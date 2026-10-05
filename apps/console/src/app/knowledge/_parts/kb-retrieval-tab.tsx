@@ -1,0 +1,149 @@
+'use client';
+
+import * as React from 'react';
+import { ArrowRight, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { RETRIEVAL_PRESETS } from '@/components/knowledge/knowledge-meta';
+import { RetrievalForm } from '@/components/knowledge/retrieval-form';
+import { LoadingButton } from '@/components/shared/loading-button';
+import { KeyValues, Section } from '@/components/shared/surface';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useUpdateKb } from '@/hooks/knowledge-queries';
+import { useLookups } from '@/hooks/queries';
+import type { KnowledgeBaseDetail, PrecedenceRule, RetrievalSettings } from '@/lib/types/knowledge';
+
+/** Session hand-off of unsaved retrieval settings from this tab to the playground. */
+export const playgroundDraftKey = (kbId: string) => `ops-playground-draft-${kbId}`;
+
+/** Retrieval settings form with precedence rules, a live summary rail and a sticky unsaved bar. */
+export function KbRetrievalTab({ kb, onTestInPlayground }: { kb: KnowledgeBaseDetail; onTestInPlayground: () => void }) {
+  const update = useUpdateKb(kb.id);
+  const lookups = useLookups();
+  const [draft, setDraft] = React.useState<RetrievalSettings>(kb.retrieval);
+  const [precedence, setPrecedence] = React.useState<PrecedenceRule[]>(kb.precedence);
+  React.useEffect(() => {
+    setDraft(kb.retrieval);
+    setPrecedence(kb.precedence);
+  }, [kb.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(kb.retrieval) || JSON.stringify(precedence) !== JSON.stringify(kb.precedence);
+  React.useEffect(() => {
+    if (!dirty) return;
+    const guard = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [dirty]);
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({ retrieval: draft, precedence: precedence.filter((p) => p.label.trim()) });
+      toast.success('Retrieval settings saved', { description: 'They apply to the next query; stored chunks are unchanged.' });
+    } catch (e) {
+      toast.error('Couldn’t save retrieval settings', { description: (e as Error).message });
+    }
+  };
+  const discard = () => {
+    const before = { draft, precedence };
+    setDraft(kb.retrieval);
+    setPrecedence(kb.precedence);
+    toast('Changes discarded', {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          setDraft(before.draft);
+          setPrecedence(before.precedence);
+        },
+      },
+    });
+  };
+  const testInPlayground = () => {
+    try {
+      sessionStorage.setItem(playgroundDraftKey(kb.id), JSON.stringify(draft));
+    } catch {
+      // Storage can be blocked; the playground then starts from the saved settings.
+    }
+    onTestInPlayground();
+  };
+  const setP = (i: number, p: Partial<PrecedenceRule>) => setPrecedence(precedence.map((x, j) => (j === i ? { ...x, ...p } : x)));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <RetrievalForm
+            value={draft}
+            onChange={(p) => setDraft((d) => ({ ...d, ...p }))}
+            sources={kb.attached.map((a) => ({ id: a.sourceId, name: a.source.name }))}
+            metadataKeys={kb.metadataKeys}
+            models={lookups.data?.models ?? []}
+            variant="full"
+          />
+          <Section id="precedence" title="Precedence" description="When two documents disagree, the higher rule wins and the answer says which document it followed">
+            <div className="flex flex-col gap-2">
+              {precedence.map((p, i) => (
+                <div key={p.id} className="flex flex-wrap items-center gap-2">
+                  <span className="w-5 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                  <Input className="h-8 min-w-40 flex-1" value={p.label} onChange={(e) => setP(i, { label: e.target.value })} placeholder="e.g. Policy beats FAQ" aria-label="Rule" />
+                  <Input className="h-8 w-36" value={p.winner} onChange={(e) => setP(i, { winner: e.target.value })} placeholder="e.g. Policy" aria-label="Wins" />
+                  <ArrowRight className="size-3.5 text-muted-foreground" />
+                  <Input className="h-8 w-36" value={p.loser} onChange={(e) => setP(i, { loser: e.target.value })} placeholder="e.g. FAQ" aria-label="Loses" />
+                  <Button variant="ghost" size="icon" className="size-8" onClick={() => setPrecedence(precedence.filter((_, j) => j !== i))} aria-label="Remove rule">
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <Button variant="outline" size="sm" className="h-7 w-fit" onClick={() => setPrecedence([...precedence, { id: `p${Date.now()}`, label: '', winner: '', loser: '' }])}>
+                <Plus className="size-3.5" /> Add rule
+              </Button>
+            </div>
+          </Section>
+        </div>
+        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+          <Section title="Effective settings" description="What a query gets with these settings" bodyClassName="px-4 py-1">
+            <KeyValues
+              rows={[
+                ['Mode', draft.searchMode],
+                ['Rerank', draft.rerank ? `On · ${draft.reranker}` : 'Off'],
+                ['Chunks', String(draft.chunkLimit)],
+                ['Threshold', draft.threshold.toFixed(2)],
+                ['Synthesis', draft.synthesis ? `On · ${draft.model}` : 'Off'],
+                ['Citations', draft.citationStyle],
+                ['Tables', draft.structuredTables ? 'Structured values' : 'Prose'],
+                ['Filters', draft.defaultFilters.length ? draft.defaultFilters.map((f) => `${f.key} ${f.op} ${f.value}`).join('; ') : 'None'],
+                ['Scope', draft.scopeSourceIds.length ? `${draft.scopeSourceIds.length} sources` : 'All sources'],
+              ]}
+            />
+          </Section>
+          <Section title="Start from a preset" description="Replaces search and synthesis settings; save to keep it">
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(RETRIEVAL_PRESETS) as (keyof typeof RETRIEVAL_PRESETS)[]).map((p) => (
+                <Button key={p} variant="outline" size="sm" className="capitalize" onClick={() => setDraft((d) => ({ ...d, ...RETRIEVAL_PRESETS[p] }))}>
+                  {p === 'raw' ? 'Raw retrieval' : p}
+                </Button>
+              ))}
+            </div>
+          </Section>
+          <Button variant="outline" onClick={testInPlayground}>
+            <Play className="size-3.5" /> Test in playground
+          </Button>
+        </div>
+      </div>
+
+      {dirty && (
+        <div data-unsaved-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
+          <span className="text-sm text-muted-foreground">Unsaved retrieval changes</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={discard} disabled={update.isPending}>
+              <RotateCcw className="size-3.5" /> Discard
+            </Button>
+            <LoadingButton size="sm" isLoading={update.isPending} onClick={save}>
+              Save changes
+            </LoadingButton>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

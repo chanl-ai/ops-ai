@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks commits that break the console's standards (apps/console/CLAUDE.md). Fix the code; do not bypass with --no-verify.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+pnpm -s verify || { echo "pre-commit: pnpm verify failed (see apps/console/CLAUDE.md)"; exit 1; }
