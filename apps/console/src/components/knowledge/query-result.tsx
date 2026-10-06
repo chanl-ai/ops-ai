@@ -10,12 +10,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toggle } from '@/components/ui/toggle';
 import { ms } from '@/lib/format';
 import type { Citation, PlaygroundAnswer, RetrievalSettings } from '@/lib/types/knowledge';
+import type { RuntimeValues } from '@/lib/types/knowledge-retrieval';
 import { cn } from '@/lib/utils';
+
+import { CitationFlags } from './citation-flags';
+import { MODE_LABEL, SHAPE_LABEL } from './retrieval-meta';
+import { RetrievalTraceView } from './retrieval-trace';
 
 const docHref = (kbId: string, documentId: string) => `/knowledge/${kbId}?tab=documents&doc=${documentId}`;
 
@@ -36,6 +41,7 @@ function CitationMarker({ citation: c, kbId }: { citation: Citation; kbId: strin
               {c.section}
               {c.page ? ` · p.${c.page}` : ''} · <span className="font-mono">{c.version}</span>
             </div>
+            <CitationFlags citation={c} className="mt-1" />
           </div>
         </div>
         <p className="rounded bg-muted/50 p-2 text-xs italic">“{c.snippet}”</p>
@@ -79,6 +85,9 @@ export function QueryResult({
   error,
   onRetry,
   onExclude,
+  kbIds,
+  runtime,
+  label,
 }: {
   result: PlaygroundAnswer;
   streamed?: string;
@@ -88,21 +97,50 @@ export function QueryResult({
   error?: string | null;
   onRetry?: () => void;
   onExclude?: (documentId: string) => void;
+  /** Every knowledge base the question searched, for the request body. */
+  kbIds?: string[];
+  runtime?: RuntimeValues;
+  /** Names the configuration when two results sit side by side. */
+  label?: string;
 }) {
   const [showRejected, setShowRejected] = React.useState(false);
   const chunks = result.chunks.filter((c) => showRejected || !c.rejected);
+  const shape = result.shape ?? settings.answerShape;
   const body = {
     question: result.question,
-    settings: { searchMode: settings.searchMode, rerank: settings.rerank, chunkLimit: settings.chunkLimit, threshold: settings.threshold, synthesis: settings.synthesis, model: settings.model, temperature: settings.temperature, citationStyle: settings.citationStyle },
-    filters: { tags: { include: settings.tagsInclude, exclude: settings.tagsExclude, includeUntagged: settings.includeUntagged }, metadata: settings.defaultFilters, sourceIds: settings.scopeSourceIds },
+    kbIds: kbIds ?? [kbId],
+    settings: {
+      searchMode: settings.searchMode,
+      ...(settings.searchMode === 'hybrid' ? { hybridWeight: settings.hybridWeight } : {}),
+      ...(settings.searchMode === 'as_of' ? { asOf: settings.asOf || 'today' } : {}),
+      rerank: settings.rerank,
+      rewrite: settings.rewrite,
+      ...(settings.rewrite === 'expand' ? { expandCount: settings.expandCount } : {}),
+      chunkLimit: settings.chunkLimit,
+      threshold: settings.threshold,
+      answerShape: settings.answerShape,
+      ...(settings.answerShape !== 'chunks' ? { model: settings.model, temperature: settings.temperature, instructions: settings.instructions, citationStyle: settings.citationStyle } : {}),
+    },
+    filters: { match: settings.filters.match, conditions: settings.filters.conditions.map(({ key, op, value }) => ({ key, op, value })), tags: { include: settings.tagsInclude, exclude: settings.tagsExclude, includeUntagged: settings.includeUntagged }, sourceIds: settings.scopeSourceIds },
+    ...(runtime && Object.keys(runtime).length ? { runtime } : {}),
   };
   const json = JSON.stringify(body, null, 2);
 
   return (
     <div className="rounded-lg border bg-card">
       <div className="flex items-start gap-3 border-b px-4 py-3">
-        <span className="mt-0.5 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Q</span>
-        <p className="min-w-0 flex-1 text-sm font-medium">{result.question}</p>
+        <span className="mt-0.5 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{label ?? 'Q'}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{result.question}</p>
+          <p className="text-xs text-muted-foreground">
+            {MODE_LABEL[settings.searchMode]}
+            {settings.searchMode === 'hybrid' ? ` ${Math.round(settings.hybridWeight * 100)}% semantic` : ''}
+            {settings.searchMode === 'as_of' ? ` ${settings.asOf || 'today'}` : ''}
+            {settings.rerank && settings.searchMode !== 'table_lookup' ? ' · rerank' : ''}
+            {settings.rewrite !== 'off' ? ` · ${settings.rewrite === 'expand' ? `${settings.expandCount} phrasings` : 'rewritten'}` : ''} · {SHAPE_LABEL[shape]}
+            {settings.filters.conditions.length ? ` · ${settings.filters.conditions.length} ${settings.filters.conditions.length === 1 ? 'filter' : 'filters'}` : ''}
+          </p>
+        </div>
       </div>
       {error ? (
         <div className="p-4">
@@ -129,6 +167,11 @@ export function QueryResult({
               <TabsTrigger value="chunks" className="h-7 text-xs">
                 Chunks <span className="ml-1 text-muted-foreground">({result.chunks.filter((c) => !c.rejected).length})</span>
               </TabsTrigger>
+              {result.trace && (
+                <TabsTrigger value="trace" className="h-7 text-xs">
+                  Trace
+                </TabsTrigger>
+              )}
               <TabsTrigger value="request" className="h-7 text-xs">
                 Request
               </TabsTrigger>
@@ -176,12 +219,57 @@ export function QueryResult({
                   </div>
                 )}
               </div>
-            ) : !settings.synthesis && !streaming ? (
-              <p className="text-sm text-muted-foreground">Answer synthesis is off. The Chunks tab holds the retrieved passages.</p>
+            ) : shape === 'chunks' && !streaming ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">Chunks only: no answer is written. These passages go to the workflow step that asked.</p>
+                <ol className="flex flex-col gap-1.5">
+                  {result.chunks
+                    .filter((c) => !c.rejected)
+                    .map((c, i) => (
+                      <li key={c.chunkId} className="rounded-md border p-2 text-xs">
+                        <div className="mb-0.5 text-muted-foreground">
+                          {i + 1}. {c.documentTitle} · {c.location} · <span className="font-mono">{c.score.toFixed(2)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap">{c.text}</p>
+                      </li>
+                    ))}
+                </ol>
+              </div>
             ) : (
               <>
                 <CitedText text={streaming ? (streamed ?? '') : result.answer} citations={result.citations} kbId={kbId} />
                 {streaming && <span className="inline-block h-4 w-1.5 animate-pulse bg-foreground/70 align-middle" />}
+                {!streaming && result.rows && result.rows.length > 0 && (
+                  <div className="overflow-x-auto rounded-md border" data-testid="table-rows">
+                    <div className="border-b bg-muted/40 px-3 py-1.5 text-xs font-medium">
+                      Matched rows · {result.rows[0].documentTitle} {result.rows[0].version}
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Row</TableHead>
+                          {Object.keys(result.rows[0].values).map((k) => (
+                            <TableHead key={k}>{k}</TableHead>
+                          ))}
+                          <TableHead className="text-right">Score</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {result.rows.map((r) => (
+                          <TableRow key={`${r.documentId}-${r.row}`}>
+                            <TableCell className="font-mono text-xs">{r.row}</TableCell>
+                            {Object.entries(r.values).map(([k, val]) => (
+                              <TableCell key={k} className={cn('text-xs whitespace-nowrap', r.matched.includes(k) && 'font-medium text-primary')}>
+                                {val}
+                              </TableCell>
+                            ))}
+                            <TableCell className="text-right font-mono text-xs tabular-nums">{r.score.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
                 {!streaming && result.structured && settings.structuredTables && (
                   <div className="overflow-hidden rounded-md border">
                     <div className="border-b bg-muted/40 px-3 py-1.5 text-xs font-medium">Structured values</div>
@@ -219,6 +307,7 @@ export function QueryResult({
                           · {c.section}
                           {c.page ? ` · p.${c.page}` : ''} · <span className="font-mono">{c.version}</span>
                         </span>
+                        <CitationFlags citation={c} />
                       </li>
                     ))}
                   </ol>
@@ -228,7 +317,7 @@ export function QueryResult({
           </TabsContent>
           <TabsContent value="chunks" className="p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">Ordered by score after rerank. Threshold {settings.threshold.toFixed(2)}.</p>
+              <p className="text-xs text-muted-foreground">Ordered by final score. Threshold {settings.threshold.toFixed(2)}; the Trace tab shows every stage.</p>
               <Toggle size="sm" pressed={showRejected} onPressedChange={setShowRejected} className="h-7 text-xs">
                 Show rejected
               </Toggle>
@@ -267,6 +356,11 @@ export function QueryResult({
               </Accordion>
             )}
           </TabsContent>
+          {result.trace && (
+            <TabsContent value="trace" className="p-4">
+              <RetrievalTraceView trace={result.trace} />
+            </TabsContent>
+          )}
           <TabsContent value="request" className="flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">The request body that reproduces this result.</p>

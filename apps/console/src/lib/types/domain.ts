@@ -327,6 +327,9 @@ export interface EmailConfig {
   securityScan?: boolean;
   archive?: boolean;
   sync?: { status: 'syncing' | 'healthy' | 'error'; lastMessageAt: string | null; messages24h: number; error?: string };
+  /** The Microsoft 365 integration holding this mailbox's consent; sync follows its status. */
+  connectionId?: string;
+  connection?: import('./integrations').ConnectionRef;
 }
 
 export interface Deployment {

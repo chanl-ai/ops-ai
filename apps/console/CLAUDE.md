@@ -35,6 +35,7 @@ A rule that is not checked by the script is still a rule; the script covers the 
 | Bulk change | `BulkConfirmDialog` / `BulkFieldDialog` + `toastBulk` (skipped items named by reason) + `useSticky` | silent partial success |
 | Record page | `RecordLayout` / `AttributeCard` / `FieldRow`, or a settings form with a right rail | bespoke grids |
 | Field | `FormField` (label, "(optional)", hint, inline error, `aria-invalid`) | placeholder-as-label |
+| Upload a file | `FileUpload` (`components/shared/file-upload.tsx`): presigned upload through the Files API, progress, scan state, limits from Settings → Storage; pass the `fileId` on | `<input type="file">` with your own request, `FormData`, `fetch` PUT of a `File` (`check-standards` rule 13) |
 
 `components/ui/*` are shadcn primitives adapted from the shared component library: do not edit them; wrap them in
 `components/shared/`. Pages adapted from an earlier internal product keep their layout and copy but must be moved

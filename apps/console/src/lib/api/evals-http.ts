@@ -11,7 +11,7 @@ export function createEvalsHttp(get: Get, send: Send, qs: (p: ListParams & { vie
     suites: (aid) => get(`/agents/${aid}/eval-suites`),
     cases: (aid, p) => get(`/agents/${aid}/eval-cases?${qs(p)}`),
     createCase: (aid, i) => send('POST', `/agents/${aid}/eval-cases`, i),
-    importCases: (aid, rows) => send('POST', `/agents/${aid}/eval-cases/import`, { rows }),
+    importCases: (aid, rows, fileId) => send('POST', `/agents/${aid}/eval-cases/import`, { rows, fileId }),
     caseFromTurn: (aid, i) => send('POST', `/agents/${aid}/eval-cases/from-turn`, i),
     removeCase: (id) => send('DELETE', `/eval-cases/${id}`),
     bulkRemoveCases: (ids) => send('POST', '/eval-cases/bulk-delete', { ids }),

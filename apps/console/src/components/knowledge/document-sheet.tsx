@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, BadgeCheck, ExternalLink, History, MinusCircle, RefreshCw, Search, UserRound } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Copy, ExternalLink, FilePlus2, History, MinusCircle, PauseCircle, RefreshCw, Search, UserRound } from 'lucide-react';
 
+import { FileDownloadButton } from '@/components/files/file-actions';
 import { DetailSheet, type DetailSheetNavigation } from '@/components/shared/detail-sheet';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FieldRow, FieldSectionLabel } from '@/components/shared/field-row';
@@ -23,6 +24,9 @@ import { cn } from '@/lib/utils';
 
 import { ERROR_CLASS_LABEL, FreshnessBadge, ItemStatusBadge, MimeIcon, SensitivityBadge } from './knowledge-meta';
 
+const VERSION_TONE = { current: 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300', superseded: 'text-muted-foreground', scheduled: 'border-blue-200 text-blue-700 dark:border-blue-900 dark:text-blue-300' } as const;
+const VERSION_LABEL = { current: 'In force', superseded: 'Superseded', scheduled: 'Scheduled' } as const;
+
 /** One document or source item: its content, chunks, governance metadata and revision history. */
 export function DocumentSheet({
   open,
@@ -38,6 +42,8 @@ export function DocumentSheet({
   onExclude,
   onSetTags,
   onSetOwner,
+  onAddMetadata,
+  onOpenItem,
 }: {
   open: boolean;
   item?: ItemWithDetail;
@@ -52,6 +58,9 @@ export function DocumentSheet({
   onExclude: () => void;
   onSetTags: (tags: string[]) => void;
   onSetOwner: (owner: string) => Promise<unknown>;
+  onAddMetadata?: () => void;
+  /** Opens another item in this sheet, such as an earlier version. */
+  onOpenItem?: (id: string) => void;
 }) {
   const [chunkQuery, setChunkQuery] = React.useState('');
   const [diffRev, setDiffRev] = React.useState<number | null>(null);
@@ -97,6 +106,7 @@ export function DocumentSheet({
         footerActions={
           item && (
             <>
+              {item.fileId && <FileDownloadButton fileId={item.fileId} name={item.path.split('/').pop() ?? item.title} label="Download original" />}
               <Button size="sm" variant="outline" disabled={busy || item.status === 'excluded'} onClick={onReprocess}>
                 <RefreshCw className="size-3.5" /> Reprocess
               </Button>
@@ -140,6 +150,50 @@ export function DocumentSheet({
                 </AlertDescription>
               </Alert>
             )}
+            {item.status === 'held' && item.held && (
+              <Alert>
+                <PauseCircle className="size-4" />
+                <AlertTitle>Held: missing {item.held.missing.join(', ')}</AlertTitle>
+                <AlertDescription className="flex flex-col items-start gap-2">
+                  <p>
+                    {item.held.kbNames.join(', ')} {item.held.kbNames.length === 1 ? 'requires' : 'require'} these fields, so this document is stored but not indexed or searched.
+                  </p>
+                  {onAddMetadata && (
+                    <Button size="sm" variant="outline" onClick={onAddMetadata} disabled={busy}>
+                      <FilePlus2 className="size-3.5" /> Add metadata
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+            {item.status === 'excluded' && (
+              <Alert>
+                <MinusCircle className="size-4" />
+                <AlertTitle>{item.excludedBy ?? 'Excluded'}</AlertTitle>
+                <AlertDescription>Change the source’s rules to bring it back; the next sync then indexes it.</AlertDescription>
+              </Alert>
+            )}
+            {item.duplicateOf && (
+              <Alert>
+                <Copy className="size-4" />
+                <AlertTitle>Indexed once, as {item.duplicateOf.title}</AlertTitle>
+                <AlertDescription className="flex flex-col items-start gap-2">
+                  <p>The content is identical to the copy in {item.duplicateOf.sourceName}, so search returns that one and lists both sources.</p>
+                  {onOpenItem && (
+                    <Button size="sm" variant="outline" onClick={() => onOpenItem(item.duplicateOf!.itemId)}>
+                      Open the indexed copy
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+            {item.versionStatus === 'superseded' && (
+              <Alert>
+                <History className="size-4" />
+                <AlertTitle>Superseded by {item.supersededBy}</AlertTitle>
+                <AlertDescription>Kept and searchable only for questions asked as of a date when this version was in force.</AlertDescription>
+              </Alert>
+            )}
             {item.url && (
               <Button asChild size="sm" variant="outline" className="w-fit">
                 <a href={item.url} target="_blank" rel="noreferrer">
@@ -154,7 +208,9 @@ export function DocumentSheet({
                   Chunks <span className="ml-1 text-muted-foreground">{d.chunks.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value="metadata">Metadata</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
+                <TabsTrigger value="history">
+                  Versions <span className="ml-1 text-muted-foreground">{d.versions.length}</span>
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="content" className="flex flex-col gap-3 pt-3">
@@ -226,6 +282,8 @@ export function DocumentSheet({
                   <FieldRow key={k} label={k} value={val} mono />
                 ))}
                 <FieldRow label="External id" value={item.externalId} mono />
+                <FieldRow label="Content digest" value={item.digest} mono />
+                {item.alsoIn?.length ? <FieldRow label="Also in" value={item.alsoIn.map((a) => `${a.title} (${a.sourceName})`).join(', ')} /> : null}
                 <FieldSectionLabel>Tags</FieldSectionLabel>
                 {synced ? (
                   <div className="flex flex-col gap-1 px-1">
@@ -251,7 +309,48 @@ export function DocumentSheet({
                 </div>
               </TabsContent>
 
-              <TabsContent value="history" className="pt-3">
+              <TabsContent value="history" className="flex flex-col gap-3 pt-3">
+                <FieldSectionLabel>Versions</FieldSectionLabel>
+                <div className="rounded-md border" data-testid="version-history">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Version</TableHead>
+                        <TableHead>Effective</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="hidden sm:table-cell">Digest</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {d.versions.map((ver) => (
+                        <TableRow key={ver.itemId} className={cn(ver.itemId === item.id && 'bg-muted/40')}>
+                          <TableCell className="font-mono text-xs">{ver.version}</TableCell>
+                          <TableCell className="whitespace-nowrap">{dateOnly(ver.effectiveDate)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn('font-normal', VERSION_TONE[ver.status])}>
+                              {VERSION_LABEL[ver.status]}
+                              {ver.supersededBy ? ` by ${ver.supersededBy}` : ''}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">{ver.digest}</TableCell>
+                          <TableCell className="text-right">
+                            {ver.itemId === item.id ? (
+                              <span className="text-xs text-muted-foreground">Open</span>
+                            ) : (
+                              onOpenItem && (
+                                <Button variant="ghost" size="sm" className="h-7" onClick={() => onOpenItem(ver.itemId)}>
+                                  Open
+                                </Button>
+                              )
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <FieldSectionLabel>Changes to this version</FieldSectionLabel>
                 {synced ? (
                   <ul className="divide-y text-sm">
                     {d.revisions.map((r) => (

@@ -1,4 +1,5 @@
 import type { Citation } from './knowledge';
+import type { RetrievalTrace } from './knowledge-retrieval';
 
 export type { Citation };
 
@@ -123,7 +124,9 @@ export interface MessageFeedback {
   reason?: string;
 }
 
+/** A file uploaded through the Files API; messages carry its id, never its bytes. */
 export interface ChatAttachment {
+  fileId: string;
   name: string;
   size: number;
 }
@@ -135,6 +138,8 @@ export interface ChatMessage {
   at: string;
   attachments?: ChatAttachment[];
   citations?: Citation[];
+  /** How the cited passages were found: queries, filters, scores, precedence. */
+  trace?: RetrievalTrace;
   toolCalls?: ToolCall[];
   widgets?: ChatWidget[];
   feedback?: MessageFeedback;

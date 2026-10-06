@@ -1,9 +1,13 @@
 'use client';
 
-import { ArrowDownLeft, ArrowUpRight, Paperclip } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowDownLeft, ArrowUpRight, Paperclip, ShieldX } from 'lucide-react';
+
+import { FileDownloadButton } from '@/components/files/file-actions';
+import { ScanText } from '@/components/files/file-meta';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { dateTime, relativeTime } from '@/lib/format';
+import { bytes, dateTime, relativeTime } from '@/lib/format';
 import type { CaseEvent, CaseMessage } from '@/lib/types/cases';
 import { cn } from '@/lib/utils';
 
@@ -27,14 +31,19 @@ export function CaseConversation({ messages }: { messages: CaseMessage[] }) {
             <p className="text-sm font-medium">{m.subject}</p>
             <p className="text-sm whitespace-pre-wrap">{m.body}</p>
             {m.attachments.map((a) => (
-              <div key={a.name} className="flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-xs">
-                <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {a.name} <span className="font-normal text-muted-foreground">· {a.sizeKb} KB</span>
+              <div key={a.fileId || a.name} className={cn('flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-xs', a.blocked && 'border-destructive/40 bg-destructive/5')} data-testid="case-attachment">
+                {a.blocked ? <ShieldX className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-x-2 font-medium">
+                    <Link href={`/files?file=${a.fileId}`} className="underline-offset-2 hover:underline">
+                      {a.name}
+                    </Link>
+                    <span className="font-normal text-muted-foreground">{bytes(a.size)}</span>
+                    <ScanText status={a.scan} />
                   </p>
-                  <p className="text-muted-foreground">{a.summary}</p>
+                  <p className={cn('text-muted-foreground', a.blocked && 'text-destructive')}>{a.blocked ?? a.summary}</p>
                 </div>
+                <FileDownloadButton fileId={a.fileId} name={a.name} blocked={a.blocked ?? (a.scan === 'pending' ? 'Still being scanned' : undefined)} size="icon" variant="ghost" />
               </div>
             ))}
           </CardContent>

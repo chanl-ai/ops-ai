@@ -3,13 +3,13 @@
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { FileSearch, MinusCircle, RotateCcw } from 'lucide-react';
+import { FilePlus2, FileSearch, MinusCircle, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { ERROR_CLASS_LABEL, ITEM_STATUS_LABEL, ItemStatusBadge, MimeIcon } from '@/components/knowledge/knowledge-meta';
+import { ERROR_CLASS_LABEL, ITEM_STATUS_LABEL, ItemStatusBadge, itemReason, MimeIcon } from '@/components/knowledge/knowledge-meta';
 import { BulkConfirmDialog, toastBulk } from '@/components/shared/bulk';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -17,7 +17,8 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useExcludeItems, useReprocessItems, useSourceItems } from '@/hooks/knowledge-queries';
+import { AddMetadataDialog } from '@/components/knowledge/add-metadata-dialog';
+import { useExcludeItems, useReprocessItems, useSetItemMetadata, useSourceItems } from '@/hooks/knowledge-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { bytes, count, mimeLabel, relativeTime, shortDate } from '@/lib/format';
@@ -27,6 +28,7 @@ import { DocumentPanel } from '@/components/knowledge/document-panel';
 
 type Row = Item & { onRowClick: (i: Item) => void };
 
+
 /** Every item the source fetched. `?status=failed` presets the filter. */
 export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSync: () => void }) {
   const params = useSearchParams();
@@ -35,7 +37,9 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
   const query = useSourceItems(source.id, list.params, !!source.running);
   const reprocess = useReprocessItems();
   const exclude = useExcludeItems();
+  const setMetadata = useSetItemMetadata();
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [fixing, setFixing] = React.useState<Item | null>(null);
   const [bulk, setBulk] = React.useState<{ kind: 'reprocess' | 'exclude'; rows: Item[] } | null>(null);
   const shown = useSticky(bulk);
   const [resetKey, setResetKey] = React.useState(0);
@@ -67,11 +71,26 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
         enableHiding: false,
       },
       { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <ItemStatusBadge status={row.original.status} />, filterFn: facetFilterFn },
-      { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => <span className="tabular-nums">{count(row.original.chunkCount)}</span> },
+      { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => (row.original.status === 'held' ? <span className="text-muted-foreground">Not indexed</span> : <span className="tabular-nums">{count(row.original.chunkCount)}</span>) },
       { accessorKey: 'sizeBytes', header: ({ column }) => <DataTableColumnHeader column={column} title="Size" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{bytes(row.original.sizeBytes)}</span> },
       { accessorKey: 'modifiedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Modified at source" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{shortDate(row.original.modifiedAt)}</span> },
       { id: 'processedAt', accessorFn: (r) => r.processedAt ?? '', header: ({ column }) => <DataTableColumnHeader column={column} title="Last processed" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(row.original.processedAt)}</span> },
       { id: 'mime', accessorFn: (r) => r.mimeType, header: () => <span className="text-xs">Type</span>, cell: ({ row }) => <span className="font-mono text-xs">{mimeLabel(row.original.mimeType)}</span>, filterFn: facetFilterFn },
+      {
+        id: 'reason',
+        accessorFn: (r) => itemReason(r) ?? '',
+        header: () => <span className="text-xs">Why</span>,
+        cell: ({ row }) => {
+          const why = itemReason(row.original);
+          return why ? (
+            <span className="block max-w-64 truncate text-xs text-muted-foreground" title={why}>
+              {why}
+            </span>
+          ) : (
+            <span className="text-muted-foreground/60">—</span>
+          );
+        },
+      },
       {
         id: 'errorClass',
         accessorFn: (r) => r.errorClass ?? 'none',
@@ -105,6 +124,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
               row={row}
               actions={[
                 { label: 'Open', icon: FileSearch, onClick: (r) => setOpenId(r.original.id) },
+                ...(row.original.status === 'held' ? [{ label: 'Add metadata', icon: FilePlus2, onClick: () => setFixing(row.original) }] : []),
                 { label: 'Reprocess', icon: RotateCcw, onClick: (r) => setBulk({ kind: 'reprocess', rows: [r.original] }) },
                 { label: 'Exclude', icon: MinusCircle, variant: 'destructive', onClick: (r) => setBulk({ kind: 'exclude', rows: [r.original] }) },
               ]}
@@ -169,11 +189,23 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
       <DocumentPanel
         itemId={openId}
         onClose={() => setOpenId(null)}
+        onOpenItem={setOpenId}
         navigation={
           idx >= 0
             ? { currentIndex: idx, totalCount: items.length, onPrev: idx > 0 ? () => setOpenId(items[idx - 1].id) : undefined, onNext: idx < items.length - 1 ? () => setOpenId(items[idx + 1].id) : undefined }
             : undefined
         }
+      />
+
+      <AddMetadataDialog
+        open={!!fixing}
+        onOpenChange={(o) => !o && setFixing(null)}
+        item={fixing ?? undefined}
+        isPending={setMetadata.isPending}
+        onSubmit={async (values) => {
+          const it = await setMetadata.mutateAsync({ id: fixing!.id, values });
+          toast.success(it.status === 'held' ? `${it.title} is still held` : `${it.title} is searchable`, { description: it.status === 'held' ? `Still missing ${it.held?.missing.join(', ')}.` : 'Its knowledge bases include it from the next query.' });
+        }}
       />
 
       <BulkConfirmDialog

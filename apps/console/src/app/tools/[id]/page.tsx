@@ -18,7 +18,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { ActivityPanel } from '@/components/tools/activity-panel';
 import { ReasonDialog, RequestApprovalDialog } from '@/components/tools/approval-dialogs';
 import { ApprovalsTable } from '@/components/tools/approvals-table';
-import { CredentialsPanel } from '@/components/tools/credentials-panel';
+import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { ApprovalStateBadge, ENV_LABEL, ModuleMark, ModuleTypeBadge } from '@/components/tools/module-meta';
 import { OperationSheet } from '@/components/tools/operation-sheet';
 import { OperationsTable } from '@/components/tools/operations-table';
@@ -41,7 +41,6 @@ import {
   useRequestModuleApproval,
   useRequestModuleReview,
   useRevokeModuleApprovals,
-  useSetCredentialRef,
   useTestModule,
   useToolModule,
   useUpdateOperation,
@@ -51,9 +50,9 @@ import { ApiError } from '@/lib/api';
 import { plural, shortDate } from '@/lib/format';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 
-const TABS = ['operations', 'test', 'access', 'approval', 'credentials', 'activity', 'versions'] as const;
+const TABS = ['operations', 'test', 'access', 'approval', 'connection', 'activity', 'versions'] as const;
 type Tab = (typeof TABS)[number];
-const LABEL: Record<Tab, string> = { operations: 'Operations', test: 'Test console', access: 'Access', approval: 'Approval', credentials: 'Credentials', activity: 'Activity', versions: 'Versions' };
+const LABEL: Record<Tab, string> = { operations: 'Operations', test: 'Test console', access: 'Access', approval: 'Approval', connection: 'Connection', activity: 'Activity', versions: 'Versions' };
 const REJECT = ['Scope wider than the workflow needs', 'Missing justification', 'Use a read-only operation instead', 'Workflow not yet approved by its owner'];
 const REVOKE = ['No longer needed', 'Workflow retired', 'Security review finding', 'Granted in error'];
 
@@ -71,7 +70,6 @@ export default function ModulePage() {
   const request = useRequestModuleApproval();
   const decide = useDecideModuleApproval();
   const revoke = useRevokeModuleApprovals();
-  const setRef = useSetCredentialRef();
   const test = useTestModule();
   const remove = useDeleteModule();
   const [opId, setOpId] = React.useState<string | null>(null);
@@ -131,6 +129,7 @@ export default function ModulePage() {
           <span className="text-xs">{m.status === 'draft' ? `Draft v${m.version}` : `v${m.version}`}</span>
           <span>Owner {m.ownerTeam}</span>
           <span className="max-w-full truncate font-mono text-xs">{m.endpoint}</span>
+          <ConnectionChip connection={m.connection} />
         </span>
       }
       backHref="/tools"
@@ -227,7 +226,18 @@ export default function ModulePage() {
           <Alert variant="destructive">
             <Unplug className="size-4" />
             <AlertTitle>Unreachable from the gateway</AlertTitle>
-            <AlertDescription>Calls fail into the workflow’s human step until the system responds.</AlertDescription>
+            <AlertDescription className="flex flex-col items-start gap-2">
+              <p>
+                {m.connection && m.connection.status !== 'healthy' && m.connection.status !== 'expiring'
+                  ? `Its connection ${m.connection.name} is ${m.connection.status === 'revoked' ? 'revoked' : m.connection.status === 'error' ? 'failing to sign in' : 'expired'}. Calls fail into the workflow’s human step until it is fixed in Integrations.`
+                  : 'Calls fail into the workflow’s human step until the system responds.'}
+              </p>
+              {m.connection && (
+                <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
+                  <Link href={`/integrations/${m.connection.id}`}>Open connection</Link>
+                </Button>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -279,13 +289,26 @@ export default function ModulePage() {
           </div>
         )}
         {tab === 'approval' && <ReviewPanel major={m.major} reviews={m.reviews} versions={m.versions} drift={m.drift} canRequest={!reviewOpenNow} onRequest={() => setReviewOpen(true)} />}
-        {tab === 'credentials' && (
-          <CredentialsPanel
-            module={m}
-            saving={setRef.isPending}
-            onChangeRef={(c, ref) => setRef.mutateAsync({ id: m.id, credentialId: c.id, secretRef: ref }).then(() => toast.success('Reference saved', { description: 'The next call uses it.' }), fail('save the reference'))}
-          />
-        )}
+        {tab === 'connection' &&
+          (m.connection ? (
+            <div className="flex flex-col gap-3 rounded-lg border bg-card p-4" data-testid="module-connection">
+              <ConnectionChip connection={m.connection} className="self-start" />
+              <p className="text-sm text-muted-foreground">
+                Every operation in this module calls {m.system} through this connection. Its credential, scopes, owner and expiry are managed in Integrations; this module cannot change them.
+                {m.auth.header && (
+                  <>
+                    {' '}
+                    The gateway sends it as the <code className="font-mono">{m.auth.header}</code> header.
+                  </>
+                )}
+              </p>
+              <Button variant="outline" size="sm" className="self-start" asChild>
+                <Link href={`/integrations/${m.connection.id}`}>Open connection</Link>
+              </Button>
+            </div>
+          ) : (
+            <EmptyState icon={KeyRound} title="No connection" description="This module is served inside the gateway and needs no credential." />
+          ))}
         {tab === 'activity' &&
           (activity.isPending ? (
             <div className="flex flex-col gap-4">

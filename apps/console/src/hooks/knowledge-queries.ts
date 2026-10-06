@@ -10,14 +10,16 @@ import type {
   KnowledgeBaseInput,
   KnowledgeBasePatch,
   QueryInput,
+  RetrieveInput,
   Rule,
   RunFilters,
   SourceFilters,
+  HeldPreviewInput,
   SourceInput,
   SourcePatch,
-  SourceType,
   SyncOptions,
 } from '@/lib/types/knowledge';
+import type { SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams } from '@/lib/types/query';
 
 /** Every knowledge key starts with 'knowledge', so one invalidation refreshes lists, records and counts. */
@@ -31,8 +33,8 @@ export const kk = {
   runs: (id: string, p: unknown) => ['knowledge', 'source', id, 'runs', p] as const,
   run: (id: string) => ['knowledge', 'run', id] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
-  connections: ['knowledge', 'connections'] as const,
   lookups: ['knowledge', 'lookups'] as const,
+  samples: (sourceId?: string) => ['knowledge', 'samples', sourceId ?? 'all'] as const,
 };
 
 const paged = { placeholderData: keepPreviousData };
@@ -63,7 +65,8 @@ export const useSyncRun = (id: string | null) =>
   useQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
 export const useItem = (id: string | null) =>
   useQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
-export const useConnections = () => useQuery({ queryKey: kk.connections, queryFn: api.knowledge.sources.connections });
+/** Seeded documents for the split preview; a source's own documents come first. */
+export const useIngestSamples = (sourceId?: string) => useQuery({ queryKey: kk.samples(sourceId), queryFn: () => api.knowledge.sources.samples(sourceId), staleTime: 60_000 });
 export const useKnowledgeLookups = () => useQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */
@@ -88,6 +91,10 @@ export const useSetKbSourceRules = (id: string) => useWrite(({ sourceId, rules }
 export const useBulkRefreshKbs = () => useWrite((ids: string[]) => api.knowledge.kbs.bulkRefresh(ids));
 export const useBulkDeleteKbs = () => useWrite((ids: string[]) => api.knowledge.kbs.bulkRemove(ids), ['lookups']);
 export const useKbQuery = (id: string) => useMutation({ mutationFn: (i: QueryInput) => api.knowledge.kbs.query(id, i) });
+/** Search across several knowledge bases, as chat and workflow knowledge steps do. */
+export const useRetrieve = () => useMutation({ mutationFn: (i: RetrieveInput) => api.knowledge.retrieve(i) });
+/** Splits a sample document with draft settings; nothing is saved. */
+export const usePreviewSplit = () => useMutation({ mutationFn: (i: SplitPreviewInput) => api.knowledge.sources.previewSplit(i) });
 
 export const useCreateSource = () =>
   useWrite(({ input, sync, kbIds }: { input: SourceInput; sync?: boolean; kbIds?: string[] }) => api.knowledge.sources.create(input, { sync, kbIds }));
@@ -97,8 +104,9 @@ export const useSyncSource = () => useWrite(({ id, opts }: { id: string; opts?: 
 export const useCancelRun = () => useWrite((id: string) => api.knowledge.sources.cancelRun(id));
 export const usePauseSource = () => useWrite(({ id, paused }: { id: string; paused: boolean }) => api.knowledge.sources.setPaused(id, paused));
 export const useReprocessSource = () => useWrite((id: string) => api.knowledge.sources.reprocess(id));
+export const usePreviewHeld = () => useMutation({ mutationFn: (i: HeldPreviewInput) => api.knowledge.sources.previewHeld(i) });
 export const usePreviewSource = () => useMutation({ mutationFn: (i: Pick<SourceInput, 'type' | 'config'>) => api.knowledge.sources.preview(i) });
-export const useConnect = () => useWrite((type: SourceType) => api.knowledge.sources.connect(type));
+export const useApproveIngest = () => useWrite((id: string) => api.knowledge.sources.approveIngest(id));
 export const useBulkSyncSources = () => useWrite((ids: string[]) => api.knowledge.sources.bulkSync(ids));
 export const useBulkPauseSources = () => useWrite(({ ids, paused }: { ids: string[]; paused: boolean }) => api.knowledge.sources.bulkSetPaused(ids, paused));
 export const useBulkDeleteSources = () => useWrite((ids: string[]) => api.knowledge.sources.bulkRemove(ids));
@@ -108,4 +116,5 @@ export const useExcludeItems = () => useWrite((ids: string[]) => api.knowledge.i
 export const useVerifyItem = () => useWrite(({ id, verified }: { id: string; verified: boolean }) => api.knowledge.items.verify(id, verified));
 export const useSetItemTags = () => useWrite(({ id, tags }: { id: string; tags: string[] }) => api.knowledge.items.setTags(id, tags));
 export const useSetItemOwner = () => useWrite(({ id, owner }: { id: string; owner: string }) => api.knowledge.items.setOwner(id, owner));
+export const useSetItemMetadata = () => useWrite(({ id, values }: { id: string; values: Record<string, string> }) => api.knowledge.items.setMetadata(id, values));
 export const useTagItems = () => useWrite(({ ids, tag }: { ids: string[]; tag: string }) => api.knowledge.items.addTag(ids, tag));

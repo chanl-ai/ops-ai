@@ -10,6 +10,8 @@ import type { SettingsApi } from './settings-contract';
 import type { EvalsApi } from './evals-contract';
 import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
+import type { IntegrationsApi } from './integrations-contract';
+import type { FilesApi } from './files-contract';
 import type {
   Agent,
   AgentInput,
@@ -124,6 +126,8 @@ export interface OpsApi {
   evals: EvalsApi;
   modelRisk: ModelRiskApi;
   toolModules: ToolModulesApi;
+  integrations: IntegrationsApi;
+  files: FilesApi;
   tools: {
     list(params: ListParams<ToolFilters>): Promise<ListResult<Tool> & { stats: ToolStats }>;
     create(input: ToolInput): Promise<Tool>;
@@ -149,7 +153,8 @@ export interface OpsApi {
   tests: {
     list(workflowId: string): Promise<TestCase[]>;
     create(workflowId: string, input: TestCaseInput): Promise<TestCase>;
-    importRows(workflowId: string, rows: TestCaseInput[]): Promise<BulkResult>;
+    /** `fileId` is the uploaded CSV the rows came from; the test set is recorded as one of its references. */
+    importRows(workflowId: string, rows: TestCaseInput[], fileId?: string): Promise<BulkResult>;
     fromRun(runId: string): Promise<TestCase>;
     remove(id: string): Promise<void>;
   };

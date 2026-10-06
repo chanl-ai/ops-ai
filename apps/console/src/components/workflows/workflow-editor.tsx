@@ -39,6 +39,8 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Review, Workflow, ValidationRun, WorkflowDetail, WorkflowGraph } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
 
+import { ANSWER_SHAPES, QUERY_MODES } from '@/components/knowledge/retrieval-meta';
+
 import { CanvasControls } from './canvas-controls';
 import { NodePalette } from './node-palette';
 import { CAT_COLORS, DND_MIME, GROUP_LABEL, type OptionSource, paletteToNode, resolveKind, type StepData } from './node-types';
@@ -196,6 +198,8 @@ function Inspector({
     sla: slaOptions.map((o) => ({ value: o, label: o })),
     durations: DURATIONS.map((o) => ({ value: o, label: o })),
     schedules: SCHEDULES.map((o) => ({ value: o, label: o })),
+    queryModes: [{ value: 'default', label: 'Knowledge base default' }, ...QUERY_MODES.map((m) => ({ value: m.value, label: m.label }))],
+    answerShapes: [{ value: 'default', label: 'Knowledge base default' }, ...ANSWER_SHAPES.map((m) => ({ value: m.value, label: m.label }))],
   };
   const fields = kind?.fields ?? (selected.type === 'review' || selected.type === 'end' ? [] : [{ key: 'description', label: 'Description', input: 'text' as const }]);
   return (

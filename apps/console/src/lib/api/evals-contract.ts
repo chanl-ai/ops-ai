@@ -12,7 +12,8 @@ export interface EvalsApi {
   cases(agentId: string, params: ListParams<EvalCaseFilters>): Promise<ListResult<EvalCase>>;
   createCase(agentId: string, input: EvalCaseInput): Promise<EvalCase>;
   /** Rows that fail validation are skipped with the reason; ids are row indexes. */
-  importCases(agentId: string, rows: EvalCaseInput[]): Promise<BulkResult>;
+  /** `fileId` is the uploaded CSV the rows came from; the eval set is recorded as one of its references. */
+  importCases(agentId: string, rows: EvalCaseInput[], fileId?: string): Promise<BulkResult>;
   /** Builds a case from one test-panel turn: its input, who it ran as, and what it called and cited. */
   caseFromTurn(agentId: string, input: SaveTurnInput): Promise<EvalCase>;
   /** 403 on a platform case. */

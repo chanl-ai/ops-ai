@@ -119,9 +119,6 @@ export function HttpOperationBuilder({ value, onChange, errors }: { value: HttpO
           <Textarea id="http-body" value={value.body ?? ''} onChange={(e) => set('body', e.target.value)} rows={4} className="font-mono text-xs" placeholder={'e.g. {\n  "amount": {{amount}}\n}'} />
         </FormField>
       )}
-      <FormField id="http-secret" label="Credential" optional hint="A vault path. The gateway resolves it on each call; the value never reaches the console or the agent.">
-        <Input id="http-secret" value={value.secretRef ?? ''} onChange={(e) => set('secretRef', e.target.value)} placeholder="e.g. vault://prod/data-gateway/deposits/api-key" className="font-mono text-sm" />
-      </FormField>
     </div>
   );
 }

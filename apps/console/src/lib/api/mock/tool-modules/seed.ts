@@ -1,7 +1,6 @@
 import type { ToolAccess } from '@/lib/types/domain';
 import type {
   BindingSource,
-  CatalogItem,
   CredentialKind,
   DiscoveredOperation,
   Environment,
@@ -526,22 +525,9 @@ export const RUN_CONTEXTS: Record<string, { caseId: string; label: string; bindi
   wf_advisor: [{ caseId: 'CASE-A-0091', label: 'Q3 review · Lin & Moreau LLP', bindings: { 'case.id': 'CASE-A-0091', 'case.customerId': 'CUS-700912' } }],
 };
 
-export const CATALOG: Omit<CatalogItem, 'moduleId'>[] = [
-  { id: 'cat_core_banking', name: 'Core banking', system: 'Core Banking', category: 'Core systems', type: 'openapi', description: 'Accounts, loans, customer profiles and servicing actions.', operations: 6, auth: 'oauth_client_credentials', owner: 'Core Banking Platform', available: true },
-  { id: 'cat_salesforce', name: 'Salesforce', system: 'Salesforce', category: 'CRM', type: 'mcp', description: 'Contacts, cases and activity through Salesforce’s hosted MCP server.', operations: 3, auth: 'oauth_client_credentials', owner: 'CRM Platform', available: true },
-  { id: 'cat_m365_mail', name: 'Microsoft 365 mail', system: 'Outbound mail', category: 'Productivity', type: 'openapi', description: 'Read threads and reply from shared mailboxes.', operations: 2, auth: 'oauth_client_credentials', owner: 'Messaging Platform', available: true },
-  { id: 'cat_sharepoint', name: 'SharePoint', system: 'SharePoint', category: 'Productivity', type: 'mcp', description: 'Search and read policy sites and files.', operations: 2, auth: 'oauth_client_credentials', owner: 'Digital Workplace', available: true },
-  { id: 'cat_case_mgmt', name: 'Case management system', system: 'Case management system', category: 'Internal', type: 'mcp', description: 'Signed agreements, statements and identity documents.', operations: 2, auth: 'mtls', owner: 'Enterprise Data', available: true },
-  { id: 'cat_servicenow', name: 'ServiceNow', system: 'ServiceNow', category: 'Internal', type: 'mcp', description: 'Incidents and requests in the IT and operations service desk.', operations: 5, auth: 'oauth_client_credentials', owner: 'IT Service Management', available: true },
-  { id: 'cat_docusign', name: 'DocuSign', system: 'DocuSign', category: 'Productivity', type: 'openapi', description: 'Send envelopes and check signature status.', operations: 4, auth: 'oauth_client_credentials', owner: 'Digital Workplace', available: true },
-  { id: 'cat_moodys', name: 'Moody’s KYC', system: 'Moody’s KYC', category: 'Risk & compliance', type: 'openapi', description: 'Entity verification and adverse media.', operations: 3, auth: 'api_key', owner: 'Financial Crime Ops', available: true },
-  { id: 'cat_temenos_payments', name: 'Payments hub', system: 'Payments Hub', category: 'Core systems', type: 'http', description: 'Wire history and holds.', operations: 2, auth: 'api_key', owner: 'Payments Operations', available: true },
-  { id: 'cat_bloomberg', name: 'Bloomberg data', system: 'Bloomberg', category: 'Risk & compliance', type: 'openapi', description: 'Market data for portfolio reviews. Licence review with Procurement.', operations: 0, auth: 'api_key', owner: 'Wealth', available: false },
-];
-
 const op = (name: string, description: string, access: ToolAccess, group: string, input: SchemaField[], method?: HttpMethod, path?: string): DiscoveredOperation => ({ name, description, access, group, input, method, path });
 
-/** What discovery returns for catalog items and the generic MCP or OpenAPI sources. */
+/** What discovery returns for a connection's catalog system, or the generic MCP or OpenAPI sources. */
 export const DISCOVERY: Record<string, { version: string; operations: DiscoveredOperation[]; warnings?: string[] }> = {
   cat_servicenow: {
     version: '1.0.0',

@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, CalendarX, Clock, Landmark, Plus, ShieldAlert, Trash2, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Boxes, Cable, CalendarClock, CalendarX, Clock, Landmark, Plus, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -18,21 +19,20 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { selectColumn } from '@/components/shared/select-column';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
+import { ConnectDialog } from '@/components/integrations/connect-dialog';
+import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddModuleDialog } from '@/components/tools/add-module-dialog';
-import { CatalogGrid } from '@/components/tools/catalog-grid';
 import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, MODULE_TYPE, ModuleMark, ModuleTypeBadge, pctText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useBulkDeleteModules, useCreateModule, useDeleteModule, useDiscoverModule, useToolCatalog, useToolModules } from '@/hooks/tool-module-queries';
+import { useConnectFlow, useIntegrationOptions } from '@/hooks/integration-queries';
+import { useBulkDeleteModules, useCreateModule, useDeleteModule, useDiscoverModule, useToolModules } from '@/hooks/tool-module-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { useTabParam } from '@/hooks/use-tab-param';
 import { count, plural } from '@/lib/format';
-import type { CatalogItem, ModuleFilters, ModuleView, ToolModule } from '@/lib/types/tool-modules';
+import type { ModuleFilters, ModuleView, ToolModule } from '@/lib/types/tool-modules';
 
 type Row = ToolModule & { onRowClick: (m: ToolModule) => void };
 
-const TABS = ['modules', 'catalog'] as const;
 const VIEW_EMPTY: Record<ModuleView, string> = {
   all: 'Connect a system once; workflows then request the operations they need.',
   needs_approval: 'Every module has a decided security review and no open requests.',
@@ -61,6 +61,16 @@ function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
       enableHiding: false,
     },
     { accessorKey: 'type', header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />, cell: ({ row }) => <ModuleTypeBadge type={row.original.type} />, filterFn: facetFilterFn },
+    {
+      id: 'connection',
+      accessorFn: (m) => m.connection?.name ?? '',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Connection" />,
+      cell: ({ row }) => (
+        <StopRowClick align="start">
+          <ConnectionChip connection={row.original.connection} className="max-w-56" />
+        </StopRowClick>
+      ),
+    },
     {
       accessorKey: 'version',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Version" />,
@@ -150,16 +160,18 @@ function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
 
 export default function ToolsPage() {
   const router = useRouter();
-  const [tab, setTab] = useTabParam(TABS, 'modules');
   const [view, setView] = React.useState<ModuleView>('all');
   const list = useListParams<ModuleFilters>('displayName');
   const query = useToolModules({ ...list.params, view });
-  const catalog = useToolCatalog(tab === 'catalog');
   const discover = useDiscoverModule();
   const create = useCreateModule();
   const remove = useDeleteModule();
   const bulkRemove = useBulkDeleteModules();
-  const [adding, setAdding] = React.useState<{ item: CatalogItem | null } | null>(null);
+  const [adding, setAdding] = React.useState(false);
+  const [connecting, setConnecting] = React.useState(false);
+  const [newConnectionId, setNewConnectionId] = React.useState<string | undefined>();
+  const connections = useIntegrationOptions(adding);
+  const flow = useConnectFlow(connecting);
   const [deleting, setDeleting] = React.useState<ToolModule | null>(null);
   const [bulk, setBulk] = React.useState<ToolModule[] | null>(null);
   const shownBulk = useSticky(bulk);
@@ -180,30 +192,19 @@ export default function ToolsPage() {
       title="Tools & MCP"
       description="Systems connected through the data gateway, the operations each exposes, and which workflows may call them"
       actions={
-        <Button onClick={() => setAdding({ item: null })}>
-          <Plus className="size-4" /> Add module
-        </Button>
-      }
-      tabs={
-        <Tabs value={tab} onValueChange={(t) => setTab(t as (typeof TABS)[number])}>
-          <TabsList>
-            <TabsTrigger value="modules">Modules</TabsTrigger>
-            <TabsTrigger value="catalog">Catalog</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/integrations?tab=catalog">
+              <Cable className="size-4" /> Connect a system
+            </Link>
+          </Button>
+          <Button onClick={() => setAdding(true)}>
+            <Plus className="size-4" /> Add module
+          </Button>
+        </div>
       }
     >
-      {tab === 'catalog' ? (
-        catalog.isPending ? (
-          <PageSkeleton statCards={0} tableRows={6} showToolbar={false} />
-        ) : catalog.isError ? (
-          <QueryError what="the catalog" onRetry={() => catalog.refetch()} retrying={catalog.isFetching} error={catalog.error} />
-        ) : catalog.data.length ? (
-          <CatalogGrid items={catalog.data} onAdd={(item) => setAdding({ item })} />
-        ) : (
-          <ListEmpty icon={Boxes} noun="catalog systems" filtered={false} description="The catalog is empty. Add a module from an MCP server, an OpenAPI spec or an HTTP operation." createLabel="Add module" onCreate={() => setAdding({ item: null })} />
-        )
-      ) : query.isPending ? (
+      {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={8} />
       ) : query.isError && !query.data ? (
         <QueryError what="modules" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
@@ -262,23 +263,44 @@ export default function ToolsPage() {
               onPaginationChange: list.setPagination,
               isLoading: query.isFetching && query.isPlaceholderData,
             }}
-            emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'modules' : 'modules in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' ? 'Add module' : undefined} onCreate={view === 'all' ? () => setAdding({ item: null }) : undefined} />}
+            emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'modules' : 'modules in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' ? 'Add module' : undefined} onCreate={view === 'all' ? () => setAdding(true) : undefined} />}
           />
         </div>
       )}
 
       <AddModuleDialog
-        open={!!adding}
-        onOpenChange={(o) => !o && setAdding(null)}
-        catalogItem={adding?.item}
+        open={adding}
+        onOpenChange={(o) => {
+          setAdding(o);
+          if (!o) setNewConnectionId(undefined);
+        }}
+        connections={connections.data ?? []}
+        connectionsLoading={connections.isPending}
+        newConnectionId={newConnectionId}
+        onConnectNew={() => setConnecting(true)}
         onDiscover={(s) => discover.mutateAsync(s)}
         discovering={discover.isPending}
         creating={create.isPending}
         onCreate={async (input) => {
           const m = await create.mutateAsync(input);
           toast.success(`Saved ${m.displayName} as a draft`, { description: 'Request a security review from its Approval tab.' });
-          setAdding(null);
+          setAdding(false);
           router.push(`/tools/${m.id}`);
+        }}
+      />
+      <ConnectDialog
+        open={connecting}
+        onOpenChange={setConnecting}
+        catalog={flow.catalog}
+        teams={flow.teams}
+        defaultTeam={flow.defaultTeam}
+        currentUser={flow.currentUser}
+        connecting={flow.connecting}
+        onConnect={async (input) => {
+          const i = await flow.connect(input);
+          toast.success(`Connected ${i.name}`, { description: 'Picked for this module.' });
+          setNewConnectionId(i.id);
+          setConnecting(false);
         }}
       />
       <DeleteDialog

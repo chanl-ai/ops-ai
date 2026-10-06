@@ -322,6 +322,11 @@ open production (ADR-0004 to ADR-0006, failure modes).
 | E7.5 Secrets | Bank secret store (or OpenBao or Vault); secret reads audited | `03` G-A7 | ADR-0004, `03` 5.4 | API only |
 | E7.6 Delivery pipeline | Builds from pinned sources with SBOM and signing; Worker Versioning deploys; every job asserts its target environment and store | A job pointed at the wrong store runs (design lessons, rank 9) | ADR-0004, design lessons | API only |
 | E7.7 Operations | OpenTelemetry ids across run, case and gateways; SLOs; on-call per component; backups verified by restoring content | A restore test returns an empty or wrong database without failing | architecture overview, failure modes, problem statement, Operations | API only |
+| E7.9 Files service | `services/files/` behind its API (`10` F1–F19): presigned upload and download against the bank's cloud of choice (ADR-0010), completion with size and digest checks, team dedupe, PostgreSQL `files` schema for metadata and references | `10` A1, A3, A5 or A6 | `10` 5.1, 5.2, ADR-0010 | Every upload point (`FileUpload`), `/files` |
+| | Scanner (B14) on storage events; quarantine; blocked references; re-scan on signature update | `10` A4 | `10` 5.3 | `/files` Quarantined view, case attachments |
+| | Retention classes, nightly retention run, legal hold in the service and in storage, WORM class for evidence | `10` A8, A9, A10 or A12 | `10` 5.6, 5.7 | `/files` bulk actions, `/settings/storage` |
+| | Callers move from bytes to `fileId`: mailbox intake attachments, knowledge sources, chat attachments, eval and test imports, evidence bundles, exports; each adds its reference | A service stores or accepts file bytes outside the files service, or a record holds a storage key | `10` 6, `02` S3, `07`, `04` 4.6 | Add source, chat composer, Import CSV dialogs, Model risk and review Export |
+| | Storage settings and connection test; download links audited | `10` A7, A11 or A13 | `10` F16, F17, 8.3 | `/settings/storage` |
 | E7.8 Reviews that open production | Threat model; module review model (decision 1); pen test; evidence pack for Model Risk (decision 2); change-board agreement (decision 3) | Production opens without a signed record for each | problem statement decisions, architecture overview, traceability | API only |
 
 ### Workflow 1 cell (department, with one embedded solutions engineer)
@@ -426,7 +431,8 @@ critical path.
 | B11 | Real customer mail allowed as test cases, retention, redaction | Compliance, Model Risk | 6 (critical) | Workflow 1 suite | `04` Q4 |
 | B12 | IdP group to department and collection mapping, and its maintainer | Identity team | 6 | Knowledge scope | `02` Q1 |
 | B13 | Entitlement data source OPA reads | Identity team, system teams | 6 | Gateway decisions | `03` Q3 |
-| B14 | Anti-malware interface for attachments | Security | 6 | Intake | `03` Q2 |
+| B14 | Anti-malware interface for attachments and every upload (Defender for Storage, ICAP or ClamAV) | Security | 6 | Intake, files service | `03` Q2, `10` Q2 |
+| B38 | Object storage cloud for phase 1 (S3 or Azure Blob), its region, the bank KMS key, and whether browsers may reach the storage endpoint for presigned uploads | Infrastructure, Network security | 4 (critical) | Files service, every upload | ADR-0010, `10` Q1 |
 | B15 | Where the first department's policies live, and their metadata quality | Knowledge owner | 4 | Connector choice, held rate | `02` Q2, Q3 |
 | B16 | Knowledge owner for the first department; monthly review accepted | Department head | 6 | Curation | `02` Q5 |
 | B17 | Who operates Temporal, the gateways and the registry, and the on-call model | Technology operations | 12 | Production readiness | overview Q3 |
@@ -464,7 +470,7 @@ half the screens are broken.
 | 3 | Generate OpenAPI 3.1 and TypeScript types in CI from the Python models; fail CI when committed types differ (ADR-0002) | WS1 | The equality check has been seen failing once |
 | 4 | Update `apps/console/src/lib/types/*` to re-export the generated types, and reshape the contract interfaces to the spec operations. Update the mock to the new contract so it stays the UI's development backend and the source of `?mock=slow`, `?mock=error`, `?mock=empty` states | WS5 | `pnpm verify` passes; every screen renders against the reshaped mock |
 | 5 | Implement `http.ts` (and the knowledge, cases, chat clients) over the generated client. Settle one error envelope first: `01` 6 uses RFC 9457 problem details, `02`/`03` use `{code, message, details}`, `07` and the mock's `http.ts` use `{error: {code, message}}`. This plan proposes RFC 9457 with a stable `code` everywhere and a mapping in `http.ts` | WS1, WS5 | One envelope in the OpenAPI document |
-| 6 | Put a BFF in the Next.js app: bank SSO (OIDC), same-origin `/api`, user token forwarded to the Python API; the browser never calls the Python API or the gateways directly | WS5, WS7 | No browser request leaves the console origin (except the chat sandbox origin in phase 3) |
+| 6 | Put a BFF in the Next.js app: bank SSO (OIDC), same-origin `/api`, user token forwarded to the Python API; the browser never calls the Python API or the gateways directly | WS5, WS7 | No browser request leaves the console origin, except the chat sandbox origin in phase 3 and presigned PUT and GET to the storage endpoint for file bytes (`10` 5.1) |
 | 7 | Swap per namespace in `apps/console/src/lib/api/index.ts`: today it chooses all-mock or all-HTTP from `NEXT_PUBLIC_OPS_API_URL`. It gains a list of namespaces served by HTTP, so `cases` can be real while `chat` stays mock; nothing outside this one file knows which is in use (`apps/console/CLAUDE.md`) | WS5 | A namespace listed as real makes no mock call (browser network log) |
 | 8 | Contract tests: one scenario suite runs against the mock and against the real API for each namespace; a difference fails CI | WS5, WS6 | A deliberate field rename in the mock fails the suite |
 | 9 | When every phase-1 namespace is real in `test`, the mock is used only for UI development and for phase-2 namespaces (`chat` until phase 3) | WS5 | Production build has no mock namespace |

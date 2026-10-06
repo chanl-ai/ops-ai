@@ -95,7 +95,7 @@ export function KbOverview({
                       <Loader2 className="size-4 animate-spin text-muted-foreground" /> Indexing
                     </span>
                     <span className="tabular-nums text-muted-foreground">
-                      {count(kb.indexing.done)} of {count(kb.indexing.total)} items
+                      {count(kb.indexing.done)} of {plural(kb.indexing.total, 'item')}
                     </span>
                   </div>
                   <Progress value={(kb.indexing.done / kb.indexing.total) * 100} className="h-1.5" />

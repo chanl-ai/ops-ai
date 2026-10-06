@@ -1,10 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { Check, Info, Loader2, Pencil, Plug, Plus, Trash2 } from 'lucide-react';
+import { Info, Loader2, Pencil, Plug, Plus, Trash2 } from 'lucide-react';
 
-import { PARSING_OPTIONS, RULE_FIELDS, SOURCE_TYPES, STRATEGIES, scheduleLabel, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
+import { ConnectionChip, SystemMark } from '@/components/integrations/integration-meta';
+import { RULE_FIELDS, RULE_PLACEHOLDER, SOURCE_TYPES, scheduleLabel, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { FileUpload, type UploadItem, uploadsBlocker } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Stepper } from '@/components/shared/stepper';
@@ -18,23 +20,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { bytes, count, plural } from '@/lib/format';
-import type { ChunkStrategy, Connection, KnowledgeBase, MetadataMapping, Rule, Schedule, Sensitivity, SourceInput, SourcePreview, SourceType } from '@/lib/types/knowledge';
+import type { ConnectionRef, IntegrationKind } from '@/lib/types/integrations';
+import type { HeldPreview, HeldPreviewInput, KnowledgeBase, MetadataMapping, ParsingSettings, Rule, Schedule, Sensitivity, SourceInput, SourcePreview, SourceType } from '@/lib/types/knowledge';
+import type { IngestPresetId, IngestSettings, SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import { cn } from '@/lib/utils';
 
+import { IngestForm } from './ingest-form';
+import { applyPreset, defaultIngest, PRESET_LABEL, strategyMeta } from './ingest-meta';
+import { MetadataMappingEditor } from './metadata-mapping-editor';
 import { countFor, ScopeTree, TREES } from './scope-tree';
+import { SplitPreviewPanel } from './split-preview';
 
-const STEPS = ['Type', 'Scope', 'Parsing', 'Rules', 'Schedule', 'Review'] as const;
-const STEP_TITLE = ['Source type', 'Connection and scope', 'Parsing and chunking', 'Rules and metadata', 'Permissions and schedule', 'Review'];
+const STEPS = ['Type', 'Scope', 'Ingestion', 'Rules', 'Schedule', 'Review'] as const;
+const STEP_TITLE = ['Source type', 'Connection and scope', 'Ingestion', 'Rules and metadata', 'Permissions and schedule', 'Review'];
 
 interface Draft {
   type?: SourceType;
   name: string;
+  connectionId: string;
   scope: string[];
   urls: string;
   startUrl: string;
@@ -43,15 +51,9 @@ interface Draft {
   includePaths: string;
   excludePaths: string;
   text: string;
-  files: { name: string; size: number }[];
-  ocr: boolean;
-  tables: boolean;
-  vision: boolean;
-  removeHtml: boolean;
-  strategy: ChunkStrategy;
-  size: number;
-  overlap: number;
-  language: string;
+  files: UploadItem[];
+  parsing: ParsingSettings;
+  ingest: IngestSettings;
   rules: Rule[];
   mapping: MetadataMapping[];
   tags: string[];
@@ -69,6 +71,7 @@ interface Draft {
 
 const empty = (): Draft => ({
   name: '',
+  connectionId: '',
   scope: [],
   urls: '',
   startUrl: '',
@@ -78,14 +81,8 @@ const empty = (): Draft => ({
   excludePaths: '',
   text: '',
   files: [],
-  ocr: false,
-  tables: true,
-  vision: false,
-  removeHtml: true,
-  strategy: 'structure',
-  size: 512,
-  overlap: 50,
-  language: 'auto',
+  parsing: { ocr: false, tables: true, vision: false },
+  ingest: defaultIngest(),
   rules: [],
   mapping: [{ key: 'locale', from: 'static:en' }],
   tags: [],
@@ -100,6 +97,13 @@ const empty = (): Draft => ({
   notify: true,
   kbIds: [],
 });
+
+/** The integration kind each connected-app source type reads through. */
+const KIND_OF: Partial<Record<SourceType, IntegrationKind>> = { sharepoint: 'sharepoint', confluence: 'confluence', gdrive: 'gdrive', github: 'github', notion: 'notion', zendesk: 'zendesk', salesforce: 'salesforce' };
+const usableConn = (c: ConnectionRef) => c.status === 'healthy' || c.status === 'expiring';
+
+/** The preset a new source of this type starts from; web and help-centre content gets cleaned and FAQ questions. */
+const presetFor = (t: SourceType): IngestPresetId => (t === 'crawl' || t === 'url' || t === 'zendesk' || t === 'salesforce' ? 'help_centre' : 'policy_manual');
 
 const scheduleFor = (kind: Schedule['kind']): Schedule =>
   kind === 'manual' ? { kind } : kind === 'daily' ? { kind, time: '02:00' } : kind === 'weekly' ? { kind, day: 'Mon', time: '03:00' } : kind === 'monthly' ? { kind, day: 1, time: '03:00' } : { kind: 'webhook', safetyNetDaily: true };
@@ -124,25 +128,38 @@ export function AddSourceDialog({
   onOpenChange,
   initialType,
   connections,
+  newConnectionId,
   knowledgeBases,
   collections,
   existingNames,
   onPreview,
-  onConnect,
+  onConnectNew,
   onSubmit,
   isPending,
+  samples,
+  samplesLoading,
+  onPreviewSplit,
+  onPreviewHeld,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialType?: SourceType;
-  connections: Connection[];
+  /** Connections from Integrations; a connected-app source must pick one. */
+  connections: ConnectionRef[];
+  /** Set after "Connect a new system" finishes, so the new connection is picked. */
+  newConnectionId?: string;
   knowledgeBases: Pick<KnowledgeBase, 'id' | 'name'>[];
   collections: string[];
   existingNames: string[];
   onPreview: (input: Pick<SourceInput, 'type' | 'config'>) => Promise<SourcePreview>;
-  onConnect: (type: SourceType) => Promise<unknown>;
+  /** Opens the Integrations connect dialog for this kind of system. */
+  onConnectNew: (kind: IntegrationKind) => void;
   onSubmit: (input: SourceInput, opts: { sync: boolean; kbIds: string[] }) => Promise<unknown>;
   isPending: boolean;
+  samples: SampleDocument[];
+  samplesLoading?: boolean;
+  onPreviewSplit: (input: SplitPreviewInput) => Promise<SplitPreview>;
+  onPreviewHeld: (input: HeldPreviewInput) => Promise<HeldPreview>;
 }) {
   const [step, setStep] = React.useState(1);
   const [d, setD] = React.useState<Draft>(empty);
@@ -150,19 +167,20 @@ export function AddSourceDialog({
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<SourcePreview | null>(null);
   const [previewing, setPreviewing] = React.useState(false);
-  const [connecting, setConnecting] = React.useState(false);
-  const [chunkPreview, setChunkPreview] = React.useState<string[] | null>(null);
+  const [held, setHeld] = React.useState<HeldPreview | null>(null);
   const bodyRef = React.useRef<HTMLDivElement>(null);
-  const fileRef = React.useRef<HTMLInputElement>(null);
 
+  // Read through a ref so a refetched connection list does not reset the draft mid-edit.
+  const connectionsRef = React.useRef(connections);
+  connectionsRef.current = connections;
   const pickType = React.useCallback((t: SourceType) => {
     const m = sourceTypeMeta(t);
     setD((x) => ({
       ...x,
       type: t,
+      connectionId: connectionsRef.current.find((c) => c.kind === KIND_OF[t] && usableConn(c))?.id ?? '',
       scope: [],
-      strategy: t === 'text' ? 'faq' : 'structure',
-      removeHtml: t === 'crawl' || t === 'url',
+      ingest: applyPreset(defaultIngest(), presetFor(t)),
       permissions: m.supportsInherit ? 'inherit' : 'workspace',
       schedule: t === 'file' || t === 'text' ? { kind: 'manual' } : m.supportsWebhook ? { kind: 'webhook', safetyNetDaily: true } : { kind: 'daily', time: '02:00' },
     }));
@@ -177,16 +195,19 @@ export function AddSourceDialog({
     setTouched(false);
     setSubmitError(null);
     setPreview(null);
-    setChunkPreview(null);
   }, [open, initialType, pickType]);
   React.useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
+  React.useEffect(() => {
+    if (newConnectionId) setD((x) => ({ ...x, connectionId: newConnectionId }));
+  }, [newConnectionId]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
   const meta = d.type ? sourceTypeMeta(d.type) : undefined;
-  const conn = d.type ? connections.find((c) => c.type === d.type) : undefined;
-  const needsConnection = !!meta?.connected && conn?.status !== 'connected';
+  const kindConns = d.type && KIND_OF[d.type] ? connections.filter((c) => c.kind === KIND_OF[d.type!]) : [];
+  const conn = kindConns.find((c) => c.id === d.connectionId);
+  const needsConnection = !!meta?.connected && !(conn && usableConn(conn));
   const tree = d.type ? TREES[d.type] : undefined;
   const scopeCount = tree ? countFor(tree, d.scope) : 0;
   const urlList = d.urls.split('\n').map((u) => u.trim()).filter(Boolean);
@@ -200,14 +221,40 @@ export function AddSourceDialog({
     include: d.includePaths,
     exclude: d.excludePaths,
     fileNames: d.files.map((f) => f.name),
+    fileIds: d.files.map((f) => f.fileId).filter(Boolean),
   });
+
+  // Required keys of the chosen knowledge bases and how many previewed items they would hold, from the API.
+  const heldKey = JSON.stringify([d.type, d.kbIds, d.mapping, d.files.length, d.urls, d.scope, step >= 4]);
+  React.useEffect(() => {
+    if (!d.type || step < 4 || !d.kbIds.length) {
+      setHeld(null);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      onPreviewHeld({ type: d.type!, config: config(), metadataMapping: d.mapping.filter((m) => m.key.trim()), kbIds: d.kbIds })
+        .then((r) => {
+          if (live) setHeld(r);
+        })
+        .catch(() => {
+          if (live) setHeld(null);
+        });
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heldKey]);
+  const heldTotal = held?.byKb.filter((k) => k.held > 0) ?? [];
 
   const errors: Record<number, string | undefined> = {
     1: d.type ? undefined : 'Pick a source type.',
     2: (() => {
       if (d.name.trim().length < 2 || d.name.length > 80) return 'Name it in 2 to 80 characters, e.g. Card dispute policies.';
       if (existingNames.some((n) => n.toLowerCase() === d.name.trim().toLowerCase())) return 'A source with this name already exists.';
-      if (needsConnection) return `Connect ${meta?.label} first.`;
+      if (needsConnection) return conn ? `${conn.name} is not healthy. Pick another connection or fix it in Integrations.` : `Pick a ${meta?.label} connection, or connect one.`;
       if (tree && !d.scope.length) return `Pick at least one item under ${meta?.scopeLabel.toLowerCase()}.`;
       if (d.type === 'url' && !urlList.length) return 'Add at least one URL.';
       if (d.type === 'url' && urlList.some((u) => !/^https?:\/\//.test(u))) return 'URLs start with http:// or https://.';
@@ -216,15 +263,31 @@ export function AddSourceDialog({
       if (d.type === 'crawl' && (d.maxPages < 10 || d.maxPages > 5000)) return 'Max pages is 10 to 5,000.';
       if (d.type === 'text' && !d.text.trim()) return 'Paste the text to index.';
       if (d.type === 'file' && !d.files.length) return 'Add at least one file.';
+      if (d.type === 'file' && uploadsBlocker(d.files)) return uploadsBlocker(d.files);
       if (preview && !preview.ok) return preview.message;
       return undefined;
     })(),
-    3: d.strategy !== 'rows' && (d.size < 100 || d.size > 2000) ? 'Chunk size is 100 to 2,000 tokens.' : undefined,
+    3: !d.ingest.strategies.length
+      ? 'Choose at least one strategy, or a preset.'
+      : d.ingest.strategies.includes('table_rows') && d.ingest.columns.length && !d.ingest.columns.some((c) => c.role === 'searchable')
+        ? 'Mark at least one table column as searchable.'
+        : d.ingest.size < 100 || d.ingest.size > 2000
+          ? 'Chunk size is 100 to 2,000 tokens.'
+          : undefined,
     5: d.permissions === 'selected' && !d.principals.length ? 'Add at least one member or group.' : undefined,
   };
   const stepError = touched ? errors[step] : undefined;
   const next = () => {
-    if (errors[step]) return setTouched(true);
+    if (errors[step]) {
+      setTouched(true);
+      // The error sits at the top of the body; an inline one next to its control is shown first when there is one.
+      requestAnimationFrame(() => {
+        const inline = bodyRef.current?.querySelector('[data-field-error]');
+        if (inline) inline.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        else bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      return;
+    }
     setTouched(false);
     setStep(step + 1);
   };
@@ -243,11 +306,12 @@ export function AddSourceDialog({
   const build = (status: 'active' | 'draft'): SourceInput => ({
     type: d.type!,
     name: d.name.trim(),
+    connectionId: meta?.connected ? d.connectionId || undefined : undefined,
     status,
     scopeSummary,
     config: config(),
-    parsing: { ocr: d.ocr, tables: d.tables, vision: d.vision, removeHtml: d.removeHtml },
-    chunking: { strategy: d.strategy, size: d.size, overlap: d.overlap, language: d.language },
+    parsing: d.parsing,
+    ingest: d.ingest,
     rules: d.rules.filter((r) => r.value.trim()),
     metadataMapping: d.mapping.filter((m) => m.key.trim()),
     tags: d.tags,
@@ -259,7 +323,8 @@ export function AddSourceDialog({
     notifyOnFailure: d.notify,
     sensitivity: d.sensitivity,
     collection: d.collection.trim() || 'General',
-    itemsPending: preview?.rows.length ?? scopeCount,
+    fileIds: d.type === 'file' ? d.files.flatMap((f) => (f.fileId ? [f.fileId] : [])) : undefined,
+    itemsPending: preview?.rows.length ?? (d.type === 'file' ? d.files.length : d.type === 'url' ? urlList.length : d.type === 'text' ? 1 : scopeCount),
   });
 
   const submit = async (status: 'active' | 'draft', sync: boolean) => {
@@ -312,7 +377,7 @@ export function AddSourceDialog({
         className="h-8 min-w-40 flex-1 font-mono text-xs"
         value={r.value}
         aria-label="Value"
-        placeholder={r.field === 'path' ? 'e.g. **/Archive/**' : r.field === 'mime' ? 'e.g. application/zip' : r.field === 'sizeUnder' ? 'e.g. 50 MB' : 'e.g. draft'}
+        placeholder={RULE_PLACEHOLDER[r.field]}
         onChange={(e) => set('rules', d.rules.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
       />
       <Button variant="ghost" size="icon" className="size-8" onClick={() => set('rules', d.rules.filter((_, j) => j !== i))} aria-label="Remove rule">
@@ -324,13 +389,16 @@ export function AddSourceDialog({
   const reviewSections: [string, number, [string, React.ReactNode][]][] = meta
     ? [
         ['Source type', 1, [['Type', meta.label]]],
-        ['Connection and scope', 2, [['Name', d.name], ['Connection', conn?.connectedAs], ['Scope', scopeSummary]]],
+        ['Connection and scope', 2, [['Name', d.name], ['Connection', conn?.name], ['Scope', scopeSummary]]],
         [
-          'Parsing and chunking',
+          'Ingestion',
           3,
           [
-            ['Parsing', [d.ocr && 'OCR', d.tables && 'tables', d.vision && 'vision', d.removeHtml && 'remove HTML'].filter(Boolean).join(', ') || 'Defaults'],
-            ['Chunking', `${STRATEGIES.find((s) => s.value === d.strategy)?.label} · ${d.size} tokens · ${d.overlap} overlap`],
+            ['Preset', PRESET_LABEL[d.ingest.preset]],
+            ['Strategies', d.ingest.strategies.map((x) => strategyMeta(x).label).join(', ')],
+            ['Parsing', [d.parsing.ocr && 'OCR', d.parsing.tables && 'keep tables', d.parsing.vision && 'vision'].filter(Boolean).join(', ') || 'Defaults'],
+            ['Chunks', `${d.ingest.size} tokens · ${d.ingest.overlap} overlap`],
+            ...(d.ingest.strategies.some((x) => strategyMeta(x).ai) ? [['AI steps', `Call ${d.ingest.model}; wait for the knowledge owner’s approval`] as [string, string]] : []),
           ],
         ],
         [
@@ -340,6 +408,7 @@ export function AddSourceDialog({
             ['Rules', d.rules.filter((r) => r.value).map((r) => `${r.kind} ${r.field} ${r.value}`).join('; ') || 'None'],
             ['Metadata', d.mapping.filter((m) => m.key).map((m) => `${m.key} ← ${m.from.replace(/^(static|field):/, '')}`).join(', ') || 'None'],
             ['Tags', d.tags.join(', ') || 'None'],
+            ['Knowledge bases', knowledgeBases.filter((k) => d.kbIds.includes(k.id)).map((k) => k.name).join(', ') || 'None'],
             ['Collection', d.collection || 'General'],
             ['Sensitivity', d.sensitivity],
           ],
@@ -366,7 +435,7 @@ export function AddSourceDialog({
       description={`Step ${step} of ${STEPS.length} · ${STEP_TITLE[step - 1]}`}
       headerExtra={<Stepper steps={STEPS} current={step} className="pt-3" testId="source-stepper" />}
       bodyRef={bodyRef}
-      bodyClassName="h-[30rem]"
+      bodyClassName="h-[30rem] flex-auto"
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div>
@@ -405,7 +474,8 @@ export function AddSourceDialog({
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{group}</h3>
               <RadioGroup value={d.type ?? ''} onValueChange={(t) => pickType(t as SourceType)} className="grid gap-2 sm:grid-cols-2">
                 {SOURCE_TYPES.filter((t) => t.group === group).map((t) => {
-                  const c = connections.find((x) => x.type === t.type);
+                  const cs = connections.filter((x) => x.kind === KIND_OF[t.type]);
+                  const ok = cs.some(usableConn);
                   return (
                     <label key={t.type} htmlFor={`st-${t.type}`} className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', d.type === t.type && 'border-primary bg-primary/5')}>
                       <RadioGroupItem value={t.type} id={`st-${t.type}`} className="mt-0.5" />
@@ -413,9 +483,9 @@ export function AddSourceDialog({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                           {t.label}
-                          {t.connected && c?.status !== 'connected' && (
+                          {t.connected && !ok && (
                             <Badge variant="outline" className="font-normal">
-                              {c?.status === 'needs_reauth' ? 'Reconnect' : 'Not connected'}
+                              {cs.length ? 'Reconnect' : 'Not connected'}
                             </Badge>
                           )}
                         </span>
@@ -430,45 +500,48 @@ export function AddSourceDialog({
         </div>
       )}
 
-      {step === 2 && meta && (
-        <div className="flex flex-col gap-5">
+      {/* A file source keeps this step mounted while hidden, so uploads in progress survive moving between steps. */}
+      {meta && (step === 2 || d.type === 'file') && (
+        <div className={cn('flex flex-col gap-5', step !== 2 && 'hidden')}>
           <FormField id="src-name" label="Name" error={touched && (d.name.trim().length < 2 || existingNames.some((n) => n.toLowerCase() === d.name.trim().toLowerCase())) ? errors[2] : undefined}>
             <Input id="src-name" value={d.name} onChange={(e) => set('name', e.target.value)} placeholder={d.type === 'sharepoint' ? 'e.g. Card dispute policies' : d.type === 'crawl' ? 'e.g. Public pricing pages' : 'e.g. Branch procedures'} autoFocus />
           </FormField>
 
           {meta.connected && (
             <div className="flex flex-col gap-2">
-              <Label>Connection</Label>
-              {conn?.status === 'connected' ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                  <Check className="size-4 text-emerald-600" />
-                  <span className="font-medium">{conn.name}</span>
-                  <span className="text-muted-foreground">{conn.connectedAs}</span>
-                </div>
-              ) : (
+              <Label htmlFor="src-conn">Connection</Label>
+              <div className="flex flex-wrap gap-2">
+                <Select value={d.connectionId} onValueChange={(v) => set('connectionId', v)}>
+                  <SelectTrigger id="src-conn" className="min-w-56 flex-1">
+                    <SelectValue placeholder={kindConns.length ? `Choose a ${meta.label} connection` : `No ${meta.label} connection yet`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {kindConns.map((c) => (
+                      <SelectItem key={c.id} value={c.id} disabled={c.status === 'revoked'}>
+                        <span className="flex items-center gap-2">
+                          <SystemMark kind={c.kind} size="sm" /> {c.name}
+                          {!usableConn(c) && <span className="text-xs text-muted-foreground">· {c.status === 'revoked' ? 'revoked' : 'needs reconnect'}</span>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={() => onConnectNew(KIND_OF[meta.type]!)}>
+                  <Plus className="size-4" /> Connect a new system
+                </Button>
+              </div>
+              {conn && !usableConn(conn) ? (
                 <Alert>
                   <Plug className="size-4" />
-                  <AlertTitle>{conn?.status === 'needs_reauth' ? `${meta.label} needs to be reconnected` : `${meta.label} is not connected`}</AlertTitle>
+                  <AlertTitle>{conn.name} cannot be used until it is fixed</AlertTitle>
                   <AlertDescription className="flex flex-col items-start gap-2">
-                    <p>{conn?.status === 'needs_reauth' ? 'The saved token expired. Reconnect to keep syncing.' : 'Connect once for the workspace; every source of this type reuses it.'}</p>
-                    <LoadingButton
-                      size="sm"
-                      isLoading={connecting}
-                      loadingText="Testing connection…"
-                      onClick={async () => {
-                        setConnecting(true);
-                        try {
-                          await onConnect(meta.type);
-                        } finally {
-                          setConnecting(false);
-                        }
-                      }}
-                    >
-                      {conn?.status === 'needs_reauth' ? 'Reconnect' : 'Connect'} {meta.label}
-                    </LoadingButton>
+                    <p>Reconnect it in Integrations, or pick another connection.</p>
+                    <ConnectionChip connection={conn} />
                   </AlertDescription>
                 </Alert>
-              )}
+              ) : !kindConns.length ? (
+                <p className="text-xs text-muted-foreground">Connections are set up once in Integrations, with their scopes, owner and expiry; every source of this type can reuse one.</p>
+              ) : null}
             </div>
           )}
 
@@ -489,38 +562,7 @@ export function AddSourceDialog({
           {d.type === 'file' && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="src-files">Files</Label>
-              <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-6 text-center text-sm">
-                <p className="text-muted-foreground">PDF, DOCX, XLSX, PPTX, CSV, TXT, MD or HTML, up to 50 MB each.</p>
-                <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                  <Plus className="size-3.5" /> Choose files
-                </Button>
-                <input
-                  ref={fileRef}
-                  id="src-files"
-                  type="file"
-                  multiple
-                  hidden
-                  accept=".pdf,.docx,.xlsx,.pptx,.csv,.txt,.md,.html"
-                  onChange={(e) => {
-                    const picked = Array.from(e.target.files ?? []).map((f) => ({ name: f.name, size: f.size }));
-                    set('files', [...d.files, ...picked.filter((p) => !d.files.some((f) => f.name === p.name))]);
-                    e.target.value = '';
-                  }}
-                />
-              </div>
-              {d.files.length > 0 && (
-                <ul className="divide-y rounded-md border text-sm">
-                  {d.files.map((f) => (
-                    <li key={f.name} className="flex items-center gap-2 px-3 py-1.5">
-                      <span className="flex-1 truncate">{f.name}</span>
-                      <span className="text-xs text-muted-foreground">{bytes(f.size)}</span>
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => set('files', d.files.filter((x) => x.name !== f.name))} aria-label={`Remove ${f.name}`}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <FileUpload id="src-files" purpose="knowledge_source" multiple onChange={(items) => set('files', items)} testId="source-file-upload" />
             </div>
           )}
 
@@ -598,83 +640,8 @@ export function AddSourceDialog({
 
       {step === 3 && (
         <div className="flex flex-col gap-5">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {PARSING_OPTIONS.map((o) => (
-              <div key={o.k} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-                <Label htmlFor={`p-${o.k}`} className="flex items-center gap-1.5 font-normal">
-                  {o.label} <Tip text={o.tip} />
-                </Label>
-                <Switch id={`p-${o.k}`} checked={d[o.k]} onCheckedChange={(v) => set(o.k, v)} />
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label>Chunking strategy</Label>
-            <RadioGroup value={d.strategy} onValueChange={(v) => set('strategy', v as ChunkStrategy)} className="grid gap-2 sm:grid-cols-2">
-              {STRATEGIES.map((s) => (
-                <label key={s.value} htmlFor={`strat-${s.value}`} className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', d.strategy === s.value && 'border-primary bg-primary/5')}>
-                  <RadioGroupItem value={s.value} id={`strat-${s.value}`} className="mt-0.5" />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                      {s.label}
-                      {s.llm && (
-                        <Badge variant="outline" className="font-normal">
-                          Uses credits each sync
-                        </Badge>
-                      )}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">{s.description}</span>
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
-          <div className={cn('grid gap-6 sm:grid-cols-2', d.strategy === 'rows' && 'opacity-50')}>
-            {(
-              [
-                ['size', 'Chunk size (tokens)', 100, 2000, 16],
-                ['overlap', 'Overlap (tokens)', 0, 500, 10],
-              ] as const
-            ).map(([k, label, min, max, stepBy]) => (
-              <div key={k} className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`c-${k}`}>{label}</Label>
-                  <Input id={`c-${k}`} type="number" className="h-7 w-20 text-right tabular-nums" value={d[k]} min={min} max={max} disabled={d.strategy === 'rows'} onChange={(e) => set(k, Number(e.target.value))} />
-                </div>
-                <Slider value={[d[k]]} min={min} max={max} step={stepBy} disabled={d.strategy === 'rows'} onValueChange={([v]) => set(k, v)} aria-label={label} />
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={() =>
-                setChunkPreview(
-                  Array.from({ length: 6 }, (_, i) =>
-                    d.strategy === 'faq'
-                      ? `Q: ${['What is the dispute window?', 'Who approves a provisional credit?', 'How long does a chargeback take?'][i % 3]}\nA: ${['60 days from the statement date.', 'A Card Services lead, above $500.', 'Up to 45 days with the network.'][i % 3]}`
-                      : d.strategy === 'rows'
-                        ? `Product: ${['Personal loan', 'Line of credit', 'Mortgage'][i % 3]} | Band: > $250k | Fee: 0.${5 + i}%`
-                        : `${['1. Purpose', '2. Scope', '3. Eligibility', '4. Procedure'][i % 4]} · ${d.strategy === 'headers' ? `[Context: Card dispute policy, section ${(i % 4) + 1}] ` : ''}This policy applies to every card product. Where card network rules set a higher standard, that standard applies. (${d.size} tokens, ${d.overlap} overlap)`,
-                  ),
-                )
-              }
-            >
-              Preview chunks
-            </Button>
-            {chunkPreview && (
-              <ol className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-md border p-2">
-                {chunkPreview.map((c, i) => (
-                  <li key={i} className="rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-                    <span className="mr-2 text-muted-foreground">#{i + 1}</span>
-                    {c}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
+          <IngestForm idPrefix="add" ingest={d.ingest} parsing={d.parsing} onIngest={(v) => set('ingest', v)} onParsing={(v) => set('parsing', v)} />
+          <SplitPreviewPanel idPrefix="add" samples={samples} samplesLoading={samplesLoading} ingest={d.ingest} parsing={d.parsing} mapping={d.mapping} onPreview={onPreviewSplit} />
         </div>
       )}
 
@@ -689,21 +656,35 @@ export function AddSourceDialog({
             </Button>
           </div>
           <div className="flex flex-col gap-2">
-            <Label>Metadata mapping</Label>
-            <p className="text-xs text-muted-foreground">Key ← source field, or a fixed value such as locale = en.</p>
-            {d.mapping.map((m, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                <Input className="h-8 w-40 font-mono text-xs" value={m.key} placeholder="e.g. department" aria-label="Metadata key" onChange={(e) => set('mapping', d.mapping.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))} />
-                <span className="text-muted-foreground">←</span>
-                <Input className="h-8 min-w-40 flex-1 font-mono text-xs" value={m.from} placeholder="e.g. field:Dept or static:en" aria-label="Comes from" onChange={(e) => set('mapping', d.mapping.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)))} />
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => set('mapping', d.mapping.filter((_, j) => j !== i))} aria-label="Remove mapping">
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            ))}
-            <Button variant="outline" size="sm" className="w-fit" onClick={() => set('mapping', [...d.mapping, { key: '', from: 'static:' }])}>
-              <Plus className="size-3.5" /> Add mapping
-            </Button>
+            <Label>Attach to knowledge bases</Label>
+            <p className="text-xs text-muted-foreground">Optional. Each one indexes the items on its next refresh, and holds any item missing a key it requires.</p>
+            <div className="flex flex-wrap gap-2">
+              {knowledgeBases.map((k) => (
+                <label key={k.id} htmlFor={`src-kb-${k.id}`} className={cn('flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs', d.kbIds.includes(k.id) && 'border-primary bg-primary/5')}>
+                  <Checkbox id={`src-kb-${k.id}`} checked={d.kbIds.includes(k.id)} onCheckedChange={(v) => set('kbIds', v ? [...d.kbIds, k.id] : d.kbIds.filter((x) => x !== k.id))} className="size-3.5" /> {k.name}
+                </label>
+              ))}
+            </div>
+            {held && held.byKb.length > 0 && (
+              <ul className="flex flex-col gap-1 rounded-md border bg-muted/40 px-3 py-2 text-xs" data-testid="required-metadata">
+                {held.byKb.map((k) => (
+                  <li key={k.kbId} className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium">{k.kbName} requires</span>
+                    {k.required.map((key) => (
+                      <Badge key={key} variant="outline" className={cn('font-mono text-[11px] font-normal', k.missing.includes(key) && 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400')}>
+                        {key}
+                      </Badge>
+                    ))}
+                    {k.missing.length > 0 && <span className="text-muted-foreground">· map {k.missing.join(', ')} below or items are held</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Metadata</Label>
+            <p className="text-xs text-muted-foreground">Each key comes from a field at the source, a fixed value such as locale = en, or a model reading the document at ingest.</p>
+            <MetadataMappingEditor value={d.mapping} onChange={(v) => set('mapping', v)} model={d.ingest.model} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField id="src-tags" label="Tags on every item" optional>
@@ -863,6 +844,25 @@ export function AddSourceDialog({
       {step === 6 && meta && (
         <div className="flex flex-col gap-4">
           {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
+          {held && heldTotal.length > 0 && (
+            <Alert data-testid="held-warning">
+              <Info className="size-4" />
+              <AlertTitle>Some items would be held</AlertTitle>
+              <AlertDescription className="flex flex-col items-start gap-2">
+                <ul className="list-disc pl-4">
+                  {heldTotal.map((k) => (
+                    <li key={k.kbId}>
+                      {k.kbName}: {k.held} of {plural(held.items, 'previewed item')} missing {k.missing.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+                <p>Held items are stored but not searched until the missing keys are added.</p>
+                <Button size="sm" variant="outline" onClick={() => setStep(4)}>
+                  Map the missing keys
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           {reviewSections.map(([title, target, rows]) => (
             <div key={title} className="rounded-lg border">
               <div className="flex items-center justify-between border-b px-3 py-2">
@@ -876,17 +876,6 @@ export function AddSourceDialog({
               </div>
             </div>
           ))}
-          <div className="flex flex-col gap-2 rounded-lg border p-3">
-            <span className="text-sm font-medium">Attach to knowledge bases</span>
-            <span className="text-xs text-muted-foreground">Optional. Its items are indexed by each one on their next refresh.</span>
-            <div className="flex flex-wrap gap-2">
-              {knowledgeBases.map((k) => (
-                <label key={k.id} htmlFor={`src-kb-${k.id}`} className={cn('flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs', d.kbIds.includes(k.id) && 'border-primary bg-primary/5')}>
-                  <Checkbox id={`src-kb-${k.id}`} checked={d.kbIds.includes(k.id)} onCheckedChange={(v) => set('kbIds', v ? [...d.kbIds, k.id] : d.kbIds.filter((x) => x !== k.id))} className="size-3.5" /> {k.name}
-                </label>
-              ))}
-            </div>
-          </div>
         </div>
       )}
     </DialogShell>

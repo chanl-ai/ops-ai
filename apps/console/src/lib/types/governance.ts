@@ -76,7 +76,7 @@ export interface ToolCallStats {
 
 // ── Audit ──────────────────────────────────────────────────────────────────
 
-export type AuditAction = 'created' | 'edited' | 'published' | 'approved' | 'rejected' | 'restored' | 'deleted' | 'granted' | 'revoked' | 'connected' | 'login';
+export type AuditAction = 'created' | 'edited' | 'published' | 'approved' | 'rejected' | 'restored' | 'deleted' | 'granted' | 'revoked' | 'connected' | 'login' | 'uploaded' | 'downloaded' | 'legal_hold';
 export type AuditTargetType =
   | 'workflow'
   | 'agent'
@@ -92,9 +92,12 @@ export type AuditTargetType =
   | 'api_key'
   | 'webhook'
   | 'mailbox'
+  | 'integration'
   | 'notifications'
   | 'session'
-  | 'model';
+  | 'model'
+  | 'file'
+  | 'storage';
 
 export interface AuditActor {
   kind: 'person' | 'workflow';

@@ -13,6 +13,8 @@ import { createSettingsHttp } from './settings-http';
 import { createEvalsHttp } from './evals-http';
 import { createModelRiskHttp } from './model-risk-http';
 import { createToolModulesHttp } from './tool-modules-http';
+import { createIntegrationsHttp } from './integrations-http';
+import { createFilesHttp } from './files-http';
 import { currentTeamId } from './team-context';
 
 function qs(params: ListParams & { view?: string }) {
@@ -97,6 +99,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
     evals: createEvalsHttp(get, send, qs),
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),
+    integrations: createIntegrationsHttp(get, send, qs),
+    files: createFilesHttp(get, send, qs),
     tools: {
       list: (p) => get(`/tools?${qs(p)}`),
       create: (i) => send('POST', '/tools', i),
@@ -119,7 +123,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     tests: {
       list: (wid) => get(`/workflows/${wid}/tests`),
       create: (wid, i) => send('POST', `/workflows/${wid}/tests`, i),
-      importRows: (wid, rows) => send('POST', `/workflows/${wid}/tests/import`, { rows }),
+      importRows: (wid, rows, fileId) => send('POST', `/workflows/${wid}/tests/import`, { rows, fileId }),
       fromRun: (runId) => send('POST', `/runs/${runId}/test-case`),
       remove: (id) => send('DELETE', `/tests/${id}`),
     },

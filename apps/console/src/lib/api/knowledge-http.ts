@@ -40,8 +40,10 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       runs: (id, p) => get(`/sources/${id}/runs?${qs(p)}`),
       run: (runId) => get(`/sync-runs/${runId}`),
       preview: (i) => send('POST', '/sources/preview', i),
-      connections: () => get('/connections'),
-      connect: (type) => send('POST', '/connections', { type }),
+      previewHeld: (i) => send('POST', '/sources/preview-held', i),
+      samples: (sourceId) => get(`/ingest/samples${sourceId ? `?sourceId=${sourceId}` : ''}`),
+      previewSplit: (i) => send('POST', '/ingest/preview-split', i),
+      approveIngest: (id) => send('POST', `/sources/${id}/ingest/approve`),
       bulkSync: (ids) => send('POST', '/sources/bulk-sync', { ids }),
       bulkSetPaused: (ids, paused) => send('POST', '/sources/bulk-pause', { ids, paused }),
       bulkRemove: (ids) => send('POST', '/sources/bulk-delete', { ids }),
@@ -54,7 +56,9 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       setTags: (id, tags) => send('PUT', `/items/${id}/tags`, { tags }),
       setOwner: (id, owner) => send('PUT', `/items/${id}/owner`, { owner }),
       addTag: (ids, tag) => send('POST', '/items/tag', { ids, tag }),
+      setMetadata: (id, values) => send('PATCH', `/items/${id}/metadata`, { values }),
     },
+    retrieve: (i) => send('POST', '/knowledge/retrieve', i),
     lookups: () => get('/knowledge/lookups'),
   };
 }

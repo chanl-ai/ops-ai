@@ -101,7 +101,7 @@ in it). Phase 2b adds sharing, attachments, custom apps, titles, export and opti
 |---|---|---|
 | `Thread` | `id`, `ownerId`, `title`, `workflowId`, `kbIds[]`, `pinned`, `archived`, `hiddenAt?`, `retentionClass`, `legalHold`, `createdAt`, `lastMessageAt`, `messageCount` | `workflowId` is the chat workflow (shown as the agent). Version lives on each session and message |
 | `Session` | `id`, `threadId`, `runId`, `workflowVersion`, `definitionDigest`, `state`, `openedAt`, `closedAt?`, `closeReason?` | One Temporal run (CD-1) |
-| `Message` | `id`, `threadId`, `sessionId`, `role` (`user`, `assistant`), `content`, `at`, `status`, `supersededBy?`, `workflowVersion`, `agentVersion`, `modelAlias`, `attachments[]`, `citations[]`, `toolCalls[]`, `widgets[]`, `noAnswer`, `error?`, `feedback?` | Edited or regenerated messages are superseded, never deleted |
+| `Message` | `id`, `threadId`, `sessionId`, `role` (`user`, `assistant`), `content`, `at`, `status`, `supersededBy?`, `workflowVersion`, `agentVersion`, `modelAlias`, `attachments[{fileId, name, size}]` (file ids from the Files API, `10`; never bytes), `citations[]`, `toolCalls[]`, `widgets[]`, `noAnswer`, `error?`, `feedback?` | Edited or regenerated messages are superseded, never deleted |
 | `ToolCallRecord` | `id`, `messageId`, `module`, `moduleVersion`, `tool`, `inputRef`, `outputRef`, `status`, `durationMs`, `gatewayCallId`, `origin` (`model`, `app`), `gated?` | Input and output stored by reference after redaction; `gatewayCallId` joins the data gateway log |
 | `Citation` | `n`, `documentId`, `title`, `section`, `page?`, `version`, `snippet`, `url?`, `precedenceNote?` | Same shape as `apps/console/src/lib/types/knowledge.ts` and `02` |
 | `WidgetInstance` | `id`, `messageId`, `view` (`ops-views` kind) or `resourceUri`, `module`, `moduleVersion`, `toolCallId`, `asOf`, `payloadRef`, `state` | Payload frozen at render time; a widget shows "as of" and never refetches silently |
@@ -201,7 +201,8 @@ Mirrors the review it points to: `pending`, `awaiting_second` (one of two four-e
 16. History passed to the model is the non-superseded messages of the thread, truncated to the alias's
     context budget from the oldest end; the truncation is recorded on the turn.
 17. Tool results, retrieved passages, attachment text and `ui/update-model-context` content enter the
-    model context as data blocks. Text inside them cannot change identity, entitlement, risk tier or
+    model context as data blocks. Attachments arrive as file ids; their text is read through the Files
+    API (`10`) and only after a clean scan. Text inside them cannot change identity, entitlement, risk tier or
     scope (design lessons, top lesson 1).
 18. Regenerate supersedes the chosen assistant message and answers the user message before it again.
 19. Edit applies to the latest user message only (phase 2a). It supersedes that message and every
@@ -390,7 +391,7 @@ return `ListResult` with facet counts computed server-side.
 | Delete thread | `DELETE /chat/threads/{id}` | none | 204 | 403 not owner | 2a |
 | Bulk update | `POST /chat/threads/bulk-update` | `{ ids, patch: { pinned?, archived? } }` | `BulkResult` with skipped reasons | | 2a |
 | Bulk delete | `POST /chat/threads/bulk-delete` | `{ ids }` | `BulkResult` | | 2a |
-| Send | `POST /chat/threads/{id}/messages` | `{ clientMessageId, content, attachments?, regenerate?, edit? }`; header `Idempotency-Key` = `clientMessageId` | SSE, UI message stream v1 | 400 empty; 403 not owner; 409 turn active (body names it); 422 agent retired; 429 budget | 2a |
+| Send | `POST /chat/threads/{id}/messages` | `{ clientMessageId, content, attachments?: {fileId, name, size}[], regenerate?, edit? }`; each `fileId` must be a `clean` `chat_attachment` of the caller's team, and the send records the thread as a reference (`10` 5.3.4); header `Idempotency-Key` = `clientMessageId` | SSE, UI message stream v1 | 400 empty; 403 not owner; 409 turn active (body names it), or an attachment still scanning or quarantined; 422 agent retired; 429 budget | 2a |
 | Resume stream | `GET /chat/threads/{id}/stream` | none | SSE replay and continue, or 204 | 404 | 2a |
 | Stop turn | `POST /chat/threads/{id}/turns/{turnId}/cancel` | none | `{ status: 'stopped' }` | 409 already finished | 2a |
 | Feedback | `PUT /chat/threads/{id}/messages/{messageId}/feedback` | `{ feedback: { rating, reason? } \| null }` | 204 | 403 no access | 2a |
@@ -422,7 +423,7 @@ contract, the mock's behaviour and the scope above, and needs a pass once the pa
 | `/chat` thread rail: list, search, facets (agent, knowledge base, state, owner), pinned group, bulk pin, archive, delete | `threads.list`, `bulkUpdate`, `bulkRemove` | Mock lists other people's threads with an `owner` facet; spec shows only own and shared (`owner=shared`). Delete must say it hides and is kept for the retention period |
 | New chat: agent picker with suggestions, knowledge base picker | `agents`, `threads.create` | Picker must offer `selectableKbIds` only; mock accepts any existing knowledge base |
 | `/chat/[id]` header: agent name and version, knowledge base chips, rename, pin, archive | `threads.get`, `threads.update` | Version boundary marker when the agent was updated mid-thread (rule 13) |
-| Composer: send, attachments, stop | `send`, `cancel` | Mock stops by aborting the request; spec needs the cancel endpoint. Attachments are phase 2b; mock accepts names only |
+| Composer: send, attachments, stop | `send`, `cancel` | Mock stops by aborting the request; spec needs the cancel endpoint. Attachments upload through the shared `FileUpload` (compact) to the Files API and Send waits for the scan; the message carries file ids. Reading attachment text into the turn is phase 2b |
 | Message actions: regenerate, edit, copy, feedback with reason | `send` (`regenerate`, `edit`), `feedback` | Mock allows editing any user message; spec allows the latest only in 2a |
 | Status line (thinking, retrieving, calling tool, writing) | `data-status` part | None |
 | Tool call disclosure: name, system, input, output, duration, gate | `tool-*` parts, stored `toolCalls` | Show module and version; redact per sensitivity |
@@ -523,7 +524,7 @@ Each test runs against the real stack in the non-production cluster and states h
 | 4 | Retention class for chat transcripts, and whether a deleted-by-user thread must stay visible to compliance until purge | Rule 49, CD-10 |
 | 5 | Do the bank's forward proxies pass `text/event-stream` unbuffered to internal apps? | Streaming design; fallback is chunked fetch with the same parts |
 | 6 | Which stream relay does the bank run (Redis Streams, Kafka, NATS)? | Relay implementation |
-| 7 | May attachments include customer documents, and which scanner do they go through? | Phase 2b attachments |
+| 7 | May attachments include customer documents? (The scanner is the files service's, `10` 5.3; retention is the Chat attachments class.) | Phase 2b attachments |
 | 8 | Is a separate registrable domain for the sandbox origin available inside the bank's DNS and certificate process? | Sandbox, 2a |
 | 9 | Should shared threads be allowed across departments at all, or only within one? | Phase 2b sharing |
 

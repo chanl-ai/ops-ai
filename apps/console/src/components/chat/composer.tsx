@@ -1,19 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import { ArrowUp, Database, Paperclip, Plus, Square, X } from 'lucide-react';
-import { toast } from 'sonner';
+import { ArrowUp, Database, Plus, Square, X } from 'lucide-react';
 
 import { KbDot } from '@/components/knowledge/knowledge-meta';
+import { FileUpload, type UploadItem, uploadsBlocker } from '@/components/shared/file-upload';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
-import { bytes } from '@/lib/format';
 import type { ChatAttachment } from '@/lib/types/chat';
 
 const MAX = 8000;
-const MAX_FILE = 10 * 1024 * 1024;
 
 export interface KbOption {
   id: string;
@@ -91,16 +89,20 @@ export function Composer({
   autoFocus?: boolean;
 }) {
   const [text, setText] = React.useState('');
-  const [files, setFiles] = React.useState<ChatAttachment[]>([]);
-  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [files, setFiles] = React.useState<UploadItem[]>([]);
+  // Remounting the upload control clears it after a send.
+  const [uploadKey, setUploadKey] = React.useState(0);
   const tooLong = text.length > MAX;
-  const canSend = !disabledReason && !streaming && !!text.trim() && !tooLong;
+  const waiting = files.length ? uploadsBlocker(files) : undefined;
+  const canSend = !disabledReason && !streaming && !!text.trim() && !tooLong && !waiting;
 
   const send = () => {
     if (!canSend) return;
-    onSend(text.trim(), files);
+    const attachments: ChatAttachment[] = files.flatMap((f) => (f.fileId ? [{ fileId: f.fileId, name: f.name, size: f.size }] : []));
+    onSend(text.trim(), attachments);
     setText('');
     setFiles([]);
+    setUploadKey((k) => k + 1);
   };
 
   if (disabledReason)
@@ -108,18 +110,6 @@ export function Composer({
 
   return (
     <div className="rounded-lg border bg-background shadow-xs focus-within:ring-[3px] focus-within:ring-ring/30">
-      {files.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-          {files.map((f) => (
-            <span key={f.name} className="inline-flex items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-1 pl-2 text-xs">
-              <Paperclip className="size-3" /> {f.name} · {bytes(f.size)}
-              <button type="button" onClick={() => setFiles((x) => x.filter((y) => y.name !== f.name))} className="rounded-sm p-0.5 hover:bg-foreground/10" aria-label={`Remove ${f.name}`}>
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
       <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -136,26 +126,10 @@ export function Composer({
         className="max-h-48 min-h-[56px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
       />
       <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2">
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          accept="image/*,application/pdf,.docx,.xlsx,.csv,.eml"
-          className="hidden"
-          onChange={(e) => {
-            const picked = Array.from(e.target.files ?? []);
-            const tooBig = picked.filter((f) => f.size > MAX_FILE);
-            if (tooBig.length) toast.error(`${tooBig.map((f) => f.name).join(', ')} is over 10 MB`);
-            const ok = picked.filter((f) => f.size <= MAX_FILE).map((f) => ({ name: f.name, size: f.size }));
-            setFiles((x) => [...x, ...ok.filter((f) => !x.some((y) => y.name === f.name))].slice(0, 5));
-            e.target.value = '';
-          }}
-        />
-        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => fileRef.current?.click()} aria-label="Attach files">
-          <Paperclip className="size-3.5" /> Attach
-        </Button>
+        <FileUpload key={uploadKey} variant="compact" purpose="chat_attachment" multiple onChange={setFiles} id="chat-attach" testId="chat-attach" />
         {footer}
         <span className="ml-auto flex items-center gap-2">
+          {waiting && <span className="text-xs text-muted-foreground">{waiting}</span>}
           {tooLong && (
             <span className="text-xs tabular-nums text-destructive">
               {text.length.toLocaleString('en-CA')} / {MAX.toLocaleString('en-CA')}

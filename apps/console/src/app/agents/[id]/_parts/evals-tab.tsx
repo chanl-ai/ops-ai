@@ -399,8 +399,8 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         collections={options.data?.collections ?? []}
         tools={options.data?.tools ?? []}
         isPending={importRows.isPending}
-        onImport={async (rows) => {
-          const res = await importRows.mutateAsync(rows);
+        onImport={async (rows, fileId) => {
+          const res = await importRows.mutateAsync({ rows, fileId });
           toastBulk(res, 'Imported', 'eval case', (i) => rows[Number(i)]?.name || `Row ${Number(i) + 2}`);
         }}
       />

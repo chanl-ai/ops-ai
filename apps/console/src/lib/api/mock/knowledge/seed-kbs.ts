@@ -4,21 +4,24 @@ import { ago, daysAgo } from "./time"
 export const NO_ANSWER = "I could not find that in the knowledge base."
 
 export const retrievalPresets: Record<"balanced" | "precise" | "raw", Partial<RetrievalSettings>> = {
-  balanced: { searchMode: "hybrid", rerank: true, chunkLimit: 8, threshold: 0.5, synthesis: true, temperature: 0.1 },
-  precise: { searchMode: "hybrid", rerank: true, chunkLimit: 5, threshold: 0.65, synthesis: true, temperature: 0 },
-  raw: { searchMode: "hybrid", rerank: false, chunkLimit: 10, threshold: 0.4, synthesis: false },
+  balanced: { searchMode: "hybrid", rerank: true, chunkLimit: 8, threshold: 0.5, answerShape: "answer_with_citations", temperature: 0.1 },
+  precise: { searchMode: "hybrid", rerank: true, chunkLimit: 5, threshold: 0.65, answerShape: "answer_with_citations", temperature: 0 },
+  raw: { searchMode: "hybrid", rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: "chunks" },
 }
 
 export const defaultRetrieval: RetrievalSettings = {
   searchMode: "hybrid",
+  hybridWeight: 0.6,
   rerank: true,
   reranker: "hosted",
   chunkLimit: 8,
   threshold: 0.5,
-  queryRewrite: false,
+  asOf: "",
+  rewrite: "off",
+  expandCount: 3,
   rewriteInstructions: "",
   scopeSourceIds: [],
-  synthesis: true,
+  answerShape: "answer_with_citations",
   model: "claude-sonnet-5",
   temperature: 0.1,
   maxTokens: 800,
@@ -26,7 +29,7 @@ export const defaultRetrieval: RetrievalSettings = {
   citationStyle: "inline",
   includeChunks: true,
   noAnswerMessage: NO_ANSWER,
-  defaultFilters: [],
+  filters: { match: "all", conditions: [] },
   tagsInclude: [],
   tagsExclude: [],
   includeUntagged: true,
@@ -53,11 +56,12 @@ export const kbs: KnowledgeBase[] = [
     ],
     collections: ["Fraud"],
     precedence: [
-      { id: "p1", label: "Bank-wide policy beats departmental addendum", winner: "Bank-wide policy", loser: "Departmental addendum" },
-      { id: "p2", label: "Policy beats FAQ", winner: "Policy", loser: "FAQ" },
-      { id: "p3", label: "Newer effective date beats older", winner: "Newer version", loser: "Superseded version" },
+      { id: "p1", label: "Playbook beats model documentation on release authority", kind: "class", winner: "playbook", loser: "model_doc" },
+      { id: "p2", label: "Policy beats FAQ", kind: "class", winner: "policy", loser: "faq" },
+      { id: "p3", label: "Newer effective date beats older", kind: "newer", winner: "", loser: "" },
     ],
-    retrieval: { ...defaultRetrieval, defaultFilters: [{ key: "locale", op: "equals", value: "en" }] },
+    metadataProfile: { required: ["owner"] },
+    retrieval: { ...defaultRetrieval },
     access: {
       members: { mode: "all", principals: [] },
       anyApiKey: false,
@@ -86,9 +90,11 @@ export const kbs: KnowledgeBase[] = [
     sources: [{ sourceId: "src_hr_sharepoint", itemsContributed: 787, rules: [] }],
     collections: ["Compliance"],
     precedence: [
-      { id: "p1", label: "Playbook beats guidance note", winner: "Playbook", loser: "Guidance note" },
-      { id: "p2", label: "Model documentation beats playbook for score thresholds", winner: "Model documentation", loser: "Playbook" },
+      { id: "p1", label: "Bank-wide procedure beats provincial addendum", kind: "class", winner: "procedure", loser: "addendum" },
+      { id: "p2", label: "Procedure beats FAQ", kind: "class", winner: "procedure", loser: "faq" },
+      { id: "p3", label: "Newer effective date beats older", kind: "newer", winner: "", loser: "" },
     ],
+    metadataProfile: { required: ["owner", "effective_date", "jurisdiction"] },
     retrieval: { ...defaultRetrieval, model: "claude-opus-5-5", chunkLimit: 10, citationStyle: "footnotes" },
     access: {
       members: { mode: "selected", principals: ["group:Compliance", "group:Fraud Strategy"] },
@@ -116,7 +122,8 @@ export const kbs: KnowledgeBase[] = [
       { sourceId: "src_branch_faq", itemsContributed: 1, rules: [] },
     ],
     collections: ["Product", "Support"],
-    precedence: [{ id: "p1", label: "Pricing page beats FAQ", winner: "Pricing site", loser: "Branch FAQ" }],
+    precedence: [{ id: "p1", label: "Pricing page beats FAQ", kind: "class", winner: "pricing", loser: "faq" }],
+    metadataProfile: { required: ["owner"] },
     retrieval: { ...defaultRetrieval, chunkLimit: 6, threshold: 0.55, citationStyle: "links", noAnswerMessage: "I could not find that. Call 1-800-555-0142 or visit a branch." },
     access: {
       members: { mode: "all", principals: [] },
@@ -142,11 +149,12 @@ export const kbs: KnowledgeBase[] = [
     sources: [{ sourceId: "src_lending_policies", itemsContributed: 9, rules: [] }],
     collections: ["Lending"],
     precedence: [
-      { id: "p1", label: "Bank-wide policy beats departmental guideline", winner: "Lending policy", loser: "Guideline" },
-      { id: "p2", label: "Procedure beats FAQ", winner: "Procedure", loser: "FAQ" },
-      { id: "p3", label: "Current version beats superseded", winner: "v6", loser: "v5" },
+      { id: "p1", label: "Policy beats guidance", kind: "class", winner: "policy", loser: "guidance" },
+      { id: "p2", label: "Policy beats FAQ", kind: "class", winner: "policy", loser: "faq" },
+      { id: "p3", label: "Newer effective date beats older", kind: "newer", winner: "", loser: "" },
     ],
-    retrieval: { ...retrievalPresets.precise, ...defaultRetrieval, chunkLimit: 5, threshold: 0.65, temperature: 0, instructions: "Answer in one paragraph and always name the policy document, section and version. Return fee and limit tables as values.", structuredTables: true },
+    metadataProfile: { required: ["owner", "effective_date", "product", "jurisdiction"] },
+    retrieval: { ...retrievalPresets.precise, ...defaultRetrieval, chunkLimit: 5, threshold: 0.6, temperature: 0, instructions: "Answer in one paragraph and always name the policy document, section and version. Return fee and limit tables as values.", structuredTables: true },
     access: {
       members: { mode: "selected", principals: ["group:Lending", "group:Legal"] },
       anyApiKey: false,
@@ -173,8 +181,12 @@ export const kbs: KnowledgeBase[] = [
     color: "rose",
     sources: [{ sourceId: "src_contracts", itemsContributed: 11, rules: [] }],
     collections: ["Cards"],
-    precedence: [{ id: "p1", label: "Current guide beats superseded guide", winner: "Current guide", loser: "Superseded guide" }],
-    retrieval: { ...defaultRetrieval, chunkLimit: 6, threshold: 0.6, citationStyle: "inline" },
+    precedence: [
+      { id: "p1", label: "Policy beats guide", kind: "class", winner: "policy", loser: "guide" },
+      { id: "p2", label: "Newer effective date beats older", kind: "newer", winner: "", loser: "" },
+    ],
+    metadataProfile: { required: ["owner", "effective_date", "product"] },
+    retrieval: { ...defaultRetrieval, chunkLimit: 6, threshold: 0.55, citationStyle: "inline" },
     access: {
       members: { mode: "selected", principals: ["group:Card Services", "group:Compliance"] },
       anyApiKey: false,
@@ -206,9 +218,12 @@ export const kbs: KnowledgeBase[] = [
     ],
     collections: [],
     precedence: [
-      { id: "p1", label: "Bank-wide policy beats departmental", winner: "Bank-wide", loser: "Departmental" },
-      { id: "p2", label: "Procedure beats FAQ", winner: "Procedure", loser: "FAQ" },
+      { id: "p1", label: "Bank-wide procedure beats provincial addendum", kind: "class", winner: "procedure", loser: "addendum" },
+      { id: "p2", label: "Procedure beats FAQ", kind: "class", winner: "procedure", loser: "faq" },
+      { id: "p3", label: "Pricing page beats FAQ", kind: "class", winner: "pricing", loser: "faq" },
+      { id: "p4", label: "Newer effective date beats older", kind: "newer", winner: "", loser: "" },
     ],
+    metadataProfile: { required: ["owner"] },
     retrieval: { ...defaultRetrieval, chunkLimit: 12 },
     access: {
       members: { mode: "all", principals: [] },
@@ -357,11 +372,12 @@ export const genericAnswer: PlaygroundAnswer = {
   synthesisMs: 1_830,
 }
 
+/** Questions that show the query modes apart on each knowledge base's seeded documents. */
 export const suggestedQuestions: Record<string, string[]> = {
-  kb_people: ["How long do we keep customer due diligence records?", "When must a suspicious transaction be reported?", "Which customers need enhanced due diligence?"],
-  kb_eng: ["How long do we hold a wire to a new payee?", "What are the wire risk score thresholds?", "Who approves a hold release at score 70 or above?"],
-  kb_support: ["What is the refund window for an annual card fee?", "What is the NSF fee?", "Is there a fee for paper statements?"],
-  kb_lending: ["What is the origination fee on a small business loan over $250k?", "What are the eligibility bands for personal loans?", "How does the hardship program work?"],
-  kb_legal: ["When does provisional credit apply to a disputed card payment?", "Which chargeback reason codes cover fraud?", "How long does a customer have to dispute a transaction?"],
-  kb_all: ["What is the refund window for an annual card fee?", "How long do we keep customer due diligence records?", "How long do we hold a wire to a new payee?"],
+  kb_people: ["How long do we hold a wire to a new payee?", "Who approves a hold release at score 70 or above?", "What is hold code WH-24?"],
+  kb_eng: ["How long do we keep customer due diligence records?", "When does the retention period start in Ontario?", "What details must accompany a wire under the travel rule?"],
+  kb_support: ["What is the refund window for an annual card fee?", "What is the NSF fee?", "When is the wire cut-off at a branch outside Toronto?"],
+  kb_lending: ["How many payments can a borrower defer?", "Can a customer postpone their loan instalments for a few months?", "Origination fee for a small business term loan over $250k"],
+  kb_legal: ["Which reason code covers a duplicate charge, 12.6?", "When is form NF-2207 needed?", "When does provisional credit apply to a disputed card payment?"],
+  kb_all: ["How long do we hold a wire to a new payee?", "What is the refund window for an annual card fee?", "How long do we keep customer due diligence records?"],
 }

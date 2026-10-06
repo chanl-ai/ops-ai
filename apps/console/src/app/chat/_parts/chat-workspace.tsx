@@ -11,6 +11,8 @@ import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
 import { AssistantMessage, UserMessage } from '@/components/chat/message-view';
 import { ThreadRail } from '@/components/chat/thread-rail';
 import { DocumentPanel } from '@/components/knowledge/document-panel';
+import { RetrievalTraceView } from '@/components/knowledge/retrieval-trace';
+import { DetailSheet } from '@/components/shared/detail-sheet';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
@@ -39,6 +41,7 @@ import { useLookups } from '@/hooks/queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { teamOfError } from '@/hooks/use-team';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
+import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
 const ALL = { page: 1, pageSize: 100 };
 
@@ -88,6 +91,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const [deleting, setDeleting] = React.useState<Pick<ChatThreadRow, 'id' | 'title'> | null>(null);
   const deletingShown = useSticky(deleting);
   const [docId, setDocId] = React.useState<string | null>(null);
+  const [trace, setTrace] = React.useState<RetrievalTrace | null>(null);
   const [editingTitle, setEditingTitle] = React.useState(false);
   const [titleDraft, setTitleDraft] = React.useState('');
 
@@ -150,6 +154,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           onDelete={setDeleting}
           onCopy={copy}
           onOpenDocument={setDocId}
+          onOpenTrace={setTrace}
           onSend={(input, cutFrom) => chat.send(threadId, input, cutFrom)}
           onStop={() => chat.stop(threadId)}
           onDismissFailed={() => chat.dismiss(threadId)}
@@ -192,7 +197,10 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
         />
       )}
 
-      <DocumentPanel itemId={docId} onClose={() => setDocId(null)} />
+      <DocumentPanel itemId={docId} onClose={() => setDocId(null)} onOpenItem={setDocId} />
+      <DetailSheet open={!!trace} onOpenChange={(o) => !o && setTrace(null)} title="How this answer was found" description={trace ? `“${trace.question}”` : undefined} widthClass="sm:max-w-3xl" testId="chat-trace-sheet">
+        {trace && <RetrievalTraceView trace={trace} />}
+      </DetailSheet>
 
       <DeleteDialog
         open={!!deleting}
@@ -344,6 +352,7 @@ function ThreadView({
   onDelete,
   onCopy,
   onOpenDocument,
+  onOpenTrace,
   onSend,
   onStop,
   onDismissFailed,
@@ -366,6 +375,7 @@ function ThreadView({
   onDelete: (t: ChatThread) => void;
   onCopy: (text: string, what?: string) => void;
   onOpenDocument: (id: string) => void;
+  onOpenTrace: (trace: RetrievalTrace) => void;
   onSend: (input: SendInput, cutFrom?: string) => void;
   onStop: () => void;
   onDismissFailed: () => void;
@@ -519,6 +529,7 @@ function ThreadView({
                     )
                   }
                   onOpenDocument={onOpenDocument}
+                  onOpenTrace={onOpenTrace}
                   onCopy={(text) => onCopy(text)}
                   onRegenerate={m.id === lastAssistant?.id && !streaming ? () => onSend({ content: '', regenerate: m.id }, m.id) : undefined}
                   onFeedback={(fb) => onFeedback(m.id, fb)}

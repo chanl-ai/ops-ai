@@ -1,8 +1,35 @@
 import type { ErrorClass, Item, Source, SyncRun } from "@/lib/types/knowledge"
+import type { IngestSettings, IngestStrategy, TableColumn } from "@/lib/types/knowledge-ingest"
+import { DEFAULT_INGEST_MODEL, digestOf, docText, familyOf } from "./ingest"
+import { docByKey, FEATURED } from "./seed-documents"
 import { ago, daysAgo, inHours, inDays, seeded } from "./time"
 
-const defaultParsing = { ocr: false, tables: true, vision: false, removeHtml: true }
-const defaultChunking = { strategy: "structure" as const, size: 512, overlap: 50, language: "auto" }
+const defaultParsing = { ocr: false, tables: true, vision: false }
+
+const RATE_COLUMNS: TableColumn[] = [
+  { name: "Product", role: "searchable", key: true },
+  { name: "Band", role: "searchable" },
+  { name: "Origination fee", role: "metadata" },
+  { name: "Minimum", role: "metadata" },
+  { name: "Maximum", role: "metadata" },
+  { name: "Secured", role: "searchable" },
+  { name: "Effective", role: "metadata" },
+  { name: "Notes", role: "ignored" },
+]
+
+/** Ingestion settings; AI steps listed in `approved` start approved by the knowledge owner. */
+const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], extra: Partial<IngestSettings> = {}, approved: string[] = []): IngestSettings => ({
+  preset,
+  strategies,
+  size: 512,
+  overlap: 50,
+  childSize: 40,
+  questionsPerSection: 2,
+  columns: [],
+  model: DEFAULT_INGEST_MODEL,
+  approval: { status: approved.length ? "approved" : "not_needed", approvedSteps: approved, decidedBy: approved.length ? "Knowledge owner" : undefined, decidedAt: approved.length ? daysAgo(20) : undefined },
+  ...extra,
+})
 
 export const sources: Source[] = [
   {
@@ -14,7 +41,7 @@ export const sources: Source[] = [
     scopeSummary: "Site: Financial Crime Operations · Documents/Policies, Documents/Forms",
     config: { site: "Financial Crime Operations", libraries: ["Documents/Policies", "Documents/Forms"], includeOffice: true, includePdf: true, auth: "app-only" },
     parsing: { ...defaultParsing, ocr: true },
-    chunking: defaultChunking,
+    ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [{ id: "r1", kind: "exclude", field: "path", value: "**/Archive/**" }],
     metadataMapping: [
       { key: "department", from: "field:Dept" },
@@ -52,7 +79,7 @@ export const sources: Source[] = [
     scopeSummary: "Spaces: FRAUD, PAY, OPS · attachments included",
     config: { site: "northfield.atlassian.net", spaces: ["FRAUD", "PAY", "OPS"], includeAttachments: true },
     parsing: defaultParsing,
-    chunking: { ...defaultChunking, strategy: "headers" },
+    ingest: ingest("custom", ["structure", "context_headers"]),
     rules: [{ id: "r2", kind: "exclude", field: "title", value: "Meeting notes" }],
     metadataMapping: [
       { key: "space", from: "field:Space" },
@@ -88,8 +115,8 @@ export const sources: Source[] = [
     connectionLabel: "GitHub app · northfield-bank",
     scopeSummary: "northfield-bank/model-risk-docs · main · docs/**, **/*.md",
     config: { installation: "northfield-bank", repos: ["northfield-bank/model-risk-docs"], branch: "main", globs: ["docs/**", "**/*.md"] },
-    parsing: { ...defaultParsing, removeHtml: false },
-    chunking: defaultChunking,
+    parsing: defaultParsing,
+    ingest: ingest("custom", ["structure"]),
     rules: [{ id: "r3", kind: "exclude", field: "path", value: "docs/archive/**" }],
     metadataMapping: [
       { key: "area", from: "field:Path segment 2" },
@@ -124,11 +151,11 @@ export const sources: Source[] = [
     scopeSummary: "12 files from Files/Cards/Disputes",
     config: { folderId: "f_contracts" },
     parsing: { ...defaultParsing, ocr: true },
-    chunking: defaultChunking,
+    ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [],
     metadataMapping: [
       { key: "guide", from: "field:Filename prefix" },
-      { key: "doc_type", from: "static:guide" },
+      { key: "product", from: "field:Product line" },
     ],
     tags: ["dispute", "cards"],
     titleFrom: "filename",
@@ -157,7 +184,7 @@ export const sources: Source[] = [
     scopeSummary: "https://www.northfieldbank.com/sitemap-pricing.xml · depth 3 · 200 pages max",
     config: { startUrl: "https://www.northfieldbank.com/sitemap-pricing.xml", depth: 3, maxPages: 200, sameDomain: true, include: ["/pricing/**", "/fees/**"], exclude: ["/pricing/archive/**"], respectRobots: true },
     parsing: { ...defaultParsing, tables: true },
-    chunking: { ...defaultChunking, size: 400 },
+    ingest: ingest("custom", ["clean", "structure"], { size: 400 }),
     rules: [],
     metadataMapping: [
       { key: "product", from: "field:URL path segment 2" },
@@ -192,11 +219,12 @@ export const sources: Source[] = [
     scopeSummary: "9 files from Files/Lending",
     config: { folderId: "f_lending" },
     parsing: { ...defaultParsing, tables: true },
-    chunking: { ...defaultChunking, strategy: "rows" },
+    ingest: ingest("custom", ["structure", "context_headers", "table_rows"], { columns: RATE_COLUMNS }),
     rules: [],
     metadataMapping: [
       { key: "policy_area", from: "field:Filename prefix" },
       { key: "effective", from: "field:Effective date" },
+      { key: "jurisdiction", from: "field:Jurisdiction" },
     ],
     tags: ["policy", "lending", "fees"],
     titleFrom: "filename",
@@ -225,7 +253,7 @@ export const sources: Source[] = [
     scopeSummary: "Pasted Markdown · 1 document · 2,140 words",
     config: { format: "markdown" },
     parsing: defaultParsing,
-    chunking: { ...defaultChunking, strategy: "faq" },
+    ingest: ingest("help_centre", ["structure", "faq"], {}, ["faq"]),
     rules: [],
     metadataMapping: [{ key: "audience", from: "static:branch-staff" }],
     tags: ["faq"],
@@ -257,9 +285,9 @@ export const sources: Source[] = [
     scopeSummary: "Categories: Accounts, Cards · en-ca · published only",
     config: { subdomain: "northfield", categories: ["Accounts", "Cards"], locales: ["en-ca"], publishedOnly: true },
     parsing: defaultParsing,
-    chunking: defaultChunking,
+    ingest: { ...ingest("help_centre", ["clean", "structure", "faq"]), approval: { status: "pending", approvedSteps: [], requestedBy: "Customer Care" } },
     rules: [],
-    metadataMapping: [],
+    metadataMapping: [{ key: "product", from: "ai:product" }],
     tags: ["help-centre"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
@@ -273,7 +301,7 @@ export const sources: Source[] = [
     status: "draft",
     itemsIndexed: 0,
     itemsFailed: 0,
-    itemsPending: 0,
+    itemsPending: 46,
     usedByKbIds: [],
     createdAt: daysAgo(1),
   },
@@ -286,7 +314,7 @@ export const sources: Source[] = [
     scopeSummary: "Pages: Product wiki, Roadmap · child pages included",
     config: { pages: ["Product wiki", "Roadmap"], includeChildren: true },
     parsing: defaultParsing,
-    chunking: { ...defaultChunking, strategy: "topics" },
+    ingest: ingest("custom", ["topic"], {}, ["topic"]),
     rules: [],
     metadataMapping: [{ key: "space", from: "static:product" }],
     tags: ["product"],
@@ -343,7 +371,7 @@ const ghDocs = [
   "README.md", "CONTRIBUTING.md", "docs/reference/credit-decision-models.md", "docs/reference/dispute-triage-model.md", "docs/guides/kyc-risk-scoring.md", "docs/guides/override-and-limits.md",
 ]
 
-const contracts = [
+export const contracts = [
   "Dispute rights guide — debit cards.pdf", "Dispute rights guide — credit cards.pdf", "Dispute rights guide — wires and e-Transfers.pdf",
   "Chargeback reason codes — fraud.pdf", "Chargeback reason codes — processing errors.pdf", "Provisional credit policy.pdf",
   "Dispute time limits — schedule.pdf", "Merchant representment checklist.pdf", "Unauthorised transaction liability.pdf",
@@ -357,7 +385,7 @@ const pricingPages = [
   "/fees/account-closure", "/fees/safe-deposit", "/fees/certified-cheques", "/pricing/student", "/pricing/seniors", "/pricing/newcomers", "/pricing/credit-cards/annual-fee",
 ]
 
-const lendingFiles = [
+export const lendingFiles = [
   "Lending policy v6 — personal loans.pdf", "Lending policy v6 — small business.pdf", "Fee schedule 2026 Q3.xlsx", "Eligibility bands — personal.xlsx",
   "Hardship program guidelines.pdf", "Collections escalation matrix.xlsx", "Rate card — September 2026.xlsx", "Mortgage underwriting guide v4.2.pdf", "Lending policy v5 — personal loans (superseded).pdf",
 ]
@@ -412,8 +440,35 @@ function mk(
     verified: rnd() > 0.85,
     queries30d: Math.floor(rnd() * rnd() * 120),
     pageCount: mime === "application/pdf" ? 2 + Math.floor(rnd() * 40) : undefined,
+    digest: "",
+    // Repo paths and crawled pages are distinct documents even when titles repeat (copies per folder, translations).
+    family: src.type === "github" || src.type === "crawl" ? path : familyOf(title),
+    versionStatus: "current",
     ...extra,
   }
+}
+
+const docClassFor = (title: string, sourceId: string) => {
+  const t = title.toLowerCase()
+  if (/\bfaq\b/.test(t)) return "faq"
+  if (/addendum/.test(t)) return "addendum"
+  if (/\bform\b|template/.test(t)) return "form"
+  if (/appendix|summary|checklist|training|deck|guide/.test(t)) return "guidance"
+  if (sourceId === "src_eng_confluence") return "playbook"
+  if (sourceId === "src_github_docs") return "model_doc"
+  if (sourceId === "src_pricing_crawl") return "pricing"
+  if (sourceId === "src_notion_product") return "wiki"
+  if (/schedule|rate card|bands|matrix/.test(t)) return "schedule"
+  return sourceId === "src_hr_sharepoint" ? "procedure" : "policy"
+}
+
+/** Digest from the full body where there is one, else from what identifies the file, so duplicates share it. */
+function finish(it: Item) {
+  const key = FEATURED[it.id]
+  const doc = key ? docByKey(key) : undefined
+  it.digest = digestOf(doc ? docText(doc) : `${it.sourceId}|${it.path}|${it.sizeBytes}`)
+  it.metadata = { doc_class: doc?.docClass ?? docClassFor(it.title, it.sourceId), ...it.metadata, ...(doc?.metadata ?? {}) }
+  return it
 }
 
 export function buildItems(): Item[] {
@@ -432,7 +487,10 @@ export function buildItems(): Item[] {
         const isForm = v === " — form"
         const mime = isForm ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : i % 3 === 0 ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         const it = mk(rnd, src, i, title, `Documents/${isForm ? "Forms" : "Policies"}/${p.replace(/\s+/g, "-")}${v ? "/" + v.trim().replace(/[—()]/g, "").trim().replace(/\s+/g, "-") : ""}.${isForm ? "docx" : mime.includes("pdf") ? "pdf" : "docx"}`, mime)
-        it.metadata = { department: "Financial crime", locale: "en", policy_owner: it.owner }
+        it.metadata = { department: "Financial crime", locale: "en", policy_owner: it.owner, jurisdiction: /Ontario/.test(v) ? "ON" : /Quebec/.test(v) ? "QC" : /BC/.test(v) ? "BC" : /Alberta/.test(v) ? "AB" : "CA" }
+        // Year-marked copies are earlier versions of the same document.
+        if (v.includes("(2025)")) it.effectiveDate = daysAgo(420 + (i % 60)).slice(0, 10)
+        if (v.includes("(2024)")) it.effectiveDate = daysAgo(800 + (i % 60)).slice(0, 10)
         out.push(it)
         i++
       }
@@ -449,6 +507,12 @@ export function buildItems(): Item[] {
       out[idx].error = msg
       out[idx].chunkCount = 0
     }
+    out.find((x) => x.id === "src_hr_sharepoint_it_12")!.effectiveDate = "2026-02-01"
+    out.find((x) => x.id === "src_hr_sharepoint_it_402")!.effectiveDate = "2025-02-01"
+    // Left in the library's Archive folder; the source's exclude rule keeps it out.
+    const archived = mk(rnd, src, 790, "Sanctions screening procedure (2021 archive)", "Documents/Archive/Sanctions-screening-procedure-2021.pdf", "application/pdf")
+    archived.metadata = { department: "Financial crime", locale: "en", policy_owner: archived.owner, jurisdiction: "CA" }
+    out.push(archived)
   }
 
   // Confluence: 380 items
@@ -466,6 +530,15 @@ export function buildItems(): Item[] {
         i++
       }
     }
+    Object.assign(out.find((x) => x.id === "src_eng_confluence_it_0")!, { version: "v5.0", effectiveDate: "2026-05-01" })
+    Object.assign(out.find((x) => x.id === "src_eng_confluence_it_1")!, { version: "v3.4", effectiveDate: "2025-11-01" })
+    // The same travel-rule procedure is copied into the payments space; it is indexed once.
+    const copy = mk(rnd, src, 380, "Travel rule for wire transfers", "PAY/Travel+rule+for+wire+transfers", "text/html")
+    copy.metadata = { space: "PAY", team: "payments-ops" }
+    out.push(copy)
+    const notes = mk(rnd, src, 381, "Meeting notes — fraud ops weekly 2026-09-22", "OPS/Meeting+notes/2026-09-22", "text/html")
+    notes.metadata = { space: "OPS", team: "payments-ops" }
+    out.push(notes)
   }
 
   // GitHub: 214 items
@@ -492,7 +565,9 @@ export function buildItems(): Item[] {
     contracts.forEach((c, i) => {
       const it = mk(rnd, src, i, c.replace(/\.pdf$/, ""), `Cards/Disputes/${c}`, "application/pdf", {
         fileId: `file_dispute_guide_${i}`,
-        metadata: { guide: c.split(" — ")[0], doc_type: "guide" },
+        effectiveDate: daysAgo(30 + i * 9).slice(0, 10),
+        // The letter templates arrived without a product line, so Cards & disputes holds them.
+        metadata: i === 10 ? { guide: c.split(" — ")[0] } : { guide: c.split(" — ")[0], product: "cards" },
       })
       if (i === 6) {
         it.status = "failed"
@@ -531,7 +606,8 @@ export function buildItems(): Item[] {
       const mime = f.endsWith(".xlsx") ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : f.endsWith(".docx") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"
       const it = mk(rnd, src, i, f.replace(/\.(pdf|xlsx|docx)$/, ""), `Lending/${f}`, mime, {
         fileId: `file_lending_${i}`,
-        metadata: { policy_area: f.split(" ")[0].toLowerCase(), effective: "2026-07-01" },
+        // The collections matrix has no jurisdiction field at the source, so Lending policy holds it.
+        metadata: { policy_area: f.split(" ")[0].toLowerCase(), effective: "2026-07-01", product: /small business/i.test(f) ? "small_business_loan" : /mortgage/i.test(f) ? "mortgage" : "personal_loan", ...(f.startsWith("Collections") ? {} : { jurisdiction: "CA" }) },
         version: f.includes("v6") ? "v6.0" : f.includes("v5") ? "v5.2" : f.includes("v4.2") ? "v4.2" : "v1.3",
         effectiveDate: "2026-07-01",
         reviewBy: "2026-12-31",
@@ -543,6 +619,23 @@ export function buildItems(): Item[] {
         it.effectiveDate = "2025-01-15"
         it.reviewBy = "2026-01-15"
       }
+      out.push(it)
+    })
+    // Payment deferral policy: v1.0 was in force until v2.0 took effect on 1 March 2026.
+    ;[
+      { n: 9, version: "v1.0", effectiveDate: "2024-11-01", modified: 340 },
+      { n: 10, version: "v2.0", effectiveDate: "2026-03-01", modified: 200 },
+    ].forEach(({ n, version, effectiveDate, modified }) => {
+      const it = mk(rnd, src, n, "Payment deferral policy", `Lending/Payment deferral policy ${version}.pdf`, "application/pdf", {
+        fileId: `file_lending_${n}`,
+        metadata: { policy_area: "payment", effective: effectiveDate, product: "personal_loan", jurisdiction: "CA" },
+        version,
+        effectiveDate,
+        reviewBy: "2026-12-31",
+        verified: true,
+        supersedes: version === "v2.0" ? "Payment deferral policy v1.0" : undefined,
+      })
+      it.modifiedAt = daysAgo(modified)
       out.push(it)
     })
   }
@@ -571,7 +664,7 @@ export function buildItems(): Item[] {
     }
   }
 
-  return out
+  return out.map(finish)
 }
 
 // ---- Runs -----------------------------------------------------------------

@@ -155,7 +155,7 @@ entry's tier.
 |---|---|
 | `evals[{name, version, summary}]` | Agent: its own latest eval. Workflow: the latest eval of each pinned agent (`04` 5.10.5) |
 | `workflowSuite` | Workflow only: the latest suite run summary and its time (`04` 4.3) |
-| `bundles[{version, bundleId, sealedAt}]` | Sealed evidence bundles of recent versions (`04` 4.6) |
+| `bundles[{version, bundleId, sealedAt}]` | Sealed evidence bundles of recent versions (`04` 4.6). Each is an immutable file in the Files API (`10` 5.7); Export returns that file and a signed download link |
 
 ## 5. Behaviour
 
@@ -252,7 +252,7 @@ Conventions of `01` section 6. Paths follow the mock's `model-risk-http.ts` unde
 | Route or dialog | API | Gaps between mock and spec |
 |---|---|---|
 | `/model-risk` list (`apps/console/src/app/model-risk/page.tsx`) with views, facets, stats; bulk Request validation and Set next review | R1, R3, R4, R8 | None |
-| `/model-risk/[id]` entry page: attributes, tier, what it touches, evidence, monitoring, conditions, validation history, findings | R2 | Findings have no create or edit action (R10 is API only in phase 1) |
+| `/model-risk/[id]` entry page: attributes, tier, what it touches, evidence, monitoring, conditions, validation history, findings; Export per evidence bundle | R2, `10` F13, F6 | Findings have no create or edit action (R10 is API only in phase 1) |
 | Change tier dialog | R5 | None |
 | Add condition, condition status dialogs | R6, R7 | None |
 | Request validation, next review dialogs | R3, R4 | None |
@@ -281,7 +281,10 @@ status changed (with reason), next review set, finding raised or updated.
 ### 8.3 Evidence
 
 The validation record references the review id; the review's evidence list is frozen at request
-time. The workflow's sealed evidence bundle records the inventory entry at decision (`04` 8.3).
+time. The workflow's sealed evidence bundle records the inventory entry at decision (`04` 8.3). Bundles
+are stored immutable (WORM) through the Files API, so the copy a validator downloads is the sealed
+object and cannot have been changed since (`10` 5.7). The review sheet of a publish request or
+validation offers Export evidence bundle.
 
 ## 9. Non-functional
 

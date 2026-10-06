@@ -1,6 +1,7 @@
 import type { BulkResult } from '@/lib/types/domain';
 import type {
-  Connection,
+  HeldPreview,
+  HeldPreviewInput,
   DocumentFilters,
   DocumentRow,
   Item,
@@ -14,6 +15,7 @@ import type {
   KnowledgeBaseRow,
   PlaygroundAnswer,
   QueryInput,
+  RetrieveInput,
   Rule,
   RunFilters,
   Source,
@@ -27,6 +29,7 @@ import type {
   SyncOptions,
   SyncRun,
 } from '@/lib/types/knowledge';
+import type { SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams, ListResult } from '@/lib/types/query';
 
 /** Data Hub knowledge: knowledge bases, the sources that feed them, and the items sources produce. */
@@ -46,6 +49,7 @@ export interface KnowledgeApi {
     detachSource(id: string, sourceId: string): Promise<KnowledgeBase>;
     setSourceRules(id: string, sourceId: string, rules: Rule[]): Promise<KnowledgeBase>;
     documents(id: string, params: ListParams<DocumentFilters>): Promise<ListResult<DocumentRow>>;
+    /** Searches this knowledge base (and `alsoKbIds`) and returns the answer with its retrieval trace. */
     query(id: string, input: QueryInput): Promise<PlaygroundAnswer>;
     bulkRefresh(ids: string[]): Promise<BulkResult>;
     bulkRemove(ids: string[]): Promise<BulkResult>;
@@ -67,8 +71,14 @@ export interface KnowledgeApi {
     run(runId: string): Promise<SyncRun>;
     /** Lists what a source would fetch, without creating it. */
     preview(input: Pick<SourceInput, 'type' | 'config'>): Promise<SourcePreview>;
-    connections(): Promise<Connection[]>;
-    connect(type: SourceType): Promise<Connection>;
+    /** Required metadata of the chosen knowledge bases, and how many previewed items each would hold for it. */
+    previewHeld(input: HeldPreviewInput): Promise<HeldPreview>;
+    /** Seeded documents a split preview can run on; a source's own documents first when `sourceId` is given. */
+    samples(sourceId?: string): Promise<SampleDocument[]>;
+    /** Splits one sample document with the given settings, without saving anything. */
+    previewSplit(input: SplitPreviewInput): Promise<SplitPreview>;
+    /** The knowledge owner approves the source's AI ingestion steps. */
+    approveIngest(id: string): Promise<Source>;
     bulkSync(ids: string[]): Promise<BulkResult>;
     bulkSetPaused(ids: string[], paused: boolean): Promise<BulkResult>;
     bulkRemove(ids: string[]): Promise<BulkResult>;
@@ -82,7 +92,11 @@ export interface KnowledgeApi {
     setTags(id: string, tags: string[]): Promise<Item>;
     setOwner(id: string, owner: string): Promise<Item>;
     addTag(ids: string[], tag: string): Promise<BulkResult>;
+    /** Supplies metadata a held item is missing; it becomes searchable when nothing required is left. */
+    setMetadata(id: string, values: Record<string, string>): Promise<Item>;
   };
+  /** Searches several knowledge bases with each one's saved settings unless `settings` or `overrides` say otherwise. Used by chat and workflow knowledge steps. */
+  retrieve(input: RetrieveInput): Promise<PlaygroundAnswer>;
   /** Document owners, tags and source collections, for pickers. */
   lookups(): Promise<{ owners: string[]; tags: string[]; collections: string[] }>;
 }

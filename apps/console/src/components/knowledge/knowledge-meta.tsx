@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ChunkStrategy, ErrorClass, ItemStatus, KbHealth, RunPhase, RunStatus, Schedule, Sensitivity, SourceStatus, SourceType, SyncRun } from '@/lib/types/knowledge';
+import type { ErrorClass, Item, ItemStatus, KbHealth, RunPhase, RunStatus, Schedule, Sensitivity, SourceStatus, SourceType, SyncRun } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -100,6 +100,7 @@ const ITEM: Record<ItemStatus, [Tone, LucideIcon, string]> = {
   partial: ['warn', AlertTriangle, 'Partial'],
   excluded: ['neutral', MinusCircle, 'Excluded'],
   deleted: ['neutral', MinusCircle, 'Deleted at source'],
+  held: ['warn', PauseCircle, 'Held'],
 };
 export const ITEM_STATUS_LABEL = Object.fromEntries(Object.entries(ITEM).map(([k, v]) => [k, v[2]])) as Record<ItemStatus, string>;
 export function ItemStatusBadge({ status }: { status: ItemStatus }) {
@@ -224,15 +225,6 @@ export function backoffRetryAt(run: SyncRun) {
   return new Date(new Date(run.startedAt).getTime() + (run.durationSec + wait) * 1000).toISOString();
 }
 
-export const STRATEGIES: { value: ChunkStrategy; label: string; description: string; llm?: boolean }[] = [
-  { value: 'structure', label: 'Structure aware', description: 'Headings, paragraphs and sentences. Fast and predictable.' },
-  { value: 'topics', label: 'Smart topics', description: 'A model groups content by topic before chunking.', llm: true },
-  { value: 'faq', label: 'FAQ optimised', description: 'Generates sample questions per section so questions match better.', llm: true },
-  { value: 'headers', label: 'Topic headers', description: 'Adds a one-line context summary to each chunk.', llm: true },
-  { value: 'summarise', label: 'Summarise', description: 'Key points only. Smaller index, less detail.', llm: true },
-  { value: 'rows', label: 'Rows', description: 'Tables only: each row is a chunk, headers become field names.' },
-];
-
 export const RULE_FIELDS = [
   { value: 'path', label: 'Path glob' },
   { value: 'title', label: 'Title contains' },
@@ -241,15 +233,34 @@ export const RULE_FIELDS = [
   { value: 'sizeUnder', label: 'Size under' },
 ] as const;
 
+/** Each rule field's value example, so the placeholder follows the field. */
+export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], string> = {
+  path: 'e.g. **/Archive/**',
+  title: 'e.g. draft',
+  mime: 'e.g. application/zip',
+  modifiedAfter: 'e.g. 2026-01-01',
+  sizeUnder: 'e.g. 50 MB',
+};
+
 export const PARSING_OPTIONS = [
   { k: 'ocr' as const, label: 'OCR', tip: 'Runs on scanned PDFs and images. Slower and uses credits.' },
-  { k: 'tables' as const, label: 'Table extraction', tip: 'Tables in PDF and DOCX become row chunks with headers as field names, so fee schedules come back as values.' },
+  { k: 'tables' as const, label: 'Keep tables', tip: 'Tables in PDF, DOCX and XLSX keep their columns, so table rows and structured values can read them.' },
   { k: 'vision' as const, label: 'Vision for figures', tip: 'Describes images and charts into text.' },
-  { k: 'removeHtml' as const, label: 'Remove HTML and boilerplate', tip: 'Strips navigation, footers and scripts from web pages.' },
 ];
 
 export const RETRIEVAL_PRESETS = {
-  balanced: { searchMode: 'hybrid', rerank: true, chunkLimit: 8, threshold: 0.5, synthesis: true, temperature: 0.1 },
-  precise: { searchMode: 'hybrid', rerank: true, chunkLimit: 5, threshold: 0.65, synthesis: true, temperature: 0 },
-  raw: { searchMode: 'hybrid', rerank: false, chunkLimit: 10, threshold: 0.4, synthesis: false },
+  balanced: { searchMode: 'hybrid', rerank: true, chunkLimit: 8, threshold: 0.5, answerShape: 'answer_with_citations', temperature: 0.1 },
+  precise: { searchMode: 'hybrid', rerank: true, chunkLimit: 5, threshold: 0.65, answerShape: 'answer_with_citations', temperature: 0 },
+  raw: { searchMode: 'hybrid', rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: 'chunks' },
 } as const;
+
+/** Why an item is not searched as-is: the rule, the missing metadata, the copy it duplicates or the version that replaced it. */
+export function itemReason(i: Item): string | undefined {
+  if (i.status === 'excluded') return i.excludedBy ?? 'Excluded by hand';
+  if (i.status === 'held' && i.held) return `Missing ${i.held.missing.join(', ')} · required by ${i.held.kbNames.join(', ')}`;
+  if (i.duplicateOf) return `Same content as ${i.duplicateOf.title} in ${i.duplicateOf.sourceName}; indexed once there`;
+  if (i.versionStatus === 'superseded') return `Superseded by ${i.supersededBy}; kept for as-of questions`;
+  if (i.versionStatus === 'scheduled') return `Takes effect ${i.effectiveDate}`;
+  if (i.alsoIn?.length) return `Also in ${i.alsoIn.map((a) => a.sourceName).join(', ')}; indexed once`;
+  return undefined;
+}

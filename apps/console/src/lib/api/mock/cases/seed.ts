@@ -13,7 +13,7 @@ interface Template {
   body: string;
   fields: Record<string, string>;
   amount?: number;
-  attachments?: { name: string; sizeKb: number; summary: string }[];
+  attachments?: { name: string; sizeKb: number; summary: string; infected?: boolean }[];
   account: string;
 }
 
@@ -30,7 +30,10 @@ const T: Template[] = [
     subject: 'Charged twice for one purchase',
     body: 'Hi,\n\nLakeside Furniture charged my card ending 2231 twice for the same order ($1,240.18 each, both on October 1). I only placed one order. The receipt is attached.\n\nRegards',
     fields: { card_last4: '2231', merchant: 'Lakeside Furniture', amount: '$1,240.18', transaction_date: '2026-10-01' }, amount: 1240.18,
-    attachments: [{ name: 'receipt-LF-88213.jpg', sizeKb: 912, summary: 'One receipt for order LF-88213, total $1,240.18, paid by card ending 2231.' }],
+    attachments: [
+      { name: 'receipt-LF-88213.jpg', sizeKb: 912, summary: 'One receipt for order LF-88213, total $1,240.18, paid by card ending 2231.' },
+      { name: 'remittance-advice.docm', sizeKb: 58, summary: '', infected: true },
+    ],
   },
   {
     workflowId: 'wf_card_inbox', intentId: 'dispute_charge', account: 'Visa •• 9012',
@@ -202,7 +205,7 @@ export function seedCases(me: string, workflowName: (id: string) => string): Cas
     const id = `CASE-${4100 + i}`;
 
     const messages: CaseMessage[] = [
-      { id: `${id}-m1`, direction: 'inbound', from: `${name} <${email}>`, to: MAILBOXES[t.workflowId], at: receivedAt, subject: t.subject, body: t.body, attachments: t.attachments ?? [] },
+      { id: `${id}-m1`, direction: 'inbound', from: `${name} <${email}>`, to: MAILBOXES[t.workflowId], at: receivedAt, subject: t.subject, body: t.body, attachments: (t.attachments ?? []).map((a) => ({ fileId: '', name: a.name, size: a.sizeKb * 1024, mime: '', scan: a.infected ? 'infected' : 'clean', summary: a.summary })) },
     ];
 
     const actions: CaseAction[] = intent.actions.map((tool, k) => {
@@ -230,7 +233,7 @@ export function seedCases(me: string, workflowName: (id: string) => string): Cas
         label: ACTION_LABEL[tool] ?? tool,
         tool,
         input,
-        evidence: [`Extracted from the email: ${Object.values(t.fields).slice(0, 2).join(', ')}`, ...(t.attachments ?? []).map((a) => `Attachment ${a.name}: ${a.summary}`)],
+        evidence: [`Extracted from the email: ${Object.values(t.fields).slice(0, 2).join(', ')}`, ...(t.attachments ?? []).filter((a) => !a.infected).map((a) => `Attachment ${a.name}: ${a.summary}`)],
         needsApproval,
         approverGroup: rule?.approverGroup,
         fourEyes: !!rule?.fourEyes && needsApproval,

@@ -141,7 +141,7 @@ fail | pending | not_applicable, detail, evidenceRef, override?{reason, by, at}}
 
 | Entity | Fields | Rules |
 |---|---|---|
-| `EvidenceBundle` | `digest`, `workflowId`, `versionNumber`, `manifest` (5.6), `sealedAt`, `sealedBy` (system), `storageUri` | Written once to WORM storage at approval; the index row lives in PostgreSQL schema `evidence` (ADR-0006) |
+| `EvidenceBundle` | `digest`, `workflowId`, `versionNumber`, `manifest` (5.6), `sealedAt`, `sealedBy` (system), `fileId` | Written once at approval through the Files API as a file with purpose `evidence_bundle` in a WORM retention class (`10` 5.7, ADR-0010): Object Lock compliance mode or a locked immutability policy, so nobody can change or delete it before retention ends. The index row lives in PostgreSQL schema `evidence` (ADR-0006) and holds the `fileId`, never a storage URI |
 | `EvidenceEntry` | `id`, `bundleDigest`, `kind` (`promotion`, `smoke`, `rollback`, `model_update_run`, `drift_check`, `knowledge_rerun`, `module_revoked`), `payloadDigest`, `createdAt` | Later facts about a version are appended as separate sealed entries that reference the bundle. The bundle itself never changes |
 
 ### 4.7 Release pointer
@@ -572,7 +572,7 @@ to 13 with `pageSize=1`.
 | 18 | `PUT /risk-tiers/{tier}` | `steps[]`, `reason` (creates a pending change needing a second approver from Model Risk) | `GatePolicyChange` | 403 | Later |
 | 19 | `GET /publish-requests/{reviewId}/gate` | | `GateEvaluation` (refreshes when the eval run completes) | | 1 |
 | 20 | `GET /workflows/{id}/versions/{n}/evidence` | | `{bundle{digest, manifest, sealedAt}, entries[]}` | 404 | 1 |
-| 21 | `GET /evidence/{digest}/export` | | Archive (manifest, definition, plan, run results, outputs, approvals, gate evaluation) with a detached signature | 404 | 1 |
+| 21 | `POST /v1/files/evidence-exports` (`10` F13), then `10` F6 | `{kind: 'publish_request', reviewId}` or `{kind: 'model', entryId, version}` | The sealed bundle's `FileRecord` (archive of manifest, definition, plan, run results, outputs, approvals, gate evaluation, with a detached signature); download is a short-lived signed link, audited. Exporting again returns the same immutable file | 404 | 1 |
 
 Override reasons are submitted with the publish decision (`01` operation 35, `overrideReasons[{stepId,
 caseId, reason}]`); a decision without a reason for every advisory failure returns 422.

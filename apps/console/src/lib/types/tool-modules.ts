@@ -1,5 +1,6 @@
 import type { ToolAccess } from './domain';
 import type { ToolCallRow } from './governance';
+import type { ConnectionRef } from './integrations';
 
 /**
  * Tool modules (spec 03 §4.1): one system connected once, holding the operations agents call. A module version is
@@ -48,6 +49,9 @@ export interface ToolModule {
   reachable: boolean;
   /** The MCP server's tool list no longer matches the reviewed snapshot. */
   drift: boolean;
+  /** The integration whose credential the gateway uses; null for modules served inside the gateway. */
+  connectionId?: string;
+  connection: ConnectionRef | null;
   updatedAt: string;
 }
 
@@ -194,18 +198,6 @@ export interface SecurityReview {
 
 export type CredentialKind = 'oauth_client_credentials' | 'mtls' | 'api_key' | 'basic';
 
-/** A pointer into the bank vault. No API returns the value. */
-export interface ModuleCredential {
-  id: string;
-  environment: Environment;
-  kind: CredentialKind;
-  secretRef: string;
-  setBy: string;
-  setAt: string;
-  rotateBy: string;
-  status: 'ok' | 'rotate_soon' | 'overdue';
-}
-
 /** A sample run context the test console can act as: the workflow whose approval applies and the case's bound fields. */
 export interface RunContextOption {
   id: string;
@@ -228,7 +220,6 @@ export interface ToolModuleDetail extends ToolModule {
   approvals: ModuleApproval[];
   reviews: SecurityReview[];
   versions: ModuleVersion[];
-  credentials: ModuleCredential[];
   runContexts: RunContextOption[];
 }
 
@@ -270,9 +261,8 @@ export interface ModuleTestResult {
 }
 
 export type ModuleSource =
-  | { kind: 'mcp'; url: string; secretRef?: string }
-  | { kind: 'openapi'; specUrl?: string; fileName?: string; secretRef?: string }
-  | { kind: 'catalog'; catalogId: string };
+  | { kind: 'mcp'; url: string; connectionId?: string }
+  | { kind: 'openapi'; specUrl?: string; fileName?: string; /** Uploaded spec, from the Files API. */ fileId?: string; connectionId?: string };
 
 export interface DiscoveredOperation {
   name: string;
@@ -303,7 +293,6 @@ export interface HttpOperationInput {
   url: string;
   headers: { key: string; value: string }[];
   body?: string;
-  secretRef?: string;
 }
 
 export interface ModuleInput {
@@ -312,26 +301,9 @@ export interface ModuleInput {
   system: string;
   type: ModuleType;
   endpoint: string;
-  secretRef?: string;
-  catalogId?: string;
+  /** The integration the gateway authenticates through. */
+  connectionId: string;
   /** Selected operations from discovery, with the access class the owner confirmed. */
   operations?: DiscoveredOperation[];
   http?: HttpOperationInput;
-}
-
-export interface CatalogItem {
-  id: string;
-  name: string;
-  system: string;
-  category: 'Core systems' | 'CRM' | 'Productivity' | 'Risk & compliance' | 'Internal';
-  type: ModuleType;
-  description: string;
-  operations: number;
-  auth: CredentialKind | 'none';
-  owner: string;
-  /** Set when a module from this item already exists. */
-  moduleId?: string;
-  /** The connected module's own approval state, so the card never says more than the module does. */
-  moduleState?: ModuleApprovalState;
-  available: boolean;
 }

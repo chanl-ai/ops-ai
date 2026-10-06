@@ -1,5 +1,5 @@
 import type { Icon } from '@tabler/icons-react';
-import { IconBolt, IconDatabase, IconGitPullRequest, IconHistory, IconHome, IconListDetails, IconMail, IconMessages, IconPlug, IconRobot, IconRocket, IconRoute, IconScale, IconSettings, IconShieldLock, IconUserCheck } from '@tabler/icons-react';
+import { IconBolt, IconDatabase, IconFiles, IconGitPullRequest, IconHistory, IconHome, IconListDetails, IconMail, IconMessages, IconPlug, IconPlugConnected, IconRobot, IconRocket, IconRoute, IconScale, IconSettings, IconShieldLock, IconUserCheck } from '@tabler/icons-react';
 
 export interface NavItem {
   title: string;
@@ -33,10 +33,13 @@ export const NAV: NavGroup[] = [
   },
   {
     label: 'Data Hub',
+    // Connect first, then curate knowledge and sources and expose tools; every one of them uses a connection.
     items: [
+      { title: 'Integrations', url: '/integrations', icon: IconPlugConnected },
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
       { title: 'Knowledge changes', url: '/knowledge/changes', icon: IconGitPullRequest },
       { title: 'Sources', url: '/sources', icon: IconPlug },
+      { title: 'Files', url: '/files', icon: IconFiles },
       { title: 'Tools & MCP', url: '/tools', icon: IconBolt },
     ],
   },

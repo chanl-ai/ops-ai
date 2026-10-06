@@ -12,6 +12,8 @@ import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { RunStatusBadge, SCHEDULE_KIND_LABEL, SOURCE_STATUS_LABEL, SOURCE_TYPES, SourceStatusBadge, SourceTypeIcon, scheduleLabel, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
 import { PageLayout } from '@/components/page-layout';
+import { ConnectDialog } from '@/components/integrations/connect-dialog';
+import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddSourceDialog } from '@/components/sources/add-source-dialog';
 import { BulkConfirmDialog, SelectedList, toastBulk } from '@/components/shared/bulk';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -26,20 +28,22 @@ import {
   useBulkDeleteSources,
   useBulkPauseSources,
   useBulkSyncSources,
-  useConnect,
-  useConnections,
   useCreateSource,
   useDeleteSource,
   useKnowledgeBases,
   useKnowledgeLookups,
   usePauseSource,
+  useIngestSamples,
   usePreviewSource,
+  usePreviewHeld, usePreviewSplit,
   useSourcesList,
   useSyncSource,
 } from '@/hooks/knowledge-queries';
+import { useConnectFlow, useIntegrationOptions } from '@/hooks/integration-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
+import type { IntegrationKind } from '@/lib/types/integrations';
 import type { Schedule, SourceFilters, SourceRow, SourceStatus } from '@/lib/types/knowledge';
 
 type Row = SourceRow & { onRowClick: (s: SourceRow) => void };
@@ -59,13 +63,26 @@ function columns(actions: { sync: (s: SourceRow) => void; togglePause: (s: Sourc
             <Link href={`/sources/${row.original.id}`} className="block truncate font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
               {row.original.name}
             </Link>
-            <div className="truncate font-mono text-xs text-muted-foreground">{row.original.connectionLabel ?? row.original.scopeSummary}</div>
+            <div className="truncate font-mono text-xs text-muted-foreground">{row.original.scopeSummary}</div>
           </div>
         </div>
       ),
       enableHiding: false,
     },
     { accessorKey: 'type', header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />, cell: ({ row }) => <span className="whitespace-nowrap">{sourceTypeMeta(row.original.type).short}</span>, filterFn: facetFilterFn },
+    {
+      id: 'connection',
+      accessorFn: (r) => r.connection?.name ?? '',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Connection" />,
+      cell: ({ row }) =>
+        row.original.connection ? (
+          <StopRowClick align="start">
+            <ConnectionChip connection={row.original.connection} className="max-w-56" />
+          </StopRowClick>
+        ) : (
+          <span className="text-xs text-muted-foreground">None needed</span>
+        ),
+    },
     {
       id: 'items',
       accessorFn: (r) => r.itemsIndexed,
@@ -155,11 +172,12 @@ export default function SourcesPage() {
   const query = useSourcesList(list.params);
   const all = useSourcesList(ALL);
   const kbs = useKnowledgeBases(ALL);
-  const connections = useConnections();
   const lookups = useKnowledgeLookups();
   const create = useCreateSource();
   const preview = usePreviewSource();
-  const connect = useConnect();
+  const previewSplit = usePreviewSplit();
+  const previewHeld = usePreviewHeld();
+  const samples = useIngestSamples();
   const sync = useSyncSource();
   const pause = usePauseSource();
   const remove = useDeleteSource();
@@ -167,6 +185,10 @@ export default function SourcesPage() {
   const bulkPause = useBulkPauseSources();
   const bulkDelete = useBulkDeleteSources();
   const [addOpen, setAddOpen] = React.useState(false);
+  const [connectKind, setConnectKind] = React.useState<IntegrationKind | null>(null);
+  const [newConnectionId, setNewConnectionId] = React.useState<string | undefined>();
+  const connections = useIntegrationOptions(addOpen);
+  const flow = useConnectFlow(!!connectKind);
   const [deleting, setDeleting] = React.useState<SourceRow | null>(null);
   const deletingShown = useSticky(deleting);
   const [bulk, setBulk] = React.useState<{ kind: BulkKind; rows: SourceRow[] } | null>(null);
@@ -258,20 +280,21 @@ export default function SourcesPage() {
 
       <AddSourceDialog
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(o) => {
+          setAddOpen(o);
+          if (!o) setNewConnectionId(undefined);
+        }}
         connections={connections.data ?? []}
         knowledgeBases={kbs.data?.data ?? []}
         collections={lookups.data?.collections ?? []}
         existingNames={(all.data?.data ?? []).map((s) => s.name)}
         onPreview={(i) => preview.mutateAsync(i)}
-        onConnect={async (type) => {
-          try {
-            const c = await connect.mutateAsync(type);
-            toast.success(`${c.name} connected`, { description: c.connectedAs });
-          } catch (e) {
-            toast.error('Couldn’t connect', { description: (e as Error).message });
-          }
-        }}
+        samples={samples.data ?? []}
+        samplesLoading={samples.isPending}
+        onPreviewSplit={(i) => previewSplit.mutateAsync(i)}
+        onPreviewHeld={(i) => previewHeld.mutateAsync(i)}
+        newConnectionId={newConnectionId}
+        onConnectNew={(kind) => setConnectKind(kind)}
         isPending={create.isPending}
         onSubmit={async (input, opts) => {
           const s = await create.mutateAsync({ input, ...opts });
@@ -328,6 +351,22 @@ export default function SourcesPage() {
       >
         <SelectedList names={names} />
       </DeleteDialog>
+      <ConnectDialog
+        open={!!connectKind}
+        onOpenChange={(o) => !o && setConnectKind(null)}
+        catalog={flow.catalog}
+        kinds={connectKind ? [connectKind] : undefined}
+        teams={flow.teams}
+        defaultTeam={flow.defaultTeam}
+        currentUser={flow.currentUser}
+        connecting={flow.connecting}
+        onConnect={async (input) => {
+          const i = await flow.connect(input);
+          toast.success(`Connected ${i.name}`, { description: 'Picked for this source.' });
+          setNewConnectionId(i.id);
+          setConnectKind(null);
+        }}
+      />
     </PageLayout>
   );
 }

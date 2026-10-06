@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { toastBulk } from '@/components/shared/bulk';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -125,13 +126,17 @@ function parseCsv(text: string): TestCaseInput[] {
   }));
 }
 
-function ImportDialog({ open, onOpenChange, onImport, isPending }: { open: boolean; onOpenChange: (o: boolean) => void; onImport: (rows: TestCaseInput[]) => Promise<unknown>; isPending: boolean }) {
+function ImportDialog({ open, onOpenChange, onImport, isPending }: { open: boolean; onOpenChange: (o: boolean) => void; onImport: (rows: TestCaseInput[], fileId: string) => Promise<unknown>; isPending: boolean }) {
   const [rows, setRows] = React.useState<TestCaseInput[] | null>(null);
+  const [upload, setUpload] = React.useState<UploadItem[]>([]);
+  const fileId = uploadsReady(upload) ? upload[0].fileId : undefined;
+  const waiting = upload.length ? uploadsBlocker(upload) : undefined;
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (open) {
       setRows(null);
       setError(null);
+      setUpload([]);
     }
   }, [open]);
   const valid = (rows ?? []).filter((r) => r.name.trim() && r.input.trim());
@@ -150,9 +155,10 @@ function ImportDialog({ open, onOpenChange, onImport, isPending }: { open: boole
           </Button>
           <LoadingButton
             isLoading={isPending}
-            disabled={!valid.length}
+            disabled={!valid.length || !fileId}
+            title={waiting}
             onClick={async () => {
-              await onImport(rows!);
+              await onImport(rows!, fileId!);
               onOpenChange(false);
             }}
           >
@@ -162,28 +168,25 @@ function ImportDialog({ open, onOpenChange, onImport, isPending }: { open: boole
       }
     >
       <div className="flex flex-col gap-3">
-        <label htmlFor="tc-file" className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center hover:bg-muted/40">
-          <Upload className="size-5 text-muted-foreground" />
-          <span className="text-sm font-medium">Choose a CSV file</span>
-          <span className="text-xs text-muted-foreground">Rows missing a name or input are skipped and listed after import.</span>
-          <input
-            id="tc-file"
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              try {
-                const parsed = parseCsv(await f.text());
-                if (!parsed.length) setError('The file has no rows under the header.');
-                else setRows(parsed);
-              } catch {
-                setError('That file could not be read as CSV.');
-              }
-            }}
-          />
-        </label>
+        <FileUpload
+          id="tc-file"
+          purpose="test_import"
+          title="Drop a CSV file here or choose one"
+          hint="Rows missing a name or input are skipped and listed after import."
+          onChange={setUpload}
+          onPick={async ([f]) => {
+            setRows(null);
+            setError(null);
+            try {
+              const parsed = parseCsv(await f.text());
+              if (!parsed.length) setError('The file has no rows under the header.');
+              else setRows(parsed);
+            } catch {
+              setError('That file could not be read as CSV.');
+            }
+          }}
+          testId="test-import-upload"
+        />
         {error && <p className="text-sm text-destructive">{error}</p>}
         {rows && invalid > 0 && <p className="text-sm text-amber-700 dark:text-amber-400">{invalid} row{invalid === 1 ? '' : 's'} without a name or input will be skipped.</p>}
         {rows && (
@@ -369,8 +372,8 @@ export function TestCases({ workflowId, liveGraph, tools }: { workflowId: string
         open={importOpen}
         onOpenChange={setImportOpen}
         isPending={importRows.isPending}
-        onImport={async (rows) => {
-          const res = await importRows.mutateAsync(rows);
+        onImport={async (rows, fileId) => {
+          const res = await importRows.mutateAsync({ rows, fileId });
           toastBulk(res, 'Imported', 'test case', (id) => `Row ${Number(id) + 2}`);
         }}
       />

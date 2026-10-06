@@ -2,7 +2,6 @@ import type { BulkResult } from '@/lib/types/domain';
 import type { ListParams, ListResult } from '@/lib/types/query';
 import type {
   ApprovalRequestInput,
-  CatalogItem,
   DiscoveryResult,
   ModuleActivity,
   ModuleApproval,
@@ -23,7 +22,6 @@ import type {
 export interface ToolModulesApi {
   list(params: ListParams<ModuleFilters> & { view: ModuleView }): Promise<ListResult<ToolModule> & { stats: ModuleStats; viewCounts: ModuleViewCounts }>;
   get(id: string): Promise<ToolModuleDetail>;
-  catalog(): Promise<CatalogItem[]>;
   /** Reads an MCP server's tool list or an OpenAPI document without saving anything. */
   discover(source: ModuleSource): Promise<DiscoveryResult>;
   /** Saves a draft module; it needs a security review before any workflow can be approved for it. */
@@ -41,7 +39,6 @@ export interface ToolModulesApi {
   /** Owner team only, and never the requester. */
   decideApproval(id: string, approvalId: string, decision: 'approved' | 'rejected', reason?: string): Promise<ModuleApproval>;
   revokeApprovals(id: string, approvalIds: string[], reason: string): Promise<BulkResult>;
-  setCredentialRef(id: string, credentialId: string, secretRef: string): Promise<ToolModuleDetail>;
   test(id: string, input: ModuleTestInput): Promise<ModuleTestResult>;
   activity(id: string): Promise<ModuleActivity>;
 }

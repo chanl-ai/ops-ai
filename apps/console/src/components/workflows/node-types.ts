@@ -47,7 +47,7 @@ export const iconKey = (icon: LucideIcon) => Object.entries(ICONS).find(([, c]) 
 
 // ── Field specs: what the inspector shows for each node kind, and which fields the checks require ──
 
-export type OptionSource = "agents" | "tools" | "collections" | "workflows" | "owners" | "reviewerGroups" | "sla" | "durations" | "schedules"
+export type OptionSource = "agents" | "tools" | "collections" | "workflows" | "owners" | "reviewerGroups" | "sla" | "durations" | "schedules" | "queryModes" | "answerShapes"
 
 export interface FieldSpec {
   key: string
@@ -95,7 +95,21 @@ export const NODE_KINDS: NodeKind[] = [
   { id: "classify", label: "Classify and route", description: "Sends the run down one labelled path", icon: GitBranch, group: "ai", type: "branch", branches: ["Low", "Gate", "Block"], fields: [{ key: "description", label: "Classify by", input: "text", placeholder: "Fraud risk of the wire", required: true }, { key: "branches", label: "Paths", input: "branches" }] },
   { id: "extract", label: "Extract", description: "Typed fields from text or a document", icon: ScanText, group: "ai", type: "step", isNew: true, fields: [{ key: "description", label: "Fields", input: "text", placeholder: "employer, annual income, start date", required: true }] },
   // Data and tools
-  { id: "knowledge", label: "Knowledge search", description: "Searches collections, keeps citations", icon: BookOpen, group: "tool", type: "step", fields: [{ key: "description", label: "Collection", input: "select", options: "collections", required: true }] },
+  {
+    id: "knowledge",
+    label: "Knowledge search",
+    description: "Searches collections, keeps citations",
+    icon: BookOpen,
+    group: "tool",
+    type: "step",
+    // Overrides for this step only; anything left at the default uses the knowledge base's saved retrieval settings.
+    fields: [
+      { key: "description", label: "Collection", input: "select", options: "collections", required: true },
+      { key: "queryMode", label: "Query mode", input: "select", options: "queryModes", hint: "Default uses the knowledge base’s saved settings." },
+      { key: "filters", label: "Filters", input: "textarea", mono: true, placeholder: "product is {case.product}\njurisdiction one of CA, {case.region}", hint: "One condition per line, all must match. Values can be runtime variables such as {case.product}." },
+      { key: "answerShape", label: "Answer shape", input: "select", options: "answerShapes", hint: "Chunks only hands the passages to the next step without writing an answer." },
+    ],
+  },
   { id: "tool", label: "Tool", description: "A registered HTTP, code or MCP tool", icon: Wrench, group: "tool", type: "step", fields: [F.tool] },
   { id: "http", label: "HTTP request", description: "Ad-hoc call to an allow-listed host", icon: Globe, group: "tool", type: "step", fields: [{ key: "description", label: "URL", input: "text", placeholder: "https://api.internal/…", required: true, mono: true }] },
   { id: "code", label: "Code", description: "Sandboxed JavaScript transform", icon: Code2, group: "tool", type: "step", fields: [{ key: "description", label: "Code", input: "textarea", placeholder: "return { total: input.items.length }", mono: true, required: true }] },

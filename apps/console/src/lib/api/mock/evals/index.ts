@@ -5,6 +5,7 @@ import { ApiError } from '../../contract';
 import type { EvalsApi } from '../../evals-contract';
 import type { OpsApi } from '../../contract';
 import { PRINCIPALS } from '../run-as/principals';
+import type { FileLinks } from '../files';
 import { bulk, field, id, list, notFound, respond } from '../runtime';
 import { AGENT_CASES, PLATFORM_TEMPLATES, RULE_OF, SEED_FAILURES, SUITE_META } from './seed';
 
@@ -23,6 +24,8 @@ export interface EvalsDeps {
   toolAccess: (name: string) => string | undefined;
   collections: () => string[];
   me: string;
+  /** Imported CSVs are files; the eval set is recorded as a reference. */
+  files: FileLinks;
 }
 
 const RUN_MS = 3500;
@@ -305,9 +308,10 @@ export function createEvalsMock(deps: EvalsDeps) {
         if (err) throw new ApiError(`${err}.`, 400);
         return addCase(aid, input, 'manual');
       }),
-    importCases: (aid, rows) =>
+    importCases: (aid, rows, fileId) =>
       respond(() => {
         const a = agentOr404(aid);
+        if (fileId) deps.files.link(fileId, { type: 'eval_set', id: aid, name: `${a.name} eval cases`, href: `/agents/${aid}?tab=evals` }, ['test_import']);
         const held = contentOf(a).toolNames;
         return bulk(rows.map((_, i) => String(i)), (i) => {
           const err = validateInput(rows[Number(i)]);

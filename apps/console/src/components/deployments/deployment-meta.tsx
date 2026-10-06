@@ -1,6 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { Code2, Mail, MessageSquare } from 'lucide-react';
+
+import { ConnectionChip } from '@/components/integrations/integration-meta';
 
 import { CopyButton } from '@/components/shared/copy-button';
 import { Button } from '@/components/ui/button';
@@ -130,11 +133,24 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
           >
             <span className="font-medium">{syncText(d.email.sync).title}</span>
             <span className={d.email.sync.status === 'error' ? '' : 'text-muted-foreground'}>{syncText(d.email.sync).detail}</span>
-            {d.email.sync.status === 'error' && onReconnect && (
-              <Button size="sm" variant="outline" className="ml-auto" disabled={reconnecting} onClick={onReconnect}>
-                Reconnect
+            {d.email.sync.status === 'error' && d.email.connection ? (
+              <Button size="sm" variant="outline" className="ml-auto" asChild>
+                <Link href={`/integrations/${d.email.connection.id}`}>Fix the connection</Link>
               </Button>
+            ) : (
+              d.email.sync.status === 'error' &&
+              onReconnect && (
+                <Button size="sm" variant="outline" className="ml-auto" disabled={reconnecting} onClick={onReconnect}>
+                  Reconnect
+                </Button>
+              )
             )}
+          </div>
+        )}
+        {d.email.connection && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Connection: </span>
+            <ConnectionChip connection={d.email.connection} />
           </div>
         )}
         <CodeBlock label="Shared mailbox" code={d.email.inboundAddress} />

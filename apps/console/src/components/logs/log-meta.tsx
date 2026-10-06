@@ -77,6 +77,9 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   revoked: 'Revoked',
   connected: 'Connected',
   login: 'Signed in',
+  uploaded: 'Uploaded',
+  downloaded: 'Downloaded',
+  legal_hold: 'Legal hold',
 };
 
 export const TARGET_LABEL: Record<AuditTargetType, string> = {
@@ -94,9 +97,12 @@ export const TARGET_LABEL: Record<AuditTargetType, string> = {
   api_key: 'API key',
   webhook: 'Webhook',
   mailbox: 'Mailbox',
+  integration: 'Integration',
   notifications: 'Notifications',
   session: 'Session',
   model: 'Model',
+  file: 'File',
+  storage: 'Storage',
 };
 
 export function ActionBadge({ action }: { action: AuditAction }) {

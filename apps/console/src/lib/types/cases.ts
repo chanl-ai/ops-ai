@@ -1,3 +1,4 @@
+import type { ScanStatus } from './files';
 /** Email-to-workflow: how an email workflow is configured, and the cases it produces. */
 
 // ── Configuration (lives on the workflow graph, so it is drafted, tested and published with it) ──
@@ -79,11 +80,18 @@ export interface SampleMailResult {
 
 export type CaseStatus = 'new' | 'in_progress' | 'waiting_approval' | 'waiting_customer' | 'closed';
 
+/** An email attachment, stored once by the Files API; the case holds its file id. */
 export interface Attachment {
+  fileId: string;
   name: string;
-  sizeKb: number;
-  /** AI summary of the attachment's content. */
+  /** Bytes. */
+  size: number;
+  mime: string;
+  scan: ScanStatus;
+  /** AI summary of the attachment's content; empty when the scan blocked it. */
   summary: string;
+  /** Set while the file is quarantined: why the content is not available. */
+  blocked?: string;
 }
 
 export interface CaseMessage {

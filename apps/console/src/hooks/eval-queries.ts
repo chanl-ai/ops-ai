@@ -52,7 +52,7 @@ function useEvalWrite<A, R>(agentId: string, fn: (a: A) => Promise<R>) {
 }
 
 export const useCreateEvalCase = (agentId: string) => useEvalWrite(agentId, (i: EvalCaseInput) => api.evals.createCase(agentId, i));
-export const useImportEvalCases = (agentId: string) => useEvalWrite(agentId, (rows: EvalCaseInput[]) => api.evals.importCases(agentId, rows));
+export const useImportEvalCases = (agentId: string) => useEvalWrite(agentId, ({ rows, fileId }: { rows: EvalCaseInput[]; fileId?: string }) => api.evals.importCases(agentId, rows, fileId));
 export const useEvalCaseFromTurn = (agentId: string) => useEvalWrite(agentId, (i: SaveTurnInput) => api.evals.caseFromTurn(agentId, i));
 export const useDeleteEvalCase = (agentId: string) => useEvalWrite(agentId, (id: string) => api.evals.removeCase(id));
 export const useBulkDeleteEvalCases = (agentId: string) => useEvalWrite(agentId, (ids: string[]) => api.evals.bulkRemoveCases(ids));

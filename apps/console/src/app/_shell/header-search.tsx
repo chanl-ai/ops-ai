@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bot, Mail, MessageSquarePlus, Route, Users } from 'lucide-react';
+import { Bot, Cable, Mail, MessageSquarePlus, Route, Users } from 'lucide-react';
 import { IconShieldCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 
@@ -56,6 +56,7 @@ export function HeaderSearch() {
     ...(pathname.startsWith('/chat') ? [newChat] : []),
     { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/workflows?create=1') },
     { id: 'new-agent', label: 'New agent', icon: Bot, keywords: 'create add', run: () => go('/agents?create=1') },
+    { id: 'connect-system', label: 'Connect a system', icon: Cable, keywords: 'integration connection oauth sharepoint servicenow salesforce credential', run: () => go('/integrations?tab=catalog') },
     { id: 'connect-mailbox', label: 'Connect mailbox', icon: Mail, keywords: 'email inbox deployment outlook', run: () => go('/deployments?create=email') },
     ...(pathname.startsWith('/chat') ? [] : [newChat]),
     { id: 'switch-team', label: 'Switch team', icon: Users, keywords: 'team change', opens: 'teams' },

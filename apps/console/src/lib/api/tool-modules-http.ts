@@ -11,7 +11,6 @@ export function createToolModulesHttp(get: Get, send: Send, qs: (p: ListParams &
   return {
     list: (p) => get(`${base}?${qs(p)}`),
     get: (id) => get(`${base}/${id}`),
-    catalog: () => get(`${base}/catalog`),
     discover: (source) => send('POST', `${base}/discover`, source),
     create: (i) => send('POST', base, i),
     remove: (id) => send('DELETE', `${base}/${id}`),
@@ -23,7 +22,6 @@ export function createToolModulesHttp(get: Get, send: Send, qs: (p: ListParams &
     requestApproval: (id, i) => send('POST', `${base}/${id}/approvals`, i),
     decideApproval: (id, aid, decision, reason) => send('POST', `${base}/${id}/approvals/${aid}/decide`, { decision, reason }),
     revokeApprovals: (id, ids, reason) => send('POST', `${base}/${id}/approvals/revoke`, { ids, reason }),
-    setCredentialRef: (id, cid, secretRef) => send('PATCH', `${base}/${id}/credentials/${cid}`, { secretRef }),
     test: (id, i) => send('POST', `${base}/${id}/test`, i),
     activity: (id) => get(`${base}/${id}/activity`),
   };

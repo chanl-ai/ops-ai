@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { EvidenceExportButton } from '@/components/files/file-actions';
 import { isOpen, type ReviewRow, reviewColumns } from '@/components/reviews/review-columns';
 import { ReviewDecisionForm, ReviewDetailBody } from '@/components/reviews/review-detail';
 import { BulkDecisionDialog } from '@/components/reviews/bulk-decision-dialog';
@@ -281,6 +282,7 @@ export default function ReviewsPage() {
         onOpenChange={(o) => !o && setActiveId(null)}
         title={active?.title}
         description={active ? `${active.id} · ${active.customer} · ${KIND_LABEL[active.kind]}` : undefined}
+        footerActions={active && (active.kind === 'publish_request' || active.kind === 'model_validation') ? <EvidenceExportButton input={{ kind: 'publish_request', reviewId: active.id }} /> : undefined}
         tags={
           active && (
             <>

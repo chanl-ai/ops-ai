@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, Copy, Paperclip, Pencil, RefreshCw, SearchX, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -118,6 +118,7 @@ export function AssistantMessage({
   onRegenerate,
   onFeedback,
   onWidgetAction,
+  onOpenTrace,
 }: {
   message: ChatMessage;
   /** Set while the reply is in flight and nothing has been written yet. */
@@ -130,6 +131,8 @@ export function AssistantMessage({
   onRegenerate?: () => void;
   onFeedback?: (feedback: MessageFeedback | null) => void;
   onWidgetAction?: (widgetId: string, action: WidgetAction) => Promise<unknown>;
+  /** Opens how the cited passages were found: queries, filters, scores and precedence. */
+  onOpenTrace?: (trace: NonNullable<ChatMessage['trace']>) => void;
 }) {
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
   const [reason, setReason] = React.useState(FEEDBACK_REASONS[0]);
@@ -137,7 +140,7 @@ export function AssistantMessage({
   const cites = message.citations ?? [];
   const renderCitation = (n: number) => {
     const c = cites.find((x) => x.n === n);
-    return c ? <CitationPopover citation={c} onOpenDocument={onOpenDocument} /> : null;
+    return c ? <CitationPopover citation={c} onOpenDocument={onOpenDocument} onOpenTrace={message.trace && onOpenTrace ? () => onOpenTrace(message.trace!) : undefined} /> : null;
   };
   const settled = !streaming && !phaseLabel;
 
@@ -166,6 +169,12 @@ export function AssistantMessage({
       ) : null}
 
       {settled && cites.length > 0 && <SourcesList citations={cites} onOpenDocument={onOpenDocument} />}
+      {settled && message.trace && onOpenTrace && (
+        <button type="button" onClick={() => onOpenTrace(message.trace!)} className="flex w-fit items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+          <ListTree className="size-3" /> How this was found · {message.trace.candidates.filter((c) => c.outcome === 'returned').length} of {message.trace.searched} passages
+          {message.trace.precedence.length ? ` · ${message.trace.precedence.length} precedence ${message.trace.precedence.length === 1 ? 'decision' : 'decisions'}` : ''}
+        </button>
+      )}
 
       {message.stopped && settled && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

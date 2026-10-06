@@ -10,7 +10,7 @@ These documents design an operational AI platform for banks and describe the con
 | Reader | Read in this order |
 |---|---|
 | Engineer | `background/problem-statement.md` → `architecture/overview.md` → `backend/overview.md` → the topic spec for the area you work on → `specs/design-lessons.md` → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0009) → `specs/03-data-and-ai-gateways.md` → `backend/overview.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0010) → `specs/03-data-and-ai-gateways.md` → `backend/overview.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → `specs/04-evals-and-release.md` → `specs/08-model-risk.md` → `specs/09-governance-and-admin.md` → ADR-0005 |
 
 ## Requirements
@@ -46,6 +46,7 @@ These documents design an operational AI platform for banks and describe the con
 | `architecture/decisions/ADR-0007-build-vs-adopt.md` | What is adopted and what is built |
 | `architecture/decisions/ADR-0008-ai-gateway.md` | Portkey behind a key-and-budget service |
 | `architecture/decisions/ADR-0009-chat-experience.md` | In-console chat and MCP Apps |
+| `architecture/decisions/ADR-0010-object-storage.md` | Storage adapter with Amazon S3 and Azure Blob Storage as first-class backends |
 | `specs/01-agent-builder.md` | Registry, workflows, agents, versions, edit classes, human steps, cases, queues, SLAs |
 | `specs/02-knowledge.md` | Knowledge sources, metadata, scope, precedence, freshness, citations, curation |
 | `specs/03-data-and-ai-gateways.md` | Tool modules, approvals, credentials, call logs, mailbox intake, AI gateway |
@@ -53,6 +54,7 @@ These documents design an operational AI platform for banks and describe the con
 | `specs/07-agent-chat.md` | Chat with agents inside the platform |
 | `specs/08-model-risk.md` | Model inventory, tiering, validation, monitoring |
 | `specs/09-governance-and-admin.md` | Teams, roles, audit, access, notifications, webhooks, API keys, usage, search |
+| `specs/10-files.md` | Files API: presigned uploads, scanning, dedupe, references, retention, legal hold, WORM evidence, storage settings |
 | `specs/design-lessons.md` | Engineering lessons from earlier agent and tool platforms |
 | `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `backend/overview.md` | Service map, repo layout, contract flow, standards, security boundaries |

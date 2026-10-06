@@ -24,8 +24,8 @@ const VIEW: Record<Exclude<AuditView, 'all'>, (e: AuditEntry) => boolean> = {
 const req = () => `req_${Math.random().toString(36).slice(2, 12)}`;
 
 export type AuditWrite = Pick<AuditEntry, 'action' | 'target' | 'summary'> & Partial<Pick<AuditEntry, 'diff' | 'reason'>> & { owner?: string };
-/** Lets other mocks (model risk, evals) write to the same audit log; set when the governance mock is created. */
-export const auditSink: { log: (e: AuditWrite) => void } = { log: () => undefined };
+/** Lets other mocks (model risk, evals, integrations) write to and read the same audit log; set when the governance mock is created. */
+export const auditSink: { log: (e: AuditWrite) => void; entries: () => AuditEntry[] } = { log: () => undefined, entries: () => [] };
 
 /**
  * Logs and access, plus team settings (which write to the same audit log). Seeds come from the fixtures, so
@@ -54,6 +54,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
     audit.unshift({ diff: [], ...e, owner, id: id('aud'), at: new Date().toISOString(), actor: { kind: 'person', name: me, detail: emailOf(me) }, teamId: t.id, team: t.name, requestId: req() });
   };
   auditSink.log = log;
+  auditSink.entries = () => audit.filter((e) => inTeam(e.owner)).map(strip);
 
   const statusOf = (g: AccessGrant): GrantStatus => {
     if (!g.expiresAt) return 'active';

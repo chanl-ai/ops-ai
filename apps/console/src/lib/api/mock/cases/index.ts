@@ -2,6 +2,8 @@ import type { CaseAction, CaseDetail, CaseRow, CaseView, EmailWorkflowConfig, Sa
 
 import { ApiError } from '../../contract';
 import type { CasesApi } from '../../cases-contract';
+import type { FileLinks } from '../files';
+import { mimeOf } from '../files';
 import { bulk, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { APPROVER_GROUPS, ASSIGNEES, QUEUES } from './configs';
@@ -22,9 +24,30 @@ const RESULT: Record<string, string> = {
 };
 
 /** In-memory cases for the ops workbench. `me` is the signed-in reviewer; they belong to every approver group in the demo. */
-export function createCasesMock(deps: { me: string; workflowName: (id: string) => string; workflowOwner: (id: string) => string | undefined }) {
+export function createCasesMock(deps: { me: string; workflowName: (id: string) => string; workflowOwner: (id: string) => string | undefined; files: FileLinks }) {
   const { me } = deps;
   const cases: CaseDetail[] = seedCases(me, deps.workflowName);
+  // Intake stores each attachment through the Files API; the case keeps the file id. Identical content mailed
+  // twice is stored once. The first termination letter (an employment dispute) is under legal hold.
+  let held = false;
+  for (const c of cases)
+    for (const m of c.messages)
+      m.attachments = m.attachments.map((a) => {
+        const f = deps.files.intake({
+          name: a.name,
+          size: a.size,
+          team: deps.workflowOwner(c.workflowId) ?? 'Platform',
+          ref: { type: 'case', id: c.id, name: `${c.id} · ${c.subject}`, href: `/cases/${c.id}` },
+          infected: a.scan === 'infected',
+          hold: a.name === 'termination-letter.pdf' && !held && (held = true) ? { by: 'Legal (Employment)', reason: 'LH-2026-021: wrongful dismissal claim, preserve the borrower file' } : undefined,
+        });
+        return { ...a, fileId: f.id, mime: mimeOf(a.name), scan: f.scan.status };
+      });
+  /** Attachments show the file's current scan state; a quarantined one shows why it is blocked. */
+  const withFiles = (c: CaseDetail): CaseDetail => ({
+    ...c,
+    messages: c.messages.map((m) => ({ ...m, attachments: m.attachments.map((a) => ({ ...a, ...deps.files.state(a.fileId) })) })),
+  });
 
   const row = (c: CaseDetail): CaseDetail => {
     const open = isOpen(c);
@@ -32,7 +55,7 @@ export function createCasesMock(deps: { me: string; workflowName: (id: string) =
     const slaMinutes = open && c.status !== 'waiting_customer' ? Math.round((new Date(c.slaDueAt).getTime() - Date.now()) / 60_000) : null;
     const pend = c.actions.filter(pending);
     return {
-      ...c,
+      ...withFiles(c),
       workflowName: deps.workflowName(c.workflowId),
       slaMinutes,
       pendingApprovals: pend.length,

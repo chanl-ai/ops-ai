@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { count, dateTime, duration, ms, relativeTime } from '@/lib/format';
+import { count, dateTime, duration, ms, relativeTime, plural } from '@/lib/format';
 import type { SyncRun } from '@/lib/types/knowledge';
 
 /** One sync run: counts, phases, errors with per-item reprocess, and the raw log. */
@@ -115,7 +115,7 @@ export function RunSheet({
               <div className="mb-3 flex flex-col gap-1.5">
                 <div className="flex justify-between text-xs tabular-nums text-muted-foreground">
                   <span>
-                    {count(run.progress.done)} of {count(run.progress.total)} items, {count(run.progress.failed)} failed
+                    {count(run.progress.done)} of {plural(run.progress.total, 'item')}, {count(run.progress.failed)} failed
                   </span>
                   <span>{Math.round((run.progress.done / Math.max(run.progress.total, 1)) * 100)}%</span>
                 </div>

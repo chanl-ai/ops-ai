@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { openLink } from '@/components/files/file-actions';
 import { AuditSheet } from '@/components/logs/audit-sheet';
 import { ACTION_LABEL, ActionBadge, ActorCell, options, TARGET_LABEL } from '@/components/logs/log-meta';
 import { PageLayout } from '@/components/page-layout';
@@ -17,6 +18,7 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { useDownloadFile, useExportAudit } from '@/hooks/file-queries';
 import { useAudit } from '@/hooks/governance-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
@@ -114,10 +116,29 @@ export default function AuditPage() {
   const facets = query.data?.facets ?? {};
   const withCounts = (column: string, opts: { label: string; value: string }[]) => opts.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 })).filter((o) => o.count > 0 || column === 'action');
 
-  const exportCsv = () =>
-    toast.success('Export started', {
-      description: `${plural(query.data?.pagination.total ?? 0, 'entry', 'entries')} in this view, as CSV. A download link will be emailed to you.`,
-    });
+  const exportAudit = useExportAudit();
+  const download = useDownloadFile();
+  // The export is a file in Files (purpose export, 30-day retention); the download is a short-lived signed link.
+  const exportCsv = async () => {
+    try {
+      const f = await exportAudit.mutateAsync({ ...list.params, view });
+      toast.success(`Exported ${plural(query.data?.pagination.total ?? 0, 'entry', 'entries')}`, {
+        description: `${f.name} is in Files and is deleted after ${f.retention.deleteAfter}.`,
+        action: {
+          label: 'Download',
+          onClick: async () => {
+            try {
+              openLink(await download.mutateAsync(f.id), f.name);
+            } catch (e) {
+              toast.error('Couldn’t download', { description: (e as Error).message });
+            }
+          },
+        },
+      });
+    } catch (e) {
+      toast.error('Couldn’t export', { description: (e as Error).message });
+    }
+  };
 
   return (
     <PageLayout
@@ -125,7 +146,7 @@ export default function AuditPage() {
       title="Audit log"
       description="Who changed what: publishes, approvals, access, settings and sign-ins"
       actions={
-        <Button variant="outline" onClick={exportCsv} disabled={!query.data?.pagination.total}>
+        <Button variant="outline" onClick={exportCsv} disabled={!query.data?.pagination.total || exportAudit.isPending}>
           <Download className="size-4" /> Export
         </Button>
       }

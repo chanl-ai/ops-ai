@@ -101,7 +101,7 @@ export const useBulkDeleteDeployments = () => useWrite((ids: string[]) => api.de
 
 export const useTests = (workflowId: string) => useQuery({ queryKey: ['workflow', workflowId, 'tests'], queryFn: () => api.tests.list(workflowId) });
 export const useCreateTest = (workflowId: string) => useWrite((i: TestCaseInput) => api.tests.create(workflowId, i), ['workflow']);
-export const useImportTests = (workflowId: string) => useWrite((rows: TestCaseInput[]) => api.tests.importRows(workflowId, rows), ['workflow']);
+export const useImportTests = (workflowId: string) => useWrite(({ rows, fileId }: { rows: TestCaseInput[]; fileId?: string }) => api.tests.importRows(workflowId, rows, fileId), ['workflow', 'files']);
 export const useTestFromRun = () => useWrite((runId: string) => api.tests.fromRun(runId), ['workflow']);
 export const useDeleteTest = () => useWrite((id: string) => api.tests.remove(id), ['workflow']);
 export const useUpdateWorkflow = (id: string) => useWrite((i: WorkflowSettingsInput) => api.workflows.update(id, i), ['workflows', 'workflow', 'lookups', 'reviews']);

@@ -1,5 +1,4 @@
 import type {
-  Connection,
   DocumentRow,
   Item,
   KbHealth,
@@ -7,20 +6,25 @@ import type {
   KnowledgeBaseDetail,
   KnowledgeBaseRow,
   PlaygroundAnswer,
-  RetrievalSettings,
-  ScoredChunk,
+  RetrieveInput,
   Source,
   SourceDetail,
+  SourceInput,
   SourceRow,
   SyncRun,
 } from '@/lib/types/knowledge';
+import type { IngestSettings, ItemVersionRow } from '@/lib/types/knowledge-ingest';
+import type { ConnectionRef } from '@/lib/types/integrations';
 
 import { ApiError } from '../../contract';
 import type { KnowledgeApi } from '../../knowledge-contract';
+import type { FileLinks } from '../files';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { itemDetail } from './detail';
-import { defaultRetrieval, kbs as SEED_KBS, playgroundAnswers, retrievalPresets, suggestedQuestions } from './seed-kbs';
+import { aiApproved, aiSteps, applyMapping, chunkCountFor, govern, listSamples, previewSplit, settingsDigest, snakeKey, validateIngest } from './ingest';
+import { createRetrieval, type IndexSnapshot } from './retrieve';
+import { defaultRetrieval, kbs as SEED_KBS, retrievalPresets, suggestedQuestions } from './seed-kbs';
 import { buildItems, runs as SEED_RUNS, sources as SEED_SOURCES } from './seed-sources';
 
 const now = () => new Date().toISOString();
@@ -31,102 +35,7 @@ const snake = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace
 /** One running job advances a step per this many milliseconds, so progress bars move between polls. */
 const STEP_MS = 1200;
 
-const CONNECTIONS: Connection[] = [
-  { type: 'sharepoint', name: 'SharePoint', status: 'connected', connectedAs: 'northfield.sharepoint.com (app-only)' },
-  { type: 'confluence', name: 'Confluence', status: 'needs_reauth', connectedAs: 'northfield.atlassian.net' },
-  { type: 'gdrive', name: 'Google Drive', status: 'disconnected' },
-  { type: 'github', name: 'GitHub', status: 'connected', connectedAs: 'GitHub app · northfield-bank' },
-  { type: 'notion', name: 'Notion', status: 'connected', connectedAs: 'Northfield Product (Notion)' },
-  { type: 'zendesk', name: 'Zendesk', status: 'disconnected' },
-  { type: 'salesforce', name: 'Salesforce Knowledge', status: 'disconnected' },
-];
-
 const OWNERS = ['Financial Crime Ops', 'Compliance', 'Fraud Strategy', 'Fraud Operations', 'Model Risk', 'Card Services', 'Lending Ops', 'Retail Product', 'Branch Network', 'Customer Care', 'James Richardson'];
-
-const STOP = new Set(['what', 'when', 'which', 'where', 'does', 'have', 'with', 'from', 'that', 'this', 'there', 'their', 'about', 'should', 'would', 'could', 'into', 'over', 'under', 'much', 'many', 'long', 'they', 'your', 'ours']);
-const terms = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9$]+/).filter((w) => w.length > 3 && !STOP.has(w)));
-const overlap = (q: Set<string>, text: string) => {
-  const t = terms(text);
-  return [...q].filter((w) => t.has(w)).length;
-};
-
-interface Scope {
-  /** Sources the knowledge base reads (narrowed by the retrieval scope when one is set). */
-  sourceIds: Set<string>;
-  /** Searchable documents from those sources. */
-  pool: Item[];
-  sourceName: (sid: string) => string;
-}
-
-const inScope = (scope: Scope, documentId: string) => [...scope.sourceIds].some((sid) => documentId.startsWith(`${sid}_it_`));
-
-/** Term-overlap retrieval over the scoped documents: rank documents by title, path and tags, then take each one's best chunk. */
-function searchPool(question: string, scope: Scope): PlaygroundAnswer {
-  const q = terms(question);
-  const ranked = scope.pool
-    .filter((it) => (it.status === 'indexed' || it.status === 'partial') && it.chunkCount > 0)
-    .map((it) => ({ it, score: overlap(q, `${it.title} ${it.path} ${it.tags.join(' ')} ${Object.values(it.metadata).join(' ')}`) }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.it.title.localeCompare(b.it.title))
-    .slice(0, 5);
-  const chunks: ScoredChunk[] = ranked.map(({ it, score }, i) => {
-    const detail = itemDetail(it);
-    const best = detail.chunks.reduce((b, c) => (overlap(q, c.text) > overlap(q, b.text) ? c : b), detail.chunks[0]);
-    // Three matching terms count as a full match; questions carry filler words a title never repeats.
-    const s = Math.min(0.95, 0.5 + 0.42 * Math.min(1, score / Math.min(Math.max(q.size, 1), 3)) + (best && overlap(q, best.text) ? 0.03 : 0) - i * 0.02);
-    return { chunkId: `c${i + 1}`, documentId: it.id, documentTitle: it.title, sourceName: scope.sourceName(it.sourceId), score: Math.round(s * 100) / 100, location: best?.location ?? '', text: best?.text ?? '', rejected: false, version: it.version };
-  });
-  const top = chunks.slice(0, 2);
-  const answer = top.length
-    ? `The closest match is ${top[0].documentTitle} (${top[0].location}) [1]: ${top[0].text.split('. ')[0].replace(/\.$/, '')}.` +
-      (top[1] ? ` ${top[1].documentTitle} covers the same point [2]: ${top[1].text.split('. ')[0].replace(/\.$/, '')}.` : '')
-    : '';
-  return {
-    id: 'pa_search',
-    question,
-    matchers: [],
-    answer,
-    followed: 'Highest-scoring document after precedence rules',
-    citations: top.map((c, i) => ({ n: i + 1, documentId: c.documentId, title: c.documentTitle, section: c.location, version: c.version, snippet: c.text.split('. ')[0] })),
-    chunks,
-    noAnswer: chunks.length === 0,
-    retrievalMs: 320 + chunks.length * 40,
-    synthesisMs: 1_400,
-  };
-}
-
-/**
- * Answers from the knowledge base's own sources only. A canned answer is used when its matchers fit the question
- * and its documents come from those sources; anything else is retrieved by term overlap. Threshold and chunk
- * limit are applied last.
- */
-function findAnswer(question: string, settings: RetrievalSettings, scope: Scope): PlaygroundAnswer {
-  const q = question.toLowerCase();
-  let best: PlaygroundAnswer | undefined;
-  let bestScore = 0;
-  for (const a of playgroundAnswers) {
-    if (!a.noAnswer && !a.chunks.some((c) => inScope(scope, c.documentId))) continue;
-    const score = a.matchers.filter((m) => q.includes(m.toLowerCase())).length;
-    if (score > bestScore) {
-      best = a;
-      bestScore = score;
-    }
-  }
-  const base = best ? { ...best, chunks: best.chunks.filter((c) => inScope(scope, c.documentId)), citations: best.citations.filter((c) => inScope(scope, c.documentId)) } : searchPool(question, scope);
-  const chunks = base.chunks.map((c) => ({ ...c, rejected: c.score < settings.threshold })).slice(0, Math.max(settings.chunkLimit, 2));
-  const accepted = chunks.filter((c) => !c.rejected);
-  const noAnswer = !!base.noAnswer || accepted.length === 0;
-  return {
-    ...base,
-    id: `${base.id}_${Date.now().toString(36)}`,
-    question,
-    chunks,
-    noAnswer,
-    answer: noAnswer || !settings.synthesis ? '' : base.answer,
-    citations: noAnswer ? [] : base.citations.filter((ci) => accepted.some((c) => c.documentId === ci.documentId)),
-    synthesisMs: settings.synthesis && !noAnswer ? base.synthesisMs : 0,
-  };
-}
 
 /**
  * In-memory knowledge backend. Index refreshes and sync runs advance in the background on every request, so a
@@ -134,13 +43,83 @@ function findAnswer(question: string, settings: RetrievalSettings, scope: Scope)
  *
  * `agentNames` answers which agents cite a knowledge base; agents store the knowledge base name as a collection.
  */
-export function createKnowledgeMock(deps: { agentNames: (kbName: string) => string[]; agentOwners: (kbName: string) => string[]; currentUser: string }): { api: KnowledgeApi; kbNames: () => string[] } {
+export function createKnowledgeMock(deps: { agentNames: (kbName: string) => string[]; agentOwners: (kbName: string) => string[]; currentUser: string; connection: (id?: string) => ConnectionRef | undefined; files: () => FileLinks }): {
+  api: KnowledgeApi;
+  /** Sources reading through a connection, for its Used by tab. */
+  sourcesUsing: (connId: string) => Source[];
+  /** A revoke stops the connection's sources; a reconnect resumes them. */
+  reflectConnection: (connId: string, revoked: boolean) => void;
+  kbNames: () => string[];
+  /** Synchronous search, for seeding chat threads with real answers and traces. */
+  retrieveNow: (input: RetrieveInput) => PlaygroundAnswer;
+} {
   const kbs: KnowledgeBase[] = structuredClone(SEED_KBS);
   const sources: Source[] = structuredClone(SEED_SOURCES);
   let items: Item[] = buildItems();
   const runs: SyncRun[] = structuredClone(SEED_RUNS);
-  const connections: Connection[] = structuredClone(CONNECTIONS);
   let lastTick = Date.now();
+
+  // What each source's chunks were last built with. Search and the item page read this, so a saved strategy
+  // change shows as "re-index needed" until a sync rebuilds the chunks.
+  const snapshots = new Map<string, IndexSnapshot>();
+  const reindexed = (src: Source) => {
+    const snap: IndexSnapshot = { ingest: structuredClone(src.ingest), parsing: { ...src.parsing }, aiAllowed: aiApproved(src), digest: settingsDigest(src) };
+    snapshots.set(src.id, snap);
+    src.indexedSettingsDigest = snap.digest;
+  };
+  for (const src of sources) {
+    reindexed(src);
+    for (const it of items) if (it.sourceId === src.id && it.status !== 'failed') it.chunkCount = chunkCountFor(it, src);
+  }
+  govern(items, sources, kbs);
+  const engine = createRetrieval({ items: () => items, sources: () => sources, kbs: () => kbs, snapshot: (sid) => snapshots.get(sid) });
+  const regovern = () => govern(items, sources, kbs);
+
+  /** The knowledge owner approves AI ingest steps; adding a step after approval asks again. */
+  const reconcileApproval = (src: Source, previous: IngestSettings['approval']) => {
+    const steps = aiSteps(src.ingest, src.metadataMapping);
+    const approvedSteps = previous.approvedSteps;
+    if (!steps.length) src.ingest.approval = { ...previous, status: 'not_needed' };
+    else if (steps.every((x) => approvedSteps.includes(x))) src.ingest.approval = { ...previous, status: 'approved' };
+    else src.ingest.approval = { status: 'pending', approvedSteps, requestedBy: deps.currentUser };
+  };
+
+  /** The requester cannot approve their own AI step (spec 5.14.13); approving runs the steps on every item at the next re-index. */
+  const selfApproval = (src: Source) => src.ingest.approval.requestedBy === deps.currentUser;
+  const approvalView = (src: Source) => {
+    const waiting = aiSteps(src.ingest, src.metadataMapping).filter((x) => !src.ingest.approval.approvedSteps.includes(x));
+    // A draft has no items yet, so its estimate uses what the scope would fetch.
+    const n = items.filter((i) => i.sourceId === src.id && i.status !== 'excluded' && i.status !== 'failed').length || src.itemsPending;
+    // About six sections per document; FAQ and topic call the model once per section, extraction once per item.
+    const calls = waiting.reduce((t, x) => t + (x.startsWith('extract ') ? n : n * 6), 0);
+    return {
+      canApprove: !selfApproval(src),
+      blockedReason: selfApproval(src) ? 'You requested this change; another knowledge owner must approve.' : undefined,
+      modelCalls: calls,
+      estimatedCost: `$${(calls * 0.0021).toFixed(2)}`,
+      items: n,
+    };
+  };
+
+  /** What a source with this type and config would fetch; the preview and the held preview read the same rows. */
+  const previewRows = (input: Pick<SourceInput, 'type' | 'config'>) => {
+    const c = input.config as { startUrl?: string; urls?: string; fileNames?: string[]; scopeCount?: number };
+    const urls = (c.urls ?? '').split('\n').map((u) => u.trim()).filter(Boolean);
+    const n = input.type === 'file' ? (c.fileNames?.length ?? 0) : input.type === 'url' ? urls.length : input.type === 'crawl' ? 24 : input.type === 'text' ? 1 : Math.min(c.scopeCount ?? 0, 50);
+    const pick = <T,>(xs: T[], i: number) => xs[i % xs.length];
+    const rows = Array.from({ length: n }, (_, i) => ({
+      title:
+        input.type === 'file' ? c.fileNames![i]
+        : input.type === 'url' ? urls[i]
+        : input.type === 'crawl' ? `Pricing · ${pick(['overview', 'chequing', 'savings', 'mortgages', 'fees'], i)}`
+        : input.type === 'sharepoint' ? pick(['Customer due diligence standard', 'Sanctions screening procedure', 'Suspicious transaction reporting', 'Beneficial ownership verification', 'Risk rating methodology'], i)
+        : `${input.type} item ${i + 1}`,
+      path: input.type === 'sharepoint' ? `Documents/${i % 7 === 3 ? 'Archive' : 'Policies'}/file-${i}.pdf` : input.type === 'crawl' ? `/pricing/${pick(['', 'chequing', 'savings', 'mortgages', 'fees'], i)}` : `item-${i}`,
+      size: 20_000 + ((i * 7919) % 900_000),
+      modified: new Date(Date.now() - i * 3 * 86400_000).toISOString().slice(0, 10),
+    }));
+    return rows;
+  };
 
   const kbOr404 = (kid: string) => kbs.find((k) => k.id === kid) ?? notFound('Knowledge base');
   const sourceOr404 = (sid: string) => sources.find((s) => s.id === sid) ?? notFound('Source');
@@ -176,6 +155,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
   }
   const sourceRow = (s: Source): SourceRow => ({
     ...s,
+    connection: deps.connection(s.connectionId),
     usedBy: kbs.filter((k) => k.sources.some((l) => l.sourceId === s.id)).map((k) => ({ id: k.id, name: k.name })),
     running: !!runningRun(s.id),
   });
@@ -191,7 +171,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       const job = k.jobs[0]?.status === 'running' ? k.jobs[0] : undefined;
       if (done < k.indexing.total) {
         k.indexing.done = done;
-        k.healthReasons = [`Index refresh running: ${done} of ${k.indexing.total} items`];
+        k.healthReasons = [`Index refresh running: ${done} of ${k.indexing.total} ${k.indexing.total === 1 ? 'item' : 'items'}`];
         if (job) job.processed = done;
         continue;
       }
@@ -214,7 +194,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       const done = Math.min(total, r.progress.done + Math.max(1, Math.ceil(total / 12)));
       const phaseIdx = Math.min(5, Math.floor((done / total) * 6));
       r.phases = r.phases.map((p, i) => ({ ...p, status: i < phaseIdx ? 'done' : i === phaseIdx ? 'running' : 'skipped', durationMs: i <= phaseIdx ? p.durationMs + 900 : 0 }));
-      r.log.push(`${now().slice(11, 19)} ${r.phases[phaseIdx].name}: ${done} of ${total} items`);
+      r.log.push(`${now().slice(11, 19)} ${r.phases[phaseIdx].name}: ${done} of ${total} ${total === 1 ? 'item' : 'items'}`);
       const pending = items.filter((it) => it.sourceId === r.sourceId && (it.status === 'pending' || it.status === 'processing'));
       if (done < total) {
         r.progress.done = done;
@@ -224,12 +204,26 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       }
       // A manual run over freshly added items fails one of them, so the retry path is reachable in the demo.
       const failedItem = r.trigger === 'manual' && pending.length >= 3 && !r.errors.length ? pending[pending.length - 1] : undefined;
+      const src0 = sources.find((x) => x.id === r.sourceId);
+      // Every run re-chunks what it touches with the source's current settings; a full run touches everything.
       for (const it of items) {
         if (it.sourceId !== r.sourceId) continue;
+        const touched = it.status === 'pending' || it.status === 'processing' || r.trigger === 'full' || (r.trigger === 'retry' && it.status === 'failed');
+        if (src0 && touched && it.status !== 'excluded') applyMapping(it, src0, aiApproved(src0));
+        const chunkCount = src0 ? chunkCountFor(it, src0) : it.chunkCount;
         if (failedItem && it.id === failedItem.id) Object.assign(it, { status: 'failed', errorClass: 'parse', error: 'PDF is encrypted; upload an unlocked copy', chunkCount: 0, processedAt: now() });
-        else if (it.status === 'pending' || it.status === 'processing') Object.assign(it, { status: 'indexed', chunkCount: it.chunkCount || 6 + Math.floor(Math.random() * 20), processedAt: now(), error: undefined, errorClass: undefined });
-        else if (r.trigger === 'retry' && it.status === 'failed') Object.assign(it, { status: 'indexed', chunkCount: 6, processedAt: now(), error: undefined, errorClass: undefined });
+        else if (it.status === 'pending' || it.status === 'processing') Object.assign(it, { status: 'indexed', chunkCount, processedAt: now(), error: undefined, errorClass: undefined });
+        else if (r.trigger === 'retry' && it.status === 'failed') Object.assign(it, { status: 'indexed', chunkCount, processedAt: now(), error: undefined, errorClass: undefined });
+        else if (r.trigger === 'full' && (it.status === 'indexed' || it.status === 'held' || it.status === 'partial')) Object.assign(it, { chunkCount: it.status === 'held' ? 0 : chunkCount, processedAt: now() });
       }
+      if (src0 && (r.trigger === 'full' || r.trigger === 'manual' || r.trigger === 'schedule' || r.trigger === 'webhook')) {
+        const before = src0.indexedSettingsDigest;
+        reindexed(src0);
+        const strategies = src0.ingest.strategies.filter((x) => aiApproved(src0) || (x !== 'topic' && x !== 'faq'));
+        r.log.push(`chunk: rebuilt with ${strategies.join(', ')}${before !== src0.indexedSettingsDigest ? ' (settings changed since the last index)' : ''}`);
+        if (!aiApproved(src0)) r.log.push('chunk: AI steps skipped until the knowledge owner approves them');
+      }
+      regovern();
       const srcItems = items.filter((it) => it.sourceId === r.sourceId);
       const failed = srcItems.filter((it) => it.status === 'failed').length;
       const indexed = srcItems.filter((it) => it.status === 'indexed').length;
@@ -249,7 +243,14 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
     }
 
     // Items reprocessed outside a run finish on their own.
-    for (const it of items) if (it.status === 'processing' && !runningRun(it.sourceId)) Object.assign(it, { status: 'indexed', chunkCount: it.chunkCount || 8, processedAt: now() });
+    let finished = false;
+    for (const it of items) {
+      if (it.status !== 'processing' || runningRun(it.sourceId)) continue;
+      const src = sources.find((x) => x.id === it.sourceId);
+      Object.assign(it, { status: 'indexed', chunkCount: src ? chunkCountFor(it, src) : it.chunkCount, processedAt: now() });
+      finished = true;
+    }
+    if (finished) regovern();
   }
 
   /** Catches background jobs up with the wall clock before every read or write. */
@@ -269,7 +270,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
 
   function startRefresh(k: KnowledgeBase, trigger = 'manual refresh') {
     k.health = 'indexing';
-    k.healthReasons = [`Index refresh running: 0 of ${k.stats.documents} items`];
+    k.healthReasons = [`Index refresh running: 0 of ${k.stats.documents} ${k.stats.documents === 1 ? 'item' : 'items'}`];
     k.indexing = { done: 0, total: Math.max(k.stats.documents, 1), taskId: id('task') };
     k.jobs.unshift({ id: id('job'), startedAt: now(), durationSec: 0, processed: 0, failed: 0, status: 'running', trigger });
   }
@@ -279,7 +280,9 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       ? Math.max(src.itemsFailed, 1)
       : opts.full
         ? Math.max(src.itemsIndexed + src.itemsFailed, 12)
-        : Math.max(Math.round((src.itemsIndexed + src.itemsFailed) * 0.06), src.itemsIndexed === 0 ? 12 : 4);
+        : src.itemsIndexed === 0 && src.itemsPending > 0
+          ? src.itemsPending
+          : Math.max(Math.round((src.itemsIndexed + src.itemsFailed) * 0.06), src.itemsIndexed === 0 ? 12 : 4);
     const r: SyncRun = {
       id: id('run'),
       sourceId: src.id,
@@ -295,7 +298,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       progress: { done: 0, total, failed: 0 },
     };
     runs.unshift(r);
-    Object.assign(src, { status: src.status === 'draft' ? 'active' : src.status, lastRunStatus: 'running', reprocessPending: false });
+    Object.assign(src, { status: src.status === 'draft' ? 'active' : src.status, lastRunStatus: 'running' });
     return r;
   }
 
@@ -348,8 +351,9 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
               const source = sources.find((s) => s.id === l.sourceId);
               return source ? [{ ...l, source }] : [];
             }),
-            metadataKeys: Array.from(new Set(items.filter((i) => ids.has(i.sourceId)).flatMap((i) => Object.keys(i.metadata)))),
+            metadataKeys: Array.from(new Set(['owner', 'effective_date', 'version', 'topic', ...items.filter((i) => ids.has(i.sourceId)).flatMap((i) => Object.keys(i.metadata))])).sort(),
             suggestedQuestions: suggestedQuestions[k.id] ?? suggestedQuestions.kb_all,
+            heldCount: items.filter((i) => ids.has(i.sourceId) && i.status === 'held').length,
           };
         }),
       create: (input) =>
@@ -366,7 +370,8 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             color: input.color,
             sources: srcs.map((s) => ({ sourceId: s.id, itemsContributed: s.itemsIndexed, rules: [] })),
             collections: input.collections.length ? input.collections : Array.from(new Set(srcs.map((s) => s.collection))),
-            precedence: [{ id: 'p1', label: 'Newer effective date beats older', winner: 'Newer version', loser: 'Superseded version' }],
+            precedence: [{ id: 'p1', label: 'Newer effective date beats older', kind: 'newer', winner: '', loser: '' }],
+            metadataProfile: { required: ['owner'] },
             retrieval: { ...defaultRetrieval, ...retrievalPresets[input.preset] },
             access: {
               members: { mode: 'all', principals: [] },
@@ -385,6 +390,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           if (documents > 0) startRefresh(k, 'initial build');
           kbs.unshift(k);
           srcs.forEach((s) => s.usedByKbIds.push(k.id));
+          regovern();
           return k;
         }),
       update: (kid, patch) =>
@@ -392,8 +398,10 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const k = kbOr404(kid);
           const { retrieval, ...rest } = patch;
           if (rest.name && kbs.some((x) => x.id !== kid && x.name.toLowerCase() === rest.name!.toLowerCase())) throw new ApiError('A knowledge base with this name already exists.', 409);
+          if (rest.metadataProfile) rest.metadataProfile = { required: Array.from(new Set(rest.metadataProfile.required.map(snakeKey).filter(Boolean))) };
           Object.assign(k, rest);
           if (retrieval) k.retrieval = { ...k.retrieval, ...retrieval };
+          if (rest.metadataProfile) regovern();
           return k;
         }),
       remove: (kid) =>
@@ -456,6 +464,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         run(() => {
           const k = kbOr404(kid);
           sourceIds.forEach((sid) => attach(k, sid));
+          regovern();
           return k;
         }),
       detachSource: (kid, sid) =>
@@ -468,6 +477,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           k.stats.documents = Math.max(0, k.stats.documents - link!.itemsContributed);
           const src = sources.find((s) => s.id === sid);
           if (src) src.usedByKbIds = src.usedByKbIds.filter((x) => x !== kid);
+          regovern();
           return k;
         }),
       setSourceRules: (kid, sid, rules) =>
@@ -493,13 +503,9 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       query: (kid, input) =>
         run(() => {
           const k = kbOr404(kid);
-          const scoped = input.settings.scopeSourceIds?.length ? k.sources.filter((l) => input.settings.scopeSourceIds.includes(l.sourceId)) : k.sources;
-          const sourceIds = new Set(scoped.map((l) => l.sourceId));
-          return findAnswer(input.question, input.settings, {
-            sourceIds,
-            pool: items.filter((it) => sourceIds.has(it.sourceId)),
-            sourceName: (sid) => sources.find((s) => s.id === sid)?.name ?? sid,
-          });
+          guardTeam(kbOwners(k), 'knowledge base');
+          const { alsoKbIds, ...rest } = input;
+          return engine.retrieve({ ...rest, kbIds: [kid, ...(alsoKbIds ?? []).filter((x) => x !== kid)] });
         }),
       bulkRefresh: (ids) =>
         run(() =>
@@ -546,22 +552,42 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           });
           return {
             ...s,
+            connection: deps.connection(s.connectionId),
             readers: kbs.filter((k) => k.sources.some((l) => l.sourceId === sid)).map(({ id: kid, name, slug, color, health }) => ({ id: kid, name, slug, color, health })),
             running: runningRun(sid),
             recentRuns: srcRuns.slice(0, 5),
             errorGroups: [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([message, count]) => ({ message, count })),
             itemCount: items.filter((i) => i.sourceId === sid).length,
+            reindexNeeded: s.status !== 'draft' && settingsDigest({ ...s }) !== s.indexedSettingsDigest,
+            requiredMetadata: Array.from(new Set(kbs.filter((k) => k.sources.some((l) => l.sourceId === sid)).flatMap((k) => k.metadataProfile.required))).filter((k) => !['owner', 'effective_date', 'version'].includes(k)),
+            aiStepsWaiting: aiSteps(s.ingest, s.metadataMapping).filter((x) => !s.ingest.approval.approvedSteps.includes(x)),
+            approval: s.ingest.approval.status === 'pending' ? approvalView(sourceOr404(sid)) : undefined,
+            governance: {
+              excluded: items.filter((i) => i.sourceId === sid && i.status === 'excluded').length,
+              held: items.filter((i) => i.sourceId === sid && i.status === 'held').length,
+              duplicates: items.filter((i) => i.sourceId === sid && i.duplicateOf).length,
+              superseded: items.filter((i) => i.sourceId === sid && i.versionStatus === 'superseded').length,
+            },
           };
         }),
       create: (input, opts) =>
         run(() => {
           if (sources.some((s) => s.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new ApiError('A source with this name already exists.', 409);
-          const conn = connections.find((c) => c.type === input.type);
+          const conn = deps.connection(input.connectionId);
+          if (input.connectionId && !conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
+          if (conn?.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
+          validateIngest(input.ingest);
+          if (input.type === 'file' && input.status !== 'draft' && !input.fileIds?.length) throw new ApiError('Upload at least one file.', 400);
+          const { fileIds, ...rest } = input;
+          const sid = id('src');
+          // Linking first refuses a quarantined or still-scanning file before the source exists.
+          for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/sources/${sid}` }, ['knowledge_source']);
           const s: Source = {
-            ...input,
-            id: id('src'),
-            connectionId: conn ? `int_${conn.type}` : undefined,
-            connectionLabel: conn?.connectedAs,
+            ...rest,
+            config: { ...rest.config, fileIds },
+            id: sid,
+            connectionId: conn?.id,
+            connectionLabel: conn?.name,
             owner: deps.currentUser,
             status: input.status ?? 'active',
             itemsIndexed: 0,
@@ -570,6 +596,8 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             usedByKbIds: [],
             createdAt: now(),
           };
+          reconcileApproval(s, { status: 'not_needed', approvedSteps: [] });
+          s.indexedSettingsDigest = settingsDigest(s);
           sources.unshift(s);
           opts?.kbIds?.forEach((kid) => {
             const k = kbs.find((x) => x.id === kid);
@@ -582,7 +610,12 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         run(() => {
           const s = sourceOr404(sid);
           if (patch.name && sources.some((x) => x.id !== sid && x.name.toLowerCase() === patch.name!.toLowerCase())) throw new ApiError('A source with this name already exists.', 409);
+          if (patch.ingest) validateIngest(patch.ingest);
+          const approval = s.ingest.approval;
           Object.assign(s, patch);
+          // Approval is the server's to keep; a client cannot send itself approved.
+          reconcileApproval(s, approval);
+          regovern();
           return s;
         }),
       remove: (sid) =>
@@ -637,34 +670,48 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       run: (rid) => run(() => runs.find((r) => r.id === rid) ?? notFound('Sync run')),
       preview: (input) =>
         run(() => {
-          const c = input.config as { startUrl?: string; urls?: string; fileNames?: string[]; scopeCount?: number };
+          const c = input.config as { startUrl?: string };
           if (input.type === 'crawl' && /\/\/(10\.|192\.168\.|127\.)/.test(c.startUrl ?? '')) {
             return { ok: false, message: 'URL resolves to a private IP range. Crawls must target a public host.', rows: [] };
           }
-          const urls = (c.urls ?? '').split('\n').map((u) => u.trim()).filter(Boolean);
-          const n = input.type === 'file' ? (c.fileNames?.length ?? 0) : input.type === 'url' ? urls.length : input.type === 'crawl' ? 24 : input.type === 'text' ? 1 : Math.min(c.scopeCount ?? 0, 50);
-          const pick = <T,>(xs: T[], i: number) => xs[i % xs.length];
-          const rows = Array.from({ length: n }, (_, i) => ({
-            title:
-              input.type === 'file' ? c.fileNames![i]
-              : input.type === 'url' ? urls[i]
-              : input.type === 'crawl' ? `Pricing · ${pick(['overview', 'chequing', 'savings', 'mortgages', 'fees'], i)}`
-              : input.type === 'sharepoint' ? pick(['Customer due diligence standard', 'Sanctions screening procedure', 'Suspicious transaction reporting', 'Beneficial ownership verification', 'Risk rating methodology'], i)
-              : `${input.type} item ${i + 1}`,
-            path: input.type === 'sharepoint' ? `Documents/${i % 7 === 3 ? 'Archive' : 'Policies'}/file-${i}.pdf` : input.type === 'crawl' ? `/pricing/${pick(['', 'chequing', 'savings', 'mortgages', 'fees'], i)}` : `item-${i}`,
-            size: 20_000 + ((i * 7919) % 900_000),
-            modified: new Date(Date.now() - i * 3 * 86400_000).toISOString().slice(0, 10),
-          }));
+          const rows = previewRows(input);
+          const n = rows.length;
           return { ok: true, message: `Connection OK · ${n} item${n === 1 ? '' : 's'} would be fetched`, rows };
         }),
-      connections: () => run(() => connections),
-      connect: (type) =>
+      previewHeld: (input) =>
         run(() => {
-          const c = connections.find((x) => x.type === type) ?? notFound('Connection');
-          c.status = 'connected';
-          c.connectedAs = c.connectedAs ?? `${c.name} · Northfield Bank`;
-          sources.filter((s) => s.type === type && s.status === 'revoked').forEach((s) => (s.status = 'active'));
-          return c;
+          const rows = previewRows(input);
+          const mapped = new Map(input.metadataMapping.filter((m) => m.key.trim()).map((m) => [snakeKey(m.key), m.from]));
+          // Owner and effective date always come with a new item; a source column is absent on some items, and AI extraction waits for approval.
+          const has = (key: string, i: number) => {
+            const k = snakeKey(key);
+            if (k === 'owner' || k === 'effective_date' || k === 'version') return true;
+            const from = mapped.get(k);
+            if (!from) return false;
+            if (from.startsWith('static:')) return !!from.slice(7).trim();
+            if (from.startsWith('field:')) return i % 3 !== 2;
+            return false;
+          };
+          const byKb = input.kbIds
+            .map((kid) => kbs.find((k) => k.id === kid))
+            .filter((k): k is KnowledgeBase => !!k)
+            .map((k) => {
+              const required = k.metadataProfile.required;
+              const missingPer = rows.map((_, i) => required.filter((key) => !has(key, i)));
+              return { kbId: k.id, kbName: k.name, required, held: missingPer.filter((x) => x.length).length, missing: Array.from(new Set(missingPer.flat())) };
+            });
+          return { items: rows.length, byKb };
+        }),
+      samples: (sid) => run(() => listSamples(sources, sid)),
+      previewSplit: (input) => run(() => previewSplit(input)),
+      approveIngest: (sid) =>
+        run(() => {
+          const s = sourceOr404(sid);
+          const steps = aiSteps(s.ingest, s.metadataMapping);
+          if (!steps.length) throw new ApiError('This source has no AI ingestion steps to approve.', 409);
+          if (selfApproval(s)) throw new ApiError('You requested this change; another knowledge owner must approve.', 403);
+          s.ingest.approval = { status: 'approved', approvedSteps: Array.from(new Set([...s.ingest.approval.approvedSteps, ...steps])), requestedBy: s.ingest.approval.requestedBy, decidedBy: deps.currentUser, decidedAt: now() };
+          return s;
         }),
       bulkSync: (ids) =>
         run(() =>
@@ -696,7 +743,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         run(() => {
           const it = itemOr404(iid);
           const src = sources.find((s) => s.id === it.sourceId);
-          return { ...it, sourceName: src?.name ?? it.sourceId, sourceType: src?.type ?? 'file', detail: itemDetail(it) };
+          const versions: ItemVersionRow[] = items
+            .filter((x) => x.sourceId === it.sourceId && x.family === it.family && x.status !== 'excluded')
+            .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
+            .map((x) => ({ itemId: x.id, title: x.title, version: x.version, effectiveDate: x.effectiveDate, status: x.versionStatus, digest: x.digest, sourceName: src?.name ?? x.sourceId, supersededBy: x.supersededBy }));
+          return { ...it, sourceName: src?.name ?? it.sourceId, sourceType: src?.type ?? 'file', detail: { ...itemDetail(it, snapshots.get(it.sourceId)), versions } };
         }),
       reprocess: (ids) =>
         run(() =>
@@ -720,6 +771,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
               if (it.status === 'failed') src.itemsFailed = Math.max(0, src.itemsFailed - 1);
             }
             Object.assign(it, { status: 'excluded', chunkCount: 0 });
+            regovern();
           }),
         ),
       verify: (iid, verified) =>
@@ -750,7 +802,25 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             it.tags = [...it.tags, tag];
           }),
         ),
+      setMetadata: (iid, values) =>
+        run(() => {
+          const it = itemOr404(iid);
+          for (const [k, raw] of Object.entries(values)) {
+            const v = raw.trim();
+            if (!v) continue;
+            const key = snakeKey(k);
+            if (key === 'owner') it.owner = v;
+            else if (key === 'effective_date') {
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new ApiError('Effective date is a date such as 2026-07-01.', 422);
+              it.effectiveDate = v;
+            } else it.metadata = { ...it.metadata, [key]: v };
+          }
+          regovern();
+          return it;
+        }),
     },
+
+    retrieve: (input) => run(() => engine.retrieve(input)),
 
     lookups: () =>
       run(() => ({
@@ -760,5 +830,17 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       })),
   };
 
-  return { api, kbNames: () => kbs.map((k) => k.name) };
+  return {
+    api,
+    kbNames: () => kbs.map((k) => k.name),
+    retrieveNow: (input) => engine.retrieve(input),
+    sourcesUsing: (connId) => sources.filter((s) => s.connectionId === connId),
+    reflectConnection: (connId, revoked) => {
+      for (const s of sources) {
+        if (s.connectionId !== connId || s.status === 'draft') continue;
+        if (revoked) s.status = 'revoked';
+        else if (s.status === 'revoked') s.status = 'active';
+      }
+    },
+  };
 }

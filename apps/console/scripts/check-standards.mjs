@@ -20,6 +20,8 @@ const report = (f, index, rule) => violations.push(`${f.rel}:${lineOf(f.text, in
 
 const inDir = (f, d) => f.rel.startsWith(`src/${d}/`);
 const isUi = (f) => inDir(f, 'components/ui');
+/** The only files allowed to move file bytes: the Files API client and mock, the upload hook, and the shared upload component. */
+const isFilesLayer = (f) => /^src\/(lib\/api\/files-[a-z]+\.ts|lib\/api\/mock\/files\/|hooks\/file-queries\.ts|components\/shared\/file-upload\.tsx)/.test(f.rel);
 
 for (const f of files) {
   const { text } = f;
@@ -67,6 +69,17 @@ for (const f of files) {
 
   // 10. "New" is a dialog, never a page.
   if (/^src\/app\/.*\/new\/page\.tsx$/.test(f.rel)) report(f, 0, '/new page (create in a DialogShell, then open the edit page)');
+
+  // 13. File bytes leave the browser only through the Files API: its client and mock, the upload hook and the
+  //     shared upload component. Anything else that sends a File or Blob, builds FormData or opens an
+  //     XMLHttpRequest is a second upload path that skips presigned URLs, limits and scanning.
+  if (!isFilesLayer(f)) {
+    for (const m of text.matchAll(/\bnew FormData\b|\bXMLHttpRequest\b/g)) report(f, m.index, 'FormData or XMLHttpRequest outside the files layer (upload through components/shared/file-upload)');
+    for (const m of text.matchAll(/\bfetch\s*\(/g)) {
+      const call = text.slice(m.index, m.index + 400);
+      if (/method:\s*['"`](PUT|POST)['"`]/.test(call) && /body:\s*(new (File|Blob)\b|[\w.]*(file|blob|File|Blob)\w*)/.test(call)) report(f, m.index, 'fetch PUT/POST with a File or Blob body outside the files layer (upload through components/shared/file-upload)');
+    }
+  }
 
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');

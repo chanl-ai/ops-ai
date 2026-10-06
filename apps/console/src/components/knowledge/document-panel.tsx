@@ -1,13 +1,17 @@
 'use client';
 
+import * as React from 'react';
 import { toast } from 'sonner';
 
+import { AddMetadataDialog } from '@/components/knowledge/add-metadata-dialog';
 import { DocumentSheet } from '@/components/knowledge/document-sheet';
 import type { DetailSheetNavigation } from '@/components/shared/detail-sheet';
-import { useExcludeItems, useItem, useKnowledgeLookups, useReprocessItems, useSetItemOwner, useSetItemTags, useVerifyItem } from '@/hooks/knowledge-queries';
+import { useExcludeItems, useItem, useKnowledgeLookups, useReprocessItems, useSetItemMetadata, useSetItemOwner, useSetItemTags, useVerifyItem } from '@/hooks/knowledge-queries';
 
 /** Loads one item and wires the document sheet's actions; shared by a knowledge base's Documents tab and a source's Items tab. */
-export function DocumentPanel({ itemId, onClose, navigation }: { itemId: string | null; onClose: () => void; navigation?: DetailSheetNavigation }) {
+export function DocumentPanel({ itemId, onClose, navigation, onOpenItem }: { itemId: string | null; onClose: () => void; navigation?: DetailSheetNavigation; onOpenItem?: (id: string) => void }) {
+  const metadata = useSetItemMetadata();
+  const [fixing, setFixing] = React.useState(false);
   const item = useItem(itemId);
   const lookups = useKnowledgeLookups();
   const reprocess = useReprocessItems();
@@ -15,11 +19,12 @@ export function DocumentPanel({ itemId, onClose, navigation }: { itemId: string 
   const verify = useVerifyItem();
   const tags = useSetItemTags();
   const owner = useSetItemOwner();
-  const busy = reprocess.isPending || exclude.isPending || verify.isPending || tags.isPending || owner.isPending;
+  const busy = reprocess.isPending || exclude.isPending || verify.isPending || tags.isPending || owner.isPending || metadata.isPending;
   const it = item.data;
   const fail = (what: string) => (e: Error) => toast.error(`Couldn’t ${what}`, { description: e.message });
 
   return (
+    <>
     <DocumentSheet
       open={!!itemId}
       onOpenChange={(o) => !o && onClose()}
@@ -53,6 +58,20 @@ export function DocumentPanel({ itemId, onClose, navigation }: { itemId: string 
         await owner.mutateAsync({ id: it.id, owner: o });
         toast.success(`Owner set to ${o}`);
       }}
+      onAddMetadata={() => setFixing(true)}
+      onOpenItem={onOpenItem}
     />
+    <AddMetadataDialog
+      open={fixing}
+      onOpenChange={setFixing}
+      item={it}
+      isPending={metadata.isPending}
+      onSubmit={async (values) => {
+        if (!it) return;
+        const next = await metadata.mutateAsync({ id: it.id, values });
+        toast.success(next.status === 'held' ? `${next.title} is still held` : `${next.title} is searchable`, { description: next.status === 'held' ? `Still missing ${next.held?.missing.join(', ')}.` : 'Its knowledge bases include it from the next query.' });
+      }}
+    />
+    </>
   );
 }

@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Upload } from 'lucide-react';
-
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -81,15 +80,20 @@ export function ImportEvalCasesDialog({
   collections: string[];
   /** Tools the agent holds; a check naming any other tool is rejected. */
   tools: string[];
-  onImport: (rows: EvalCaseInput[]) => Promise<unknown>;
+  /** `fileId` is the uploaded CSV; the eval set is recorded as using it. */
+  onImport: (rows: EvalCaseInput[], fileId: string) => Promise<unknown>;
   isPending: boolean;
 }) {
   const [rows, setRows] = React.useState<ParsedRow[] | null>(null);
   const [fileError, setFileError] = React.useState<string | null>(null);
+  const [upload, setUpload] = React.useState<UploadItem[]>([]);
+  const fileId = uploadsReady(upload) ? upload[0].fileId : undefined;
+  const waiting = upload.length ? uploadsBlocker(upload) : undefined;
   React.useEffect(() => {
     if (open) {
       setRows(null);
       setFileError(null);
+      setUpload([]);
     }
   }, [open]);
   const valid = (rows ?? []).filter((r) => !r.error);
@@ -104,15 +108,15 @@ export function ImportEvalCasesDialog({
       description="CSV with a header row: name, input, runAs, knowledgeBases, checks. Separate several knowledge bases or checks with semicolons."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {rows && <span className="mr-auto text-xs text-muted-foreground">{invalid ? `${plural(invalid, 'row')} with errors will be skipped` : 'Every row is valid'}</span>}
+          {rows && <span className="mr-auto text-xs text-muted-foreground">{waiting ?? (invalid ? `${plural(invalid, 'row')} with errors will be skipped` : 'Every row is valid')}</span>}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
           <LoadingButton
             isLoading={isPending}
-            disabled={!valid.length}
+            disabled={!valid.length || !fileId}
             onClick={async () => {
-              await onImport(valid.map((r) => r.input));
+              await onImport(valid.map((r) => r.input), fileId!);
               onOpenChange(false);
             }}
           >
@@ -122,29 +126,23 @@ export function ImportEvalCasesDialog({
       }
     >
       <div className="flex flex-col gap-3">
-        <label htmlFor="ec-file" className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center hover:bg-muted/40">
-          <Upload className="size-5 text-muted-foreground" />
-          <span className="text-sm font-medium">{rows ? 'Choose another file' : 'Choose a CSV file'}</span>
-          <span className="text-xs text-muted-foreground">Checks look like calls_tool:place_wire_hold(action=hold); reply_contains:callback; extracts:amount=1240.18; cites:Fraud &amp; payments|§3.2</span>
-          <input
-            id="ec-file"
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              if (!f) return;
-              try {
-                const parsed = parseEvalCsv(await f.text(), principals, collections, tools);
-                setFileError(parsed.length ? null : 'The file has no rows under the header.');
-                setRows(parsed.length ? parsed : null);
-              } catch {
-                setFileError('That file could not be read as CSV.');
-              }
-            }}
-          />
-        </label>
+        <FileUpload
+          id="ec-file"
+          purpose="test_import"
+          title="Drop a CSV file here or choose one"
+          hint="Checks look like calls_tool:place_wire_hold(action=hold); reply_contains:callback; extracts:amount=1240.18; cites:Fraud & payments|§3.2"
+          onChange={setUpload}
+          onPick={async ([f]) => {
+            try {
+              const parsed = parseEvalCsv(await f.text(), principals, collections, tools);
+              setFileError(parsed.length ? null : 'The file has no rows under the header.');
+              setRows(parsed.length ? parsed : null);
+            } catch {
+              setFileError('That file could not be read as CSV.');
+            }
+          }}
+          testId="eval-import-upload"
+        />
         {fileError && <p className="text-sm text-destructive">{fileError}</p>}
         {rows && (
           <div className="overflow-hidden rounded-md border" data-testid="eval-import-preview">

@@ -26,7 +26,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function respond<T>(fn: (m: Mode) => T): Promise<T> {
   const m = mode();
   await sleep(m === 'slow' ? 2500 : 250 + Math.random() * 250);
-  if (m === 'error') throw new ApiError('The service is unavailable (503). Mock outage.', 503);
+  if (m === 'error') throw new ApiError('The request failed. Nothing has changed on your side; try again in a moment.', 503);
   return structuredClone(fn(m));
 }
 

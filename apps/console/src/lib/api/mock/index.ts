@@ -15,6 +15,7 @@ import type {
   WorkflowDetail,
   WorkflowGraph,
 } from '@/lib/types/domain';
+import type { ConnectionActivity, ConnectionRef, Dependant } from '@/lib/types/integrations';
 
 import { ApiError, type Lookups, type OpsApi } from '../contract';
 import { createCasesMock } from './cases';
@@ -22,12 +23,16 @@ import { createChatMock } from './chat';
 import { createKnowledgeMock } from './knowledge';
 import { createKnowledgeChangesMock } from './knowledge-changes';
 import { createNotificationsMock } from './notifications';
-import { runAsApi, scopeTurn, withRunAs } from './run-as';
+import { runAsApi, scopeTurn } from './run-as';
 import { createSearchMock } from './search';
 import { createGovernanceMock } from './governance';
 import { createToolModulesMock } from './tool-modules';
+import { createIntegrationsMock } from './integrations';
+import { MAILBOX_CONNECTION } from './integrations/seed';
 import { createEvalsMock } from './evals';
 import { createModelRiskMock } from './model-risk';
+import { createFilesMock } from './files';
+import { auditSink } from './governance';
 import { bulk, field, id, list, notFound, respond } from './runtime';
 import * as F from './fixtures';
 import { countGates, countSteps, SEED_GRAPHS, templateGraph } from './graphs';
@@ -57,14 +62,39 @@ export function createMockApi(): OpsApi {
   const teamAgents = () => agents.filter((a) => inTeam(a.owner));
   const teamWorkflows = () => workflows.filter((w) => inTeam(w.owner));
   const toolInTeam = (t: Tool) => inTeam(agents.filter((a) => t.grantedAgentIds.includes(a.id)).map((a) => a.owner));
+  // Integrations own every connection; sources, modules and mailboxes hold its id and read its status through these.
+  // Assigned below once the dependants' stores exist; only called at request time.
+  let integrations: ReturnType<typeof createIntegrationsMock> | undefined;
+  const connectionRef = (cid?: string): ConnectionRef | undefined => {
+    const l = integrations?.link(cid);
+    return l && { id: l.id, name: l.name, kind: l.kind, status: l.status, expiresAt: l.expiresAt };
+  };
+  // Every byte goes through the files store; other mocks hold file ids and record themselves as references.
+  // `reviews` is read at request time, after it is built below.
+  const files = createFilesMock({
+    me: F.CURRENT_USER.name,
+    modelEntry: (mid) => {
+      const ref = mid.replace(/^mr_/, '');
+      const w = workflows.find((x) => x.id === ref);
+      const a = agents.find((x) => x.id === ref);
+      return w ? { name: w.name, owner: w.owner, version: w.version } : a ? { name: a.name, owner: a.owner, version: a.version } : undefined;
+    },
+    review: (rid) => {
+      const r = reviews.find((x) => x.id === rid);
+      return r && { id: r.id, kind: r.kind, workflowName: r.workflowName, toVersion: r.publish?.toVersion, owner: wfOwner(r.workflowId) ?? 'Platform' };
+    },
+    auditCount: () => auditSink.entries().length,
+  });
   const knowledge = createKnowledgeMock({
+    files: () => files.links,
+    connection: connectionRef,
     agentNames: (kbName) => agents.filter((a) => a.collections.includes(kbName)).map((a) => a.name),
     agentOwners: (kbName) => agents.filter((a) => a.collections.includes(kbName)).map((a) => a.owner),
     currentUser: F.CURRENT_USER.name,
   });
   const wfName = (wid: string) => workflows.find((w) => w.id === wid)?.name ?? wid;
-  const cases = createCasesMock({ me: F.CURRENT_USER.name, workflowName: wfName, workflowOwner: wfOwner });
-  const chat = createChatMock({ knowledge: knowledge.api, agents: () => agents.filter((a) => a.status === 'live'), agentOwner: (aid) => agents.find((a) => a.id === aid)?.owner, reviews: () => self.reviews, me: F.CURRENT_USER.name, slaByQueue: cases.slaByQueue });
+  const cases = createCasesMock({ me: F.CURRENT_USER.name, workflowName: wfName, workflowOwner: wfOwner, files: files.links });
+  const chat = createChatMock({ knowledge: knowledge.api, ground: knowledge.retrieveNow, agents: () => agents.filter((a) => a.status === 'live'), agentOwner: (aid) => agents.find((a) => a.id === aid)?.owner, reviews: () => self.reviews, me: F.CURRENT_USER.name, slaByQueue: cases.slaByQueue, files: files.links });
 
   const reviews: Review[] = F.REVIEWS.map((s) => {
     const p = policies.find((x) => x.id === s.policyId)!;
@@ -271,14 +301,86 @@ export function createMockApi(): OpsApi {
     // A mailbox's first sync finishes a few seconds after connecting, so the sheet shows it moving to healthy.
     if (d.email?.sync?.status === 'syncing' && Date.now() - new Date(d.updatedAt).getTime() > 4000)
       d.email.sync = { status: 'healthy', lastMessageAt: d.email.sync.lastMessageAt ?? new Date().toISOString(), messages24h: d.email.sync.messages24h };
+    const link = d.email?.connectionId ? connectionRef(d.email.connectionId) : undefined;
+    let email = d.email;
+    if (email && link) {
+      // Mail sync follows the mailbox's connection: a revoked, expired or failing connection stops reading mail.
+      const broken = link.status === 'revoked' || link.status === 'needs_reconnect' || link.status === 'error';
+      const sync: NonNullable<typeof email.sync> = broken
+        ? { status: 'error', lastMessageAt: email.sync?.lastMessageAt ?? null, messages24h: email.sync?.messages24h ?? 0, error: link.status === 'revoked' ? 'The Microsoft 365 connection was revoked. New email is not being read.' : link.status === 'error' ? 'Microsoft Graph is refusing the connection. New email is not being read.' : 'Microsoft Graph returned 401: the mailbox consent expired. New email is not being read.' }
+        : email.sync?.status === 'error'
+          ? { status: 'syncing', lastMessageAt: email.sync.lastMessageAt, messages24h: email.sync.messages24h }
+          : (email.sync ?? { status: 'healthy', lastMessageAt: null, messages24h: 0 });
+      if (sync.status === 'syncing' && email.sync?.status === 'error') d.updatedAt = new Date().toISOString();
+      if (d.email) d.email.sync = sync;
+      email = { ...email, sync, connection: link };
+    }
     return {
       ...d,
+      email,
       workflowName: w?.name ?? d.workflowId,
       latestVersion: w?.version ?? d.version,
       api: d.api && { ...d.api, endpoint: `https://api.northfieldbank.com/ops/v1/run/${w ? w.id.replace('wf_', '') : d.workflowId}` },
     };
   };
-  deployments.push(...F.DEPLOYMENTS.map((d) => ({ ...d, workflowName: '', latestVersion: d.version, api: d.api && { ...d.api, endpoint: '' } })));
+  deployments.push(...F.DEPLOYMENTS.map((d) => ({ ...d, workflowName: '', latestVersion: d.version, api: d.api && { ...d.api, endpoint: '' }, email: d.email && { ...d.email, connectionId: MAILBOX_CONNECTION[d.id] } })));
+
+  const toolModules = createToolModulesMock({ tools, agents, connection: (cid) => integrations?.link(cid) });
+  const SOURCE_STATUS = { active: ['Syncing on schedule', 'ok'], paused: ['Schedule paused', 'muted'], draft: ['Draft', 'muted'], revoked: ['Stopped: connection revoked', 'bad'] } as const;
+  const dependants = (cid: string): Dependant[] => [
+    ...knowledge.sourcesUsing(cid).map((src): Dependant => ({
+      type: 'source',
+      id: src.id,
+      name: src.name,
+      href: `/sources/${src.id}`,
+      owner: src.owner,
+      status: SOURCE_STATUS[src.status][0],
+      tone: src.status === 'active' && src.lastRunStatus === 'failed' ? 'bad' : SOURCE_STATUS[src.status][1],
+      stops: src.status === 'revoked' ? 'Already stopped syncing' : 'Syncs stop; indexed items stay searchable but stop updating',
+    })),
+    ...toolModules.using(cid).map((m): Dependant => ({
+      type: 'tool_module',
+      id: m.id,
+      name: m.displayName,
+      href: `/tools/${m.id}`,
+      owner: m.ownerTeam,
+      status: !m.reachable ? 'Unreachable' : m.status === 'published' ? `v${m.version} · ${m.operationCount} operations` : m.status === 'draft' ? 'Draft' : 'In security review',
+      tone: !m.reachable ? 'bad' : m.status === 'published' ? 'ok' : 'muted',
+      stops: m.workflows.length ? `Calls fail into the human step for ${m.workflows.map((x) => x.name).join(', ')}` : 'Calls fail; no workflow holds an approval yet',
+    })),
+    ...deployments
+      .filter((d) => d.email?.connectionId === cid)
+      .map((d): Dependant => {
+        const r = deploymentRow(d);
+        const sync = r.email?.sync;
+        return {
+          type: 'mailbox',
+          id: d.id,
+          name: `${d.name} · ${d.email!.inboundAddress}`,
+          href: `/deployments?deployment=${d.id}`,
+          owner: wfOwner(d.workflowId) ?? '',
+          status: sync?.status === 'error' ? 'Not reading mail' : sync?.status === 'syncing' ? 'Catching up' : 'Reading mail',
+          tone: sync?.status === 'error' ? 'bad' : 'ok',
+          stops: 'New email is not read and no cases open; replies cannot be sent',
+        };
+      }),
+  ];
+  const activity = (cid: string): ConnectionActivity[] =>
+    [
+      ...knowledge.sourcesUsing(cid).flatMap((src): ConnectionActivity[] =>
+        src.lastSyncAt ? [{ id: `${src.id}_last`, at: src.lastSyncAt, kind: 'sync', label: `Sync · ${src.name}`, detail: src.lastRunStatus === 'failed' ? 'Failed' : src.lastRunStatus === 'partial' ? 'Finished with failed items' : 'Finished', ok: src.lastRunStatus !== 'failed', href: `/sources/${src.id}?tab=history` }] : [],
+      ),
+      ...toolModules.using(cid).flatMap((m) =>
+        toolModules.recentCalls(m.id, 5).map((c): ConnectionActivity => ({ id: c.id, at: c.at, kind: 'call', label: c.target, detail: `${c.workflowName} · ${c.status === 'ok' ? 'OK' : c.status === 'awaiting_approval' ? 'Waiting for approval' : c.status === 'denied' ? 'Denied' : 'Failed'} · ${c.latencyMs} ms`, ok: c.status === 'ok' || c.status === 'awaiting_approval', href: `/logs/tool-calls?q=${encodeURIComponent(c.target)}` })),
+      ),
+      ...deployments
+        .filter((d) => d.email?.connectionId === cid && d.email.sync?.lastMessageAt)
+        .map((d): ConnectionActivity => ({ id: `${d.id}_mail`, at: d.email!.sync!.lastMessageAt!, kind: 'sync', label: `Mail · ${d.email!.inboundAddress}`, detail: d.email!.sync!.status === 'error' ? 'Last email read before the connection failed' : `${d.email!.sync!.messages24h} emails in 24 h`, ok: d.email!.sync!.status !== 'error', href: `/deployments?deployment=${d.id}` })),
+    ]
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 15);
+  integrations = createIntegrationsMock({ me: F.CURRENT_USER.name, dependants, activity, onStatus: knowledge.reflectConnection });
+  const integrationsApi = integrations.api;
 
   // A publish request someone else raised, so maker-checker approval can be shown end to end.
   {
@@ -291,7 +393,7 @@ export function createMockApi(): OpsApi {
     r.slaMinutes = 385;
   }
 
-  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me });
+  const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me, files: files.links });
   const modelRisk = createModelRiskMock({ agents: () => agents.map(agentRow), workflows: () => workflows.map(workflowRow), graph: (wid) => graphs[wid], lastValidation: (wid) => validations[wid], reviews: () => reviews, toolSystem: (tid) => tools.find((t) => t.id === tid)?.system, owners: F.OWNERS, me, evals });
 
   const self: OpsApi = {
@@ -332,7 +434,8 @@ export function createMockApi(): OpsApi {
           if (w.status === 'draft') throw new ApiError('Publish the workflow before deploying it. Deployments only serve published versions.', 422);
           if (input.channel === 'email' && deployments.some((d) => d.email?.inboundAddress === input.email?.inboundAddress))
             throw new ApiError(`${input.email?.inboundAddress} is already routed to another deployment.`, 409);
-          const email = input.email && { ...input.email, sync: { status: 'syncing' as const, lastMessageAt: null, messages24h: 0 } };
+          // The mailbox's consent becomes a Microsoft 365 connection in Integrations that this deployment reads through.
+          const email = input.email && { ...input.email, connectionId: integrations?.addMailbox(input.email.inboundAddress, w.owner), sync: { status: 'syncing' as const, lastMessageAt: null, messages24h: 0 } };
           const d: Deployment = { id: id('dp'), ...input, email, workflowName: w.name, version: w.version, latestVersion: w.version, status: 'active', traffic24h: 0, errors24h: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), api: input.api && { ...input.api, keyPrefix: `nfb_${input.environment === 'production' ? 'live' : 'test'}_${Math.random().toString(36).slice(2, 5)}`, endpoint: '' } };
           deployments.unshift(d);
           return deploymentRow(d);
@@ -415,17 +518,18 @@ export function createMockApi(): OpsApi {
           tests.unshift(t);
           return t;
         }),
-      importRows: (wid, rows) =>
-        respond(() =>
-          bulk(
+      importRows: (wid, rows, fileId) =>
+        respond(() => {
+          if (fileId) files.links.link(fileId, { type: 'test_set', id: wid, name: `${wfName(wid)} tests`, href: `/workflows/${wid}?tab=tests` }, ['test_import']);
+          return bulk(
             rows.map((_, i) => String(i)),
             (i) => {
               const r = rows[Number(i)];
               if (!r.name?.trim() || !r.input?.trim()) return 'Name and input are required';
               tests.unshift({ id: id('tc'), workflowId: wid, ...r, source: 'csv', createdAt: new Date().toISOString() });
             },
-          ),
-        ),
+          );
+        }),
       fromRun: (runId) =>
         respond(() => {
           const run = Object.values(runCache).flat().find((r) => r.id === runId) ?? notFound('Run');
@@ -750,7 +854,7 @@ export function createMockApi(): OpsApi {
         ),
     },
 
-    knowledge: withRunAs(knowledge.api),
+    knowledge: knowledge.api,
     knowledgeChanges: createKnowledgeChangesMock({ me, workflowName: wfName, workflowOwner: wfOwner }),
     search: createSearchMock({ workflows: teamWorkflows, agents: teamAgents, cases: cases.api, knowledge: knowledge.api, chat }),
     notifications: createNotificationsMock({ me, reviews: () => reviews }),
@@ -760,7 +864,9 @@ export function createMockApi(): OpsApi {
     evals: evals.api,
     modelRisk: modelRisk.api,
     ...createGovernanceMock(),
-    toolModules: createToolModulesMock({ tools, agents }),
+    toolModules: toolModules.api,
+    integrations: integrationsApi,
+    files: files.api,
 
     tools: {
       list: (p) =>

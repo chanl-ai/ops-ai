@@ -3,12 +3,14 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronDown, CircleDashed, Pause, Play, RefreshCw, SearchX, ShieldAlert, Trash2 } from 'lucide-react';
+import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, SearchX, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SensitivityBadge, SourceStatusBadge, SourceTypeIcon, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
+import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { PageLayout } from '@/components/page-layout';
 import { SourceOverview } from '@/components/sources/source-overview';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -19,15 +21,20 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useCancelRun, useConnect, useDeleteSource, usePauseSource, useSource, useSyncSource } from '@/hooks/knowledge-queries';
+import { strategyMeta } from '@/components/sources/ingest-meta';
+import { useApproveIngest, useCancelRun, useDeleteSource, usePauseSource, useReprocessSource, useSource, useSyncSource } from '@/hooks/knowledge-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { ApiError } from '@/lib/api';
 import { count, plural } from '@/lib/format';
 import type { SyncOptions } from '@/lib/types/knowledge';
+import type { IngestStrategy } from '@/lib/types/knowledge-ingest';
 
 import { SourceHistoryTab } from '../_parts/source-history-tab';
 import { SourceItemsTab } from '../_parts/source-items-tab';
 import { SourceSettingsTab } from '../_parts/source-settings-tab';
+
+/** Lower-cases a label for use inside a sentence, leaving acronyms such as FAQ alone. */
+const midSentence = (l: string) => (/^[A-Z]{2}/.test(l) ? l : l.charAt(0).toLowerCase() + l.slice(1));
 
 const TABS = ['overview', 'items', 'history', 'settings'] as const;
 type Tab = (typeof TABS)[number];
@@ -42,9 +49,11 @@ export default function SourcePage() {
   const cancel = useCancelRun();
   const pause = usePauseSource();
   const remove = useDeleteSource();
-  const connect = useConnect();
+  const reindex = useReprocessSource();
+  const approve = useApproveIngest();
   const [fullOpen, setFullOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [approveOpen, setApproveOpen] = React.useState(false);
 
   if (query.isPending)
     return (
@@ -72,6 +81,10 @@ export default function SourcePage() {
     pause.mutate({ id: s.id, paused: s.status !== 'paused' }, { onSuccess: (x) => toast.success(x.status === 'paused' ? 'Schedule paused' : 'Schedule resumed', { description: s.name }), onError: fail('change the schedule') });
   const tabHref = (t: string, q?: string) => `/sources/${s.id}?tab=${t}${q ? `&${q}` : ''}`;
   const syncBlocked = running || s.status === 'revoked' || s.status === 'draft';
+  const stepLabel = (x: string) => (x.startsWith('extract ') ? `extracting ${x.slice(8)} with AI` : midSentence(strategyMeta(x as IngestStrategy).label));
+  const waiting = new Set(s.aiStepsWaiting);
+  const runsNow = s.ingest.strategies.filter((x) => !waiting.has(x)).map(stepLabel);
+  const waits = s.aiStepsWaiting.map(stepLabel);
 
   return (
     <PageLayout
@@ -81,11 +94,11 @@ export default function SourcePage() {
       description={
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>{meta.label}</span>
-          {s.connectionLabel && <span className="font-mono text-xs">{s.connectionLabel}</span>}
+          {s.connection && <ConnectionChip connection={s.connection} />}
           <SensitivityBadge level={s.sensitivity} />
           <span>Collection {s.collection}</span>
           <span>Owner {s.owner}</span>
-          {s.reprocessPending && <span className="text-amber-700 dark:text-amber-400">Settings changed; reprocess pending</span>}
+          {s.reindexNeeded && <span className="text-amber-700 dark:text-amber-400">Re-index needed</span>}
         </span>
       }
       backHref="/sources"
@@ -134,17 +147,12 @@ export default function SourcePage() {
             <ShieldAlert className="size-4" />
             <AlertTitle>The {meta.short} connection was revoked</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-2">
-              <p>Syncs stop until it is reconnected. Indexed items stay searchable but will not update.</p>
-              <LoadingButton
-                size="sm"
-                variant="outline"
-                className="border-destructive/40 text-foreground"
-                isLoading={connect.isPending}
-                loadingText="Testing connection…"
-                onClick={() => connect.mutate(s.type, { onSuccess: (c) => toast.success(`${c.name} reconnected`, { description: 'Scheduled syncs resume.' }), onError: fail('reconnect') })}
-              >
-                Reconnect {meta.short}
-              </LoadingButton>
+              <p>Syncs stop until it is reconnected in Integrations. Indexed items stay searchable but will not update.</p>
+              {s.connection && (
+                <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
+                  <Link href={`/integrations/${s.connection.id}`}>Open {s.connection.name}</Link>
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -174,6 +182,51 @@ export default function SourcePage() {
                   Activate and sync
                 </LoadingButton>
               </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {s.reindexNeeded && (
+          <Alert data-testid="reindex-banner">
+            <Layers className="size-4" />
+            <AlertTitle>Re-index needed</AlertTitle>
+            <AlertDescription className="flex flex-col items-start gap-2">
+              <p>
+                The ingestion settings changed since these chunks were built. Search keeps using the old chunks until a re-index rebuilds {plural(s.itemCount, 'item')}.
+              </p>
+              <p data-testid="reindex-steps">
+                Runs now: {runsNow.length ? runsNow.join(', ') : 'structure splitting'}.
+                {waits.length > 0 && ` Waits for approval: ${waits.join(', ')}. A later re-index adds ${waits.length === 1 ? 'it' : 'them'} once approved.`}
+              </p>
+              <LoadingButton
+                size="sm"
+                isLoading={reindex.isPending}
+                disabled={running || s.status === 'revoked'}
+                onClick={() => reindex.mutate(s.id, { onSuccess: () => toast.success(`Re-indexing ${s.name}`, { description: 'Runs as a full sync; progress is on the Overview tab.' }), onError: fail('start the re-index') })}
+              >
+                <RefreshCw className="size-4" /> {running ? 'A sync is running' : 'Re-index now'}
+              </LoadingButton>
+            </AlertDescription>
+          </Alert>
+        )}
+        {s.ingest.approval.status === 'pending' && (
+          <Alert>
+            <ShieldCheck className="size-4" />
+            <AlertTitle>AI ingestion steps wait for the knowledge owner</AlertTitle>
+            <AlertDescription className="flex flex-col items-start gap-2">
+              <p>
+                {s.ingest.approval.requestedBy ? `${s.ingest.approval.requestedBy} turned on` : 'This source uses'} {waits.join(' and ')}, which {waits.length === 1 ? 'calls' : 'call'} {s.ingest.model} at ingest. Syncs run without{' '}
+                {waits.length === 1 ? 'it' : 'them'} until another knowledge owner approves.
+              </p>
+              {s.approval && !s.approval.canApprove ? (
+                <p className="font-medium" data-testid="self-approval">
+                  {s.approval.blockedReason}
+                </p>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setApproveOpen(true)}>
+                  Review and approve
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -226,6 +279,26 @@ export default function SourcePage() {
       >
         <p className="text-sm text-muted-foreground">It takes longer than an incremental sync. Agents keep answering from the current index while it runs.</p>
       </DialogShell>
+
+      {s.approval && (
+        <ConfirmActionDialog
+          open={approveOpen}
+          onOpenChange={setApproveOpen}
+          title={`Approve AI ingestion for ${s.name}?`}
+          consequence={`${waits.join(' and ')} will call ${s.ingest.model} for every item at the next re-index, sending item text through the AI gateway under the ingestion key.`}
+          details={[
+            { label: 'Requested by', value: s.ingest.approval.requestedBy ?? 'Unknown' },
+            { label: 'Documents affected', value: plural(s.approval.items, 'document') },
+            { label: 'Model calls', value: `About ${count(s.approval.modelCalls)} per full re-index` },
+            { label: 'Estimated cost', value: `About ${s.approval.estimatedCost} per full re-index` },
+          ]}
+          runsNow
+          note="Approving is recorded with your name. Chunks change only when the source is re-indexed."
+          confirmLabel="Approve"
+          isPending={approve.isPending}
+          onConfirm={() => approve.mutateAsync(s.id).then(() => toast.success('AI ingestion steps approved', { description: 'Re-index to build chunks with them.' }))}
+        />
+      )}
 
       <DeleteDialog
         open={deleteOpen}

@@ -5,7 +5,6 @@ import type {
   DiscoveredOperation,
   Environment,
   ModuleApproval,
-  ModuleCredential,
   ModuleOperation,
   ModuleRef,
   ModuleType,
@@ -27,7 +26,9 @@ import { rng } from '../governance/catalog';
 import { seedToolCalls } from '../governance/seed-calls';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam, teamOwner } from '../teams';
-import { CATALOG, daysAgo, DAY, DISCOVERY, f, inDays, MODULE_SEEDS, RUN_CONTEXTS, vaultRef, type ModuleSeed } from './seed';
+import { MODULE_CONNECTION } from '../integrations/seed';
+import type { ConnectionLink } from '../integrations';
+import { daysAgo, DAY, DISCOVERY, f, inDays, MODULE_SEEDS, RUN_CONTEXTS, type ModuleSeed } from './seed';
 
 interface Op {
   id: string;
@@ -68,7 +69,7 @@ interface Mod {
   approvals: ModuleApproval[];
   reviews: SecurityReview[];
   versions: ModuleVersion[];
-  credentials: ModuleCredential[];
+  connectionId?: string;
   pending: OperationChange[];
   /** Operations and their tool flags as they were before the first staged change, for discard. */
   baseline: { ops: Op[]; tools: Record<string, Pick<Tool, 'enabled' | 'description'>> } | null;
@@ -98,9 +99,15 @@ const DENY_TEXT: Record<string, string> = {
 
 /**
  * Tool modules over the shared tool records: each operation is one grantable tool, so agents keep granting tools
- * while the module holds the manifest, approvals, reviews and credentials.
+ * while the module holds the manifest, approvals and reviews. The credential lives on the module's integration.
  */
-export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[] }): ToolModulesApi {
+export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]; connection: (id?: string) => ConnectionLink | undefined }): {
+  api: ToolModulesApi;
+  /** Modules calling through a connection, for its Used by tab. */
+  using: (connId: string) => ToolModule[];
+  /** A module's latest gateway calls, newest first. */
+  recentCalls: (moduleId: string, n: number) => ToolCallRow[];
+} {
   const { tools, agents } = deps;
   const me = F.CURRENT_USER.name;
   const toolOf = (o: Op) => tools.find((t) => t.id === o.toolId)!;
@@ -184,19 +191,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       };
     });
     for (const a of approvals) if (a.status === 'approved') for (const name of a.operations) if (s.operations.find((o) => o.name === name)?.tool) grantToWorkflowAgent(a.workflowId, ops.find((o) => o.name === name)!.toolId);
-    const credentials: ModuleCredential[] =
-      s.auth === 'none'
-        ? []
-        : (Object.entries(s.rotate ?? { production: 90 }) as [Environment, number][]).map(([env, d], i) => ({
-            id: `${s.id}_cred${i + 1}`,
-            environment: env,
-            kind: s.auth as CredentialKind,
-            secretRef: vaultRef(env, s.name, s.auth as CredentialKind),
-            setBy: s.ownerContacts[0],
-            setAt: daysAgo(180 - d),
-            rotateBy: inDays(d),
-            status: 'ok',
-          }));
     return {
       id: s.id,
       name: s.name,
@@ -221,7 +215,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       approvals,
       reviews,
       versions,
-      credentials,
+      connectionId: MODULE_CONNECTION[s.id],
       pending: [],
       baseline: null,
     };
@@ -234,12 +228,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   const approvalStatus = (a: ModuleApproval): ModuleApproval['status'] => (a.status === 'approved' && a.expiresAt && new Date(a.expiresAt).getTime() < Date.now() ? 'expired' : a.status);
   const approvalsOf = (m: Mod) => m.approvals.map((a) => ({ ...a, status: approvalStatus(a) }));
   const ownersOf = (m: Mod) => [m.ownerTeam, ...m.approvals.map((a) => wfOwner(a.workflowId))];
-  const credStatus = (c: ModuleCredential): ModuleCredential['status'] => {
-    const left = new Date(c.rotateBy).getTime() - Date.now();
-    return left < 0 ? 'overdue' : left < 14 * DAY ? 'rotate_soon' : 'ok';
-  };
 
   function row(m: Mod): ToolModule {
+    const conn = deps.connection(m.connectionId);
     const ops = m.ops.map((o) => ({ o, t: toolOf(o) }));
     const live = ops;
     const calls24h = live.reduce((s, { t }) => s + t.calls24h, 0);
@@ -282,8 +273,11 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       calls24h,
       errorRate: calls24h ? errors / calls24h : 0,
       p95Ms: Math.max(0, ...live.filter(({ t }) => t.calls24h).map(({ t }) => t.p95Ms)),
-      reachable: m.reachable,
+      // A connection that is revoked, expired or failing makes the system unreachable from the gateway.
+      reachable: m.reachable && !['revoked', 'needs_reconnect', 'error'].includes(conn?.status ?? ''),
       drift: m.drift,
+      connectionId: m.connectionId,
+      connection: conn ? { id: conn.id, name: conn.name, kind: conn.kind, status: conn.status, expiresAt: conn.expiresAt } : null,
       updatedAt: m.updatedAt,
     };
   }
@@ -345,7 +339,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       approvals: approvals.sort((a, b) => order[a.status] - order[b.status] || (a.expiresAt ?? '9').localeCompare(b.expiresAt ?? '9')),
       reviews: [...m.reviews].reverse(),
       versions: [...m.versions].reverse(),
-      credentials: m.credentials.map((c) => ({ ...c, status: credStatus(c) })),
       runContexts: runContexts(m),
     };
   }
@@ -383,14 +376,10 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   }
 
   function discovered(source: Parameters<ToolModulesApi['discover']>[0]) {
-    if (source.kind === 'catalog') {
-      const item = CATALOG.find((c) => c.id === source.catalogId) ?? notFound('Catalog item');
-      const existing = mods.find((m) => m.catalogId === item.id || m.system === item.system);
-      if (existing) throw new ApiError(`${item.name} is already connected as ${existing.displayName}.`, 409);
-      if (!item.available) throw new ApiError(`${item.name} is not available yet.`, 409);
-      const d = DISCOVERY[item.id] ?? DISCOVERY[item.type === 'mcp' ? 'mcp' : 'openapi'];
-      return { type: item.type, system: item.system, suggestedName: kebab(item.name), version: d.version, endpoint: `https://${kebab(item.system)}.northfield.internal/${item.type === 'mcp' ? 'mcp' : 'api'}`, operations: d.operations, warnings: d.warnings ?? [] };
-    }
+    const conn = deps.connection(source.connectionId);
+    if (source.connectionId && !conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
+    if (conn?.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations first.`, 409);
+    const known = conn ? DISCOVERY[conn.catalogId] : undefined;
     if (source.kind === 'mcp') {
       let host: string;
       try {
@@ -401,20 +390,20 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (e instanceof ApiError) throw e;
         throw new ApiError('That is not a complete address. Enter it with https://.', 400);
       }
-      const d = host.includes('servicenow') ? DISCOVERY.cat_servicenow : DISCOVERY.mcp;
+      const d = known ?? (host.includes('servicenow') ? DISCOVERY.cat_servicenow : DISCOVERY.mcp);
       const label = host.split('.')[0];
-      const system = host.includes('servicenow') ? 'ServiceNow' : label.charAt(0).toUpperCase() + label.slice(1);
+      const system = host.includes('servicenow') || conn?.catalogId === 'cat_servicenow' ? 'ServiceNow' : label.charAt(0).toUpperCase() + label.slice(1);
       return { type: 'mcp' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.url, operations: d.operations, warnings: d.warnings ?? [] };
     }
     const ref = source.specUrl || source.fileName;
     if (!ref) throw new ApiError('Add the spec as a URL or a file.', 400);
     const base = (source.fileName ?? new URL(source.specUrl!).hostname).split(/[./]/)[0];
     const system = base.charAt(0).toUpperCase() + base.slice(1);
-    const d = DISCOVERY.openapi;
+    const d = known ?? DISCOVERY.openapi;
     return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.northfield.internal/api`, operations: d.operations, warnings: d.warnings ?? [] };
   }
 
-  return {
+  const api: ToolModulesApi = {
     list: (p) =>
       respond((md) => {
         const scoped = mods.filter((m) => inTeam(ownersOf(m))).map(row);
@@ -450,23 +439,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
 
     get: (mid) => respond(() => detail(find(mid))),
 
-    catalog: () =>
-      respond((md) => {
-        if (md === 'empty') return [];
-        const visible = mods.filter((m) => inTeam(ownersOf(m)));
-        const matchOf = (c: (typeof CATALOG)[number]) => visible.find((m) => m.catalogId === c.id || m.system === c.system);
-        const listed = CATALOG.map((c) => {
-          const m = matchOf(c);
-          return { ...c, moduleId: m?.id, moduleState: m ? row(m).approvalState : undefined };
-        });
-        // Modules connected without a catalog entry still appear, so the catalog lists every connected system.
-        const matched = new Set(listed.map((c) => c.moduleId).filter(Boolean));
-        const extra = visible
-          .filter((m) => !matched.has(m.id))
-          .map((m) => ({ id: `cat_mod_${m.id}`, name: m.displayName, system: m.system, category: 'Internal' as const, type: m.type, description: m.description, operations: m.ops.length, auth: m.auth.kind, owner: m.ownerTeam, available: true, moduleId: m.id, moduleState: row(m).approvalState }));
-        return [...listed, ...extra];
-      }),
-
     discover: (source) => respond(() => discovered(source)),
 
     create: (input) =>
@@ -477,7 +449,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
         let opsIn: DiscoveredOperation[] = input.operations ?? [];
         let endpoint = input.endpoint;
-        let secretRef = input.secretRef;
+        const conn = deps.connection(input.connectionId);
+        if (!conn) throw new ApiError('Choose the connection this module calls through.', 400);
+        if (conn.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
         if (input.type === 'code') throw new ApiError('Code modules need the sandbox, which is not available yet.', 422);
         if (input.http) {
           const h = input.http;
@@ -493,19 +467,18 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           const path = h.url.slice(url.origin.length) || '/';
           const vars = [...new Set([...h.url.matchAll(/\{([a-zA-Z0-9_]+)\}/g), ...(h.body ?? '').matchAll(/\{\{\s*([a-z][a-zA-Z0-9_]*)\s*\}\}/g)].map((m) => m[1]))];
           opsIn = [{ name: kebab(h.name).replace(/-/g, '_'), description: h.description, access: h.access, method: h.method, path, group: 'operations', input: vars.map((v) => f(v, 'string', true)) }];
-          secretRef = h.secretRef || secretRef;
         }
         if (!opsIn.length) throw new ApiError('Choose at least one operation to expose.', 400);
         for (const o of opsIn) if (tools.some((t) => t.name === o.name)) throw new ApiError(`An operation named ${o.name} already exists in another module.`, 409);
         const mid = id('mod');
-        const version = input.http ? '1.0.0' : (DISCOVERY[input.catalogId ?? '']?.version ?? '1.0.0');
+        const version = input.http ? '1.0.0' : (DISCOVERY[conn.catalogId]?.version ?? '1.0.0');
         const owner = teamOwner() ?? 'Platform';
         const ops: Op[] = opsIn.map((o, i) => {
           const t: Tool = { id: id('tl'), name: o.name, description: o.description, type: toolTypeOf(input.type), system: input.system, access: o.access, requiresReview: o.access !== 'read', enabled: true, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: sampleInput(o.input), moduleId: mid, module: input.displayName };
           tools.unshift(t);
           return { id: `${mid}_op${i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: [], binding: null, rateLimitPerMin: 60, requiresApproval: o.access !== 'read', amountMax: undefined, stub: { ok: true } };
         });
-        const kind: CredentialKind = input.type === 'mcp' ? 'oauth_client_credentials' : 'api_key';
+        const kind: CredentialKind = conn.authMethod === 'api_key' ? 'api_key' : conn.authMethod === 'mtls' ? 'mtls' : 'oauth_client_credentials';
         const m: Mod = {
           id: mid,
           name,
@@ -517,7 +490,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           ownerTeam: owner,
           ownerContacts: [me],
           endpoint,
-          auth: { kind: secretRef ? kind : 'none' },
+          auth: { kind },
           timeoutMs: 8000,
           egressHosts: (() => {
             try {
@@ -527,7 +500,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
             }
           })(),
           dataClassification: 'confidential',
-          catalogId: input.catalogId,
+          catalogId: conn.catalogId,
           reachable: true,
           drift: false,
           updatedAt: new Date().toISOString(),
@@ -536,7 +509,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           approvals: [],
           reviews: [],
           versions: [{ version, major: majorOf(version), status: 'draft', publishedBy: me, note: 'First version', changes: opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access === 'money_movement' ? 'money movement' : o.access} operation`, major: true })), pinnedBy: [], reachability: [{ environment: 'test', ok: true, checkedAt: new Date().toISOString() }] }],
-          credentials: secretRef ? [{ id: id('cred'), environment: 'production', kind, secretRef, setBy: me, setAt: new Date().toISOString(), rotateBy: inDays(90), status: 'ok' }] : [],
+          connectionId: conn.id,
           pending: [],
           baseline: null,
         };
@@ -696,16 +669,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         });
       }),
 
-    setCredentialRef: (mid, cid, secretRef) =>
-      respond(() => {
-        const m = find(mid);
-        const c = m.credentials.find((x) => x.id === cid) ?? notFound('Credential');
-        if (!/^vault:\/\/[a-z0-9][a-z0-9/_-]+$/.test(secretRef.trim())) throw new ApiError('Use a vault path, e.g. vault://prod/data-gateway/core-banking/oauth-client.', 400);
-        Object.assign(c, { secretRef: secretRef.trim(), setBy: me, setAt: new Date().toISOString() });
-        touch(m);
-        return detail(m);
-      }),
-
     test: (mid, input) =>
       respond(() => {
         const m = find(mid);
@@ -768,5 +731,17 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           recent: mine.slice(0, 12).map(strip),
         };
       }),
+  };
+
+  const stripCall = ({ request: _q, response: _r, redacted: _d, policy: _p, identity: _i, requestId: _x, error: _e, ...rest }: ToolCallDetail): ToolCallRow => rest;
+  return {
+    api,
+    using: (connId) => mods.filter((m) => m.connectionId === connId).map(row),
+    recentCalls: (mid, n) => {
+      const m = mods.find((x) => x.id === mid);
+      if (!m) return [];
+      const names = new Set(m.ops.map((o) => o.name));
+      return allCalls().filter((c) => c.gateway === 'data' && names.has(c.target)).slice(0, n).map(stripCall);
+    },
   };
 }

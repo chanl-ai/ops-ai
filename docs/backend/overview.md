@@ -4,20 +4,21 @@ Status: draft for review. No backend code exists yet. This document describes th
 layout, contracts and standards the backend will follow, so that work can start from one agreed
 shape. The console in `apps/console/` runs against an in-memory mock until these services exist.
 
-Binding decisions are in `docs/architecture/decisions/` (ADR-0001 to ADR-0009). Behaviour is
+Binding decisions are in `docs/architecture/decisions/` (ADR-0001 to ADR-0010). Behaviour is
 specified in `docs/specs/`. Timing comes from `docs/plan/implementation-plan.md`.
 
 ## 1. Service map
 
 | Service | Folder | What it owns | Data stores | Spec |
 |---|---|---|---|---|
-| Control-plane API | `services/control-plane/` | Registry (workflows, agents, versions, risk tier, owner, cost, release pointers), drafts and edit classes, publish requests and the release gate, cases, queues and SLAs, reviews, governance (teams, roles, audit, notifications, API keys, usage). Serves the OpenAPI contract the console calls | PostgreSQL (system of record), WORM object store (evidence bundles, audit export) | `01` 4–6, `04` 4.5–4.7 and 5.5–5.7, `08`, `09`; ADR-0004, ADR-0006 |
+| Control-plane API | `services/control-plane/` | Registry (workflows, agents, versions, risk tier, owner, cost, release pointers), drafts and edit classes, publish requests and the release gate, cases, queues and SLAs, reviews, governance (teams, roles, audit, notifications, API keys, usage). Serves the OpenAPI contract the console calls. Holds `fileId`s, never file bytes | PostgreSQL (system of record); files through the files service | `01` 4–6, `04` 4.5–4.7 and 5.5–5.7, `08`, `09`; ADR-0004, ADR-0006 |
+| Files | `services/files/` | Every file byte: presigned upload and download URLs, completion with size and digest checks, dedupe per team, malware scan results and quarantine, references, retention, legal hold, WORM evidence, previews. The only holder of storage credentials | PostgreSQL schema `files` (metadata, references, versions); object storage through the adapter of ADR-0010 (S3 or Azure Blob) | `10`; ADR-0006, ADR-0010 |
 | Workflow interpreter | `services/interpreter/` | One Temporal workflow type that walks any compiled execution plan, the node-type implementations, activity workers per risk tier, the agent-block host | Temporal history (owned by Temporal); writes run journal rows and payloads through the control plane and object store | `01` 4.6, 5.6, 5.7; ADR-0001, ADR-0003 |
 | Data gateway | `services/data-gateway/` | Tool and knowledge modules, module versions and approvals with expiry, the per-call policy decision (OPA), credential resolution from the secret store, subject binding, approval-token checks on writes, the call log | PostgreSQL (modules, approvals, call log), secret store (credentials), pgvector database (read path for knowledge) | `03` 4.1–4.5, 5.1–5.5; ADR-0005 |
 | Key-and-budget service (AI gateway front) | `services/ai-gateway/` | Model aliases, per-workflow and per-purpose keys and budgets, metadata logging, failover rules, agent discovery from traffic. Holds every model key; Portkey's open-source gateway runs behind it as the data plane | PostgreSQL (aliases, budgets, usage), secret store (provider keys) | `03` 4.8, 5.8–5.10; ADR-0008 |
-| Mailbox intake | `services/mailbox-intake/` | Shared-mailbox polling (Microsoft Graph delta every 60 s per folder), security scan, archive, the new-mail event that starts a run, daily reconciliation | PostgreSQL (mailbox state, intake records), WORM object store (mail archive, attachments) | `03` 4.6, 5.6; ADR-0007 |
-| Knowledge ingestion | `services/knowledge-ingest/` | Source sync, required-metadata checks, chunking, embedding through the AI gateway under the ingestion identity, indexing, freshness and staleness, the citation index | pgvector database (separate PostgreSQL instance), object store (source copies) | `02` 4, 5.1–5.8, 5.13; ADR-0006 |
-| Eval runner | `services/eval-runner/` | Suite runs on publish requests, agent evals, model-update runs, scoring against baselines, injection thresholds, sealing evidence bundles | PostgreSQL (runs, results, baselines), WORM object store (evidence bundles) | `04` 4.1–4.6, 5.1–5.4, 5.8–5.10 |
+| Mailbox intake | `services/mailbox-intake/` | Shared-mailbox polling (Microsoft Graph delta every 60 s per folder), archive, the new-mail event that starts a run, daily reconciliation. Attachments are written through the files service, which scans them | PostgreSQL (mailbox state, intake records); mail archive and attachments through the files service | `03` 4.6, 5.6; ADR-0007 |
+| Knowledge ingestion | `services/knowledge-ingest/` | Source sync, required-metadata checks, chunking, embedding through the AI gateway under the ingestion identity, indexing, freshness and staleness, the citation index | pgvector database (separate PostgreSQL instance); source files and fetched originals through the files service by `fileId` | `02` 4, 5.1–5.8, 5.13; ADR-0006 |
+| Eval runner | `services/eval-runner/` | Suite runs on publish requests, agent evals, model-update runs, scoring against baselines, injection thresholds, sealing evidence bundles | PostgreSQL (runs, results, baselines); evidence bundles sealed through the files service into a WORM class | `04` 4.1–4.6, 5.1–5.4, 5.8–5.10 |
 | Shared libraries | `services/shared/` | Generated models from `packages/contracts`, settings loading, logging and tracing setup, run-context and identity types, gateway clients | none | Section 3 below |
 
 All services are Python (ADR-0002). The console's backend-for-frontend stays in TypeScript inside
@@ -38,6 +39,7 @@ services/
   mailbox-intake/
   knowledge-ingest/
   eval-runner/
+  files/                files service: storage adapters (S3, Azure Blob, local), scanning hook, retention, holds
   shared/               generated contract models, settings, logging, tracing, clients
 packages/
   contracts/            OpenAPI 3.1 and JSON Schema, generated TS and Python types
@@ -51,6 +53,55 @@ deploy/
 | Tool modules | Published as data (module definitions and versions) in the data gateway's store; adapter code per module kind in `services/data-gateway/modules/` | A new tool module for an existing kind (MCP, OpenAPI) is configuration, with no code change |
 | Knowledge modules | Served by the data gateway; built by `services/knowledge-ingest/` | Same approval model as tool modules |
 | Agent blocks | Packaged agent code run by `services/interpreter/agent_host/` | Every model call goes through the AI gateway |
+| Storage adapters | `services/files/src/ops_files/storage/` | One protocol, S3 and Azure Blob backends (ADR-0010); a third backend is a new adapter with the same tests |
+
+### Files: a service, not a control-plane module
+
+The files layer is its own service (`services/files/`) rather than a module inside the control plane.
+
+| Reason | Detail |
+|---|---|
+| Storage credentials in one place | Only the files service can sign URLs or write objects, the same pattern as the data gateway holding system credentials. A control-plane module would put storage credentials in the process that serves the whole console API |
+| Callers other than the console | Mailbox intake, knowledge ingestion and the eval runner write and read files. They call the files service with their service identity instead of going through the control plane |
+| Different scaling and failure profile | Signing is cheap but bursty (mail with many attachments, bulk source uploads); scan results arrive as storage events. A slow scanner or retention run does not slow case or review writes |
+| Bytes never pass through it either | The service signs and records; browsers PUT and GET directly against storage (`10` 5.1, 5.4), so being separate adds no extra hop to the byte path |
+
+The cost is one more deployable and a call from the control plane to add or check a reference when a
+record takes a `fileId`. References are written by the service that owns the using record, through the
+files service's internal API (`10` F18), so no service reads the `files` schema directly.
+
+### Upload and download flows
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser (FileUpload)
+  participant F as files service
+  participant S as Object storage (S3 or Azure Blob)
+  participant V as Scanner
+  participant O as Owning service (control-plane, knowledge-ingest)
+
+  B->>F: createUpload(name, size, mime, purpose, digest)
+  F-->>B: presigned PUT for one key, 15 min, signed checksum and encryption headers
+  B->>S: PUT bytes (direct, never through an API)
+  B->>F: completeUpload(fileId, digest)
+  F->>S: Read object size, compute sha256
+  F-->>B: FileRecord (scan pending) or existing file (deduplicated)
+  S-->>V: Object created event
+  V->>F: Scan result (clean, infected, failed)
+  B->>O: Create source / send message / import with fileId
+  O->>F: Add reference (refused while pending or quarantined)
+  B->>F: downloadUrl(fileId)
+  F-->>B: Signed GET, signedUrlMinutes, audited
+  B->>S: GET bytes
+```
+
+| Flow | Who writes the bytes | Notes |
+|---|---|---|
+| Console upload (sources, chat, imports, tool specs) | Browser, on a presigned PUT | `10` 5.1 |
+| Mail attachment | Mailbox intake through the files service's internal write (`10` F19) | Scanned before the agent reads it (Flow step 1) |
+| Evidence bundle | Eval runner through the internal write, into a WORM class | `04` 4.6, `10` 5.7 |
+| Audit and inventory exports | Control plane through the internal write, purpose `export` | `10` F14 |
 
 ## 3. Contract flow
 
@@ -125,7 +176,7 @@ sequenceDiagram
 | Actions drafted | interpreter, ai-gateway, data-gateway | `interpreter.nodes.draft_action`, `interpreter.agent_host` |
 | Approval token issued | control-plane | `control_plane.approvals.tokens` |
 | Approved write executed | interpreter, data-gateway | `interpreter.nodes.per_action_approval`, `data_gateway.calls`, `data_gateway.policy` |
-| Audit and evidence | all, via control-plane and object store | `control_plane.audit`, `shared.logging` |
+| Audit and evidence | all, via control-plane; bytes via the files service | `control_plane.audit`, `shared.logging`, `ops_files.service` |
 
 ## 5. Local development (planned)
 
@@ -137,7 +188,8 @@ the host with hot reload. None of this exists yet.
 | Temporal (with its own PostgreSQL) | Durable execution |
 | PostgreSQL `ops` | System of record |
 | PostgreSQL `knowledge` with pgvector | Knowledge index, separate database as in ADR-0006 |
-| Object store (S3-compatible) | Mail archive, payloads, evidence bundles |
+| Object store (LocalStack for S3, Azurite for Azure Blob) | Files through the files service: mail archive, uploads, payloads, evidence bundles |
+| ClamAV | Malware scanning for the files service |
 | Portkey gateway | AI gateway data plane |
 | OPA | Policy decisions for the data gateway |
 
@@ -167,7 +219,8 @@ uv run --package interpreter python -m interpreter.worker
 |---|---|
 | Trust facts | Identity, team, subject and tier come from platform context (run context, tokens). Message text, email bodies and model output never set them |
 | Keys | Workers and agent blocks hold no model keys and no system credentials. The key-and-budget service holds model keys; the data gateway resolves system credentials from the secret store |
-| Egress | Worker pods reach only Temporal, the two gateways and the object store. Every model call goes through the AI gateway and every system call through the data gateway |
+| Egress | Worker pods reach only Temporal, the two gateways and the files service. Every model call goes through the AI gateway, every system call through the data gateway, and every file through the files service |
+| Files | No API accepts or returns file bytes; they take `fileId`s. Only the files service holds storage credentials. Nothing reads a file before its scan passes |
 | Writes | A write needs an approval token bound to the exact action payload; the data gateway rejects a token whose payload digest differs |
 | Records | The model does not choose which record a write touches; the subject binding comes from the case |
 | Fail closed | Each control declares whether it fails open or closed; approval, scope and egress checks fail closed |
@@ -183,6 +236,7 @@ uv run --package interpreter python -m interpreter.worker
 | Cases | Case, queue and SLA timer created | Queues, SLAs, calendars, approval rules and the review workbench |
 | Knowledge | none | One knowledge base with metadata checks, citations and a golden set |
 | Evals | none | Suite in the gate, injection threshold, evidence bundles sealed per version |
+| Files | Presigned upload, completion, download against the bank's storage in `test`; EICAR scan fake | Scanner, references, retention run, legal hold, WORM evidence on the bank's cloud of choice (ADR-0010) |
 | Release | `test` pointer table | Production pointer, four-eyes publish, rollback by pointer |
 | Contracts | Generated OpenAPI, JSON Schema and types with the CI equality check | Same, covering every phase-1 operation |
 
@@ -191,5 +245,6 @@ uv run --package interpreter python -m interpreter.worker
 | # | Question |
 |---|---|
 | 1 | Whether the control plane is one deployable or splits cases and governance into their own services once load is known |
-| 2 | Which S3-compatible store with object lock the bank runs on-premises, and whether the local stack can use the same product |
+| 2 | Which S3-compatible store with object lock the bank runs on-premises, and whether the local stack can use the same product (ADR-0010 requires Object Lock compliance mode) |
+| 4 | Whether browsers can reach the storage endpoint from the bank's network; if not, the files service fronts storage with a streaming proxy (`10` Q1) |
 | 3 | Whether the contract moves to `packages/contracts` by generation from the TypeScript types or by hand-writing OpenAPI first and generating the console types from it |

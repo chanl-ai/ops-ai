@@ -4,9 +4,9 @@ import { ApiError } from '@/lib/api/contract';
 import type { KnowledgeApi } from '@/lib/api/knowledge-contract';
 import type { ApprovalState, ApprovalWidget, ChatMessage, ChatStreamEvent, ChatThread, ChatThreadRow, ChatWidget } from '@/lib/types/chat';
 import type { Agent, Review } from '@/lib/types/domain';
-import type { PlaygroundAnswer } from '@/lib/types/knowledge';
+import type { PlaygroundAnswer, RetrievalSettings, RetrieveInput } from '@/lib/types/knowledge';
 
-import { defaultRetrieval, playgroundAnswers } from '../knowledge/seed-kbs';
+import type { FileLinks } from '../files';
 import { bulk, id, list, mode, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { GENERAL_SUGGESTIONS, SUGGESTIONS, planTurn, type QueueSla, type TurnPlan } from './scripts';
@@ -15,6 +15,8 @@ const ALL = { page: 1, pageSize: 100 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const NEW_TITLE = 'New chat';
+/** Chat replies in words, so a knowledge base saved to return bare chunks still gets a written answer here; everything else comes from each knowledge base's saved settings. */
+const CHAT_OVERRIDES: Partial<RetrievalSettings> = { answerShape: 'answer_with_citations' };
 
 /**
  * `?chat=fail-next` makes the next reply stop part-way with an error, so the partial-reply state can be reviewed
@@ -32,12 +34,13 @@ function takeFailNext() {
   }
 }
 
-function assemble(plan: TurnPlan, grounded?: PlaygroundAnswer): Pick<ChatMessage, 'content' | 'toolCalls' | 'widgets' | 'citations' | 'noAnswer'> {
+function assemble(plan: TurnPlan, grounded?: PlaygroundAnswer): Pick<ChatMessage, 'content' | 'toolCalls' | 'widgets' | 'citations' | 'noAnswer' | 'trace'> {
   const toolCalls = plan.steps.map((s) => ({ ...s.call, id: id('tc'), status: 'success' as const }));
   const widgets = plan.steps.flatMap((s) => s.widgets);
   return {
     content: grounded ? grounded.answer : plan.text,
     citations: grounded?.citations.length ? grounded.citations : undefined,
+    trace: grounded?.trace,
     noAnswer: grounded?.noAnswer || undefined,
     toolCalls: toolCalls.length ? toolCalls : undefined,
     widgets: widgets.length ? widgets : undefined,
@@ -49,6 +52,8 @@ const approvalState = (r: Review): ApprovalState =>
 
 type Deps = {
   knowledge: KnowledgeApi;
+  /** Synchronous search for seeding threads with real answers and their traces. */
+  ground: (input: RetrieveInput) => PlaygroundAnswer;
   /** Agents people may chat with: live ones only. */
   agents: () => Pick<Agent, 'id' | 'name' | 'role' | 'version' | 'model' | 'collections'>[];
   /** Owner of an agent; conversations and the agent picker follow the current team through it. */
@@ -58,10 +63,18 @@ type Deps = {
   me: string;
   /** Per-queue SLA figures from the cases backend, so chat and the Cases page agree. */
   slaByQueue: () => QueueSla[];
+  /** Attachments arrive as file ids; each send records the chat as a reference and refuses quarantined files. */
+  files: FileLinks;
 };
 
 export function createChatMock(deps: Deps): ChatApi {
-  const answer = (pid: string) => playgroundAnswers.find((a) => a.id === pid);
+  const answer = (question: string, kbIds: string[]) => {
+    try {
+      return deps.ground({ question, kbIds, overrides: CHAT_OVERRIDES });
+    } catch {
+      return undefined;
+    }
+  };
   const seed = (
     tid: string,
     title: string,
@@ -69,7 +82,7 @@ export function createChatMock(deps: Deps): ChatApi {
     kbIds: string[],
     minutes: number,
     question: string,
-    opts: { grounded?: string; owner?: string; pinned?: boolean; archived?: boolean; feedback?: ChatMessage['feedback'] } = {},
+    opts: { grounded?: boolean; owner?: string; pinned?: boolean; archived?: boolean; feedback?: ChatMessage['feedback'] } = {},
   ): ChatThread => {
     const a = deps.agents().find((x) => x.id === agentId);
     const at = minsAgo(minutes);
@@ -77,7 +90,7 @@ export function createChatMock(deps: Deps): ChatApi {
     const plan = { ...fresh, steps: fresh.steps.map((s) => ({ ...s, widgets: s.widgets.map((w) => ({ ...w, asOf: at })) })) };
     const messages: ChatMessage[] = [
       { id: `${tid}_u1`, role: 'user', content: question, at },
-      { id: `${tid}_a1`, role: 'assistant', at, feedback: opts.feedback, ...assemble(plan, opts.grounded ? answer(opts.grounded) : undefined) },
+      { id: `${tid}_a1`, role: 'assistant', at, feedback: opts.feedback, ...assemble(plan, opts.grounded ? answer(question, kbIds) : undefined) },
     ];
     return {
       id: tid,
@@ -100,17 +113,17 @@ export function createChatMock(deps: Deps): ChatApi {
   const threads: ChatThread[] = [
     seed('th_sla', 'Breaching SLA cases by queue', 'ag_dispute', ['kb_legal'], 25, 'Show breaching SLA cases by queue', { pinned: true }),
     seed('th_dispute', 'Dispute REV-3020 provisional credit', 'ag_dispute', ['kb_legal'], 48, 'Summarise dispute REV-3020 and draft the credit'),
-    seed('th_wire', 'New-payee wire hold rule', 'ag_fraud', ['kb_people', 'kb_eng'], 60 * 3, 'What is our new-payee wire hold rule?', { grounded: 'pa_newpayee', feedback: { rating: 'up' }, pinned: true }),
+    seed('th_wire', 'New-payee wire hold rule', 'ag_fraud', ['kb_people', 'kb_eng'], 60 * 3, 'What is our new-payee wire hold rule?', { grounded: true, feedback: { rating: 'up' }, pinned: true }),
     seed('th_kyc', 'KYC refresh for Daniel Okoye', 'ag_kyb', ['kb_eng'], 60 * 26, 'Open a KYC refresh request for Daniel Okoye'),
     seed('th_week', 'Case volume this week', 'ag_dispute', ['kb_legal'], 60 * 24 * 3, 'How are we doing this week?'),
-    seed('th_fee', 'Annual card fee refunds', 'ag_branch', ['kb_support'], 60 * 24 * 5, 'What is the refund window for an annual card fee?', { grounded: 'pa_card_fee' }),
+    seed('th_fee', 'Annual card fee refunds', 'ag_branch', ['kb_support'], 60 * 24 * 5, 'What is the refund window for an annual card fee?', { grounded: true }),
     seed('th_halifax', 'Halifax wire cut-off', 'ag_branch', ['kb_support'], 60 * 24 * 9, 'What is the wire cut-off time at the Halifax branch?', {
-      grounded: 'pa_noanswer',
+      grounded: true,
       feedback: { rating: 'down', reason: 'Missing from the knowledge base' },
     }),
-    seed('th_retention', 'Due diligence record retention', 'ag_kyb', ['kb_eng'], 60 * 24 * 12, 'How long do we keep customer due diligence records?', { grounded: 'pa_retention', archived: true }),
-    seed('th_fees', 'Business loan origination fee', 'ag_loan', ['kb_lending'], 60 * 24 * 20, 'What is the origination fee on a small business loan over $250k?', { grounded: 'pa_fees' }),
-    seed('th_maya', 'Wire release authority', 'ag_fraud', ['kb_people'], 60 * 30, 'What is our new-payee wire hold rule?', { grounded: 'pa_newpayee', owner: 'Maya Okafor' }),
+    seed('th_retention', 'Due diligence record retention', 'ag_kyb', ['kb_eng'], 60 * 24 * 12, 'How long do we keep customer due diligence records?', { grounded: true, archived: true }),
+    seed('th_fees', 'Business loan origination fee', 'ag_loan', ['kb_lending'], 60 * 24 * 20, 'What is the origination fee on a small business loan over $250k?', { grounded: true }),
+    seed('th_maya', 'Wire release authority', 'ag_fraud', ['kb_people'], 60 * 30, 'What is our new-payee wire hold rule?', { grounded: true, owner: 'Maya Okafor' }),
     seed('th_anika', 'Queue breaches for the stand-up', 'ag_dispute', ['kb_legal'], 60 * 24 * 4, 'Show breaching SLA cases by queue', { owner: 'Anika Singh' }),
   ];
 
@@ -262,11 +275,12 @@ export function createChatMock(deps: Deps): ChatApi {
     async *send(tid, input, signal): AsyncIterable<ChatStreamEvent> {
       const m = mode();
       await sleep(m === 'slow' ? 1500 : 150);
-      if (m === 'error') throw new ApiError('The chat service is unavailable (503). Mock outage.', 503);
+      if (m === 'error') throw new ApiError('The request failed. Nothing has changed on your side; try again in a moment.', 503);
       const failPart = takeFailNext();
       const t = threadOr404(tid);
       if (t.owner !== deps.me) throw new ApiError('Only the owner can continue this conversation.', 403);
       if (!input.content.trim() && !input.regenerate) throw new ApiError('Type a message first.', 400);
+      for (const a of input.attachments ?? []) deps.files.link(a.fileId, { type: 'chat', id: t.id, name: t.title === NEW_TITLE ? input.content.trim().slice(0, 48) : t.title, href: `/chat/${t.id}` }, ['chat_attachment']);
       const now = () => new Date().toISOString();
 
       let question = input.content.trim();
@@ -343,11 +357,10 @@ export function createChatMock(deps: Deps): ChatApi {
           msg.noAnswer = true;
         } else {
           try {
-            // Every attached knowledge base is searched; the answer with the strongest accepted chunk wins.
-            const answers = await Promise.all(t.kbIds.map((k) => deps.knowledge.kbs.query(k, { question, settings: defaultRetrieval })));
+            // One search across every attached knowledge base, with each one's saved settings and precedence rules.
+            const ans = await deps.knowledge.retrieve({ question, kbIds: t.kbIds, overrides: CHAT_OVERRIDES });
             if (stopped()) return;
-            const strength = (a: PlaygroundAnswer) => (a.noAnswer ? -1 : Math.max(0, ...a.chunks.filter((c) => !c.rejected).map((c) => c.score)));
-            const ans = answers.reduce((b, a) => (strength(a) > strength(b) ? a : b));
+            msg.trace = ans.trace;
             if (ans.noAnswer || !ans.answer) {
               const names = await kbNameMap();
               text = `I could not find that in ${t.kbIds.map((k) => names.get(k) ?? k).join(' or ')}. Nothing retrieved scored above the relevance threshold, so I have not guessed.`;

@@ -3,6 +3,9 @@
  * Shapes follow the Docs AI model so the two products can share a backend.
  */
 
+import type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';
+import type { AnswerShape, FilterGroup, QueryMode, RetrievalTrace, RewriteMode, RuntimeValues, TableRowHit } from './knowledge-retrieval';
+
 export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 
 export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce';
@@ -16,20 +19,12 @@ export type Schedule =
   | { kind: 'monthly'; day: number; time: string }
   | { kind: 'webhook'; safetyNetDaily: boolean };
 
-export type ChunkStrategy = 'structure' | 'topics' | 'faq' | 'headers' | 'summarise' | 'rows';
-
+/** Parsing before splitting. Stripping HTML is the `clean` ingestion strategy. */
 export interface ParsingSettings {
   ocr: boolean;
+  /** Keep tables as tables, so `table_rows` and structured values can read them. */
   tables: boolean;
   vision: boolean;
-  removeHtml: boolean;
-}
-
-export interface ChunkingSettings {
-  strategy: ChunkStrategy;
-  size: number;
-  overlap: number;
-  language: string;
 }
 
 export interface Rule {
@@ -41,7 +36,7 @@ export interface Rule {
 
 export interface MetadataMapping {
   key: string;
-  /** `static:en` for a fixed value, `field:Dept` for a column at the source. */
+  /** `static:en` for a fixed value, `field:Dept` for a column at the source, `ai:product` to extract it with a model at ingest. */
   from: string;
 }
 
@@ -51,12 +46,16 @@ export interface Source {
   id: string;
   type: SourceType;
   name: string;
+  /** The integration this source reads through; its status shows read-only on the source. */
   connectionId?: string;
   connectionLabel?: string;
+  connection?: import('./integrations').ConnectionRef;
   scopeSummary: string;
   config: Record<string, unknown>;
   parsing: ParsingSettings;
-  chunking: ChunkingSettings;
+  ingest: IngestSettings;
+  /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
+  indexedSettingsDigest?: string;
   rules: Rule[];
   metadataMapping: MetadataMapping[];
   tags: string[];
@@ -81,7 +80,6 @@ export interface Source {
   cursor?: string;
   usedByKbIds: string[];
   createdAt: string;
-  reprocessPending?: boolean;
 }
 
 /** A source row as lists show it: knowledge base names and the running flag come joined from the API. */
@@ -90,7 +88,8 @@ export interface SourceRow extends Source {
   running: boolean;
 }
 
-export type ItemStatus = 'indexed' | 'pending' | 'processing' | 'failed' | 'partial' | 'excluded' | 'deleted';
+/** `held`: missing metadata a reading knowledge base requires, so it is stored but not searchable. */
+export type ItemStatus = 'indexed' | 'pending' | 'processing' | 'failed' | 'partial' | 'excluded' | 'deleted' | 'held';
 export type ErrorClass = 'parse' | 'fetch' | 'permission' | 'too_large' | 'rate_limited';
 
 export interface Chunk {
@@ -138,6 +137,19 @@ export interface Item {
   queries30d: number;
   pageCount?: number;
   fileId?: string;
+  /** Content digest; identical content across sources is indexed once. */
+  digest: string;
+  /** Items with the same family are versions of one document. */
+  family: string;
+  versionStatus: VersionStatus;
+  supersededBy?: string;
+  /** Set when this item's content is already indexed from another item; it adds no chunks. */
+  duplicateOf?: { itemId: string; title: string; sourceName: string };
+  /** Other sources holding the same content, on the item that is indexed. */
+  alsoIn?: { itemId: string; title: string; sourceName: string }[];
+  /** The source rule that excluded it, in words. */
+  excludedBy?: string;
+  held?: HeldReason;
 }
 
 /** A document as the knowledge base's Documents tab lists it. */
@@ -151,6 +163,8 @@ export interface ItemDetail {
   content: string;
   chunks: Chunk[];
   revisions: Revision[];
+  /** Every version of this document, newest first. */
+  versions: ItemVersionRow[];
 }
 
 export interface ItemWithDetail extends Item {
@@ -190,26 +204,26 @@ export interface SyncRun {
   progress?: { done: number; total: number; failed: number };
 }
 
-export type SearchMode = 'semantic' | 'keyword' | 'hybrid';
+export type SearchMode = QueryMode;
 export type CitationStyle = 'inline' | 'footnotes' | 'links' | 'none';
 
-export interface MetadataFilter {
-  key: string;
-  op: 'equals' | 'in' | 'not';
-  value: string;
-}
-
 export interface RetrievalSettings {
-  searchMode: SearchMode;
+  searchMode: QueryMode;
+  /** Weight of the semantic score in hybrid mode, 0 to 1; the rest is keyword. */
+  hybridWeight: number;
   rerank: boolean;
   reranker: 'hosted' | 'cross-encoder';
   chunkLimit: number;
   threshold: number;
-  queryRewrite: boolean;
+  /** Date for `as_of`: only versions in force on it are searched. */
+  asOf: string;
+  rewrite: RewriteMode;
+  /** Phrasings searched when `rewrite` is `expand`, including the original. */
+  expandCount: number;
   rewriteInstructions: string;
   /** Empty means every attached source. */
   scopeSourceIds: string[];
-  synthesis: boolean;
+  answerShape: AnswerShape;
   model: string;
   temperature: number;
   maxTokens: number;
@@ -217,7 +231,7 @@ export interface RetrievalSettings {
   citationStyle: CitationStyle;
   includeChunks: boolean;
   noAnswerMessage: string;
-  defaultFilters: MetadataFilter[];
+  filters: FilterGroup;
   tagsInclude: string[];
   tagsExclude: string[];
   includeUntagged: boolean;
@@ -234,11 +248,21 @@ export interface KbSourceLink {
   rules: Rule[];
 }
 
+/**
+ * When two returned chunks cover the same topic, the first matching rule decides which one is used. `class`
+ * compares the documents' `doc_class` metadata (`winner` beats `loser`); `newer` keeps the later effective date.
+ */
 export interface PrecedenceRule {
   id: string;
   label: string;
+  kind: 'class' | 'newer';
   winner: string;
   loser: string;
+}
+
+/** Metadata every document must carry before this knowledge base searches it; items without it are held. */
+export interface MetadataProfile {
+  required: string[];
 }
 
 export interface KbAccess {
@@ -269,6 +293,7 @@ export interface KnowledgeBase {
   /** Department boundaries this knowledge base may read; empty means all. */
   collections: string[];
   precedence: PrecedenceRule[];
+  metadataProfile: MetadataProfile;
   retrieval: RetrievalSettings;
   access: KbAccess;
   automation: 'act' | 'suggest';
@@ -306,6 +331,8 @@ export interface KnowledgeBaseDetail extends KnowledgeBaseRow {
   /** Metadata keys present on this knowledge base's documents, for filter editors. */
   metadataKeys: string[];
   suggestedQuestions: string[];
+  /** Documents held for missing required metadata. */
+  heldCount: number;
 }
 
 export interface Citation {
@@ -318,6 +345,13 @@ export interface Citation {
   snippet: string;
   url?: string;
   precedenceNote?: string;
+  /** Past its review-by date; still served, flagged wherever the citation shows. */
+  stale?: boolean;
+  /** The source's connection was revoked, so this passage no longer updates from the source. */
+  connectionRevoked?: boolean;
+  /** As-of answers: the date the cited version was in force, and whether a later version has replaced it since. */
+  inForceOn?: string;
+  supersededToday?: boolean;
 }
 
 export interface ScoredChunk {
@@ -355,22 +389,27 @@ export interface PlaygroundAnswer {
   synthesisMs: number;
   /** Present when the question ran as someone else: what their permissions hid. */
   permissions?: import('./run-as').PermissionScope;
-}
-
-export type ConnectionStatus = 'connected' | 'needs_reauth' | 'disconnected';
-
-/** A workspace-level connection to an app; every source of that type reuses it. */
-export interface Connection {
-  type: SourceType;
-  name: string;
-  status: ConnectionStatus;
-  connectedAs?: string;
+  shape?: AnswerShape;
+  /** Rows matched by `table_lookup`. */
+  rows?: TableRowHit[];
+  trace?: RetrievalTrace;
 }
 
 export interface SourcePreview {
   ok: boolean;
   message: string;
   rows: { title: string; path: string; size: number; modified: string }[];
+}
+
+/** What a new source's previewed items would look like to the knowledge bases chosen for attachment (spec 5.15.10). */
+export interface HeldPreviewInput extends Pick<SourceInput, 'type' | 'config' | 'metadataMapping'> {
+  kbIds: string[];
+}
+
+export interface HeldPreview {
+  /** Previewed items the counts cover. */
+  items: number;
+  byKb: { kbId: string; kbName: string; required: string[]; held: number; missing: string[] }[];
 }
 
 /** A source read for its page: knowledge bases that read it, recent runs and error groups come joined. */
@@ -380,6 +419,16 @@ export interface SourceDetail extends Source {
   recentRuns: SyncRun[];
   errorGroups: { message: string; count: number }[];
   itemCount: number;
+  /** The ingestion settings changed since the chunks were built. */
+  reindexNeeded: boolean;
+  /** Metadata keys the knowledge bases reading this source require. */
+  requiredMetadata: string[];
+  /** Items excluded by a rule, held for metadata, or indexed once elsewhere. */
+  governance: { excluded: number; held: number; duplicates: number; superseded: number };
+  /** AI ingest steps still waiting for approval; syncs and re-indexes run without them. */
+  aiStepsWaiting: string[];
+  /** Whether the current user may approve the waiting steps, and what approving starts. */
+  approval?: { canApprove: boolean; blockedReason?: string; modelCalls: number; estimatedCost: string; items: number };
 }
 
 export interface KnowledgeBaseInput {
@@ -391,7 +440,7 @@ export interface KnowledgeBaseInput {
   collections: string[];
 }
 
-export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'description' | 'color' | 'collections' | 'precedence'>> & {
+export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'description' | 'color' | 'collections' | 'precedence' | 'metadataProfile'>> & {
   retrieval?: Partial<RetrievalSettings>;
 };
 
@@ -402,7 +451,7 @@ export type SourceInput = Pick<
   | 'scopeSummary'
   | 'config'
   | 'parsing'
-  | 'chunking'
+  | 'ingest'
   | 'rules'
   | 'metadataMapping'
   | 'tags'
@@ -414,9 +463,15 @@ export type SourceInput = Pick<
   | 'notifyOnFailure'
   | 'sensitivity'
   | 'collection'
-> & { status?: 'active' | 'draft'; itemsPending?: number };
+  | 'connectionId'
+> & {
+  status?: 'active' | 'draft';
+  itemsPending?: number;
+  /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
+  fileIds?: string[];
+};
 
-export type SourcePatch = Partial<Omit<SourceInput, 'type'>> & { reprocessPending?: boolean };
+export type SourcePatch = Partial<Omit<SourceInput, 'type'>>;
 
 export interface SyncOptions {
   full?: boolean;
@@ -425,13 +480,27 @@ export interface SyncOptions {
 
 export interface QueryInput {
   question: string;
-  settings: RetrievalSettings;
+  /** Full settings for this call; omitted uses each knowledge base's saved settings. */
+  settings?: RetrievalSettings;
+  /** Fields that override the saved settings for this call only (workflow steps, chat). */
+  overrides?: Partial<RetrievalSettings>;
+  /** Values for runtime variables in filters. */
+  runtime?: RuntimeValues;
   /** Answer as this staff member or role (see run-as.ts); omitted answers with the caller's own access. */
   runAsId?: string;
+  /** Further knowledge bases to search with this one; their precedence rules apply after this one's. */
+  alsoKbIds?: string[];
+}
+
+/** A question over one or more knowledge bases. */
+export interface RetrieveInput extends Omit<QueryInput, 'alsoKbIds'> {
+  kbIds: string[];
 }
 
 export type KbFilters = { health?: string[]; access?: string[] };
 export type SourceFilters = { type?: string[]; status?: string[]; schedule?: string[]; usedBy?: string[] };
 export type DocumentFilters = { sourceId?: string[]; status?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
 export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: string[] };
+
+export type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';
 export type RunFilters = { status?: string[]; trigger?: string[] };

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, ChartColumn, KeyRound, Settings, Users, Webhook, type LucideIcon } from 'lucide-react';
+import { Bell, ChartColumn, HardDrive, KeyRound, Settings, Users, Webhook, type LucideIcon } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ export const SETTINGS_NAV: { id: string; title: string; href: string; icon: Luci
   { id: 'notifications', title: 'Notifications', href: '/settings/notifications', icon: Bell, description: 'Where approvals, SLA warnings and alerts go' },
   { id: 'webhooks', title: 'Webhooks', href: '/settings/webhooks', icon: Webhook, description: 'Send events to the bank’s other systems' },
   { id: 'api-keys', title: 'API keys', href: '/settings/api-keys', icon: KeyRound, description: 'Keys for systems that start runs or read logs' },
+  { id: 'storage', title: 'Storage', href: '/settings/storage', icon: HardDrive, description: 'Where files are kept, upload limits, scanning and retention' },
   { id: 'usage', title: 'Usage and cost', href: '/settings/usage', icon: ChartColumn, description: 'Tokens, model cost and tool calls for chargeback' },
 ];
 

@@ -1,9 +1,8 @@
 import type { AgentTestTurn } from '@/lib/types/domain';
-import type { PlaygroundAnswer, Sensitivity } from '@/lib/types/knowledge';
+import type { Sensitivity } from '@/lib/types/knowledge';
 import type { PermissionScope, RunAsPrincipal } from '@/lib/types/run-as';
 
 import { ApiError } from '../../contract';
-import type { KnowledgeApi } from '../../knowledge-contract';
 import type { RunAsApi } from '../../run-as-contract';
 import { playgroundAnswers } from '../knowledge/seed-kbs';
 import { sources } from '../knowledge/seed-sources';
@@ -39,33 +38,6 @@ function scope(p: RunAsPrincipal, hidden: string[], blockedTools: string[] = [])
 }
 
 const docs = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
-
-/** Removes what the principal cannot read from a playground answer, and says so instead of answering from it. */
-export function scopeAnswer(a: PlaygroundAnswer, runAsId?: string): PlaygroundAnswer {
-  const p = principal(runAsId);
-  if (!p) return a;
-  const hidden = [...new Set([...a.chunks.map((c) => c.documentId), ...a.citations.map((c) => c.documentId)])].filter((d) => !canSee(p, d));
-  const permissions = scope(p, hidden);
-  if (!hidden.length) return { ...a, permissions };
-  const chunks = a.chunks.filter((c) => !hidden.includes(c.documentId));
-  const citations = a.citations.filter((c) => !hidden.includes(c.documentId)).map((c, i) => ({ ...c, n: i + 1 }));
-  if (a.noAnswer || !a.answer) return { ...a, chunks, citations, permissions };
-  if (!citations.length)
-    return {
-      ...a,
-      chunks,
-      citations,
-      answer: `I can’t see the documents that answer this. Running as ${p.name}, ${docs(hidden.length)} in ${permissions.hiddenCollections.join(', ')} ${hidden.length === 1 ? 'is' : 'are'} outside their access, so I won’t answer from them.`,
-      permissions,
-    };
-  // Rebuilt from the visible passages only: the original wording may carry facts from a hidden document.
-  return { ...a, chunks, citations, answer: citations.map((c) => `${c.snippet} [${c.n}]`).join(' '), permissions };
-}
-
-/** Wraps the knowledge API so playground questions honour `QueryInput.runAsId`. */
-export function withRunAs(api: KnowledgeApi): KnowledgeApi {
-  return { ...api, kbs: { ...api.kbs, query: async (kid, input) => scopeAnswer(await api.kbs.query(kid, input), input.runAsId) } };
-}
 
 const KNOWLEDGE_TOOL = 'search_knowledge';
 

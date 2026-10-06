@@ -3,3 +3,9 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 .env*
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

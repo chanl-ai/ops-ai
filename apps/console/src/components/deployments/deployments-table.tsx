@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpCircle, Pause, Play, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -81,7 +82,9 @@ export function DeploymentsTable({ workflowId, createOpen, onCreateOpenChange, c
   const promote = usePromoteDeployment();
   const bulkUpdate = useBulkUpdateDeployments();
   const bulkDelete = useBulkDeleteDeployments();
-  const [activeId, setActiveId] = React.useState<string | null>(null);
+  // `?deployment=` opens that deployment's sheet, so other pages (an integration's Used by tab) can link to it.
+  const linked = useSearchParams().get('deployment');
+  const [activeId, setActiveId] = React.useState<string | null>(linked);
   const [bulk, setBulk] = React.useState<{ kind: 'pause' | 'resume' | 'latest' | 'delete'; rows: Deployment[] } | null>(null);
   const shown = useSticky(bulk);
   const [resetKey, setResetKey] = React.useState(0);

@@ -101,7 +101,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
           ),
         filterFn: facetFilterFn,
       },
-      { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => <span className="tabular-nums">{count(row.original.chunkCount)}</span> },
+      { accessorKey: 'chunkCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Chunks" />, cell: ({ row }) => (row.original.status === 'held' ? <span className="text-muted-foreground">Not indexed</span> : <span className="tabular-nums">{count(row.original.chunkCount)}</span>) },
       { accessorKey: 'modifiedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Modified" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{shortDate(row.original.modifiedAt)}</span> },
       { accessorKey: 'freshness', header: ({ column }) => <DataTableColumnHeader column={column} title="Freshness" />, cell: ({ row }) => <FreshnessBadge reviewBy={row.original.reviewBy} />, filterFn: facetFilterFn },
       { accessorKey: 'sensitivity', header: ({ column }) => <DataTableColumnHeader column={column} title="Sensitivity" />, cell: ({ row }) => <SensitivityBadge level={row.original.sensitivity} />, filterFn: facetFilterFn },
@@ -175,6 +175,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
       <DocumentPanel
         itemId={docId}
         onClose={() => setDoc(null)}
+        onOpenItem={setDoc}
         navigation={
           idx >= 0
             ? {

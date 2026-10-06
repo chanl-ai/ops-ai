@@ -7,6 +7,7 @@ import { Activity, AlertTriangle, Bot, ClipboardCheck, FileCheck2, Gauge, ListCh
 import { toast } from 'sonner';
 
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
+import { EvidenceExportButton } from '@/components/files/file-actions';
 import { ConditionDialog, ConditionStatusDialog, NextReviewDialog, RequestValidationDialog, TierDialog } from '@/components/model-risk/model-risk-dialogs';
 import { ConditionBadge, FINDING_STATUS_LABEL, SeverityBadge, TYPE_LABEL, ValidationBadge } from '@/components/model-risk/model-risk-meta';
 import { OverrideRateChart, PassRateChart } from '@/components/model-risk/monitoring-charts';
@@ -200,6 +201,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                         <TableHead>Version</TableHead>
                         <TableHead>Evidence bundle</TableHead>
                         <TableHead>Sealed</TableHead>
+                        <TableHead className="w-0" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -210,6 +212,9 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                             {shortId(b.bundleId)}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{shortDate(b.sealedAt)}</TableCell>
+                          <TableCell className="text-right">
+                            <EvidenceExportButton input={{ kind: 'model', entryId: e.id, version: b.version }} label="Export" size="xs" />
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

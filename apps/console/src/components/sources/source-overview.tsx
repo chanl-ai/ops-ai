@@ -74,7 +74,7 @@ export function SourceOverview({
             <div className="flex flex-col gap-1.5">
               <div className="flex flex-wrap justify-between gap-2 text-sm">
                 <span className="tabular-nums">
-                  {count(run.progress.done)} of {count(run.progress.total)} items, {count(run.progress.failed)} failed
+                  {count(run.progress.done)} of {plural(run.progress.total, 'item')}, {count(run.progress.failed)} failed
                 </span>
                 <span className="tabular-nums text-muted-foreground">{Math.round((run.progress.done / Math.max(run.progress.total, 1)) * 100)}%</span>
               </div>
