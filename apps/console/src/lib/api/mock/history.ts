@@ -59,20 +59,27 @@ function pathOf(graph: WorkflowGraph, stopAtReview: boolean) {
     path.push(cur);
     if (cur.type === 'review' && stopAtReview) break;
     const id = cur.id;
-    const next = graph.edges.find((e) => e.source === id && (e.sourceHandle == null || ['mid', 'Gate', 'approved'].includes(e.sourceHandle)));
+    const next = graph.edges.find((e) => e.source === id && (e.sourceHandle == null || ['mid', 'Gate', 'approved', 'Matched'].includes(e.sourceHandle)));
     cur = next ? graph.nodes.find((n) => n.id === next.target) : undefined;
   }
   return path;
 }
 
-export function runsFor(workflowId: string, graph: WorkflowGraph | undefined, version: number, openReviewIds: string[], count = 46): WorkflowRun[] {
+/** Run ids are positional per workflow (newest first), so other slices can name a run without generating it. */
+export const runIdFor = (workflowId: string, index: number) => `RUN-${workflowId.slice(3, 6).toUpperCase()}-${String(9000 - index).padStart(4, '0')}`;
+
+/** `pausedRunIds` are runs waiting on a person outside Reviews (an email case's drafted actions awaiting sign-off). */
+export function runsFor(workflowId: string, graph: WorkflowGraph | undefined, version: number, openReviewIds: string[], count = 46, pausedRunIds: string[] = []): WorkflowRun[] {
   if (!graph?.nodes.length) return [];
   const rnd = seeded(workflowId);
   const runs: WorkflowRun[] = [];
+  const paused = new Set(pausedRunIds);
   let minutes = 3;
   for (let i = 0; i < count; i++) {
     const roll = rnd();
-    const status: RunStatus = i < openReviewIds.length ? 'waiting_review' : i === 0 ? 'running' : roll < 0.07 ? 'failed' : 'completed';
+    const id = runIdFor(workflowId, i);
+    const onHold = i >= openReviewIds.length && paused.has(id);
+    const status: RunStatus = i < openReviewIds.length || onHold ? 'waiting_review' : i === 0 ? 'running' : roll < 0.07 ? 'failed' : 'completed';
     const path = pathOf(graph, status === 'waiting_review');
     const failAt = status === 'failed' ? Math.max(1, Math.floor(rnd() * (path.length - 1))) : -1;
     const steps: RunStep[] = path.map((n, idx) => {
@@ -86,18 +93,18 @@ export function runsFor(workflowId: string, graph: WorkflowGraph | undefined, ve
         kind,
         status: failed ? 'failed' : skipped ? 'skipped' : waiting || (status === 'running' && idx === path.length - 1) ? 'waiting' : 'done',
         durationMs: skipped ? 0 : Math.round(80 + rnd() * (kind === 'agent' ? 2400 : 600)),
-        detail: failed ? 'Upstream returned 504 after 3 retries' : waiting ? `Paused for ${n.data.reviewers ?? 'reviewer'}` : n.data.description || undefined,
+        detail: failed ? 'Upstream returned 504 after 3 retries' : waiting ? (onHold ? 'Waiting for sign-off on the drafted actions' : `Paused for ${n.data.reviewers ?? 'reviewer'}`) : n.data.description || undefined,
       };
     });
     runs.push({
-      id: `RUN-${workflowId.slice(3, 6).toUpperCase()}-${String(9000 - i).padStart(4, '0')}`,
+      id,
       workflowId,
       version: i < 30 ? version : Math.max(1, version - 1),
       subject: SUBJECTS[Math.floor(rnd() * SUBJECTS.length)],
       status,
       startedAt: ago(minutes),
       durationMs: steps.reduce((s, x) => s + x.durationMs, 0),
-      reviewId: status === 'waiting_review' ? openReviewIds[i] : undefined,
+      reviewId: status === 'waiting_review' && !onHold ? openReviewIds[i] : undefined,
       error: status === 'failed' ? 'A tool call failed; the run stopped before acting.' : undefined,
       steps,
     });
@@ -106,6 +113,39 @@ export function runsFor(workflowId: string, graph: WorkflowGraph | undefined, ve
   return runs;
 }
 
+
+/**
+ * A run another caller started just now, e.g. an agent calling the workflow as a tool. It walks the graph like a
+ * seeded run and stops at the first review node when the workflow's gates pause it. `seq` counts such runs per
+ * workflow, so ids continue above the seeded ones.
+ */
+export function startedRun(workflowId: string, graph: WorkflowGraph | undefined, version: number, seq: number, subject: string, trigger: string, pauses: boolean): WorkflowRun | null {
+  if (!graph?.nodes.length) return null;
+  const path = pathOf(graph, pauses);
+  const atReview = pauses && path[path.length - 1]?.type === 'review';
+  const steps: RunStep[] = path.map((n, idx) => {
+    const last = idx === path.length - 1;
+    return {
+      nodeId: n.id,
+      label: n.data.label,
+      kind: KIND[n.type] ?? (n.data.category === 'tool' ? 'tool' : n.data.category === 'response' || n.data.category === 'control' ? 'action' : 'agent'),
+      status: last ? 'waiting' : 'done',
+      durationMs: last ? 0 : 120 + idx * 90,
+      detail: idx === 0 ? trigger : last && atReview ? `Paused for ${n.data.reviewers ?? 'reviewer'}` : n.data.description || undefined,
+    };
+  });
+  return {
+    id: runIdFor(workflowId, -seq),
+    workflowId,
+    version,
+    subject,
+    status: atReview ? 'waiting_review' : 'running',
+    startedAt: new Date().toISOString(),
+    durationMs: steps.reduce((x, y) => x + y.durationMs, 0),
+    trigger,
+    steps,
+  };
+}
 
 /** Canned test reply that exercises the agent's own tools and gates, so the test panel shows a realistic turn. */
 export function testTurnFor(agent: { slug: string; name: string }, message: string, tools: string[]): AgentTestTurn {

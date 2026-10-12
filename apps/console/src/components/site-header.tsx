@@ -19,7 +19,7 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
         <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
           {crumbs.map((c, i) => (
-            <span key={c} className="flex items-center gap-1.5">
+            <span key={`${i}-${c}`} className="flex items-center gap-1.5">
               {i > 0 && <span className="text-muted-foreground/40">/</span>}
               <span className={i === crumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'}>{c}</span>
             </span>

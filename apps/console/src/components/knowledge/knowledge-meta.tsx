@@ -36,9 +36,9 @@ import { cn } from '@/lib/utils';
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
 
 const toneClass: Record<Tone, string> = {
-  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300',
-  warn: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300',
-  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300',
+  good: 'border-success/40 bg-success/10 text-success-text',
+  warn: 'border-warning/40 bg-warning/10 text-warning-text',
+  bad: 'border-destructive/40 bg-destructive/10 text-destructive',
   neutral: 'border-border bg-muted text-muted-foreground',
   info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300',
 };
@@ -128,8 +128,8 @@ export function FreshnessBadge({ reviewBy }: { reviewBy: string }) {
 
 export function MimeIcon({ mime, className }: { mime: string; className?: string }) {
   const c = cn('size-4 shrink-0 text-muted-foreground', className);
-  if (mime === 'application/pdf') return <FileText className={cn(c, 'text-red-500')} />;
-  if (mime.includes('spreadsheet') || mime === 'text/csv') return <FileSpreadsheet className={cn(c, 'text-emerald-600')} />;
+  if (mime === 'application/pdf') return <FileText className={cn(c, 'text-destructive')} />;
+  if (mime.includes('spreadsheet') || mime === 'text/csv') return <FileSpreadsheet className={cn(c, 'text-success-text')} />;
   if (mime.includes('presentation')) return <Presentation className={cn(c, 'text-orange-500')} />;
   if (mime.includes('wordprocessing')) return <FileText className={cn(c, 'text-blue-500')} />;
   if (mime === 'text/markdown' || mime === 'text/plain') return <FileCode2 className={c} />;
@@ -140,15 +140,15 @@ export function MimeIcon({ mime, className }: { mime: string; className?: string
 export const KB_COLORS: Record<string, string> = {
   violet: 'bg-violet-500',
   blue: 'bg-blue-500',
-  emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  slate: 'bg-slate-500',
+  emerald: 'bg-success',
+  amber: 'bg-warning',
+  rose: 'bg-destructive',
+  slate: 'bg-muted-foreground',
   teal: 'bg-teal-500',
 };
 
 export function KbDot({ color, className }: { color: string; className?: string }) {
-  return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-slate-400', className)} />;
+  return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-muted-foreground', className)} />;
 }
 
 export interface SourceTypeMeta {
@@ -210,7 +210,7 @@ export const ERROR_CLASS_LABEL: Record<ErrorClass, string> = { parse: 'Parse', f
 export const PHASE_LABEL: Record<RunPhase['name'], string> = { list: 'List changes', fetch: 'Fetch', parse: 'Parse', chunk: 'Chunk', embed: 'Embed', upsert: 'Upsert' };
 
 export function PhaseIcon({ status }: { status: RunPhase['status'] }) {
-  if (status === 'done') return <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" aria-label="Done" />;
+  if (status === 'done') return <CheckCircle2 className="size-4 text-success-text" aria-label="Done" />;
   if (status === 'running') return <Loader2 className="size-4 animate-spin text-blue-600 dark:text-blue-400" aria-label="Running" />;
   if (status === 'failed') return <XCircle className="size-4 text-destructive" aria-label="Failed" />;
   return <CircleDashed className="size-4 text-muted-foreground" aria-label="Not run" />;

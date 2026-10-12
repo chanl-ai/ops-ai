@@ -1,0 +1,9 @@
+# US2: uc-042 api: the activity chart's 14 UTC days come from the call log, today's count and errors match the calls made.
+# The runner gives each run its own database and ports.
+id: us2-activity-from-the-call-log
+accept: US2
+failure_mode: the chart invents days from the 24 h count
+layers:
+  cli:
+    run: "make usecase-test UC=uc-042 LAYER=api"
+    expect: { exit: 0, stdout: "uc-042 api  9 checks passed" }

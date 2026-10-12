@@ -1,0 +1,34 @@
+{
+ "module": "mod_aef7b3232e4e",
+ "calls": [
+  "echo_get_tpj6 200 ok=true ",
+  "echo_get_tpj6 200 ok=true ",
+  "echo_get_tpj6 200 ok=true ",
+  "echo_unavailable_tpj6 200 ok=false {\"code\":\"UPSTREAM_ERROR\",\"message\":\"postman-echo.com answered 503.\",\"status\":503,\"side\":\"upstream\"}"
+ ],
+ "after": {
+  "module": {
+   "calls24h": 4,
+   "errorRate": 0.25,
+   "p95Ms": 176
+  },
+  "ops": {
+   "echo_get_tpj6": [
+    3,
+    0,
+    170
+   ],
+   "echo_unavailable_tpj6": [
+    1,
+    1,
+    153
+   ]
+  },
+  "today": {
+   "date": "2026-10-12",
+   "count": 4,
+   "errors": 1,
+   "p95Ms": 176
+  }
+ }
+}

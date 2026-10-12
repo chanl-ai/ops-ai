@@ -1,0 +1,8 @@
+# US1: uc-038 drives it live through /v1/calls against postman-echo.com and an unresolvable allowed host.
+id: us1-failure-names-its-side
+accept: US1
+failure_mode: a failure is reported on the wrong side, or a message carries an address
+layers:
+  cli:
+    run: "OPS_LIVE_EGRESS=1 make usecase-test UC=uc-038 LAYER=api"
+    expect: { exit: 0, stdout: "uc-038 api  7 checks passed" }

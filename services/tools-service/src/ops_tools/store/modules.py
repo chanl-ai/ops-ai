@@ -1,0 +1,357 @@
+"""The tool-module registry: modules, their operations, versions, security reviews and workflow approvals.
+
+A module and its children are one aggregate. The service reads it whole, changes it, and writes it back whole with
+`put`, which replaces the children in the same transaction and lands only while the module's `revision` still equals
+the one read, so two concurrent edits cannot silently overwrite each other.
+
+Every table carries `tenant_id`; `tool_modules` also carries `team_id`, the team that owns the module. Row-level
+security on them arrives with ops_identity (c-006), as the checkpointer does it.
+"""
+
+from __future__ import annotations
+
+from typing import Any, ClassVar, cast
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.sql.schema import SchemaItem
+
+from ops_store import Guarantee
+
+metadata = sa.MetaData()
+
+_TS = sa.DateTime(timezone=True)
+
+tool_modules = sa.Table(
+    "tool_modules",
+    metadata,
+    # Ids are unique within a tenant only: every tenant's dev seed uses the console's ids (mod_core_banking).
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("name", sa.String(120), nullable=False),
+    sa.Column("display_name", sa.String(200), nullable=False),
+    sa.Column("system", sa.String(200), nullable=False),
+    sa.Column("description", sa.Text, nullable=False),
+    sa.Column("type", sa.String(16), nullable=False),
+    sa.Column("status", sa.String(16), nullable=False),
+    sa.Column("owner_team", sa.String(120), nullable=False),
+    sa.Column("owner_contacts", sa.JSON, nullable=False),
+    sa.Column("endpoint", sa.Text, nullable=False),
+    sa.Column("auth", sa.JSON, nullable=False),
+    sa.Column("timeout_ms", sa.Integer, nullable=False),
+    sa.Column("data_classification", sa.String(16), nullable=False),
+    sa.Column("catalog_id", sa.String(64)),
+    sa.Column("connection_id", sa.String(64)),
+    sa.Column("reachable", sa.Boolean, nullable=False),
+    sa.Column("drift", sa.Boolean, nullable=False),
+    sa.Column("version", sa.String(32), nullable=False),
+    # Staged operation changes not yet published, and the operations as they were before the first one (discard).
+    sa.Column("pending", sa.JSON, nullable=False),
+    sa.Column("baseline", sa.JSON),
+    # Rises on every write of the aggregate; `put` lands only against the revision it read (CAS). 0 marks a module
+    # as the dev seed wrote it and nobody has changed since, which the seed may refresh.
+    sa.Column("revision", sa.Integer, nullable=False),
+    sa.Column("created_at", _TS, nullable=False),
+    sa.Column("updated_at", _TS, nullable=False),
+    # Workflows pin a module by name, so a name is unique within a tenant.
+    sa.UniqueConstraint("tenant_id", "name", name="ux_tool_modules_name"),
+)
+
+
+def _child(name: str, *columns: SchemaItem, **kw: Any) -> sa.Table:
+    return sa.Table(
+        name,
+        metadata,
+        sa.Column("tenant_id", sa.String(64), primary_key=True),
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("module_id", sa.String(64), nullable=False),
+        # Order within the module, as the console lists them.
+        sa.Column("position", sa.Integer, nullable=False),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "module_id"], ["tool_modules.tenant_id", "tool_modules.id"], ondelete="CASCADE"
+        ),
+        sa.Index(f"ix_{name}_module", "tenant_id", "module_id"),
+        *columns,
+        **kw,
+    )
+
+
+module_operations = _child(
+    "module_operations",
+    sa.Column("name", sa.String(120), nullable=False),
+    sa.Column("tool_id", sa.String(64), nullable=False),
+    sa.Column("description", sa.Text, nullable=False),
+    # The access class the gateway enforces; set here by the owner, never by the caller (read, write, money_movement).
+    sa.Column("access", sa.String(16), nullable=False),
+    sa.Column("enabled", sa.Boolean, nullable=False),
+    # How the gateway runs it: `http` calls the module's endpoint, `stub` answers with `stub` (a seeded system with no
+    # reachable upstream), `local` runs the Runtime's demo tool of the same name.
+    sa.Column("executor", sa.String(8), nullable=False, server_default="http"),
+    sa.Column("method", sa.String(8)),
+    sa.Column("path", sa.Text),
+    # Header values are literals or {{NAME}} references to a secret; a literal credential is refused on save.
+    sa.Column("headers", sa.JSON, nullable=False, server_default="[]"),
+    # A JSON body template with {{arg}} placeholders; without one the arguments the URL did not use are the body.
+    sa.Column("body", sa.Text),
+    # A Jinja2 template over the parsed response (ops_tools.transform); null returns the response as it came.
+    sa.Column("response_transform", sa.Text),
+    # This operation's limit; null uses the module's timeout_ms.
+    sa.Column("timeout_ms", sa.Integer),
+    sa.Column("input", sa.JSON, nullable=False),
+    sa.Column("masked_output", sa.JSON, nullable=False),
+    sa.Column("binding", sa.JSON),
+    sa.Column("rate_limit_per_min", sa.Integer, nullable=False),
+    sa.Column("requires_approval", sa.Boolean, nullable=False),
+    sa.Column("amount_max", sa.Numeric(14, 2)),
+    sa.Column("stub", sa.JSON, nullable=False),
+    # The gateway resolves a call by tool name, so an operation name is unique within a tenant.
+    sa.UniqueConstraint("tenant_id", "name", name="ux_module_operations_name"),
+)
+
+module_versions = _child(
+    "module_versions",
+    sa.Column("version", sa.String(32), nullable=False),
+    sa.Column("major", sa.Integer, nullable=False),
+    sa.Column("status", sa.String(16), nullable=False),
+    sa.Column("published_at", _TS),
+    sa.Column("published_by", sa.String(200), nullable=False),
+    sa.Column("note", sa.Text, nullable=False),
+    sa.Column("changes", sa.JSON, nullable=False),
+    sa.Column("pinned_by", sa.JSON, nullable=False),
+    sa.Column("reachability", sa.JSON, nullable=False),
+    sa.UniqueConstraint("tenant_id", "module_id", "version", name="ux_module_versions_version"),
+)
+
+security_reviews = _child(
+    "security_reviews",
+    sa.Column("major", sa.Integer, nullable=False),
+    sa.Column("version", sa.String(32), nullable=False),
+    sa.Column("decision", sa.String(24), nullable=False),
+    sa.Column("requested_by", sa.String(200), nullable=False),
+    sa.Column("requested_at", _TS, nullable=False),
+    sa.Column("reviewer", sa.String(200)),
+    sa.Column("decided_at", _TS),
+    sa.Column("findings", sa.JSON, nullable=False),
+    sa.Column("note", sa.Text),
+)
+
+module_approvals = _child(
+    "module_approvals",
+    sa.Column("workflow_id", sa.String(64), nullable=False),
+    sa.Column("workflow_name", sa.String(200), nullable=False),
+    # The team owning the workflow when the approval was requested, from agents-service (c-039): who may see the
+    # module through this approval. Null on approvals made before workflows came from agents-service.
+    sa.Column("workflow_team_id", sa.String(64)),
+    sa.Column("environment", sa.String(16), nullable=False),
+    sa.Column("major", sa.Integer, nullable=False),
+    sa.Column("operations", sa.JSON, nullable=False),
+    sa.Column("constraints", sa.Text),
+    sa.Column("requested_by", sa.String(200), nullable=False),
+    sa.Column("justification", sa.Text, nullable=False),
+    sa.Column("requested_at", _TS, nullable=False),
+    sa.Column("decided_by", sa.String(200)),
+    sa.Column("decided_at", _TS),
+    # requested, approved, rejected or revoked; `expired` is computed from expires_at and never stored.
+    sa.Column("status", sa.String(16), nullable=False),
+    sa.Column("expires_at", _TS),
+    sa.Column("reason", sa.Text),
+)
+
+# The hosts a module calls: entries of the tenant's egress allow-list (`store.egress`), never a list of its own. The
+# foreign key refuses a host the list does not hold; a listed host a module uses cannot be removed (RESTRICT).
+module_egress_hosts = sa.Table(
+    "module_egress_hosts",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("module_id", sa.String(64), primary_key=True),
+    sa.Column("host", sa.String(253), primary_key=True),
+    sa.Column("position", sa.Integer, nullable=False),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "module_id"], ["tool_modules.tenant_id", "tool_modules.id"], ondelete="CASCADE"
+    ),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "host"], ["egress_hosts.tenant_id", "egress_hosts.host"], ondelete="RESTRICT"
+    ),
+)
+
+# The fields of an operation that say how it is called; a staged change to any of them waits for publish.
+CALL_SHAPE = ("method", "path", "headers", "body", "response_transform", "timeout_ms")
+OPERATION_DEFAULTS: dict[str, Any] = {"response_transform": None, "timeout_ms": None}
+# Defaults per child table, for rows written before a column existed.
+CHILD_DEFAULTS: dict[str, dict[str, Any]] = {"operations": OPERATION_DEFAULTS, "approvals": {"workflow_team_id": None}}
+
+CHILDREN: dict[str, sa.Table] = {
+    "operations": module_operations,
+    "versions": module_versions,
+    "reviews": security_reviews,
+    "approvals": module_approvals,
+}
+
+Aggregate = dict[str, Any]
+"""A module row's columns plus `operations`, `versions`, `reviews` and `approvals`, each a list of row dicts, and
+`egress_hosts`, the tenant allow-list entries the module calls."""
+
+# The allow-list's host column, named here without importing store.egress (which imports this module).
+_listed_hosts = sa.table("egress_hosts", sa.column("tenant_id"), sa.column("host"))
+
+
+class HostNotAllowedError(RuntimeError):
+    """A module names a host the tenant's egress allow-list does not hold."""
+
+    def __init__(self, host: str) -> None:
+        super().__init__(host)
+        self.host = host
+
+
+class StaleModuleError(RuntimeError):
+    """`put` found a newer revision than the one the caller read: someone else changed the module first."""
+
+
+class ModuleStore:
+    # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
+    requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self.engine = engine
+
+    async def _children(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, list[dict[str, Any]]]] = {i: {k: [] for k in CHILDREN} for i in ids}
+        for key, table in CHILDREN.items():
+            q = (
+                table.select()
+                .where(table.c.tenant_id == tenant_id, table.c.module_id.in_(ids))
+                .order_by(table.c.module_id, table.c.position)
+            )
+            for r in (await c.execute(q)).mappings():
+                out[r["module_id"]][key].append(dict(r))
+        hosts: dict[str, list[str]] = {i: [] for i in ids}
+        q = (
+            sa.select(module_egress_hosts.c.module_id, module_egress_hosts.c.host)
+            .where(module_egress_hosts.c.tenant_id == tenant_id, module_egress_hosts.c.module_id.in_(ids))
+            .order_by(module_egress_hosts.c.module_id, module_egress_hosts.c.position)
+        )
+        for module_id, host in await c.execute(q):
+            hosts[module_id].append(host)
+        return {i: {**out[i], "egress_hosts": hosts[i]} for i in ids}
+
+    async def all(self, tenant_id: str) -> list[Aggregate]:
+        async with self.engine.connect() as c:
+            q = (
+                tool_modules.select()
+                .where(tool_modules.c.tenant_id == tenant_id)
+                .order_by(tool_modules.c.created_at.desc())
+            )
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            kids = await self._children(c, tenant_id, [r["id"] for r in rows])
+        return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def get(self, tenant_id: str, module_id: str) -> Aggregate | None:
+        async with self.engine.connect() as c:
+            q = tool_modules.select().where(tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id)
+            row = (await c.execute(q)).mappings().first()
+            if row is None:
+                return None
+            return {**dict(row), **(await self._children(c, tenant_id, [module_id]))[module_id]}
+
+    async def operation_named(self, tenant_id: str, name: str) -> tuple[Aggregate, dict[str, Any]] | None:
+        """The module holding operation `name`, and the operation: how the gateway resolves a call by tool name."""
+        async with self.engine.connect() as c:
+            q = sa.select(module_operations.c.module_id).where(
+                module_operations.c.tenant_id == tenant_id, module_operations.c.name == name
+            )
+            module_id = (await c.execute(q)).scalar()
+        if module_id is None:
+            return None
+        agg = await self.get(tenant_id, module_id)
+        if agg is None:
+            return None
+        op = next(o for o in agg["operations"] if o["name"] == name)
+        # A staged edit to the call shape runs only once published: while changes are pending, calls take the shape
+        # from the baseline (the published operations), so an unreviewed path or method never reaches the system.
+        baseline = cast(list[dict[str, Any]], agg.get("baseline") or [])
+        published = next((o for o in baseline if o["id"] == op["id"]), None)
+        if published is not None:
+            op = {**op, **{k: published.get(k) for k in CALL_SHAPE}}
+        return agg, op
+
+    async def names_taken(self, tenant_id: str, names: list[str]) -> set[str]:
+        """Which of `names` are already operation names in the tenant, in any module."""
+        if not names:
+            return set()
+        q = sa.select(module_operations.c.name).where(
+            module_operations.c.tenant_id == tenant_id, module_operations.c.name.in_(names)
+        )
+        async with self.engine.connect() as c:
+            return {r[0] for r in await c.execute(q)}
+
+    async def put(self, agg: Aggregate, *, expected_revision: int | None, seeded: bool = False) -> Aggregate:
+        """Writes the whole aggregate. `expected_revision` None inserts a new module; otherwise the update lands only
+        when the stored revision still equals it, else StaleModuleError. Returns the aggregate at its new revision.
+        `seeded` writes revision 0, the dev seed's mark for a module nobody has edited. HostNotAllowedError when the
+        module names a host the tenant's egress allow-list does not hold; nothing is written then."""
+        row = {k: v for k, v in agg.items() if k not in CHILDREN and k != "egress_hosts"}
+        hosts: list[str] = list(dict.fromkeys(agg.get("egress_hosts") or []))
+        async with self.engine.begin() as c:
+            if hosts:
+                listed_q = sa.select(_listed_hosts.c.host).where(
+                    _listed_hosts.c.tenant_id == row["tenant_id"], _listed_hosts.c.host.in_(hosts)
+                )
+                listed = {r[0] for r in await c.execute(listed_q)}
+                missing = [h for h in hosts if h not in listed]
+                if missing:
+                    raise HostNotAllowedError(missing[0])
+            if expected_revision is None:
+                row["revision"] = 0 if seeded else 1
+                await c.execute(tool_modules.insert().values(**row))
+            else:
+                row["revision"] = 0 if seeded else expected_revision + 1
+                done = await c.execute(
+                    tool_modules.update()
+                    .where(
+                        tool_modules.c.tenant_id == row["tenant_id"],
+                        tool_modules.c.id == row["id"],
+                        tool_modules.c.revision == expected_revision,
+                    )
+                    .values(**row)
+                )
+                if done.rowcount == 0:
+                    raise StaleModuleError(row["id"])
+                for table in (*CHILDREN.values(), module_egress_hosts):
+                    await c.execute(
+                        table.delete().where(table.c.tenant_id == row["tenant_id"], table.c.module_id == row["id"])
+                    )
+            for key, table in CHILDREN.items():
+                # Every row names the same columns (an insert of many rows takes its columns from the first); a
+                # seeded or older operation may predate response_transform and timeout_ms, an approval its team.
+                rows = [
+                    {
+                        **CHILD_DEFAULTS.get(key, {}),
+                        **r,
+                        "tenant_id": row["tenant_id"],
+                        "module_id": row["id"],
+                        "position": i,
+                    }
+                    for i, r in enumerate(agg[key])
+                ]
+                if rows:
+                    await c.execute(table.insert(), rows)
+            if hosts:
+                links = [
+                    {"tenant_id": row["tenant_id"], "module_id": row["id"], "host": h, "position": i}
+                    for i, h in enumerate(hosts)
+                ]
+                await c.execute(module_egress_hosts.insert(), links)
+        return {**agg, "revision": row["revision"]}
+
+    async def delete(self, tenant_id: str, module_id: str) -> bool:
+        async with self.engine.begin() as c:
+            done = await c.execute(
+                tool_modules.delete().where(tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id)
+            )
+            return done.rowcount > 0
+
+    async def count(self, tenant_id: str) -> int:
+        q = sa.select(sa.func.count()).select_from(tool_modules).where(tool_modules.c.tenant_id == tenant_id)
+        async with self.engine.connect() as c:
+            return int((await c.execute(q)).scalar_one())

@@ -49,17 +49,20 @@ export function RequestPublishDialog({
 }) {
   const [note, setNote] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
+  // A 422 naming agent versions to publish first is about the pins, not the note, so it gets its own message.
+  const [pinError, setPinError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (open) {
       setNote('');
       setError(null);
+      setPinError(null);
     }
   }, [open]);
 
   const changes = [
-    ...diff.added.map((n) => ({ icon: Plus, cls: 'text-emerald-600', text: `Added ${n.data.label}` })),
+    ...diff.added.map((n) => ({ icon: Plus, cls: 'text-success-text', text: `Added ${n.data.label}` })),
     ...diff.changed.map((n) => ({ icon: PenLine, cls: 'text-sky-600', text: `Changed ${n.data.label}` })),
-    ...diff.removed.map((n) => ({ icon: Minus, cls: 'text-red-600', text: `Removed ${n.data.label}` })),
+    ...diff.removed.map((n) => ({ icon: Minus, cls: 'text-destructive', text: `Removed ${n.data.label}` })),
     ...diff.config.map((text) => ({ icon: PenLine, cls: 'text-sky-600', text })),
   ];
   const s = validation?.summary;
@@ -87,11 +90,13 @@ export function RequestPublishDialog({
               loadingText="Sending…"
               onClick={async () => {
                 if (note.trim().length < 4) return setError('Describe the change in a few words; the approver reads it first.');
+                setPinError(null);
                 try {
                   await onRequest(note.trim());
                   onOpenChange(false);
                 } catch (e) {
-                  setError((e as Error).message);
+                  if ((e as { status?: number }).status === 422) setPinError((e as Error).message);
+                  else setError((e as Error).message);
                 }
               }}
             >
@@ -101,6 +106,16 @@ export function RequestPublishDialog({
         </div>
       }
     >
+      {pinError && (
+        <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="publish-pin-error">
+          <XCircle className="mt-0.5 size-4 shrink-0" />
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">This workflow can’t be sent for publish yet</span>
+            <span>{pinError}</span>
+            <span className="text-xs text-muted-foreground">Request publish on each agent’s page, or decide the open request in Reviews, then try again.</span>
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <FormField id="pub-note" label="What changed" error={error ?? undefined}>
@@ -126,14 +141,14 @@ export function RequestPublishDialog({
           <div className="rounded-lg border">
             <div className="border-b px-3 py-2 text-sm font-medium">Checks · {issues.length ? `${issues.length} not passing` : 'all passing'}</div>
             {issues.length === 0 ? (
-              <p className="flex items-center gap-2 px-3 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+              <p className="flex items-center gap-2 px-3 py-3 text-sm text-success-text">
                 <CheckCircle2 className="size-4" /> Every step is wired and configured.
               </p>
             ) : (
               <ul className="flex max-h-40 flex-col gap-1.5 overflow-y-auto px-3 py-2.5 text-sm">
                 {issues.map((i, k) => (
                   <li key={k} className="flex items-start gap-2">
-                    <AlertTriangle className={cn('mt-0.5 size-3.5 shrink-0', i.severity === 'error' ? 'text-red-600' : 'text-amber-600')} /> {i.message}
+                    <AlertTriangle className={cn('mt-0.5 size-3.5 shrink-0', i.severity === 'error' ? 'text-destructive' : 'text-warning-text')} /> {i.message}
                   </li>
                 ))}
               </ul>
@@ -165,18 +180,18 @@ export function RequestPublishDialog({
                   <span className="font-semibold tabular-nums">{s!.passed}</span>/{s!.total} pass on draft
                 </span>
                 {!firstPublish && (
-                  <span className={cn(s!.regressions ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground')}>
+                  <span className={cn(s!.regressions ? 'font-medium text-destructive' : 'text-muted-foreground')}>
                     {s!.regressions} regression{s!.regressions === 1 ? '' : 's'} vs live
                   </span>
                 )}
               </div>
               <ul className="flex max-h-72 flex-col divide-y overflow-y-auto">
                 {validation.results.map((r) => (
-                  <li key={r.caseId} className={cn('flex items-start gap-2 px-3 py-2 text-sm', r.regression && 'bg-red-500/5')}>
-                    {r.draft.passed ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-red-600" />}
+                  <li key={r.caseId} className={cn('flex items-start gap-2 px-3 py-2 text-sm', r.regression && 'bg-destructive/5')}>
+                    {r.draft.passed ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />}
                     <div className="min-w-0 flex-1">
                       <div className="truncate">{r.caseName}</div>
-                      {r.draft.failure && <div className="text-xs text-red-600 dark:text-red-400">{r.draft.failure}</div>}
+                      {r.draft.failure && <div className="text-xs text-destructive">{r.draft.failure}</div>}
                     </div>
                     <span className="shrink-0 text-xs text-muted-foreground">{r.regression ? 'Passed on live' : r.live ? (r.live.passed ? 'Live: pass' : 'Live: fail') : ''}</span>
                   </li>

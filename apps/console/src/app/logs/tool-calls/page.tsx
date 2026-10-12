@@ -119,7 +119,7 @@ export default function ToolCallsPage() {
   }, [calls, facets.workflowId]);
 
   return (
-    <PageLayout icon={ScrollText} title="Tool calls" description="Every tool and model call through the data and AI gateways, with its approval and policy">
+    <PageLayout switcher icon={ScrollText} title="Tool calls" description="Every tool and model call through the data and AI gateways, with its approval and policy">
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={10} />
       ) : query.isError && !query.data ? (

@@ -62,11 +62,14 @@ export function ToolCallSheet({
           <Section title="Call" flush bodyClassName="px-4">
             <KeyValues
               rows={[
+                ...(c.subject ? ([['Runs as', `${c.subject.name} · ${c.subject.kind}`]] as [string, ReactNode][]) : []),
+                ...(c.actor ? ([['Acting for them', `${c.actor.name} · ${c.actor.kind}`]] as [string, ReactNode][]) : []),
                 ['Workflow', <Link key="w" href={`/workflows/${c.workflowId}`} className="underline-offset-4 hover:underline">{c.workflowName}</Link>],
                 ['Agent', c.agentName],
                 ['Run', <Link key="r" href={`/workflows/${c.workflowId}?tab=runs`} className="font-mono text-xs underline-offset-4 hover:underline">{c.runId}</Link>],
                 ...(c.caseId ? ([['Case', <Link key="c" href={`/cases/${c.caseId}`} className="font-mono text-xs underline-offset-4 hover:underline">{c.caseId}</Link>]] as [string, ReactNode][]) : []),
                 ['Identity', call ? <code key="i" className="font-mono text-xs">{call.identity}</code> : undefined],
+                ...(c.step ? ([['Step', <code key="s" className="font-mono text-xs">{c.step}</code>]] as [string, ReactNode][]) : []),
                 ['Latency', ms(c.latencyMs)],
                 ...(c.tokens ? ([['Tokens', `${count(c.tokens.input)} in · ${count(c.tokens.output)} out`], ['Cost', c.cost != null ? cad(c.cost) : undefined]] as [string, ReactNode][]) : []),
                 ['Request id', call ? <code key="q" className="font-mono text-xs">{call.requestId}</code> : undefined],

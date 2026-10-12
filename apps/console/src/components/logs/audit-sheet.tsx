@@ -54,13 +54,13 @@ export function AuditSheet({ entry, navigation, onOpenChange }: { entry: AuditEn
                     <TableRow key={d.field}>
                       <TableCell className="align-top text-xs text-muted-foreground">{d.field}</TableCell>
                       <TableCell className="align-top whitespace-normal">
-                        {d.before != null ? <span className="rounded-sm bg-red-50 px-1 text-red-800 line-through decoration-red-400/60 dark:bg-red-950/40 dark:text-red-300">{d.before}</span> : <span className="text-muted-foreground">—</span>}
+                        {d.before != null ? <span className="rounded-sm bg-destructive/10 px-1 text-destructive line-through decoration-destructive/60">{d.before}</span> : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="align-top">
                         <ArrowRight className="size-3.5 text-muted-foreground" />
                       </TableCell>
                       <TableCell className="align-top whitespace-normal">
-                        {d.after != null ? <span className="rounded-sm bg-emerald-50 px-1 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">{d.after}</span> : <span className="text-muted-foreground">—</span>}
+                        {d.after != null ? <span className="rounded-sm bg-success/10 px-1 text-success-text">{d.after}</span> : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                     </TableRow>
                   ))}

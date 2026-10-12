@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 
 const KIND: Record<NotificationKind, { icon: LucideIcon; tone: string }> = {
   approval_waiting: { icon: UserCheck, tone: 'bg-primary/10 text-primary' },
-  sla_at_risk: { icon: AlertTriangle, tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  sla_at_risk: { icon: AlertTriangle, tone: 'bg-warning/10 text-warning-text' },
   publish_request: { icon: Rocket, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
   mailbox_disconnected: { icon: MailWarning, tone: 'bg-destructive/10 text-destructive' },
   test_regression: { icon: FlaskConical, tone: 'bg-destructive/10 text-destructive' },
@@ -174,7 +174,7 @@ function Item({ n, onOpen, onMarkRead }: { n: OpsNotification; onOpen: () => voi
         {(n.alsoSentTo.length > 0 || n.handledElsewhere) && (
           <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {n.handledElsewhere && (
-              <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 font-normal text-emerald-700 dark:text-emerald-400">
+              <Badge variant="outline" className="border-success/40 bg-success/10 font-normal text-success-text">
                 <Check className="size-3" /> {n.handledElsewhere}
               </Badge>
             )}

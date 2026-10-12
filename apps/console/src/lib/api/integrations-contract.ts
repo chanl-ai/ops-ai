@@ -2,6 +2,8 @@ import type { BulkResult } from '@/lib/types/domain';
 import type {
   CatalogSystem,
   ConnectInput,
+  ConnectionSetupPatch,
+  DraftConnectInput,
   ConnectionRef,
   Integration,
   IntegrationDetail,
@@ -20,6 +22,12 @@ export interface IntegrationsApi {
   options(): Promise<ConnectionRef[]>;
   catalog(): Promise<CatalogSystem[]>;
   connect(input: ConnectInput): Promise<Integration>;
+  /** Saves a draft connection from the one-screen connect; it serves nothing until `activate`. */
+  createDraft(input: DraftConnectInput): Promise<Integration>;
+  /** Drafts only: saves scopes, credential, owner or expiry from the Setup tab. 409 once active. */
+  saveSetup(id: string, patch: ConnectionSetupPatch): Promise<IntegrationDetail>;
+  /** Runs the connect checks on a draft (scopes, sign-in, owner, expiry) and makes it live. 400 names what is missing. */
+  activate(id: string): Promise<IntegrationDetail>;
   /** Renews consent or re-establishes the credential; dependants resume. */
   reconnect(id: string): Promise<IntegrationDetail>;
   /** Points the connection at a new vault path; the gateway uses it from the next call. */
@@ -31,4 +39,6 @@ export interface IntegrationsApi {
   revoke(ids: string[], reason: string): Promise<BulkResult>;
   /** Opens a request the system owner decides; nothing is granted until then. */
   requestScopes(id: string, input: { scopes: string[]; justification: string }): Promise<IntegrationDetail>;
+  /** The two switches on a Connections row: sync knowledge from the system, and expose its operations as tools. */
+  setSwitches(id: string, patch: { syncKnowledge?: boolean; exposeTools?: boolean }): Promise<Integration>;
 }

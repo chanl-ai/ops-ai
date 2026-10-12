@@ -1,0 +1,15 @@
+{
+  "id": "us1-rate-limit-refuses",
+  "accept": "US1",
+  "failure_mode": "the call past the limit runs, or its refusal is not logged, or each gateway process counts on its own",
+  "sha": "6083ba142db7e2b02242e56a4fd3f64e8db8fb84",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "== uc-011 api: A tool call runs through the registry and is logged with its caller (docs/usecases/tools-service/scripts/test-uc-011-api.py)\nPASS a registry read runs (200)\nPASS masked fields stay masked\nPASS a registry write without an approval token is refused (403)\nPASS input missing a required field is refused before egress (422)\nPASS a tool no module holds is refused (403)\nPASS every call is logged, refused ones too\nPASS the log names the calling service (from its token), the agent, and the run\nPASS refusals are logged as denied\nPASS the rate limit is set to one call a minute\nPASS a call past the operation's rate limit is refused RATE_LIMITED with its reset time\nPASS transfer_funds (seeded hidden and bound to a case) is shown and unbound so it can be called\nPASS a money call over its amount limit is refused before the policy (403 amount_over_limit)\nPASS rate and amount refusals are logged as denied\nPASS the test panel refuses the same amount the gateway refused\nPASS the console mock refuses exactly the amounts the gateway refuses\n\nPASS        uc-011 api  15 checks passed\n\nexit 0"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import type { Agent, BulkResult, Review, ReviewDecisionInput, Risk, ValidationRun, Workflow, WorkflowGraph } from '@/lib/types/domain';
 import type { AgentEvalPin, EvalGate } from '@/lib/types/evals';
-import type { ModelCondition, ModelEntry, ModelEntryDetail, ModelFinding, ModelRiskView, ModelValidationRequest, ValidationRecord, ValidationScope, ValidationStatus } from '@/lib/types/model-risk';
+import type { EvidenceBundle, ModelCondition, ModelEntry, ModelEntryDetail, ModelFinding, ModelRiskView, ModelValidationRequest, ValidationRecord, ValidationScope, ValidationStatus } from '@/lib/types/model-risk';
 
 import { plural } from '@/lib/format';
 
@@ -12,7 +12,7 @@ import { MODEL_ALIAS } from '../governance/catalog';
 import { PRINCIPALS } from '../run-as/principals';
 import { bulk, field, id, list, notFound, respond } from '../runtime';
 import { inTeam, teamDirectory } from '../teams';
-import { ENTRY_SEEDS, VALIDATION_SEEDS, VALIDATORS } from './seed';
+import { ENTRY_SEEDS, UNSEALED, VALIDATION_SEEDS, VALIDATORS } from './seed';
 
 export interface ModelRiskDeps {
   agents: () => Agent[];
@@ -144,6 +144,12 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
 
   const conditionStatus = (c: ModelCondition): ModelCondition => (c.status === 'open' && c.dueDate < ymd(0) ? { ...c, status: 'overdue' } : c);
 
+  /** Sealed bundles for the three newest versions. Versions published before sealing existed (UNSEALED) have none. */
+  const bundlesFor = (refId: string, version: number): EvidenceBundle[] =>
+    [version, version - 1, version - 2]
+      .filter((v) => v >= 1 && !UNSEALED.includes(`${refId}:${v}`))
+      .map((v) => ({ version: v, bundleId: `evb_${Math.floor(hash(`${refId}:${v}`) * 0xffffff).toString(16).padStart(6, '0')}${v}`, sealedAt: new Date(Date.now() - (version - v + 1) * 9 * DAY).toISOString() }));
+
   const detail = (e: StoredEntry): ModelEntryDetail => {
     const r = row(e);
     const a = agentOf(e);
@@ -166,7 +172,7 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
           return s ? [{ name: p.name, version: p.version, summary: s }] : [];
         }),
         workflowSuite: val ? { ...val.summary, ranAt: val.ranAt } : null,
-        bundles: [version, version - 1, version - 2].filter((v) => v >= 1).map((v) => ({ version: v, bundleId: `evb_${Math.floor(hash(`${e.refId}:${v}`) * 0xffffff).toString(16).padStart(6, '0')}${v}`, sealedAt: new Date(Date.now() - (version - v + 1) * 9 * DAY).toISOString() })),
+        bundles: bundlesFor(e.refId, version),
       },
       validations: [...e.validations].sort((x, y) => y.date.localeCompare(x.date)),
       conditions: e.conditions.map(conditionStatus),
@@ -342,10 +348,10 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
       }
       return enrich(await inner.decide(rid, input));
     },
-    bulkDecide: async (ids, decision, reason) => {
+    bulkDecide: async (ids, decision, reason, opts) => {
       const validations = ids.filter((rid) => deps.reviews().find((x) => x.id === rid)?.kind === 'model_validation');
       const rest = ids.filter((rid) => !validations.includes(rid));
-      const res: BulkResult = rest.length ? await inner.bulkDecide(rest, decision, reason) : { updated: [], skipped: [] };
+      const res: BulkResult = rest.length ? await inner.bulkDecide(rest, decision, reason, opts) : { updated: [], skipped: [] };
       return { updated: res.updated, skipped: [...res.skipped, ...validations.map((rid) => ({ id: rid, reason: 'Model validations need an individual decision' }))] };
     },
   });
@@ -441,5 +447,10 @@ export function createModelRiskMock(deps: ModelRiskDeps) {
     options: () => respond(() => ({ owners: deps.owners, validators: VALIDATORS })),
   };
 
-  return { api, wrapReviews };
+  /** Sets the tier of a workflow created by the platform (an agent wrapper) the first time it is seen. */
+  const seedTier = (refId: string, tier: Risk, reason: string) => {
+    if (entries[`mr_${refId}`]) return;
+    Object.assign(seedEntry(refId, 'workflow'), { tier, tierReason: reason });
+  };
+  return { api, wrapReviews, withGate: enrich, bundlesFor, seedTier, tierOf: (refId: string, type: 'agent' | 'workflow') => seedEntry(refId, type).tier };
 }

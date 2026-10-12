@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MoreHorizontal, Pause, Play, Rocket, SearchX, Trash2 } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, Pause, Play, PlayCircle, Rocket, SearchX, Trash2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { toast } from 'sonner';
 
@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmailConfigTab } from '@/components/email/email-config-tab';
+import { StartRunDialog } from '@/components/workflows/start-run-dialog';
 import { WorkflowEditor } from '@/components/workflows/workflow-editor';
 import { WorkflowRuns } from '@/components/workflows/workflow-runs';
 import { TestCases } from '@/components/workflows/test-cases';
@@ -28,15 +29,17 @@ import {
   useLookups,
   useRequestPublish,
   useSaveDraft,
+  useTestWorkflow,
   useValidateWorkflow,
   useRestoreWorkflow,
+  useRouteFields,
   useTools,
   useUpdateWorkflow,
   useWorkflow,
   useWorkflowStatus,
   useWorkflowVersions,
 } from '@/hooks/queries';
-import { useCaseQueues, useTestSampleMail } from '@/hooks/case-queries';
+import { useCaseQueues, useStartableWorkflows, useStartRun, useTestSampleMail } from '@/hooks/case-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { ApiError } from '@/lib/api';
 import { plural } from '@/lib/format';
@@ -81,6 +84,11 @@ export default function WorkflowDetailPage() {
   const agentList = useAgents(ALL_TOOLS);
   const versions = useWorkflowVersions(id);
   const validate = useValidateWorkflow(id);
+  const testWorkflow = useTestWorkflow(id);
+  const routeFields = useRouteFields();
+  const startRun = useStartRun();
+  const [startOpen, setStartOpen] = React.useState(false);
+  const startable = useStartableWorkflows(startOpen);
   const requestPublish = useRequestPublish(id);
   const saveDraft = useSaveDraft(id);
   const [deployOpen, setDeployOpen] = React.useState(false);
@@ -155,6 +163,8 @@ export default function WorkflowDetailPage() {
         toolOptions={(tools.data?.data ?? []).filter((t) => t.enabled)}
         lookupOptions={{ collections: lookups?.collections ?? [], owners: lookups?.owners ?? [], workflows: lookups?.workflows ?? [] }}
         onValidate={(graph) => validate.mutateAsync({ graph })}
+        onTestRun={(graph) => testWorkflow.mutateAsync(graph)}
+        routeFields={routeFields.data}
         onRequestPublish={(graph, note, validationRunId, checksFailing) => requestPublish.mutateAsync({ graph, note, validationRunId, checksFailing })}
         isRequesting={requestPublish.isPending}
         onSaveDraft={(graph) => saveDraft.mutateAsync(graph)}
@@ -165,13 +175,19 @@ export default function WorkflowDetailPage() {
               {visibleTabs.map((t) => (
                 <TabsTrigger key={t} value={t}>
                   {LABEL[t]}
-                  {t === 'runs' && wf.openReviews > 0 && <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 text-[10px] text-amber-700 tabular-nums dark:text-amber-400">{wf.openReviews} paused</span>}
+                  {t === 'runs' && wf.openReviews > 0 && <span className="ml-1 rounded-full bg-warning/15 px-1.5 text-[10px] text-warning-text tabular-nums">{wf.openReviews} paused</span>}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
         }
         extraActions={
+          <>
+          {wf.version > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setStartOpen(true)} data-testid="workflow-start-run">
+              <PlayCircle className="size-3.5" /> Start run
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" className="size-8" aria-label="More actions">
@@ -190,6 +206,7 @@ export default function WorkflowDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </>
         }
       >
         {isEmail && (tab === 'intents' || tab === 'routing' || tab === 'approvals') && <EmailConfigTab tab={tab} {...emailProps} />}
@@ -262,6 +279,21 @@ export default function WorkflowDetailPage() {
         )}
       </WorkflowEditor>
 
+      <StartRunDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        workflows={(startable.data ?? []).filter((w) => w.name === wf.id)}
+        loading={startable.isPending}
+        loadError={startable.isError ? startable.error.message : undefined}
+        isPending={startRun.isPending}
+        onSubmit={async (input) => {
+          const { threadId, run } = await startRun.mutateAsync(input);
+          // Agent runs are chat threads, which Cases leaves out; until chat reads threads there is no page to open.
+          if (!run) return void toast.success('Run finished', { description: `Thread ${threadId} ran to its end. Agent runs are not cases; the agent's reply is in the thread's run state.`, duration: 10_000 });
+          toast.success(`Started ${run.id}`);
+          router.push(`/cases?run=${encodeURIComponent(run.id)}`);
+        }}
+      />
       <DeleteDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

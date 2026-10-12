@@ -13,11 +13,11 @@ export const VALIDATION_STATUS_LABEL: Record<ValidationStatus, string> = {
 };
 
 const VALIDATION_TONE: Record<ValidationStatus, string> = {
-  not_validated: 'border-amber-300 text-amber-800 dark:border-amber-900 dark:text-amber-300',
+  not_validated: 'border-warning/40 text-warning-text',
   in_validation: 'border-sky-300 text-sky-800 dark:border-sky-900 dark:text-sky-300',
-  validated: 'border-emerald-300 text-emerald-800 dark:border-emerald-900 dark:text-emerald-300',
-  validated_with_conditions: 'border-emerald-300 text-emerald-800 dark:border-emerald-900 dark:text-emerald-300',
-  expired: 'border-red-300 text-red-700 dark:border-red-900 dark:text-red-300',
+  validated: 'border-success/40 text-success-text',
+  validated_with_conditions: 'border-success/40 text-success-text',
+  expired: 'border-destructive/40 text-destructive',
 };
 
 /** `wrap` lets a long label ("Validated with conditions") break onto two lines in a narrow table column. */
@@ -30,9 +30,9 @@ export function ValidationBadge({ status, wrap }: { status: ValidationStatus; wr
 }
 
 const SEVERITY_TONE: Record<FindingSeverity, string> = {
-  critical: 'bg-red-600 text-white',
-  high: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
-  medium: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  critical: 'bg-destructive text-white',
+  high: 'bg-destructive/10 text-destructive',
+  medium: 'bg-warning/10 text-warning-text',
   low: 'bg-muted text-muted-foreground',
 };
 
@@ -45,7 +45,7 @@ export const CONDITION_STATUS_LABEL: Record<ConditionStatus, string> = { open: '
 
 export function ConditionBadge({ status }: { status: ConditionStatus }) {
   return (
-    <Badge variant="outline" className={cn('font-normal', status === 'overdue' && 'border-red-300 text-red-700 dark:border-red-900 dark:text-red-300', status === 'met' && 'text-muted-foreground')}>
+    <Badge variant="outline" className={cn('font-normal', status === 'overdue' && 'border-destructive/40 text-destructive', status === 'met' && 'text-muted-foreground')}>
       {CONDITION_STATUS_LABEL[status]}
     </Badge>
   );

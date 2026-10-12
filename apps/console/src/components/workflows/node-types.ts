@@ -1,3 +1,4 @@
+import type { RouteWhen } from "@/lib/types/domain"
 import {
   AlertTriangle,
   Bot,
@@ -148,9 +149,9 @@ const GROUP_META: Record<GroupId, { label: string; iconBg: string; iconText: str
   trigger: { label: "Trigger", iconBg: "bg-violet-500/15", iconText: "text-violet-600 dark:text-violet-400" },
   ai: { label: "AI", iconBg: "bg-indigo-500/15", iconText: "text-indigo-600 dark:text-indigo-300" },
   tool: { label: "Data and tools", iconBg: "bg-teal-500/15", iconText: "text-teal-600 dark:text-teal-400" },
-  human: { label: "Human", iconBg: "bg-amber-500/15", iconText: "text-amber-600 dark:text-amber-400" },
-  logic: { label: "Logic", iconBg: "bg-slate-500/15", iconText: "text-slate-600 dark:text-slate-300" },
-  output: { label: "Output", iconBg: "bg-rose-500/15", iconText: "text-rose-600 dark:text-rose-400" },
+  human: { label: "Human", iconBg: "bg-warning/15", iconText: "text-warning-text" },
+  logic: { label: "Logic", iconBg: "bg-muted", iconText: "text-muted-foreground" },
+  output: { label: "Output", iconBg: "bg-destructive/15", iconText: "text-destructive" },
 }
 
 export const PALETTE_CATEGORIES: PaletteCategory[] = (Object.keys(GROUP_META) as GroupId[]).map((id) => ({
@@ -165,11 +166,11 @@ export const CAT_COLORS: Record<string, { bg: string; text: string; border: stri
   trigger:  { bg: "bg-violet-500/15", text: "text-violet-600 dark:text-violet-400", border: "border-violet-500/30" },
   ai:       { bg: "bg-indigo-500/15", text: "text-indigo-600 dark:text-indigo-300", border: "border-indigo-500/40", glow: "shadow-indigo-500/10" },
   tool:     { bg: "bg-teal-500/15",   text: "text-teal-600 dark:text-teal-400",   border: "border-teal-500/30" },
-  human:    { bg: "bg-amber-500/15",  text: "text-amber-600 dark:text-amber-400", border: "border-amber-500/50" },
-  logic:    { bg: "bg-slate-500/15",  text: "text-slate-600 dark:text-slate-300",  border: "border-slate-500/30" },
-  output:   { bg: "bg-rose-500/15",   text: "text-rose-600 dark:text-rose-400",   border: "border-rose-500/30" },
-  response: { bg: "bg-rose-500/15",   text: "text-rose-600 dark:text-rose-400",   border: "border-rose-500/30" },
-  control:  { bg: "bg-rose-500/15",   text: "text-rose-600 dark:text-rose-400",   border: "border-rose-500/30" },
+  human: { bg: "bg-warning/15", text: "text-warning-text", border: "border-warning/50" },
+  logic: { bg: "bg-muted", text: "text-muted-foreground", border: "border-border" },
+  output: { bg: "bg-destructive/15", text: "text-destructive", border: "border-destructive/40" },
+  response: { bg: "bg-destructive/15", text: "text-destructive", border: "border-destructive/40" },
+  control: { bg: "bg-destructive/15", text: "text-destructive", border: "border-destructive/40" },
   data:     { bg: "bg-teal-500/15",   text: "text-teal-700 dark:text-teal-400",   border: "border-teal-500/30" },
   guard:    { bg: "bg-orange-500/15", text: "text-orange-600 dark:text-orange-400", border: "border-orange-500/30" },
 }
@@ -189,6 +190,9 @@ export interface StepData {
   agentSlug?: string
   agentVersion?: number
   branches?: string[]
+  /** Branch only: the comparison per path (keyed by its handle) and the path taken when none matches. */
+  routes?: Record<string, RouteWhen>
+  defaultRoute?: string
   reviewers?: string
   condition?: string
   sla?: string

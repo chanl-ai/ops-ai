@@ -1,0 +1,76 @@
+[project]
+name = "ops-ai"
+version = "0.1.0"
+description = "Ops AI Python workspace: reusable libraries in packages/, deployable services in services/"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-checkpointer", "ops-metering", "ops-policy", "ops-identity", "ops-agents-service", "ops-platform-service", "ops-tools-service", "ops-models-service", "ops-storage", "ops-ingest[ocr]", "ops-files-service", "ops-store"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "pyright>=1.1.390",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "langgraph-checkpoint-conformance>=0.0.2",
+    "moto[s3,server]>=5.0.20",
+    "boto3-stubs[s3]>=1.35",
+    "reportlab>=4.2",
+    "types-openpyxl>=3.1.5",
+    "jsonschema>=4.23",
+    "openapi-spec-validator>=0.7",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_storage", "packages/ops_ingest", "packages/ops_store", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service"]
+
+[tool.uv.sources]
+ops-contracts = { workspace = true }
+ops-service-kit = { workspace = true }
+ops-agent-kernel = { workspace = true }
+ops-checkpointer = { workspace = true }
+ops-metering = { workspace = true }
+ops-policy = { workspace = true }
+ops-identity = { workspace = true }
+ops-store = { workspace = true }
+ops-storage = { workspace = true }
+ops-ingest = { workspace = true }
+ops-files-service = { workspace = true }
+ops-agents-service = { workspace = true }
+ops-platform-service = { workspace = true }
+ops-tools-service = { workspace = true }
+ops-models-service = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["packages/*/src", "services/*/src", "services/agents-service"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N"]
+ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
+
+[tool.pyright]
+include = ["packages", "services/agents-service", "services/tools-service", "services/files-service"]
+exclude = ["**/.venv", "**/__pycache__", "**/node_modules"]
+# Each project has its own `tests` package imported as `tests.*`, so each gets its own import root.
+executionEnvironments = [
+    { root = "services/agents-service", extraPaths = ["services/agents-service"] },
+    { root = "services/platform-service", extraPaths = ["services/platform-service"] },
+    { root = "services/files-service", extraPaths = ["services/files-service"] },
+    { root = "packages/ops_ingest", extraPaths = ["packages/ops_ingest"] },
+    { root = "packages/ops_policy", extraPaths = ["packages/ops_policy"] },
+    { root = "packages/ops_identity", extraPaths = ["packages/ops_identity"] },
+    { root = "packages/ops_store", extraPaths = ["packages/ops_store"] },
+    { root = "." },
+]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"

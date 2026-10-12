@@ -1,87 +1,86 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, CheckCircle2, Clock, Inbox, Mail, ShieldCheck, UserPlus, Users, XCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { AlertCircle, CheckCircle2, Clock, Inbox, Mail, UserCheck, Users } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { caseColumns, type CaseTableRow } from '@/components/cases/case-columns';
+import { RUN_STATE_OPTIONS, runColumns, RunSummary, type RunTableRow } from '@/components/cases/run-columns';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
-import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { CASE_STATUS_LABEL } from '@/components/status-badges';
+import { RunSheet } from '@/components/workflows/run-sheet';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { useAssignCases, useCaseQueues, useCases, useCloseCases } from '@/hooks/case-queries';
-import { useLookups } from '@/hooks/queries';
+import { useAssignRuns, useCaseQueues, useCaseRun, useCaseRuns } from '@/hooks/case-queries';
+import { useTestFromRun, useWorkflows } from '@/hooks/queries';
 import { useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
-import type { CaseFilters, CaseRow, CaseView } from '@/lib/types/cases';
+import type { RunRow, RunRowFilters, RunView } from '@/lib/types/cases';
 
-const PRIORITY_OPTIONS = (['urgent', 'high', 'normal', 'low'] as const).map((p) => ({ label: p[0].toUpperCase() + p.slice(1), value: p }));
-const STATUS_OPTIONS = Object.entries(CASE_STATUS_LABEL)
-  .filter(([v]) => v !== 'closed')
-  .map(([value, label]) => ({ label, value }));
-const CLOSE_REASONS = ['Resolved', 'Duplicate of another case', 'Not a request for us', 'Spam or phishing'];
+const EMPTY_COPY: Record<RunView, { noun: string; description: string }> = {
+  needs_person: { noun: 'runs waiting on a person', description: 'No run is paused for a reviewer or an approval right now.' },
+  open: { noun: 'open runs', description: 'Runs appear here while a workflow is working on them.' },
+  past_sla: { noun: 'runs past SLA', description: 'Every open run is inside its SLA.' },
+  done_today: { noun: 'runs finished today', description: 'Runs that finish today appear here.' },
+};
 
 export default function CasesPage() {
   const router = useRouter();
-  const [view, setView] = React.useState<CaseView>('team');
-  const list = useListParams<CaseFilters>('subject');
-  const query = useCases({ ...list.params, view });
+  const search = useSearchParams();
+  const [view, setView] = React.useState<RunView>('needs_person');
+  const list = useListParams<RunRowFilters>('subject');
+  const query = useCaseRuns({ ...list.params, view });
   const { data: queues } = useCaseQueues();
-  const { data: lookups } = useLookups();
-  const assign = useAssignCases();
-  const close = useCloseCases();
-  const [bulk, setBulk] = React.useState<{ kind: 'assign' | 'close'; rows: CaseRow[] } | null>(null);
+  const { data: workflows } = useWorkflows({ page: 1, pageSize: 100 });
+  const assign = useAssignRuns();
+  const saveAsTest = useTestFromRun();
+  const [bulk, setBulk] = React.useState<RunRow[] | null>(null);
   const shown = useSticky(bulk);
   const [selectionResetKey, setSelectionResetKey] = React.useState(0);
-  const me = lookups?.currentUser.name;
 
-  const rows = query.data?.data;
-  const tableRows: CaseTableRow[] = React.useMemo(
-    () => (rows ?? []).map((c) => ({ ...c, onRowClick: (x: CaseRow) => router.push(`/cases/${x.id}`), href: `/cases/${c.id}`, rowTestId: `case-row-${c.id}` })),
-    [rows, router],
+  // `?run=` opens one run's sheet; links from the Overview and old case links use it.
+  const activeId = search.get('run');
+  const setActiveId = React.useCallback(
+    (id: string | null) => {
+      const p = new URLSearchParams(search.toString());
+      if (id) p.set('run', id);
+      else p.delete('run');
+      router.replace(`/cases${p.size ? `?${p}` : ''}`, { scroll: false });
+    },
+    [router, search],
   );
 
+  const rows = React.useMemo(() => query.data?.data ?? [], [query.data]);
+  const idx = rows.findIndex((r) => r.id === activeId);
+  const linked = useCaseRun(idx < 0 ? activeId : null);
+  const active = idx >= 0 ? rows[idx] : (linked.data ?? null);
+  const tableRows: RunTableRow[] = React.useMemo(() => rows.map((r) => ({ ...r, onRowClick: (x: RunRow) => setActiveId(x.id), rowTestId: `run-row-${r.id}` })), [rows, setActiveId]);
+
   const counts = query.data?.viewCounts;
-  const stats = query.data?.stats;
   const facets = query.data?.facets ?? {};
   const withCounts = (column: string, options: { label: string; value: string }[]) => options.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 }));
-  // Intent ids repeat across mailboxes (address_change), so the facet lists each id once with its first name.
-  const intentOptions = React.useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const c of rows ?? []) if (!seen.has(c.intentId)) seen.set(c.intentId, c.intentName);
-    for (const id of Object.keys(facets.intentId ?? {})) if (!seen.has(id)) seen.set(id, id.replace(/_/g, ' '));
-    return [...seen].map(([value, label]) => ({ value, label }));
-  }, [rows, facets.intentId]);
-
+  const workflowOptions = (workflows?.data ?? []).map((w) => ({ label: w.name, value: w.id }));
+  const queueOptions = Object.keys(facets.queue ?? {}).map((q) => ({ label: q, value: q }));
   const resetSelection = () => setSelectionResetKey((k) => k + 1);
+  const empty = EMPTY_COPY[view];
 
   return (
-    <PageLayout icon={Mail} title="Cases" description="Customer emails turned into cases, with the actions the agent drafted">
+    <PageLayout icon={Mail} title="Cases" description="Runs across every workflow: what is open, what waits on a person, and what the agent did">
       {query.isPending ? (
-        <PageSkeleton statCards={4} tableRows={8} />
+        <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="cases" onRetry={() => query.refetch()} retrying={query.isFetching} testId="cases-error" />
+        <QueryError what="runs" onRetry={() => query.refetch()} retrying={query.isFetching} testId="cases-error" />
       ) : (
         <div className="flex flex-col gap-4">
-          <StatCardGrid columns={4}>
-            <StatCard label="Open cases" value={stats?.open} icon={Inbox} footer={{ text: `${counts?.mine ?? 0} assigned to you`, subtext: 'Across all mailboxes' }} />
-            <StatCard label="Past SLA" value={stats?.breaching} icon={AlertCircle} footer={{ text: stats?.breaching ? 'Oldest first in Past SLA' : 'Nothing overdue', subtext: 'SLA set per intent in routing' }} />
-            <StatCard label="Waiting on approval" value={stats?.awaitingApproval} icon={ShieldCheck} footer={{ text: `${counts?.awaiting_me ?? 0} you can approve`, subtext: 'Drafted actions run only after sign-off' }} />
-            <StatCard label="Closed today" value={stats?.closedToday} icon={CheckCircle2} footer={{ text: `${counts?.closed ?? 0} closed in total`, subtext: 'Since midnight' }} />
-          </StatCardGrid>
-
           {query.isError && (
             <Alert variant="destructive">
               <AlertCircle />
               <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing cases failed. These are the last results that loaded.
+                Refreshing runs failed. These are the last results that loaded.
                 <Button size="sm" variant="outline" onClick={() => query.refetch()}>
                   Try again
                 </Button>
@@ -90,19 +89,18 @@ export default function CasesPage() {
           )}
 
           <SavedViewTabs
-            ariaLabel="Case views"
+            ariaLabel="Run views"
             presets={[
-              { id: 'mine', label: `Assigned to me · ${counts?.mine ?? 0}` },
-              { id: 'team', label: `All open · ${counts?.team ?? 0}`, icon: Inbox },
-              { id: 'awaiting_me', label: `Awaiting my approval · ${counts?.awaiting_me ?? 0}`, icon: ShieldCheck },
-              { id: 'breaching', label: `Past SLA · ${counts?.breaching ?? 0}`, icon: Clock },
-              { id: 'closed', label: `Closed · ${counts?.closed ?? 0}` },
+              { id: 'needs_person', label: `Needs a person · ${counts?.needs_person ?? 0}`, icon: UserCheck },
+              { id: 'open', label: `Open · ${counts?.open ?? 0}`, icon: Inbox },
+              { id: 'past_sla', label: `Past SLA · ${counts?.past_sla ?? 0}`, icon: Clock },
+              { id: 'done_today', label: `Done today · ${counts?.done_today ?? 0}`, icon: CheckCircle2 },
             ]}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}
             onSelectPreset={(id) => {
-              setView(id as CaseView);
+              setView(id as RunView);
               list.reset();
               resetSelection();
             }}
@@ -113,17 +111,15 @@ export default function CasesPage() {
           />
 
           <DataTableWithViews
-            columns={caseColumns}
+            columns={runColumns}
             data={tableRows}
             getRowId={(r) => r.id}
             searchColumn="subject"
-            searchPlaceholder="Search subject, customer or case id…"
-            initialColumnVisibility={{ confidence: false, mailbox: false }}
+            searchPlaceholder="Search subject, run or case id…"
             filters={[
-              { column: 'queue', title: 'Queue', options: withCounts('queue', (queues?.queues ?? []).map((q) => ({ label: q, value: q }))) },
-              { column: 'intentId', title: 'Intent', options: withCounts('intentId', intentOptions) },
-              { column: 'priority', title: 'Priority', options: withCounts('priority', PRIORITY_OPTIONS) },
-              ...(view === 'closed' ? [] : [{ column: 'status', title: 'Status', options: withCounts('status', STATUS_OPTIONS) }]),
+              { column: 'workflowId', title: 'Workflow', options: withCounts('workflowId', workflowOptions) },
+              { column: 'state', title: 'State', options: withCounts('state', RUN_STATE_OPTIONS) },
+              { column: 'queue', title: 'Queue', options: withCounts('queue', queueOptions) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             selectionResetKey={selectionResetKey}
@@ -136,86 +132,64 @@ export default function CasesPage() {
               onPaginationChange: list.setPagination,
               isLoading: query.isFetching && query.isPlaceholderData,
             }}
-            bulkActions={
-              view === 'closed'
-                ? []
-                : [
-                    {
-                      label: 'Assign to me',
-                      icon: UserPlus,
-                      variant: 'outline',
-                      onClick: (selected) =>
-                        me &&
-                        assign.mutate(
-                          { ids: selected.map((r) => r.id), assignee: me },
-                          {
-                            onSuccess: (res) => {
-                              toastBulk(res, 'Assigned', 'case');
-                              resetSelection();
-                            },
-                            onError: (e) => toast.error('Couldn’t assign those cases', { description: e.message }),
-                          },
-                        ),
-                    },
-                    { label: 'Assign', icon: Users, variant: 'outline', onClick: (rows) => setBulk({ kind: 'assign', rows }) },
-                    { label: 'Close', icon: XCircle, variant: 'outline', onClick: (rows) => setBulk({ kind: 'close', rows }) },
-                  ]
-            }
+            bulkActions={view === 'done_today' ? [] : [{ label: 'Assign', icon: Users, variant: 'outline', onClick: (selected) => setBulk(selected) }]}
             emptyState={
               <ListEmpty
                 icon={Mail}
-                noun={view === 'closed' ? 'closed cases' : 'cases'}
+                noun={empty.noun}
                 filtered={list.isFiltered}
-                createLabel={view === 'mine' || view === 'awaiting_me' ? 'Show all open cases' : 'Connect a mailbox'}
+                createLabel={view === 'open' ? 'Go to workflows' : 'Show all open runs'}
                 onCreate={() => {
-                  if (view === 'mine' || view === 'awaiting_me') {
-                    setView('team');
+                  if (view === 'open') router.push('/workflows');
+                  else {
+                    setView('open');
                     list.reset();
                     resetSelection();
-                  } else router.push('/deployments?create=1');
+                  }
                 }}
-                description={
-                  view === 'mine'
-                    ? 'Nothing is assigned to you. Pick cases up from All open.'
-                    : view === 'awaiting_me'
-                      ? 'No drafted actions are waiting for your approval.'
-                      : 'Each email to a connected mailbox opens a case here.'
-                }
+                description={empty.description}
               />
             }
           />
         </div>
       )}
 
+      <RunSheet
+        run={active}
+        onClose={() => setActiveId(null)}
+        navigation={
+          idx >= 0
+            ? {
+                currentIndex: idx,
+                totalCount: rows.length,
+                onPrev: idx > 0 ? () => setActiveId(rows[idx - 1].id) : undefined,
+                onNext: idx < rows.length - 1 ? () => setActiveId(rows[idx + 1].id) : undefined,
+              }
+            : undefined
+        }
+        summary={active && <RunSummary run={active} />}
+        saving={saveAsTest.isPending}
+        onSaveAsTest={(r) =>
+          saveAsTest.mutate(r.id, {
+            onSuccess: (t) => toast.success('Saved as a test case', { description: `${t.name}. It runs on every publish request.` }),
+            onError: (e) => toast.error('Couldn’t save the test case', { description: e.message }),
+          })
+        }
+      />
+
       <BulkFieldDialog
-        open={bulk?.kind === 'assign'}
+        open={!!bulk}
         onOpenChange={(o) => !o && setBulk(null)}
-        title={`Assign ${shown?.rows.length ?? 0} cases`}
-        description="The assignee sees them in Assigned to me. SLA clocks keep running."
+        title={`Assign ${shown?.length ?? 0} runs`}
+        description="Runs started by an email are assigned with their case. Runs paused at a review gate are assigned in Reviews. SLA clocks keep running."
         fieldLabel="Assignee"
         options={queues?.assignees ?? []}
-        names={(shown?.rows ?? []).map((r) => `${r.id} · ${r.subject}`)}
+        names={(shown ?? []).map((r) => `${r.id} · ${r.subject}`)}
         confirmLabel="Assign"
         isPending={assign.isPending}
         onConfirm={async (assignee) => {
-          const res = await assign.mutateAsync({ ids: bulk!.rows.map((r) => r.id), assignee });
-          toastBulk(res, `Assigned to ${assignee}:`, 'case');
-          resetSelection();
-        }}
-      />
-      <BulkFieldDialog
-        open={bulk?.kind === 'close'}
-        onOpenChange={(o) => !o && setBulk(null)}
-        title={`Close ${shown?.rows.length ?? 0} cases`}
-        description="Cases with actions still waiting for approval stay open. Decide or reject those actions first."
-        fieldLabel="Reason"
-        options={CLOSE_REASONS}
-        names={(shown?.rows ?? []).map((r) => `${r.id} · ${r.subject}`)}
-        confirmLabel="Close cases"
-        isPending={close.isPending}
-        onConfirm={async (reason) => {
-          const res = await close.mutateAsync({ ids: bulk!.rows.map((r) => r.id), reason });
-          toastBulk(res, 'Closed', 'case');
+          const res = await assign.mutateAsync({ ids: bulk!.map((r) => r.id), assignee });
+          toastBulk(res, `Assigned to ${assignee}:`, 'run');
           resetSelection();
         }}
       />

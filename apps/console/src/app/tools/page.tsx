@@ -1,10 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Activity, AlertTriangle, ArrowRight, Boxes, Cable, CalendarClock, CalendarX, Clock, Landmark, Plus, ShieldAlert, Trash2, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, Download, CalendarX, Clock, Landmark, Plus, Route, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -22,10 +21,13 @@ import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { ConnectDialog } from '@/components/integrations/connect-dialog';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddModuleDialog } from '@/components/tools/add-module-dialog';
+import { NewModuleDialog } from '@/components/tools/new-module-dialog';
+import { WorkflowToolsTable } from '@/components/tools/workflow-tools-table';
 import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, MODULE_TYPE, ModuleMark, ModuleTypeBadge, pctText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
 import { useConnectFlow, useIntegrationOptions } from '@/hooks/integration-queries';
-import { useBulkDeleteModules, useCreateModule, useDeleteModule, useDiscoverModule, useToolModules } from '@/hooks/tool-module-queries';
+import { useTools } from '@/hooks/queries';
+import { useBulkDeleteModules, useCreateBlankModule, useCreateModule, useDeleteModule, useDiscoverModule, useToolModules } from '@/hooks/tool-module-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural } from '@/lib/format';
@@ -39,6 +41,7 @@ const VIEW_EMPTY: Record<ModuleView, string> = {
   expiring: 'No workflow approval expires in the next 30 days.',
   expired: 'No module has only expired approvals.',
   failing: 'Every module is reachable and under a 2% error rate.',
+  security_review: 'No module has a security review waiting on Security.',
 };
 
 function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
@@ -98,11 +101,11 @@ function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
           <div className="flex max-w-44 flex-col items-start gap-0.5">
             <ApprovalStateBadge state={m.approvalState} />
             {m.drift ? (
-              <span className="text-xs text-amber-700 dark:text-amber-400">Server tools changed</span>
+              <span className="text-xs text-warning-text">Server tools changed</span>
             ) : m.status !== 'published' ? (
               <span className="text-xs text-muted-foreground">{m.status === 'draft' ? 'Security review not requested' : 'Security review open'}</span>
             ) : m.pendingApprovals ? (
-              <span className="text-xs text-amber-700 dark:text-amber-400">{plural(m.pendingApprovals, 'request')} waiting</span>
+              <span className="text-xs text-warning-text">{plural(m.pendingApprovals, 'request')} waiting</span>
             ) : (
               m.nextExpiry && <ExpiryText at={m.nextExpiry} />
             )}
@@ -132,7 +135,7 @@ function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
       header: ({ column }) => <DataTableColumnHeader column={column} title="Errors" />,
       cell: ({ row }) =>
         !row.original.reachable ? (
-          <span className="text-xs font-medium text-red-600 dark:text-red-400">Unreachable</span>
+          <span className="text-xs font-medium text-destructive">Unreachable</span>
         ) : row.original.calls24h ? (
           <span className={`tabular-nums ${errorTone(row.original.errorRate)}`}>{pctText(row.original.errorRate)}</span>
         ) : (
@@ -160,11 +163,15 @@ function columns(onDelete: (m: ToolModule) => void): ColumnDef<Row>[] {
 
 export default function ToolsPage() {
   const router = useRouter();
-  const [view, setView] = React.useState<ModuleView>('all');
+  // `workflows` lists workflow tools from the tools API; every other view is a module view.
+  const [view, setView] = React.useState<ModuleView | 'workflows'>('all');
+  const workflowTools = useTools({ page: 1, pageSize: 100, filters: { type: ['workflow'] } });
   const list = useListParams<ModuleFilters>('displayName');
-  const query = useToolModules({ ...list.params, view });
+  const query = useToolModules({ ...list.params, view: view === 'workflows' ? 'all' : view });
   const discover = useDiscoverModule();
   const create = useCreateModule();
+  const createBlank = useCreateBlankModule();
+  const [creatingBlank, setCreatingBlank] = React.useState(false);
   const remove = useDeleteModule();
   const bulkRemove = useBulkDeleteModules();
   const [adding, setAdding] = React.useState(false);
@@ -188,18 +195,17 @@ export default function ToolsPage() {
 
   return (
     <PageLayout
+      switcher
       icon={Wrench}
-      title="Tools & MCP"
+      title="Tools"
       description="Systems connected through the data gateway, the operations each exposes, and which workflows may call them"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/integrations?tab=catalog">
-              <Cable className="size-4" /> Connect a system
-            </Link>
+          <Button variant="outline" onClick={() => setAdding(true)} data-testid="import-operations">
+            <Download className="size-4" /> Import operations
           </Button>
-          <Button onClick={() => setAdding(true)}>
-            <Plus className="size-4" /> Add module
+          <Button onClick={() => setCreatingBlank(true)} data-testid="new-module">
+            <Plus className="size-4" /> New module
           </Button>
         </div>
       }
@@ -224,12 +230,13 @@ export default function ToolsPage() {
               { id: 'expiring', label: `Expiring soon · ${counts?.expiring ?? 0}`, icon: Clock },
               { id: 'expired', label: `Expired · ${counts?.expired ?? 0}`, icon: CalendarX },
               { id: 'failing', label: `Failing · ${counts?.failing ?? 0}`, icon: AlertTriangle },
+              { id: 'workflows', label: `Workflows · ${workflowTools.data?.pagination.total ?? 0}`, icon: Route },
             ]}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}
             onSelectPreset={(id) => {
-              setView(id as ModuleView);
+              setView(id as ModuleView | 'workflows');
               list.reset();
               setResetKey((k) => k + 1);
             }}
@@ -238,6 +245,9 @@ export default function ToolsPage() {
             onDeleteView={() => undefined}
             canSave={false}
           />
+          {view === 'workflows' ? (
+            <WorkflowToolsTable tools={workflowTools.data?.data ?? []} total={workflowTools.data?.pagination.total ?? 0} />
+          ) : (
           <DataTableWithViews
             columns={cols}
             data={rows}
@@ -265,6 +275,7 @@ export default function ToolsPage() {
             }}
             emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'modules' : 'modules in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' ? 'Add module' : undefined} onCreate={view === 'all' ? () => setAdding(true) : undefined} />}
           />
+          )}
         </div>
       )}
 
@@ -283,8 +294,19 @@ export default function ToolsPage() {
         creating={create.isPending}
         onCreate={async (input) => {
           const m = await create.mutateAsync(input);
-          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Request a security review from its Approval tab.' });
+          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Rename it, attach its connection and request a security review on its page.' });
           setAdding(false);
+          router.push(`/tools/${m.id}`);
+        }}
+      />
+      <NewModuleDialog
+        open={creatingBlank}
+        onOpenChange={setCreatingBlank}
+        creating={createBlank.isPending}
+        onCreate={async (input) => {
+          const m = await createBlank.mutateAsync(input);
+          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Add operations and attach its connection here.' });
+          setCreatingBlank(false);
           router.push(`/tools/${m.id}`);
         }}
       />

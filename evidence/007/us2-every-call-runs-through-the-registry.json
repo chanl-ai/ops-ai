@@ -1,0 +1,15 @@
+{
+  "id": "us2-every-call-runs-through-the-registry",
+  "accept": "US2",
+  "failure_mode": "a call runs without the registry's access class, bad input reaches the upstream, or a refusal leaves no row",
+  "sha": "221f7d5139aa53d145ebb7e9166c0fae6694075a",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_c007; ports agents 8960, tools 8961, models 8962, platform 49206, console 3160\n\n== uc-011 api: A tool call runs through the registry and is logged with its caller (docs/usecases/tools-service/scripts/test-uc-011-api.py)\nPASS a registry read runs (200)\nPASS masked fields stay masked\nPASS a registry write without an approval token is refused (403)\nPASS input missing a required field is refused before egress (422)\nPASS a tool no module holds is refused (403)\nPASS every call is logged, refused ones too\nPASS the log names who called, for whom, in which run\nPASS refusals are logged as denied\n\nPASS        uc-011 api  8 checks passed\n\nexit 0"
+    }
+  ]
+}

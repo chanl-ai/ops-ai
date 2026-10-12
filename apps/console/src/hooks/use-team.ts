@@ -29,14 +29,14 @@ export function useTeam() {
   );
 
   const create = useMutation({
-    mutationFn: (input: TeamInput) => api.teams.create(input),
+    mutationFn: (input: TeamInput) => api.teams.create!(input),
     onSuccess: (t) => {
       void qc.invalidateQueries({ queryKey: TEAMS_KEY });
       switchTeam(t.id);
     },
   });
 
-  return { teamId, team, teams: teams.data ?? [], isPending: teams.isPending, isError: teams.isError && !teams.data, retry: teams.refetch, switchTeam, create };
+  return { teamId, team, teams: teams.data ?? [], canCreate: !!api.teams.create, isPending: teams.isPending, isError: teams.isError && !teams.data, retry: teams.refetch, switchTeam, create };
 }
 
 /** The owning team when a request failed because the record belongs to another team. */

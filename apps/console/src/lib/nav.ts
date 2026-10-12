@@ -1,67 +1,118 @@
 import type { Icon } from '@tabler/icons-react';
-import { IconBolt, IconDatabase, IconFiles, IconGitPullRequest, IconHistory, IconHome, IconListDetails, IconMail, IconMessages, IconPlug, IconPlugConnected, IconRobot, IconRocket, IconRoute, IconScale, IconSettings, IconShieldLock, IconUserCheck } from '@tabler/icons-react';
+import { IconBook2, IconDatabase, IconHome, IconListDetails, IconMail, IconMessages, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck } from '@tabler/icons-react';
+
+/** A route shown as a tab under its parent item rather than as its own sidebar row. */
+export interface NavChild {
+  title: string;
+  url: string;
+}
 
 export interface NavItem {
   title: string;
   url: string;
   icon: Icon;
+  children?: NavChild[];
+  /** Label of the parent's own tab in the section strip when it differs from the sidebar name (Brain's first tab is the knowledge bases list). */
+  tabTitle?: string;
 }
 
 export interface NavGroup {
-  label?: string;
+  label: string;
   items: NavItem[];
 }
 
 export const NAV: NavGroup[] = [
   {
+    label: 'Work',
     items: [
       { title: 'Overview', url: '/', icon: IconHome },
       { title: 'Cases', url: '/cases', icon: IconMail },
-      // Chat sits with the day-to-day work surfaces; Agent Studio and Data Hub are where agents are configured.
-      { title: 'Chat', url: '/chat', icon: IconMessages },
       // Reviews is daily work for approvers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Reviews', url: '/reviews', icon: IconUserCheck },
+      { title: 'Chat', url: '/chat', icon: IconMessages },
     ],
   },
   {
-    label: 'Agent Studio',
+    label: 'Agents',
     items: [
       { title: 'Agents', url: '/agents', icon: IconRobot },
-      { title: 'Workflows', url: '/workflows', icon: IconRoute },
-      { title: 'Deployments', url: '/deployments', icon: IconRocket },
+      // A deployment only exists for a published workflow, so it lives under Workflows.
+      { title: 'Workflows', url: '/workflows', icon: IconRoute, children: [{ title: 'Deployments', url: '/deployments' }] },
+      { title: 'Skills', url: '/skills', icon: IconSparkles },
     ],
   },
   {
     label: 'Data Hub',
-    // Connect first, then curate knowledge and sources and expose tools; every one of them uses a connection.
     items: [
-      { title: 'Integrations', url: '/integrations', icon: IconPlugConnected },
+      // The Wiki holds the content agents read: pages, documents, collections and the edits waiting on them.
+      {
+        title: 'Wiki',
+        tabTitle: 'Pages',
+        url: '/wiki',
+        icon: IconBook2,
+        children: [
+          { title: 'Documents', url: '/files' },
+          { title: 'Collections', url: '/wiki/collections' },
+          { title: 'Changes', url: '/knowledge/changes' },
+        ],
+      },
+      // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      { title: 'Knowledge changes', url: '/knowledge/changes', icon: IconGitPullRequest },
-      { title: 'Sources', url: '/sources', icon: IconPlug },
-      { title: 'Files', url: '/files', icon: IconFiles },
-      { title: 'Tools & MCP', url: '/tools', icon: IconBolt },
+      // One row per system, with switches for syncing knowledge and exposing tools.
+      { title: 'Connections', url: '/integrations', icon: IconPlugConnected },
+      { title: 'Tools', url: '/tools', icon: IconTool },
     ],
   },
   // Oversight is its own job (risk, audit, platform admins), separate from building agents or curating data.
-  { label: 'Govern', items: [{ title: 'Tool calls', url: '/logs/tool-calls', icon: IconListDetails }, { title: 'Audit log', url: '/logs/audit', icon: IconHistory }, { title: 'Access', url: '/access', icon: IconShieldLock }, { title: 'Model risk', url: '/model-risk', icon: IconScale }, { title: 'Settings', url: '/settings', icon: IconSettings }] },
+  {
+    label: 'Govern',
+    items: [
+      { title: 'Activity', tabTitle: 'Tool calls', url: '/logs/tool-calls', icon: IconListDetails, children: [{ title: 'Audit log', url: '/logs/audit' }] },
+      { title: 'Access', url: '/access', icon: IconShieldLock },
+      // Assurance holds testing and governance evidence in one place; the model inventory is one view of it.
+      { title: 'Assurance', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
+      { title: 'Settings', url: '/settings', icon: IconSettings },
+    ],
+  },
 ];
 
-/** The nav entry for a path. Longest matching url wins, so /knowledge/changes is not read as a knowledge base page. */
-export function navMatch(pathname: string): { group: NavGroup; item: NavItem } | null {
-  let best: { group: NavGroup; item: NavItem } | null = null;
-  for (const group of NAV) {
-    for (const item of group.items) {
-      const hit = item.url === '/' ? pathname === '/' : pathname === item.url || pathname.startsWith(`${item.url}/`);
-      if (hit && (!best || item.url.length > best.item.url.length)) best = { group, item };
-    }
-  }
-  return best;
+export interface NavHit {
+  group: NavGroup;
+  item: NavItem;
+  child?: NavChild;
 }
 
-/** Breadcrumb trail for the header: section label, then the page title. */
+function covers(url: string, pathname: string): boolean {
+  return url === '/' ? pathname === '/' : pathname === url || pathname.startsWith(`${url}/`);
+}
+
+/**
+ * The nav entry for a path. Longest matching url across items and their children wins, so /knowledge/changes
+ * resolves to Brain with the Changes child rather than to a knowledge base page.
+ */
+export function navMatch(pathname: string): NavHit | null {
+  let best: (NavHit & { len: number }) | null = null;
+  for (const group of NAV) {
+    for (const item of group.items) {
+      if (covers(item.url, pathname) && (!best || item.url.length > best.len)) best = { group, item, len: item.url.length };
+      for (const child of item.children ?? []) {
+        if (covers(child.url, pathname) && (!best || child.url.length > best.len)) best = { group, item, child, len: child.url.length };
+      }
+    }
+  }
+  return best && { group: best.group, item: best.item, child: best.child };
+}
+
+/** Breadcrumb trail for the header: section label, the sidebar item, then the tab when a child route matched. */
 export function crumbsFor(pathname: string): string[] {
   const best = navMatch(pathname);
   if (!best) return [];
-  return best.group.label ? [best.group.label, best.item.title] : [best.item.title];
+  return best.child ? [best.group.label, best.item.title, best.child.title] : [best.group.label, best.item.title];
+}
+
+/** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */
+export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string }[] } | null {
+  const best = navMatch(pathname);
+  if (!best?.item.children?.length) return null;
+  return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title }, ...best.item.children.map((c) => ({ href: c.url, label: c.title }))] };
 }

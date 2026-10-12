@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "codeloop": {
+      "command": "codeloop",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

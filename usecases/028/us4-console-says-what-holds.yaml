@@ -1,0 +1,9 @@
+# US4: the sheet's rate hint says per operation across every caller, and uc-011 runs the console mock's amount rule
+# (amount.ts) beside the gateway over six amounts and requires the same verdicts.
+id: us4-console-says-what-holds
+accept: US4
+failure_mode: the console says "per workflow" or the mock allows an amount the gateway refuses
+layers:
+  cli:
+    run: "grep -q 'Calls a minute for this operation, across every caller.' apps/console/src/components/tools/operation-sheet.tsx && make usecase-test UC=uc-011 LAYER=api"
+    expect: { exit: 0, stdout: "uc-011 api  15 checks passed" }

@@ -98,6 +98,50 @@ const empty = (): Draft => ({
   kbIds: [],
 });
 
+/**
+ * The input a one-screen "Add source" saves: type, name and where to read from, with the defaults the guided add
+ * starts from for everything else. It saves as a draft; scope, ingestion, rules and schedule are set on the page.
+ */
+export function blankSourceInput(b: { type: SourceType; name: string; connectionId?: string; location: string; files?: UploadItem[] }): SourceInput {
+  const d = empty();
+  const lines = b.location.split('\n').map((x) => x.trim()).filter(Boolean);
+  const fileIds = (b.files ?? []).flatMap((f) => (f.fileId ? [f.fileId] : []));
+  const scope = sourceTypeMeta(b.type).connected ? lines : [];
+  const summary =
+    b.type === 'file'
+      ? plural(fileIds.length, 'file')
+      : b.type === 'url'
+        ? plural(lines.length, 'URL')
+        : b.type === 'crawl'
+          ? `${lines[0] ?? ''} · depth ${d.depth} · ${count(d.maxPages)} pages max`
+          : b.type === 'text'
+            ? `Pasted Markdown · ${plural(b.location.split(/\s+/).filter(Boolean).length, 'word')}`
+            : `${scope.join(', ')}`;
+  return {
+    type: b.type,
+    name: b.name.trim(),
+    connectionId: sourceTypeMeta(b.type).connected ? b.connectionId : undefined,
+    status: 'draft',
+    scopeSummary: summary,
+    config: { scope, scopeCount: 0, urls: b.type === 'url' ? lines.join('\n') : '', startUrl: b.type === 'crawl' ? (lines[0] ?? '') : '', depth: d.depth, maxPages: d.maxPages, include: '', exclude: '', text: b.type === 'text' ? b.location : undefined, fileNames: (b.files ?? []).map((f) => f.name), fileIds },
+    parsing: d.parsing,
+    ingest: applyPreset(d.ingest, presetFor(b.type)),
+    rules: [],
+    metadataMapping: d.mapping,
+    tags: [],
+    titleFrom: d.titleFrom,
+    permissions: { mode: 'workspace' },
+    schedule: d.schedule,
+    deletedAtSource: d.deletedAtSource,
+    staleAfterDays: d.staleAfter,
+    notifyOnFailure: d.notify,
+    sensitivity: d.sensitivity,
+    collection: 'General',
+    fileIds: b.type === 'file' ? fileIds : undefined,
+    itemsPending: b.type === 'file' ? fileIds.length : b.type === 'url' ? lines.length : b.type === 'text' ? 1 : 0,
+  };
+}
+
 /** The integration kind each connected-app source type reads through. */
 const KIND_OF: Partial<Record<SourceType, IntegrationKind>> = { sharepoint: 'sharepoint', confluence: 'confluence', gdrive: 'gdrive', github: 'github', notion: 'notion', zendesk: 'zendesk', salesforce: 'salesforce' };
 const usableConn = (c: ConnectionRef) => c.status === 'healthy' || c.status === 'expiring';
@@ -608,7 +652,7 @@ export function AddSourceDialog({
                 <Button variant="outline" size="sm" onClick={runPreview} disabled={previewing}>
                   {previewing && <Loader2 className="size-3.5 animate-spin" />} Preview what it fetches
                 </Button>
-                {preview && <span className={cn('text-xs', preview.ok ? 'text-emerald-600' : 'text-destructive')}>{preview.message}</span>}
+                {preview && <span className={cn('text-xs', preview.ok ? 'text-success-text' : 'text-destructive')}>{preview.message}</span>}
               </div>
               {preview?.ok && preview.rows.length > 0 && (
                 <div className="rounded-md border">
@@ -671,7 +715,7 @@ export function AddSourceDialog({
                   <li key={k.kbId} className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium">{k.kbName} requires</span>
                     {k.required.map((key) => (
-                      <Badge key={key} variant="outline" className={cn('font-mono text-[11px] font-normal', k.missing.includes(key) && 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400')}>
+                      <Badge key={key} variant="outline" className={cn('font-mono text-[11px] font-normal', k.missing.includes(key) && 'border-warning/40 text-warning-text')}>
                         {key}
                       </Badge>
                     ))}

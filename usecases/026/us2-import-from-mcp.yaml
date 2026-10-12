@@ -1,0 +1,9 @@
+# US2: uc-012 steps 7 and 8: MCP discovery, a call through tools/call, and drift stopping calls.
+# Own database and ports: ops_usecase is shared.
+id: us2-import-from-mcp
+accept: US2
+failure_mode: an MCP tool runs after the server stopped listing it
+layers:
+  cli:
+    run: "make usecase-test UC=uc-012 LAYER=api OPS_USECASE_DB=ops_usecase_c026 OPS_USECASE_AGENTS_PORT=8970 OPS_USECASE_TOOLS_PORT=8971 OPS_USECASE_MODELS_PORT=8972 OPS_USECASE_CONSOLE_PORT=3170"
+    expect: { exit: 0, stdout: "uc-012 api  11 checks passed" }

@@ -14,6 +14,9 @@ export function createIntegrationsHttp(get: Get, send: Send, qs: (p: ListParams 
     options: () => get(`${base}/options`),
     catalog: () => get(`${base}/catalog`),
     connect: (i) => send('POST', base, i),
+    createDraft: (i) => send('POST', `${base}/drafts`, i),
+    saveSetup: (id, p) => send('PATCH', `${base}/${id}/setup`, p),
+    activate: (id) => send('POST', `${base}/${id}/activate`),
     reconnect: (id) => send('POST', `${base}/${id}/reconnect`),
     rotate: (id, credentialRef) => send('PATCH', `${base}/${id}/credential`, { credentialRef }),
     check: (id) => send('POST', `${base}/${id}/check`),
@@ -21,5 +24,6 @@ export function createIntegrationsHttp(get: Get, send: Send, qs: (p: ListParams 
     impact: (ids) => send('POST', `${base}/impact`, { ids }),
     revoke: (ids, reason) => send('POST', `${base}/revoke`, { ids, reason }),
     requestScopes: (id, i) => send('POST', `${base}/${id}/scope-requests`, i),
+    setSwitches: (id, patch) => send('PATCH', `${base}/${id}/switches`, patch),
   };
 }

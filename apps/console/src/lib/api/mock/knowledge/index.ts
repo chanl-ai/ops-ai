@@ -19,6 +19,7 @@ import type { ConnectionRef } from '@/lib/types/integrations';
 import { ApiError } from '../../contract';
 import type { KnowledgeApi } from '../../knowledge-contract';
 import type { FileLinks } from '../files';
+import { auditSink } from '../governance';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { itemDetail } from './detail';
@@ -391,6 +392,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           kbs.unshift(k);
           srcs.forEach((s) => s.usedByKbIds.push(k.id));
           regovern();
+          auditSink.log({ action: 'created', target: { type: 'knowledge_base', name: k.name, href: `/knowledge/${k.id}` }, summary: srcs.length ? `Created ${k.name} reading ${srcs.length} sources` : `Created ${k.name} with no sources yet` });
           return k;
         }),
       update: (kid, patch) =>
@@ -465,6 +467,8 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const k = kbOr404(kid);
           sourceIds.forEach((sid) => attach(k, sid));
           regovern();
+          // A knowledge base created without sources builds its first index once one brings content.
+          if (k.health === 'never' && k.stats.documents > 0 && !k.jobs.some((j) => j.status === 'running')) startRefresh(k, 'initial build');
           return k;
         }),
       detachSource: (kid, sid) =>
@@ -581,7 +585,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           const { fileIds, ...rest } = input;
           const sid = id('src');
           // Linking first refuses a quarantined or still-scanning file before the source exists.
-          for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/sources/${sid}` }, ['knowledge_source']);
+          for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
           const s: Source = {
             ...rest,
             config: { ...rest.config, fileIds },
@@ -604,6 +608,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             if (k) attach(k, s.id);
           });
           if (opts?.sync && s.status !== 'draft') startSync(s);
+          auditSink.log({ action: 'created', target: { type: 'source', name: s.name, href: `/integrations/sources/${s.id}` }, summary: s.status === 'draft' ? `Saved ${s.name} as a draft source` : `Created source ${s.name}` });
           return s;
         }),
       update: (sid, patch) =>

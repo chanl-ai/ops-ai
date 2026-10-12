@@ -1,5 +1,5 @@
 /** Record kinds the command palette searches on the server. Pages and actions are listed by the client. */
-export type SearchGroup = 'workflows' | 'agents' | 'cases' | 'knowledge' | 'chats';
+export type SearchGroup = 'workflows' | 'agents' | 'cases' | 'knowledge' | 'chats' | 'skills';
 
 export interface SearchHit {
   id: string;

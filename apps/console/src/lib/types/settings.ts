@@ -12,6 +12,8 @@ export interface Member {
   status: 'active' | 'invited';
   lastActiveAt?: string;
   invitedAt?: string;
+  /** Invited members: the token of their invitation link, opened at /invite/[token]. */
+  inviteToken?: string;
 }
 
 export type MemberFilters = { role?: string[]; status?: string[]; teamId?: string[] };

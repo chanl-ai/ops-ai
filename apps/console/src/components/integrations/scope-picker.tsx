@@ -28,7 +28,7 @@ export function ScopePicker({ scopes, selected, onChange, locked = [] }: { scope
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                         {s.label}
-                        <span className={cn('rounded border px-1.5 text-[11px] font-normal', s.access === 'write' ? 'border-amber-500/30 text-amber-700 dark:text-amber-300' : 'text-muted-foreground')}>{s.access === 'write' ? 'Write' : 'Read'}</span>
+                        <span className={cn('rounded border px-1.5 text-[11px] font-normal', s.access === 'write' ? 'border-warning/40 text-warning-text' : 'text-muted-foreground')}>{s.access === 'write' ? 'Write' : 'Read'}</span>
                         {isLocked && <span className="text-xs font-normal text-muted-foreground">Granted</span>}
                       </span>
                       <span className="block text-xs text-muted-foreground">{s.description}</span>

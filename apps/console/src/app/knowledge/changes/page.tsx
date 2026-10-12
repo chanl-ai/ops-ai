@@ -8,7 +8,7 @@ import { PageLayout } from '@/components/page-layout';
 /** Proposed document changes across every knowledge base, decided by each document's owner. */
 export default function KnowledgeChangesPage() {
   return (
-    <PageLayout icon={GitPullRequestArrow} title="Knowledge changes" description="Document edits waiting for their owner">
+    <PageLayout switcher icon={GitPullRequestArrow} title="Knowledge changes" description="Document edits waiting for their owner">
       <KnowledgeChangesQueue />
     </PageLayout>
   );

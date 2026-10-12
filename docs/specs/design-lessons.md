@@ -21,10 +21,10 @@ The "Spec" column uses these codes:
 | Code | Document |
 |---|---|
 | Arch | `docs/architecture/overview.md` and the ADRs under `docs/architecture/decisions/` |
-| 01 | `docs/specs/01-agent-builder.md` |
-| 02 | `docs/specs/02-knowledge.md` |
-| 03 | `docs/specs/03-data-and-ai-gateways.md` |
-| 04 | `docs/specs/04-evals-and-release.md` |
+| 01 | `docs/specs/agent-builder.md` |
+| 02 | `docs/specs/knowledge.md` |
+| 03 | `docs/specs/data-and-ai-gateways.md` |
+| 04 | `docs/specs/evals-and-release.md` |
 
 ## Agent configuration and versioning
 

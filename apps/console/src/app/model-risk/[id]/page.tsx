@@ -278,7 +278,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                 <ol className="relative flex flex-col gap-3 border-l pl-5">
                   {e.validations.map((v) => (
                     <li key={v.id} className="relative">
-                      <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full border-2 border-background ${v.outcome === 'rejected' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                      <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full border-2 border-background ${v.outcome === 'rejected' ? 'bg-destructive' : 'bg-success'}`} />
                       <div className="text-sm font-medium">
                         {OUTCOME_LABEL[v.outcome]} <span className="font-normal text-muted-foreground">· {v.validator} · {shortDate(v.date)}</span>
                       </div>

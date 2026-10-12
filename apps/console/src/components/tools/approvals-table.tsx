@@ -58,7 +58,7 @@ export function ApprovalsTable({
                 <TableCell className="min-w-56">
                   <span className="flex flex-wrap gap-1">
                     {a.operations.map((o) => (
-                      <code key={o} className={cn('rounded border px-1 font-mono text-[11px]', money.has(o) && 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300')}>
+                      <code key={o} className={cn('rounded border px-1 font-mono text-[11px]', money.has(o) && 'border-destructive/40 bg-destructive/10 text-destructive')}>
                         {o}
                       </code>
                     ))}

@@ -19,7 +19,7 @@ export function CaseConversation({ messages }: { messages: CaseMessage[] }) {
         <Card key={m.id} className={cn(m.direction === 'outbound' && 'bg-muted/30')}>
           <CardHeader className="flex flex-row flex-wrap items-baseline justify-between gap-2 space-y-0 pb-2">
             <div className="flex min-w-0 items-center gap-2 text-sm">
-              {m.direction === 'inbound' ? <ArrowDownLeft className="size-4 text-sky-600" aria-label="Received" /> : <ArrowUpRight className="size-4 text-emerald-600" aria-label="Sent" />}
+              {m.direction === 'inbound' ? <ArrowDownLeft className="size-4 text-muted-foreground" aria-label="Received" /> : <ArrowUpRight className="size-4 text-muted-foreground" aria-label="Sent" />}
               <span className="truncate font-medium">{m.from}</span>
               <span className="truncate text-muted-foreground">to {m.to}</span>
             </div>
@@ -62,7 +62,7 @@ export function CaseActivity({ events }: { events: CaseEvent[] }) {
         <ol className="relative flex flex-col gap-4 border-l pl-5">
           {sorted.map((e, i) => (
             <li key={`${e.at}-${i}`} className="relative">
-              <span className={cn('absolute top-1.5 -left-[25px] size-2 rounded-full', e.kind === 'rejected' ? 'bg-red-500' : e.kind === 'approved' || e.kind === 'executed' ? 'bg-emerald-500' : 'bg-muted-foreground/50')} />
+              <span className={cn('absolute top-1.5 -left-[25px] size-2 rounded-full', e.kind === 'rejected' ? 'bg-destructive' : e.kind === 'approved' || e.kind === 'executed' ? 'bg-success' : 'bg-muted-foreground/50')} />
               <p className="text-sm">{e.text}</p>
               <p className="text-xs text-muted-foreground">
                 {e.by} · <time dateTime={e.at} title={dateTime(e.at)}>{relativeTime(e.at)}</time>

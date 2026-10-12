@@ -22,7 +22,7 @@ import { selectColumn } from '@/components/shared/select-column';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useBulkDeleteKbs, useBulkRefreshKbs, useCreateKb, useDeleteKb, useDuplicateKb, useKnowledgeBases, useRefreshKb, useSourcesList } from '@/hooks/knowledge-queries';
+import { useBulkDeleteKbs, useBulkRefreshKbs, useCreateKb, useDeleteKb, useDuplicateKb, useKnowledgeBases, useRefreshKb } from '@/hooks/knowledge-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
@@ -167,7 +167,6 @@ export default function KnowledgeBasesPage() {
   const router = useRouter();
   const list = useListParams<KbFilters>('name');
   const query = useKnowledgeBases(list.params);
-  const sources = useSourcesList(ALL);
   const allKbs = useKnowledgeBases(ALL);
   const create = useCreateKb();
   const refresh = useRefreshKb();
@@ -208,6 +207,7 @@ export default function KnowledgeBasesPage() {
 
   return (
     <PageLayout
+      switcher
       icon={Database}
       title="Knowledge bases"
       description="Indexes agents search and cite"
@@ -291,13 +291,12 @@ export default function KnowledgeBasesPage() {
       <CreateKbDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        sources={sources.data?.data ?? []}
         existingNames={(allKbs.data?.data ?? []).map((k) => k.name)}
         isPending={create.isPending}
         onSubmit={async (input) => {
           const kb = await create.mutateAsync(input);
-          toast.success(`Created ${kb.name}`, { description: 'The first index build has started.' });
-          router.push(`/knowledge/${kb.id}`);
+          toast.success(`Created ${kb.name}`, { description: 'Attach a source on its Sources tab; the first index build starts then.' });
+          router.push(`/knowledge/${kb.id}?tab=sources`);
         }}
       />
 

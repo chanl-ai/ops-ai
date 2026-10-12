@@ -1,7 +1,9 @@
 "use client"
 
+import Link from "next/link"
+
 import {
-  IconCreditCard,
+  IconShieldLock,
   IconDotsVertical,
   IconLogout,
   IconNotification,
@@ -28,9 +30,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useRouter } from "next/navigation"
+import { useSession, useSignOut } from "@/hooks/auth-queries"
 
 export function NavUser({
-  user,
+  user: fallback,
 }: {
   user: {
     name: string
@@ -39,6 +43,12 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  // Whoever is signed in, once the session is known; the workspace lookup is only the placeholder before that.
+  const { session } = useSession()
+  const user = session ? { ...fallback, name: session.user.name, email: session.user.email } : fallback
+  const router = useRouter()
+  // Signing out drops every cached query, then the guard would send this page to /login anyway; going there directly avoids a flash.
+  const signOut = useSignOut()
 
   return (
     <SidebarMenu>
@@ -84,23 +94,35 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <IconUserCircle />
-                Account
+              <DropdownMenuItem asChild>
+                <Link href="/account" data-testid="nav-account">
+                  <IconUserCircle />
+                  Account
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconCreditCard />
-                Billing
+              <DropdownMenuItem asChild>
+                <Link href="/account/security" data-testid="nav-security">
+                  <IconShieldLock />
+                  Security
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconNotification />
-                Notifications
+              <DropdownMenuItem asChild>
+                <Link href="/settings/notifications">
+                  <IconNotification />
+                  Notifications
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="sign-out"
+              onSelect={async () => {
+                await signOut.mutateAsync()
+                router.replace("/login")
+              }}
+            >
               <IconLogout />
-              Log out
+              Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

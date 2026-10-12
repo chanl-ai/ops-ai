@@ -52,7 +52,7 @@ export function ResolveConflictDialog({
             <div className="text-xs font-medium text-muted-foreground">Proposed in {change.documentTitle}</div>
             <p className="mt-1 text-sm whitespace-pre-wrap">{change.after}</p>
           </div>
-          <div className="min-w-0 rounded-md border border-red-600/30 bg-red-500/5 p-3">
+          <div className="min-w-0 rounded-md border border-destructive/40 bg-destructive/5 p-3">
             <div className="text-xs font-medium text-muted-foreground">
               Currently in {c.documentTitle} · {c.sourceName}
             </div>

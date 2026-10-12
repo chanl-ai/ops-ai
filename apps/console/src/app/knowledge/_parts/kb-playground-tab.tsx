@@ -361,7 +361,7 @@ export function KbPlaygroundTab({ kb }: { kb: KnowledgeBaseDetail }) {
           </div>
           <div className="flex items-center justify-between gap-2 px-1 pt-1 text-[11px] text-muted-foreground">
             <span>Enter to send · Shift+Enter for a new line</span>
-            <span className={cn('hidden truncate sm:inline', isDraft && 'text-amber-600 dark:text-amber-400')}>
+            <span className={cn('hidden truncate sm:inline', isDraft && 'text-warning-text')}>
               {compare ? `A: ${summary(draft)} · B: ${summary(draftB)}` : `${isDraft ? 'Draft settings' : 'Saved settings'} · ${summary(draft)}`}
               {alsoKbIds.length ? ` · +${alsoKbIds.length} knowledge ${alsoKbIds.length === 1 ? 'base' : 'bases'}` : ''}
             </span>

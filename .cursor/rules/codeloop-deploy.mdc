@@ -1,0 +1,48 @@
+---
+description: Work a codeloop card through the deploy lane: staging, verify, prod, smoke.
+alwaysApply: false
+---
+
+# codeloop lane: deploy (v1)
+
+Run `codeloop card show <id>` first; the card says which stage it is in. Gates are approved only by a person.
+
+| Stage | Skill | Output | Done check | Gate |
+|---|---|---|---|---|
+| staging | deploy | deploy/{id}/staging.md | `codeloop check file deploy/{id}/staging.md --has 'result: pass'` |  |
+| verify | qa | deploy/{id}/verify.md | `codeloop check file deploy/{id}/verify.md --has 'result: pass'` |  |
+| prod | ship | deploy/{id}/prod.md | `codeloop check file deploy/{id}/prod.md --has 'result: pass'` | prod (owner, before the stage runs) |
+| smoke | debug | deploy/{id}/smoke.md | `codeloop check file deploy/{id}/smoke.md --has 'result: pass'` |  |
+
+## staging
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `deploy` skill (.claude/commands/deploy.md). Deploy to staging or production with verification gates
+4. Write the result to `deploy/{id}/staging.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file deploy/{id}/staging.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## verify
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `qa` skill (.claude/commands/qa.md). Quality gate — run all checks before promoting a task
+4. Write the result to `deploy/{id}/verify.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file deploy/{id}/verify.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## prod
+
+0. This stage changes something public. The card waits at gate `prod` as it enters. Do nothing until a person has approved it.
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `ship` skill (.claude/commands/ship.md). Close the loop — QA, deploy staging, deploy prod, verify, close task
+4. Write the result to `deploy/{id}/prod.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file deploy/{id}/prod.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## smoke
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `debug` skill (.claude/commands/debug.md). Investigate production issues — search logs, check health, create regression tasks
+4. Write the result to `deploy/{id}/smoke.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file deploy/{id}/smoke.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.

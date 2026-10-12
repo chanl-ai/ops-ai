@@ -43,7 +43,7 @@ export function CaseActionCard({
   const Icon = action.kind === 'reply' ? Mail : Wrench;
 
   return (
-    <Card className={pending ? 'border-amber-500/40' : undefined} data-testid={`action-${action.id}`}>
+    <Card className={pending ? 'border-warning/40' : undefined} data-testid={`action-${action.id}`}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
         <div className="flex min-w-0 items-start gap-2">
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -82,8 +82,8 @@ export function CaseActionCard({
             ))}
           </p>
         )}
-        {action.result && <p className="text-xs text-emerald-700 dark:text-emerald-400">{action.result}</p>}
-        {action.rejectedReason && <p className="text-xs text-red-700 dark:text-red-400">Rejected: {action.rejectedReason}</p>}
+        {action.result && <p className="text-xs text-success-text">{action.result}</p>}
+        {action.rejectedReason && <p className="text-xs text-destructive">Rejected: {action.rejectedReason}</p>}
 
         {pending && (
           <div className="flex flex-wrap items-center gap-2 border-t pt-3">

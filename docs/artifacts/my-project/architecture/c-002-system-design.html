@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- codeloop-artifact-template: system-design 1 -->
+<!-- codeloop artifact lineage: c-002 <- base -->
+<!-- codeloop-artifact
+id: c-002
+kind: system-design
+title: Fill codeloop wiki architecture pages
+scope: [console, runtime-api, agent-kernel, interpreter, engine-temporal, engine-langgraph, control-plane, data-gateway, ai-gateway, postgres]
+components: [console, runtime-api, agent-kernel, interpreter, engine-temporal, engine-langgraph, control-plane, data-gateway, ai-gateway, postgres]
+environments: [dev, test, production]
+-->
+<title>Ops AI Runtime Design</title>
+<style>
+/* codeloop-artifact-base-css: 1
+   Shared across templates/artifacts/{mock,system-design,workflow}/template.html. Inlined into a
+   <style> block at generation time by src/lib/artifact.ts, every generated artifact stays a
+   single, self-contained HTML file; nothing links out to this file at view time.
+   Token set extends the Protobox palette already used in templates/mock/template.html. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --text: #1a1d21;
+  --muted: #5f6b7a;
+  --border: #d9dee5;
+  --accent: #2f5fd0;
+  --accent-text: #ffffff;
+  --ok: #1f7a4d;
+  --warn: #a15c00;
+  --danger: #b3261e;
+  --line: 0.0625rem;
+
+  /* Spacing scale: 4/8/12/16/24/32, expressed in rem (1rem = 16). */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Radii: cards, pills, sheets. */
+  --radius-card: 1rem;
+  --radius-pill: 999rem;
+  --radius-sheet: 1.5rem;
+
+  /* Type scale. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418;
+    --surface: #1a1f26;
+    --surface-2: #20262e;
+    --text: #e8ebef;
+    --muted: #9aa5b4;
+    --border: #2c343f;
+    --accent: #7ea2f5;
+    --accent-text: #0d1117;
+    --ok: #5fcf96;
+    --warn: #f0b860;
+    --danger: #f28b82;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418;
+  --surface: #1a1f26;
+  --surface-2: #20262e;
+  --text: #e8ebef;
+  --muted: #9aa5b4;
+  --border: #2c343f;
+  --accent: #7ea2f5;
+  --accent-text: #0d1117;
+  --ok: #5fcf96;
+  --warn: #f0b860;
+  --danger: #f28b82;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+}
+h1, h2, h3, h4 { font-weight: 600; margin: 0; }
+h1 { font-size: var(--text-2xl); }
+h2 { font-size: var(--text-xl); }
+h3 { font-size: var(--text-lg); }
+p { margin: 0; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+
+/* Page shell: 16px-equivalent gutters, no fixed pixel widths, grid clamps instead of break points. */
+.shell { display: grid; gap: var(--space-6); max-width: 76rem; margin: 0 auto; padding: var(--space-5) var(--space-4); }
+.page-head { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-4); border-bottom: var(--line) solid var(--border); }
+.page-head .scope { color: var(--muted); max-width: 60rem; }
+.meta { color: var(--muted); font-size: var(--text-sm); }
+
+/* Legend: the groupings a mock/spec spans. */
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.legend .chip { background: var(--surface-2); }
+
+/* Changestrip: what changed vs the prior version, one line per change. */
+.changestrip { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); background: var(--surface); border: var(--line) solid var(--border); border-radius: var(--radius-card); }
+.changestrip h2 { font-size: var(--text-lg); }
+.changestrip ul { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* Chip / badge: small labelled tokens. Chip = neutral grouping tag; badge = status. */
+.chip, .badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-3); height: 1.5rem; border: var(--line) solid var(--border); border-radius: var(--radius-pill); font-size: var(--text-xs); white-space: nowrap; }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.danger { color: var(--danger); border-color: var(--danger); }
+.badge.accent { color: var(--accent); border-color: var(--accent); }
+
+/* App chrome: the window a frame sits inside, so a frame reads as the product, not a wireframe. */
+.chrome { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); border: var(--line) solid var(--border); border-radius: var(--radius-card); overflow: hidden; background: var(--surface); }
+.chrome .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); border-bottom: var(--line) solid var(--border); background: var(--surface-2); }
+.chrome .dots { display: flex; gap: var(--space-1); }
+.chrome .dots span { width: 0.6rem; height: 0.6rem; border-radius: var(--radius-pill); background: var(--border); display: block; }
+.chrome .crumb { color: var(--muted); font-size: var(--text-sm); }
+.chrome .side { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border-right: var(--line) solid var(--border); background: var(--surface-2); min-width: 0; }
+.chrome .side .item { padding: var(--space-2) var(--space-3); border-radius: var(--radius-card); color: var(--muted); font-size: var(--text-sm); }
+.chrome .side .item.active { background: var(--surface); color: var(--text); font-weight: 600; }
+.chrome .main { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; min-height: 14rem; }
+.chrome .main .header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); justify-content: space-between; }
+.chrome .main .actions { display: flex; gap: var(--space-2); }
+
+/* Frame: a labelled screen/diagram surface. Always followed by a sibling .caption, never carries one inside. */
+.frame { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.frame > .chrome { width: 100%; }
+.frame .skeleton { background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); border-radius: var(--radius-card); height: 1rem; }
+.frame .skeleton.block { height: 4rem; }
+
+/* Caption: outside the frame. Label, rationale, API/data line. */
+.caption { display: flex; flex-direction: column; gap: var(--space-1); padding-left: var(--space-4); border-left: var(--line) solid var(--border); }
+.caption h4 { font-size: var(--text-sm); display: flex; align-items: center; gap: var(--space-2); }
+.caption p { color: var(--muted); font-size: var(--text-sm); }
+.caption .api { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--text-xs); color: var(--muted); }
+
+/* State tabs: the state a frame is showing, named as a row above each frame group. */
+.state-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.state-tabs .tab { padding: var(--space-1) var(--space-3); border: var(--line) solid var(--border); border-radius: var(--radius-pill); font-size: var(--text-xs); color: var(--muted); }
+.state-tabs .tab.current { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+
+/* Card / form row / button / callout. */
+.card { padding: var(--space-4); background: var(--surface); border: var(--line) solid var(--border); border-radius: var(--radius-card); display: flex; flex-direction: column; gap: var(--space-3); }
+.form-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.form-row label { font-size: var(--text-sm); color: var(--muted); }
+.form-row input, .form-row select, .form-row textarea { font: inherit; padding: var(--space-2); color: var(--text); background: var(--bg); border: var(--line) solid var(--border); border-radius: var(--radius-card); }
+.button { font: inherit; font-size: var(--text-sm); padding: var(--space-2) var(--space-4); color: var(--accent-text); background: var(--accent); border: 0; border-radius: var(--radius-card); cursor: pointer; }
+.button.quiet { color: var(--text); background: transparent; border: var(--line) solid var(--border); }
+.button.danger { background: var(--danger); color: var(--accent-text); }
+.callout { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-card); border: var(--line) solid var(--border); background: var(--surface-2); font-size: var(--text-sm); }
+.callout.warn { border-color: var(--warn); color: var(--warn); }
+.callout.danger { border-color: var(--danger); color: var(--danger); }
+.callout.info { border-color: var(--accent); color: var(--accent); }
+
+/* Table. */
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th, td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: var(--line) solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.03em; }
+td.gap { color: var(--muted); font-style: italic; }
+
+/* Contract + section scaffolding. Counter resets once on .shell, not per section, so the numbered
+   headings (1. Component map, 2. State matrix, …) run in document order down the page. */
+.shell { counter-reset: contract; }
+section.contract { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4); background: var(--surface); border: var(--line) solid var(--border); border-radius: var(--radius-card); }
+section.contract h3 { counter-increment: contract; }
+section.contract h3::before { content: counter(contract) '. '; color: var(--muted); }
+.component-map, .state-matrix { overflow-x: auto; }
+
+/* Mermaid diagrams render client-side from the jsdelivr CDN via a `pre` tagged with the mermaid
+   class (see the generated page's body). No extra CSS needed here, mermaid themes itself from
+   the surrounding colour-scheme call in the page's own script tag. */
+pre.mermaid { background: var(--surface); border: var(--line) solid var(--border); border-radius: var(--radius-card); padding: var(--space-4); overflow-x: auto; }
+
+/* Grid of frames: clamps, never a fixed pixel width. */
+.stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.frame-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--space-5); align-items: start; }
+.screen-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.screen-group > .scope { color: var(--muted); font-size: var(--text-sm); }
+
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header class="page-head">
+    <h1>Ops AI runtime: how a workflow with agents, evals, fan-out and handovers runs</h1>
+    <p class="meta">c-002 · ops-ai · architecture · system design · 2026-10-10</p>
+    <p class="scope">The runtime that executes published workflows, agent runs and chat sessions for the Ops AI console, on either of two execution engines, Temporal or LangGraph on PostgreSQL, behind one seam. Sources: docs/architecture/service-map.md, specs 14–17, ADR-0001..0015.</p>
+  </header>
+
+  <section class="changestrip">
+    <h2>What changed</h2>
+    <ul>
+      <li>First version. Supersedes the stub wiki pages that said no architecture was found.</li>
+      <li>Nothing is decided. Every ADR is an option with a recommendation; the design keeps a seam at each choice so a deployment can pick differently. The seams table below is the contract.</li>
+      <li>Slice 1 (chat on the real runtime) is live: OpenAI gpt-5.5, Pydantic AI kernel, approval with step-up, PostgreSQL. Section "The prototype at the bottom" shows how. The engine seam arrives with the first workflow run.</li>
+    </ul>
+  </section>
+
+  <section class="contract">
+    <h3>Context</h3>
+    <p>Back-office staff at a bank (Northfield is the demo tenant) run agents and workflows from the Ops AI console. The runtime executes them; everything it touches outside itself goes through a gateway or the control plane.</p>
+    <table>
+      <tr><th>Actor / external system</th><th>Relationship</th></tr>
+      <tr><td>Ops staff (console)</td><td>Chat with agents, watch runs in Cases, decide reviews. Reach the runtime only through the console BFF.</td></tr>
+      <tr><td>Builders and approvers (console)</td><td>Author definitions, request and approve publishes in the control plane; the runtime reads the result as a compiled plan by digest.</td></tr>
+      <tr><td>Outside assistants</td><td>Call published workflows over the MCP and API channels; each call starts a run.</td></tr>
+      <tr><td>Shared mailboxes (Microsoft Graph)</td><td>mailbox-intake polls delta every 60 s and starts a run per new mail.</td></tr>
+      <tr><td>Bank systems (CRM, core, mail, MCP servers)</td><td>Reached only through the data gateway, which decides with OPA and checks approval tokens on writes.</td></tr>
+      <tr><td>Model providers (Anthropic, OpenAI, bank-hosted)</td><td>Reached only through the AI gateway; workers hold no model keys. Slice 1 uses a direct key from the environment as a stand-in.</td></tr>
+      <tr><td>Bank IdP (Entra, Okta)</td><td>Signs people in (spec 13); issues the delegation tokens a run acts under (ADR-0005).</td></tr>
+      <tr><td>Control plane</td><td>Registry, versions, release pointers, cases, reviews, audit. Owns every approval token; the runtime only verifies them.</td></tr>
+    </table>
+  </section>
+
+  <section class="contract">
+    <h3>Software layers and libraries</h3>
+    <p>Top to bottom: what the person touches, down to where bytes rest. Each layer names its technology and version; the table under the diagram says what each library is for, its licence, and the alternative the matching ADR scored. Boxes marked "(slice 1)" are what runs today.</p>
+    <pre class="mermaid">
+flowchart TB
+  subgraph L1["Presentation: apps/console"]
+    direction LR
+    ui["Next.js 16 · React 19 · shadcn/ui"] --- chat["AI SDK v6 useChat · SSE reader (chat-http.ts)"] --- auth["AuthProvider seam: mock | oidc | firebase"]
+  end
+  subgraph L2["Runtime API: services/agents-service/src/ops_agents/api"]
+    direction LR
+    api["FastAPI 0.143 · uvicorn · sse-starlette"] --- env["envelope { success, data } · X-Team-Id · service token"]
+  end
+  subgraph L3["Domain: one turn, one plan"]
+    direction LR
+    kernel["Agent kernel: Pydantic AI 2.55 (ops_agent_kernel)"] --- interp["Interpreter + node catalogue (spec 16)"] --- acts["Activities: tools, knowledge, cases (ops_agents.activities)"]
+  end
+  subgraph L4["Engine seam (ADR-0015): chosen per deployment"]
+    direction LR
+    temporal["Temporal: temporalio 1.34 SDK + server"] --- lg["LangGraph 1.2 + PostgresSaver, pollers"] --- dbos["DBOS Transact 3.2 (spike)"] --- none["none: in-process chat turn (slice 1)"]
+  end
+  subgraph L5["Gateways and control plane"]
+    direction LR
+    aig["AI gateway: key-and-budget + Portkey | direct key (slice 1)"] --- dg["Data gateway: OPA, approval tokens | in-process tools (slice 1)"] --- cp["Control plane: registry, cases, reviews | seeded catalog (slice 1)"]
+  end
+  subgraph L6["Stores (ADR-0006)"]
+    direction LR
+    pg["PostgreSQL 16: SQLAlchemy 2 + asyncpg + Alembic"] --- redis["Redis Streams relay"] --- s3["S3 object lock (WORM)"] --- tpg["Temporal PostgreSQL (when Temporal)"]
+  end
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6
+    </pre>
+    <table>
+      <tr><th>Layer</th><th>Library</th><th>Version</th><th>Licence</th><th>Role</th><th>Alternative scored</th></tr>
+      <tr><td>Presentation</td><td>Next.js, React, shadcn/ui</td><td>16, 19</td><td>MIT</td><td>Console pages, BFF route handlers, components</td><td>LibreChat for chat (ADR-0009)</td></tr>
+      <tr><td>Presentation</td><td>Vercel AI SDK</td><td>6 (7 is current)</td><td>Apache-2.0</td><td>useChat, UI message stream parts</td><td>assistant-ui on top (ADR-0009)</td></tr>
+      <tr><td>Runtime API</td><td>FastAPI, uvicorn, sse-starlette</td><td>0.143, 0.54, 3.5</td><td>MIT, BSD, BSD</td><td>HTTP routes, SSE streaming, OpenAPI served from the contract</td><td>any ASGI framework</td></tr>
+      <tr><td>Runtime API</td><td>pydantic, pydantic-settings</td><td>2.14, 2.15</td><td>MIT</td><td>Contract models, one Settings object read at boot</td><td>none</td></tr>
+      <tr><td>Domain</td><td>Pydantic AI</td><td>2.55</td><td>MIT</td><td>The agent loop: model call, tool calls, deferred tools as interrupts, AI SDK stream adapter</td><td>OpenAI Agents SDK, LangGraph agents, own loop (ADR-0014)</td></tr>
+      <tr><td>Domain</td><td>openai SDK (anthropic optional)</td><td>current</td><td>Apache-2.0, MIT</td><td>Model client; slice 1 calls OpenAI gpt-5.5 with a key from the environment</td><td>bank-hosted OpenAI-compatible endpoint</td></tr>
+      <tr><td>Engine</td><td>temporalio</td><td>1.34</td><td>MIT</td><td>Durable execution, Updates, timers, replay, Worker Versioning</td><td>LangGraph on PostgreSQL, DBOS (ADR-0015)</td></tr>
+      <tr><td>Engine</td><td>langgraph, langgraph-checkpoint-postgres</td><td>1.2, 3.1</td><td>MIT (psycopg LGPL)</td><td>Graph run with checkpoints and interrupts; adapter adds timers, leases, queue</td><td>Temporal, DBOS</td></tr>
+      <tr><td>Gateways</td><td>Portkey gateway, OPA</td><td>self-hosted</td><td>MIT, Apache-2.0</td><td>Model data plane; policy decisions</td><td>LiteLLM; Envoy AI Gateway (ADR-0007, 0008)</td></tr>
+      <tr><td>Stores</td><td>SQLAlchemy Core, asyncpg, Alembic</td><td>2.1, 0.32, 1.20</td><td>MIT, Apache-2.0, MIT</td><td>Typed SQL, async driver, reviewed migrations</td><td>psycopg (LGPL)</td></tr>
+      <tr><td>Stores</td><td>redis-py</td><td>8.1</td><td>MIT</td><td>Stream relay for chat parts, 10-minute expiry, no job queue</td><td>none in slice 1</td></tr>
+      <tr><td>Observability</td><td>opentelemetry-sdk, structlog</td><td>1.45, 26.1</td><td>Apache-2.0, MIT</td><td>One trace per run, JSON logs with run and step ids</td><td>Langfuse on top (ADR-0007)</td></tr>
+      <tr><td>Tooling</td><td>uv, ruff, pyright, pytest</td><td>0.13, 0.17, 1.1, 9.1</td><td>MIT/Apache</td><td>Workspace, lint, strict types, tests; make verify</td><td>mypy</td></tr>
+    </table>
+    <p class="muted">Full transitive list with native-code and network flags: <code>docs/architecture/dependencies.md</code> (61 packages, no copyleft beyond psycopg for the LangGraph adapter).</p>
+  </section>
+
+  <section class="contract">
+    <h3>How the running prototype works, sequence by sequence</h3>
+    <p>What runs today when you open <code>http://localhost:3016/chat</code>. Every name below is a file or table in the repo at ops-ai <code>9991257</code> (runtime) and <code>0d508ca</code> (console).</p>
+    <table>
+      <tr><th>Piece</th><th>Where</th><th>What it does</th></tr>
+      <tr><td>Console switch</td><td><code>apps/console/src/lib/api/index.ts</code></td><td>The only file that reads env. With <code>NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:8700</code> the chat area becomes the HTTP client (<code>createChatOnlyHttp</code>); every other area stays on the in-memory mock.</td></tr>
+      <tr><td>Chat HTTP client</td><td><code>apps/console/src/lib/api/chat-http.ts</code></td><td>Calls the Runtime's <code>/chat/*</code> routes from the browser with <code>X-Team-Id</code>; reads the reply as server-sent events, one JSON <code>ChatStreamEvent</code> per <code>data:</code> frame; refetches the thread after a widget action.</td></tr>
+      <tr><td>Runtime API</td><td><code>services/agents-service/src/ops_agents/api</code> · <code>routers/chat.py</code></td><td>FastAPI on port 8700. Eleven routes: agents, threads CRUD and bulk, <code>POST /threads/{id}/messages</code> (SSE), feedback, widget actions. <code>envelope.py</code> wraps <code>{ success, data }</code>; <code>auth.py</code> is the dev session.</td></tr>
+      <tr><td>Turn driver</td><td><code>ops_agents/api/turns.py</code> · <code>TurnRecorder</code>, <code>drive()</code></td><td>Builds a <code>TurnRequest</code> from the seeded agent, runs the kernel, translates kernel events into the console's stream events and writes messages, tool calls, widgets and interrupts as they happen.</td></tr>
+      <tr><td>Agent kernel</td><td><code>packages/ops_agent_kernel</code> · <code>kernel.py run_turn()</code></td><td>One turn: retrieve passages, assemble context, call the model through Pydantic AI, run read tools, and when the model calls a write tool stop with an <code>Interrupted</code> event carrying the model history. Events: <code>StatusChanged</code>, <code>TextDelta</code>, <code>ToolInputAvailable</code>, <code>ToolOutput</code>, <code>CitationsReady</code>, <code>Interrupted</code>, <code>TurnFinished</code>.</td></tr>
+      <tr><td>Model</td><td><code>ops_service_kit/settings.py</code> · <code>OPS_MODEL_ALIAS</code></td><td>OpenAI <code>gpt-5.5</code> by default, key <code>OPENAI_API_KEY</code> from the environment, never a file. A <code>claude-*</code> alias selects Anthropic when its key exists. No gateway yet.</td></tr>
+      <tr><td>Tools and passages</td><td><code>packages/ops_agents.activities</code> · <code>catalog.py</code>, <code>tools.py</code>, <code>knowledge.py</code></td><td>A seeded catalog: three agents, their tools (read tools run locally; write tools carry an approval template and a money flag), six policy passages searched by keyword for citations. Stand-ins for the data gateway and knowledge-ingest behind the same ports the kernel calls.</td></tr>
+      <tr><td>Tables</td><td><code>ops_agents/api/store.py</code> · migration <code>0001</code></td><td><code>threads</code>, <code>messages</code>, <code>tool_calls</code> (idempotency key <code>run:turn:step:ordinal</code> and input hash), <code>widgets</code>, <code>interrupts</code> (the paused turn's model history). PostgreSQL 5477 from <code>compose.yaml</code>; SQLite in tests.</td></tr>
+      <tr><td>Step-up</td><td>console <code>components/auth/reauth-dialog.tsx</code> · runtime <code>routers/chat.py</code></td><td>A widget with <code>movesMoney</code> asks "Confirm it is you" before sending; the Runtime refuses a money approval without a step-up token (422). The token is recorded, not yet verified.</td></tr>
+    </table>
+    <div class="stack">
+      <div class="frame">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant B as Browser /chat
+  participant R as Runtime API :8700
+  participant K as Kernel
+  participant O as OpenAI gpt-5.5
+  participant DB as PostgreSQL
+  B->>R: POST /chat/threads/{id}/messages {content}
+  R->>DB: insert user message
+  R->>K: run_turn(TurnRequest)
+  K->>K: keyword retrieval, context
+  K->>O: chat completion, tools declared
+  O-->>K: text deltas, tool call lookup_account
+  K->>K: run read tool locally
+  K->>O: tool result
+  O-->>K: final text
+  K-->>R: events
+  R-->>B: SSE status, text, tool_start, tool_end, citations, done
+  R->>DB: assistant message, tool_calls
+        </pre>
+        <div class="caption"><h4>One question</h4><p>The browser talks to the Runtime directly; the reply streams as it is produced and is stored as it streams.</p><p class="api">POST /chat/threads/{id}/messages · turns.py drive()</p></div>
+      </div>
+      <div class="frame">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant B as Browser /chat
+  participant R as Runtime API :8700
+  participant K as Kernel
+  participant O as OpenAI gpt-5.5
+  participant DB as PostgreSQL
+  B->>R: POST messages "hold wire W-88213"
+  R->>K: run_turn
+  K->>O: completion
+  O-->>K: tool call place_wire_hold (write, money)
+  K-->>R: Interrupted(history, pending call)
+  R->>DB: interrupts row, widget pending
+  R-->>B: SSE widget approval, done
+  B->>B: step-up dialog (movesMoney)
+  B->>R: POST widgets/{id}/actions {approve, stepUpToken}
+  R->>K: resume(history, approved)
+  K->>K: run write tool with stored input, same key
+  K->>O: tool result
+  O-->>K: "Hold is in place… NB-…"
+  R->>DB: widget approved, continuation message
+  B->>R: GET thread (refetch shows it)
+        </pre>
+        <div class="caption"><h4>One approval</h4><p>The turn pauses with its model history saved; approval resumes the same turn through Pydantic AI's deferred tools, so the model finishes its own sentence.</p><p class="api">POST …/widgets/{id}/actions · kernel.py resume path</p></div>
+      </div>
+    </div>
+    <p class="muted">Run it: <code>cd services/agents-service && make install && make db-up && make migrate && make run</code>, then <code>cd apps/console && pnpm dev:runtime</code> (console on 3017; 3016 is already running this way). Proof script: <code>services/agents-service/scripts/prove-chat.py</code>.</p>
+  </section>
+
+  <section class="contract">
+    <h3>One complex workflow, step by step</h3>
+    <p>A dispute email with attachments. The definition below uses every node kind the owner asked about: a loop over items with fan-out, an agent per item, an agent that grades (an eval inside the run), a condition that loops back, a policy gate, a handover to a person, and a write that needs the person's approval. Node kinds are from spec 16 §3; the agent turn inside each agent node is spec 15.</p>
+    <pre class="mermaid">
+flowchart TD
+  T["trigger: mailbox"] --> A1["agent: classify intent"]
+  A1 --> SW{"switch on classification"}
+  SW -->|dispute| L["loop: for each attachment, concurrency 4, max 20"]
+  SW -->|other| H0["human step: handoff to triage"]
+  L --> A2["agent: extract fields from one attachment"]
+  A2 --> LE["loop end: collect"]
+  LE --> A3["agent: draft reply with citations"]
+  A3 --> A4["agent: grade the draft, judge asset v3"]
+  A4 --> C{"condition: score >= 0.8 or attempts = 3"}
+  C -->|no| A3
+  C -->|yes| G["gate: policy evaluation"]
+  G -->|approved by policy| S["tool: send reply, write"]
+  G -->|needs person| H["human step: handover to Disputes, SLA 4h"]
+  H -->|approved, token| S
+  H -->|rejected| E2["end: closed without reply"]
+  H -->|timeout| H2["human step: escalate to team lead"]
+  S --> E["end"]
+    </pre>
+    <table>
+      <tr><th>Node</th><th>What runs</th><th>Side effect class</th><th>If the worker dies here</th><th>If it has to wait</th></tr>
+      <tr><td>trigger: mailbox</td><td>mailbox-intake calls R1 start run with the mail id as the idempotency key; the plan is pinned by digest at the production pointer</td><td>none</td><td>R1 twice with one key returns the first run</td><td>never</td></tr>
+      <tr><td>agent: classify, extract, draft, grade</td><td>One kernel turn each: context assembly, model call through the AI gateway, tool calls through the data gateway, result by reference. The grade node is an agent whose version is a judge asset from Assurance (spec 04), so the eval that gates publish is the same eval that gates the run.</td><td>read, or none</td><td>The step ledger is saved after every committed model or tool step; the retry replays the ledger and calls nothing twice (spec 15 §4.5)</td><td>A turn that hits an approval returns an Interrupt; the interpreter turns it into a human step</td></tr>
+      <tr><td>switch, condition, loop end</td><td>CEL in workflow code, no I/O</td><td>none</td><td>Recomputed from state; deterministic</td><td>never</td></tr>
+      <tr><td>loop: for each attachment</td><td>The interpreter schedules the body per item, at most 4 in flight, iteration index in every idempotency key; above 50 items the body runs as child runs through R1 (spec 16 §3.7)</td><td>the body's highest class</td><td>Finished items are in the journal; only the in-flight items re-run</td><td>never; items that fail follow the body's onError and the loop continues</td></tr>
+      <tr><td>condition: score or attempts</td><td>Loops back to the draft agent at most three times; the attempt count lives in run state</td><td>none</td><td>Count is state, so no extra attempt</td><td>never</td></tr>
+      <tr><td>gate: policy</td><td>Evaluates the published gate policies; below the auto-approve limit the case service signs a policy approval token; money and high tier always go to a person (spec 16 §3.11)</td><td>none</td><td>Re-evaluated; the token request is keyed</td><td>never</td></tr>
+      <tr><td>human step: handover</td><td>create_decision_tasks in the case service, then the run waits; SLA timer 4 h; on timeout the escalate port</td><td>write to the case service only</td><td>The wait is durable in the engine; tasks are keyed runId:nodeId:iteration so a retry returns the same tasks</td><td>Hours to days at no compute. The decision arrives as an Update carrying the approval token bound to the exact action payload (spec 16 §4)</td></tr>
+      <tr><td>tool: send reply</td><td>Data gateway call with the approval token; OPA checks token, scope, expiry, entitlement; one attempt, then a reconciliation read</td><td>write</td><td>If the gateway accepted before the crash, the reconciliation read finds the sent mail and the step completes without a second send</td><td>never</td></tr>
+    </table>
+  </section>
+
+  <section class="contract">
+    <h3>The same run on each engine</h3>
+    <p>The plan is identical. What differs is how the engine adapter provides durability. The third column is the DBOS spike ADR-0015 asks for; its two unverified cells are marked.</p>
+    <table>
+      <tr><th>Mechanism</th><th>Temporal adapter</th><th>LangGraph on PostgreSQL adapter</th><th>DBOS Transact (spike)</th></tr>
+      <tr><td>Start a run</td><td>Start InterpreterWorkflow, id = runId</td><td>Insert engine_run, enqueue work; graph built from the plan at first pickup</td><td>Start workflow with runId as the idempotent workflow id</td></tr>
+      <tr><td>Agent node</td><td>Activity on the tier's task queue; ledger in heartbeat details</td><td>Graph node calls the same activity function; ledger in a table</td><td>Step function; ledger in a table</td></tr>
+      <tr><td>Fan-out loop, concurrency 4</td><td>Activities scheduled in parallel inside workflow code; child workflows above 50 items</td><td>Send to the body subgraph with a semaphore of 4 held in state; child runs above 50 items through R1</td><td>Parallel steps; child runs through R1</td></tr>
+      <tr><td>Eval loop back</td><td>Workflow code loops; history grows per attempt</td><td>Edge back to the draft node; checkpoint per attempt</td><td>Loop in workflow code; step history grows</td></tr>
+      <tr><td>Human wait, hours to days</td><td>wait_condition on an Update handler; zero compute while waiting</td><td>interrupt() after the decision tasks exist; thread parked in the checkpointer; zero compute</td><td>Durable recv on a workflow event; zero compute</td></tr>
+      <tr><td>SLA timer, escalation</td><td>Durable timer in the workflow</td><td>Row in timers; a poller per tier resumes due threads with SKIP LOCKED; accuracy equals the poll interval</td><td>Durable sleep stored in the database</td></tr>
+      <tr><td>Decision arrives</td><td>Update with a validator that re-checks token, self-approval, approver count</td><td>Advisory lock per run, dedupe on update_id, same validator on get_state, then Command resume</td><td>Send to the workflow; validator in our code (unverified)</td></tr>
+      <tr><td>Crash mid-tool-call</td><td>Activity retried per side-effect class; write class gets one attempt plus reconciliation</td><td>Lease on the work row expires, another worker resumes from the last checkpoint; the node re-runs from its start, so the ledger and idempotency keys do the de-duplication</td><td>Resumes from the last completed step</td></tr>
+      <tr><td>Versioning of running runs</td><td>Plan by digest, Worker Versioning pinned builds, patched() for emergencies</td><td>Plan by digest; each run records engineBuild and workers pick only their build, so old builds drain</td><td>Plan by digest; code versioning unverified</td></tr>
+      <tr><td>Replay</td><td>Deterministic replay of history; proves code changes against real past runs</td><td>Resume corpus: recorded checkpoints resumed on the new build with activity fakes; proves resume, not determinism</td><td>Step-level replay</td></tr>
+      <tr><td>Extra infrastructure</td><td>Temporal server and its PostgreSQL</td><td>None beyond the ops PostgreSQL</td><td>None beyond PostgreSQL</td></tr>
+      <tr><td>Licence note</td><td>MIT; Rust core wheel</td><td>MIT; checkpointer needs psycopg 3, LGPL-3.0, used unmodified</td><td>MIT</td></tr>
+    </table>
+    <div class="stack">
+      <div class="frame">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant CP as Control plane
+  participant T as Temporal
+  participant W as Worker
+  participant DG as Data gateway
+  W->>CP: create_decision_tasks (keyed)
+  W->>T: wait_condition on Update
+  Note over T: days pass, no compute
+  CP->>T: Update actionDecided + token
+  T->>W: validator ok, resume
+  W->>DG: send_reply with token
+  DG-->>W: accepted, call id
+  W->>CP: journal row, case update
+        </pre>
+        <div class="caption"><h4>Temporal: the wait is a durable Update handler</h4><p>The validator runs before the Update is accepted, so a stale or forged token never reaches workflow code.</p><p class="api">POST /v1/runs/{runId}/updates · spec 14 R7</p></div>
+      </div>
+      <div class="frame">
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant CP as Control plane
+  participant PG as PostgreSQL
+  participant W as Worker pool
+  participant DG as Data gateway
+  W->>CP: create_decision_tasks (keyed)
+  W->>PG: checkpoint, interrupt, timers row
+  Note over PG: days pass, thread parked
+  CP->>PG: engine_update row + token (lock, dedupe)
+  W->>PG: poller picks the run (SKIP LOCKED)
+  W->>W: validator on get_state, Command resume
+  W->>DG: send_reply with token
+  W->>PG: journal row, checkpoint
+        </pre>
+        <div class="caption"><h4>LangGraph on PostgreSQL: the wait is an interrupt plus a parked thread</h4><p>Timers, leases and the queue are tables the adapter owns; the validator is the same code, run on the restored state.</p><p class="api">POST /v1/runs/{runId}/updates · ADR-0015 adapter table</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="contract">
+    <h3>Deployment topology</h3>
+    <table>
+      <tr><th>Environment</th><th>Where each piece runs</th><th>Notes</th></tr>
+      <tr><td>dev</td><td>Console on the laptop (3016), Runtime API (8700), PostgreSQL in compose (5477); Temporal dev server in compose only when the Temporal adapter is selected; direct model key from the environment</td><td>Slice 1 today. Per-area API switch keeps every page except /chat on the mock.</td></tr>
+      <tr><td>test</td><td>Bank Kubernetes namespace: console, Runtime API, worker pools per tier, control plane, PostgreSQL ops; Temporal server if allowed; AI and data gateways; OPA</td><td>Engine chosen by ENGINE=temporal|langgraph. Service tokens replaced by mTLS through the mesh (spec 17 Q5).</td></tr>
+      <tr><td>production</td><td>Same as test on separate namespaces and databases; WORM object store; bank collector for traces</td><td>Default-deny egress: workers reach only the engine, the two gateways and the files service (ADR-0004).</td></tr>
+    </table>
+    <pre class="mermaid">
+flowchart LR
+  subgraph A["Deployment A: bank allows Temporal"]
+    a1["Runtime API pods, FastAPI"]
+    a2["Worker pools per tier, Temporal SDK"]
+    a3["Temporal server + its PostgreSQL"]
+    a4["PostgreSQL ops"]
+    a2 --> a3
+    a1 --> a4
+    a2 --> a4
+  end
+  subgraph B["Deployment B: PostgreSQL only"]
+    b1["Runtime API pods, FastAPI"]
+    b2["Worker pools per tier, LangGraph + pollers"]
+    b4["PostgreSQL ops: checkpoints, timers, work queue"]
+    b1 --> b4
+    b2 --> b4
+  end
+    </pre>
+  </section>
+
+  <section class="contract">
+    <h3>Network view</h3>
+    <p>People never reach the runtime directly. The BFF carries the session; service calls carry a service token today and mTLS from test.</p>
+    <pre class="mermaid">
+flowchart LR
+  browser["Browser"] -->|https 443, session cookie| console["Console BFF, Next.js :3016"]
+  console -->|http, X-Team-Id, SSE| api["Runtime API, FastAPI :8700"]
+  mcp["Outside assistant"] -->|https, MCP| api
+  api -->|service token| cp["Control plane :8710"]
+  api -->|service token| dg["Data gateway :8720"]
+  api -->|per-workflow key| aig["AI gateway :8730"]
+  aig --> models["Model endpoints"]
+  dg --> bank["Bank systems, MCP servers"]
+  api -->|5432| pg["PostgreSQL ops :5477"]
+  api -.->|7233, when selected| temporal["Temporal :7233"]
+    </pre>
+  </section>
+
+  <section class="contract">
+    <h3>Data stores</h3>
+    <p>What the runtime owns in PostgreSQL ops (spec 14 §7). Definitions, cases, reviews and audit belong to the control plane; chat threads and messages are in the runtime for slice 1 and move to the control plane's chat module later (spec 14 Q2).</p>
+    <pre class="mermaid">
+erDiagram
+  RUN ||--o{ RUN_STEP : has
+  RUN ||--o{ RUN : parent_of
+  RUN ||--o{ ENGINE_WORK : queued_as
+  RUN ||--o{ TIMER : waits_on
+  RUN ||--o{ ENGINE_UPDATE : receives
+  RUN_STEP ||--o{ TOOL_CALL : made
+  RUN_STEP ||--o| INTERRUPT : paused_at
+  CHAT_THREAD ||--o{ CHAT_MESSAGE : has
+  CHAT_THREAD ||--o| RUN : session_of
+  CHAT_MESSAGE ||--o{ TOOL_CALL : shows
+  CHAT_MESSAGE ||--o{ WIDGET : shows
+  RUN {
+    string run_id PK
+    string workflow_id
+    int version_number
+    string definition_digest
+    string environment
+    string status
+    string parent_run_id
+    string engine
+    string engine_build
+  }
+  RUN_STEP {
+    string step_id PK
+    string kind
+    string status
+    string input_ref
+    string output_ref
+    int attempts
+  }
+  TIMER {
+    string timer_id PK
+    datetime due_at
+    string kind
+  }
+    </pre>
+  </section>
+
+  <section class="contract">
+    <h3>Seams: where a deployment may choose differently</h3>
+    <p>Each row is one choice an enterprise may make differently. The seam is the interface that keeps the rest of the system unchanged; the options are what the ADR scored; the recommendation is the default, not a decision. What every option must honour is the rule that makes a plan or a turn portable.</p>
+    <table>
+      <tr><th>Seam</th><th>Options (ADR)</th><th>Recommended default</th><th>What every option must honour</th></tr>
+      <tr><td>Execution engine</td><td>Temporal · LangGraph on PostgreSQL · DBOS Transact · none for chat-only (ADR-0001, 0015)</td><td>LangGraph on PostgreSQL first, Temporal where allowed</td><td>Engine interface: start, update with validator, cancel, query, timers, child runs via R1; idempotent side-effecting nodes; the eight conformance tests</td></tr>
+      <tr><td>Agent loop</td><td>Pydantic AI · OpenAI Agents SDK · LangGraph agents · own loop over the model SDKs (ADR-0014)</td><td>Pydantic AI</td><td>Kernel contract: TurnRequest in, events and TurnResult out, Interrupt and Resume shapes, no library persistence, no outbound telemetry</td></tr>
+      <tr><td>Model access</td><td>Portkey gateway · LiteLLM · direct provider key · bank-hosted OpenAI-compatible endpoint (ADR-0008)</td><td>Key-and-budget service in front of Portkey; direct key in dev</td><td>OpenAI-compatible chat completions; keys held by the gateway service, never by workers; per-workflow budget</td></tr>
+      <tr><td>Tool access</td><td>Data gateway with OPA · Protobox agent-service tool runner · in-process tools for dev (ADR-0005, spec 03)</td><td>Data gateway</td><td>Every write carries an approval token bound to the input hash; every call logged with run and step ids</td></tr>
+      <tr><td>System of record</td><td>PostgreSQL · the bank's case system for cases · MongoDB for the Protobox edition's Data Hub (ADR-0006)</td><td>PostgreSQL</td><td>Immutable published rows; transactional pointer moves; append-only audit</td></tr>
+      <tr><td>Durable evidence</td><td>S3 object lock · Azure Blob immutability · bank WORM appliance (ADR-0010)</td><td>S3-compatible with object lock</td><td>One storage protocol in the files service; bundles addressed by digest</td></tr>
+      <tr><td>Sign-in</td><td>OIDC or SAML to the bank IdP · Firebase · mock (ADR-0013)</td><td>oidc; firebase for the self-serve edition</td><td>AuthProvider interface; policy from the API; step-up before money approvals in every channel</td></tr>
+      <tr><td>Language of the runtime</td><td>Python · TypeScript on Protobox's agent-service (ADR-0002)</td><td>Python</td><td>Contracts in packages/contracts generated for both; shared kernel fixtures</td></tr>
+      <tr><td>Deployment</td><td>Kubernetes on private cloud or on-prem · docker compose · single VM (ADR-0004)</td><td>Kubernetes</td><td>Config from env, no .env files; default-deny egress; health and readiness endpoints</td></tr>
+      <tr><td>Chat surface</td><td>Ops AI console · intranet widget · the bank's own assistant over MCP · LibreChat (ADR-0009)</td><td>Console on AI SDK useChat</td><td>AI SDK UI message stream v1 from the kernel; approvals and step-up in every channel</td></tr>
+    </table>
+  </section>
+
+  <section class="contract">
+    <h3>Tech choices</h3>
+    <p>Each row is the recommendation from its ADR, recorded as an option until the owner confirms it.</p>
+    <table>
+      <tr><th>Choice</th><th>Alternative considered</th><th>Why</th><th>Cost</th></tr>
+      <tr><td>Two engines behind one seam: Temporal preferred, LangGraph on PostgreSQL second (ADR-0015)</td><td>Temporal only (ADR-0001); LangGraph only; DBOS</td><td>Some banks refuse a new stateful server; PostgreSQL is already there. Temporal keeps the strongest durability and replay where allowed.</td><td>Two adapters to keep conformant; the LangGraph adapter owns timers, leases and queues; weaker replay there.</td></tr>
+      <tr><td>Pydantic AI for the agent loop (ADR-0014)</td><td>OpenAI Agents SDK, LangGraph agents, own loop over the SDKs</td><td>Runs as a plain call inside an activity with no library persistence; deferred tools map to interrupts; AI SDK stream adapter. OpenAI Agents SDK exports traces to OpenAI by default.</td><td>Approval-token binding is our code in every option.</td></tr>
+      <tr><td>Python for everything that executes a run (ADR-0002)</td><td>TypeScript on Protobox's agent-service</td><td>Agent, eval and ML libraries; one validator for definitions</td><td>Protobox's TypeScript chat loop is re-implemented, kept behaviourally aligned by shared fixtures.</td></tr>
+      <tr><td>PostgreSQL for registry, runs and cases (ADR-0006)</td><td>Protobox's MongoDB</td><td>Transactional pointer moves, foreign keys from pins to immutable rows, row-level security</td><td>Two databases in the Protobox edition until the Data Hub moves.</td></tr>
+      <tr><td>asyncpg over psycopg for the runtime's own tables</td><td>psycopg 3</td><td>psycopg is LGPL-3.0; asyncpg is Apache-2.0</td><td>The LangGraph checkpointer still requires psycopg; legal confirms unmodified use.</td></tr>
+      <tr><td>SSE for streams</td><td>WebSockets</td><td>One direction, replayable with Last-Event-ID, works through bank proxies</td><td>No client-to-server messages on the same connection.</td></tr>
+      <tr><td>Chat turns in-process in slice 1</td><td>Chat sessions as engine runs from day one (spec 14 R10)</td><td>A turn lasts seconds and needs no durable wait; ships weeks earlier</td><td>A crash mid-turn loses that turn; child runs from chat still start through R1.</td></tr>
+    </table>
+  </section>
+
+  <section class="contract">
+    <h3>Risks</h3>
+    <ul>
+      <li>Two engines double the conformance surface. Mitigation: the eight-test conformance suite in ADR-0015 runs on both adapters in CI; plans may not carry engine-specific settings.</li>
+      <li>The LangGraph adapter proves resume, not determinism. Mitigation: side-effecting nodes are idempotent by key, write class gets one attempt plus a reconciliation read.</li>
+      <li>DBOS may beat LangGraph for engine B. Mitigation: one-week spike against the conformance suite before the adapter is extended past slice needs.</li>
+      <li>Compiled wheels (Temporal Rust core, pydantic-core, asyncpg) may be blocked by a source-only mirror. Mitigation: the dependency manifest names each; builds from source are documented.</li>
+      <li>psycopg is LGPL. Mitigation: unmodified use, legal sign-off recorded.</li>
+      <li>AI SDK 7 is current and Protobox is on 6. Mitigation: the console targets 6 until Protobox moves; the kernel's stream adapter is pinned to 6.</li>
+      <li>Slice 1 chat is not durable and tools are in-process. Mitigation: each stand-in sits behind the same interface as the real gateway and is replaced by its own card.</li>
+    </ul>
+  </section>
+</div>
+<script>
+  try {
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default' });
+  } catch (e) {}
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# US5: uc-010 ui: the sheet's HTTP section (the Add operation builder), an off-endpoint URL blocked, the unused-input warning, stage, publish.
+# The runner gives each run its own database and ports.
+id: us5-sheet-http-section
+accept: US5
+failure_mode: the sheet's call editor drifts from Add operation, or an unused input goes unwarned
+layers:
+  cli:
+    run: "make usecase-test UC=uc-010 LAYER=ui"
+    expect: { exit: 0, stdout: "uc-010 ui   10 checks passed" }

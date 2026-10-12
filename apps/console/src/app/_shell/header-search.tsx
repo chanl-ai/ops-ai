@@ -2,11 +2,12 @@
 
 import * as React from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bot, Cable, Mail, MessageSquarePlus, Route, Users } from 'lucide-react';
+import { Bot, Cable, Link2, Mail, MessageSquarePlus, Route, Sparkles, Users } from 'lucide-react';
 import { IconShieldCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 
 import { CommandPalette, type PaletteAction, type PalettePage, SearchButton } from '@/components/header/command-palette';
+import { useConnectUrl } from '@/hooks/connect-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
 import { NAV } from '@/lib/nav';
@@ -14,6 +15,8 @@ import type { SearchHit } from '@/lib/types/search';
 
 /** Sub-pages that are not in the sidebar but are worth jumping to. */
 const EXTRA_PAGES: PalettePage[] = [
+  // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
+  { title: 'Connect your assistant', href: '/deployments?tab=mcp', section: 'Agents · Deployments', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect' },
   { title: 'Gate policies', href: '/reviews/policies', section: 'Reviews', icon: IconShieldCheck },
 ];
 
@@ -30,6 +33,7 @@ export function HeaderSearch() {
   const recents = useRecentSearches(open);
   const visit = useVisitSearchHit();
   const { teams, teamId, switchTeam } = useTeam();
+  const connectUrl = useConnectUrl();
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,12 +54,34 @@ export function HeaderSearch() {
     setOpen(false);
     router.push(href);
   };
-  const pages: PalettePage[] = [...NAV.flatMap((g) => g.items.map((i) => ({ title: i.title, href: i.url, section: g.label, icon: i.icon }))), ...EXTRA_PAGES];
+  // Child routes are tabs, not sidebar rows, so they are listed here to stay reachable by name.
+  const navPages: PalettePage[] = NAV.flatMap((g) =>
+    g.items.flatMap((i) => [{ title: i.title, href: i.url, section: g.label, icon: i.icon }, ...(i.children ?? []).map((c) => ({ title: c.title, href: c.url, section: `${g.label} · ${i.title}`, icon: i.icon }))]),
+  );
+  const pages: PalettePage[] = [...navPages, ...EXTRA_PAGES.filter((e) => !navPages.some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };
   const actions: PaletteAction[] = [
     ...(pathname.startsWith('/chat') ? [newChat] : []),
+    {
+      id: 'copy-mcp-url',
+      label: 'Copy MCP URL',
+      icon: Link2,
+      keywords: 'connect assistant claude cursor copilot chatgpt mcp url',
+      run: async () => {
+        setOpen(false);
+        try {
+          const url = await connectUrl();
+          await navigator.clipboard.writeText(url);
+          toast.success('Copied the MCP URL', { description: url });
+        } catch (e) {
+          toast.error('Couldn’t copy the MCP URL', { description: (e as Error).message });
+        }
+      },
+    },
     { id: 'new-workflow', label: 'New workflow', icon: Route, keywords: 'create add', run: () => go('/workflows?create=1') },
     { id: 'new-agent', label: 'New agent', icon: Bot, keywords: 'create add', run: () => go('/agents?create=1') },
+    { id: 'generate-skill', label: 'Generate skill', icon: Sparkles, keywords: 'create add skill procedure sop draft ai', run: () => go('/skills?create=generate') },
+    { id: 'new-skill', label: 'New skill', icon: Sparkles, keywords: 'create add blank skill procedure', run: () => go('/skills?create=1') },
     { id: 'connect-system', label: 'Connect a system', icon: Cable, keywords: 'integration connection oauth sharepoint servicenow salesforce credential', run: () => go('/integrations?tab=catalog') },
     { id: 'connect-mailbox', label: 'Connect mailbox', icon: Mail, keywords: 'email inbox deployment outlook', run: () => go('/deployments?create=email') },
     ...(pathname.startsWith('/chat') ? [] : [newChat]),

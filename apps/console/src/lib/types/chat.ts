@@ -11,6 +11,8 @@ export interface ChatAgent {
   version: number;
   model: string;
   defaultKbIds: string[];
+  /** Knowledge bases this agent may search, with display names; the chat picker and chips use these when present. Includes defaultKbIds. */
+  kbs?: { id: string; name: string }[];
   /** Starter prompts shown on the new-chat screen. */
   suggestions: string[];
 }
@@ -69,6 +71,8 @@ export interface ApprovalWidget extends WidgetBase {
   risk: 'critical' | 'high' | 'medium' | 'low';
   /** Set when approving moves money or changes a production system; the approval is confirmed with this text. */
   consequence?: string;
+  /** True when approving runs a money-movement operation; the console asks for a step-up first. Set by the server. */
+  movesMoney?: boolean;
   state: ApprovalState;
   decidedBy?: string;
   reason?: string;
@@ -102,7 +106,8 @@ export interface MetricWidget extends WidgetBase {
 export type ChatWidget = TableWidget | ChartWidget | RecordWidget | ApprovalWidget | FormWidget | MetricWidget;
 export type WidgetKind = ChatWidget['kind'];
 
-export type WidgetAction = { type: 'approve' } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
+/** `stepUpToken`: approving a money movement needs a re-authentication from the last 5 minutes. */
+export type WidgetAction = { type: 'approve'; stepUpToken?: string } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
 
 // ── Messages ──
 
@@ -136,6 +141,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   at: string;
+  /** Assistant messages: the model that answered, as the provider reported it (e.g. gpt-5.5-2026-04-23). */
+  model?: string;
   attachments?: ChatAttachment[];
   citations?: Citation[];
   /** How the cited passages were found: queries, filters, scores, precedence. */
@@ -149,6 +156,8 @@ export interface ChatMessage {
   stopped?: boolean;
   /** The reply failed part-way; the text so far is kept. */
   error?: string;
+  /** Why the model endpoint refused the reply, e.g. `rate_limited`; kept so a reload reads the same as the stream. */
+  errorCode?: string;
 }
 
 export interface ChatThread {
@@ -205,4 +214,4 @@ export type ChatStreamEvent =
   | { type: 'text'; delta: string }
   | { type: 'citations'; citations: Citation[] }
   | { type: 'done'; message: ChatMessage }
-  | { type: 'error'; message: string; partial: ChatMessage };
+  | { type: 'error'; message: string; partial: ChatMessage; code?: string };

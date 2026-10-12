@@ -1,0 +1,9 @@
+# US3: uc-025. Every member write leaves one entry with actor, request id and target, and a viewer cannot read them.
+# platform-service's suite proves the same-transaction half: a write failing part-way leaves no entry and no change.
+id: us3-every-write-is-audited
+accept: US3
+failure_mode: a write leaves no entry, or a viewer reads the audit
+layers:
+  cli:
+    run: "make usecase-test UC=uc-025 LAYER=api OPS_USECASE_DB=ops_usecase_c006 OPS_USECASE_AGENTS_PORT=8900 OPS_USECASE_TOOLS_PORT=8901 OPS_USECASE_MODELS_PORT=8902 OPS_USECASE_PLATFORM_PORT=8903 OPS_USECASE_PLATFORM_INTERNAL_PORT=8904 OPS_USECASE_CONSOLE_PORT=3218"
+    expect: { exit: 0, stdout: "uc-025 api  5 checks passed" }

@@ -1,0 +1,9 @@
+# US1: uc-040 ui: a pending module review is listed in Reviews > Tool modules and leaves it once decided.
+# The runner gives each run its own database and ports.
+id: us1-reviews-tab
+accept: US1
+failure_mode: a pending review is missing from the tab, or a decided one stays
+layers:
+  cli:
+    run: "make usecase-test UC=uc-040 LAYER=ui"
+    expect: { exit: 0, stdout: "uc-040 ui   8 checks passed" }

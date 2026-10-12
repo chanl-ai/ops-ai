@@ -64,7 +64,7 @@ export function MetadataMappingEditor({ value, onChange, model, required = [], d
         );
       })}
       {missing.length > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
+        <p className="text-xs text-warning-text">
           Required by a knowledge base that reads this source and not mapped here: {missing.join(', ')}. Items without them are held.
         </p>
       )}

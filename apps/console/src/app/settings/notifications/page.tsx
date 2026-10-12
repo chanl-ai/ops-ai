@@ -131,7 +131,7 @@ export default function NotificationsPage() {
                   </div>
                   {c.actionable && c.connected && (
                     <Badge variant="outline" className="font-normal">
-                      <CheckCircle2 className="text-emerald-600" /> Can approve here
+                      <CheckCircle2 className="text-success-text" /> Can approve here
                     </Badge>
                   )}
                   <Badge variant={c.connected ? 'secondary' : 'outline'} className="font-normal">

@@ -3,7 +3,7 @@ import type { ListParams } from '@/lib/types/query';
 
 import type { ChatApi } from './chat-contract';
 import { ApiError } from './contract';
-import { currentTeamId } from './team-context';
+import { fetchWithIdentity } from './request-identity';
 
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
@@ -13,21 +13,29 @@ async function* readSse(res: Response): AsyncIterable<ChatStreamEvent> {
   if (!res.body) return;
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = '';
+  const parse = (f: string) => {
+    // SSE allows CRLF line endings and comment lines (": keep-alive"); only `data:` lines carry the event.
+    const data = f
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith('data:'))
+      .map((l) => l.slice(5).trim())
+      .join('');
+    return data ? (JSON.parse(data) as ChatStreamEvent) : null;
+  };
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     buf += value;
-    const frames = buf.split('\n\n');
+    const frames = buf.split(/\r?\n\r?\n/);
     buf = frames.pop() ?? '';
     for (const f of frames) {
-      const data = f
-        .split('\n')
-        .filter((l) => l.startsWith('data:'))
-        .map((l) => l.slice(5).trim())
-        .join('');
-      if (data) yield JSON.parse(data) as ChatStreamEvent;
+      const ev = parse(f);
+      if (ev) yield ev;
     }
   }
+  // A server may close right after the last frame without the blank line that ends it.
+  const last = parse(buf);
+  if (last) yield last;
 }
 
 /** REST routes for chat; replies stream over SSE from POST /chat/threads/:id/messages. */
@@ -44,9 +52,9 @@ export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => stri
       bulkRemove: (ids) => send('POST', '/chat/threads/bulk-delete', { ids }),
     },
     async *send(threadId, input, signal) {
-      const res = await fetch(`${baseUrl}/chat/threads/${threadId}/messages`, {
+      const res = await fetchWithIdentity(`${baseUrl}/chat/threads/${threadId}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Team-Id': currentTeamId() },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify(input),
         signal,
       });

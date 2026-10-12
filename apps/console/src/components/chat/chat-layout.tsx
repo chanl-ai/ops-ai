@@ -14,7 +14,7 @@ export function ChatLayout({ rail, railOpen, onRailOpenChange, children }: { rai
     <div className="flex h-[calc(100svh-1rem-var(--header-height))] min-h-[480px] overflow-hidden border-t">
       <aside className="hidden w-[272px] shrink-0 overflow-hidden border-r lg:flex">{rail}</aside>
       <Sheet open={railOpen} onOpenChange={onRailOpenChange}>
-        <SheetContent side="left" className="flex w-full flex-col gap-0 p-0 sm:max-w-[300px]">
+        <SheetContent side="left" className="flex w-full flex-col gap-0 p-0 sm:max-w-xs">
           <SheetHeader className="border-b">
             <SheetTitle>Chats</SheetTitle>
           </SheetHeader>

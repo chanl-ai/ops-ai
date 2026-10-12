@@ -10,4 +10,4 @@ Status: current.
 | Data flow | Pages read data through hooks; hooks call the API contract; components take props only |
 | Docs | Follow the doc standards in `CONTRIBUTING.md`; update cross-references when a file moves |
 | Hooks | Do not bypass the pre-commit hook with `--no-verify`; fix the cause |
-| Secrets | Never add `.env` files, credentials or real customer data |
+| Secrets | Never commit `.env`, credentials or real customer data; `.env.example` is the only env file in git |

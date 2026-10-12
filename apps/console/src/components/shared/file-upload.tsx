@@ -35,7 +35,7 @@ function StatusLine({ item }: { item: UploadItem }) {
     );
   if (item.phase === 'ready')
     return (
-      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 text-success-text">
         <CheckCircle2 className="size-3" /> {item.deduplicated ? 'Already stored in your team · reused' : 'Uploaded · scan clean'}
       </span>
     );
@@ -70,6 +70,7 @@ export function FileUpload({
   disabled,
   id = 'file-upload',
   testId,
+  types,
 }: {
   purpose: FilePurpose;
   multiple?: boolean;
@@ -84,6 +85,8 @@ export function FileUpload({
   disabled?: boolean;
   id?: string;
   testId?: string;
+  /** Narrows the purpose's allowed extensions for this control, e.g. `['md', 'zip']` for a skill import. */
+  types?: string[];
 }) {
   const up = useFileUpload({ purpose, team, retentionClass, multiple });
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -94,8 +97,9 @@ export function FileUpload({
     onChangeRef.current(up.items);
   }, [up.items]);
 
-  const accept = up.limit?.allowedTypes.map((t) => `.${t}`).join(',');
-  const rule = up.limit ? `${up.limit.allowedTypes.map((t) => t.toUpperCase()).join(', ')} · up to ${up.limit.maxSizeMb} MB${multiple ? ' each' : ''}` : 'Loading limits…';
+  const allowed = up.limit ? (types ? up.limit.allowedTypes.filter((t) => types.includes(t)) : up.limit.allowedTypes) : undefined;
+  const accept = allowed?.map((t) => `.${t}`).join(',');
+  const rule = up.limit && allowed ? `${allowed.map((t) => t.toUpperCase()).join(', ')} · up to ${up.limit.maxSizeMb} MB${multiple ? ' each' : ''}` : 'Loading limits…';
   const pick = (list: FileList | null) => {
     const files = Array.from(list ?? []);
     if (!files.length) return;

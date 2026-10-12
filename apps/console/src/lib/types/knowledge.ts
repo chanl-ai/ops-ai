@@ -498,7 +498,7 @@ export interface RetrieveInput extends Omit<QueryInput, 'alsoKbIds'> {
 }
 
 export type KbFilters = { health?: string[]; access?: string[] };
-export type SourceFilters = { type?: string[]; status?: string[]; schedule?: string[]; usedBy?: string[] };
+export type SourceFilters = { type?: string[]; status?: string[]; schedule?: string[]; usedBy?: string[]; connectionId?: string[] };
 export type DocumentFilters = { sourceId?: string[]; status?: string[]; freshness?: string[]; sensitivity?: string[]; tags?: string[] };
 export type ItemFilters = { status?: string[]; mime?: string[]; errorClass?: string[] };
 

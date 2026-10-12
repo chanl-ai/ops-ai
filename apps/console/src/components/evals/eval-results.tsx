@@ -46,7 +46,7 @@ export function EvalRunSummary({ run }: { run: EvalRun }) {
         {tiles.map((t) => (
           <div key={t.label} className="bg-card p-3">
             <div className="text-xs text-muted-foreground">{t.label}</div>
-            <div className={cn('text-lg font-semibold tabular-nums', t.tone === 'bad' && 'text-red-600 dark:text-red-400', t.tone === 'warn' && 'text-amber-700 dark:text-amber-400')}>{t.value}</div>
+            <div className={cn('text-lg font-semibold tabular-nums', t.tone === 'bad' && 'text-destructive', t.tone === 'warn' && 'text-warning-text')}>{t.value}</div>
             <div className="text-xs text-muted-foreground">{t.sub}</div>
           </div>
         ))}
@@ -101,10 +101,10 @@ export function EvalSuiteGrid({ suites }: { suites: EvalSuite[] }) {
               )}
             </div>
             <div className="flex items-baseline gap-2">
-              <span className={cn('text-2xl font-semibold tabular-nums', failing && (s.kind === 'injection' ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'))}>{s.passed !== null && s.total ? pct(s.passed / s.total) : '—'}</span>
+              <span className={cn('text-2xl font-semibold tabular-nums', failing && (s.kind === 'injection' ? 'text-destructive' : 'text-warning-text'))}>{s.passed !== null && s.total ? pct(s.passed / s.total) : '—'}</span>
               <span className="text-xs text-muted-foreground tabular-nums">{s.passed !== null ? `${s.passed}/${s.total} passed` : `${s.caseCount} cases, not run`}</span>
             </div>
-            {!!s.regressions && <span className="text-xs text-red-600 dark:text-red-400">{s.regressions === 1 ? '1 regression' : `${s.regressions} regressions`}</span>}
+            {!!s.regressions && <span className="text-xs text-destructive">{s.regressions === 1 ? '1 regression' : `${s.regressions} regressions`}</span>}
             <p className="line-clamp-2 text-xs text-muted-foreground">{s.description}</p>
           </div>
         );

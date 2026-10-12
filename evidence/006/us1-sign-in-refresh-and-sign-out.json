@@ -1,0 +1,15 @@
+{
+  "id": "us1-sign-in-refresh-and-sign-out",
+  "accept": "US1",
+  "failure_mode": "a reused refresh token is accepted, or a signed-out session still resolves",
+  "sha": "01d631bf4361c14e8101004fc210b3b122cabb16",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_c006; ports agents 8900, tools 8901, models 8902, platform 8903, console 3218\n\n== uc-021 api: Sign in, session, refresh, sign out (docs/usecases/platform-service/scripts/test-uc-021-api.py)\nPASS sign-in returns a token and a refresh token\nPASS the session resolves to James on team_ops\nPASS the token is 401 past its TTL\nPASS refresh returns a fresh token that resolves\nPASS reusing a rotated refresh token is 401\nPASS the reuse ended the session for its current token too\nPASS after sign-out the token is 401\nPASS after sign-out the refresh token is 401\n\nPASS        uc-021 api  8 checks passed\n\nexit 0"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# US2: uc-038 drives it live through /v1/calls against postman-echo.com and an unresolvable allowed host.
+id: us2-test-environment-reads-the-system
+accept: US2
+failure_mode: the test console answers a read from the stub while claiming the system
+layers:
+  cli:
+    run: "OPS_LIVE_EGRESS=1 make usecase-test UC=uc-038 LAYER=api"
+    expect: { exit: 0, stdout: "uc-038 api  7 checks passed" }

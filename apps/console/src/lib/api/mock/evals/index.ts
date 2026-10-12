@@ -1,4 +1,4 @@
-import type { Agent, AgentGuardrails, Version } from '@/lib/types/domain';
+import type { Agent, AgentGuardrails, AgentVersion } from '@/lib/types/domain';
 import type { EvalCase, EvalCaseInput, EvalCaseOutcome, EvalCaseResult, EvalCheck, EvalCheckResult, EvalRun, EvalRunTrigger, EvalSuite, EvalSuiteKind, EvalSummary, EvalVersionStats, EvalVersionSummary } from '@/lib/types/evals';
 
 import { ApiError } from '../../contract';
@@ -394,10 +394,13 @@ export function createEvalsMock(deps: EvalsDeps) {
       start(aid, 'restore');
       return a;
     },
-    versions: async (aid) => (await inner.versions(aid)).map((v: Version) => ({ ...v, evalSummary: summaryFor(aid, v.version) ?? undefined })),
+    versions: async (aid) => (await inner.versions(aid)).map((v: AgentVersion) => ({ ...v, evalSummary: summaryFor(aid, v.version) ?? undefined })),
   });
 
-  return { api, wrapAgents, summaryFor, isRunning, passRates };
+  /** Every completed run with its results, newest first, for Assurance. */
+  const history = () => runs.map(settle).filter((r) => r.status === 'complete').map(publicRun);
+
+  return { api, wrapAgents, summaryFor, isRunning, passRates, history, casesOf };
 }
 
 export type EvalsMock = ReturnType<typeof createEvalsMock>;

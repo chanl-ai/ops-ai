@@ -1,3 +1,4 @@
+import type { WorkflowRun } from './domain';
 import type { ScanStatus } from './files';
 /** Email-to-workflow: how an email workflow is configured, and the cases it produces. */
 
@@ -165,6 +166,8 @@ export interface CaseRow {
   pendingApprovals: number;
   /** Pending actions the current user may approve now. */
   awaitingMe: number;
+  /** The workflow run this email started; the case is that run's email, fields and drafted actions. */
+  runId?: string;
 }
 
 export interface CaseDetail extends CaseRow {
@@ -194,3 +197,55 @@ export interface CaseStats {
 }
 
 export type ActionDecision = 'approve' | 'reject';
+
+// ── Runs across workflows (the Cases page) ──
+
+/** A run as the Cases page shows it: the run itself, plus who it waits on and the SLA it runs against. */
+export type RunState = 'running' | 'waiting' | 'done' | 'failed';
+
+export type RunView = 'needs_person' | 'open' | 'past_sla' | 'done_today';
+
+export interface RunRow extends WorkflowRun {
+  workflowName: string;
+  state: RunState;
+  /** Reviewer, assignee or queue the run is paused for; null when nothing waits on a person. */
+  waitingOn: string | null;
+  queue: string | null;
+  assignee: string | null;
+  slaDueAt: string | null;
+  /** Minutes until the SLA lapses; negative once overdue. Null when no SLA applies or the clock is paused. */
+  slaMinutes: number | null;
+  /** Agent actions that ran (auto-approved or signed off) and those still waiting for sign-off. */
+  actionsApproved: number;
+  actionsPending: number;
+  /** Email case for runs started by a mailbox; its page holds the email, fields and drafted actions. */
+  caseId: string | null;
+}
+
+export type RunRowFilters = { workflowId?: string[]; state?: string[]; queue?: string[] };
+
+/** A workflow the runtime can start, with the input its first node reads. */
+export interface StartableWorkflow {
+  name: string;
+  title: string;
+  /** `agent` is a published agent's own graph, `agent:<id>`. */
+  kind: 'code' | 'definition' | 'agent';
+  latestVersion: number | null;
+  /** `email` is the `{ sender, subject, body }` object; `agent` is an agent id. */
+  input: { name: string; label: string; type: 'text' | 'email' | 'agent'; required: boolean }[];
+}
+
+/** Starts one run of a workflow the runtime can run; `input` is what that workflow's first node reads. */
+export interface StartRunInput {
+  workflowId: string;
+  /** Shown as the run's subject in Cases. */
+  subject: string;
+  input: Record<string, unknown>;
+}
+
+export interface RunViewCounts {
+  needs_person: number;
+  open: number;
+  past_sla: number;
+  done_today: number;
+}

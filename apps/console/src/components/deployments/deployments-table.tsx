@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpCircle, Pause, Play, Plus, Rocket, Trash2 } from 'lucide-react';
@@ -46,7 +47,7 @@ function columns(showWorkflow: boolean): ColumnDef<Row>[] {
       cell: ({ row }) => (
         <div className="min-w-44">
           <div className="font-medium">{row.original.name}</div>
-          {showWorkflow && <div className="text-xs text-muted-foreground">{row.original.workflowName}</div>}
+          {showWorkflow && <div className="text-xs text-muted-foreground">{row.original.agentName ? `Agent · ${row.original.agentName}` : row.original.workflowName}</div>}
         </div>
       ),
       enableHiding: false,
@@ -62,7 +63,7 @@ function columns(showWorkflow: boolean): ColumnDef<Row>[] {
       cell: ({ row }) => (
         <span className="tabular-nums">
           {count(row.original.traffic24h)}
-          {row.original.errors24h > 0 && <span className="ml-1.5 text-xs text-red-600 dark:text-red-400">{plural(row.original.errors24h, 'error')}</span>}
+          {row.original.errors24h > 0 && <span className="ml-1.5 text-xs text-destructive">{plural(row.original.errors24h, 'error')}</span>}
         </span>
       ),
     },
@@ -71,9 +72,26 @@ function columns(showWorkflow: boolean): ColumnDef<Row>[] {
 }
 
 /** Deployment list with create, inspect and bulk actions. Scoped to one workflow when `workflowId` is set. */
-export function DeploymentsTable({ workflowId, createOpen, onCreateOpenChange, createChannel }: { workflowId?: string; createOpen: boolean; onCreateOpenChange: (open: boolean) => void; createChannel?: DeployChannel }) {
+export function DeploymentsTable({
+  workflowId,
+  channel,
+  createOpen,
+  onCreateOpenChange,
+  createChannel,
+  onChooseMcp,
+}: {
+  workflowId?: string;
+  /** Fixes the table to one channel, for the per-channel tabs on the Deployments page. */
+  channel?: DeployChannel;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+  createChannel?: DeployChannel;
+  onChooseMcp?: () => void;
+}) {
+  const router = useRouter();
   const list = useListParams<DeploymentFilters>('name');
-  const params = workflowId ? { ...list.params, filters: { ...list.params.filters, workflowId: [workflowId] } } : list.params;
+  const fixed = { ...(workflowId ? { workflowId: [workflowId] } : {}), ...(channel ? { channel: [channel] } : {}) };
+  const params = workflowId || channel ? { ...list.params, filters: { ...list.params.filters, ...fixed } } : list.params;
   const query = useDeployments(params);
   const workflows = useWorkflows(ALL);
   const create = useCreateDeployment();
@@ -123,9 +141,9 @@ export function DeploymentsTable({ workflowId, createOpen, onCreateOpenChange, c
           searchPlaceholder="Search deployments…"
           initialColumnVisibility={{ workflowId: false, updatedAt: false }}
           filters={[
-            { column: 'channel', title: 'Channel', options: (Object.keys(CHANNELS) as Deployment['channel'][]).map((c) => ({ label: CHANNELS[c].label, value: c, count: facets.channel?.[c] ?? 0 })) },
+            ...(channel ? [] : [{ column: 'channel', title: 'Channel', options: (Object.keys(CHANNELS) as Deployment['channel'][]).map((c) => ({ label: CHANNELS[c].label, value: c, count: facets.channel?.[c] ?? 0 })) }]),
             { column: 'environment', title: 'Environment', options: [{ label: 'Production', value: 'production', count: facets.environment?.production ?? 0 }, { label: 'Staging', value: 'staging', count: facets.environment?.staging ?? 0 }] },
-            ...(workflowId ? [] : [{ column: 'workflowId', title: 'Workflow', options: (workflows.data?.data ?? []).map((w) => ({ label: w.name, value: w.id, count: facets.workflowId?.[w.id] ?? 0 })) }]),
+            ...(workflowId ? [] : [{ column: 'workflowId', title: 'Workflow', options: (workflows.data?.data ?? []).map((w) => ({ label: w.wrapsAgentName ? `Agent · ${w.wrapsAgentName}` : w.name, value: w.id, count: facets.workflowId?.[w.id] ?? 0 })) }]),
           ]}
           onColumnFiltersChange={list.onColumnFiltersChange}
           selectionResetKey={resetKey}
@@ -199,6 +217,8 @@ export function DeploymentsTable({ workflowId, createOpen, onCreateOpenChange, c
         workflows={workflows.data?.data ?? []}
         fixedWorkflowId={workflowId}
         initialChannel={createChannel}
+        // Outside the Deployments page (a workflow's Deployments tab) MCP still hands off to the MCP tab.
+        onChooseMcp={onChooseMcp ?? (() => router.push('/deployments?tab=mcp&focus=tools'))}
         isPending={create.isPending}
         onSubmit={async (input) => {
           const d = await create.mutateAsync(input);

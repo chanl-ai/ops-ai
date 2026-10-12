@@ -1,0 +1,96 @@
+---
+description: Work a codeloop card through the build lane: research, interview, mock, spec, build, verify, review, staging, live.
+alwaysApply: false
+---
+
+# codeloop lane: build (v1)
+
+Run `codeloop card show <id>` first; the card says which stage it is in. Gates are approved only by a person.
+
+| Stage | Skill | Output | Done check | Gate |
+|---|---|---|---|---|
+| research | research | {spec}/research.md | `codeloop check research {id} --min-sources 3` |  |
+| interview | interview | {spec}/interview.md | `codeloop check questions {id} --min 3` |  |
+| mock | mock |  | `codeloop check mock {id}` |  |
+| spec | spec | {spec}/tasks.md | `codeloop spec check {id}` | spec (owner, after the check passes) |
+| build | api |  | `codeloop task check {id} --all-done && npm test` |  |
+| verify | verify | evidence/{nnn}/verify.md | `codeloop verify {id}` | local (owner, after the check passes) |
+| review | review | evidence/{nnn}/review.md | `codeloop check file evidence/{nnn}/review.md --has 'verdict: approve'` | pr (reviewer, after the check passes) |
+| staging | release | evidence/{nnn}/staging.md | `codeloop check file evidence/{nnn}/staging.md --has 'result: pass'` |  |
+| live | release | evidence/{nnn}/prod.md | `codeloop check file evidence/{nnn}/prod.md --has 'result: pass'` | prod (owner, before the stage runs) |
+
+## research
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `research` skill (.claude/skills/research/SKILL.md).
+4. Write the result to `{spec}/research.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check research {id} --min-sources 3`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## interview
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `interview` skill (.claude/skills/interview/SKILL.md).
+4. Write the result to `{spec}/interview.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check questions {id} --min 3`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## mock
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `mock` skill (.claude/skills/mock/SKILL.md).
+4. Keep the change inside what the card asks for.
+5. Run `codeloop card advance <id>`. It runs `codeloop check mock {id}`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## spec
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `spec` skill (.claude/skills/spec/SKILL.md).
+4. Write the result to `{spec}/tasks.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop spec check {id}`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+6. The card then waits at gate `spec` for the owner. Stop there. Never run `codeloop approve` yourself.
+
+## build
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `api` skill (.claude/skills/api/SKILL.md).
+4. Keep the change inside what the card asks for.
+5. Run `codeloop card advance <id>`. It runs `codeloop task check {id} --all-done && npm test`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## verify
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `verify` skill (.claude/skills/verify/SKILL.md).
+4. Write the result to `evidence/{nnn}/verify.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop verify {id}`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+6. The card then waits at gate `local` for the owner. Stop there. Never run `codeloop approve` yourself.
+
+## review
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `review` skill (.claude/skills/review/SKILL.md).
+4. Write the result to `evidence/{nnn}/review.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file evidence/{nnn}/review.md --has 'verdict: approve'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+6. The card then waits at gate `pr` for the reviewer. Stop there. Never run `codeloop approve` yourself.
+
+## staging
+
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `release` skill (.claude/skills/release/SKILL.md).
+4. Write the result to `evidence/{nnn}/staging.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file evidence/{nnn}/staging.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+
+## live
+
+0. This stage changes something public. The card waits at gate `prod` as it enters. Do nothing until a person has approved it.
+1. Run `codeloop card show <id>`. It prints the output path, the done check, the stage notes and any earlier rejection notes. Follow those over anything remembered.
+2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
+3. Do the work with the `release` skill (.claude/skills/release/SKILL.md).
+4. Write the result to `evidence/{nnn}/prod.md`.
+5. Run `codeloop card advance <id>`. It runs `codeloop check file evidence/{nnn}/prod.md --has 'result: pass'`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.

@@ -1,0 +1,15 @@
+{
+  "id": "us1-models-service-streams-tools-and-refusals",
+  "accept": "US1",
+  "failure_mode": "a stream drops tool-call deltas, or the OpenAI client retries a 429 behind the caller's back",
+  "sha": "bfb69723f9a52f444627047a8f9dec40af068bb8",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "uv run ruff format --check src tests migrations scripts\n15 files already formatted\nuv run ruff check src tests migrations scripts\nAll checks passed!\nuv run pyright src tests migrations scripts\n0 errors, 0 warnings, 0 informations\nuv run --project . python scripts/test_db.py postgresql+asyncpg://ops:ops@localhost:5477/ops_test_c009 && OPS_DATABASE_URL=postgresql+asyncpg://ops:ops@localhost:5477/ops_test_c009 uv run pytest\n.....................                                                    [100%]\n21 passed in 4.04s\nuv run python scripts/check_openapi.py\nopenapi: 13 operations, 0 untyped on the allowlist\n\nexit 0"
+    }
+  ]
+}

@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { Tool } from '@/lib/types/domain';
+import type { GrantableTool } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
 
 /**
  * Pick which operations an agent may call, grouped by the module they belong to. Money operations state the
- * four-eyes rule because every call waits for one person's approval and a second person's check.
+ * four-eyes rule because every call waits for one person's approval and a second person's check. Workflows exposed
+ * to agents are their own group: calling one starts a run, which keeps the workflow's review gates.
  */
 export function GrantToolsDialog({
   open,
@@ -28,7 +29,7 @@ export function GrantToolsDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  tools: Tool[];
+  tools: GrantableTool[];
   loading: boolean;
   granted: string[];
   onSubmit: (toolIds: string[]) => Promise<unknown>;
@@ -43,8 +44,8 @@ export function GrantToolsDialog({
     }
   }, [open, granted]);
 
-  const visible = tools.filter((t) => !search || `${t.name} ${t.module ?? ''} ${t.system} ${t.description}`.toLowerCase().includes(search.toLowerCase()));
-  const groups = [...new Set(visible.map((t) => t.module ?? t.system))];
+  const visible = tools.filter((t) => !search || `${t.name} ${t.server} ${t.description}`.toLowerCase().includes(search.toLowerCase()));
+  const groups = [...new Set(visible.map((t) => t.server))];
   const toggle = (id: string, on: boolean) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -102,34 +103,27 @@ export function GrantToolsDialog({
               <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{g}</p>
               <ul className="flex flex-col divide-y rounded-lg border">
                 {visible
-                  .filter((t) => (t.module ?? t.system) === g)
+                  .filter((t) => t.server === g)
                   .map((t) => (
                     <li key={t.id}>
-                      <label htmlFor={`grant-${t.id}`} className={cn('flex items-start gap-3 px-3 py-2.5 hover:bg-muted/40', t.enabled ? 'cursor-pointer' : 'cursor-not-allowed')}>
-                        <Checkbox id={`grant-${t.id}`} checked={selected.has(t.id)} onCheckedChange={(v) => toggle(t.id, !!v)} disabled={!t.enabled} className="mt-0.5" />
+                      <label htmlFor={`grant-${t.id}`} className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/40">
+                        <Checkbox id={`grant-${t.id}`} checked={selected.has(t.id)} onCheckedChange={(v) => toggle(t.id, !!v)} className="mt-0.5" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
                             <code className="font-mono text-sm">{t.name}</code>
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">{t.description}</span>
-                          {!t.enabled && (
-                            <span className="block text-xs text-amber-700 dark:text-amber-400">
-                              {t.access === 'money_movement'
-                                ? `Can’t be granted: ${t.module ?? t.system} hides it. Money operations need the module owner to expose them and a workflow approval first; every call then needs four eyes.`
-                                : `Can’t be granted: ${t.module ?? t.system} hides it. Ask the module owner to expose it.`}
-                            </span>
-                          )}
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
                           <AccessBadge access={t.access} />
                           {t.access === 'money_movement' ? (
-                            <span className="flex items-center gap-1 text-[11px] text-red-700 dark:text-red-400">
+                            <span className="flex items-center gap-1 text-[11px] text-destructive">
                               <Users className="size-3" /> Four eyes on every call
                             </span>
                           ) : (
-                            t.requiresReview && (
-                              <span className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
-                                <UserCheck className="size-3" /> Pauses for review
+                            t.approval && (
+                              <span className="flex items-center gap-1 text-[11px] text-warning-text">
+                                <UserCheck className="size-3" /> {t.approval}
                               </span>
                             )
                           )}

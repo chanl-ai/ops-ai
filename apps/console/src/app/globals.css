@@ -40,6 +40,10 @@
   --sidebar-ring: oklch(0.55 0.15 150);
   --success: oklch(0.6 0.15 150);
   --warning: oklch(0.75 0.15 75);
+  /* Text shades of success and warning: the fills above are 3.5:1 and 2.2:1 on the background, below AA for small
+     text; these are 5.4:1 (docs/console/standards.md). */
+  --success-text: oklch(0.5 0.13 150);
+  --warning-text: oklch(0.52 0.12 65);
   --radius: 0.5rem;
 }
 
@@ -78,6 +82,8 @@
   --sidebar-ring: oklch(0.7 0.16 150);
   --success: oklch(0.7 0.16 150);
   --warning: oklch(0.8 0.14 75);
+  --success-text: oklch(0.78 0.15 150);
+  --warning-text: oklch(0.82 0.13 80);
 }
 
 @theme inline {
@@ -107,6 +113,8 @@
   --color-chart-5: var(--chart-5);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

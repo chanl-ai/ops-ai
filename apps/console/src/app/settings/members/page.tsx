@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { UserCog, UserPlus, Users, UserX } from 'lucide-react';
 import { toast } from 'sonner';
@@ -50,7 +51,19 @@ function columns(roleLabel: (r: MemberRole) => string, showTeam: boolean, onRole
     {
       accessorKey: 'status',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-      cell: ({ row }) => (row.original.status === 'invited' ? <span className="text-xs text-amber-700 dark:text-amber-400">Invited {relativeTime(row.original.invitedAt)}</span> : <span className="text-xs text-muted-foreground">Active</span>),
+      cell: ({ row }) =>
+        row.original.status === 'invited' ? (
+          <span className="flex flex-col text-xs">
+            <span className="text-warning-text">Invited {relativeTime(row.original.invitedAt)}</span>
+            {row.original.inviteToken && (
+              <Link href={`/invite/${row.original.inviteToken}`} className="text-muted-foreground underline underline-offset-2" onClick={(e) => e.stopPropagation()} data-testid={`invite-link-${row.original.id}`}>
+                Invite link
+              </Link>
+            )}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Active</span>
+        ),
       filterFn: facetFilterFn,
     },
     { accessorKey: 'lastActiveAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Last active" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{row.original.lastActiveAt ? relativeTime(row.original.lastActiveAt) : '—'}</span> },

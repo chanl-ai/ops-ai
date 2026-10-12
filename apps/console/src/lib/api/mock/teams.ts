@@ -16,6 +16,9 @@ const teams: Team[] = [
   { id: 'team_onboarding', name: 'Onboarding', icon: 'onboarding', ownerGroups: ['Onboarding'], scope: 'owned', memberCount: 9 },
   { id: 'team_retail', name: 'Retail Banking', icon: 'retail', ownerGroups: ['Retail Banking', 'Retail Product', 'Branch Network', 'Customer Care'], scope: 'owned', memberCount: 31 },
   { id: 'team_wealth', name: 'Wealth', icon: 'wealth', ownerGroups: ['Wealth'], scope: 'owned', memberCount: 7 },
+  // The ids platform-service's dev seed uses, so the console, tools-service and agents-service name these teams alike.
+  { id: 'team_ops', name: 'Operations', icon: 'team', ownerGroups: ['Operations'], scope: 'owned', memberCount: 3 },
+  { id: 'team_security', name: 'Security', icon: 'team', ownerGroups: ['Security'], scope: 'all', memberCount: 1 },
 ];
 
 const current = () => teams.find((t) => t.id === currentTeamId()) ?? teams[0];

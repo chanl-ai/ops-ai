@@ -12,17 +12,17 @@ export const KIND: Record<IntegrationKind, { label: string; icon: LucideIcon; ti
   sharepoint: { label: 'SharePoint', icon: Cloud, tint: 'bg-teal-500/10 text-teal-700 dark:text-teal-300' },
   confluence: { label: 'Confluence', icon: BookOpen, tint: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },
   salesforce: { label: 'Salesforce', icon: Building2, tint: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300' },
-  core_banking: { label: 'Core banking', icon: Landmark, tint: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+  core_banking: { label: 'Core banking', icon: Landmark, tint: 'bg-success/10 text-success-text' },
   case_management: { label: 'Case management system', icon: FolderKanban, tint: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
   servicenow: { label: 'ServiceNow', icon: Headset, tint: 'bg-lime-500/10 text-lime-700 dark:text-lime-300' },
-  payments_hub: { label: 'Payments hub', icon: Banknote, tint: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+  payments_hub: { label: 'Payments hub', icon: Banknote, tint: 'bg-warning/10 text-warning-text' },
   internal_mcp: { label: 'Internal MCP server', icon: Plug, tint: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300' },
-  gdrive: { label: 'Google Drive', icon: HardDrive, tint: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-300' },
-  zendesk: { label: 'Zendesk', icon: LifeBuoy, tint: 'bg-green-500/10 text-green-700 dark:text-green-300' },
-  github: { label: 'GitHub', icon: Github, tint: 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-300' },
+  gdrive: { label: 'Google Drive', icon: HardDrive, tint: 'bg-warning/10 text-warning-text' },
+  zendesk: { label: 'Zendesk', icon: LifeBuoy, tint: 'bg-success/10 text-success-text' },
+  github: { label: 'GitHub', icon: Github, tint: 'bg-muted text-foreground' },
   notion: { label: 'Notion', icon: StickyNote, tint: 'bg-stone-500/10 text-stone-700 dark:text-stone-300' },
-  credit_bureau: { label: 'Credit bureau', icon: Gauge, tint: 'bg-rose-500/10 text-rose-700 dark:text-rose-300' },
-  internal_api: { label: 'Internal API', icon: Server, tint: 'bg-slate-500/10 text-slate-700 dark:text-slate-300' },
+  credit_bureau: { label: 'Credit bureau', icon: Gauge, tint: 'bg-destructive/10 text-destructive' },
+  internal_api: { label: 'Internal API', icon: Server, tint: 'bg-muted text-foreground' },
   aws_s3: { label: 'Amazon S3', icon: Archive, tint: 'bg-orange-500/10 text-orange-700 dark:text-orange-300' },
   azure_blob: { label: 'Azure Blob Storage', icon: CloudCog, tint: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
 };
@@ -35,10 +35,11 @@ export const AUTH: Record<AuthMethod, { label: string; hint: string }> = {
 };
 
 const STATUS: Record<IntegrationStatus, { label: string; cls: string; dot: string }> = {
-  healthy: { label: 'Healthy', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  expiring: { label: 'Expiring', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
-  needs_reconnect: { label: 'Needs reconnect', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500' },
-  error: { label: 'Error', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500' },
+  draft: { label: 'Draft', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
+  healthy: { label: 'Healthy', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
+  expiring: { label: 'Expiring', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' },
+  needs_reconnect: { label: 'Needs reconnect', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+  error: { label: 'Error', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
   revoked: { label: 'Revoked', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<IntegrationStatus, string>;
@@ -54,9 +55,9 @@ export function IntegrationStatusBadge({ status }: { status: IntegrationStatus }
 }
 
 export const TONE_TEXT: Record<Tone, string> = {
-  ok: 'text-emerald-700 dark:text-emerald-400',
-  warn: 'text-amber-700 dark:text-amber-400',
-  bad: 'font-medium text-red-600 dark:text-red-400',
+  ok: 'text-success-text',
+  warn: 'text-warning-text',
+  bad: 'font-medium text-destructive',
   muted: 'text-muted-foreground',
 };
 

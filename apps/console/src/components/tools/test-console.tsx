@@ -79,6 +79,7 @@ export function TestConsole({
   running,
   result,
   error,
+  stacked,
 }: {
   operations: ModuleOperation[];
   contexts: RunContextOption[];
@@ -90,6 +91,8 @@ export function TestConsole({
   running: boolean;
   result?: ModuleTestResult;
   error?: string;
+  /** Request above response, for the side panel beside the module's tabs. */
+  stacked?: boolean;
 }) {
   const [opName, setOpName] = React.useState(initialOperation ?? operations[0]?.name ?? '');
   const [contextId, setContextId] = React.useState(contexts[0]?.id ?? NO_CONTEXT);
@@ -100,6 +103,10 @@ export function TestConsole({
     if (initialOperation) setOpName(initialOperation);
   }, [initialOperation]);
 
+  // The first operation of a module that had none, or one removed while chosen: fall back to the first listed.
+  React.useEffect(() => {
+    if (!operations.some((o) => o.name === opName) && operations[0]) setOpName(operations[0].name);
+  }, [operations, opName]);
   const op = operations.find((o) => o.name === opName);
   const ctx = contexts.find((c) => c.id === contextId);
   const boundArg = op?.binding?.arg;
@@ -143,7 +150,7 @@ export function TestConsole({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className={stacked ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}>
       <Section title="Request" description="Runs through the data gateway with the chosen workflow’s approval.">
         <div className="flex flex-col gap-4">
           <FormField id="t-op" label="Operation">
@@ -186,7 +193,7 @@ export function TestConsole({
                 Test environment
               </ToggleGroupItem>
             </ToggleGroup>
-            <p className="text-xs text-muted-foreground">{target === 'stub' ? 'Returns the operation’s canned response. Nothing leaves the gateway.' : 'Calls the system’s test environment. Writes need an approval token.'}</p>
+            <p className="text-xs text-muted-foreground">{target === 'stub' ? 'Returns the operation’s canned response. Nothing leaves the gateway.' : 'Reads call the system through the gateway. Writes answer from the stub; the test console never writes to a system.'}</p>
           </div>
           {op && (
             <div className="flex flex-col gap-3 border-t pt-4">
@@ -247,21 +254,23 @@ export function TestConsole({
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
               {result.decision === 'allow' ? (
-                <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 font-medium text-success-text">
                   <CheckCircle2 className="size-4" /> Allowed
                 </span>
               ) : result.decision === 'invalid' ? (
-                <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+                <span className="inline-flex items-center gap-1 font-medium text-warning-text">
                   <CircleAlert className="size-4" /> Invalid input · not sent
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 font-medium text-red-700 dark:text-red-400">
+                <span className="inline-flex items-center gap-1 font-medium text-destructive">
                   <ShieldX className="size-4" /> Denied · {DENY_LABEL[result.denyReason ?? ''] ?? 'refused by the gateway'}
                 </span>
               )}
               <span className="text-muted-foreground tabular-nums">HTTP {result.status}</span>
               <span className="text-muted-foreground tabular-nums">{ms(result.latencyMs)}</span>
+              {result.stubbed === false && result.reachedHost && <span className="text-muted-foreground">from {result.reachedHost}</span>}
             </div>
+            {result.stubbed && <p className="text-sm text-warning-text" data-testid="test-stubbed">Writes answer from the stub. The test console never writes to the system.</p>}
             {result.decision === 'deny' && result.denyMessage && <p className="text-sm">{result.denyMessage}</p>}
             {result.decision === 'invalid' && <p className="text-sm">Fix the highlighted {result.invalid && result.invalid.length === 1 ? 'field' : 'fields'} and run again.</p>}
             {result.denyReason === 'approval_token_missing' && (
@@ -269,7 +278,7 @@ export function TestConsole({
                 <FlaskConical className="size-4" />
                 <AlertTitle>Simulate the approval</AlertTitle>
                 <AlertDescription className="flex flex-col items-start gap-2">
-                  <p>Issues a test approval token for this exact input, so the call reaches the test environment. Test only: it is never accepted in production.</p>
+                  <p>Issues a test approval token for this exact input, so the call passes the approval gate and answers from the stub. Test only: it is never accepted in production.</p>
                   <Button size="sm" variant="outline" disabled={running} onClick={() => run(true)}>
                     <UserCheck className="size-4" /> Simulate approval and run
                   </Button>
@@ -278,7 +287,7 @@ export function TestConsole({
             )}
             {result.testApprovalToken && (
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-text">
                   Test only
                 </Badge>
                 Ran with a simulated approval token <code className="font-mono text-foreground">{result.testApprovalToken}</code>

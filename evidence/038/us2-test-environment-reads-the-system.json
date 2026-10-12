@@ -1,0 +1,16 @@
+{
+  "id": "us2-test-environment-reads-the-system",
+  "accept": "US2",
+  "failure_mode": "the test console answers a read from the stub while claiming the system",
+  "sha": "bfdff3adcc186c29289374ffb47d31c906b34bce",
+  "env": "local",
+  "workspace": "export of bfdff3a",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_r45238_8b81af (this run's, dropped at the end); ports agents 56085, tools 56086, models 56087, platform 56089, console 56088\n\n== uc-038 api: A failed tool call says which side failed, and a test call reaches the real system (live, OPS_LIVE_EGRESS=1) (docs/usecases/tools-service/scripts/test-uc-038-api.py)\nPASS a call through /v1/calls reached postman-echo.com and its answer is reported as the upstream's\nPASS the upstream echoed the request the gateway sent\nPASS a second call carries no cookie from the first (the egress client keeps none)\nPASS an allowed host that cannot be reached fails on our side, named as such\nPASS the executions log shows the side each failure broke on\nPASS no failure message carries a dialled address\nPASS the test console's Test environment read reached postman-echo.com, not the stub\n\nPASS        uc-038 api  7 checks passed\n\nexit 0"
+    }
+  ]
+}

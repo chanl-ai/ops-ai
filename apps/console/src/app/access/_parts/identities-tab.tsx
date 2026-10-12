@@ -37,7 +37,7 @@ const columns: ColumnDef<Row>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Expiring soon" />,
     cell: ({ row }) =>
       row.original.expiringSoon ? (
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-warning-text">
           <AlertTriangle className="size-3.5" /> {row.original.expiringSoon}
         </span>
       ) : (
@@ -47,7 +47,7 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'moneyMovement',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Moves money" />,
-    cell: ({ row }) => (row.original.moneyMovement ? <Badge variant="outline" className="border-red-200 bg-red-50 font-normal text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">Yes</Badge> : <span className="text-xs text-muted-foreground">No</span>),
+    cell: ({ row }) => (row.original.moneyMovement ? <Badge variant="outline" className="border-destructive/40 bg-destructive/10 font-normal text-destructive">Yes</Badge> : <span className="text-xs text-muted-foreground">No</span>),
   },
   { accessorKey: 'lastUsedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Last call" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{row.original.lastUsedAt ? relativeTime(row.original.lastUsedAt) : 'Never'}</span> },
 ];
@@ -76,7 +76,7 @@ function IdentityCard(identity: Row) {
           <p className="text-sm text-muted-foreground">{identity.lastUsedAt ? relativeTime(identity.lastUsedAt) : 'Never'}</p>
         </div>
       </div>
-      {identity.expiringSoon > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{plural(identity.expiringSoon, 'grant')} expiring soon</p>}
+      {identity.expiringSoon > 0 && <p className="mt-2 text-xs text-warning-text">{plural(identity.expiringSoon, 'grant')} expiring soon</p>}
     </button>
   );
 }

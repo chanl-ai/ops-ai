@@ -72,7 +72,7 @@ export function ConfirmActionDialog({
     >
       <div className="flex flex-col gap-3 text-sm">
         <p className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-text" />
           <span>{consequence}</span>
         </p>
         {details && details.length > 0 && (

@@ -1,9 +1,11 @@
-import type { CaseAction, CaseDetail, CaseRow, CaseView, EmailWorkflowConfig, SampleMailResult } from '@/lib/types/cases';
+import type { CaseAction, CaseDetail, CaseRow, CaseView, EmailWorkflowConfig, RunRow, RunView, SampleMailResult } from '@/lib/types/cases';
+import type { Review, WorkflowRun } from '@/lib/types/domain';
 
 import { ApiError } from '../../contract';
 import type { CasesApi } from '../../cases-contract';
 import type { FileLinks } from '../files';
 import { mimeOf } from '../files';
+import { runIdFor } from '../history';
 import { bulk, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { APPROVER_GROUPS, ASSIGNEES, QUEUES } from './configs';
@@ -23,8 +25,19 @@ const RESULT: Record<string, string> = {
   send_payoff_statement: 'Payoff statement generated and emailed',
 };
 
-/** In-memory cases for the ops workbench. `me` is the signed-in reviewer; they belong to every approver group in the demo. */
-export function createCasesMock(deps: { me: string; workflowName: (id: string) => string; workflowOwner: (id: string) => string | undefined; files: FileLinks }) {
+/**
+ * In-memory cases for the ops workbench. `me` is the signed-in reviewer; they belong to every approver group in the demo.
+ * `runs` and `reviews` are the workflow slice's own records: the Cases page lists those runs as they are, so a run reads
+ * the same here and under its workflow's Runs tab.
+ */
+export function createCasesMock(deps: {
+  me: string;
+  workflowName: (id: string) => string;
+  workflowOwner: (id: string) => string | undefined;
+  files: FileLinks;
+  runs: () => WorkflowRun[];
+  reviews: () => Review[];
+}) {
   const { me } = deps;
   const cases: CaseDetail[] = seedCases(me, deps.workflowName);
   // Intake stores each attachment through the Files API; the case keeps the file id. Identical content mailed
@@ -182,7 +195,147 @@ export function createCasesMock(deps: { me: string; workflowName: (id: string) =
         return a;
       }),
     testSampleMail: (config, input) => respond(() => classify(config, input.subject, input.body, input.from)),
+    runs: (p) => listRuns(p),
+    run: (id) => getRun(id),
+    startRun: (input) => respond(() => {
+      const run = startRun(input);
+      return { threadId: run.id, run };
+    }),
+    startable: () =>
+      respond(() => [
+        { name: 'simple_workflow', title: 'Product question', kind: 'code' as const, latestVersion: null, input: [{ name: 'question', label: 'Question', type: 'text' as const, required: true }] },
+        { name: 'complex_workflow', title: 'Dispute email', kind: 'code' as const, latestVersion: null, input: [{ name: 'email', label: 'Email', type: 'email' as const, required: true }] },
+      ]),
+    assignRuns: (ids, assignee) => assignRuns(ids, assignee),
     queues: () => respond(() => ({ queues: QUEUES, assignees: ASSIGNEES, approverGroups: APPROVER_GROUPS })),
+  };
+
+  // Each email opened a run of its mailbox workflow. Run ids are positional, so the link is made by id without
+  // generating runs (the workflow slice asks `pausedRunIds` while it generates them). The newest case takes the
+  // newest run after those held by open reviews and the one still in flight.
+  let linked = false;
+  const link = () => {
+    if (linked) return;
+    linked = true;
+    const reviews = deps.reviews();
+    for (const wid of new Set(cases.map((c) => c.workflowId))) {
+      const offset = Math.max(1, reviews.filter((r) => r.workflowId === wid && (r.status === 'pending' || r.status === 'in_review')).length);
+      cases
+        .filter((c) => c.workflowId === wid)
+        .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+        .forEach((c, i) => (c.runId = runIdFor(wid, offset + i)));
+    }
+  };
+  /** Runs held for a person by their email case: open, and not waiting on the customer's reply. */
+  const pausedRunIds = (wid: string) => {
+    link();
+    return cases.filter((c) => c.workflowId === wid && c.runId && isOpen(c) && c.status !== 'waiting_customer').map((c) => c.runId!);
+  };
+
+  // State is the run's own status, so a run reads the same here and on its workflow's Runs tab.
+  const stateOf = (r: WorkflowRun): RunRow['state'] => (r.status === 'completed' ? 'done' : r.status === 'failed' ? 'failed' : r.status === 'running' ? 'running' : 'waiting');
+  const isActionStep = (s: WorkflowRun['steps'][number]) => (s.kind === 'tool' || s.kind === 'action') && s.status === 'done';
+
+  const runRow = (r: WorkflowRun, byRun: Map<string, CaseDetail>, reviews: Map<string, Review>): RunRow => {
+    const base = { ...r, workflowName: deps.workflowName(r.workflowId), caseId: null, queue: null, assignee: null, slaDueAt: null, slaMinutes: null, waitingOn: null, actionsPending: 0 };
+    const c = byRun.get(r.id);
+    if (c) {
+      const cr = row(c);
+      const pend = c.actions.filter(pending);
+      const open = isOpen(c);
+      const approver = pend[0]?.approverGroup;
+      return {
+        ...base,
+        caseId: c.id,
+        queue: c.queue,
+        assignee: c.assignee,
+        state: stateOf(r),
+        waitingOn: r.status !== 'waiting_review' ? null : pend.length ? (approver ?? c.queue) : (c.assignee ?? c.queue),
+        slaDueAt: open ? c.slaDueAt : null,
+        slaMinutes: cr.slaMinutes,
+        actionsApproved: c.actions.filter((a) => a.status === 'approved' || a.status === 'executed').length,
+        actionsPending: pend.length,
+      };
+    }
+    const rv = r.reviewId ? reviews.get(r.reviewId) : undefined;
+    if (rv) {
+      return {
+        ...base,
+        state: 'waiting',
+        queue: rv.policy.reviewers,
+        assignee: rv.assignee ?? null,
+        waitingOn: rv.assignee ?? rv.policy.reviewers,
+        slaDueAt: new Date(Date.now() + rv.slaMinutes * 60_000).toISOString(),
+        slaMinutes: rv.slaMinutes,
+        actionsApproved: r.steps.filter(isActionStep).length,
+        actionsPending: 1,
+      };
+    }
+    return { ...base, state: stateOf(r), actionsApproved: r.steps.filter(isActionStep).length };
+  };
+
+  // Runs started from the console finish at once here; the agents service runs them for real.
+  const started: WorkflowRun[] = [];
+  const startRun = ({ workflowId, subject }: { workflowId: string; subject: string }): RunRow => {
+    const r: WorkflowRun = { id: `RUN-S${started.length + 1}`, workflowId, version: 1, subject, status: 'completed', startedAt: new Date().toISOString(), durationMs: 0, trigger: `Started by ${me}`, steps: [] };
+    started.unshift(r);
+    return runRow(r, new Map(), new Map());
+  };
+
+  /** Every run in the current team, newest first, joined to its email case or review. */
+  const runRows = (): RunRow[] => {
+    link();
+    const byRun = new Map(cases.filter((c) => c.runId).map((c) => [c.runId!, c]));
+    const reviews = new Map(deps.reviews().map((r) => [r.id, r]));
+    return [...started, ...deps.runs()]
+      .filter((r) => inTeam(deps.workflowOwner(r.workflowId)))
+      .map((r) => runRow(r, byRun, reviews))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  };
+  const isOpenRun = (r: RunRow) => r.state === 'running' || r.state === 'waiting';
+  const inRunView = (r: RunRow, v: RunView) =>
+    v === 'needs_person'
+      ? r.state === 'waiting'
+      : v === 'open'
+        ? isOpenRun(r)
+        : v === 'past_sla'
+          ? isOpenRun(r) && (r.slaMinutes ?? 0) < 0
+          : r.state === 'done' && new Date(r.startedAt).toDateString() === new Date().toDateString();
+  // Overdue first, then the least time left; runs with no SLA follow, newest first.
+  const bySla = (a: RunRow, b: RunRow) => (a.slaMinutes ?? Infinity) - (b.slaMinutes ?? Infinity) || b.startedAt.localeCompare(a.startedAt);
+
+  const listRuns: CasesApi['runs'] = (p) =>
+    respond((m) => {
+      const rows = runRows();
+      const scoped = rows.filter((r) => inRunView(r, p.view));
+      if (p.view !== 'done_today') scoped.sort(bySla);
+      const result = list(scoped, p, { text: (r) => `${r.id} ${r.subject} ${r.workflowName} ${r.caseId ?? ''}`, value: (r, k) => (k === 'queue' ? (r.queue ? [r.queue] : []) : String((r as unknown as Record<string, unknown>)[k])), facetKeys: ['workflowId', 'state', 'queue'] }, m);
+      const src = m === 'empty' ? [] : rows;
+      const count = (v: RunView) => src.filter((r) => inRunView(r, v)).length;
+      return { ...result, viewCounts: { needs_person: count('needs_person'), open: count('open'), past_sla: count('past_sla'), done_today: count('done_today') } };
+    });
+  const getRun: CasesApi['run'] = (id) => respond((m) => (m === 'empty' ? notFound('Run') : (runRows().find((r) => r.id === id) ?? notFound('Run'))));
+  const assignRuns: CasesApi['assignRuns'] = (ids, assignee) =>
+    respond(() => {
+      const rows = new Map(runRows().map((r) => [r.id, r]));
+      return bulk(ids, (id) => {
+        const r = rows.get(id);
+        if (!r) return 'Not found';
+        if (r.reviewId) return 'Paused at a review gate; assign it in Reviews';
+        if (!r.caseId) return 'Nothing waits on a person';
+        const c = caseOr404(r.caseId);
+        if (!isOpen(c)) return 'Closed';
+        if (c.assignee === assignee) return `Already with ${assignee}`;
+        c.assignee = assignee;
+        if (c.status === 'new') c.status = 'in_progress';
+        log(c, 'assigned', `Assigned to ${assignee}`);
+      });
+    });
+
+  /** Overview counts: runs across workflows that wait on a person. */
+  const runStats = () => {
+    const open = runRows().filter((r) => r.state === 'waiting');
+    return { open: open.length, breaching: open.filter((r) => (r.slaMinutes ?? 0) < 0).length, awaitingApproval: open.filter((r) => r.actionsPending > 0).length };
   };
 
   /** Open cases per queue with SLA breaches, for the chat case-engine tools. */
@@ -202,7 +355,7 @@ export function createCasesMock(deps: { me: string; workflowName: (id: string) =
     });
   };
 
-  return { api, stats: () => stats(), slaByQueue };
+  return { api, stats: () => runStats(), slaByQueue, pausedRunIds };
 }
 
 const words = (s: string) => new Set(s.toLowerCase().split(/[^a-z0-9$]+/).filter((w) => w.length > 3));

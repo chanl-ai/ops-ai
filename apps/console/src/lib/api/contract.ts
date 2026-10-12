@@ -7,14 +7,26 @@ import type { RunAsApi } from './run-as-contract';
 import type { SearchApi } from './search-contract';
 import type { GovernanceApi } from './governance-contract';
 import type { SettingsApi } from './settings-contract';
+import type { SignInPolicyApi } from './sign-in-contract';
+import type { InvitesApi } from './invites-contract';
+import type { AccountApi } from './account-contract';
 import type { EvalsApi } from './evals-contract';
 import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
+import type { EgressApi } from './egress-contract';
+import type { SecretsApi } from './secrets-contract';
 import type { IntegrationsApi } from './integrations-contract';
 import type { FilesApi } from './files-contract';
+import type { TemplatesApi } from './templates-contract';
+import type { PromptsApi } from './prompts-contract';
+import type { SkillsApi } from './skills-contract';
+import type { AssuranceApi } from './assurance-contract';
+import type { ConnectApi } from './connect-contract';
+import type { WikiApi } from './wiki-contract';
 import type {
   Agent,
   AgentInput,
+  AgentVersion,
   AgentPatch,
   AgentTestTurn,
   BulkResult,
@@ -40,6 +52,10 @@ import type {
   Workflow,
   WorkflowDetail,
   WorkflowGraph,
+  WorkflowTestRun,
+  GrantableTool,
+  ModelAlias,
+  RouteFields,
   WorkflowInput,
 } from '@/lib/types/domain';
 import type {
@@ -70,15 +86,29 @@ export interface OpsApi {
     list(params: ListParams<AgentFilters>): Promise<ListResult<Agent>>;
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
+    /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */
     update(id: string, patch: AgentPatch): Promise<Agent>;
     remove(id: string): Promise<void>;
-    versions(id: string): Promise<Version[]>;
+    versions(id: string): Promise<AgentVersion[]>;
+    /** Copies a version into a new draft; nothing publishes. */
     restore(id: string, version: number): Promise<Agent>;
-    setStatus(id: string, status: LifecycleStatus): Promise<Agent>;
+    /**
+     * Sends a draft version to Reviews as an `agent_publish` review. 409 when one is already open for the agent;
+     * 422 when the version is not the newest draft. Approving it, by someone other than the requester and the
+     * author, publishes the version (spec 04 5.11).
+     */
+    requestPublish(id: string, version: number, note: string): Promise<Review>;
+    /** Pauses or resumes the agent for new runs. 409 when pausing an agent that has never been published. */
+    setPaused(id: string, paused: boolean): Promise<Agent>;
     /** `runAsId` answers with that staff member's or role's permissions (see run-as-contract.ts). */
     test(id: string, message: string, runAsId?: string): Promise<AgentTestTurn>;
-    bulkUpdate(ids: string[], patch: { status?: LifecycleStatus; owner?: string }): Promise<BulkResult>;
-    bulkRemove(ids: string[]): Promise<BulkResult>;
+    /** The tools any agent may be granted; a grant names their ids, and an unknown id is refused. */
+    grantableTools(): Promise<GrantableTool[]>;
+    /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
+    modelAliases(): Promise<ModelAlias[]>;
+    /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
+    bulkUpdate?(ids: string[], patch: { paused?: boolean; owner?: string }): Promise<BulkResult>;
+    bulkRemove?(ids: string[]): Promise<BulkResult>;
   };
   workflows: {
     list(params: ListParams<WorkflowFilters>): Promise<ListResult<Workflow>>;
@@ -87,6 +117,10 @@ export interface OpsApi {
     /** Runs the workflow's test cases against a draft graph (and the live version for comparison). Advisory: never blocks. */
     validate(id: string, graph: WorkflowGraph, target?: 'draft' | 'live'): Promise<ValidationRun>;
     lastValidation(id: string): Promise<ValidationRun | null>;
+    /** Runs a graph (the draft when left out) once on a sample case; each pause is approved so the run reaches its end. */
+    test(id: string, input: { graph?: WorkflowGraph }): Promise<WorkflowTestRun>;
+    /** The fields and operators a branch's routes may compare; publishing refuses anything else. */
+    routeFields(): Promise<RouteFields>;
     /** Saves the canvas draft; `null` discards it. */
     saveDraft(id: string, graph: WorkflowGraph | null): Promise<WorkflowDetail['draft'] | null>;
     /** Sends a draft to the Reviews queue as a publish request; approving it there publishes. */
@@ -97,14 +131,16 @@ export interface OpsApi {
     runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<WorkflowRun>>;
     versions(id: string): Promise<Version[]>;
     restore(id: string, version: number): Promise<Workflow>;
-    bulkUpdate(ids: string[], patch: { status?: LifecycleStatus; owner?: string }): Promise<BulkResult>;
+    /** Absent when the backend has no bulk route (the agents-service registry). */
+    bulkUpdate?(ids: string[], patch: { status?: LifecycleStatus; owner?: string }): Promise<BulkResult>;
   };
   reviews: {
     list(params: ReviewListParams): Promise<ListResult<Review> & { viewCounts: ReviewViewCounts; stats: ReviewStats }>;
     get(id: string): Promise<Review>;
     decide(id: string, input: ReviewDecisionInput): Promise<Review>;
     assign(ids: string[], assignee?: string): Promise<BulkResult>;
-    bulkDecide(ids: string[], decision: ReviewDecision, reason?: string): Promise<BulkResult>;
+    /** Approving money movements needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */
+    bulkDecide(ids: string[], decision: ReviewDecision, reason?: string, opts?: { stepUpToken?: string }): Promise<BulkResult>;
   };
   policies: {
     list(params: ListParams<PolicyFilters>): Promise<ListResult<GatePolicy>>;
@@ -123,11 +159,24 @@ export interface OpsApi {
   chat: ChatApi;
   governance: GovernanceApi;
   settings: SettingsApi;
+  signInPolicy: SignInPolicyApi;
+  invites: InvitesApi;
+  account: AccountApi;
   evals: EvalsApi;
   modelRisk: ModelRiskApi;
   toolModules: ToolModulesApi;
+  /** The tenant's egress allow-list (tools-service). */
+  egress: EgressApi;
+  /** Credentials tool calls send; values never come back (tools-service). */
+  secrets: SecretsApi;
   integrations: IntegrationsApi;
   files: FilesApi;
+  templates: TemplatesApi;
+  prompts: PromptsApi;
+  skills: SkillsApi;
+  assurance: AssuranceApi;
+  connect: ConnectApi;
+  wiki: WikiApi;
   tools: {
     list(params: ListParams<ToolFilters>): Promise<ListResult<Tool> & { stats: ToolStats }>;
     create(input: ToolInput): Promise<Tool>;
@@ -164,7 +213,8 @@ export interface OpsApi {
   /** Teams the user can switch between. The current team id is sent with every call (see team-context.ts). */
   teams: {
     list(): Promise<Team[]>;
-    create(input: TeamInput): Promise<Team>;
+    /** Absent under platform sign-in, where an admin creates teams in platform settings; the switcher then offers no Add team. */
+    create?(input: TeamInput): Promise<Team>;
   };
 }
 

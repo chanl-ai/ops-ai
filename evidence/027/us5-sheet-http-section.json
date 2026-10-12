@@ -1,0 +1,15 @@
+{
+  "id": "us5-sheet-http-section",
+  "accept": "US5",
+  "failure_mode": "the sheet's call editor drifts from Add operation, or an unused input goes unwarned",
+  "sha": "8535924c40dd35b6b24f95a0a57d1552f487c1d1",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_r1032_1d7f52 (this run's, dropped at the end); ports agents 58672, tools 58673, models 58674, platform 58676, console 58675\n\n== uc-010 ui: A builder manages a tool module (docs/usecases/tools-service/scripts/test-uc-010-ui.mjs)\nPASS the module starts published with the operation\nPASS the sheet shows the published call in the HTTP section\nPASS a URL off the module endpoint is refused in the sheet and cannot be staged\nPASS a path that drops {accountId} warns that the input is unused\nPASS Stage change sends only the new path, staged as one major change\nPASS the sheet labels the staged call as not yet what calls run\nPASS the published version is unchanged until publish\nPASS publishing the path edit makes the next major version and opens a security review\nPASS the operation now calls the edited path\nPASS no page errors\n\nPASS        uc-010 ui   10 checks passed\n\nexit 0"
+    }
+  ]
+}

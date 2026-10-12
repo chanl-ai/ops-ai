@@ -2,7 +2,7 @@
 
 Status: draft for review.
 
-Banks want AI agents to take over routine back-office work: reading a servicing inbox, looking up
+Enterprises want AI agents to take over routine back-office work: reading a servicing inbox, looking up
 the customer, drafting the reply or the record change, and handing it to a person to approve. The
 first such workflow usually takes several quarters to reach production, and the second takes almost
 as long as the first. This document states why, what the platform has to provide so that later

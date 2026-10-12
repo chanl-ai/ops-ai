@@ -24,7 +24,7 @@ const DESCRIBE = ['Which system and how the platform signs in', 'What the connec
 const VAULT_RE = /^vault:\/\/[a-z0-9][a-z0-9/_.-]+$/;
 const LITERAL_RE = /^(sk[-_]|xox[abp]-|ghp_|eyJ|-----BEGIN|AKIA)|^[A-Za-z0-9+/=_-]{32,}$/;
 const DAY = 86_400_000;
-const ymd = (days: number) => new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
+export const ymd = (days: number) => new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
 
 /** Null when the reference is a usable vault path; otherwise what is wrong with it. */
 export function vaultProblem(raw: string) {
@@ -73,7 +73,7 @@ export function ConnectDialog({
   const [name, setName] = React.useState('');
   const [instanceUrl, setInstanceUrl] = React.useState('');
   const [scopes, setScopes] = React.useState<string[]>([]);
-  const [consent, setConsent] = React.useState<'none' | 'screen' | 'granting' | 'granted'>('none');
+  const [consent, setConsent] = React.useState<ConsentState>('none');
   const [credentialRef, setCredentialRef] = React.useState('');
   const [owner, setOwner] = React.useState('');
   const [expiry, setExpiry] = React.useState('');
@@ -164,11 +164,6 @@ export function ConnectDialog({
     } catch (e) {
       setError((e as Error).message);
     }
-  };
-
-  const grant = () => {
-    setConsent('granting');
-    setTimeout(() => setConsent('granted'), 700);
   };
 
   const granted = system?.scopes.filter((s) => scopes.includes(s.id)) ?? [];
@@ -287,106 +282,10 @@ export function ConnectDialog({
       )}
 
       {step === 3 && system && (
-        <div className="flex flex-col gap-4">
-          {auth === 'oauth_consent' ? (
-            consent === 'granted' ? (
-              <div className="flex items-start gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3" data-testid="consent-granted">
-                <CheckCircle2 className="mt-0.5 size-4 text-emerald-600" />
-                <div className="min-w-0 flex-1 text-sm">
-                  <p className="font-medium">Consent granted by {currentUser}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plural(scopes.length, 'scope')} on {instanceUrl.replace(/^https?:\/\//, '')}. The refresh token is stored in the bank vault; nobody sees it.
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setConsent('screen')}>
-                  Sign in again
-                </Button>
-              </div>
-            ) : consent === 'none' ? (
-              <div className="flex flex-col items-start gap-3 rounded-md border p-4">
-                <p className="text-sm text-muted-foreground">An administrator of {system.name} signs in and approves the {plural(scopes.length, 'scope')} you chose. Nothing is connected until you finish.</p>
-                <Button
-                  onClick={() => {
-                    setTouched(false);
-                    setConsent('screen');
-                  }}
-                  data-testid="oauth-sign-in"
-                >
-                  <LogIn className="size-4" /> Sign in with {consentBrand(system)}
-                </Button>
-              </div>
-            ) : (
-              <div className="mx-auto flex w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-5 shadow-sm" role="group" aria-label={`${consentBrand(system)} consent screen`} data-testid="consent-screen">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <SystemMark kind={system.kind} size="sm" /> {consentBrand(system)} · {instanceUrl.replace(/^https?:\/\//, '')}
-                </div>
-                <p className="text-base font-semibold">Permissions requested</p>
-                <p className="text-sm">
-                  <span className="font-medium">Northfield Ops AI</span> wants to:
-                </p>
-                <ul className="flex flex-col gap-1.5 text-sm">
-                  {granted.map((s) => (
-                    <li key={s.id} className="flex items-start gap-2">
-                      {s.access === 'write' ? <PencilLine className="mt-0.5 size-3.5 shrink-0 text-amber-600" /> : <Eye className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
-                      <span>{s.label}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-muted-foreground">Signed in as {currentUser}. Accepting grants these for the whole organisation until the expiry you set.</p>
-                <div className="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" disabled={consent === 'granting'} onClick={() => setConsent('none')}>
-                    Cancel
-                  </Button>
-                  <LoadingButton size="sm" isLoading={consent === 'granting'} loadingText="Granting…" onClick={grant} data-testid="consent-accept">
-                    Accept
-                  </LoadingButton>
-                </div>
-              </div>
-            )
-          ) : (
-            <>
-              <Alert>
-                <Vault className="size-4" />
-                <AlertDescription>
-                  {AUTH[auth].hint} The gateway resolves the reference on each call; agents, workers and this console never see the value.
-                </AlertDescription>
-              </Alert>
-              <FormField id="cx-cred" label="Vault reference" error={touched ? (credProblem ?? undefined) : undefined} hint="The path in the bank vault, not the secret itself.">
-                <Input id="cx-cred" value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder={`e.g. vault://prod/integrations/${system.id.replace('cat_', '').replace(/_/g, '-')}/${auth === 'api_key' ? 'api-key' : auth === 'mtls' ? 'client-certificate' : 'client-secret'}`} className="font-mono text-sm" aria-invalid={touched && !!credProblem} autoComplete="off" spellCheck={false} />
-              </FormField>
-            </>
-          )}
-        </div>
+        <ConnectionCredentialFields system={system} auth={auth} scopes={scopes} instanceUrl={instanceUrl} currentUser={currentUser} consent={consent} onConsent={setConsent} onSignIn={() => (setTouched(false), setConsent('screen'))} credentialRef={credentialRef} onCredentialRef={setCredentialRef} credentialError={touched ? (credProblem ?? undefined) : undefined} />
       )}
 
-      {step === 4 && (
-        <div className="flex flex-col gap-5">
-          <FormField id="cx-owner" label="Owner team" hint="Answers for the connection: renewals, scope requests and incidents.">
-            <Select value={owner} onValueChange={setOwner}>
-              <SelectTrigger id="cx-owner" className="w-full">
-                <SelectValue placeholder="Choose a team" />
-              </SelectTrigger>
-              <SelectContent>
-                {teams.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-          <FormField id="cx-expiry" label={auth === 'oauth_consent' ? 'Consent expires' : 'Credential expires'} error={touched ? (expiryProblem ?? undefined) : undefined} hint="The owner team is reminded 30 days before. After it, every dependant stops until someone reconnects.">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input id="cx-expiry" type="date" value={expiry} min={ymd(1)} onChange={(e) => setExpiry(e.target.value)} className="w-44" aria-invalid={touched && !!expiryProblem} />
-              {[30, 90, 180, 365].map((d) => (
-                <Button key={d} type="button" size="sm" variant={expiry === ymd(d) ? 'secondary' : 'ghost'} onClick={() => setExpiry(ymd(d))}>
-                  {d} days
-                </Button>
-              ))}
-            </div>
-          </FormField>
-        </div>
-      )}
+      {step === 4 && <ConnectionOwnerExpiryFields auth={auth} teams={teams} owner={owner} onOwner={setOwner} expiry={expiry} onExpiry={setExpiry} expiryError={touched ? (expiryProblem ?? undefined) : undefined} />}
 
       {step === 5 && system && (
         <div className="flex flex-col gap-4" data-testid="connect-review">
@@ -407,9 +306,9 @@ export function ConnectDialog({
                 {reads.length ? reads.map((s) => <li key={s.id}>{s.label}<span className="block text-xs text-muted-foreground">{s.description}</span></li>) : <li className="text-muted-foreground">Nothing</li>}
               </ul>
             </div>
-            <div className={cn('rounded-md border p-3', writes.length && 'border-amber-500/40')}>
+            <div className={cn('rounded-md border p-3', writes.length && 'border-warning/40')}>
               <p className="flex items-center gap-1.5 text-sm font-medium">
-                <PencilLine className="size-4 text-amber-600" /> It will be able to write
+                <PencilLine className="size-4 text-warning-text" /> It will be able to write
               </p>
               <ul className="mt-2 flex flex-col gap-1.5 text-sm">
                 {writes.length ? writes.map((s) => <li key={s.id}>{s.label}<span className="block text-xs text-muted-foreground">{s.description}</span></li>) : <li className="text-muted-foreground">Nothing. It is read only.</li>}
@@ -439,6 +338,142 @@ function ReviewRow({ label, value, detail, mono, onEdit }: { label: string; valu
       <Button size="sm" variant="ghost" onClick={onEdit}>
         Edit
       </Button>
+    </div>
+  );
+}
+
+export type ConsentState = 'none' | 'screen' | 'granting' | 'granted';
+
+/**
+ * How the gateway proves who it is: the OAuth consent screen, or a vault reference for the other methods. Used by
+ * the guided connect's Credential step and by a draft connection's Setup tab.
+ */
+export function ConnectionCredentialFields({
+  system,
+  auth,
+  scopes,
+  instanceUrl,
+  currentUser,
+  consent,
+  onConsent,
+  onSignIn,
+  credentialRef,
+  onCredentialRef,
+  credentialError,
+}: {
+  system: CatalogSystem;
+  auth: AuthMethod;
+  scopes: string[];
+  instanceUrl: string;
+  currentUser: string;
+  consent: ConsentState;
+  onConsent: (c: ConsentState) => void;
+  onSignIn: () => void;
+  credentialRef: string;
+  onCredentialRef: (v: string) => void;
+  credentialError?: string;
+}) {
+  const granted = system.scopes.filter((s) => scopes.includes(s.id));
+  const grant = () => {
+    onConsent('granting');
+    setTimeout(() => onConsent('granted'), 700);
+  };
+  return (
+    <div className="flex flex-col gap-4">
+          {auth === 'oauth_consent' ? (
+            consent === 'granted' ? (
+              <div className="flex items-start gap-3 rounded-md border border-success/40 bg-success/5 p-3" data-testid="consent-granted">
+                <CheckCircle2 className="mt-0.5 size-4 text-success-text" />
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-medium">Consent granted by {currentUser}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {plural(scopes.length, 'scope')} on {instanceUrl.replace(/^https?:\/\//, '')}. The refresh token is stored in the bank vault; nobody sees it.
+                  </p>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => onConsent('screen')}>
+                  Sign in again
+                </Button>
+              </div>
+            ) : consent === 'none' ? (
+              <div className="flex flex-col items-start gap-3 rounded-md border p-4">
+                <p className="text-sm text-muted-foreground">An administrator of {system.name} signs in and approves the {plural(scopes.length, 'scope')} you chose. Nothing is connected until you finish.</p>
+                <Button onClick={onSignIn} data-testid="oauth-sign-in">
+                  <LogIn className="size-4" /> Sign in with {consentBrand(system)}
+                </Button>
+              </div>
+            ) : (
+              <div className="mx-auto flex w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-5 shadow-sm" role="group" aria-label={`${consentBrand(system)} consent screen`} data-testid="consent-screen">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <SystemMark kind={system.kind} size="sm" /> {consentBrand(system)} · {instanceUrl.replace(/^https?:\/\//, '')}
+                </div>
+                <p className="text-base font-semibold">Permissions requested</p>
+                <p className="text-sm">
+                  <span className="font-medium">Northfield Ops AI</span> wants to:
+                </p>
+                <ul className="flex flex-col gap-1.5 text-sm">
+                  {granted.map((s) => (
+                    <li key={s.id} className="flex items-start gap-2">
+                      {s.access === 'write' ? <PencilLine className="mt-0.5 size-3.5 shrink-0 text-warning-text" /> : <Eye className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                      <span>{s.label}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">Signed in as {currentUser}. Accepting grants these for the whole organisation until the expiry you set.</p>
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" disabled={consent === 'granting'} onClick={() => onConsent('none')}>
+                    Cancel
+                  </Button>
+                  <LoadingButton size="sm" isLoading={consent === 'granting'} loadingText="Granting…" onClick={grant} data-testid="consent-accept">
+                    Accept
+                  </LoadingButton>
+                </div>
+              </div>
+            )
+          ) : (
+            <>
+              <Alert>
+                <Vault className="size-4" />
+                <AlertDescription>
+                  {AUTH[auth].hint} The gateway resolves the reference on each call; agents, workers and this console never see the value.
+                </AlertDescription>
+              </Alert>
+              <FormField id="cx-cred" label="Vault reference" error={credentialError} hint="The path in the bank vault, not the secret itself.">
+                <Input id="cx-cred" value={credentialRef} onChange={(e) => onCredentialRef(e.target.value)} placeholder={`e.g. vault://prod/integrations/${system.id.replace('cat_', '').replace(/_/g, '-')}/${auth === 'api_key' ? 'api-key' : auth === 'mtls' ? 'client-certificate' : 'client-secret'}`} className="font-mono text-sm" aria-invalid={!!credentialError} autoComplete="off" spellCheck={false} />
+              </FormField>
+            </>
+          )}
+    </div>
+  );
+}
+
+/** Who answers for the connection and when it ends; the guided connect's step 4 and a draft's Setup tab. */
+export function ConnectionOwnerExpiryFields({ auth, teams, owner, onOwner, expiry, onExpiry, expiryError }: { auth: AuthMethod; teams: string[]; owner: string; onOwner: (v: string) => void; expiry: string; onExpiry: (v: string) => void; expiryError?: string }) {
+  return (
+    <div className="flex flex-col gap-5">
+          <FormField id="cx-owner" label="Owner team" hint="Answers for the connection: renewals, scope requests and incidents.">
+            <Select value={owner} onValueChange={onOwner}>
+              <SelectTrigger id="cx-owner" className="w-full">
+                <SelectValue placeholder="Choose a team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+          <FormField id="cx-expiry" label={auth === 'oauth_consent' ? 'Consent expires' : 'Credential expires'} error={expiryError} hint="The owner team is reminded 30 days before. After it, every dependant stops until someone reconnects.">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input id="cx-expiry" type="date" value={expiry} min={ymd(1)} onChange={(e) => onExpiry(e.target.value)} className="w-44" aria-invalid={!!expiryError} />
+              {[30, 90, 180, 365].map((d) => (
+                <Button key={d} type="button" size="sm" variant={expiry === ymd(d) ? 'secondary' : 'ghost'} onClick={() => onExpiry(ymd(d))}>
+                  {d} days
+                </Button>
+              ))}
+            </div>
+          </FormField>
     </div>
   );
 }

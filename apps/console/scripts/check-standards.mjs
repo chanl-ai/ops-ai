@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Enforces the grep-provable rules in CLAUDE.md. Exits 1 with file:line for every violation.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -15,6 +15,25 @@ function walk(dir) {
 
 const files = walk(src).map((abs) => ({ abs, rel: relative(root, abs), text: readFileSync(abs, 'utf8') }));
 const violations = [];
+const notes = [];
+
+// 14. Colours come from the theme tokens and layout widths are fluid (docs/console/standards.md). Files that broke
+//     this before the rule existed are listed with their count in palette-baseline.json; a file may lower its count,
+//     never raise it, and a file not listed may have none. `--write-baseline` records the current counts after a
+//     conversion lowers them.
+const PALETTE = /\b(?:text|bg|border|ring|fill|stroke|from|via|to|divide|outline|decoration)-(?:amber|emerald|green|red|slate|gray|zinc)-\d{2,3}\b/g;
+const FIXED_WIDTH = /(?<![\w-])(?:min-|max-)?w-\[\d+px\]/g;
+// A rail (a fixed-width column that does not shrink, e.g. the chat thread list) is correct layout, so a px width on an
+// element whose classes include shrink-0 is allowed.
+const classesAround = (text, index) => {
+  const open = Math.max(text.lastIndexOf('"', index), text.lastIndexOf("'", index), text.lastIndexOf('`', index));
+  const close = text.indexOf(text[open], index);
+  return text.slice(open + 1, close < 0 ? index : close);
+};
+const isRail = (text, m) => /(^|\s)shrink-0(\s|$)/.test(classesAround(text, m.index));
+const baselinePath = join(root, 'scripts/palette-baseline.json');
+const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
+const counts = {};
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const report = (f, index, rule) => violations.push(`${f.rel}:${lineOf(f.text, index)}  ${rule}`);
 
@@ -81,14 +100,35 @@ for (const f of files) {
     }
   }
 
+  const hits = [...text.matchAll(PALETTE), ...[...text.matchAll(FIXED_WIDTH)].filter((m) => !isRail(text, m))];
+  if (hits.length) counts[f.rel] = hits.length;
+  const allowed = baseline[f.rel] ?? 0;
+  if (hits.length > allowed) {
+    const first = hits.sort((a, b) => a.index - b.index)[0];
+    report(f, first.index, `${hits.length} raw palette classes or fixed px widths, ${allowed} allowed (use the success, warning and destructive tokens and fluid widths)`);
+  } else if (hits.length < allowed) notes.push(`${f.rel}: ${hits.length} of ${allowed} allowed; run with --write-baseline to lock the drop in`);
+
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');
 }
 
 // 12. Every routed page has a recognised header or shell. ChatWorkspace renders ChatLayout, the full-height chat shell.
-for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel))) {
+// A page that only calls next/navigation `redirect()` and renders no JSX (a retired route) has nothing to lay out.
+const redirectOnly = (text) => /\bredirect\(/.test(text) && !/<\/|\/>/.test(text);
+// Sign-in pages under app/(auth) are laid out by app/(auth)/layout.tsx (centred card, no sidebar), not PageLayout.
+const authShell = (rel) => rel.startsWith('src/app/(auth)/');
+for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel))) {
   if (!/PageLayout|ReviewsPageLayout|WorkflowEditor|<AgentSettingsPage|KbPageLayout|SourcePageLayout|ChatLayout|<ChatWorkspace/.test(f.text)) report(f, 0, 'page without PageLayout (or a documented shell)');
 }
+
+if (process.argv.includes('--write-baseline')) {
+  // Recording the counts is the point of this mode, so rule 14 does not fail it.
+  for (let i = violations.length - 1; i >= 0; i--) if (violations[i].includes('raw palette classes')) violations.splice(i, 1);
+  writeFileSync(baselinePath, JSON.stringify(Object.fromEntries(Object.entries(counts).sort()), null, 2) + '\n');
+  console.log(`check-standards: baseline written, ${Object.keys(counts).length} files, ${Object.values(counts).reduce((a, b) => a + b, 0)} uses`);
+}
+for (const f of Object.keys(baseline)) if (!files.some((x) => x.rel === f)) notes.push(`${f}: listed in palette-baseline.json but gone; run with --write-baseline`);
+if (notes.length) console.log(notes.map((n) => `  note: ${n}`).join('\n'));
 
 if (violations.length) {
   console.error(`check-standards: ${violations.length} violation(s)\n` + violations.map((v) => `  ${v}`).join('\n'));

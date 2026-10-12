@@ -23,7 +23,11 @@ export function inputsOf(op: Pick<HttpOperationInput, 'url' | 'body'>) {
 }
 
 /** One HTTP operation, built the way the shared component library's HTTP tool editor builds a request. Credentials are vault references only. */
-export function HttpOperationBuilder({ value, onChange, errors }: { value: HttpOperationInput; onChange: (v: HttpOperationInput) => void; errors?: Partial<Record<'name' | 'url', string>> }) {
+/**
+ * `callOnly` drops name, access and description: the operation sheet edits an existing operation's call, and shows
+ * those itself (name and access are fixed once workflows can be approved for it).
+ */
+export function HttpOperationBuilder({ value, onChange, errors, callOnly }: { value: HttpOperationInput; onChange: (v: HttpOperationInput) => void; errors?: Partial<Record<'name' | 'url' | 'body', string>>; callOnly?: boolean }) {
   const set = <K extends keyof HttpOperationInput>(k: K, v: HttpOperationInput[K]) => onChange({ ...value, [k]: v });
   const params = inputsOf(value);
   const literal = value.headers.filter((h) => SENSITIVE.includes(h.key.trim().toLowerCase()) && h.value.trim() && !SECRET_REF.test(h.value.trim()));
@@ -31,26 +35,30 @@ export function HttpOperationBuilder({ value, onChange, errors }: { value: HttpO
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField id="http-name" label="Operation name" hint="Lower case with underscores; agents see this name." error={errors?.name}>
-          <Input id="http-name" value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. get_statement" className="font-mono" aria-invalid={!!errors?.name} />
-        </FormField>
-        <FormField id="http-access" label="Access" hint={value.access === 'money_movement' ? 'Every call needs a person’s approval and a second approver.' : value.access === 'write' ? 'Calls wait for an approval token unless a gate policy covers them.' : 'Reads run without approval.'}>
-          <Select value={value.access} onValueChange={(v) => set('access', v as ToolAccess)}>
-            <SelectTrigger id="http-access" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="read">Read</SelectItem>
-              <SelectItem value="write">Write</SelectItem>
-              <SelectItem value="money_movement">Moves money</SelectItem>
-            </SelectContent>
-          </Select>
-        </FormField>
-      </div>
-      <FormField id="http-desc" label="Description" optional hint="Agents read this to decide when to call the operation.">
-        <Input id="http-desc" value={value.description} onChange={(e) => set('description', e.target.value)} placeholder="e.g. Monthly statement for a deposit account" />
-      </FormField>
+      {!callOnly && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField id="http-name" label="Operation name" hint="Lower case with underscores; agents see this name." error={errors?.name}>
+              <Input id="http-name" value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. get_statement" className="font-mono" aria-invalid={!!errors?.name} />
+            </FormField>
+            <FormField id="http-access" label="Access" hint={value.access === 'money_movement' ? 'Every call needs a person’s approval and a second approver.' : value.access === 'write' ? 'Calls wait for an approval token unless a gate policy covers them.' : 'Reads run without approval.'}>
+              <Select value={value.access} onValueChange={(v) => set('access', v as ToolAccess)}>
+                <SelectTrigger id="http-access" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read">Read</SelectItem>
+                  <SelectItem value="write">Write</SelectItem>
+                  <SelectItem value="money_movement">Moves money</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+          </div>
+          <FormField id="http-desc" label="Description" optional hint="Agents read this to decide when to call the operation.">
+            <Input id="http-desc" value={value.description} onChange={(e) => set('description', e.target.value)} placeholder="e.g. Monthly statement for a deposit account" />
+          </FormField>
+        </>
+      )}
       <FormField id="http-url" label="Request" error={errors?.url} hint="Use {name} for path parameters. Values the case binds are filled by the gateway.">
         <div className="flex">
           <Select value={value.method} onValueChange={(v) => set('method', v as HttpMethod)}>
@@ -109,13 +117,13 @@ export function HttpOperationBuilder({ value, onChange, errors }: { value: HttpO
           </div>
         ))}
         {literal.length > 0 && (
-          <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <p className="flex items-center gap-1.5 text-xs text-warning-text">
             <AlertTriangle className="size-3.5 shrink-0" /> {literal.map((h) => h.key).join(', ')} holds a literal value. Reference the vault instead, e.g. <code className="font-mono">{'{{CORE_API_KEY}}'}</code>.
           </p>
         )}
       </div>
       {hasBody && (
-        <FormField id="http-body" label="Body template" optional hint="Use {{name}} for values the agent supplies.">
+        <FormField id="http-body" label="Body template" optional hint="Use {{name}} for values the agent supplies." error={errors?.body}>
           <Textarea id="http-body" value={value.body ?? ''} onChange={(e) => set('body', e.target.value)} rows={4} className="font-mono text-xs" placeholder={'e.g. {\n  "amount": {{amount}}\n}'} />
         </FormField>
       )}

@@ -11,6 +11,7 @@ import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { CatalogGrid } from '@/components/integrations/catalog-grid';
 import { ConnectDialog } from '@/components/integrations/connect-dialog';
+import { NewConnectionDialog } from '@/components/integrations/new-connection-dialog';
 import { AUTH, IntegrationStatusBadge, KIND, STATUS_LABEL, SystemMark } from '@/components/integrations/integration-meta';
 import { RevokeDialog } from '@/components/integrations/revoke-dialog';
 import { PageLayout } from '@/components/page-layout';
@@ -22,8 +23,9 @@ import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { selectColumn } from '@/components/shared/select-column';
 import { ExpiryText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useBulkCheckIntegrations, useConnectFlow, useIntegrations, useRevokeImpact, useRevokeIntegrations } from '@/hooks/integration-queries';
+import { useSetIntegrationSwitches, useBulkCheckIntegrations, useConnectFlow, useCreateDraftConnection, useIntegrations, useRevokeImpact, useRevokeIntegrations } from '@/hooks/integration-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
 import { useTabParam } from '@/hooks/use-tab-param';
@@ -45,7 +47,25 @@ function usedByText(i: Integration) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-function columns(onRecheck: (i: Integration) => void, onRevoke: (i: Integration) => void): ColumnDef<Row>[] {
+type SwitchKey = 'syncKnowledge' | 'exposeTools';
+
+function columns(onRecheck: (i: Integration) => void, onRevoke: (i: Integration) => void, onSwitch: (i: Integration, key: SwitchKey, on: boolean) => void, pendingId: string | null): ColumnDef<Row>[] {
+  const switchCell = (key: SwitchKey, label: string): ColumnDef<Row> => ({
+    id: key,
+    accessorFn: (i) => i[key],
+    header: label,
+    cell: ({ row }) => (
+      <StopRowClick align="start">
+        <Switch
+          checked={row.original[key]}
+          disabled={row.original.status === 'revoked' || pendingId === row.original.id}
+          onCheckedChange={(v) => onSwitch(row.original, key, v)}
+          aria-label={`${label} for ${row.original.name}`}
+          data-testid={`${key}-${row.original.id}`}
+        />
+      </StopRowClick>
+    ),
+  });
   return [
     selectColumn<Row>((i) => i.name),
     {
@@ -66,6 +86,9 @@ function columns(onRecheck: (i: Integration) => void, onRevoke: (i: Integration)
       ),
       enableHiding: false,
     },
+    // The two switches are the row's main controls, so they sit next to the system name.
+    switchCell('syncKnowledge', 'Sync knowledge'),
+    switchCell('exposeTools', 'Expose tools'),
     { accessorKey: 'kind', header: ({ column }) => <DataTableColumnHeader column={column} title="Kind" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{KIND[row.original.kind].label}</span>, filterFn: facetFilterFn },
     { accessorKey: 'authMethod', header: ({ column }) => <DataTableColumnHeader column={column} title="Sign-in" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{AUTH[row.original.authMethod].label}</span>, filterFn: facetFilterFn },
     { id: 'scopes', accessorFn: (i) => i.scopeSummary, header: ({ column }) => <DataTableColumnHeader column={column} title="Scopes" />, cell: ({ row }) => <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">{row.original.scopeSummary}</span> },
@@ -123,7 +146,9 @@ export default function IntegrationsPage() {
   const list = useListParams<IntegrationFilters>('name');
   const query = useIntegrations({ ...list.params, view });
   const [connectFor, setConnectFor] = React.useState<{ system?: CatalogSystem } | null>(null);
-  const flow = useConnectFlow(tab === 'catalog' || !!connectFor);
+  const [blankOpen, setBlankOpen] = React.useState(false);
+  const flow = useConnectFlow(tab === 'catalog' || !!connectFor || blankOpen);
+  const createDraft = useCreateDraftConnection();
   const bulkCheck = useBulkCheckIntegrations();
   const revoke = useRevokeIntegrations();
   const [revoking, setRevoking] = React.useState<Integration[] | null>(null);
@@ -147,29 +172,54 @@ export default function IntegrationsPage() {
     },
     [bulkCheck],
   );
-  const cols = React.useMemo(() => columns((i) => recheck([i]), (i) => setRevoking([i])), [recheck]);
+  const switches = useSetIntegrationSwitches();
+  const [switchingId, setSwitchingId] = React.useState<string | null>(null);
+  const onSwitch = React.useCallback(
+    (i: Integration, key: SwitchKey, on: boolean) => {
+      setSwitchingId(i.id);
+      switches.mutate(
+        { id: i.id, patch: { [key]: on } },
+        {
+          onSuccess: () =>
+            toast.success(key === 'syncKnowledge' ? (on ? `Syncing knowledge from ${i.name}` : `Stopped syncing knowledge from ${i.name}`) : on ? `${i.name} tools are available to agents` : `${i.name} tools are hidden from agents`),
+          onError: (e) => toast.error(`Couldn’t change ${i.name}`, { description: e.message }),
+          onSettled: () => setSwitchingId(null),
+        },
+      );
+    },
+    [switches],
+  );
+  const cols = React.useMemo(() => columns((i) => recheck([i]), (i) => setRevoking([i]), onSwitch, switchingId), [recheck, onSwitch, switchingId]);
   const rows: Row[] = React.useMemo(() => rows0.map((i) => ({ ...i, onOpen: (x: Integration) => router.push(`/integrations/${x.id}`) })), [rows0, router]);
   const optionsOf = <K extends string>(key: string, label: (k: K) => string) => Object.keys(facets[key] ?? {}).map((k) => ({ label: label(k as K), value: k, count: facets[key]?.[k] ?? 0 }));
 
   return (
     <PageLayout
+      switcher
       icon={Cable}
-      title="Integrations"
-      description="Every bank system the platform signs in to: credentials, scopes, owners, expiry and what depends on each"
+      title="Connections"
+      description="Every bank system the platform signs in to, with switches for syncing its knowledge and exposing its tools"
       actions={
-        <Button onClick={() => setConnectFor({})}>
-          <Plus className="size-4" /> Connect a system
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setConnectFor({})} data-testid="guided-connect">
+            Guided connect
+          </Button>
+          <Button onClick={() => setBlankOpen(true)} data-testid="connect-system">
+            <Plus className="size-4" /> Connect a system
+          </Button>
+        </div>
       }
       tabs={
-        <Tabs value={tab} onValueChange={(t) => setTab(t as (typeof TABS)[number])}>
-          <TabsList>
-            <TabsTrigger value="connected">
-              Connected{counts && <span className="ml-1 text-muted-foreground tabular-nums">{counts.all}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="catalog">Catalog</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-col gap-2">
+          <Tabs value={tab} onValueChange={(t) => setTab(t as (typeof TABS)[number])}>
+            <TabsList>
+              <TabsTrigger value="connected">
+                Connected{counts && <span className="ml-1 text-muted-foreground tabular-nums">{counts.all}</span>}
+              </TabsTrigger>
+              <TabsTrigger value="catalog">Catalog</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       }
     >
       {tab === 'catalog' ? (
@@ -246,13 +296,25 @@ export default function IntegrationsPage() {
                 onClear={() => setFilterResetKey((k) => k + 1)}
                 description={VIEW_EMPTY[view]}
                 createLabel={view === 'all' ? 'Connect a system' : undefined}
-                onCreate={view === 'all' ? () => setConnectFor({}) : undefined}
+                onCreate={view === 'all' ? () => setBlankOpen(true) : undefined}
               />
             }
           />
         </div>
       )}
 
+      <NewConnectionDialog
+        open={blankOpen}
+        onOpenChange={setBlankOpen}
+        catalog={flow.catalog}
+        existingNames={rows0.map((r) => r.name)}
+        isPending={createDraft.isPending}
+        onSubmit={async (input) => {
+          const i = await createDraft.mutateAsync(input);
+          toast.success(`Saved ${i.name} as a draft`, { description: 'Grant scopes, add the credential and set the expiry on its Setup tab, then connect it.' });
+          router.push(`/integrations/${i.id}?tab=setup`);
+        }}
+      />
       <ConnectDialog
         open={!!connectFor}
         onOpenChange={(o) => !o && setConnectFor(null)}

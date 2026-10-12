@@ -83,8 +83,8 @@ export function PassageDiff({ before, after, className }: { before: string; afte
           key={i}
           className={cn(
             'px-1',
-            r.kind === 'add' && 'bg-green-500/10 text-green-800 dark:text-green-300',
-            r.kind === 'del' && 'bg-red-500/10 text-red-800 dark:text-red-300',
+            r.kind === 'add' && 'bg-success/10 text-success-text',
+            r.kind === 'del' && 'bg-destructive/10 text-destructive',
           )}
         >
           <span aria-hidden className="select-none">{r.kind === 'add' ? '+ ' : r.kind === 'del' ? '- ' : '  '}</span>
@@ -93,7 +93,7 @@ export function PassageDiff({ before, after, className }: { before: string; afte
             p.type === 'same' ? (
               <React.Fragment key={k}>{p.text}</React.Fragment>
             ) : (
-              <mark key={k} className={cn('rounded-sm px-0.5 text-inherit', p.type === 'add' ? 'bg-green-500/30' : 'bg-red-500/30 line-through decoration-red-700/50')}>
+              <mark key={k} className={cn('rounded-sm px-0.5 text-inherit', p.type === 'add' ? 'bg-success/30' : 'bg-destructive/30 line-through decoration-destructive/50')}>
                 {p.text}
               </mark>
             ),

@@ -166,7 +166,7 @@ export function ImportEvalCasesDialog({
                     <TableCell>
                       <CheckChips checks={r.input.checks} max={4} />
                     </TableCell>
-                    <TableCell className="text-xs">{r.error ? <span className="text-destructive">{r.error}</span> : <span className="text-emerald-700 dark:text-emerald-400">Ready</span>}</TableCell>
+                    <TableCell className="text-xs">{r.error ? <span className="text-destructive">{r.error}</span> : <span className="text-success-text">Ready</span>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

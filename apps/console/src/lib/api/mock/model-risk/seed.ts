@@ -136,3 +136,6 @@ export const VALIDATION_SEEDS: { refId: string; scope: 'initial' | 'periodic' | 
 ];
 
 export const VALIDATORS = ['James Richardson', 'Priya Shah', 'Anika Singh'];
+
+/** `refId:version` pairs published before evidence sealing existed, so they have no sealed bundle. */
+export const UNSEALED = ['wf_lending_inbox:3', 'ag_dispute:4', 'ag_dispute:3'];

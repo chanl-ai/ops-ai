@@ -11,13 +11,13 @@ import { cn } from '@/lib/utils';
 export function TrustChip({ state, className }: { state: TrustState; className?: string }) {
   if (state === 'verified')
     return (
-      <Badge variant="outline" className={cn('border-green-600/40 bg-green-500/10 text-green-700 dark:text-green-400', className)}>
+      <Badge variant="outline" className={cn('border-success/40 bg-success/10 text-success-text', className)}>
         Verified
       </Badge>
     );
   if (state === 'changed')
     return (
-      <Badge variant="outline" className={cn('border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-400', className)}>
+      <Badge variant="outline" className={cn('border-warning/40 bg-warning/10 text-warning-text', className)}>
         Changed since verified
       </Badge>
     );
@@ -30,7 +30,7 @@ export function TrustChip({ state, className }: { state: TrustState; className?:
 
 export function FreshnessChip({ change, className }: { change: Pick<KnowledgeChange, 'freshness' | 'reviewBy'>; className?: string }) {
   return change.freshness === 'stale' ? (
-    <Badge variant="outline" className={cn('border-amber-600/40 bg-amber-500/10 text-amber-700 dark:text-amber-400', className)}>
+    <Badge variant="outline" className={cn('border-warning/40 bg-warning/10 text-warning-text', className)}>
       Review overdue since {dateOnly(change.reviewBy)}
     </Badge>
   ) : (
@@ -46,7 +46,7 @@ export function ConflictChip({ resolved, className }: { resolved?: boolean; clas
       Conflict resolved
     </Badge>
   ) : (
-    <Badge variant="outline" className={cn('border-red-600/40 bg-red-500/10 text-red-700 dark:text-red-400', className)}>
+    <Badge variant="outline" className={cn('border-destructive/40 bg-destructive/10 text-destructive', className)}>
       Conflict
     </Badge>
   );

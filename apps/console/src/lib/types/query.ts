@@ -21,7 +21,7 @@ export type ReviewView = 'mine' | 'open' | 'overdue' | 'resolved' | 'all';
 export type ReviewFilters = { risk?: string[]; workflowId?: string[]; kind?: string[]; agentSlug?: string[]; status?: string[] };
 export type ReviewListParams = ListParams<ReviewFilters> & { view: ReviewView };
 
-export type AgentFilters = { status?: string[]; owner?: string[] };
+export type AgentFilters = { availability?: string[]; owner?: string[] };
 export type WorkflowFilters = { status?: string[] };
 export type PolicyFilters = { workflowId?: string[] };
 export type RunFilters = { status?: string[] };

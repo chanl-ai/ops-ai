@@ -30,7 +30,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const { data: openReviews } = useOpenReviewCount();
   const { data: lookups, isError: lookupsFailed, refetch: retryLookups } = useLookups();
-  const { team, teams, switchTeam, create, isError: teamsFailed, retry: retryTeams } = useTeam();
+  const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const badges: Record<string, number | undefined> = { '/reviews': openReviews };
 
   return (
@@ -44,7 +44,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           subtitle={`${lookups?.workspace.name ?? 'Northfield Bank'} · Ops AI`}
           onSelect={switchTeam}
           ownerGroups={lookups?.owners ?? []}
-          onCreate={(input) => create.mutateAsync(input)}
+          onCreate={canCreate ? (input) => create.mutateAsync(input) : undefined}
           isCreating={create.isPending}
         />
       </SidebarHeader>
@@ -55,23 +55,23 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
+                  // Sub pages (Deployments under Workflows, Changes under Wiki) live in the page title switcher, so the parent row lights for them.
                   const active = navMatch(pathname)?.item.url === item.url;
                   const count = badges[item.url];
-                  return (
-                    <SidebarMenuItem key={item.url}>
-                      <SidebarMenuButton asChild tooltip={item.title} isActive={active}>
-                        <Link href={item.url}>
-                          <item.icon />
-                          <span className="flex-1">{item.title}</span>
-                          {!!count && (
-                            <Badge className="ml-auto h-5 px-1.5 py-0 text-[10px] tabular-nums" aria-label={`${count} open`}>
-                              {count}
-                            </Badge>
-                          )}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                  const row = (
+                    <SidebarMenuButton asChild tooltip={item.title} isActive={active}>
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span className="flex-1">{item.title}</span>
+                        {!!count && (
+                          <Badge className="ml-auto h-5 px-1.5 py-0 text-[10px] tabular-nums" aria-label={`${count} open`}>
+                            {count}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
                   );
+                  return <SidebarMenuItem key={item.url}>{row}</SidebarMenuItem>;
                 })}
               </SidebarMenu>
             </SidebarGroupContent>

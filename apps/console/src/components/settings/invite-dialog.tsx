@@ -81,7 +81,7 @@ export function InviteDialog({
     >
       <div className="flex flex-col gap-4">
         {teams && <TeamSelectField id="invite-team" teams={teams} value={teamId} onChange={setTeamId} hint="Their role applies within this team." />}
-        <FormField id="invite-emails" label="Email addresses" hint="Separate several with commas or new lines. Bank addresses only." error={error ?? undefined}>
+        <FormField id="invite-emails" label="Email addresses" hint="Separate several with commas or new lines. Only the domains allowed in Settings → Sign-in." error={error ?? undefined}>
           <Textarea id="invite-emails" rows={3} value={emails} onChange={(e) => (setEmails(e.target.value), setError(null))} placeholder="e.g. first.last@northfieldbank.com" aria-invalid={!!error} />
         </FormField>
         <div className="flex flex-col gap-2">

@@ -59,7 +59,7 @@ export function IntentsTab({ config, onChange, actionOptions }: { config: EmailW
       id: 'examples',
       accessorFn: (r) => r.examples.length,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Examples" />,
-      cell: ({ row }) => <span className={row.original.examples.length < 2 ? 'text-xs font-medium text-amber-700 dark:text-amber-400' : 'text-muted-foreground tabular-nums'}>{row.original.examples.length < 2 ? `${row.original.examples.length} · add more` : row.original.examples.length}</span>,
+      cell: ({ row }) => <span className={row.original.examples.length < 2 ? 'text-xs font-medium text-warning-text' : 'text-muted-foreground tabular-nums'}>{row.original.examples.length < 2 ? `${row.original.examples.length} · add more` : row.original.examples.length}</span>,
     },
     {
       id: 'fields',

@@ -66,7 +66,7 @@ export const caseColumns: ColumnDef<CaseTableRow>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Approvals" />,
     cell: ({ row }) =>
       row.original.pendingApprovals ? (
-        <span className="whitespace-nowrap text-xs font-medium text-amber-700 dark:text-amber-400">{row.original.pendingApprovals} waiting</span>
+        <span className="whitespace-nowrap text-xs font-medium text-warning-text">{row.original.pendingApprovals} waiting</span>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
       ),

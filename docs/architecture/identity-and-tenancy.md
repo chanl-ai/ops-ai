@@ -1,0 +1,92 @@
+# Identity, trust and tenancy
+
+Status: current, updated 2026-10-11 against HEAD; every decision is an option until the owner confirms it.
+
+Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
+delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
+[sign-in-and-sessions](../specs/sign-in-and-sessions.md) (human sign-in, step-up).
+
+## Decisions
+
+| Decision | Detail |
+|---|---|
+| Sign-in is a seam | The console calls one `AuthProvider` with `mock`, `oidc` and `firebase` adapters; a workspace's policy (methods, SSO domains, MFA, session length) comes from the API. Bank default: `oidc` against the bank's IdP, MFA required, invite only |
+| Delegation per run | The adapter exchanges the caller's token for a short-lived delegation token: `sub` is who the work is for, `act` is who does it (the graph version), audience the tools gateway. OAuth token exchange (RFC 8693) where the IdP supports it |
+| Process principals | Mailbox, schedule and webhook runs use a non-human principal owned by the team that owns the channel, with the entitlements that team approved. It can read and draft; it writes only with an approval token |
+| Workload identity | Each service and worker pool has its own (SPIFFE or the platform's equivalent); service-to-service calls use mTLS or OIDC |
+| Tool calls | Every tool call goes through tools-service, which asks OPA. A write needs an approval token bound to the input hash; money needs two approvers |
+| Model calls | Every model call goes through models-service with the identity's own key and budget; workers hold no model keys ([ADR-0008](decisions/ai-gateway.md)) |
+| Tenant and team | From the identity, never from a parameter or a run config |
+| One auth dependency | Every service installs `ops_identity.fastapi.Auth` (`install_auth`) and its routes depend on `CurrentPrincipal` or `CurrentService`; no service reads tokens, keys or dev headers itself. `Auth.from_settings` picks dev or platform from `OPS_AUTH_MODE` alone |
+| Calling service | An internal call's caller is its Ed25519 service token's subject (`service:<name>`), bound to that service's key; tools-service logs and decides on it and no body field names the caller |
+| Trust facts stay out of model-visible text | Tenant, tier and identity come from the run context, never from the chat message |
+
+## What each outbound call carries
+
+| Call | Carries | Checked by |
+|---|---|---|
+| Tool read | Delegation token, `X-Lease-Generation` | tools-service: identity known, tool in the registry |
+| Tool write | Delegation token, approval token, lease generation | OPA: token signed by the review service, `inputHash`, `tool`, `thread`, `step` match, not expired, two distinct approvers for money; tools-service: fence, dedupe |
+| Model call | The identity's model key | models-service (planned); today a key-admission port admits every key and a thread budget pauses the thread ([human-in-the-loop.md](human-in-the-loop.md)) |
+
+The access class (`read`, `write`, `money_movement`) comes from the gateway's own registry; the caller never declares
+it. A refusal lists every failed condition and reaches the model as a tool error, so the turn continues. Nine refusal
+reasons are tested ([gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md)).
+
+## Tenancy at rest
+
+| Fact | Detail |
+|---|---|
+| Tables | `graph_threads`, `graph_runs`, `thread_events`, `review_decisions`, `review_approvals` (migration 0021) and `ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences` (0004, 0008) carry `tenant_id`; existing rows are the dev tenant `local` |
+| Policy | Each `ENABLE` and `FORCE ROW LEVEL SECURITY` with `tenant_id = current_setting('app.tenant_id', true)` for reads and writes; an unset tenant matches nothing |
+| Tenant source | `auth.principal` sets the request's tenant from the verified token or key (ops_identity), or `local` in dev, in a context variable (`ops_agents/store/tenancy.py`). Stores and the checkpointer read it per transaction; no repository takes a tenant argument, and none is read from a body, header, path or run config |
+| No tenant | A store call with no tenant raises `NoTenantError`; below the store, the tenant role with no `app.tenant_id` sees no row |
+| Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
+| Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |
+| Checkpoints | One compiled graph serves every tenant: the saver takes the tenant from the same context variable when it opens each transaction. Team in the checkpoint key is `local`; team access is decided by the API before a thread is touched |
+| Teams | For platform callers, another tenant's thread is 404 (the store never returns it), another team's thread in the same tenant is 403 `team_forbidden` with `details.teamId`, the owning team, and thread lists show the selected team's threads only. Dev acts across teams, as it always has: the console sends its selected team while scripts and seeds create threads in `team_all` |
+| External keys | Unique per `(tenant_id, external_key)`, so one tenant's key neither collides with nor reveals another's |
+| Proven | `tests/store/test_tenancy.py` on PostgreSQL: each tenant counts only its own rows in every table with no tenant clause (turning RLS off on `graph_runs` fails it); a write naming another tenant is refused; one graph run by two tenants stores each checkpoint under its own tenant and B reads nothing of A's. `tests/api/test_platform_identity.py`: 404 across tenants, 403 with the owning team across teams, dev headers 401 in platform mode |
+| Test databases | Every service's test conftest refuses `ops_runtime`, and any PostgreSQL database other than `OPS_TEST_DATABASE_URL`, before collection (`ops_service_kit.testdb`) |
+
+## Approval and step-up token facts
+
+The one table of token facts; other pages link here. From
+[gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md) and
+[approval-trust](../services/agents-service/experiments/approval-trust.md).
+
+| Fact | Consequence |
+|---|---|
+| An approval token is bound to `{thread, step, tool, inputHash, approvers, exp}`; HS256, 15-minute TTL. Signing is `packages/ops_policy/src/ops_policy/tokens.py`; the binding is `ops_tools/tokens.py` | It covers one call; OPA verifies it with the review key |
+| The input hash is SHA-256 of RFC 8785 canonical JSON (`ops_policy.input_hash`). `24` and `24.0` hash the same; key order does not matter; NaN is refused | Any second implementation must follow RFC 8785 or call ours, plus the NFC step below |
+| Strings are normalised to NFC before hashing, an addition to RFC 8785 | A proxy that normalises text between approval and execution causes no refusal; a JCS library without NFC disagrees on decomposed text |
+| Only approvals of the current input hash count | Any edit to the input after approval invalidates every approval of it |
+| On resume the kernel hands the token to every gated call in the turn | A second call to the same tool with other arguments is refused on hash and step |
+| The token travels in the decision, is checkpointed, and is journaled in the run input | It is bearer material at rest, bounded by its binding and TTL; the sweeper needs it to replay a crashed resume |
+| An expired token is renewed from the recorded approvals of that exact call for up to 24 h ([durability-failure-and-audit.md](durability-failure-and-audit.md), Approval expiry) | A late resume or a sweeper recovery never asks the reviewer twice; the approval, not the token, bounds the window |
+| Expiry is judged by the gateway's clock, sent to OPA as `now_ns` with every call, never by OPA's own clock. The gateway also writes its `gateway.rego` into OPA at start and answers 503 `policy_drift` on `/health` if OPA serves a different one | OPA runs in a container whose clock lagged the host by up to 104 s under load, and it then accepted a token 60 s past expiry; its file watch also missed a policy edit on a bind mount |
+| A step that rewrites the draft after approval is refused at the gateway | Approve the last version of the draft |
+| A step-up token is minted by `POST /v1/auth/step-up` for the caller, signed with a key derived from the review key for that purpose only | An approval token never passes as a step-up |
+| Every money decision verifies the step-up's signature, subject (the deciding person) and age (five minutes), and answers 422 `step_up_required` with the reason | Step-up authenticates the approver; it approves nothing by itself. A decision records a fingerprint of the step-up, never the token |
+
+## Prototype shortcuts still in the code
+
+The one list of trust shortcuts; other pages link here.
+
+| Shortcut | Where | Production replacement |
+|---|---|---|
+| Dev auth: one fixed user in tenant `local`; `X-Dev-User` names a second reviewer; team from the `X-Team-Id` header | `ops_agents/api/auth.py` with `OPS_AUTH_MODE=dev`; refused by Settings outside `dev`. `OPS_AUTH_MODE=platform` resolves platform tokens and API keys through ops_identity and refuses the dev headers | Platform mode everywhere |
+| HMAC (HS256) approval and step-up tokens: the verifier can also mint | `ops_policy.HmacSigner` behind the `Signer` interface, review key in Settings | A KMS `Signer` with an asymmetric key; only hitl-service and the sign-in service can mint |
+| The review key reaches OPA by a data write anyone who can reach port 8181 could overwrite | tools-service start-up | A signed OPA bundle |
+| Internal routes accept any registered calling service | models-service's `/v1/models/*` routes take `CurrentService`; providers, keys and alias versions are what a person administers. TODO in `ops_models/app.py` | When the console gets a models admin page, those routes move to `CurrentPrincipal` with an admin role check; aliases, admit and calls stay service-only |
+| `OPS_SERVICE_TOKEN` is still a setting nothing reads | `ops_service_kit/settings.py` keeps the field and its outside-dev check | Remove both |
+| Step-up minted by the dev auth path from the demo password | `POST /v1/auth/step-up`; money decisions verify signature, subject and five-minute age | The identity provider re-authenticates and the sign-in service mints |
+| The requester check is partial. Workflow reviews refuse the requester (403, `hitl_facade.requester_of`); chat refuses self-approval only when `OPS_ALLOW_SELF_APPROVAL_IN_CHAT` is false (default true, owner decision pending), comparing display names; money refuses the same approver twice. `POST /v1/threads/{id}/approvals` has no requester check | `hitl_facade.py`, `routers/chat.py`, `routers/reviews.py` | The rule moves to hitl-service with the requester taken from identity |
+| Key budgets admit every key | `KeyAdmission` port in agents-service | A per-key ledger in models-service ([service-map.md](service-map.md)) |
+| Chat approvals use `dev-approval:<id>` | `routers/chat.py` | Chat decide calls the approvals route; until then turning the gateway on refuses chat writes |
+
+## Open
+
+Whether the bank's IdP can issue a delegation token with an `act` claim is untested (overview open question 6). If it
+cannot, the gateway mints internal delegation tokens after authenticating both parties, which concentrates trust in
+the gateway and needs Security's sign-off.

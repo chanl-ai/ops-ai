@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useLookups } from '@/hooks/queries';
 import { useTeam } from '@/hooks/use-team';
 import { api } from '@/lib/api';
-import type { ConnectInput, IntegrationFilters, IntegrationView } from '@/lib/types/integrations';
+import type { ConnectInput, ConnectionSetupPatch, DraftConnectInput, IntegrationFilters, IntegrationView } from '@/lib/types/integrations';
 import type { ListParams } from '@/lib/types/query';
 
 export const ik = {
@@ -30,10 +30,16 @@ function useIntegrationWrite<A, R>(fn: (a: A) => Promise<R>) {
 }
 
 export const useConnectIntegration = () => useIntegrationWrite((i: ConnectInput) => api.integrations.connect(i));
+export const useCreateDraftConnection = () => useIntegrationWrite((i: DraftConnectInput) => api.integrations.createDraft(i));
+export const useSaveConnectionSetup = (id: string) => useIntegrationWrite((p: ConnectionSetupPatch) => api.integrations.saveSetup(id, p));
+export const useActivateConnection = (id: string) => useIntegrationWrite(() => api.integrations.activate(id));
 export const useReconnectIntegration = () => useIntegrationWrite((id: string) => api.integrations.reconnect(id));
 export const useRotateIntegration = () => useIntegrationWrite(({ id, credentialRef }: { id: string; credentialRef: string }) => api.integrations.rotate(id, credentialRef));
 export const useCheckIntegration = () => useIntegrationWrite((id: string) => api.integrations.check(id));
 export const useBulkCheckIntegrations = () => useIntegrationWrite((ids: string[]) => api.integrations.bulkCheck(ids));
+/** The Connections row switches; the Wiki and Tools pages read what they turn on, so those refresh too. */
+export const useSetIntegrationSwitches = () =>
+  useIntegrationWrite(({ id, patch }: { id: string; patch: { syncKnowledge?: boolean; exposeTools?: boolean } }) => api.integrations.setSwitches(id, patch));
 export const useRevokeIntegrations = () => useIntegrationWrite(({ ids, reason }: { ids: string[]; reason: string }) => api.integrations.revoke(ids, reason));
 export const useRequestScopes = () => useIntegrationWrite(({ id, scopes, justification }: { id: string; scopes: string[]; justification: string }) => api.integrations.requestScopes(id, { scopes, justification }));
 

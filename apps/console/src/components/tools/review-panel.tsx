@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { shortDate } from '@/lib/format';
 import type { ModuleVersion, SecurityReview } from '@/lib/types/tool-modules';
 
+import { ModuleReviewDecision } from './module-review-decision';
 import { ChangeList } from './versions-panel';
 
 const semverCmp = (a: string, b: string) => {
@@ -17,16 +18,16 @@ const semverCmp = (a: string, b: string) => {
 };
 
 const DECISION = {
-  approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-emerald-700 dark:text-emerald-400' },
-  pending: { label: 'Waiting for Security', icon: CircleDashed, cls: 'text-amber-700 dark:text-amber-400' },
-  changes_requested: { label: 'Changes requested', icon: XCircle, cls: 'text-red-700 dark:text-red-400' },
+  approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-success-text' },
+  pending: { label: 'Waiting for Security', icon: CircleDashed, cls: 'text-warning-text' },
+  changes_requested: { label: 'Changes requested', icon: XCircle, cls: 'text-destructive' },
 } as const;
 
 /**
  * Security reviews a module once per major version (00 A1). Minor versions within the major reuse the decision,
  * so the panel shows what changed since the reviewed version alongside the review itself.
  */
-export function ReviewPanel({ major, reviews, versions, drift, onRequest, canRequest }: { major: number; reviews: SecurityReview[]; versions: ModuleVersion[]; drift: boolean; onRequest: () => void; canRequest: boolean }) {
+export function ReviewPanel({ moduleId, major, reviews, versions, drift, onRequest, canRequest }: { moduleId: string; major: number; reviews: SecurityReview[]; versions: ModuleVersion[]; drift: boolean; onRequest: () => void; canRequest: boolean }) {
   // `reviews` and `versions` arrive newest first. The latest review may be an open re-review; what changed is
   // measured from the last version Security approved, so only newer versions are listed.
   const current = reviews.find((r) => r.major === major);
@@ -55,8 +56,9 @@ export function ReviewPanel({ major, reviews, versions, drift, onRequest, canReq
                   · v{current.version} · {current.reviewer ? `${current.reviewer}, ${shortDate(current.decidedAt)}` : `requested by ${current.requestedBy}, ${shortDate(current.requestedAt)}`}
                 </span>
               </p>
-              {drift && <p className="text-sm text-amber-700 dark:text-amber-400">The MCP server now lists tools that are not in the reviewed snapshot. The gateway refuses them until a re-review.</p>}
+              {drift && <p className="text-sm text-warning-text">The MCP server now lists tools that are not in the reviewed snapshot. The gateway refuses them until a re-review.</p>}
               {current.note && <p className="text-sm">{current.note}</p>}
+              {current.decision === 'pending' && <ModuleReviewDecision moduleId={moduleId} review={current} />}
               {current.findings.length > 0 && (
                 <div>
                   <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Findings</p>

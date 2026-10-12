@@ -6,9 +6,9 @@ Status: current.
 
 | Change | Read |
 |---|---|
-| Console code | `apps/console/CLAUDE.md` (layers, components, states, copy) and `docs/ui/page-plan.md` |
+| Console code | `apps/console/CLAUDE.md` (layers, components, states, copy) and `docs/console/page-plan.md` |
 | A spec or decision | `docs/README.md`, `docs/background/problem-statement.md`, `docs/architecture/overview.md` and the ADRs |
-| Backend design | `docs/backend/overview.md` |
+| Backend design | `docs/architecture/README.md`, then `docs/architecture/service-map.md` |
 
 Decision records in `docs/architecture/decisions/` are binding on the specs. A spec that needs a
 decision changed says so under "Open questions" and proposes a new or superseding ADR; it does not
@@ -27,6 +27,17 @@ code rather than bypassing the hook.
 
 Before calling a console change done, open every changed route in a browser and check it renders
 without console errors, including the `?mock=slow`, `?mock=error` and `?mock=empty` states.
+
+## Agent tooling
+
+Agent workflow state (`.codeloop/`, `shape/`, `specs/`) stays local and is gitignored. codeloop also writes its
+protocol between `<!-- codeloop:start -->` markers in `AGENTS.md` and `CLAUDE.md`; a clean filter strips that block
+when either file is staged, so it never reaches a commit. Set the filter once per clone:
+
+```bash
+git config filter.strip-codeloop.clean "perl -0pe 's/\\n*<!-- codeloop:start -->.*?<!-- codeloop:end -->\\n?/\\n/s'"
+git config filter.strip-codeloop.smudge cat
+```
 
 ## Commit messages
 
@@ -68,12 +79,42 @@ Conventional commits: `type(scope): subject`.
 | People | No personal names. Use roles ("the product owner", "the module owner") |
 | The bank | "The bank" in specs; "Northfield Bank" is the fictional tenant in the console |
 | Claims | Every "works" claim has evidence or a command the reader can run. Mark anything unconfirmed as **unverified** |
-| File names | kebab-case; dated docs (plans, incident reviews) start `YYYY-MM-DD-`; living docs have no date |
+| File names | kebab-case, named for the topic. No dates, numbers or sequence prefixes in file names; ids such as a spec number or ADR id go in the title, the status line says whether a doc is current or superseded, and git keeps the history |
+| Content | Only what a reader acts on: decisions, rules, facts, gotchas and the evidence for them. No narrative of how a result was reached |
 | Length | What the content needs; no filler sections or repeated summaries |
+
+### Where docs live
+
+Full documentation lives only under `docs/`, in a folder that maps to a part of the repo. A code folder carries a
+short `README.md` (at most 40 lines: what it is, how to run it, links into `docs/`) and, where agents need different
+rules, a `CLAUDE.md`. `node scripts/check-docs.mjs` enforces this.
+
+| Folder | Holds |
+|---|---|
+| `docs/background/` | Problem statement |
+| `docs/architecture/` | Architecture overview, service map, backend overview, decision records in `decisions/` |
+| `docs/specs/` | Cross-cutting topic specs, `topic.md`; the spec number lives in the title |
+| `docs/console/` | Console page plan and UI designs |
+| `docs/services/<service>/` | One folder per service; the name matches a folder in `services/` |
+| `docs/packages/<package>/` | One folder per package; the name matches a folder in `packages/` |
+| `docs/deploy/` | Runbooks for the VM, Compose and Kubernetes targets |
+| `docs/plan/` | Plans, named for their topic |
+| `docs/artifacts/` | Published HTML design artifacts |
+| `docs/usecases/` | Use case registry, one doc per use case under `<service>/`, and their scripts under `<service>/scripts/` |
+
+Every doc under `docs/` is listed in `docs/README.md`.
 
 ## Code standards
 
-Console rules live in `apps/console/CLAUDE.md` and are enforced in part by `pnpm verify`. Backend
-standards (Python 3.12, uv, ruff, pyright, pytest, test levels) are in `docs/backend/overview.md`
-and apply once backend code exists. In both: one test per failure mode, and each new test is seen
-failing once before it is trusted.
+Console rules live in `apps/console/CLAUDE.md` and are enforced in part by `pnpm verify`. In both the console and
+the backend: one test per failure mode, and each new test is seen failing once before it is trusted.
+
+| Backend standard | Rule |
+|---|---|
+| Language and tooling | Python 3.12, one uv workspace at the root, ruff (lint and format), strict pyright, pytest |
+| Layers | Services import packages, never each other's code; packages never import a service (`docs/architecture/service-map.md`). `services/agents-service/scripts/check_standards.py` enforces the layer order |
+| Config | Settings are read once, from the environment, by `ops_service_kit.settings`; a bad value stops the process at start. No `.env` files |
+| Fixtures | Only under a service's `tests/fixtures/` |
+| Routes | Every route is authenticated, except health and the OpenAPI document |
+| Model calls in tests | Scripted model only; real calls are capped at 10 per experiment unless the owner approves more |
+| Gate | `make verify` before every commit |

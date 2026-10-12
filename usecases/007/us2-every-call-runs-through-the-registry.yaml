@@ -1,0 +1,9 @@
+# US2: uc-011 runs a registry read, refuses a write without a token, input that fails the schema and an unknown tool
+# before egress, and shows every call with its caller in /v1/executions. Own database and ports: ops_usecase is shared.
+id: us2-every-call-runs-through-the-registry
+accept: US2
+failure_mode: a call runs without the registry's access class, bad input reaches the upstream, or a refusal leaves no row
+layers:
+  cli:
+    run: "make usecase-test UC=uc-011 LAYER=api OPS_USECASE_DB=ops_usecase_c007 OPS_USECASE_AGENTS_PORT=8960 OPS_USECASE_TOOLS_PORT=8961 OPS_USECASE_MODELS_PORT=8962 OPS_USECASE_CONSOLE_PORT=3160"
+    expect: { exit: 0, stdout: "uc-011 api  8 checks passed" }

@@ -15,11 +15,13 @@ export const PURPOSE_LABEL: Record<FilePurpose, string> = {
   export: 'Export',
   tool_spec: 'Tool spec',
   avatar: 'Logo or avatar',
+  skill_resource: 'Skill resource',
+  idp_metadata: 'SSO metadata',
 };
 
 export const SENSITIVITY_LABEL: Record<FileSensitivity, string> = { public: 'Public', internal: 'Internal', confidential: 'Confidential', restricted: 'Restricted' };
 export const SCAN_LABEL: Record<ScanStatus, string> = { pending: 'Scanning', clean: 'Clean', infected: 'Infected', failed: 'Scan failed' };
-export const REF_LABEL: Record<FileReferenceType, string> = { source: 'Source', case: 'Case', chat: 'Chat', eval_set: 'Eval set', test_set: 'Test set', evidence: 'Evidence', export: 'Export', tool_module: 'Tool module' };
+export const REF_LABEL: Record<FileReferenceType, string> = { source: 'Source', case: 'Case', chat: 'Chat', eval_set: 'Eval set', test_set: 'Test set', evidence: 'Evidence', export: 'Export', tool_module: 'Tool module', skill: 'Skill' };
 
 export function fileIcon(name: string): LucideIcon {
   const e = name.split('.').pop()?.toLowerCase() ?? '';
@@ -32,9 +34,9 @@ export function fileIcon(name: string): LucideIcon {
 
 const SCAN_TONE: Record<ScanStatus, { icon: LucideIcon; cls: string }> = {
   pending: { icon: Loader2, cls: 'text-muted-foreground' },
-  clean: { icon: CheckCircle2, cls: 'text-emerald-700 dark:text-emerald-400' },
-  infected: { icon: ShieldX, cls: 'text-red-600 dark:text-red-400' },
-  failed: { icon: ShieldAlert, cls: 'text-amber-700 dark:text-amber-400' },
+  clean: { icon: CheckCircle2, cls: 'text-success-text' },
+  infected: { icon: ShieldX, cls: 'text-destructive' },
+  failed: { icon: ShieldAlert, cls: 'text-warning-text' },
 };
 
 export function ScanText({ status, detail }: { status: ScanStatus; detail?: string }) {
@@ -49,8 +51,8 @@ export function ScanText({ status, detail }: { status: ScanStatus; detail?: stri
 const SENS_TONE: Record<FileSensitivity, string> = {
   public: '',
   internal: '',
-  confidential: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
-  restricted: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
+  confidential: 'border-warning/40 bg-warning/10 text-warning-text',
+  restricted: 'border-destructive/40 bg-destructive/10 text-destructive',
 };
 
 export function SensitivityBadge({ value, suggested }: { value: FileSensitivity; suggested?: boolean }) {

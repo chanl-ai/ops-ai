@@ -131,7 +131,7 @@ export function IngestForm({
                     )}
                   </span>
                   <span className="block text-xs text-muted-foreground">{s.description}</span>
-                  {s.ai && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-400">Needs the knowledge owner’s approval</span>}
+                  {s.ai && <span className="mt-1 block text-xs text-warning-text">Needs the knowledge owner’s approval</span>}
                   {blocked && <span className="mt-1 block text-xs text-muted-foreground">{blocked}</span>}
                 </span>
               </label>

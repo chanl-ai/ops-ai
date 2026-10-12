@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
-import { AlertCircle, ArrowLeft, Bot, Check, Clock, Database, Loader2, Mail, MessagesSquare, Route, Search, Users, type LucideIcon } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bot, Check, Clock, Database, Loader2, Mail, MessagesSquare, Route, Search, Sparkles, Users, type LucideIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command';
@@ -14,6 +14,8 @@ export interface PalettePage {
   href: string;
   section?: string;
   icon: TablerIcon | LucideIcon;
+  /** Extra words the page should match on, e.g. its full heading when the sidebar name is shorter. */
+  keywords?: string;
 }
 
 export interface PaletteAction {
@@ -33,6 +35,7 @@ const GROUP: Record<SearchGroup, { label: string; icon: LucideIcon }> = {
   cases: { label: 'Cases', icon: Mail },
   knowledge: { label: 'Knowledge bases', icon: Database },
   chats: { label: 'Chats', icon: MessagesSquare },
+  skills: { label: 'Skills', icon: Sparkles },
 };
 
 /** Top-bar trigger. Adapted from the shared component library's search command, as a labelled field so the shortcut is visible. */
@@ -102,7 +105,7 @@ export function CommandPalette({
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search and commands" description="Search records, open pages and run actions" className="sm:max-w-xl">
       <CommandInput
-        placeholder={sub === 'teams' ? 'Switch to team…' : 'Search workflows, agents, cases, knowledge, chats…'}
+        placeholder={sub === 'teams' ? 'Switch to team…' : 'Search workflows, agents, skills, cases, knowledge, chats…'}
         value={query}
         onValueChange={onQueryChange}
         onKeyDown={(e) => {
@@ -191,7 +194,7 @@ export function CommandPalette({
             <CommandSeparator />
             <CommandGroup heading="Pages">
               {pages.map((p) => (
-                <CommandItem key={p.href} value={`${p.title} ${p.section ?? ''} ${p.href}`} onSelect={() => onNavigate(p.href)}>
+                <CommandItem key={p.href} value={`${p.title} ${p.section ?? ''} ${p.href} ${p.keywords ?? ''}`} onSelect={() => onNavigate(p.href)}>
                   <p.icon />
                   <span className="flex-1">{p.title}</span>
                   {p.section && <span className="text-xs text-muted-foreground">{p.section}</span>}

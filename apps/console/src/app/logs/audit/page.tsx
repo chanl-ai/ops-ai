@@ -142,6 +142,7 @@ export default function AuditPage() {
 
   return (
     <PageLayout
+      switcher
       icon={History}
       title="Audit log"
       description="Who changed what: publishes, approvals, access, settings and sign-ins"

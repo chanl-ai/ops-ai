@@ -19,6 +19,28 @@ export function currentTeamId(): string {
   }
 }
 
+/** The team the person picked in this tab, or null when none was picked and the default stands. */
+export function chosenTeamId(): string | null {
+  if (typeof window === 'undefined') return null;
+  if (memory) return memory;
+  try {
+    return sessionStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Forgets the picked team, so the next person to sign in in this tab starts on their own default. */
+export function clearChosenTeam() {
+  memory = null;
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // Storage blocked: clearing `memory` was enough.
+  }
+  listeners.forEach((l) => l());
+}
+
 export function setCurrentTeamId(id: string) {
   memory = id;
   try {

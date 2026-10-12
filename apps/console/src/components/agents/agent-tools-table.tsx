@@ -72,7 +72,7 @@ export function AgentToolsTable({
                 </TableCell>
                 <TableCell>
                   {t.requiresReview ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                    <span className="inline-flex items-center gap-1 text-xs text-warning-text">
                       <UserCheck className="size-3.5" /> Every call
                     </span>
                   ) : (

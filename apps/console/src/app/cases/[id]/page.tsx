@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Inbox, ListChecks, Mail, SearchX, Tags, UserPlus, Users, XCircle } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { CaseActionCard } from '@/components/cases/case-action-card';
@@ -35,8 +35,18 @@ type Tab = (typeof TABS)[number];
 const LABEL: Record<Tab, string> = { actions: 'Actions', conversation: 'Email', activity: 'Activity' };
 const CLOSE_REASONS = ['Resolved', 'Duplicate of another case', 'Not a request for us', 'Spam or phishing'];
 
-export default function CaseDetailPage() {
+/** Case links name either an email case or a run; a run id opens that run's sheet on the Cases page. */
+export default function CaseOrRunPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const isRun = id.startsWith('RUN-');
+  React.useEffect(() => {
+    if (isRun) router.replace(`/cases?run=${encodeURIComponent(id)}`);
+  }, [isRun, id, router]);
+  return isRun ? <RecordSkeleton /> : <CaseDetailPage id={id} />;
+}
+
+function CaseDetailPage({ id }: { id: string }) {
   const [tab, setTab] = useTabParam(TABS, 'actions');
   const query = useCase(id);
   const { data: lookups } = useLookups();
@@ -117,7 +127,7 @@ export default function CaseDetailPage() {
             {TABS.map((t) => (
               <TabsTrigger key={t} value={t}>
                 {LABEL[t]}
-                {t === 'actions' && pendingCount > 0 && <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 text-[10px] text-amber-700 tabular-nums dark:text-amber-400">{pendingCount} waiting</span>}
+                {t === 'actions' && pendingCount > 0 && <span className="ml-1 rounded-full bg-warning/15 px-1.5 text-[10px] text-warning-text tabular-nums">{pendingCount} waiting</span>}
                 {t === 'conversation' && <span className="ml-1 text-muted-foreground tabular-nums">{c.messages.length}</span>}
               </TabsTrigger>
             ))}

@@ -94,7 +94,7 @@ export function BulkDecisionDialog({
         <ul className="divide-y rounded-lg border" data-testid="bulk-decision-list">
           {rows.map(({ r, excluded }) => (
             <li key={r.id} className="flex items-center gap-3 px-3 py-2">
-              {excluded ? <MinusCircle className="size-4 shrink-0 text-muted-foreground" /> : <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />}
+              {excluded ? <MinusCircle className="size-4 shrink-0 text-muted-foreground" /> : <CheckCircle2 className="size-4 shrink-0 text-success-text" />}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">{r.title}</div>
                 <div className="text-xs text-muted-foreground">

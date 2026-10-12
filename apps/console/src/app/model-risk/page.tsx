@@ -107,7 +107,7 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'openFindings',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Open findings" />,
-    cell: ({ row }) => <span className={row.original.openFindings ? 'font-medium text-amber-700 tabular-nums dark:text-amber-400' : 'tabular-nums text-muted-foreground'}>{row.original.openFindings}</span>,
+    cell: ({ row }) => <span className={row.original.openFindings ? 'font-medium text-warning-text tabular-nums' : 'tabular-nums text-muted-foreground'}>{row.original.openFindings}</span>,
   },
   {
     accessorKey: 'lastEvalPassRate',
@@ -146,7 +146,7 @@ export default function ModelRiskPage() {
   const providers = Object.keys(facets.provider ?? {}).sort();
 
   return (
-    <PageLayout icon={Scale} title="Model risk" description="Every agent and workflow as a model: its risk tier, independent validation, conditions and findings">
+    <PageLayout switcher icon={Scale} title="Model inventory" description="Every agent and workflow as a model: its risk tier, independent validation, conditions and findings">
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={8} />
       ) : query.isError && !query.data ? (

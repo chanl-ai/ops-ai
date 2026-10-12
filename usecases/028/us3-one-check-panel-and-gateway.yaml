@@ -1,0 +1,8 @@
+# US3: uc-011 api: the console test panel refuses the same over-limit amount the gateway refused (one shared check).
+id: us3-one-check-panel-and-gateway
+accept: US3
+failure_mode: the test panel and the gateway keep separate copies of the amount check and disagree
+layers:
+  cli:
+    run: "make usecase-test UC=uc-011 LAYER=api"
+    expect: { exit: 0, stdout: "uc-011 api  15 checks passed" }

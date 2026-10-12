@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils';
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
 
 const STATUS: Record<RunStatus, { label: string; cls: string }> = {
-  completed: { label: 'Completed', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
-  waiting_review: { label: 'Waiting on review', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300' },
-  failed: { label: 'Failed', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
+  completed: { label: 'Completed', cls: 'border-success/40 bg-success/10 text-success-text' },
+  waiting_review: { label: 'Waiting on review', cls: 'border-warning/40 bg-warning/10 text-warning-text' },
+  failed: { label: 'Failed', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
   running: { label: 'Running', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
 };
 
@@ -43,13 +43,18 @@ export function RunTrace({ run }: { run: WorkflowRun }) {
         ))}
       </dl>
 
+      {run.trigger && (
+        <p className="text-sm text-muted-foreground" data-testid="run-trigger">
+          {run.trigger}
+        </p>
+      )}
       {run.error && (
         <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           <AlertCircle className="mt-0.5 size-4 shrink-0" /> {run.error}
         </p>
       )}
       {run.reviewId && (
-        <p className="flex items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+        <p className="flex items-center justify-between gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-text">
           This run is paused at a review gate.
           <Link href={`/reviews?review=${run.reviewId}`} className="font-medium underline underline-offset-2">
             Open {run.reviewId}
@@ -64,7 +69,7 @@ export function RunTrace({ run }: { run: WorkflowRun }) {
           return (
             <li key={`${s.nodeId}-${i}`} className="relative flex gap-3 pb-4 last:pb-0">
               {i < run.steps.length - 1 && <span className="absolute top-7 bottom-0 left-[13px] w-px bg-border" aria-hidden />}
-              <div className={cn('z-10 flex size-7 shrink-0 items-center justify-center rounded-full border bg-card', s.status === 'failed' && 'border-red-500/50', s.status === 'waiting' && 'border-amber-500/60')}>
+              <div className={cn('z-10 flex size-7 shrink-0 items-center justify-center rounded-full border bg-card', s.status === 'failed' && 'border-destructive/50', s.status === 'waiting' && 'border-warning/60')}>
                 <Icon className="size-3.5 text-muted-foreground" />
               </div>
               <div className={cn('min-w-0 flex-1 rounded-lg border px-3 py-2', s.status === 'skipped' && 'opacity-50')}>
@@ -73,16 +78,16 @@ export function RunTrace({ run }: { run: WorkflowRun }) {
                   <StatusIcon
                     className={cn(
                       'size-3.5 shrink-0',
-                      s.status === 'done' && 'text-emerald-600',
-                      s.status === 'failed' && 'text-red-600',
-                      s.status === 'waiting' && 'animate-spin text-amber-600',
+                      s.status === 'done' && 'text-success-text',
+                      s.status === 'failed' && 'text-destructive',
+                      s.status === 'waiting' && 'animate-spin text-warning-text',
                       s.status === 'skipped' && 'text-muted-foreground',
                     )}
                     aria-label={s.status}
                   />
                   <span className="ml-auto text-xs tabular-nums text-muted-foreground">{s.status === 'skipped' ? 'skipped' : duration(s.durationMs)}</span>
                 </div>
-                {s.detail && <p className={cn('mt-0.5 text-xs', s.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground')}>{s.detail}</p>}
+                {s.detail && <p className={cn('mt-0.5 text-xs', s.status === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>{s.detail}</p>}
               </div>
             </li>
           );

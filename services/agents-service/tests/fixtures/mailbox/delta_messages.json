@@ -1,0 +1,2806 @@
+[
+ {
+  "id": "AAMk000",
+  "internetMessageId": "<case-000@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 0",
+  "from": {
+   "emailAddress": {
+    "address": "customer000@example.com",
+    "name": "Customer 0"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:00Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 0)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk001",
+  "internetMessageId": "<case-001@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 1",
+  "from": {
+   "emailAddress": {
+    "address": "customer001@example.com",
+    "name": "Customer 1"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:01Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 1)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-001-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference4286 statement7 charge9608 amount6113 dispute358 card8009 reference3245 invoice6783 posted8835 order1543 refund9231 posted4350 order9995 order1443 receipt5498 merchant5933 reference6716 reference4103 amount1536 reference3230 invoice4770 merchant748 pending3291 order5904 amount3173 posted9435 order8252 statement5920 refund9859 receipt4986 dispute9652 merchant1469 posted8605 refund1914 pending4389 card3214 receipt7925 refund2262 pending3438 invoice8554 statement3092 reference2771 statement5454 posted5015 dispute6183 posted6376 card2078 order8007 statement3036 receipt9730 invoice6516 merchant7229 refund1459 pending7309 amount6226 reference1252 posted6986 amount4971 invoice6702 merchant3148"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-001-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice4355 amount7989 invoice2820 statement358 posted2023 card9656 reference5915 refund4199 posted7397 dispute8468 card6726 receipt7952 card9871 amount7840 amount2329 invoice6184 amount5008 order7655 dispute6004 order2671 pending6161 invoice9880 card5244 order6525 amount2591 card9172 statement7362 statement2991 statement9993 reference9335 merchant6076 dispute8150 pending1020 refund2529 card242 receipt8599 amount1242 amount3802 merchant6077 dispute2375 order3987 pending5215 charge617 order1594 invoice1727 statement7829 amount1130 order505 invoice9034 charge1368 charge4344 order7405 amount332 reference2245 refund7223 amount7200 amount9151 card7822 invoice9491 merchant4780"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-001-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute4686 dispute554 merchant8231 card4584 card7751 receipt7278 dispute522 invoice1403 refund9906 order3906 posted535 invoice2839 dispute6070 statement853 invoice3427 invoice7094 dispute1271 charge1868 receipt8964 charge7603 invoice8102 order1231 charge1211 dispute8524 statement3042 posted2462 charge4615 invoice2474 posted9313 receipt3654 refund9241 invoice2061 receipt2673 reference5185 refund9191 pending78 reference9321 receipt3082 reference5329 receipt8622 amount158 receipt8696 posted2232 invoice3828 order8911 reference6098 card3033 charge2689 invoice2200 receipt1216 statement200 statement7736 reference970 merchant8851 merchant6023 pending527 statement8892 refund6665 refund9261 invoice4808"
+   }
+  ]
+ },
+ {
+  "id": "AAMk002",
+  "internetMessageId": "<case-002@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 2",
+  "from": {
+   "emailAddress": {
+    "address": "customer002@example.com",
+    "name": "Customer 2"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:02Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 2)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk003",
+  "internetMessageId": "<case-003@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 3",
+  "from": {
+   "emailAddress": {
+    "address": "customer003@example.com",
+    "name": "Customer 3"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:03Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 3)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-003-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant9394 statement2762 order7175 merchant1838 invoice2913 statement497 reference6968 order4702 card7264 refund3311 order8775 reference3505 card9702 statement4176 posted5422 reference8477 merchant9582 pending536 dispute6015 invoice1918 refund458 dispute5580 receipt847 dispute2283 statement161 dispute1115 amount42 amount4320 merchant9678 pending4476 refund2168 charge6868 posted2979 refund6289 pending7030 pending8479 order7871 card4147 charge4899 statement3154 reference7346 merchant2885 pending1776 reference42 posted2629 merchant2490 pending6441 amount7966 posted8871 reference7707 refund6362 charge7505 statement5533 receipt4125 dispute2176 card6078 pending5945 refund87 reference4995 charge1352"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-003-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt3793 order1461 refund6232 receipt2062 reference2417 posted824 posted8599 reference7996 dispute5385 invoice9694 receipt4472 order1093 card2154 statement1792 pending9881 pending2541 posted8298 merchant1419 merchant2046 refund5751 dispute2592 invoice4001 charge3015 refund2056 amount7500 pending1810 invoice2239 amount3216 pending6080 invoice2369 dispute4319 merchant4488 reference25 statement489 amount7466 dispute1004 statement4499 invoice1661 receipt5504 merchant6113 charge2413 dispute7684 invoice6626 reference316 posted2471 merchant7303 dispute204 charge9032 amount4346 merchant7835 merchant6540 invoice3253 reference8901 charge7174 dispute4182 reference8877 reference5667 card8926 invoice4477 amount9105"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-003-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice749 posted4090 order53 posted8115 posted8794 card2789 statement5255 statement3438 pending4983 refund2523 card953 card4957 invoice6131 refund2811 pending44 merchant5853 pending3029 dispute3002 amount3617 amount6296 posted5884 merchant1436 receipt892 pending3338 pending7194 card3586 order924 amount8253 posted4134 posted4352 order5916 card6981 invoice6077 merchant8930 receipt2661 card999 order8259 dispute8318 statement1280 order1831 statement7186 receipt8742 merchant2892 order4311 dispute19 merchant4356 invoice5066 dispute6362 receipt9719 invoice1276 invoice1881 card8119 amount4211 card3939 reference246 statement8443 posted6236 charge3598 reference4827 order200"
+   }
+  ]
+ },
+ {
+  "id": "AAMk004",
+  "internetMessageId": "<case-004@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 4",
+  "from": {
+   "emailAddress": {
+    "address": "customer004@example.com",
+    "name": "Customer 4"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:04Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 4)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk005",
+  "internetMessageId": "<case-005@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 5",
+  "from": {
+   "emailAddress": {
+    "address": "customer005@example.com",
+    "name": "Customer 5"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:05Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 5)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-005-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference2216 posted1944 statement6531 card8008 refund1142 invoice4516 reference2875 charge2519 merchant389 reference3564 pending5362 receipt7789 pending9389 amount7394 dispute7439 refund2905 posted1851 refund2281 receipt3651 pending5760 amount9239 reference4500 pending9766 refund9330 refund443 receipt3998 receipt9453 invoice1957 order561 dispute5962 reference8175 order4146 receipt6171 card5908 posted9627 dispute9562 statement6737 order9650 charge4995 card9656 order7736 refund1704 amount9438 charge6003 pending7022 order7678 reference5368 merchant7432 receipt7952 statement1777 pending1060 amount7111 order963 order424 invoice8439 posted5755 dispute2631 charge7864 posted1156 receipt9611"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-005-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending1882 statement5681 order3815 pending8789 card9968 posted4328 reference6327 dispute48 pending5636 receipt4913 charge8092 reference5778 statement257 posted3352 statement732 statement7788 order1684 posted6806 amount5351 amount3315 refund6131 charge1805 refund813 refund4414 receipt3611 dispute7784 dispute2459 dispute4577 refund9200 statement8220 refund3289 receipt8659 statement6961 order399 order1252 invoice1337 merchant9942 order3162 posted1619 posted9320 pending7896 dispute3048 amount3449 reference153 refund5344 refund8886 pending4855 charge9833 statement477 card1722 receipt8387 refund3402 invoice6766 posted9737 posted9806 amount1458 receipt9737 posted2797 charge9938 refund4633"
+   }
+  ]
+ },
+ {
+  "id": "AAMk006",
+  "internetMessageId": "<case-006@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 6",
+  "from": {
+   "emailAddress": {
+    "address": "customer006@example.com",
+    "name": "Customer 6"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:06Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 6)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-006-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card6564 order536 amount3522 refund4876 refund7064 dispute780 order5159 dispute5857 receipt7067 dispute8674 receipt4686 reference2515 pending9764 card3238 pending7645 posted2840 order9050 statement2453 merchant3664 posted4181 amount9899 statement3458 posted4998 statement9207 statement8025 receipt2038 dispute5311 charge4752 posted56 pending4426 reference2129 card5258 merchant8674 pending5742 merchant9476 pending3 refund5023 pending3418 refund1131 receipt443 pending5786 reference5183 refund9447 reference6687 receipt9231 invoice890 statement3052 order9178 pending3850 posted4068 card2760 card2893 pending5856 dispute4679 pending3679 charge1170 charge9414 reference9128 amount898 merchant1315"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-006-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted651 dispute6111 amount6642 card8488 reference3908 receipt9689 pending6932 dispute7313 receipt9181 posted9778 reference4044 statement1530 receipt8331 receipt1753 pending8382 amount5441 pending2835 merchant1191 merchant3078 refund8140 order3980 reference8864 statement5863 order3056 statement571 receipt118 card7248 invoice1925 refund7876 charge62 statement7772 order5773 refund2380 amount6201 receipt9155 refund5369 invoice3550 reference1890 reference6556 amount788 refund4847 pending9274 order4464 posted1742 pending4209 refund5385 reference9780 dispute4997 card6573 receipt5166 amount5706 refund1918 pending6797 reference4412 merchant3818 dispute8376 invoice680 merchant1867 charge242 posted5591"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-006-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement6926 statement2063 refund202 merchant4506 charge3456 refund1714 pending3543 invoice177 invoice5308 order6526 merchant398 invoice5947 posted2585 amount2418 pending7115 card854 pending9321 receipt4919 reference9785 amount9934 reference9672 pending6 order4912 card2423 statement3487 card1797 charge51 pending6108 dispute1857 invoice8986 refund5675 order6668 dispute1819 refund4129 reference1959 amount9513 receipt1925 dispute5942 order3960 statement6806 card2004 charge354 statement236 statement5198 merchant7208 statement2511 card4534 invoice4873 refund3615 refund5411 posted9424 card2569 statement1465 refund7643 merchant8524 receipt8810 amount6291 dispute2148 posted1215 charge4506"
+   }
+  ]
+ },
+ {
+  "id": "AAMk007",
+  "internetMessageId": "<case-007@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 7",
+  "from": {
+   "emailAddress": {
+    "address": "customer007@example.com",
+    "name": "Customer 7"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:07Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 7)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-007-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement3598 invoice5211 statement6242 dispute5500 invoice2894 amount3473 reference1862 dispute2700 invoice2326 refund2551 merchant2917 amount9540 refund6744 order8205 statement7253 amount9130 order530 reference1968 dispute140 posted5138 posted7730 amount4069 merchant6863 receipt280 amount2364 statement7624 statement22 merchant1497 merchant2728 refund3304 posted3189 amount4089 merchant1537 pending8374 reference9360 pending5873 merchant1781 pending7705 statement5443 order3842 invoice3034 invoice1803 reference9158 invoice7821 card3752 pending9868 dispute1638 refund7073 statement5523 posted1339 posted1994 merchant5756 merchant1675 receipt1024 receipt8782 charge4791 order7387 order2599 statement3822 statement2925"
+   }
+  ]
+ },
+ {
+  "id": "AAMk008",
+  "internetMessageId": "<case-008@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 8",
+  "from": {
+   "emailAddress": {
+    "address": "customer008@example.com",
+    "name": "Customer 8"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:08Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 8)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk009",
+  "internetMessageId": "<case-009@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 9",
+  "from": {
+   "emailAddress": {
+    "address": "customer009@example.com",
+    "name": "Customer 9"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:09Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 9)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-009-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card7147 pending9009 order6656 merchant5692 merchant4589 posted3947 card6972 invoice6089 refund9040 invoice5302 reference4509 dispute1940 invoice6295 order4858 charge4112 receipt340 charge5412 receipt4621 statement6961 card3524 order4633 refund3685 amount8 statement6941 charge7312 refund6944 posted5965 amount6076 refund3421 posted437 merchant2427 posted9978 order7507 order3473 charge8078 order6039 card3796 pending7730 charge3975 merchant3238 statement4752 receipt5110 invoice3357 charge9879 card1577 posted8150 order4390 pending3546 amount3689 statement8412 refund1456 pending807 receipt6954 card4226 posted3659 invoice8205 refund1729 pending7590 amount3842 amount8433"
+   }
+  ]
+ },
+ {
+  "id": "AAMk010",
+  "internetMessageId": "<case-010@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 10",
+  "from": {
+   "emailAddress": {
+    "address": "customer010@example.com",
+    "name": "Customer 10"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:10Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 10)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-010-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted737 reference9928 posted7086 dispute3148 card3326 amount2642 card4957 card9303 order9022 posted2790 amount9628 pending4069 card759 dispute7258 invoice5565 dispute2222 refund4612 amount9040 merchant1453 merchant1070 invoice6369 dispute7882 merchant2597 reference4617 order840 order3924 order179 receipt878 pending122 invoice7237 card8807 posted5184 statement8627 card6431 statement9206 order3013 pending3714 card349 pending125 amount3156 charge7463 charge4280 charge143 amount8184 charge412 refund9241 refund9681 merchant6878 charge1873 statement9420 reference3150 receipt2516 pending9082 charge8027 merchant9904 statement4603 reference1411 posted9756 refund8451 card3796"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-010-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice4308 charge8829 invoice6113 merchant4918 invoice8176 refund3158 reference2020 pending5031 dispute48 receipt8069 charge6243 receipt4085 receipt305 posted6953 order332 amount1000 dispute739 charge8461 amount9518 amount7911 dispute7383 charge1736 pending1206 amount7506 invoice5387 dispute3848 receipt8241 pending7829 posted6883 refund4146 charge5542 invoice6283 invoice7687 merchant3528 statement2190 amount3568 charge6225 statement4955 card5410 statement9227 receipt2384 card5734 dispute1157 pending4940 refund7937 merchant2354 invoice3521 invoice6755 invoice3411 refund888 order404 statement7419 posted3137 card7614 card61 dispute1118 charge1033 posted7372 amount969 refund2584"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-010-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending6349 statement8380 receipt3717 refund1491 pending7085 charge1619 card1430 dispute7201 order3445 order2947 charge1816 posted6201 refund1609 reference2752 amount207 merchant8471 statement3353 receipt1181 amount5120 reference2372 dispute5762 charge7516 posted2236 dispute1227 dispute4957 dispute4830 reference1459 pending6944 merchant7939 reference5918 amount3747 receipt3949 reference1962 refund9379 order7074 charge2814 receipt9619 pending3513 statement6945 statement1500 statement7319 invoice5247 invoice1139 order1813 charge646 posted9552 reference1665 card48 statement8696 refund5400 charge9710 merchant55 order9977 invoice2681 amount5495 invoice818 card4050 refund57 amount6639 amount8729"
+   }
+  ]
+ },
+ {
+  "id": "AAMk011",
+  "internetMessageId": "<case-011@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 11",
+  "from": {
+   "emailAddress": {
+    "address": "customer011@example.com",
+    "name": "Customer 11"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:11Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 11)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-011-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant5681 order469 invoice1988 card7187 invoice3278 card8294 reference5882 receipt5756 dispute9348 order451 pending3041 refund4570 order3867 posted1870 invoice6800 amount4359 posted3213 dispute1148 reference426 card4210 invoice3678 reference8024 card8078 charge1041 invoice9000 charge9321 statement5524 posted2596 posted8860 order7838 invoice7479 invoice2653 charge6803 amount3979 invoice8432 posted3215 receipt8372 dispute195 reference8290 statement7284 pending5345 reference8379 card1593 pending4090 amount6754 invoice1262 reference5758 card5287 invoice2546 reference1318 dispute9275 order1967 statement6044 statement5816 receipt3374 amount63 invoice8675 receipt4019 pending8709 card709"
+   }
+  ]
+ },
+ {
+  "id": "AAMk012",
+  "internetMessageId": "<case-012@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 12",
+  "from": {
+   "emailAddress": {
+    "address": "customer012@example.com",
+    "name": "Customer 12"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:12Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 12)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk013",
+  "internetMessageId": "<case-013@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 13",
+  "from": {
+   "emailAddress": {
+    "address": "customer013@example.com",
+    "name": "Customer 13"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:13Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 13)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-013-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge5902 invoice2230 refund5379 order212 reference3721 merchant5399 receipt8848 order6535 statement3109 receipt1643 charge8983 merchant9694 invoice705 receipt6699 receipt1291 receipt2561 reference3374 reference6410 order1495 reference5480 order3202 dispute931 card8375 dispute6724 charge7253 reference6998 card9291 refund7258 reference7548 invoice1162 dispute4435 charge9072 refund7725 posted5033 pending8207 dispute6723 merchant7163 amount8127 reference8028 invoice2416 amount4176 invoice9480 order669 merchant4947 card7493 statement4975 merchant9842 order4812 reference5060 statement5918 merchant9188 merchant1522 card3875 receipt7264 order8062 invoice1496 order5670 dispute9142 refund6044 charge5492"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-013-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement6626 dispute5394 reference5340 dispute7292 receipt2061 statement4115 charge2903 reference8576 merchant3408 posted9507 merchant3850 receipt4916 charge5327 amount1009 invoice4354 refund9790 posted2564 dispute1146 posted8589 statement3039 refund8172 refund9399 merchant5035 posted4081 refund7728 receipt4182 charge4478 charge6187 reference8051 reference6270 merchant8943 refund2821 charge923 card5582 statement1318 amount5759 card7716 pending4621 posted3762 merchant2562 charge4047 invoice4130 charge643 charge5866 card7142 card2525 pending997 invoice233 order3632 reference7230 statement9785 amount1885 refund293 refund2439 refund2163 statement4311 posted3003 charge9707 statement7937 charge3951"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-013-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount7932 order8217 order2372 card8473 dispute3610 receipt2336 receipt1775 dispute1581 refund1354 invoice4006 card7794 charge5134 pending1968 invoice2228 dispute5298 card2505 charge6909 amount2796 order4998 statement7953 invoice8871 merchant1974 invoice8086 merchant5370 refund296 pending402 pending3108 reference4310 order4315 charge1968 receipt3418 dispute8124 posted4614 invoice2196 refund7628 receipt909 merchant171 order3641 refund4579 receipt1414 pending5327 statement5460 statement9381 invoice5158 merchant4581 charge5673 pending9781 card3886 receipt9546 card871 statement4717 posted5646 receipt7266 receipt9638 receipt6964 posted9198 invoice5961 merchant7931 statement1947 charge3792"
+   }
+  ]
+ },
+ {
+  "id": "AAMk014",
+  "internetMessageId": "<case-014@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 14",
+  "from": {
+   "emailAddress": {
+    "address": "customer014@example.com",
+    "name": "Customer 14"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:14Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 14)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk015",
+  "internetMessageId": "<case-015@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 15",
+  "from": {
+   "emailAddress": {
+    "address": "customer015@example.com",
+    "name": "Customer 15"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:15Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 15)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk016",
+  "internetMessageId": "<case-016@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 16",
+  "from": {
+   "emailAddress": {
+    "address": "customer016@example.com",
+    "name": "Customer 16"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:16Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 16)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-016-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card5250 refund1867 refund576 pending4198 pending152 charge9867 card5630 refund8876 order3814 statement8278 receipt8417 statement2156 invoice1575 statement939 card6880 charge941 pending8055 invoice3580 invoice9896 amount725 merchant1788 pending6205 pending6031 invoice4459 card1922 order5190 dispute3996 dispute1192 order4615 reference1585 statement5283 charge2137 refund6944 card831 card5242 card7621 pending4944 posted6922 dispute6714 receipt1335 receipt3207 merchant3218 merchant5016 invoice7378 card4446 order1454 pending542 charge3072 reference1871 pending3685 reference3641 refund5270 card15 receipt4008 posted2198 order5980 amount7473 posted58 statement354 merchant1296"
+   }
+  ]
+ },
+ {
+  "id": "AAMk017",
+  "internetMessageId": "<case-017@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 17",
+  "from": {
+   "emailAddress": {
+    "address": "customer017@example.com",
+    "name": "Customer 17"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:17Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 17)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-017-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted4714 refund1841 refund8958 receipt4113 charge6431 merchant2934 order6982 dispute6727 receipt6333 invoice4971 refund2338 statement4780 merchant9995 refund3523 dispute2507 dispute9763 amount7582 pending8670 refund5851 charge6495 merchant6491 refund2782 pending3329 pending8053 charge7120 amount3455 reference1134 amount3118 dispute2170 card3993 statement7616 pending6200 statement6261 refund709 dispute9417 reference5173 order9715 charge3516 reference1452 reference2833 statement1926 refund7581 posted5244 order7317 amount6607 statement1424 pending1125 pending7950 refund4257 order6426 receipt4604 reference5582 card8296 dispute1382 reference4223 merchant2215 reference459 posted6818 pending9201 reference2241"
+   }
+  ]
+ },
+ {
+  "id": "AAMk018",
+  "internetMessageId": "<case-018@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 18",
+  "from": {
+   "emailAddress": {
+    "address": "customer018@example.com",
+    "name": "Customer 18"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:18Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 18)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk019",
+  "internetMessageId": "<case-019@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 19",
+  "from": {
+   "emailAddress": {
+    "address": "customer019@example.com",
+    "name": "Customer 19"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:19Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 19)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk020",
+  "internetMessageId": "<case-020@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 20",
+  "from": {
+   "emailAddress": {
+    "address": "customer020@example.com",
+    "name": "Customer 20"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:20Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 20)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk021",
+  "internetMessageId": "<case-021@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 21",
+  "from": {
+   "emailAddress": {
+    "address": "customer021@example.com",
+    "name": "Customer 21"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:21Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 21)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-021-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt8232 merchant8631 merchant6819 charge5010 pending9554 receipt8885 posted3367 receipt6592 receipt6492 statement362 amount8638 dispute9471 amount5755 dispute7042 statement1936 statement9570 refund6741 dispute3428 card1401 card1724 card7327 merchant9526 posted9480 statement6150 refund1841 amount4030 refund5473 reference3675 invoice7193 posted7579 merchant4330 statement8952 receipt3073 receipt1229 refund685 refund5841 card4761 pending4018 card8175 amount2502 invoice3850 pending9600 invoice2054 reference2186 posted12 order5577 reference9661 merchant845 dispute2761 refund9266 merchant8829 refund2662 invoice2729 refund4662 pending1649 invoice6800 posted2395 dispute3829 refund4338 charge8668"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-021-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement4765 invoice7930 statement2162 receipt4777 pending8763 dispute7641 receipt5879 posted9266 posted4366 amount9554 merchant262 dispute9396 receipt6777 receipt3116 statement3507 amount505 refund9059 reference1743 amount664 pending3365 order9020 reference7651 dispute7530 order626 reference7905 invoice9237 refund6948 posted3973 reference1832 statement1863 refund1176 order7737 dispute7368 merchant8380 receipt549 card2996 card7148 card6067 card9283 merchant7482 merchant1331 statement3468 posted1402 invoice6645 invoice7188 amount2895 posted8720 dispute6337 charge1293 amount1494 posted4614 merchant6276 receipt2000 invoice9363 posted679 pending8872 pending5483 merchant2524 receipt5493 order5930"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-021-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge8292 dispute5817 statement2498 pending3253 charge9776 order373 pending1138 order8238 card7341 pending7573 reference2162 posted7105 posted8635 amount4157 pending2984 posted7563 receipt7541 card7783 receipt2991 dispute5953 amount6700 posted6949 refund8933 posted4419 refund8193 order9490 charge8808 receipt9786 invoice7081 order4353 amount4103 dispute6033 posted6042 dispute8673 reference1806 pending9073 merchant4049 order8843 reference8493 merchant6190 dispute6743 order7112 receipt1699 merchant5119 amount4003 order760 order9148 pending2353 card3532 order5161 merchant8891 charge7050 statement5174 card4864 merchant91 dispute1826 invoice3705 receipt4950 pending7332 pending4089"
+   }
+  ]
+ },
+ {
+  "id": "AAMk022",
+  "internetMessageId": "<case-022@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 22",
+  "from": {
+   "emailAddress": {
+    "address": "customer022@example.com",
+    "name": "Customer 22"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:22Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 22)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-022-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement3196 amount6203 receipt375 reference8837 merchant7241 merchant4745 charge753 posted9767 merchant2542 order4459 order4281 order6016 statement3037 dispute2416 amount9329 merchant8766 card4202 posted9119 posted6125 pending6043 statement7606 posted962 order6494 dispute2003 pending3222 charge5362 amount8434 merchant1498 pending9999 amount5759 refund8787 pending5078 amount1189 receipt3318 reference3039 merchant6037 merchant2618 reference6825 invoice2221 reference4505 card2220 reference687 card5820 receipt6498 statement7840 card8247 pending6120 amount8787 reference1359 refund3813 refund6901 dispute3098 order2510 dispute1026 invoice7182 invoice7211 posted7848 amount7079 pending6740 posted6310"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-022-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending5930 amount2284 receipt8123 receipt2233 charge550 amount5563 merchant7756 reference456 order1538 posted6046 statement7616 merchant2178 pending3323 invoice79 reference3699 merchant4419 invoice1917 amount2268 merchant139 amount3053 statement8520 statement1148 charge2762 amount629 order6765 order9425 posted7651 posted190 refund3901 reference1234 amount7087 statement2114 invoice6763 posted3287 posted610 charge4345 statement7761 reference9858 dispute6747 pending1997 merchant4923 reference8097 order5695 order1808 charge393 pending603 statement4655 refund3432 refund800 card2360 receipt9181 statement4113 statement7315 receipt8852 dispute7295 merchant1184 order412 statement8373 refund6385 order4807"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-022-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference7336 posted8049 card8052 order8634 merchant7011 card1410 refund9500 pending6070 dispute5143 merchant4063 dispute967 invoice5288 merchant5439 posted4648 statement4842 reference9598 order378 amount9357 statement3191 statement8421 reference1806 dispute5936 pending6709 charge2842 order493 posted8300 amount1483 invoice9755 dispute1542 posted8531 reference8182 charge7209 receipt926 reference3885 order4726 refund9728 amount6093 order8199 reference2410 merchant1634 receipt1266 invoice2823 invoice8080 amount5570 merchant3419 amount8090 receipt7895 refund4752 charge325 order822 invoice7208 invoice8293 card8824 posted1387 pending3030 statement2724 merchant6501 dispute7521 reference3926 dispute9528"
+   }
+  ]
+ },
+ {
+  "id": "AAMk023",
+  "internetMessageId": "<case-023@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 23",
+  "from": {
+   "emailAddress": {
+    "address": "customer023@example.com",
+    "name": "Customer 23"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:23Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 23)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk024",
+  "internetMessageId": "<case-024@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 24",
+  "from": {
+   "emailAddress": {
+    "address": "customer024@example.com",
+    "name": "Customer 24"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:24Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 24)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-024-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund3305 invoice2787 charge1044 merchant3527 card1838 card4563 dispute8752 merchant303 merchant5099 receipt24 statement7514 statement3467 order9869 reference5257 merchant6046 card9664 pending1913 charge6957 merchant7323 posted6032 pending7141 invoice4948 reference1888 refund3401 receipt9969 invoice5005 posted2275 statement7945 card3719 invoice2336 order6711 invoice9567 dispute4995 refund8861 receipt291 merchant229 card9823 charge2481 invoice6204 card4589 reference2642 amount1908 amount5373 pending6673 pending7487 card5370 dispute1757 amount9781 refund2498 pending849 order3381 statement1426 reference9407 dispute1769 dispute9778 posted4812 posted8116 amount8973 posted3275 receipt8580"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-024-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice7402 dispute2147 receipt4649 posted5570 invoice1594 dispute765 amount4845 refund3983 order7794 order633 pending8331 merchant7125 order1030 receipt8934 dispute4657 dispute4485 posted9562 invoice7985 receipt4851 statement583 order8859 merchant4956 posted6982 merchant817 invoice1207 statement830 amount7333 receipt3488 statement7941 posted1526 card1449 refund7627 posted8250 posted4261 invoice3752 order3941 merchant7764 receipt386 dispute208 reference3940 dispute9505 invoice2180 statement9336 receipt7239 receipt2990 statement4367 dispute9687 order4500 card7043 pending2464 reference6313 refund5639 merchant8724 card793 receipt1220 order4508 dispute7129 pending3173 statement340 order1411"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-024-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order5475 posted4316 statement1925 refund5588 receipt3620 refund2137 charge6153 posted5720 invoice107 reference6739 card5865 dispute7366 charge7486 pending8156 amount8258 posted6999 receipt7002 statement7741 receipt5758 statement4861 merchant8525 statement5137 posted4495 refund3023 card4479 order4850 pending1089 amount707 invoice7324 invoice8261 invoice3151 receipt4616 invoice7605 receipt5270 invoice8717 amount3873 dispute5362 statement3568 refund5849 order8631 order6444 dispute60 reference7874 order5772 reference8984 statement1892 charge834 posted4935 posted7966 posted139 statement381 card417 pending6207 charge5629 merchant5374 charge5654 statement7424 order6980 merchant639 merchant3943"
+   }
+  ]
+ },
+ {
+  "id": "AAMk025",
+  "internetMessageId": "<case-025@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 25",
+  "from": {
+   "emailAddress": {
+    "address": "customer025@example.com",
+    "name": "Customer 25"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:25Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 25)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-025-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card5655 receipt1 charge2112 receipt1044 dispute5295 card9582 invoice9683 charge3972 amount1178 posted7588 card9334 refund1841 dispute3694 order5110 order1419 reference7822 merchant2043 invoice6764 reference7310 invoice5020 refund8325 statement7255 invoice547 merchant3229 reference9638 pending3338 charge1923 invoice5159 posted1721 amount6381 order2384 posted2543 merchant315 statement3294 posted8797 refund1230 receipt7390 pending3480 refund3407 posted8367 merchant2849 merchant3482 dispute6259 refund3516 pending6445 reference5169 pending9200 amount9520 receipt8837 pending7087 charge132 amount4516 card493 invoice8646 receipt4017 reference6192 reference9305 receipt6608 statement6386 statement1627"
+   }
+  ]
+ },
+ {
+  "id": "AAMk026",
+  "internetMessageId": "<case-026@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 26",
+  "from": {
+   "emailAddress": {
+    "address": "customer026@example.com",
+    "name": "Customer 26"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:26Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 26)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-026-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement5939 refund177 amount9208 dispute9853 charge5816 charge2498 order8759 reference1233 merchant1954 dispute3987 charge6705 merchant5167 order7840 refund8847 amount3191 reference3827 merchant7588 charge3985 posted1392 invoice3557 amount4207 order6863 card1634 order4448 charge8016 dispute7634 invoice3212 reference8648 dispute558 reference5618 charge6239 receipt9965 pending5047 card3901 statement3124 card4107 amount2510 card8404 order3304 statement4430 reference207 invoice2468 merchant4468 dispute7422 dispute8858 statement3686 statement2197 merchant9292 refund163 reference9280 charge5233 order9083 posted7053 merchant5818 statement5580 order7410 amount6302 invoice285 invoice2739 amount1206"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-026-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund4364 dispute4513 statement331 refund3692 charge837 pending8728 statement1164 amount2834 posted5548 invoice2669 card2771 pending3490 pending7310 charge2513 refund7674 pending1486 posted2170 reference2440 order9085 merchant168 reference2125 receipt7805 posted5009 merchant5903 invoice3643 posted9998 merchant9620 order3739 statement7680 order8940 charge9450 statement7397 pending9932 merchant2094 receipt4545 charge3632 amount6290 statement7714 receipt2351 amount3218 amount2464 merchant4712 receipt4355 dispute4605 statement7881 invoice8524 receipt8457 amount7879 refund996 amount5429 invoice200 refund2988 reference1724 refund137 merchant5761 charge1036 card1543 card9750 dispute3007 merchant3422"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-026-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card6035 pending3976 statement9839 refund5554 statement9108 dispute4162 reference7112 order1497 merchant1793 receipt7161 order3862 charge9199 reference9272 order1820 statement7023 posted4405 statement3989 statement4439 refund8326 dispute3246 statement1527 posted1583 charge3503 reference2176 pending2120 statement7630 charge7474 merchant9847 receipt7040 amount9038 posted5488 order6842 statement4739 reference2863 dispute8679 posted295 reference1704 merchant6314 charge5368 order5688 card6734 posted4557 receipt9296 card9255 dispute9317 order7530 amount3794 invoice7426 merchant7797 amount270 charge5726 refund746 order2381 refund7217 invoice1517 statement9170 order8548 charge5032 receipt5997 posted2596"
+   }
+  ]
+ },
+ {
+  "id": "AAMk027",
+  "internetMessageId": "<case-027@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 27",
+  "from": {
+   "emailAddress": {
+    "address": "customer027@example.com",
+    "name": "Customer 27"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:27Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 27)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk028",
+  "internetMessageId": "<case-028@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 28",
+  "from": {
+   "emailAddress": {
+    "address": "customer028@example.com",
+    "name": "Customer 28"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:28Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 28)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-028-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute8148 statement5882 charge9339 charge1019 dispute2565 statement3543 posted9826 posted7833 merchant108 order1949 merchant6250 invoice8231 refund4861 invoice505 reference7393 pending9716 reference8936 amount4606 statement3935 order2060 card4054 card8039 dispute697 merchant8685 amount5822 order4017 receipt906 refund8505 pending8861 order9546 dispute2882 statement8750 charge5504 amount6745 invoice2345 charge15 pending2690 merchant6460 amount5011 amount7726 statement4147 statement4247 charge391 reference9024 reference2249 receipt394 posted9374 merchant2352 statement6562 order1447 invoice2616 statement5709 posted6596 reference1476 refund5737 posted5715 invoice2585 invoice1108 amount533 posted8750"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-028-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute1304 dispute9984 receipt4459 statement5452 merchant5177 merchant4710 refund3480 merchant4955 statement890 posted8794 order4601 order4813 merchant7495 merchant6266 charge8384 refund4198 receipt2267 receipt7348 receipt7422 merchant4816 posted9542 order5158 refund2658 amount3633 refund4922 posted4049 card7756 refund1227 invoice2584 statement3026 order8353 pending1021 refund709 invoice2013 posted7247 card7088 statement6234 invoice3268 refund4476 pending3029 refund6215 reference1925 invoice8991 statement8953 charge4149 refund3086 charge3868 statement5222 merchant7421 pending8451 posted4386 merchant4876 dispute8913 card4689 pending9115 statement9431 amount8804 dispute3400 statement1078 refund6154"
+   }
+  ]
+ },
+ {
+  "id": "AAMk029",
+  "internetMessageId": "<case-029@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 29",
+  "from": {
+   "emailAddress": {
+    "address": "customer029@example.com",
+    "name": "Customer 29"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:29Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 29)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-029-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount6136 order5834 charge3738 amount1406 pending333 invoice3051 invoice6710 order2437 charge3180 dispute6856 receipt4413 posted8975 charge9938 card7555 charge9436 receipt3591 statement6048 statement181 reference7283 card2415 receipt4309 amount8949 card2357 invoice7666 merchant7617 amount7502 charge1542 statement2377 reference6056 card5793 dispute9225 dispute246 pending8011 order1584 charge1990 invoice8354 invoice5205 statement2598 refund4616 receipt6132 amount4580 invoice9235 statement3014 refund3686 posted7482 refund7702 pending3897 charge3405 reference1706 refund489 charge4865 invoice9202 reference6696 receipt8426 invoice1744 dispute5558 merchant7517 posted3622 statement9591 order3625"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-029-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card8097 reference6113 invoice7385 card9471 dispute8820 amount4700 posted462 dispute6949 charge1121 charge4792 dispute9891 card364 statement2024 reference3149 merchant7839 invoice8519 amount5069 dispute1764 statement3111 dispute3696 invoice43 invoice5107 statement657 order6875 merchant5601 charge8957 reference5348 pending3794 invoice3717 amount8030 card3765 card9979 refund9779 reference5318 merchant378 receipt2914 receipt6016 card9219 order7620 dispute9479 amount8876 invoice9502 reference8147 invoice2339 pending1484 reference2371 invoice503 pending4155 pending5351 card5364 dispute5475 posted5977 card1609 receipt1950 amount5974 posted7748 order4099 charge7959 receipt8475 dispute6715"
+   }
+  ]
+ },
+ {
+  "id": "AAMk030",
+  "internetMessageId": "<case-030@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 30",
+  "from": {
+   "emailAddress": {
+    "address": "customer030@example.com",
+    "name": "Customer 30"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:30Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 30)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-030-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount1573 posted4288 receipt54 reference1920 reference3378 pending1794 refund8763 order3480 posted3282 refund1538 receipt9493 order4367 invoice2938 amount3505 invoice9841 card3409 charge5603 refund9281 amount3852 card2691 dispute2210 invoice5095 pending9210 amount4479 amount6612 charge1621 refund1378 merchant9253 receipt1172 order7445 pending6672 receipt1714 merchant406 refund6418 pending7209 merchant2323 reference1790 pending5398 receipt4391 statement7305 merchant2453 merchant150 amount6308 receipt9142 merchant7874 refund3418 pending3402 amount459 amount4688 statement4705 card4928 statement7741 pending5062 amount2670 charge9581 refund2859 statement8115 charge3101 card7502 amount894"
+   }
+  ]
+ },
+ {
+  "id": "AAMk031",
+  "internetMessageId": "<case-031@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 31",
+  "from": {
+   "emailAddress": {
+    "address": "customer031@example.com",
+    "name": "Customer 31"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:31Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 31)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-031-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order2119 reference7968 pending6755 card127 posted652 dispute17 reference4070 dispute8786 charge5537 order6098 pending6408 receipt4392 invoice9786 refund6844 amount7121 dispute4592 order3933 order1034 statement1265 reference371 posted2222 posted1265 card8677 posted6407 receipt5148 invoice2342 charge9572 order6339 amount9752 statement9157 statement852 dispute9196 posted7622 refund2838 order5623 dispute715 amount1127 dispute8405 refund2283 order8305 receipt8187 receipt5855 reference2112 card9141 amount2012 refund5440 reference1197 receipt6783 dispute6022 card1644 invoice9927 statement3427 order2032 charge6426 posted926 card6077 invoice7771 order4841 card5124 reference9541"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-031-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card2770 refund1638 posted9701 dispute7842 statement8052 reference7392 posted8867 amount6764 order6902 order4398 reference5229 amount1584 order8531 pending3320 order5139 invoice6045 pending7880 card6556 merchant6367 charge6231 posted3473 charge3065 refund318 merchant3824 pending402 amount7542 dispute4948 charge155 amount6435 charge2568 posted8794 refund2935 dispute1597 posted3742 merchant8712 refund7893 invoice6890 invoice1316 posted2155 dispute5579 statement214 refund4981 invoice2456 order905 pending6222 reference3477 statement7658 merchant7007 receipt9396 dispute716 dispute5170 amount2382 pending4900 invoice5515 receipt4908 statement3353 refund2067 receipt1293 amount8196 card3894"
+   }
+  ]
+ },
+ {
+  "id": "AAMk032",
+  "internetMessageId": "<case-032@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 32",
+  "from": {
+   "emailAddress": {
+    "address": "customer032@example.com",
+    "name": "Customer 32"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:32Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 32)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk033",
+  "internetMessageId": "<case-033@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 33",
+  "from": {
+   "emailAddress": {
+    "address": "customer033@example.com",
+    "name": "Customer 33"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:33Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 33)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk034",
+  "internetMessageId": "<case-034@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 34",
+  "from": {
+   "emailAddress": {
+    "address": "customer034@example.com",
+    "name": "Customer 34"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:34Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 34)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-034-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order9550 pending2557 reference7386 dispute217 dispute6237 order8654 statement5451 posted3181 merchant3611 reference5427 receipt6362 receipt1061 reference31 merchant2801 merchant5209 order3674 invoice809 charge7355 charge3837 receipt270 merchant7195 reference3294 order3966 merchant6283 merchant4454 invoice4983 amount4440 statement2028 card3341 posted3041 amount7944 pending4766 charge4706 amount5076 receipt8869 amount1703 order3692 charge610 posted569 posted2444 statement9704 statement1620 charge7693 receipt697 reference5015 refund6090 receipt9379 pending9513 pending9576 charge2097 invoice4942 posted7358 reference9272 invoice4139 order5487 charge6571 receipt8139 card2022 refund2714 charge6713"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-034-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge3147 refund9357 charge6726 order4526 card4900 card7715 invoice1762 merchant1729 card6287 order733 merchant578 posted9003 pending2861 posted3146 merchant7848 reference3896 pending7840 merchant575 pending5606 receipt1380 refund8292 charge59 charge8564 refund2399 receipt7976 merchant1133 amount2047 posted375 receipt1200 posted2837 card8428 amount6340 charge4128 charge1364 charge4310 dispute7941 reference9575 reference4682 statement5281 invoice1697 amount135 receipt1988 merchant147 dispute9432 merchant1400 invoice2301 refund8359 order259 charge6346 card260 card1292 order9972 statement1539 refund989 receipt4300 statement6608 statement5163 statement7057 card3613 order1374"
+   }
+  ]
+ },
+ {
+  "id": "AAMk035",
+  "internetMessageId": "<case-035@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 35",
+  "from": {
+   "emailAddress": {
+    "address": "customer035@example.com",
+    "name": "Customer 35"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:35Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 35)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-035-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice1038 charge5379 invoice6860 order669 merchant5861 invoice1017 statement6528 order3502 amount8337 charge5559 order4451 reference7272 amount1700 reference1435 posted1731 order9695 reference1768 merchant8361 refund7424 posted1584 posted4206 order5937 dispute4428 dispute5015 refund1345 posted6684 order429 merchant2320 card6677 receipt2446 receipt6014 amount7756 charge8544 pending9121 card4653 posted4613 statement2518 card9496 receipt7606 invoice7779 merchant5823 statement9214 pending4892 refund4872 card7656 reference1184 pending1088 order7561 card3614 reference107 merchant6888 posted9647 dispute5561 receipt3153 order2975 invoice1500 receipt1085 statement1693 card6058 dispute7239"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-035-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement5079 pending409 charge2390 merchant2957 receipt1 dispute919 reference1069 order8905 statement8163 charge2539 refund4795 amount5693 dispute3670 invoice6912 card9018 statement3572 card9459 amount3298 amount5343 charge943 posted6459 merchant6365 statement7708 dispute4043 charge1583 card9683 statement3961 receipt487 merchant2516 card751 invoice9522 posted6351 invoice3518 charge9921 reference3562 order592 statement9812 posted4753 statement8021 pending7053 reference5786 statement2972 order3877 posted5215 refund2610 dispute3044 pending7879 receipt6701 statement8274 statement8592 dispute2963 card6782 receipt8490 dispute5000 posted8129 merchant5781 pending2635 statement1106 dispute347 posted7220"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-035-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card4149 reference327 amount4714 order7968 receipt5678 charge5378 receipt4487 merchant7827 statement7585 pending7756 order5804 card46 dispute7429 posted7496 invoice9292 card760 invoice1663 posted2792 invoice8748 posted4981 order3174 charge9647 card2211 posted1675 card5488 receipt8925 pending2265 pending3892 reference2609 pending3062 reference2589 reference5294 merchant9928 card1809 order4889 posted9070 order2083 merchant6776 refund2955 invoice3131 merchant6001 receipt9720 reference8114 order9925 amount8527 statement382 merchant6072 receipt7444 refund7475 pending6922 posted8161 refund9246 merchant7851 reference2502 card9372 reference1248 invoice8820 pending2193 pending6367 reference262"
+   }
+  ]
+ },
+ {
+  "id": "AAMk036",
+  "internetMessageId": "<case-036@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 36",
+  "from": {
+   "emailAddress": {
+    "address": "customer036@example.com",
+    "name": "Customer 36"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:36Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 36)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk037",
+  "internetMessageId": "<case-037@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 37",
+  "from": {
+   "emailAddress": {
+    "address": "customer037@example.com",
+    "name": "Customer 37"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:37Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 37)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk038",
+  "internetMessageId": "<case-038@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 38",
+  "from": {
+   "emailAddress": {
+    "address": "customer038@example.com",
+    "name": "Customer 38"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:38Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 38)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk039",
+  "internetMessageId": "<case-039@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 39",
+  "from": {
+   "emailAddress": {
+    "address": "customer039@example.com",
+    "name": "Customer 39"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:39Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 39)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-039-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund6185 reference5881 receipt5106 dispute4041 dispute2534 order4967 posted8736 order8519 invoice2406 reference5514 merchant4481 merchant2656 reference9541 refund2683 reference7672 reference757 reference773 refund9272 amount6113 statement7025 pending8439 dispute6935 invoice2351 invoice7662 card1463 pending7231 amount6870 reference2742 receipt310 posted9426 refund5619 charge3119 amount8145 dispute6308 posted8587 statement1186 statement5615 refund8101 receipt3860 amount841 pending9728 statement6793 order6928 statement3280 invoice2440 dispute2940 pending2464 refund7831 order3466 merchant484 posted7997 dispute785 pending6733 order9221 charge3480 posted569 dispute8773 card3581 dispute313 amount8146"
+   }
+  ]
+ },
+ {
+  "id": "AAMk040",
+  "internetMessageId": "<case-040@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 40",
+  "from": {
+   "emailAddress": {
+    "address": "customer040@example.com",
+    "name": "Customer 40"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:40Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 40)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-040-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute3202 order507 receipt221 receipt6506 order5215 order7148 amount9961 amount5302 amount9720 invoice6492 posted4891 statement4858 refund2965 refund8296 refund895 order5405 order1079 receipt9873 order382 card990 charge182 pending1469 charge825 reference1154 pending6036 pending613 dispute2419 dispute4021 statement2286 pending3159 amount2862 merchant2427 statement3778 order8132 pending6785 pending9449 charge4692 charge488 posted7167 invoice6084 statement9317 charge7236 merchant2460 dispute2248 receipt2137 merchant6545 statement3865 refund7546 refund672 order7027 order8590 refund8375 receipt476 reference5080 order4498 statement1738 pending770 posted180 invoice1148 amount6318"
+   }
+  ]
+ },
+ {
+  "id": "AAMk041",
+  "internetMessageId": "<case-041@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 41",
+  "from": {
+   "emailAddress": {
+    "address": "customer041@example.com",
+    "name": "Customer 41"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:41Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 41)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk042",
+  "internetMessageId": "<case-042@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 42",
+  "from": {
+   "emailAddress": {
+    "address": "customer042@example.com",
+    "name": "Customer 42"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:42Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 42)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk043",
+  "internetMessageId": "<case-043@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 43",
+  "from": {
+   "emailAddress": {
+    "address": "customer043@example.com",
+    "name": "Customer 43"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:43Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 43)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk044",
+  "internetMessageId": "<case-044@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 44",
+  "from": {
+   "emailAddress": {
+    "address": "customer044@example.com",
+    "name": "Customer 44"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:44Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 44)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-044-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant9185 receipt5382 posted8128 invoice3173 merchant9030 refund3142 charge8893 charge804 invoice2111 dispute3040 amount7283 reference6309 statement7967 order6101 dispute5280 invoice6623 refund6526 dispute736 refund7205 posted2389 pending9078 dispute2300 refund2068 dispute9740 statement4897 charge2539 posted4402 amount7284 amount493 dispute1467 charge4196 refund8376 merchant4050 posted7280 card6875 refund4346 order2876 reference1448 card8223 dispute1151 amount1119 card4436 order8750 receipt6495 invoice538 reference7852 statement4124 card9939 amount9534 refund7115 pending9076 invoice2775 posted4236 amount6850 refund5585 statement9924 merchant5516 dispute1634 amount2473 amount58"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-044-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement6794 dispute949 receipt7096 refund1191 amount9922 order6171 order6641 amount9875 refund6608 receipt9050 charge4051 invoice2665 charge9245 posted4033 amount6435 pending2084 statement2660 merchant8870 posted1136 statement3424 receipt4489 dispute9675 reference4467 card1128 invoice4783 invoice4902 dispute7677 pending4099 receipt4369 merchant9864 posted3894 refund1687 amount301 order9165 amount188 reference3339 refund7798 amount6036 pending2787 refund4469 receipt9258 invoice697 charge2500 amount9263 statement364 merchant7426 order33 card5869 card9042 card9879 merchant8781 card8826 charge1947 reference5557 charge7356 reference5636 receipt555 posted6667 charge9386 pending3802"
+   }
+  ]
+ },
+ {
+  "id": "AAMk045",
+  "internetMessageId": "<case-045@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 45",
+  "from": {
+   "emailAddress": {
+    "address": "customer045@example.com",
+    "name": "Customer 45"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:45Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 45)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-045-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice5921 charge7311 receipt9593 dispute6849 receipt9885 dispute2711 posted6828 amount5336 dispute530 merchant7370 charge7687 statement3304 receipt2229 card9430 reference6501 order5065 statement4593 charge4817 pending3958 posted8638 order7051 receipt8574 posted2799 invoice4275 posted1659 pending3707 charge2307 reference3826 receipt412 merchant6868 amount2679 posted2006 refund5207 dispute9206 order4313 reference4109 posted5907 statement4949 reference5457 receipt3114 amount5735 refund6932 reference2310 card2881 order2216 card6967 order6399 amount5049 receipt2252 charge300 statement1004 pending8963 dispute8172 amount2851 statement8381 receipt8913 posted2119 statement5549 statement2697 pending6165"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-045-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order1995 card9418 order8312 posted2261 posted5097 refund3078 card6401 statement5575 amount1471 receipt8542 refund714 dispute4797 statement6709 dispute5392 invoice6151 receipt8810 order9769 order1002 reference5508 card3086 posted8658 invoice9891 pending4014 statement235 posted9858 merchant3597 order5546 merchant8974 merchant328 posted751 receipt6812 charge6722 invoice6433 charge2255 posted2298 reference7947 pending1492 card3543 dispute7250 dispute3439 refund3037 reference1702 statement5049 posted9187 statement1563 card6177 statement3617 reference5725 dispute6584 invoice8500 card6172 statement1759 pending2300 posted2141 statement6687 invoice1096 dispute4854 order7128 order8520 amount4970"
+   }
+  ]
+ },
+ {
+  "id": "AAMk046",
+  "internetMessageId": "<case-046@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 46",
+  "from": {
+   "emailAddress": {
+    "address": "customer046@example.com",
+    "name": "Customer 46"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:46Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 46)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-046-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice16 order5510 merchant5732 invoice2690 receipt2788 posted5691 refund778 pending3901 dispute4303 card1392 invoice9357 receipt4694 card5338 receipt4885 order9598 refund3935 dispute9043 merchant8701 refund8800 invoice3659 posted5610 pending115 amount8905 posted3636 refund3951 reference2006 charge2820 dispute7625 amount2113 posted7927 refund8186 amount4332 refund6891 receipt8568 dispute5874 statement2267 receipt8937 pending2569 refund5268 order5197 merchant7800 statement4668 receipt364 pending4934 posted6677 dispute3157 card1323 reference4778 invoice4746 posted5013 merchant5333 card6501 card8710 invoice2265 invoice885 receipt6824 invoice7640 card6848 statement3067 dispute8099"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-046-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card2942 card3416 amount3650 card4724 charge5098 reference1842 charge2611 card5049 charge5221 merchant2314 amount7509 statement7874 statement6197 invoice6402 pending3948 statement4586 invoice3941 receipt8130 amount5179 invoice6139 posted3024 charge5672 dispute9220 invoice3860 order2579 merchant4595 amount343 merchant8163 posted7882 reference8850 amount4814 pending5241 order219 amount8390 pending2475 dispute6518 posted8888 receipt3543 amount3347 order8854 order1612 reference3008 pending7558 order2370 merchant4862 invoice3142 card8580 refund8089 statement4801 posted1400 card8400 charge6270 refund3897 statement7408 invoice4657 card7555 order1719 pending7925 refund5036 posted8289"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-046-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted2994 invoice4960 card408 posted853 receipt2005 statement1123 invoice4037 invoice1514 merchant2777 amount1979 reference7991 order5981 pending5497 amount9089 receipt9527 reference4434 dispute32 refund9738 charge5238 refund3920 pending7188 amount9002 posted939 charge3754 invoice7516 reference7513 refund8640 merchant7416 statement8087 refund4704 reference7603 posted5088 dispute7045 receipt951 merchant232 refund7123 reference7302 order6565 dispute9154 charge3348 posted2914 merchant7224 charge5187 statement7555 order9723 invoice4893 card2690 refund6363 card1182 reference240 reference5709 dispute815 statement6154 order1093 invoice5481 merchant3395 posted4912 refund8195 invoice1607 posted8376"
+   }
+  ]
+ },
+ {
+  "id": "AAMk047",
+  "internetMessageId": "<case-047@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 47",
+  "from": {
+   "emailAddress": {
+    "address": "customer047@example.com",
+    "name": "Customer 47"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:47Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 47)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-047-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount7096 receipt3000 pending2039 merchant1384 amount7664 receipt6428 invoice8148 dispute9589 reference363 reference5279 reference3344 reference7931 refund9710 invoice6485 reference6171 reference5869 pending1685 invoice1000 statement9961 card2399 statement9386 order9294 posted6470 charge5779 receipt77 amount7434 receipt8628 receipt7831 merchant8778 card8752 merchant4263 amount7211 charge3539 invoice6559 reference564 order6405 amount2661 statement2503 statement2515 charge5593 reference5094 card6357 receipt9544 receipt2106 amount5528 reference3394 receipt3511 dispute8924 invoice3811 card1601 refund9813 dispute7010 amount8876 invoice6590 reference9550 reference584 pending8559 posted8956 statement7966 invoice350"
+   }
+  ]
+ },
+ {
+  "id": "AAMk048",
+  "internetMessageId": "<case-048@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 48",
+  "from": {
+   "emailAddress": {
+    "address": "customer048@example.com",
+    "name": "Customer 48"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:48Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 48)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-048-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order3140 amount3407 charge605 card3994 charge2528 refund1198 reference6222 posted1607 card6874 posted2650 refund9750 statement7735 card9412 posted3634 invoice3439 posted1072 dispute5457 merchant2691 pending605 card4397 card1553 posted4111 invoice5448 posted1607 amount4438 reference7105 statement6892 posted9825 amount9781 dispute9094 receipt6358 merchant5251 pending2425 amount4929 pending856 statement3576 charge3655 posted7057 amount2069 refund8613 order2148 reference2461 reference231 merchant800 pending6403 amount3632 dispute2858 card8105 card2909 refund6384 amount3451 posted4025 reference5692 amount5490 reference591 order3529 card1839 order9451 pending14 posted4674"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-048-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending1936 refund9155 card586 amount9868 reference1828 reference9707 receipt755 card2934 reference300 card3528 invoice9196 receipt5182 dispute6821 invoice2679 charge4781 receipt7570 pending7850 order6200 dispute4766 merchant2133 pending834 card580 charge528 charge6947 refund199 statement7798 order1670 posted2551 reference616 posted7796 card7853 order4647 receipt7679 reference8889 charge2488 receipt2815 card8977 posted2451 refund2070 posted9738 invoice2467 statement4704 posted2861 receipt2039 statement4311 refund5695 refund8943 merchant1990 invoice2837 receipt5182 order3002 statement3003 dispute7766 reference4384 amount5525 merchant6817 statement7325 invoice7615 pending4797 dispute8014"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-048-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund779 dispute5831 receipt4918 reference9423 receipt8472 charge1716 reference23 receipt6685 order5958 order7208 statement6961 amount9642 card596 card7838 statement2780 pending9321 statement9986 dispute3440 reference6438 merchant7799 card328 invoice566 dispute7840 pending7971 amount4341 amount8742 pending958 reference7849 statement8366 merchant1224 statement7334 invoice3146 posted4762 card6738 merchant9041 reference4880 reference4458 order5090 pending6636 posted4241 merchant4349 dispute6302 invoice3692 statement740 charge4973 reference9920 refund5732 amount877 receipt7249 statement413 dispute6959 merchant2619 invoice6648 merchant6474 amount3929 merchant8606 invoice5175 pending239 invoice9614 receipt6885"
+   }
+  ]
+ },
+ {
+  "id": "AAMk049",
+  "internetMessageId": "<case-049@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 49",
+  "from": {
+   "emailAddress": {
+    "address": "customer049@example.com",
+    "name": "Customer 49"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:49Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 49)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-049-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge9397 order8180 pending9737 posted4569 pending8734 amount1316 merchant2362 posted9562 card4136 statement8034 merchant9947 merchant8780 pending1162 invoice6433 refund1288 charge6346 merchant2444 refund3793 invoice446 statement3875 amount3789 receipt5195 receipt6975 receipt1074 refund1427 refund6757 pending7581 amount5373 posted7293 charge5239 dispute3460 charge2810 amount4702 reference7182 charge563 order7042 refund8028 amount7537 merchant9262 dispute1664 dispute9557 refund9852 statement2216 receipt3243 invoice5835 charge7951 order7650 order7312 charge7328 order723 merchant3779 receipt2956 amount9106 posted4134 posted9523 reference656 pending3622 reference2994 amount4465 pending721"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-049-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund3065 dispute8122 statement2140 dispute5618 refund2022 dispute3318 charge7858 dispute5445 amount2926 charge2306 posted647 pending2395 refund3643 reference1977 receipt2955 dispute2982 receipt8288 posted7818 refund9913 reference2674 statement9045 card3332 invoice395 card8373 amount7826 pending9773 card1767 card3516 charge6071 amount8431 receipt7378 receipt8151 charge3310 receipt4840 reference4305 pending16 statement8513 card8124 refund389 invoice4441 amount7175 statement9008 merchant2983 card7552 reference6099 reference6103 order7677 refund2220 statement5635 card8734 reference2456 receipt421 posted146 refund8689 reference8941 card8101 card5642 amount9996 receipt9779 pending9940"
+   }
+  ]
+ },
+ {
+  "id": "AAMk000",
+  "internetMessageId": "<case-000@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 0",
+  "from": {
+   "emailAddress": {
+    "address": "customer000@example.com",
+    "name": "Customer 0"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:00Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 0)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-000-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference6890 statement4242 posted7961 receipt4969 amount5866 pending3578 posted2281 card2289 reference1553 pending4104 posted9861 charge5081 merchant1208 order5409 amount9171 merchant5796 receipt5180 pending3350 posted7815 amount8541 card1020 reference8989 statement1528 invoice6534 invoice18 pending8086 dispute3996 invoice5328 invoice1031 refund9298 refund3909 reference2334 reference8896 amount1494 merchant5243 posted8016 merchant4938 posted4769 invoice2044 posted5451 posted3329 reference9882 posted9627 card7290 merchant9769 reference6306 dispute9431 refund4756 charge3102 charge540 pending4260 amount1131 merchant2133 charge633 merchant8857 order6410 invoice8594 card8549 reference3858 refund9663"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-000-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt9497 card7382 amount5855 merchant5313 pending1889 amount9618 order5493 refund3981 statement4440 merchant3612 dispute2793 dispute6981 statement1648 reference2397 invoice3584 statement9402 order8752 pending1212 statement2038 order3088 pending9436 merchant6409 merchant6064 merchant596 pending354 refund3030 invoice2029 amount3450 invoice1000 order373 posted6973 pending1662 card1146 refund1179 order4932 dispute7144 charge1000 posted7653 statement9772 merchant6410 refund4262 dispute7704 pending2775 invoice3332 reference951 reference2592 charge5608 posted4107 merchant9777 amount2864 statement7727 order6715 pending8332 card5851 receipt4111 charge9184 invoice203 amount1295 dispute748 posted4601"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-000-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge3934 reference7894 dispute9996 card5885 pending2168 invoice5083 receipt6789 order1322 statement9741 refund5478 charge3922 refund7342 receipt9308 receipt516 receipt9297 receipt766 charge7296 merchant4247 invoice2583 amount8643 amount9198 pending1 statement8103 dispute5112 amount816 reference6801 refund8987 order1367 invoice2138 statement6583 order6840 dispute55 refund234 invoice38 order8656 pending1602 refund1948 pending3252 card4587 invoice2985 merchant7792 receipt1332 statement4500 amount1896 card2185 order8533 order5686 merchant2530 card304 statement666 refund4254 posted5156 dispute9297 statement9954 order8101 invoice7514 order7134 dispute8813 charge3405 receipt9619"
+   }
+  ]
+ },
+ {
+  "id": "AAMk001",
+  "internetMessageId": "case-001@mail.northfield.example",
+  "subject": "Disputed charge on my card, case 1",
+  "from": {
+   "emailAddress": {
+    "address": "customer001@example.com",
+    "name": "Customer 1"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:01Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 1)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-001-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending1033 card1931 amount7364 amount6219 reference3439 merchant7993 statement6386 receipt9952 reference34 invoice7297 card3748 pending1674 dispute501 statement416 order8870 statement6245 order3548 receipt475 posted3632 reference7174 amount9058 refund5663 refund3584 reference7530 card352 receipt9116 order1638 charge4856 merchant5450 invoice8205 receipt8318 order3110 card4655 pending8181 posted6444 pending565 amount3977 invoice6623 receipt2834 dispute8991 invoice6139 merchant7191 order8330 merchant2682 posted6443 dispute8023 invoice484 amount712 card9718 pending6448 order2791 charge8228 refund201 reference3268 posted8983 refund6626 posted5633 pending5788 amount4411 order8978"
+   }
+  ]
+ },
+ {
+  "id": "AAMk002",
+  "internetMessageId": "<case-002@MAIL.NORTHFIELD.EXAMPLE>",
+  "subject": "Disputed charge on my card, case 2",
+  "from": {
+   "emailAddress": {
+    "address": "customer002@example.com",
+    "name": "Customer 2"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:02Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 2)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk003",
+  "internetMessageId": "<case-003@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 3",
+  "from": {
+   "emailAddress": {
+    "address": "customer003@example.com",
+    "name": "Customer 3"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:03Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 3)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-003-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending8916 charge6061 pending7766 order9516 merchant9922 statement7687 card9024 refund3141 invoice7704 posted9005 amount6506 order2467 refund2484 posted6388 invoice248 order1049 charge9684 statement4935 reference508 card7745 pending6350 invoice6994 receipt9452 amount2197 dispute1596 statement2227 amount3555 card7146 reference4932 receipt8310 receipt9404 dispute8750 pending6677 pending3807 dispute469 card9925 order2672 invoice5347 posted9370 pending1705 invoice3459 order9396 card4668 merchant1039 amount7921 merchant5637 reference1091 receipt2470 statement4815 receipt6802 merchant724 pending736 receipt9607 dispute9025 card8280 refund590 card118 merchant1771 pending8774 statement3233"
+   }
+  ]
+ },
+ {
+  "id": "AAMk004",
+  "internetMessageId": "case-004@mail.northfield.example",
+  "subject": "Disputed charge on my card, case 4",
+  "from": {
+   "emailAddress": {
+    "address": "customer004@example.com",
+    "name": "Customer 4"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:04Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 4)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-004-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card1690 invoice6489 amount2539 merchant1089 statement6579 posted4741 reference964 refund8525 posted5902 card2828 merchant4288 refund420 order4264 reference4452 refund2700 card4745 order6101 merchant9926 dispute6355 posted4077 charge4052 amount4587 merchant8972 card118 card9377 invoice5107 reference8329 refund6782 receipt9812 card7062 amount2643 refund4998 card708 merchant758 amount4594 posted8759 order7720 invoice5617 charge3204 merchant6763 refund7227 card3009 dispute7142 invoice9646 dispute9150 refund5300 merchant1009 invoice3749 card9538 pending3889 merchant5424 charge4766 amount420 statement5850 invoice1353 card5359 statement5288 card5270 charge6724 pending1273"
+   }
+  ]
+ },
+ {
+  "id": "AAMkR00",
+  "internetMessageId": "<reply-00@example.com>",
+  "subject": "Re: Disputed charge on my card, case 20",
+  "from": {
+   "emailAddress": {
+    "address": "customer020@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:00Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 20."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-020@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-020@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMkR01",
+  "internetMessageId": "<reply-01@example.com>",
+  "subject": "Re: Disputed charge on my card, case 21",
+  "from": {
+   "emailAddress": {
+    "address": "customer021@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:01Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 21."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-021@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-021@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMkR02",
+  "internetMessageId": "<reply-02@example.com>",
+  "subject": "Re: Disputed charge on my card, case 22",
+  "from": {
+   "emailAddress": {
+    "address": "customer022@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:02Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 22."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-022@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-022@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMkR03",
+  "internetMessageId": "<reply-03@example.com>",
+  "subject": "Re: Disputed charge on my card, case 30",
+  "from": {
+   "emailAddress": {
+    "address": "customer030@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:03Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 30."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-030@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-030@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": [],
+  "_fixture": {
+   "midRun": true
+  }
+ },
+ {
+  "id": "AAMkR04",
+  "internetMessageId": "<reply-04@example.com>",
+  "subject": "Re: Disputed charge on my card, case 31",
+  "from": {
+   "emailAddress": {
+    "address": "customer031@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:04Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 31."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-031@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-031@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": [],
+  "_fixture": {
+   "midRun": true
+  }
+ },
+ {
+  "id": "AAMk050",
+  "internetMessageId": "<case-050@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 50",
+  "from": {
+   "emailAddress": {
+    "address": "customer050@example.com",
+    "name": "Customer 50"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:50Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 50)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-050-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice4923 receipt1347 amount2462 merchant5433 amount6505 reference6749 statement6544 reference1336 invoice584 posted463 posted6918 posted9915 invoice3501 order9362 card9195 amount4986 amount609 refund1737 dispute1425 order7666 pending3968 card4817 receipt3788 reference3139 invoice2441 reference1962 pending54 charge7593 pending5959 invoice6394 statement5299 amount2447 reference7302 posted8727 statement9327 card6901 posted6036 receipt8346 charge592 amount2556 receipt7268 refund2704 card2395 receipt97 order6781 receipt9579 dispute8806 reference6454 card6405 amount9080 statement8905 card2423 merchant7615 charge8965 charge3416 dispute241 charge4971 order7553 posted422 invoice3046"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-050-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card1924 amount7473 dispute3206 statement9223 refund1851 pending6316 posted637 merchant5440 amount9007 card2020 invoice7053 posted8308 posted4646 card1295 charge2542 reference6331 refund1020 pending5643 reference4770 amount2245 refund8205 order7928 dispute1739 card3935 charge8913 posted2296 invoice7558 statement2867 pending1035 merchant2468 invoice2041 reference7899 merchant149 order2260 receipt4527 pending4168 merchant1283 charge7486 charge7218 amount7925 card5141 charge2186 card5980 order3520 amount231 amount5887 card9436 order402 merchant8411 amount5200 statement9825 amount3364 charge8127 invoice2187 posted4413 receipt5401 merchant3907 posted2879 order9856 dispute8561"
+   }
+  ]
+ },
+ {
+  "id": "AAMk051",
+  "internetMessageId": "<case-051@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 51",
+  "from": {
+   "emailAddress": {
+    "address": "customer051@example.com",
+    "name": "Customer 51"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:51Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 51)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-051-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending1052 reference2026 refund192 invoice9811 posted2794 order669 receipt9715 merchant4611 pending4665 posted6849 merchant4593 pending2256 reference4749 card292 card117 dispute8039 invoice555 statement6790 charge598 order3432 invoice1963 statement6553 reference8419 receipt1804 reference7297 pending639 refund9478 receipt6773 pending492 refund10 amount1183 merchant2002 posted4466 posted5772 statement6776 receipt5772 amount7080 card3946 receipt6125 amount1517 refund4499 charge8005 invoice2172 card4394 invoice1806 posted9642 invoice8172 card4101 refund3138 refund1181 receipt9922 merchant637 amount298 reference3191 receipt9498 pending4446 posted1006 posted1967 merchant9808 card1209"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-051-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending3662 merchant6690 statement2020 statement5988 invoice4173 amount9527 card3988 card5196 order7605 dispute4226 card4763 charge6115 refund8719 merchant5495 dispute9753 reference2133 merchant4810 reference7052 statement5131 order5535 reference6392 charge2579 order3147 merchant1430 order8804 merchant8391 statement4470 card8445 posted760 refund633 pending1670 reference241 charge655 invoice3374 merchant9567 order1740 amount3190 card6558 merchant7322 amount5355 posted9257 pending4900 statement2447 merchant1070 amount8585 reference4884 invoice5794 dispute3267 statement6275 refund5284 amount6229 order9865 order5614 refund3711 merchant3891 invoice9191 posted2791 order8061 card9815 reference6995"
+   }
+  ]
+ },
+ {
+  "id": "AAMk052",
+  "internetMessageId": "<case-052@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 52",
+  "from": {
+   "emailAddress": {
+    "address": "customer052@example.com",
+    "name": "Customer 52"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:52Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 52)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk053",
+  "internetMessageId": "<case-053@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 53",
+  "from": {
+   "emailAddress": {
+    "address": "customer053@example.com",
+    "name": "Customer 53"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:53Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 53)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk054",
+  "internetMessageId": "<case-054@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 54",
+  "from": {
+   "emailAddress": {
+    "address": "customer054@example.com",
+    "name": "Customer 54"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:54Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 54)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-054-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute7178 order7291 posted3353 merchant1488 amount7818 charge5897 dispute9887 posted6075 dispute8772 pending3164 receipt5186 merchant8140 pending466 merchant2197 posted1172 amount8079 reference9724 charge6021 amount7200 receipt8542 posted7698 dispute7294 merchant5363 dispute7794 statement801 receipt4872 receipt8740 reference9852 amount543 invoice7637 amount6902 amount3249 amount6815 card6021 reference8036 merchant9729 invoice9309 posted8607 amount4439 dispute7114 statement9831 statement8552 dispute4295 charge7568 dispute8912 merchant1411 merchant5615 reference6672 amount4612 dispute9009 receipt9346 card4606 statement8152 reference2924 posted7465 pending7411 pending7500 pending1632 refund7285 refund4930"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-054-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant2455 posted4197 amount9099 amount2178 dispute6888 receipt5891 dispute6286 charge668 refund63 posted3240 amount2191 receipt1997 amount5676 card9764 amount2752 reference4210 receipt4497 invoice7262 reference4381 statement1496 order9263 card9267 statement6954 amount8514 charge4939 statement1756 refund4782 merchant4918 receipt2133 invoice8483 reference4655 invoice5313 invoice8261 amount9436 reference2240 card3231 invoice1929 refund9281 card9438 pending8370 charge3045 card3372 receipt5187 dispute869 pending3842 statement7970 card6442 charge1709 reference9605 amount6285 reference357 dispute5686 invoice1607 dispute5325 statement3165 refund9928 amount4749 merchant9440 reference9194 charge6437"
+   }
+  ]
+ },
+ {
+  "id": "AAMk055",
+  "internetMessageId": "<case-055@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 55",
+  "from": {
+   "emailAddress": {
+    "address": "customer055@example.com",
+    "name": "Customer 55"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:55Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 55)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-055-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference4707 receipt1686 dispute4876 reference8514 order2091 amount2534 amount6439 amount151 pending7697 refund2685 reference8183 order2143 reference6569 card9604 card6562 amount4836 refund9525 reference8032 receipt9479 merchant2339 posted6319 amount5539 merchant7612 charge2690 reference3660 reference9624 order7707 statement6212 statement6675 posted6903 order2724 pending6500 statement8185 refund8079 dispute2273 order1278 receipt7812 invoice9409 card5569 refund4971 charge8609 merchant1837 refund8175 reference3333 amount7760 order7479 order5303 card3369 merchant6837 invoice5612 merchant3227 dispute1237 card1112 dispute7454 dispute4663 pending4962 pending4438 pending4032 card1077 statement6323"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-055-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice2970 amount6360 merchant4884 receipt4668 reference7874 reference8334 dispute6075 charge401 invoice9839 statement8117 refund4096 reference5343 reference2483 invoice1977 amount838 reference3556 charge6334 posted8693 statement6196 receipt1847 statement2717 posted4306 refund5134 amount5480 receipt4291 dispute5930 receipt8531 reference1479 receipt9801 order7678 statement1582 refund4361 card3418 dispute2008 refund3936 statement5567 order5150 card3934 pending2886 refund9048 order8502 card7050 receipt8973 invoice7657 statement2298 pending6963 dispute9226 pending8660 reference3148 refund1808 posted8538 statement2449 order9329 reference2702 refund2272 reference7373 invoice6875 refund9188 refund9656 pending1709"
+   }
+  ]
+ },
+ {
+  "id": "AAMk056",
+  "internetMessageId": "<case-056@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 56",
+  "from": {
+   "emailAddress": {
+    "address": "customer056@example.com",
+    "name": "Customer 56"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:56Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 56)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk057",
+  "internetMessageId": "<case-057@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 57",
+  "from": {
+   "emailAddress": {
+    "address": "customer057@example.com",
+    "name": "Customer 57"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:57Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 57)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-057-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant9082 receipt2487 invoice6823 charge1798 order457 merchant7434 card1337 amount3521 merchant5445 card3133 merchant6779 reference8308 reference3848 charge9676 reference1543 invoice5059 amount8874 statement2241 dispute7731 dispute6416 card1655 order7911 pending9480 card1049 charge6775 order1705 pending6643 receipt1088 order1310 dispute2682 merchant4822 invoice8345 invoice4994 reference414 invoice1524 receipt9619 card6248 dispute1094 dispute1214 receipt2896 dispute92 order3864 refund5255 pending343 refund2364 pending6482 receipt8923 pending3959 statement2478 receipt6207 merchant6605 reference3463 posted1734 card1002 amount2528 merchant4215 receipt2956 card4880 charge5952 reference8903"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-057-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order5349 posted1872 order3178 card8978 invoice1822 charge4251 order4690 order9299 amount4601 invoice2781 dispute7369 receipt6802 amount7980 statement7250 refund7707 dispute5776 pending4579 card6440 dispute7850 charge8478 merchant4430 amount7862 card3781 amount8137 order8948 invoice7755 charge28 amount9302 refund8510 invoice9679 charge7205 reference5829 statement5960 dispute5552 posted6365 receipt9498 statement2939 receipt5322 amount7619 statement3905 statement7888 reference9393 invoice6768 posted9711 posted6938 merchant9268 refund6073 receipt7128 posted7666 reference9818 refund3742 amount4228 order2460 charge7406 order3417 reference3070 refund11 pending5734 reference7421 amount9535"
+   }
+  ]
+ },
+ {
+  "id": "AAMk058",
+  "internetMessageId": "<case-058@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 58",
+  "from": {
+   "emailAddress": {
+    "address": "customer058@example.com",
+    "name": "Customer 58"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:58Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 58)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-058-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute8345 reference3375 dispute5992 reference1563 card7787 reference6755 card5335 charge6427 dispute2411 merchant1333 charge7851 statement741 order7516 dispute8694 charge422 dispute2388 pending4535 pending7978 posted1881 statement2965 statement747 card8918 order1250 dispute2597 dispute2754 order7650 charge8734 invoice6290 charge7044 pending5425 posted8500 amount73 invoice6207 receipt4636 merchant7710 invoice3997 receipt5741 order5088 merchant7668 refund2497 amount8047 pending7986 amount8521 amount7505 invoice6215 amount8328 card8099 receipt4679 card7768 card5271 refund6379 dispute6125 order5037 pending3300 card4933 receipt226 card2190 receipt6235 card7203 merchant8873"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-058-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending8956 receipt4256 invoice632 dispute6938 statement9340 charge1337 reference7503 pending9413 merchant9780 merchant671 amount932 charge1410 order7876 statement9172 posted1569 receipt2492 pending5838 order246 dispute1748 invoice3840 statement2704 posted9730 pending9348 card9493 merchant2204 invoice4656 amount3603 amount2229 invoice3090 invoice1319 card2349 dispute2603 posted7618 statement9336 dispute8591 pending7621 statement5643 merchant3483 amount1322 order503 refund3919 refund9090 merchant690 charge295 reference3520 card6517 order7268 receipt8996 order6219 posted3509 order6221 invoice3328 invoice2726 amount4963 card5910 receipt4909 invoice8443 dispute4365 pending4022 receipt860"
+   }
+  ]
+ },
+ {
+  "id": "AAMk059",
+  "internetMessageId": "<case-059@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 59",
+  "from": {
+   "emailAddress": {
+    "address": "customer059@example.com",
+    "name": "Customer 59"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:59Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 59)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-059-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt7261 card6664 refund7353 amount6809 card7830 card1778 receipt5433 invoice6571 invoice3005 amount4432 card5465 dispute6988 merchant1938 statement8279 order4698 charge1309 reference7156 dispute6725 refund4097 charge3016 charge4039 refund3898 refund4334 receipt9459 charge912 card4018 reference3899 posted5300 reference7961 amount1034 merchant9263 order8098 dispute1860 receipt836 invoice3599 order3323 amount3814 card4474 amount4152 reference9775 pending4759 dispute9830 pending8113 amount8712 pending5359 amount4556 refund7543 refund2431 invoice3620 amount1706 invoice9571 pending5277 refund8618 card2514 receipt703 amount7703 reference7932 amount5640 merchant5783 card3982"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-059-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference2409 statement96 posted6079 card1707 receipt4612 reference2220 statement9116 statement2402 posted4358 receipt2674 reference7048 charge4390 reference8240 reference8134 pending5553 statement205 reference4988 card1215 receipt569 pending3973 statement7731 reference2161 dispute3744 invoice8943 order1624 posted8132 receipt6016 refund4559 pending2718 reference7209 charge7642 receipt5702 refund6907 statement5796 amount3598 charge9190 card5480 dispute5413 charge3682 reference2388 receipt3970 refund5339 amount9240 refund3956 merchant1676 card3075 dispute5389 pending5660 dispute7121 statement8344 card294 posted6008 pending3228 charge8692 merchant7569 posted6660 charge5282 card9827 dispute2498 refund5413"
+   }
+  ]
+ },
+ {
+  "id": "AAMk060",
+  "internetMessageId": "<case-060@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 60",
+  "from": {
+   "emailAddress": {
+    "address": "customer060@example.com",
+    "name": "Customer 60"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:00Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 60)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-060-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending5496 posted1315 refund2785 refund9640 charge1115 pending5257 amount4106 refund9460 reference7827 merchant7871 refund6239 charge8785 statement9377 receipt5645 refund5662 statement7205 charge9588 posted5769 dispute1502 refund1039 statement5679 receipt345 amount6907 posted483 reference1694 order7962 dispute7266 statement8506 order7480 receipt2937 charge4299 order8193 pending9001 card9218 invoice9674 reference9601 invoice252 dispute4362 card6518 charge9294 refund8325 merchant6901 card8111 refund9100 invoice8980 dispute7440 merchant8262 pending3186 dispute4119 charge4809 charge1003 card1661 pending505 reference4142 order4049 dispute452 reference6749 charge8587 card159 dispute502"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-060-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount2636 charge4668 card9683 card5478 reference2551 posted1991 pending8277 charge8457 merchant5802 posted9112 pending8111 order1475 reference7637 posted6197 refund5821 refund3411 statement788 order4262 invoice8384 amount4208 amount4944 card3649 card2626 merchant732 invoice688 merchant199 refund5211 card9430 reference4678 charge361 card8029 reference9255 card9711 merchant1508 dispute9111 posted2666 refund5031 dispute1111 dispute2690 refund6937 dispute1216 pending7345 charge577 dispute3855 charge698 pending2427 charge2328 card9847 order1643 dispute9469 pending3612 invoice8058 merchant9418 refund6393 merchant6528 charge9885 reference1740 pending7834 merchant8082 statement6733"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-060-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted66 invoice4839 amount5474 order8951 refund8814 card8928 posted4363 posted4341 receipt3975 receipt4529 pending3469 dispute215 merchant9769 charge5342 refund1733 invoice2939 charge806 merchant3543 statement2183 posted5648 charge646 posted1294 statement4137 charge4931 invoice5333 statement4832 dispute809 amount3305 invoice3334 invoice3518 receipt2444 pending3355 reference1292 dispute710 order2089 posted6393 reference9058 refund7036 card7421 invoice8100 reference3747 posted9535 invoice6486 pending7423 order3630 charge1417 order7140 statement3306 receipt7440 amount5237 dispute2782 reference6453 dispute3731 amount965 card7006 receipt6727 statement6427 statement4492 posted1090 receipt3013"
+   }
+  ]
+ },
+ {
+  "id": "AAMk061",
+  "internetMessageId": "<case-061@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 61",
+  "from": {
+   "emailAddress": {
+    "address": "customer061@example.com",
+    "name": "Customer 61"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:01Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 61)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-061-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund7477 posted2834 charge4673 reference4251 card3877 merchant4569 invoice8105 charge2686 charge7437 receipt3276 amount2261 pending2754 amount1389 pending8106 posted6593 receipt2487 statement9274 dispute7712 receipt311 card1062 merchant7581 merchant7547 posted513 invoice5665 merchant7148 charge391 statement648 amount8004 order46 statement2988 charge7728 statement537 refund5218 invoice9811 invoice8079 reference7533 statement5428 amount4007 charge3373 card3855 charge6331 order5003 order1035 amount1717 receipt7148 receipt4716 receipt8027 dispute7757 statement5657 merchant1441 dispute8800 amount3044 posted1207 order5153 order4130 statement1883 refund7785 order2358 statement4972 amount4818"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-061-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order4408 statement1871 receipt482 pending6925 amount9538 card6389 reference5726 reference9915 pending9048 posted3194 amount9042 card9974 receipt1198 order9470 dispute7216 order7239 pending8703 receipt4742 reference9391 merchant8645 order5817 card2774 order8627 card625 statement1793 invoice6820 invoice4194 charge2063 posted6741 dispute8488 card6154 reference2764 posted6399 statement3478 invoice1960 merchant8574 reference2845 pending8056 pending8515 statement3639 statement9062 order8759 card1156 posted8741 dispute6455 refund4917 charge4867 receipt2455 statement6260 posted9781 dispute1952 refund4475 receipt4185 card552 invoice5079 card1221 merchant6064 reference4961 dispute3632 posted4371"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-061-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement2346 reference5974 receipt8446 amount3339 receipt9786 reference1279 receipt8093 dispute3695 reference1823 amount6441 card9322 posted7476 pending3478 posted450 invoice9346 charge8983 refund2957 receipt5187 statement7545 charge7917 statement5253 statement2756 reference7489 receipt0 merchant6690 reference3709 refund4495 posted1362 reference9404 statement6013 amount9783 order2269 order9649 card3171 receipt399 statement6197 reference5614 statement9224 posted9486 order235 refund7425 receipt831 refund7595 pending2377 dispute2587 amount7701 order1483 order9555 amount757 order4995 order6372 pending7957 order8346 refund134 reference885 card7725 card3207 reference5617 charge951 reference4520"
+   }
+  ]
+ },
+ {
+  "id": "AAMk062",
+  "internetMessageId": "<case-062@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 62",
+  "from": {
+   "emailAddress": {
+    "address": "customer062@example.com",
+    "name": "Customer 62"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:02Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 62)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk063",
+  "internetMessageId": "<case-063@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 63",
+  "from": {
+   "emailAddress": {
+    "address": "customer063@example.com",
+    "name": "Customer 63"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:03Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 63)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-063-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted2783 pending1167 dispute2240 posted9364 charge7183 statement8031 receipt5831 merchant4235 receipt2279 order5557 reference4872 amount319 invoice3396 dispute7107 dispute5182 merchant9241 invoice9619 dispute1395 invoice7725 receipt3421 pending4473 card9347 pending1814 amount8405 receipt449 amount2986 receipt7831 card6487 invoice4778 charge1916 posted8949 posted1154 invoice4001 pending3872 amount7223 invoice2448 reference152 posted9287 card9517 dispute2562 merchant6363 dispute1303 receipt4432 receipt1902 order9087 merchant6680 dispute648 pending2360 refund6925 merchant7719 posted4934 posted4313 merchant3805 refund8934 statement8363 receipt4761 refund3379 invoice758 reference8288 order7598"
+   }
+  ]
+ },
+ {
+  "id": "AAMk064",
+  "internetMessageId": "<case-064@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 64",
+  "from": {
+   "emailAddress": {
+    "address": "customer064@example.com",
+    "name": "Customer 64"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:04Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 64)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-064-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund3954 merchant6524 invoice567 merchant5572 reference4576 dispute4247 order3781 refund9682 card9918 dispute3877 posted3102 amount2480 statement2862 reference1674 posted9872 pending408 reference8617 refund9397 charge929 statement4542 merchant4990 reference6669 pending1450 merchant4122 pending1040 receipt1788 pending9792 statement7991 reference6681 pending1660 charge9812 receipt3106 reference9094 reference3017 dispute4704 charge3064 merchant4131 statement8540 merchant8067 receipt9950 pending6992 invoice1298 reference2719 dispute8700 card4660 merchant3504 card3354 amount644 statement782 amount7760 dispute7158 dispute4697 charge2257 charge4607 dispute9644 dispute749 posted5631 receipt8101 posted1513 invoice7272"
+   }
+  ]
+ },
+ {
+  "id": "AAMk065",
+  "internetMessageId": "<case-065@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 65",
+  "from": {
+   "emailAddress": {
+    "address": "customer065@example.com",
+    "name": "Customer 65"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:05Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 65)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-065-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount2600 charge7520 card6318 reference9134 card2743 order3655 receipt7002 amount3250 receipt157 charge6551 amount3522 merchant3666 invoice1925 pending1881 reference8124 charge8389 reference8609 dispute5163 amount2662 charge7712 posted0 posted9344 pending7588 reference695 receipt6024 pending9970 statement1005 receipt5203 charge828 pending4033 charge1932 pending750 card5317 dispute1188 dispute5051 amount1741 amount4710 amount9332 statement8937 receipt2048 charge2718 receipt6165 order5667 invoice4206 refund4115 charge7322 refund2464 charge4121 dispute530 pending854 refund1169 charge3125 statement1102 statement1294 merchant4256 card4406 dispute6991 invoice7561 posted312 card7192"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-065-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement8923 card176 invoice1646 statement4963 merchant4811 invoice7849 refund4436 posted2724 pending9435 charge2060 refund5428 card272 invoice7700 invoice2783 reference1252 charge8119 charge2807 pending9410 invoice8813 charge9891 statement4364 merchant1032 reference5233 merchant8255 refund5876 charge6076 posted8999 invoice3791 merchant9039 pending9186 posted847 dispute3413 statement2580 posted2863 invoice6941 dispute5460 amount6615 invoice4966 pending2359 pending2111 receipt1447 statement3819 invoice8857 charge6705 receipt6553 dispute2301 reference7559 refund2830 refund6676 charge7052 receipt7299 dispute4563 order1125 charge5429 refund6240 statement4709 invoice6352 invoice5858 card741 refund6926"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-065-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge428 order8810 dispute7499 reference6738 pending3345 charge4597 charge326 merchant1329 statement2633 posted7546 amount7936 card608 invoice7006 merchant5769 receipt5710 amount6086 amount5287 receipt4620 order8023 dispute9014 invoice8136 posted3885 statement4208 reference2046 receipt783 invoice4976 charge9892 posted5841 refund6971 charge9432 charge8183 invoice5472 posted4844 posted2800 merchant4735 dispute1082 refund8013 invoice1524 merchant6699 invoice3793 amount2968 amount101 dispute1170 merchant6874 receipt2227 invoice4398 dispute86 refund4368 order3904 card3862 statement3963 pending1152 amount3885 dispute7298 merchant6771 invoice525 dispute4160 posted4622 invoice8169 amount2893"
+   }
+  ]
+ },
+ {
+  "id": "AAMk066",
+  "internetMessageId": "<case-066@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 66",
+  "from": {
+   "emailAddress": {
+    "address": "customer066@example.com",
+    "name": "Customer 66"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:06Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 66)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-066-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant8795 dispute2411 card9984 charge7016 card7643 card4835 pending7759 statement9524 refund4424 statement9016 amount9892 charge1929 card1141 pending4195 reference2607 refund3626 amount6590 card2008 receipt7959 pending7463 order9061 invoice5837 invoice2187 merchant1715 amount2126 charge8262 card6017 invoice3456 merchant4425 invoice5330 receipt822 dispute9163 receipt7087 order5647 refund571 charge7295 posted6219 merchant8076 reference5174 posted141 order4701 dispute6241 invoice3957 pending5288 merchant6430 order4591 refund7999 refund9612 receipt9135 invoice8742 charge1759 dispute5470 merchant1781 merchant4242 statement9551 amount7447 amount8008 invoice8854 card6500 merchant2003"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-066-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute899 statement7819 amount9423 merchant8732 card6000 order7931 statement7432 refund4384 merchant8536 merchant3264 order9263 charge8187 posted7569 invoice9163 statement6701 invoice6612 reference9976 pending1640 statement1795 pending7119 amount850 order4646 order5667 reference7645 merchant3317 pending9385 order7427 statement311 pending4853 statement2889 invoice5896 posted7967 order1286 statement7551 reference7042 invoice9738 card1478 statement7087 card4421 statement9510 statement3150 charge651 reference8691 merchant1872 card8520 dispute5506 invoice9563 merchant6220 receipt6196 merchant9605 reference3793 refund3509 merchant3407 posted2794 invoice2908 refund5253 dispute2512 invoice3879 order5533 pending9758"
+   }
+  ]
+ },
+ {
+  "id": "AAMk067",
+  "internetMessageId": "<case-067@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 67",
+  "from": {
+   "emailAddress": {
+    "address": "customer067@example.com",
+    "name": "Customer 67"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:07Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 67)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk068",
+  "internetMessageId": "<case-068@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 68",
+  "from": {
+   "emailAddress": {
+    "address": "customer068@example.com",
+    "name": "Customer 68"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:08Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 68)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk069",
+  "internetMessageId": "<case-069@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 69",
+  "from": {
+   "emailAddress": {
+    "address": "customer069@example.com",
+    "name": "Customer 69"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:09Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 69)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-069-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card9442 charge4535 order2131 invoice655 merchant9021 card8618 invoice9796 statement4645 amount8373 refund6560 amount2095 posted2829 dispute8025 pending3544 dispute9306 pending6879 charge5725 charge5465 refund108 dispute8858 charge4711 invoice2802 posted5082 card8220 receipt2424 dispute1374 invoice5238 order6621 card9395 amount649 card233 dispute8595 charge9460 card2247 charge9472 charge7016 receipt6182 order2289 merchant5335 posted2818 amount1286 posted6397 dispute1684 posted8132 posted5818 receipt2869 card4529 posted9669 merchant9430 charge3053 charge5769 reference2664 card4855 posted7486 refund9626 dispute4475 refund296 order6067 refund79 pending8366"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-069-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice7378 order7590 receipt1815 statement6486 merchant2391 statement4108 receipt7141 reference5737 merchant7681 pending771 refund2798 reference9074 charge5174 amount3819 amount1333 refund6830 charge1993 amount1711 merchant6002 invoice944 dispute5420 merchant4300 order567 order885 charge2718 dispute9008 merchant3932 dispute9735 card9772 merchant7384 card3108 reference343 receipt9989 card704 amount5121 reference6830 charge2582 dispute2690 receipt257 reference8800 charge2574 order5445 order3436 pending6077 statement667 charge8124 statement3460 statement4648 pending7327 pending3250 refund206 receipt2534 invoice7481 reference4353 amount2086 pending2435 posted7313 order498 merchant6244 refund939"
+   }
+  ]
+ },
+ {
+  "id": "AAMk070",
+  "internetMessageId": "<case-070@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 70",
+  "from": {
+   "emailAddress": {
+    "address": "customer070@example.com",
+    "name": "Customer 70"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:10Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 70)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-070-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "refund2304 posted8341 reference7697 pending4550 invoice2728 pending1851 posted5673 order2651 dispute4449 merchant6477 posted6335 card5700 receipt7537 dispute1728 receipt1774 posted6139 amount7277 dispute1889 invoice9980 charge725 invoice9908 merchant1153 dispute4858 merchant8650 invoice2253 pending2177 charge2060 refund8371 card1142 merchant9405 reference5104 pending5281 refund4500 pending3170 receipt7576 pending5779 statement583 dispute4308 refund8185 statement5440 card3814 reference1620 order3128 pending9979 invoice6368 pending2211 posted1769 refund3646 reference1113 refund3895 amount6 charge7229 amount5295 amount4167 pending1040 pending1144 statement2095 order1377 pending6750 refund9670"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-070-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant9113 receipt6515 statement7035 order4242 dispute8355 card849 refund6498 merchant8470 refund7383 posted4667 statement792 reference3669 charge4872 statement5127 amount4548 pending3409 posted4348 merchant589 dispute5366 merchant7021 posted5435 refund7809 posted8671 dispute3460 merchant4084 charge8456 invoice9441 order7541 reference3958 invoice3482 merchant2067 statement1711 charge9043 card897 reference8785 pending8300 posted3320 amount7185 merchant7371 merchant2505 posted5379 receipt7863 card7410 refund7993 reference6745 reference9313 refund9392 statement1449 statement4108 receipt1766 refund1019 refund7258 card2635 statement6060 pending5611 amount9187 charge2066 statement2166 refund9802 merchant3345"
+   }
+  ]
+ },
+ {
+  "id": "AAMk071",
+  "internetMessageId": "<case-071@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 71",
+  "from": {
+   "emailAddress": {
+    "address": "customer071@example.com",
+    "name": "Customer 71"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:11Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 71)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-071-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference8414 order7559 posted2679 dispute2363 merchant976 card6068 dispute3340 pending1920 charge8177 receipt7145 pending7847 invoice5981 reference2368 statement3786 order9819 receipt2480 refund5320 refund5741 order6750 order1977 amount673 invoice3961 refund4171 dispute2594 dispute9048 card3073 amount8241 charge1004 statement3406 receipt3124 invoice5325 amount7726 card6087 refund2113 reference2416 pending5122 order7026 card7530 refund5714 invoice1150 refund1561 dispute1966 invoice9076 invoice4434 dispute2143 charge8115 merchant238 posted9774 card3467 posted5856 invoice3434 receipt8078 card7033 refund9482 amount8327 card2280 statement1760 pending8619 charge7675 invoice3159"
+   }
+  ]
+ },
+ {
+  "id": "AAMk072",
+  "internetMessageId": "<case-072@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 72",
+  "from": {
+   "emailAddress": {
+    "address": "customer072@example.com",
+    "name": "Customer 72"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:12Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 72)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-072-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt7311 dispute8652 dispute1390 merchant7837 order62 receipt3359 amount2980 amount1892 charge5566 reference9361 charge1411 dispute6596 invoice3726 reference3279 card8520 dispute2623 refund7497 card3614 amount9391 amount8225 order6109 order6809 order431 pending5456 refund3741 refund632 statement7396 statement8935 invoice2591 pending3218 order1757 amount5452 posted5098 dispute2153 invoice4892 charge1487 receipt2049 order9626 posted993 charge4235 amount8925 pending4507 invoice3168 merchant4523 order1898 posted1637 merchant7095 charge7731 pending4673 receipt3547 posted8426 statement1916 card9917 merchant1303 card3681 card1287 dispute2745 amount9789 charge8214 reference4975"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-072-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order5652 posted9580 refund9794 posted7520 statement6547 posted8609 invoice1606 amount8436 receipt921 charge1756 posted3384 amount4276 merchant5716 reference4688 statement6378 receipt1862 pending5804 order744 amount8660 charge5135 card514 reference3781 refund8741 dispute2861 amount8212 card4407 dispute3422 pending1769 charge147 dispute7314 receipt8146 dispute2977 charge2883 card2285 invoice9661 order6088 dispute295 dispute7275 charge8090 reference8540 reference7932 dispute6588 refund1469 invoice4066 invoice306 receipt5256 merchant8519 card3473 card4838 refund9813 invoice8416 receipt6419 charge711 merchant7479 amount6031 amount1735 reference637 charge8402 refund6594 pending610"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-072-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice205 invoice1528 receipt5287 order8129 statement4073 reference2560 order8255 posted336 refund567 charge7416 merchant6252 charge3364 posted7798 refund7774 receipt2238 refund4103 amount6212 card1658 refund9345 invoice3433 receipt1148 receipt8159 charge6992 card379 statement3214 order2380 refund9957 statement8016 dispute2076 card7214 invoice3018 merchant8123 order7019 reference95 statement7668 reference7727 refund8089 reference5375 pending9711 refund9853 receipt6746 card8017 invoice4003 receipt7167 amount4225 posted7018 refund1888 posted4127 statement9653 posted4279 merchant3482 amount4236 statement5278 amount652 reference7137 posted1633 refund593 order2164 pending2888 order1862"
+   }
+  ]
+ },
+ {
+  "id": "AAMk073",
+  "internetMessageId": "<case-073@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 73",
+  "from": {
+   "emailAddress": {
+    "address": "customer073@example.com",
+    "name": "Customer 73"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:13Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 73)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-073-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice3781 refund2042 order9126 dispute7884 merchant9560 statement5098 refund6893 amount9268 posted2578 refund9878 amount4703 refund3152 order3223 amount158 invoice7558 amount224 pending2485 invoice4203 charge9 reference1140 charge7241 dispute8608 amount9054 statement513 order7379 charge1676 statement849 order933 reference7534 statement7319 receipt82 merchant5581 dispute8121 receipt7547 posted5946 dispute7491 reference295 amount6696 receipt7943 refund3035 order4510 card8560 posted7659 charge2085 merchant7293 receipt2739 merchant2849 dispute1349 refund185 posted5052 merchant3522 reference1515 charge4798 refund6898 refund1813 dispute1128 merchant4271 charge3964 receipt2266 card1275"
+   }
+  ]
+ },
+ {
+  "id": "AAMk074",
+  "internetMessageId": "<case-074@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 74",
+  "from": {
+   "emailAddress": {
+    "address": "customer074@example.com",
+    "name": "Customer 74"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:14Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 74)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-074-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice1726 order4684 statement7946 card1610 merchant6087 merchant2973 receipt1406 reference5420 reference1378 receipt8817 reference6706 pending6449 amount2825 invoice6526 reference5030 refund891 order6135 amount9499 card1014 refund2586 order3115 amount2538 dispute7063 card3322 amount5754 dispute7772 reference4776 statement8789 dispute8780 charge8074 dispute8799 receipt9674 card3809 order7976 charge5472 amount871 refund9733 merchant8308 receipt1373 charge3029 merchant4023 dispute7630 dispute4564 invoice8568 invoice4613 card3147 merchant4476 dispute3074 statement9703 card8394 pending281 receipt5444 pending3551 posted7073 invoice4265 reference7460 pending4945 refund4986 pending1715 invoice5283"
+   }
+  ]
+ },
+ {
+  "id": "AAMk075",
+  "internetMessageId": "<case-075@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 75",
+  "from": {
+   "emailAddress": {
+    "address": "customer075@example.com",
+    "name": "Customer 75"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:15Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 75)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-075-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "posted2581 charge4592 dispute114 receipt7592 invoice6174 card1859 posted1580 invoice9355 refund5279 receipt6671 reference9631 order6927 order4134 amount2419 receipt5763 merchant2660 reference3049 order7776 pending3015 card4071 amount609 reference3198 refund4289 charge9657 merchant800 statement1450 refund9871 receipt9137 card7718 refund1002 charge7609 pending4751 amount2216 receipt6208 invoice2916 statement4884 statement9987 card3646 order8332 charge850 amount9506 charge2148 invoice2389 invoice7311 amount1570 statement674 card7599 order9381 card2164 amount6760 amount6072 charge674 statement7180 merchant165 reference9326 card5279 statement7996 invoice8220 merchant2448 amount1320"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-075-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "reference8455 pending9219 card1456 amount2486 refund8587 dispute8216 posted1217 posted8079 reference3407 posted7075 reference6298 invoice3792 reference7937 refund1601 merchant1642 invoice5031 card9290 reference4724 merchant540 receipt1114 posted1351 order1637 amount9144 card9527 refund5848 posted1670 charge194 pending7991 posted9486 invoice1601 reference9451 posted9038 card5361 charge9813 charge7108 merchant3053 pending5350 statement8594 posted451 pending424 statement8988 card4280 invoice2449 merchant9182 merchant7970 amount5702 order8459 amount6681 card9487 statement6965 statement8689 amount1889 statement6997 amount7830 dispute8868 amount5145 pending3073 receipt7394 order3276 charge6568"
+   }
+  ]
+ },
+ {
+  "id": "AAMk076",
+  "internetMessageId": "<case-076@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 76",
+  "from": {
+   "emailAddress": {
+    "address": "customer076@example.com",
+    "name": "Customer 76"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:16Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 76)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-076-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge281 invoice4436 order5649 reference5577 order2663 merchant8989 posted7732 pending2256 receipt9034 order4586 card3061 charge7521 reference7501 pending3408 refund7639 amount7629 order3226 merchant3469 charge3845 merchant1590 refund3548 order8670 charge9435 card9402 merchant943 receipt6669 amount322 order574 statement7815 pending3872 invoice7126 dispute9894 pending9581 statement4840 reference5424 merchant5765 merchant6703 order1822 refund1566 invoice5767 amount9100 refund136 charge9949 receipt8347 statement5126 pending471 amount6058 dispute9495 receipt6291 order4294 reference8036 card4216 invoice815 amount6603 posted3392 amount7144 charge8246 charge881 refund659 amount9279"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-076-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge3 merchant8263 pending1436 invoice3401 dispute9091 statement2574 posted5012 dispute497 invoice7107 order1230 charge8210 order6914 statement91 reference5711 refund7954 reference5408 order9504 order5300 statement8245 card9317 amount3669 amount8909 invoice4729 order9910 refund1407 card4473 statement1478 card107 amount7156 order3300 reference3886 charge5462 invoice2594 reference9058 card4118 invoice9409 card1461 card4360 charge5574 dispute14 reference8507 charge8313 charge1987 order92 reference6452 dispute1766 order5622 amount3210 refund5060 charge8386 reference2392 dispute1978 statement5410 pending1426 dispute2469 invoice3092 posted5410 posted8794 pending410 refund2188"
+   }
+  ]
+ },
+ {
+  "id": "AAMk077",
+  "internetMessageId": "<case-077@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 77",
+  "from": {
+   "emailAddress": {
+    "address": "customer077@example.com",
+    "name": "Customer 77"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:17Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 77)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-077-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt2135 reference7454 statement9371 order5549 statement5084 dispute8279 pending1608 invoice9755 merchant3223 invoice7909 posted8396 refund851 card9 statement8762 card3354 receipt1128 dispute498 order1893 refund6334 pending5594 card4340 receipt4608 amount1745 posted3272 refund1700 card560 reference7036 reference2305 refund6269 order7269 pending1740 dispute1886 pending224 receipt9205 receipt9694 posted714 refund4889 receipt2737 pending5262 charge3017 invoice1681 dispute8296 merchant9486 charge5906 invoice7886 dispute1124 posted1225 refund7331 receipt3642 card189 refund3891 merchant5655 refund4005 merchant4772 reference6888 posted673 statement4601 dispute677 merchant6801 card3970"
+   }
+  ]
+ },
+ {
+  "id": "AAMk078",
+  "internetMessageId": "<case-078@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 78",
+  "from": {
+   "emailAddress": {
+    "address": "customer078@example.com",
+    "name": "Customer 78"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:18Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 78)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk079",
+  "internetMessageId": "<case-079@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 79",
+  "from": {
+   "emailAddress": {
+    "address": "customer079@example.com",
+    "name": "Customer 79"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:19Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 79)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-079-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "statement7319 card5348 order4617 posted3405 receipt4161 invoice8605 amount5734 merchant9848 posted4907 order3328 statement9505 reference6707 merchant5022 pending6948 receipt6441 order7373 dispute4738 card4976 pending9582 statement2779 charge5568 posted3953 receipt6533 dispute2413 merchant5119 reference7729 reference1698 card9261 pending4308 amount4663 amount7134 dispute5690 posted7763 pending6918 posted5593 card256 receipt3487 invoice9135 posted8725 card8963 receipt7709 card1490 refund5791 order5034 reference682 charge2156 posted8035 posted2644 amount8465 reference2750 charge393 refund6666 pending9587 dispute8277 statement9260 pending4415 charge6179 refund8367 refund633 amount4308"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-079-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "merchant4723 receipt9941 reference7430 pending7941 card6204 pending3560 reference3702 reference1039 card3943 receipt7519 pending9080 pending2021 receipt5318 dispute332 posted4864 order1158 amount3443 charge1606 card7350 order3956 invoice2437 posted1471 reference6424 posted3241 amount7252 card5822 reference9787 pending328 receipt5787 dispute5054 invoice3352 pending8739 reference3061 merchant5723 posted6846 merchant3385 statement6206 order6370 invoice6959 posted2680 charge5797 statement1882 refund7669 charge6083 invoice2197 receipt3019 posted6658 refund9407 pending8533 merchant2802 invoice2850 dispute87 invoice3482 order713 reference9788 invoice6492 amount3607 posted9388 merchant1999 charge7443"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-079-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute6136 posted4303 card1117 dispute3849 pending8530 statement3045 order3088 dispute9740 invoice8107 reference467 invoice9849 dispute187 dispute5747 receipt6522 charge9255 pending316 pending9714 amount4894 charge1412 pending5537 charge6298 invoice730 reference7724 posted5067 merchant284 refund4491 dispute2165 amount3188 card1051 statement8476 receipt2764 merchant637 statement4511 statement1829 receipt7 amount8620 refund6881 merchant2712 reference7424 statement2743 receipt2488 reference552 refund2759 refund39 dispute5270 reference3267 posted4671 card3066 invoice5710 receipt9395 order4289 dispute4823 amount119 merchant6816 refund8137 posted1568 dispute5744 posted5777 invoice4480 refund1608"
+   }
+  ]
+ },
+ {
+  "id": "AAMk080",
+  "internetMessageId": "<case-080@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 80",
+  "from": {
+   "emailAddress": {
+    "address": "customer080@example.com",
+    "name": "Customer 80"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:20Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 80)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-080-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "order2915 amount2407 dispute3832 dispute440 dispute6541 statement876 pending3098 dispute2213 amount6451 charge5733 order8242 order3421 charge6586 card8547 statement1127 reference1881 reference4103 posted9553 merchant7012 pending4557 card4202 order3602 statement9821 posted6325 order4040 card5971 order6022 order6602 order1480 reference7897 dispute8229 statement9516 amount7890 receipt7239 refund4215 pending5105 charge6280 amount8440 refund620 invoice7640 merchant7206 pending7311 invoice4326 statement8588 merchant4502 dispute8109 posted2872 card2735 merchant2009 dispute4314 refund4002 charge1318 posted5855 invoice1003 receipt233 invoice9740 card5674 pending9024 pending2499 reference2883"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-080-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice551 refund9906 order1831 card4057 receipt4588 receipt6887 posted5024 pending8429 reference2866 order9634 reference6526 reference1687 refund3474 posted1668 receipt7369 amount776 amount2647 refund3844 card3588 charge3967 charge2527 reference5924 order1639 amount3785 dispute7586 statement9768 pending3851 reference4305 card776 pending2415 dispute1771 card5373 posted2101 receipt1888 invoice6801 posted586 refund9705 amount9459 order9526 dispute7342 invoice9469 charge8257 order7447 posted5215 order9965 receipt5501 dispute7201 dispute6173 reference7527 order4512 amount1908 pending9619 refund3014 refund8669 merchant7508 pending838 receipt5450 card846 receipt6710 order716"
+   }
+  ]
+ },
+ {
+  "id": "AAMk081",
+  "internetMessageId": "<case-081@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 81",
+  "from": {
+   "emailAddress": {
+    "address": "customer081@example.com",
+    "name": "Customer 81"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:01:21Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 81)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-081-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card1806 order7650 order5080 posted8213 pending7790 dispute2369 charge6879 card7093 pending4396 order6186 order5314 merchant6953 receipt9729 amount9527 merchant9055 merchant8063 merchant2027 receipt4245 pending1537 amount4511 merchant1937 amount6300 receipt9789 refund4478 reference9391 order656 pending8633 dispute5516 charge3640 statement9504 charge4734 charge5513 reference4932 card9008 amount297 pending8310 pending1198 reference7538 charge929 receipt2171 receipt7462 card3841 amount8445 pending6843 reference6815 order9460 invoice690 amount7076 invoice9481 charge2407 reference8593 order7480 charge3540 invoice9034 amount1587 receipt6202 refund1916 pending7690 charge6270 dispute5338"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-081-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount7753 reference4983 card2115 receipt7514 charge6817 amount8766 receipt7270 statement7796 dispute7456 receipt2703 receipt6888 merchant4207 statement2875 dispute2126 pending4680 amount304 refund814 reference287 card9171 statement9447 amount3221 order507 receipt4888 merchant6147 posted5511 dispute5494 amount7900 charge3830 card2978 posted5739 pending2676 refund1925 posted6688 charge3600 refund4481 pending8082 card2843 reference5300 charge9260 refund5161 posted446 charge1596 posted5038 refund643 amount2625 statement8308 posted9227 charge4298 receipt3729 reference3336 merchant6665 charge6049 invoice2335 statement6741 amount615 merchant336 invoice6117 card5888 pending4531 invoice6996"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-081-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "amount9734 dispute1864 receipt4361 receipt2308 receipt4749 statement26 card800 merchant4528 reference4185 statement2769 posted3646 pending3595 refund4826 charge6722 charge6734 order7395 merchant2825 invoice9681 refund5875 refund5305 invoice1955 reference9688 merchant2739 refund3115 dispute9118 order8590 refund1186 reference2782 reference9133 charge8295 amount5258 receipt1263 charge2047 posted734 refund6110 card6201 card3167 posted7435 receipt8458 amount3611 dispute1921 posted2469 order3269 card9223 invoice764 statement1307 statement695 amount899 card211 posted2697 receipt3957 dispute7453 order8168 amount4080 card7795 posted2493 order1693 pending1035 receipt6376 posted185"
+   }
+  ]
+ },
+ {
+  "id": "AAMk005",
+  "internetMessageId": "<case-005@MAIL.NORTHFIELD.EXAMPLE>",
+  "subject": "Disputed charge on my card, case 5",
+  "from": {
+   "emailAddress": {
+    "address": "customer005@example.com",
+    "name": "Customer 5"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:05Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 5)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-005-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "invoice5874 reference8684 statement7628 reference4080 order849 charge1854 dispute7685 refund6238 posted1670 pending4085 statement3550 receipt4579 charge6380 charge1178 charge7288 charge2166 statement87 refund3530 charge2727 card5138 refund8834 order3355 charge3225 receipt4895 statement5917 receipt2719 charge4322 merchant5437 card9881 pending55 pending5536 merchant5078 dispute5014 amount5173 charge7884 amount2885 statement4197 statement5859 receipt296 posted6862 dispute6166 pending148 amount765 invoice2964 pending3219 merchant4031 amount5642 posted5812 posted4110 reference7583 merchant9662 invoice6017 card600 receipt1493 refund5582 posted5941 charge5569 card8931 merchant5119 order5190"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-005-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "card2907 reference1281 order2439 invoice5067 amount2646 invoice795 merchant9841 posted6650 statement3888 invoice9731 dispute4099 amount6910 charge912 order536 reference8086 dispute3392 charge9241 charge6780 merchant2765 receipt6111 charge962 receipt4830 charge7424 pending2773 posted7430 amount5205 amount4489 card7701 receipt2400 merchant6176 posted2939 order8180 dispute2951 merchant8058 card8440 reference8980 posted5919 merchant5827 invoice9625 order562 reference5008 dispute9163 invoice4601 amount4339 reference4814 dispute2926 pending189 amount8961 reference4107 dispute4484 amount4732 posted5842 dispute4487 order5662 invoice6692 dispute2825 invoice7369 dispute5477 posted2324 posted2722"
+   }
+  ]
+ },
+ {
+  "id": "AAMk006",
+  "internetMessageId": "<case-006@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 6",
+  "from": {
+   "emailAddress": {
+    "address": "customer006@example.com",
+    "name": "Customer 6"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:06Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 6)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMk007",
+  "internetMessageId": "<case-007@mail.northfield.example>",
+  "subject": "Disputed charge on my card, case 7",
+  "from": {
+   "emailAddress": {
+    "address": "customer007@example.com",
+    "name": "Customer 7"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:07Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 7)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-007-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "charge6468 order791 merchant8779 merchant5991 pending950 posted3517 statement1408 receipt6851 merchant3943 merchant9028 receipt968 pending2028 refund9551 statement9455 pending6499 statement3622 statement9120 charge4744 receipt2363 posted1929 pending5054 posted2961 merchant9528 pending3078 dispute1596 posted1028 pending976 pending3374 amount8711 receipt5146 amount9593 amount5924 card4070 reference2945 invoice3999 merchant9411 card8604 amount5627 invoice7353 card9977 merchant1934 posted6850 charge5604 charge8011 receipt642 order1271 reference9143 pending5140 dispute5737 pending8137 pending7474 merchant1533 card7767 invoice1064 statement5072 order9469 order7301 card6320 order5685 statement7564"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-007-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute2753 pending1918 amount965 refund4709 charge4056 receipt6405 amount1320 charge7359 receipt9002 card2243 receipt9014 card6804 dispute6233 refund2472 merchant2887 charge3800 order3822 statement7945 pending2987 card4619 statement2386 receipt8758 dispute9991 pending5220 charge8445 pending884 amount9163 receipt6521 receipt6457 merchant7889 order6560 statement3122 merchant3420 amount2659 merchant5571 pending861 merchant3 pending2478 posted1662 dispute417 merchant3407 pending6164 charge4132 dispute9867 dispute7768 merchant1889 amount7634 amount7927 card1407 charge1674 invoice5613 invoice4337 amount2645 posted378 refund8654 dispute2401 invoice8899 statement8652 card1491 invoice4278"
+   }
+  ]
+ },
+ {
+  "id": "AAMk008",
+  "internetMessageId": "case-008@mail.northfield.example",
+  "subject": "Disputed charge on my card, case 8",
+  "from": {
+   "emailAddress": {
+    "address": "customer008@example.com",
+    "name": "Customer 8"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:08Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 8)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-008-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "dispute6150 charge3164 invoice717 merchant2242 refund8296 refund6565 order496 amount7985 amount6397 amount9390 refund6597 merchant7947 refund327 invoice4370 posted6679 amount6210 invoice1863 order4232 merchant1033 receipt6180 merchant951 dispute3840 invoice1409 amount8467 refund9527 reference2328 pending1054 posted613 amount3176 charge9485 amount9574 amount4680 posted5844 receipt2211 charge9851 merchant8713 invoice5141 invoice5849 order8104 posted3238 card2460 dispute8662 card8352 order1170 reference8313 invoice8928 refund5639 refund195 card5623 refund4371 statement6937 card6175 card6830 charge6492 merchant2722 order419 refund2632 card1908 statement6233 dispute2787"
+   }
+  ]
+ },
+ {
+  "id": "AAMk009",
+  "internetMessageId": "<case-009@MAIL.NORTHFIELD.EXAMPLE>",
+  "subject": "Disputed charge on my card, case 9",
+  "from": {
+   "emailAddress": {
+    "address": "customer009@example.com",
+    "name": "Customer 9"
+   }
+  },
+  "receivedDateTime": "2026-10-11T09:00:09Z",
+  "body": {
+   "contentType": "text",
+   "content": "I do not recognise a charge on my statement (case 9)."
+  },
+  "internetMessageHeaders": [],
+  "hasAttachments": true,
+  "attachments": [
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-009-0.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending6116 card2269 charge105 dispute8237 amount9907 merchant5472 posted670 invoice6209 charge7405 invoice6923 charge2759 refund841 merchant2169 posted9673 merchant6285 reference1665 card3358 order3674 invoice6910 merchant4370 refund6496 card5597 reference707 refund86 receipt897 receipt8056 charge384 refund6958 invoice1835 pending63 merchant9481 refund3326 dispute135 merchant2182 posted286 posted1389 pending8138 posted3246 receipt1127 receipt3148 order1530 invoice9499 charge2827 pending675 statement4423 posted9934 charge4396 invoice9425 statement1987 invoice6592 refund2649 pending8272 statement5995 order8553 pending9260 reference1421 dispute1801 pending5989 amount3441 receipt3256"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-009-1.txt",
+    "contentType": "text/plain",
+    "contentBytes": "pending300 receipt9957 dispute10 receipt1830 refund3632 amount4417 dispute1455 card4667 merchant8478 reference903 statement6248 reference9182 reference7022 amount5670 invoice4067 pending1085 receipt3783 merchant6568 posted6110 posted6051 charge4756 charge4242 statement827 reference2830 card2690 merchant9937 charge194 statement997 amount3417 reference6371 card242 reference5808 card2304 amount9206 card2249 merchant9108 card1932 merchant6880 amount2335 invoice9206 reference6275 pending2770 order4491 reference9785 pending8100 dispute1625 statement4535 posted2102 charge1380 charge3643 statement3324 charge7760 amount9691 posted8937 receipt1363 charge8988 amount9714 card8772 merchant471 pending9588"
+   },
+   {
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    "name": "evidence-009-2.txt",
+    "contentType": "text/plain",
+    "contentBytes": "receipt8918 card8576 posted8800 order1074 order9402 posted4920 merchant3674 invoice2252 merchant1632 invoice8055 amount990 amount867 order9878 statement6113 refund7514 refund6082 invoice9390 pending8125 refund589 pending9780 merchant768 order6713 receipt9642 merchant1322 refund558 pending2970 merchant1062 statement5812 pending7704 posted8774 amount425 invoice1233 dispute1386 reference5267 statement7599 amount9670 charge6325 amount2259 merchant5714 order3789 amount2120 refund3623 merchant1812 statement1967 merchant1352 dispute1697 invoice384 amount8552 refund6053 order1329 refund89 card8484 order3233 statement7196 card364 merchant8510 reference6834 statement4116 amount5162 pending3615"
+   }
+  ]
+ },
+ {
+  "id": "AAMkR05",
+  "internetMessageId": "<reply-05@example.com>",
+  "subject": "Re: Disputed charge on my card, case 23",
+  "from": {
+   "emailAddress": {
+    "address": "customer023@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:05Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 23."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-023@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-023@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMkR06",
+  "internetMessageId": "<reply-06@example.com>",
+  "subject": "Re: Disputed charge on my card, case 24",
+  "from": {
+   "emailAddress": {
+    "address": "customer024@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:06Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 24."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-024@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-024@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": []
+ },
+ {
+  "id": "AAMkR07",
+  "internetMessageId": "<reply-07@example.com>",
+  "subject": "Re: Disputed charge on my card, case 32",
+  "from": {
+   "emailAddress": {
+    "address": "customer032@example.com"
+   }
+  },
+  "receivedDateTime": "2026-10-11T10:00:07Z",
+  "body": {
+   "contentType": "text",
+   "content": "Here is more detail for case 32."
+  },
+  "internetMessageHeaders": [
+   {
+    "name": "In-Reply-To",
+    "value": "<case-032@mail.northfield.example>"
+   },
+   {
+    "name": "References",
+    "value": "<case-032@mail.northfield.example>"
+   }
+  ],
+  "hasAttachments": false,
+  "attachments": [],
+  "_fixture": {
+   "midRun": true
+  }
+ },
+ {
+  "id": "AAMk900",
+  "@removed": {
+   "reason": "deleted"
+  }
+ },
+ {
+  "id": "AAMk901",
+  "@removed": {
+   "reason": "changed"
+  }
+ }
+]

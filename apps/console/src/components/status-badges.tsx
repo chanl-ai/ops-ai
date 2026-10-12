@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { ActionStatus, CasePriority, CaseStatus } from '@/lib/types/cases';
-import type { LifecycleStatus, ReviewKind, ReviewStatus, Risk, ToolAccess, ToolType } from '@/lib/types/domain';
+import type { AgentAvailability, AgentVersionState, LifecycleStatus, ReviewKind, ReviewStatus, Risk, ToolAccess, ToolType } from '@/lib/types/domain';
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
 
@@ -10,19 +10,19 @@ export function LiveBadge({ status, className }: { status: LifecycleStatus; clas
     <span
       className={cn(
         pill,
-        status === 'live' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+        status === 'live' && 'border-success/40 bg-success/10 text-success-text',
         status === 'draft' && 'border-border bg-muted text-muted-foreground',
-        status === 'paused' && 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+        status === 'paused' && 'border-warning/40 bg-warning/10 text-warning-text',
         className,
       )}
     >
       {status === 'live' ? (
         <span className="relative flex size-1.5">
-          <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+          <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-60" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-success" />
         </span>
       ) : (
-        <span className={cn('inline-flex size-1.5 rounded-full', status === 'paused' ? 'bg-amber-500' : 'bg-muted-foreground/60')} />
+        <span className={cn('inline-flex size-1.5 rounded-full', status === 'paused' ? 'bg-warning' : 'bg-muted-foreground/60')} />
       )}
       {status === 'live' ? 'Live' : status === 'draft' ? 'Draft' : 'Paused'}
     </span>
@@ -30,9 +30,9 @@ export function LiveBadge({ status, className }: { status: LifecycleStatus; clas
 }
 
 const RISK: Record<Risk, string> = {
-  critical: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+  critical: 'border-destructive/40 bg-destructive/10 text-destructive',
   high: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
-  medium: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  medium: 'border-warning/40 bg-warning/10 text-warning-text',
   low: 'border-border bg-muted text-muted-foreground',
 };
 
@@ -41,10 +41,10 @@ export function RiskBadge({ risk }: { risk: Risk }) {
 }
 
 const STATUS: Record<ReviewStatus, { label: string; cls: string; dot: string }> = {
-  pending: { label: 'Pending', cls: 'border-border bg-card', dot: 'bg-amber-500' },
+  pending: { label: 'Pending', cls: 'border-border bg-card', dot: 'bg-warning' },
   in_review: { label: 'In review', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' },
-  approved: { label: 'Approved', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  rejected: { label: 'Rejected', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500' },
+  approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
   returned: { label: 'Returned to agent', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 
@@ -64,13 +64,16 @@ export const KIND_LABEL: Record<ReviewKind, string> = {
   escalation: 'Escalation',
   policy_override: 'Policy override',
   publish_request: 'Publish request',
+  agent_publish: 'Agent publish',
   model_validation: 'Model validation',
+  skill_publish: 'Skill publish',
+  template_submission: 'Template submission',
 };
 
 const ACCESS: Record<ToolAccess, { label: string; cls: string }> = {
   read: { label: 'Read', cls: 'border-border bg-muted text-muted-foreground' },
   write: { label: 'Write', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
-  money_movement: { label: 'Moves money', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
+  money_movement: { label: 'Moves money', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
 };
 
 export function AccessBadge({ access }: { access: ToolAccess }) {
@@ -79,7 +82,7 @@ export function AccessBadge({ access }: { access: ToolAccess }) {
 
 export function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
-  const color = value >= 0.85 ? 'bg-emerald-500' : value >= 0.7 ? 'bg-amber-500' : 'bg-red-500';
+  const color = value >= 0.85 ? 'bg-success' : value >= 0.7 ? 'bg-warning' : 'bg-destructive';
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
@@ -94,6 +97,7 @@ const TOOL_TYPE: Record<ToolType, string> = {
   http: 'border-chart-2/40 text-chart-2',
   code: 'border-chart-3/40 text-chart-3',
   mcp: 'border-primary/40 text-primary',
+  workflow: 'border-chart-4/40 text-chart-4',
 };
 
 export function ToolTypeBadge({ type }: { type: ToolType }) {
@@ -109,7 +113,7 @@ export function SlaText({ minutes, open, paused }: { minutes: number; open: bool
     <span
       className={cn(
         'text-xs whitespace-nowrap tabular-nums',
-        minutes < 0 ? 'font-semibold text-red-600 dark:text-red-400' : minutes < 60 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground',
+        minutes < 0 ? 'font-semibold text-destructive' : minutes < 60 ? 'text-warning-text' : 'text-muted-foreground',
       )}
     >
       {label}
@@ -120,9 +124,9 @@ export function SlaText({ minutes, open, paused }: { minutes: number; open: bool
 const CASE_STATUS: Record<CaseStatus, { label: string; cls: string; dot: string }> = {
   new: { label: 'New', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' },
   in_progress: { label: 'In progress', cls: 'border-border bg-card', dot: 'bg-primary' },
-  waiting_approval: { label: 'Waiting on approval', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
+  waiting_approval: { label: 'Waiting on approval', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' },
   waiting_customer: { label: 'Waiting on customer', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
-  closed: { label: 'Closed', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  closed: { label: 'Closed', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
 };
 export const CASE_STATUS_LABEL = Object.fromEntries(Object.entries(CASE_STATUS).map(([k, v]) => [k, v.label])) as Record<CaseStatus, string>;
 
@@ -137,7 +141,7 @@ export function CaseStatusBadge({ status }: { status: CaseStatus }) {
 }
 
 const PRIORITY: Record<CasePriority, string> = {
-  urgent: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300',
+  urgent: 'border-destructive/40 bg-destructive/10 text-destructive',
   high: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
   normal: 'border-border bg-card text-foreground',
   low: 'border-border bg-muted text-muted-foreground',
@@ -148,16 +152,50 @@ export function PriorityBadge({ priority }: { priority: CasePriority }) {
 }
 
 const ACTION_STATUS: Record<ActionStatus, { label: string; cls: string }> = {
-  drafted: { label: 'Needs approval', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' },
-  awaiting_second: { label: 'Needs second approver', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' },
-  approved: { label: 'Approved', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
-  executed: { label: 'Done', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
-  rejected: { label: 'Rejected', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
-  failed: { label: 'Failed', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
+  drafted: { label: 'Needs approval', cls: 'border-warning/40 bg-warning/10 text-warning-text' },
+  awaiting_second: { label: 'Needs second approver', cls: 'border-warning/40 bg-warning/10 text-warning-text' },
+  approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text' },
+  executed: { label: 'Done', cls: 'border-success/40 bg-success/10 text-success-text' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  failed: { label: 'Failed', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
 };
 
 /** A drafted action that needs no approval runs on its own, so it reads as "Ready" rather than "Needs approval". */
 export function ActionStatusBadge({ status, needsApproval }: { status: ActionStatus; needsApproval: boolean }) {
   const s = status === 'drafted' && !needsApproval ? { label: 'Ready', cls: 'border-border bg-muted text-muted-foreground' } : ACTION_STATUS[status];
   return <span className={cn(pill, s.cls)}>{s.label}</span>;
+}
+
+const AGENT_VERSION_STATE: Record<AgentVersionState, { label: string; cls: string }> = {
+  draft: { label: 'Draft', cls: 'border-border bg-muted text-muted-foreground' },
+  in_review: { label: 'In review', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
+  published: { label: 'Published', cls: 'border-success/40 bg-success/10 text-success-text' },
+  superseded: { label: 'Superseded', cls: 'border-border bg-transparent text-muted-foreground' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
+};
+
+/** State of an agent version: drafts publish through an `agent_publish` review before workflows can pin them. */
+export function AgentVersionBadge({ state, testId }: { state: AgentVersionState; testId?: string }) {
+  const s = AGENT_VERSION_STATE[state];
+  return (
+    <span className={cn(pill, s.cls)} data-testid={testId}>
+      {s.label}
+    </span>
+  );
+}
+
+export const AVAILABILITY_LABEL: Record<AgentAvailability, string> = { published: 'Published', not_published: 'Not published', paused: 'Paused' };
+const AVAILABILITY_CLS: Record<AgentAvailability, string> = {
+  published: 'border-success/40 bg-success/10 text-success-text',
+  not_published: 'border-border bg-muted text-muted-foreground',
+  paused: 'border-warning/40 bg-warning/10 text-warning-text',
+};
+
+/** Whether workflows can pin the agent and new runs use it: published, not published, or paused by an operator. */
+export function AgentAvailabilityBadge({ availability }: { availability: AgentAvailability }) {
+  return (
+    <span className={cn(pill, AVAILABILITY_CLS[availability])} data-testid="agent-availability">
+      {AVAILABILITY_LABEL[availability]}
+    </span>
+  );
 }

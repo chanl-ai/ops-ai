@@ -26,17 +26,31 @@ import { createNotificationsMock } from './notifications';
 import { runAsApi, scopeTurn } from './run-as';
 import { createSearchMock } from './search';
 import { createGovernanceMock } from './governance';
+import { createSignInPolicyMock } from './sign-in-policy';
+import { createInvitesMock } from './invites';
+import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
+import { createAccountMock } from './sessions';
 import { createToolModulesMock } from './tool-modules';
+import { createEgressMock } from './egress';
+import { createSecretsMock } from './secrets';
 import { createIntegrationsMock } from './integrations';
 import { MAILBOX_CONNECTION } from './integrations/seed';
 import { createEvalsMock } from './evals';
 import { createModelRiskMock } from './model-risk';
 import { createFilesMock } from './files';
+import { createSkillsMock } from './skills';
+import { createTemplatesMock, templateDeps } from './templates';
+import { createPromptsMock } from './prompts';
+import { createAssuranceMock } from './assurance';
+import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
+import { createConnectMock } from './connect';
+import { createAgentWrappers } from './agent-wrappers';
+import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
 import { bulk, field, id, list, notFound, respond } from './runtime';
 import * as F from './fixtures';
 import { countGates, countSteps, SEED_GRAPHS, templateGraph } from './graphs';
-import { runsFor, testTurnFor, versionsFor } from './history';
+import { runsFor, startedRun, testTurnFor, versionsFor } from './history';
 import { guardTeam, inTeam, teamOwner, teamsApi } from './teams';
 
 const isOpen = (r: Review) => r.status === 'pending' || r.status === 'in_review';
@@ -55,13 +69,18 @@ export function createMockApi(): OpsApi {
   const workflows = F.WORKFLOWS.map((w) => ({ ...w }));
   const graphs: Record<string, WorkflowGraph> = Object.fromEntries(Object.entries(SEED_GRAPHS).map(([k, g]) => [k, { workflowId: k, ...g }]));
   const agents = F.AGENTS.map((a) => ({ ...a, guardrails: { ...a.guardrails } }));
+  // Which agent version is published; graph pins and agent rows read it, the agent publish flow writes it.
+  const agentStore = createAgentVersionStore(agents);
+  // Agent wrapper workflows and console chat deployments; assigned once the stores they read exist, read at request time.
+  let wrappers: ReturnType<typeof createAgentWrappers> | undefined;
   const tools: Tool[] = F.TOOLS.map((t) => ({ ...t }));
   // Team scoping: a record is in the current team when its owner is (reviews, gates, deployments and cases
   // through their workflow; tools through the agents granted them; knowledge through sources and citing agents).
   const wfOwner = (wid: string) => workflows.find((w) => w.id === wid)?.owner;
   const teamAgents = () => agents.filter((a) => inTeam(a.owner));
   const teamWorkflows = () => workflows.filter((w) => inTeam(w.owner));
-  const toolInTeam = (t: Tool) => inTeam(agents.filter((a) => t.grantedAgentIds.includes(a.id)).map((a) => a.owner));
+  // A workflow tool is an exposure every team's agents may be granted, like an MCP exposure is for every team's staff.
+  const toolInTeam = (t: Tool) => !!t.workflow || inTeam(agents.filter((a) => t.grantedAgentIds.includes(a.id)).map((a) => a.owner));
   // Integrations own every connection; sources, modules and mailboxes hold its id and read its status through these.
   // Assigned below once the dependants' stores exist; only called at request time.
   let integrations: ReturnType<typeof createIntegrationsMock> | undefined;
@@ -93,8 +112,8 @@ export function createMockApi(): OpsApi {
     currentUser: F.CURRENT_USER.name,
   });
   const wfName = (wid: string) => workflows.find((w) => w.id === wid)?.name ?? wid;
-  const cases = createCasesMock({ me: F.CURRENT_USER.name, workflowName: wfName, workflowOwner: wfOwner, files: files.links });
-  const chat = createChatMock({ knowledge: knowledge.api, ground: knowledge.retrieveNow, agents: () => agents.filter((a) => a.status === 'live'), agentOwner: (aid) => agents.find((a) => a.id === aid)?.owner, reviews: () => self.reviews, me: F.CURRENT_USER.name, slaByQueue: cases.slaByQueue, files: files.links });
+  const cases = createCasesMock({ me: F.CURRENT_USER.name, workflowName: wfName, workflowOwner: wfOwner, files: files.links, runs: () => workflows.flatMap((w) => runsOf(w.id)), reviews: () => reviews });
+  const chat = createChatMock({ knowledge: knowledge.api, ground: knowledge.retrieveNow, agents: () => agents.filter((a) => (wrappers ? wrappers.chatActive(a.id) : !a.paused && agentStore.publishedOf(a.id) !== null)), agentOwner: (aid) => agents.find((a) => a.id === aid)?.owner, reviews: () => self.reviews, me: F.CURRENT_USER.name, slaByQueue: cases.slaByQueue, files: files.links, workflowTools: (aid, question) => { const a = agents.find((x) => x.id === aid); return a ? callWorkflowTools(a, question).map(({ tool, run, review, workflowName }) => ({ toolName: tool.name, workflowName, run, review: review && withAgentName(review) })) : []; } });
 
   const reviews: Review[] = F.REVIEWS.map((s) => {
     const p = policies.find((x) => x.id === s.policyId)!;
@@ -125,8 +144,16 @@ export function createMockApi(): OpsApi {
     };
   });
 
-  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name });
-  const teamReviews = () => reviews.filter((r) => inTeam(wfOwner(r.workflowId)));
+  const movesMoney = (r: Review) => tools.some((t) => t.name === r.actionTool && t.access === 'money_movement');
+  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name, movesMoney: movesMoney(r) });
+  /** 422 unless the token came from a re-authentication by the signed-in person in the last 5 minutes. */
+  const requireStepUp = (token?: string) => {
+    const v = verifyMockStepUp(token ?? '');
+    const who = currentMockUser()?.email;
+    // No session means nobody to match the token to, so it is refused like a token from another account.
+    if (!v.ok || !who || v.email !== who) throw new ApiError(!who ? 'Sign in again to approve this money movement.' : v.ok ? 'Re-authenticate to approve this money movement: the step-up belongs to another account.' : v.reason === 'expired' ? 'Re-authenticate to approve this money movement: your step-up expired after 5 minutes.' : 'Re-authenticate to approve this money movement: it needs a step-up first.', 422);
+  };
+  const teamReviews = () => reviews.filter((r) => inTeam(r.skillPublish?.ownerTeam ?? r.templateSubmission?.submittedTeam ?? (r.agentPublish ? agents.find((a) => a.id === r.agentPublish!.agentId)?.owner : undefined) ?? wfOwner(r.workflowId)));
 
   const versions: Record<string, Version[]> = {};
   /** Content of each saved version, so Restore brings back what that version actually was. */
@@ -137,9 +164,92 @@ export function createMockApi(): OpsApi {
   const snapGraph = (wid: string, version: number) => graphs[wid] && ((graphSnapshots[wid] ??= {})[version] = structuredClone(graphs[wid]));
   const versionsOf = (key: string, current: number, kind: 'workflow' | 'agent') => (versions[key] ??= versionsFor(key, current, kind));
   const runCache: Record<string, WorkflowRun[]> = {};
+  // Email cases hold their run for a person until the drafted actions are decided; regenerate when that set changes.
+  const pausedKey: Record<string, string> = {};
   const runsOf = (wid: string) => {
     const w = workflows.find((x) => x.id === wid);
-    return (runCache[wid] ??= runsFor(wid, graphs[wid], w?.version ?? 1, reviews.filter((r) => r.workflowId === wid && isOpen(r)).map((r) => r.id), w?.status === 'draft' ? 0 : 46));
+    const paused = cases.pausedRunIds(wid);
+    if (pausedKey[wid] !== paused.join()) delete runCache[wid];
+    pausedKey[wid] = paused.join();
+    const seeded = (runCache[wid] ??= runsFor(wid, graphs[wid], w?.version ?? 1, reviews.filter((r) => r.workflowId === wid && isOpen(r)).map((r) => r.id), w?.status === 'draft' ? 0 : 46, paused));
+    return startedRuns[wid]?.length ? [...startedRuns[wid], ...seeded] : seeded;
+  };
+  // Runs started by callers outside the workflow's trigger (an agent calling it as a tool), newest first. Kept apart
+  // from the seeded cache so regenerating seeded runs never drops them.
+  const startedRuns: Record<string, WorkflowRun[]> = {};
+  let gateSeq = 4100;
+  /** "8 h" → 480, "30 min" → 30; a policy SLA the mock cannot read gets a working day. */
+  const slaOf = (sla: string) => {
+    const m = sla.match(/(\d+(?:\.\d+)?)\s*(min|h|d)/);
+    return m ? Math.round(Number(m[1]) * (m[2] === 'min' ? 1 : m[2] === 'h' ? 60 : 1440)) : 480;
+  };
+  /**
+   * A started run that stops at a review node opens a review under the workflow's first gate policy, the same shape
+   * as the seeded paused-action reviews, so it reaches the Reviews queue with that policy's reviewers and SLA.
+   */
+  const gateReviewFor = (run: WorkflowRun, agentName: string): Review | null => {
+    const p = policies.find((x) => x.workflowId === run.workflowId);
+    const w = workflows.find((x) => x.id === run.workflowId);
+    if (!p || !w) return null;
+    return {
+      id: `REV-${++gateSeq}`,
+      title: `Continue ${w.name} for ${agentName}`,
+      customer: run.subject,
+      workflowId: w.id,
+      workflowName: w.name,
+      agentSlug: w.agentSlugs[0] ?? '',
+      kind: 'approval',
+      risk: modelRisk.tierOf(w.id, 'workflow'),
+      confidence: 0.82,
+      proposal: `Let ${run.id} continue. ${agentName} started it for: ${run.subject}`,
+      actionTool: F.ACTION_TOOL[w.id] ?? 'continue_run',
+      currency: 'CAD',
+      policy: { id: p.id, name: p.name, condition: p.condition, reviewers: p.reviewers, sla: p.sla, onTimeout: p.onTimeout, fourEyes: p.fourEyes },
+      slaMinutes: slaOf(p.sla),
+      approvals: [],
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      reasoning: [`${agentName} called ${w.name} as a tool`, `${run.id} reached the gate "${p.name}"`],
+      evidence: [],
+    };
+  };
+  const startRun = (wid: string, subject: string, trigger: string, pauses: boolean, agentName: string) => {
+    const w = workflows.find((x) => x.id === wid);
+    const list = (startedRuns[wid] ??= []);
+    const run = startedRun(wid, graphs[wid], w?.version ?? 1, list.length + 1, subject, trigger, pauses);
+    if (!run) return null;
+    const review = run.status === 'waiting_review' ? gateReviewFor(run, agentName) : null;
+    if (review) {
+      run.reviewId = review.id;
+      reviews.unshift(review);
+    }
+    list.unshift(run);
+    return { run, review };
+  };
+  /** Moves a started run on once its gate review is decided: approval finishes it, rejection or return stops it. */
+  const resumeStartedRun = (r: Review) => {
+    const run = (startedRuns[r.workflowId] ?? []).find((x) => x.reviewId === r.id);
+    if (!run || r.status === 'pending' || r.status === 'in_review') return;
+    const approved = r.status === 'approved';
+    run.steps = run.steps.map((st) => (st.status === 'waiting' ? { ...st, status: approved ? 'done' : 'failed', durationMs: 900, detail: `${approved ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Returned'} by ${r.assignee ?? me}${r.decisionReason ? `: ${r.decisionReason}` : ''}` } : st));
+    run.status = approved ? 'completed' : 'failed';
+    if (!approved) run.error = `The gate review ${r.id} was ${r.status}; the run stopped before acting.`;
+    run.durationMs = run.steps.reduce((x, y) => x + y.durationMs, 0);
+  };
+  /** Granted workflow tools the message is about, each started as a run with the agent as trigger. */
+  const callWorkflowTools = (a: { name: string; toolIds: string[] }, message: string) =>
+    tools
+      .filter((x) => x.workflow && a.toolIds.includes(x.id) && callsWorkflow(x.workflow.workflowId, message))
+      .flatMap((t) => {
+        const wf = t.workflow!;
+        const started = startRun(wf.workflowId, message.slice(0, 60), `Started by agent ${a.name}`, wf.approval !== 'runs_without_pause', a.name);
+        return started ? [{ tool: t, workflowName: workflows.find((w) => w.id === wf.workflowId)?.name ?? wf.workflowId, ...started }] : [];
+      });
+  /** Words of a workflow's name that, found in a message, make an agent call it; generic words are skipped. */
+  const callsWorkflow = (toolWid: string, message: string) => {
+    const name = workflows.find((x) => x.id === toolWid)?.name ?? '';
+    const words = name.toLowerCase().split(/[^a-z]+/).filter((x) => x.length >= 5 && !['review', 'workflow', 'account', 'business'].includes(x));
+    return words.some((x) => message.toLowerCase().includes(x));
   };
 
   // Seed pins: every agent step records the agent version it was published with. The wire workflow is one
@@ -148,7 +258,8 @@ export function createMockApi(): OpsApi {
     for (const n of g.nodes) {
       const a = agents.find((x) => x.slug === n.data.agentSlug);
       if (a && n.data.agentVersion == null) {
-        n.data.agentVersion = wid === 'wf_wire' ? a.version - 1 : a.version;
+        const pub = agentStore.publishedOf(a.id) ?? a.version;
+        n.data.agentVersion = wid === 'wf_wire' ? pub - 1 : pub;
         n.data.badge = `agent · ${a.slug} · v${n.data.agentVersion}`;
       }
     }
@@ -159,7 +270,8 @@ export function createMockApi(): OpsApi {
       const n = graphs[w.id]?.nodes.find((x) => x.data.agentSlug === a.slug);
       return n ? [{ workflowId: w.id, workflowName: w.name, pinnedVersion: (n.data.agentVersion as number) ?? a.version, status: w.status }] : [];
     });
-    return { ...a, usedIn, workflowIds: usedIn.map((u) => u.workflowId) };
+    const publishedVersion = agentStore.publishedOf(a.id);
+    return { ...a, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -176,6 +288,7 @@ export function createMockApi(): OpsApi {
       openReviews: reviews.filter((r) => r.workflowId === w.id && isOpen(r) && r.kind !== 'publish_request').length,
       deploymentCount: deployments.filter((d) => d.workflowId === w.id).length,
       pendingPublish: pending?.publish ? { reviewId: pending.id, toVersion: pending.publish.toVersion, requestedBy: pending.publish.requestedBy } : undefined,
+      wrapsAgentName: 'wrapsAgentId' in w && w.wrapsAgentId ? agents.find((a) => a.id === w.wrapsAgentId)?.name : undefined,
     };
   };
 
@@ -185,7 +298,9 @@ export function createMockApi(): OpsApi {
     if (!graph?.nodes?.length) throw new ApiError('The graph is empty; nothing was published.', 400);
     for (const n of graph.nodes) {
       const a = agents.find((x) => x.slug === n.data.agentSlug);
-      if (a) Object.assign(n.data, { agentVersion: a.version, badge: `agent · ${a.slug} · v${a.version}` });
+      // Workflows pin published agent versions only (spec 01 5.5.12); the request was refused if a newer draft existed.
+      const pin = a && (agentStore.publishedOf(a.id) ?? a.version);
+      if (a) Object.assign(n.data, { agentVersion: pin, badge: `agent · ${a.slug} · v${pin}` });
     }
     const list = versionsOf(wid, w.version, 'workflow');
     const before = graphs[wid];
@@ -219,7 +334,7 @@ export function createMockApi(): OpsApi {
     else if (!nodes.length) failure = 'The workflow has no steps.';
     return { passed: !failure, paused, toolsCalled, reply, failure };
   };
-  const validate = (wid: string, draft: WorkflowGraph, target: 'draft' | 'live'): ValidationRun => {
+  const validate = (wid: string, draft: WorkflowGraph, target: 'draft' | 'live', store = true): ValidationRun => {
     const cases = tests.filter((t) => t.workflowId === wid);
     const live = graphs[wid];
     const results: TestResult[] = cases.map((t) => {
@@ -238,7 +353,7 @@ export function createMockApi(): OpsApi {
       results,
       summary: { passed: results.filter((r) => r.draft.passed).length, total: results.length, regressions: results.filter((r) => r.regression).length, checksFailing },
     };
-    validations[wid] = run;
+    if (store) validations[wid] = run;
     return run;
   };
   const PUBLISH_POLICY = { id: 'gp_publish', name: 'Publish approval', condition: 'every publish', reviewers: 'Workflow publishers', sla: '1 business day', onTimeout: 'Request expires', fourEyes: false };
@@ -319,7 +434,10 @@ export function createMockApi(): OpsApi {
       ...d,
       email,
       workflowName: w?.name ?? d.workflowId,
+      agentName: w && 'wrapsAgentId' in w && w.wrapsAgentId ? agents.find((a) => a.id === w.wrapsAgentId)?.name : undefined,
       latestVersion: w?.version ?? d.version,
+      // MCP deployments follow the workflow's release pointer, so they always serve the newest published version.
+      version: d.channel === 'mcp' && w && w.status !== 'draft' ? w.version : d.version,
       api: d.api && { ...d.api, endpoint: `https://api.northfieldbank.com/ops/v1/run/${w ? w.id.replace('wf_', '') : d.workflowId}` },
     };
   };
@@ -332,7 +450,7 @@ export function createMockApi(): OpsApi {
       type: 'source',
       id: src.id,
       name: src.name,
-      href: `/sources/${src.id}`,
+      href: `/integrations/sources/${src.id}`,
       owner: src.owner,
       status: SOURCE_STATUS[src.status][0],
       tone: src.status === 'active' && src.lastRunStatus === 'failed' ? 'bad' : SOURCE_STATUS[src.status][1],
@@ -368,7 +486,7 @@ export function createMockApi(): OpsApi {
   const activity = (cid: string): ConnectionActivity[] =>
     [
       ...knowledge.sourcesUsing(cid).flatMap((src): ConnectionActivity[] =>
-        src.lastSyncAt ? [{ id: `${src.id}_last`, at: src.lastSyncAt, kind: 'sync', label: `Sync · ${src.name}`, detail: src.lastRunStatus === 'failed' ? 'Failed' : src.lastRunStatus === 'partial' ? 'Finished with failed items' : 'Finished', ok: src.lastRunStatus !== 'failed', href: `/sources/${src.id}?tab=history` }] : [],
+        src.lastSyncAt ? [{ id: `${src.id}_last`, at: src.lastSyncAt, kind: 'sync', label: `Sync · ${src.name}`, detail: src.lastRunStatus === 'failed' ? 'Failed' : src.lastRunStatus === 'partial' ? 'Finished with failed items' : 'Finished', ok: src.lastRunStatus !== 'failed', href: `/integrations/sources/${src.id}?tab=history` }] : [],
       ),
       ...toolModules.using(cid).flatMap((m) =>
         toolModules.recentCalls(m.id, 5).map((c): ConnectionActivity => ({ id: c.id, at: c.at, kind: 'call', label: c.target, detail: `${c.workflowName} · ${c.status === 'ok' ? 'OK' : c.status === 'awaiting_approval' ? 'Waiting for approval' : c.status === 'denied' ? 'Denied' : 'Failed'} · ${c.latencyMs} ms`, ok: c.status === 'ok' || c.status === 'awaiting_approval', href: `/logs/tool-calls?q=${encodeURIComponent(c.target)}` })),
@@ -394,15 +512,72 @@ export function createMockApi(): OpsApi {
   }
 
   const evals = createEvalsMock({ agents: () => agents.map(agentRow), toolName: (tid) => tools.find((t) => t.id === tid)?.name, toolAccess: (n) => tools.find((t) => t.name === n)?.access, collections: () => knowledge.kbNames(), me, files: files.links });
+  /** Attaching, detaching or moving a skill pin is an agent change, so it saves a new agent version. */
+  const bumpAgent = (aid: string, note: string) => {
+    const a = agentOr404(aid);
+    const list = versionsOf(aid, a.version, 'agent');
+    a.version += 1;
+    a.updatedAt = new Date().toISOString();
+    pushVersion(list, a.version, note, [note], me);
+    snapAgent(a);
+  };
+  const skills = createSkillsMock({ agents: () => agents.map(agentRow), tools: () => tools, kbNames: () => knowledge.kbNames(), reviews: () => reviews, bumpAgent, files: files.links, cases: cases.api, chat, teams: F.OWNERS, me });
   const modelRisk = createModelRiskMock({ agents: () => agents.map(agentRow), workflows: () => workflows.map(workflowRow), graph: (wid) => graphs[wid], lastValidation: (wid) => validations[wid], reviews: () => reviews, toolSystem: (tid) => tools.find((t) => t.id === tid)?.system, owners: F.OWNERS, me, evals });
+  const accessRank = ['read', 'write', 'money_movement'] as const;
+  const agentPublish = createAgentPublishMock({
+    store: agentStore,
+    agents: () => agents.map(agentRow),
+    versions: (aid) => newestFirst(versionsOf(aid, agentOr404(aid).version, 'agent')),
+    reviews: () => reviews,
+    evals,
+    workflowTier: (wid) => modelRisk.tierOf(wid, 'workflow'),
+    toolAccess: (aid) => tools.filter((t) => t.grantedAgentIds.includes(aid)).map((t) => t.access).sort((x, y) => accessRank.indexOf(y) - accessRank.indexOf(x))[0],
+    me,
+    onPublished: (aid, v) => wrappers?.onAgentPublished(aid, v),
+  });
+  agentPublish.seedReviews();
+  wrappers = createAgentWrappers({
+    agents: () => agents.map(agentRow),
+    workflows,
+    graphs,
+    deployments,
+    publishedOf: agentStore.publishedOf,
+    createPublishRequest: (wid, graph, note, by) => createPublishRequest(wid, graph, note, by, null),
+    gateOf: modelRisk.withGate,
+    publishGraph: (wid, graph, note, by) => void publishGraph(wid, graph, note, by),
+    tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'),
+    seedTier: modelRisk.seedTier,
+    toolAccess: (aid) => tools.filter((t) => t.grantedAgentIds.includes(aid)).map((t) => t.access).sort((x, y) => accessRank.indexOf(y) - accessRank.indexOf(x))[0],
+  });
+  const connect = createConnectMock({ workflows: () => workflows.map(workflowRow), deployments, tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'), tools, movesMoney: (wid) => agents.some((a) => workflows.find((w) => w.id === wid)?.agentSlugs.includes(a.slug) && tools.some((t) => t.access === 'money_movement' && a.toolIds.includes(t.id))), teams: F.OWNERS, me });
+  const assurance = createAssuranceMock({
+    agents: () => agents.map(agentRow),
+    workflows: () => workflows.map(workflowRow),
+    reviews: () => reviews,
+    tests: () => tests,
+    agentGate: agentPublish.withBody,
+    workflowRun: (wid) => validations[wid] ?? (graphs[wid] ? validate(wid, graphs[wid], 'live', false) : null),
+    evals,
+    modelRisk,
+    skills: skills.suiteView,
+    files: files.links,
+    people: F.REVIEWERS,
+    me,
+  });
+  const templates = createTemplatesMock(templateDeps({ agents, tools, toolInTeam, versions, snapAgent, me, kbNames: () => knowledge.kbNames(), addCase: (aid, c) => evals.api.createCase(aid, c), reviews: () => reviews, skills: { ...skills.newAgentPins, pinnedOn: skills.pinnedOn, name: skills.skillName } }));
+  const prompts = createPromptsMock({ toolNames: () => tools.map((t) => t.name) });
 
+  const signIn = createSignInPolicyMock({ me });
+  // Without a mock session (OIDC or Firebase adapters) the account is the demo user's.
+  const account = createAccountMock({ person: () => currentMockUser() ?? { id: 'usr_james', email: 'j.richardson@northfieldbank.com', name: me, method: 'password', mfaEnrolled: true }, setPassword: setMockPassword, mfaRequired: () => signIn.policy().mfaRequired, teamOf: (email) => (email.startsWith('maya.') ? { team: 'Card Services', role: 'Approver' } : email.startsWith('new.') ? { team: 'Lending Ops', role: 'Builder' } : { team: 'Platform', role: 'Admin' }) });
+  const invites = createInvitesMock({ isSsoEmail: signIn.isSsoEmail, ssoProviderLabel: () => ({ entra: 'Microsoft Entra ID', okta: 'Okta', oidc: 'your identity provider', saml: 'your identity provider' })[signIn.policy().sso.provider], mfaRequired: () => signIn.policy().mfaRequired, onAccepted: (a) => registerMockUser({ email: a.email, name: a.name, teamIds: [a.teamId], role: a.role === 'Admin' ? 'admin' : a.role === 'Viewer' ? 'viewer' : 'member', method: a.method, password: a.password }) });
   const self: OpsApi = {
     overview: {
       get: () =>
         respond((m) => {
           const empty = m === 'empty';
           const open = empty ? [] : teamReviews().filter(isOpen).sort((a, b) => a.slaMinutes - b.slaMinutes);
-          const live = teamAgents().filter((a) => a.status === 'live');
+          const live = teamAgents().filter((a) => !a.paused && agentStore.publishedOf(a.id) !== null);
           const wfs = teamWorkflows();
           const tasks = live.reduce((s, a) => s + a.tasks24h, 0);
           const auto = live.reduce((s, a) => s + a.tasks24h * a.autoResolvedRate, 0);
@@ -559,16 +734,17 @@ export function createMockApi(): OpsApi {
     },
 
     agents: {
-      list: (p) => respond((m) => list(teamAgents().map(agentRow), p, { text: (a) => `${a.name} ${a.role} ${a.slug}`, value: field, facetKeys: ['status', 'owner'] }, m)),
+      list: (p) => respond((m) => list(teamAgents().map(agentRow), p, { text: (a) => `${a.name} ${a.role} ${a.slug}`, value: field, facetKeys: ['availability', 'owner'] }, m)),
       get: (aid) => respond((m) => (m === 'empty' ? notFound('Agent') : (guardTeam(agentOr404(aid).owner, 'agent'), agentById(aid)))),
       create: (input) =>
         respond(() => {
           const slug = input.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           if (agents.some((a) => a.slug === slug)) throw new ApiError(`An agent with the handle ${slug} already exists.`, 409);
-          const a = { id: id('ag'), slug, instructions: '', ...input, toolIds: [], collections: [], status: 'draft' as const, version: 1, updatedAt: new Date().toISOString(), tasks24h: 0, autoResolvedRate: 0, workflowIds: [], guardrails: { redactPii: true, maxToolCallsPerTurn: 6, whenUnsure: 'handoff' as const, blockedTopics: [] } };
+          const a = { id: id('ag'), slug, instructions: '', ...input, toolIds: [], collections: [], paused: false, version: 1, updatedAt: new Date().toISOString(), tasks24h: 0, autoResolvedRate: 0, workflowIds: [], guardrails: { redactPii: true, maxToolCallsPerTurn: 6, whenUnsure: 'handoff' as const, blockedTopics: [] } };
           agents.unshift(a);
           versions[a.id] = [{ version: 1, publishedAt: new Date().toISOString(), publishedBy: me, note: 'Created', changes: ['Created'], current: true }];
           snapAgent(a);
+          auditSink.log({ action: 'created', target: { type: 'agent', name: a.name, href: `/agents/${a.id}` }, summary: `Created ${a.name} as a draft`, owner: a.owner });
           return agentRow(a);
         }),
       update: (aid, patch) =>
@@ -590,7 +766,8 @@ export function createMockApi(): OpsApi {
           agents.splice(agents.findIndex((a) => a.id === aid), 1);
           for (const t of tools) t.grantedAgentIds = t.grantedAgentIds.filter((x) => x !== aid);
         }),
-      versions: (aid) => respond(() => newestFirst(versionsOf(aid, agentOr404(aid).version, 'agent'))),
+      versions: (aid) => respond(() => agentPublish.versionsView(aid)),
+      requestPublish: (aid, version, note) => respond(() => agentPublish.requestPublish(aid, version, note)),
       restore: (aid, version) =>
         respond(() => {
           const a = agentOr404(aid);
@@ -606,27 +783,40 @@ export function createMockApi(): OpsApi {
           snapAgent(a);
           return agentRow(a);
         }),
-      setStatus: (aid, status) =>
+      setPaused: (aid, paused) =>
         respond(() => {
           const a = agentOr404(aid);
-          if (status === 'live' && !a.toolIds.length && !a.collections.length) throw new ApiError('Grant at least one tool or knowledge collection before publishing.', 422);
-          a.status = status;
+          if (paused && agentStore.publishedOf(aid) === null) throw new ApiError(`${a.name} has never been published, so no run uses it yet.`, 409);
+          a.paused = paused;
           a.updatedAt = new Date().toISOString();
+          // Console chat follows the switch: the agent's chat deployment pauses and resumes with it.
+          wrappers?.syncChat(aid);
           return agentRow(a);
         }),
+      // The catalogue an agent grants from: tools the module owner exposes, named the way the runtime names them.
+      grantableTools: () =>
+        respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, description: t.description, access: t.access, approval: t.requiresReview ? 'Review before it runs' : null }))),
+      modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       test: (aid, message, runAsId) =>
         respond(() => {
           const a = agentOr404(aid);
-          return scopeTurn(testTurnFor(a, message, tools.filter((t) => a.toolIds.includes(t.id)).map((t) => t.name)), message, runAsId);
+          const turn = scopeTurn(testTurnFor(a, message, tools.filter((t) => a.toolIds.includes(t.id) && !t.workflow).map((t) => t.name)), message, runAsId);
+          // A granted workflow tool whose workflow the message is about starts a real run of it, with the agent as trigger.
+          for (const { tool: t, run, review, workflowName } of callWorkflowTools(a, message)) {
+            turn.toolCalls.push({ name: t.name, input: JSON.stringify({ subject: run.subject }), output: `Started ${run.id}${review ? `; paused for review ${review.id}` : ''}` });
+            (turn.startedRuns ??= []).push({ runId: run.id, workflowId: run.workflowId, workflowName, status: run.status });
+          }
+          return turn;
         }),
       bulkUpdate: (ids, patch) =>
         respond(() =>
           bulk(ids, (aid) => {
             const a = agents.find((x) => x.id === aid);
             if (!a) return 'Not found';
-            if (patch.status && a.status === 'draft') return 'Not in use yet';
-            if (patch.status && a.status === patch.status) return `Already ${patch.status}`;
+            if (patch.paused !== undefined && agentStore.publishedOf(aid) === null) return 'Not published';
+            if (patch.paused !== undefined && a.paused === patch.paused) return patch.paused ? 'Already paused' : 'Not paused';
             Object.assign(a, patch, { updatedAt: new Date().toISOString() });
+            wrappers?.syncChat(aid);
           }),
         ),
       bulkRemove: (ids) =>
@@ -665,6 +855,44 @@ export function createMockApi(): OpsApi {
           return validate(wid, graph, target);
         }),
       lastValidation: (wid) => respond(() => validations[wid] ?? null),
+      routeFields: () =>
+        respond(() => ({
+          fields: [
+            { name: 'email.sender', type: 'text' as const },
+            { name: 'email.subject', type: 'text' as const },
+            { name: 'email.body', type: 'text' as const },
+            { name: 'decision.decision', type: 'text' as const },
+            { name: 'category', type: 'text' as const },
+            { name: 'grade', type: 'number' as const },
+          ],
+          ops: [
+            { op: 'eq', label: 'is', types: ['text' as const, 'number' as const, 'boolean' as const] },
+            { op: 'ne', label: 'is not', types: ['text' as const, 'number' as const, 'boolean' as const] },
+            { op: 'in', label: 'is one of', types: ['text' as const, 'number' as const], list: true },
+            { op: 'lt', label: 'is less than', types: ['number' as const] },
+            { op: 'le', label: 'is at most', types: ['number' as const] },
+            { op: 'gt', label: 'is more than', types: ['number' as const] },
+            { op: 'ge', label: 'is at least', types: ['number' as const] },
+          ],
+        })),
+      test: (wid, input) =>
+        respond(() => {
+          if (!workflows.some((x) => x.id === wid)) notFound('Workflow');
+          const g = input.graph ?? drafts[wid]?.graph ?? graphs[wid];
+          if (!g) notFound('Workflow graph');
+          // Follows the approved or first route from the trigger; a review pause counts as approved, as the service does.
+          const visited: string[] = [];
+          let pausesApproved = 0;
+          let cur = g.nodes.find((n) => n.type === 'trigger');
+          while (cur && !visited.includes(cur.id)) {
+            visited.push(cur.id);
+            if (cur.type === 'review') pausesApproved++;
+            const id = cur.id;
+            const next = g.edges.find((e) => e.source === id && (e.sourceHandle == null || ['mid', 'Gate', 'approved'].includes(e.sourceHandle))) ?? g.edges.find((e) => e.source === id);
+            cur = next ? g.nodes.find((n) => n.id === next.target) : undefined;
+          }
+          return { status: 'completed' as const, pausesApproved, visited, output: null, endStatus: null };
+        }),
       saveDraft: (wid, graph) =>
         respond(() => {
           if (!workflows.some((x) => x.id === wid)) notFound('Workflow');
@@ -680,6 +908,8 @@ export function createMockApi(): OpsApi {
           if (reviews.some((r) => r.kind === 'publish_request' && r.workflowId === wid && isOpen(r)))
             throw new ApiError('A publish request for this workflow is already waiting. Decide or return it first.', 409);
           if (!input.graph?.nodes?.length) throw new ApiError('The graph is empty; there is nothing to publish.', 400);
+          const unpublished = agentPublish.unpublishedPins(input.graph);
+          if (unpublished.length) throw new ApiError(`Publish ${unpublished.length === 1 ? 'this agent version' : 'these agent versions'} first: ${unpublished.join(', ')}. A workflow can pin published agent versions only.`, 422);
           const v = input.validationRunId && validations[wid]?.id === input.validationRunId ? validations[wid] : null;
           if (v) v.summary.checksFailing = input.checksFailing;
           drafts[wid] = { graph: structuredClone(input.graph), savedAt: new Date().toISOString(), savedBy: me };
@@ -785,11 +1015,15 @@ export function createMockApi(): OpsApi {
             Object.assign(r, { status: input.decision, decidedAt: new Date().toISOString(), decisionReason: input.reason, assignee: me, approvals: input.decision === 'approved' ? [me] : [] });
             return r;
           }
+          // Money approvals need a step-up from the last 5 minutes, in every channel; the audit records it.
+          if (input.decision === 'approved' && movesMoney(r)) requireStepUp(input.stepUpToken);
+          if (input.decision === 'approved' && movesMoney(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}); step-up verified`, owner: wfOwner(r.workflowId) });
           if (input.decision === 'approved' && r.policy.fourEyes && !r.approvals.length) {
             Object.assign(r, { approvals: [me], assignee: me, status: 'in_review' });
             return r;
           }
           Object.assign(r, { status: input.decision, decidedAt: new Date().toISOString(), decisionReason: input.reason, assignee: r.assignee ?? me, approvals: input.decision === 'approved' ? [...r.approvals, me] : r.approvals });
+          resumeStartedRun(r);
           return r;
         }),
       assign: (ids, assignee = me) =>
@@ -801,9 +1035,12 @@ export function createMockApi(): OpsApi {
             Object.assign(r, { assignee, status: 'in_review' });
           }),
         ),
-      bulkDecide: (ids, decision, reason) =>
+      bulkDecide: (ids, decision, reason, opts) =>
         respond(() => {
           if (decision !== 'approved' && !reason?.trim()) throw new ApiError('A reason is required to reject or return.', 400);
+          // One step-up covers the batch; without it nothing in a batch that moves money is decided.
+          const money = decision === 'approved' && ids.some((rid) => { const r = reviews.find((x) => x.id === rid); return !!r && isOpen(r) && movesMoney(r); });
+          if (money) requireStepUp(opts?.stepUpToken);
           return bulk(ids, (rid) => {
             const r = reviews.find((x) => x.id === rid);
             if (!r) return 'Not found';
@@ -812,6 +1049,8 @@ export function createMockApi(): OpsApi {
             if (decision === 'approved' && (r.risk === 'critical' || r.risk === 'high')) return `${r.risk} risk needs an individual decision`;
             if (decision === 'approved' && r.policy.fourEyes) return 'Needs two approvers';
             Object.assign(r, { status: decision, decidedAt: new Date().toISOString(), decisionReason: reason, assignee: r.assignee ?? me });
+            if (decision === 'approved' && movesMoney(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}) in bulk; step-up verified`, owner: wfOwner(r.workflowId) });
+            resumeStartedRun(r);
           });
         }),
     },
@@ -856,17 +1095,28 @@ export function createMockApi(): OpsApi {
 
     knowledge: knowledge.api,
     knowledgeChanges: createKnowledgeChangesMock({ me, workflowName: wfName, workflowOwner: wfOwner }),
-    search: createSearchMock({ workflows: teamWorkflows, agents: teamAgents, cases: cases.api, knowledge: knowledge.api, chat }),
+    search: createSearchMock({ workflows: teamWorkflows, agents: teamAgents, skills: skills.search, cases: cases.api, knowledge: knowledge.api, chat }),
     notifications: createNotificationsMock({ me, reviews: () => reviews }),
     runAs: runAsApi,
     cases: cases.api,
     chat,
     evals: evals.api,
     modelRisk: modelRisk.api,
+    assurance: assurance.api,
+    connect: connect.api,
+    wiki: createWikiMock({ me, kbNames: () => knowledge.kbNames() }).api,
     ...createGovernanceMock(),
+    signInPolicy: signIn.api,
+    invites: invites.api,
+    account: account.api,
     toolModules: toolModules.api,
+    egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
+    secrets: createSecretsMock({ me: F.CURRENT_USER.name }),
     integrations: integrationsApi,
     files: files.api,
+    skills: skills.api,
+    templates: templates.api,
+    prompts: prompts.api,
 
     tools: {
       list: (p) =>
@@ -941,7 +1191,9 @@ export function createMockApi(): OpsApi {
         ),
     },
   };
-  // Evals start a run on every agent save; model risk adds the eval gate to publish requests and decides validations.
-  Object.assign(self, { agents: evals.wrapAgents(self.agents), reviews: modelRisk.wrapReviews(self.reviews) });
+  // Evals start a run on every agent save; model risk adds the eval gate to publish requests and decides validations;
+  // skills decide skill publish requests and add the skills each test turn loads; templates decide template submissions;
+  // assurance names the suite each review can add a test case to and adds the draft case on reject or return.
+  Object.assign(self, { agents: skills.wrapAgents(evals.wrapAgents(self.agents)), reviews: assurance.wrapReviews(templates.wrapReviews(skills.wrapReviews(agentPublish.wrapReviews(modelRisk.wrapReviews(self.reviews))))) });
   return self;
 }

@@ -106,7 +106,7 @@ export function ApprovalsTab({
     <div className="flex flex-col gap-4" data-testid="approvals-tab">
       <ConfigNote>Every drafted action waits on a case until it is approved here, one action at a time. Money movement needs two people.</ConfigNote>
       {ungoverned.length > 0 && (
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="status">
+        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-text" role="status">
           No rule for {ungoverned.map((a) => `“${actionLabel(a)}”`).join(', ')}. {ungoverned.length === 1 ? 'It runs' : 'They run'} as soon as the agent drafts {ungoverned.length === 1 ? 'it' : 'them'}.
         </p>
       )}

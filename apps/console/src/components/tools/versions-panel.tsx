@@ -102,7 +102,7 @@ export function VersionsPanel({ versions }: { versions: ModuleVersion[] }) {
                 <TableCell className="text-sm">{v.pinnedBy.length ? v.pinnedBy.map((w) => w.name).join(', ') : <span className="text-xs text-muted-foreground">None</span>}</TableCell>
                 <TableCell className="text-xs whitespace-nowrap">
                   {v.reachability.map((r) => (
-                    <div key={r.environment} className={r.ok ? 'text-muted-foreground' : 'font-medium text-red-600 dark:text-red-400'}>
+                    <div key={r.environment} className={r.ok ? 'text-muted-foreground' : 'font-medium text-destructive'}>
                       {ENV_LABEL[r.environment]} {r.ok ? 'reachable' : 'unreachable'}
                     </div>
                   ))}

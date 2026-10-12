@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Archive, ArchiveRestore, Bot, Link2, MessageSquareDashed, MessagesSquare, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { StepUpCancelled, useStepUpGate } from '@/components/auth/reauth-dialog';
 import { ChatLayout } from '@/components/chat/chat-layout';
 import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
 import { AssistantMessage, UserMessage } from '@/components/chat/message-view';
@@ -31,6 +32,7 @@ import {
   useDeleteThread,
   useLiveTurn,
   useMessageFeedback,
+  abortAllReplies,
   useSendMessage,
   useStreamingThreadIds,
   useUpdateThread,
@@ -80,14 +82,31 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const agents = useChatAgents();
   const kbList = useKnowledgeBases(ALL);
   const kbs: KbOption[] = React.useMemo(() => (kbList.data?.data ?? []).map((k) => ({ id: k.id, name: k.name, color: k.color })), [kbList.data]);
+  // An agent served by the chat service names the knowledge bases it may search; those win over the Knowledge area's
+  // list, which may come from another backend (e.g. the Runtime for chat, the mock for everything else).
+  const kbsFor = React.useCallback((agentId?: string): KbOption[] => {
+    const own = agents.data?.find((a) => a.id === agentId)?.kbs;
+    return own ? own.map((k) => ({ id: k.id, name: k.name, color: kbs.find((x) => x.id === k.id)?.color ?? 'teal' })) : kbs;
+  }, [agents.data, kbs]);
   const streamingIds = useStreamingThreadIds();
   const live = useLiveTurn(threadId);
   const chat = useSendMessage();
+  // Replies keep streaming while the person moves between conversations, and stop when they leave chat altogether.
+  React.useEffect(
+    () => () => {
+      setTimeout(() => {
+        if (!window.location.pathname.startsWith('/chat')) abortAllReplies();
+      }, 0);
+    },
+    [],
+  );
   const create = useCreateThread();
   const update = useUpdateThread();
   const remove = useDeleteThread();
   const feedback = useMessageFeedback();
   const widgetAction = useWidgetAction();
+  // Approving a money movement from a chat widget needs the same step-up as in Reviews; the API enforces it.
+  const stepUp = useStepUpGate();
   const [deleting, setDeleting] = React.useState<Pick<ChatThreadRow, 'id' | 'title'> | null>(null);
   const deletingShown = useSticky(deleting);
   const [docId, setDocId] = React.useState<string | null>(null);
@@ -136,13 +155,14 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
 
   return (
     <ChatLayout rail={railNode} railOpen={railOpen} onRailOpenChange={setRailOpen}>
+      {stepUp.dialog}
       {threadId ? (
         <ThreadView
           threadId={threadId}
           query={thread}
           live={live}
           me={me}
-          kbs={kbs}
+          kbs={kbsFor(thread.data?.agentId)}
           agent={agents.data?.find((a) => a.id === thread.data?.agentId)}
           onOpenRail={() => setRailOpen(true)}
           editingTitle={editingTitle}
@@ -166,7 +186,9 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           }
           onWidgetAction={async (messageId, widgetId, action) => {
             try {
-              const w = await widgetAction.mutateAsync({ threadId, messageId, widgetId, action });
+              const target = thread.data?.messages.find((m) => m.id === messageId)?.widgets?.find((x) => x.id === widgetId);
+              const money = action.type === 'approve' && target?.kind === 'approval' && !!target.movesMoney;
+              const w = await stepUp.withStepUp('Approving this action', (stepUpToken) => widgetAction.mutateAsync({ threadId, messageId, widgetId, action: action.type === 'approve' ? { ...action, stepUpToken } : action }), { upfront: money });
               if (w.kind === 'approval')
                 toast.success(
                   w.state === 'approved' ? `Approved ${w.reviewId}` : w.state === 'awaiting_second' ? `Your approval is recorded on ${w.reviewId}` : `Rejected ${w.reviewId}`,
@@ -174,6 +196,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
                 );
               else if (w.kind === 'form' && w.result) toast.success(w.result);
             } catch (e) {
+              if (e instanceof StepUpCancelled) return;
               toast.error(action.type === 'submit' ? 'Couldn’t submit' : `Couldn’t ${action.type}`, { description: (e as Error).message });
             }
           }}
@@ -181,7 +204,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
       ) : (
         <NewChat
           agents={agents}
-          kbs={kbs}
+          kbsFor={kbsFor}
           initialAgentId={searchParams.get('agent') ?? undefined}
           onOpenRail={() => setRailOpen(true)}
           creating={create.isPending}
@@ -235,14 +258,15 @@ function RailButton({ onClick }: { onClick: () => void }) {
 
 function NewChat({
   agents,
-  kbs,
+  kbsFor,
   initialAgentId,
   onOpenRail,
   creating,
   onStart,
 }: {
   agents: ReturnType<typeof useChatAgents>;
-  kbs: KbOption[];
+  /** The knowledge bases to offer for an agent: its own when the chat service names them, else the Knowledge list. */
+  kbsFor: (agentId?: string) => KbOption[];
   initialAgentId?: string;
   onOpenRail: () => void;
   creating: boolean;
@@ -253,6 +277,7 @@ function NewChat({
   const agent: ChatAgent | undefined = list.find((a) => a.id === agentId) ?? list[0];
   const [kbIds, setKbIds] = React.useState<string[] | null>(null);
   const chosenKbs = kbIds ?? agent?.defaultKbIds ?? [];
+  const kbs = kbsFor(agent?.id);
 
   return (
     <>

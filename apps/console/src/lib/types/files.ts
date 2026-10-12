@@ -5,7 +5,7 @@ import type { AuditEntry } from './governance';
  * never raw bytes. Bytes travel browser → object storage on a short-lived presigned URL, so the control plane
  * holds metadata only (spec 10).
  */
-export type FilePurpose = 'knowledge_source' | 'chat_attachment' | 'case_attachment' | 'test_import' | 'evidence_bundle' | 'export' | 'tool_spec' | 'avatar';
+export type FilePurpose = 'knowledge_source' | 'chat_attachment' | 'case_attachment' | 'test_import' | 'evidence_bundle' | 'export' | 'tool_spec' | 'avatar' | 'skill_resource' | 'idp_metadata';
 export type ScanStatus = 'pending' | 'clean' | 'infected' | 'failed';
 export type FileSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
 export type StorageBackend = 's3' | 'azure_blob';
@@ -25,7 +25,7 @@ export interface StorageLocation {
   locked: boolean;
 }
 
-export type FileReferenceType = 'source' | 'case' | 'chat' | 'eval_set' | 'test_set' | 'evidence' | 'export' | 'tool_module';
+export type FileReferenceType = 'source' | 'case' | 'chat' | 'eval_set' | 'test_set' | 'evidence' | 'export' | 'tool_module' | 'skill';
 
 /** Something that uses the file. Removing a referenced file is refused while any reference exists. */
 export interface FileReference {

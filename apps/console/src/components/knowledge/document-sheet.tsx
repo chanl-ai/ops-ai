@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 
 import { ERROR_CLASS_LABEL, FreshnessBadge, ItemStatusBadge, MimeIcon, SensitivityBadge } from './knowledge-meta';
 
-const VERSION_TONE = { current: 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-300', superseded: 'text-muted-foreground', scheduled: 'border-blue-200 text-blue-700 dark:border-blue-900 dark:text-blue-300' } as const;
+const VERSION_TONE = { current: 'border-success/40 text-success-text', superseded: 'text-muted-foreground', scheduled: 'border-blue-200 text-blue-700 dark:border-blue-900 dark:text-blue-300' } as const;
 const VERSION_LABEL = { current: 'In force', superseded: 'Superseded', scheduled: 'Scheduled' } as const;
 
 /** One document or source item: its content, chunks, governance metadata and revision history. */
@@ -91,7 +91,7 @@ export function DocumentSheet({
               <FreshnessBadge reviewBy={item.reviewBy} />
               {item.verified && (
                 <Badge variant="outline" className="gap-1 font-normal">
-                  <BadgeCheck className="size-3 text-emerald-600" /> Verified
+                  <BadgeCheck className="size-3 text-success-text" /> Verified
                 </Badge>
               )}
               <Badge variant="outline" className="font-mono text-[11px] font-normal">
@@ -426,10 +426,10 @@ export function DocumentSheet({
         }
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <pre className="overflow-auto rounded-md border bg-red-50 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap dark:bg-red-950/30">
+          <pre className="overflow-auto rounded-md border bg-destructive/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
             {'- Top-up is 85% of base salary for 16 weeks.\n- Employees must have 6 months of service.\n  Requests go through the People portal.'}
           </pre>
-          <pre className="overflow-auto rounded-md border bg-emerald-50 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap dark:bg-emerald-950/30">
+          <pre className="overflow-auto rounded-md border bg-success/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
             {'+ Top-up is 90% of base salary for 18 weeks (birth parent) and 8 weeks (other parent).\n+ Employees must have 12 months of continuous service.\n  Requests go through the People portal.'}
           </pre>
         </div>

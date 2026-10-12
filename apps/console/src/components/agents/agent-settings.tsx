@@ -8,7 +8,7 @@ import { CHANNEL_ICON } from '@/components/agents/agent-card';
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
-import { LiveBadge } from '@/components/status-badges';
+import { AgentVersionBadge, LiveBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Lookups } from '@/lib/api';
 import { relativeTime } from '@/lib/format';
-import type { Agent, AgentGuardrails, Channel, Tool, Version } from '@/lib/types/domain';
+import type { Agent, AgentGuardrails, AgentVersion, Channel, GrantableTool, ModelAlias } from '@/lib/types/domain';
+
+import { modelHint, ModelSelect } from './model-select';
 
 /** Everything one save of the agent page can change. */
 export interface AgentDraft {
@@ -68,7 +70,8 @@ const CHANNEL_LABEL: Record<Channel, string> = { voice: 'Voice', chat: 'Chat', e
 
 type Set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => void;
 
-export function IdentitySection({ draft, set, lookups, errors }: { draft: AgentDraft; set: Set; lookups?: Lookups; errors: Partial<Record<'name' | 'role', string>> }) {
+/** `models` are the aliases publish accepts; an agent saved on any other alias still shows it, marked, so it can be changed. */
+export function IdentitySection({ draft, set, lookups, models, errors }: { draft: AgentDraft; set: Set; lookups?: Lookups; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>> }) {
   return (
     <SettingsSection title="Identity" description="Reviewers see the name and job on every run this agent pauses.">
       <div className="grid gap-4 md:grid-cols-2">
@@ -92,19 +95,8 @@ export function IdentitySection({ draft, set, lookups, errors }: { draft: AgentD
         <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
           <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
         </FormField>
-        <FormField id="ag-model" label="Model">
-          <Select value={draft.model} onValueChange={(v) => set('model', v)}>
-            <SelectTrigger id="ag-model" className="w-full bg-card font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {lookups?.models.map((m) => (
-                <SelectItem key={m} value={m} className="font-mono text-xs">
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <FormField id="ag-model" label="Model" hint={modelHint(models, draft.model)}>
+          <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={models} className="bg-card" />
         </FormField>
         <FormField id="ag-channels" label="Can talk on" hint="Where the agent is reachable is set by the deployments of the workflows that use it.">
           <ToggleGroup id="ag-channels" type="multiple" variant="outline" value={draft.channels} onValueChange={(v) => v.length && set('channels', v as Channel[])} className="w-full bg-card">
@@ -123,10 +115,13 @@ export function IdentitySection({ draft, set, lookups, errors }: { draft: AgentD
   );
 }
 
-export function InstructionsSection({ draft, set }: { draft: AgentDraft; set: Set }) {
+/** `toolbar` holds the prompt builder and "Attach always-on skill"; `footer` lists the always-on skills that add to every turn. */
+export function InstructionsSection({ draft, set, toolbar, footer, textareaRef }: { draft: AgentDraft; set: Set; toolbar?: React.ReactNode; footer?: React.ReactNode; textareaRef?: React.Ref<HTMLTextAreaElement> }) {
   return (
     <SettingsSection title="Instructions" description="What the agent must always and never do.">
+      {toolbar && <div className="mb-2 flex flex-wrap justify-end gap-2">{toolbar}</div>}
       <Textarea
+        ref={textareaRef}
         value={draft.instructions}
         onChange={(e) => set('instructions', e.target.value)}
         className="min-h-56 bg-card font-mono text-[13px] leading-relaxed"
@@ -134,11 +129,12 @@ export function InstructionsSection({ draft, set }: { draft: AgentDraft; set: Se
         aria-label="Instructions"
       />
       <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">{draft.instructions.length.toLocaleString()} characters</p>
+      {footer && <div className="mt-2">{footer}</div>}
     </SettingsSection>
   );
 }
 
-export function ToolsSection({ draft, set, tools, onGrant }: { draft: AgentDraft; set: Set; tools: Tool[]; onGrant: () => void }) {
+export function ToolsSection({ draft, set, tools, onGrant }: { draft: AgentDraft; set: Set; tools: GrantableTool[]; onGrant: () => void }) {
   const granted = tools.filter((t) => draft.toolIds.includes(t.id));
   return (
     <SettingsSection title={`Tools · ${draft.toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
@@ -149,10 +145,10 @@ export function ToolsSection({ draft, set, tools, onGrant }: { draft: AgentDraft
           <ul className="flex flex-wrap gap-2">
             {granted.map((t) => (
               <li key={t.id} className="flex items-center gap-1.5 rounded-md border bg-card py-1 pr-1 pl-2.5 text-sm">
-                {t.module && <span className="text-xs text-muted-foreground">{t.module} ·</span>}
+                <span className="text-xs text-muted-foreground">{t.server} ·</span>
                 <code className="font-mono text-xs">{t.name}</code>
-                {t.access === 'money_movement' && <span className="text-[11px] text-red-600 dark:text-red-400">moves money · four eyes</span>}
-                {t.requiresReview && <UserCheck className="size-3.5 text-amber-600" aria-label="Pauses for review" />}
+                {t.access === 'money_movement' && <span className="text-[11px] text-destructive">moves money · four eyes</span>}
+                {t.approval && <UserCheck className="size-3.5 text-warning-text" aria-label={t.approval} />}
                 <Button variant="ghost" size="icon" className="size-6" aria-label={`Remove ${t.name}`} onClick={() => set('toolIds', draft.toolIds.filter((x) => x !== t.id))}>
                   <X className="size-3.5" />
                 </Button>
@@ -322,7 +318,7 @@ export function UsedInCard({ agent, onCreateChat, creating }: { agent: Agent; on
           </ul>
         )}
         {behind.length > 0 && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300">
+          <p className="rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning-text">
             v{agent.version} reaches production when {behind.length === 1 ? behind[0].workflowName : `${behind.length} workflows`} {behind.length === 1 ? 'is' : 'are'} republished.
           </p>
         )}
@@ -331,7 +327,7 @@ export function UsedInCard({ agent, onCreateChat, creating }: { agent: Agent; on
   );
 }
 
-export function HistoryCard({ versions, loading, onOpen }: { versions?: Version[]; loading: boolean; onOpen: () => void }) {
+export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVersion[]; loading: boolean; onOpen: () => void }) {
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
@@ -351,8 +347,11 @@ export function HistoryCard({ versions, loading, onOpen }: { versions?: Version[
               <li key={v.version} className="flex gap-2">
                 <span className="font-mono text-xs leading-5 font-medium">v{v.version}</span>
                 <span className="min-w-0">
-                  <span className="block truncate">{v.note}</span>
-                  <span className="text-xs text-muted-foreground">{relativeTime(v.publishedAt)}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate">{v.note}</span>
+                    <AgentVersionBadge state={v.state} />
+                  </span>
+                  <span className="text-xs text-muted-foreground">{relativeTime(v.savedAt)}</span>
                   {v.evalSummary && <EvalSummaryLine summary={v.evalSummary} className="flex" />}
                 </span>
               </li>

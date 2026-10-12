@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, Braces, Code2, Globe, Plug, Plus } from 'lucide-react';
+import { AlertTriangle, Braces, Globe, Plug, Plus } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FileUpload, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
@@ -17,21 +17,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { ConnectionRef } from '@/lib/types/integrations';
 import { plural } from '@/lib/format';
 import type { ToolAccess } from '@/lib/types/domain';
-import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ModuleInput, ModuleSource, ModuleType } from '@/lib/types/tool-modules';
+import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource, ModuleType } from '@/lib/types/tool-modules';
 import { cn } from '@/lib/utils';
 
 import { HttpOperationBuilder, inputsOf } from './http-operation-builder';
 import { ConnectionChip, IntegrationStatusBadge, SystemMark } from '@/components/integrations/integration-meta';
 import { OperationPicker } from './operation-picker';
 
-const STEPS = ['Source', 'Operations', 'Review'] as const;
-type Kind = 'mcp' | 'openapi' | 'http' | 'code';
+const STEPS = ['Source', 'Operations'] as const;
+type Kind = 'mcp' | 'openapi' | 'http';
 
 const KINDS: { kind: Kind; label: string; hint: string; icon: typeof Plug; disabled?: string }[] = [
   { kind: 'mcp', label: 'MCP server', hint: 'Connect a remote server; choose which of its tools to expose', icon: Plug },
   { kind: 'openapi', label: 'OpenAPI spec', hint: 'Import a spec by URL or file; pick the operations', icon: Braces },
   { kind: 'http', label: 'HTTP operation', hint: 'Build one request: method, URL, headers, body', icon: Globe },
-  { kind: 'code', label: 'Code', hint: 'Functions run in a sandbox', icon: Code2, disabled: 'Needs the code sandbox, planned after the first workflow ships' },
 ];
 
 const EMPTY_HTTP: HttpOperationInput = { name: '', description: '', access: 'read', method: 'GET', url: '', headers: [{ key: 'Accept', value: 'application/json' }], body: '' };
@@ -51,8 +50,9 @@ function httpsProblem(raw: string) {
 const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /**
- * Add a module from an MCP server, an OpenAPI spec or one HTTP operation, calling through an existing connection
- * from Integrations (or one connected from here). Saves a draft and opens its page.
+ * Import operations from an MCP server, an OpenAPI spec or one HTTP request. `create` saves a new draft module named
+ * from what was read and opens its page; `append` adds the chosen operations to an existing module and offers MCP
+ * and OpenAPI only, through the module's own connection.
  */
 export function AddModuleDialog({
   open,
@@ -65,9 +65,19 @@ export function AddModuleDialog({
   discovering,
   onCreate,
   creating,
+  mode = 'create',
+  fixedConnectionId,
+  moduleName,
+  onAppend,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: 'create' | 'append';
+  /** Append mode: the module's connection, used for discovery; may be unset on a draft. */
+  fixedConnectionId?: string;
+  /** Append mode: shown in the title. */
+  moduleName?: string;
+  onAppend?: (input: ImportOperationsInput) => Promise<void>;
   connections: ConnectionRef[];
   connectionsLoading: boolean;
   /** Set after "Connect a new system" finishes, so the new connection is picked. */
@@ -89,9 +99,6 @@ export function AddModuleDialog({
   const [found, setFound] = React.useState<DiscoveryResult | null>(null);
   const [selected, setSelected] = React.useState<Map<string, ToolAccess>>(new Map());
   const [http, setHttp] = React.useState<HttpOperationInput>(EMPTY_HTTP);
-  const [displayName, setDisplayName] = React.useState('');
-  const [name, setName] = React.useState('');
-  const [system, setSystem] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   /** Errors that belong to one field render under it, not in the banner. */
   const [fieldErr, setFieldErr] = React.useState<Partial<Record<'url' | 'spec' | 'display' | 'name' | 'connection', string>>>({});
@@ -111,9 +118,6 @@ export function AddModuleDialog({
     setFound(null);
     setSelected(new Map());
     setHttp(EMPTY_HTTP);
-    setDisplayName('');
-    setName('');
-    setSystem('');
     setError(null);
     setFieldErr({});
     setTouched(false);
@@ -123,8 +127,11 @@ export function AddModuleDialog({
     if (newConnectionId) setConnectionId(newConnectionId);
   }, [newConnectionId]);
 
+  const append = mode === 'append';
+  const kinds = append ? KINDS.filter((k) => k.kind !== 'http') : KINDS;
   const usable = connections.filter((c) => c.status !== 'revoked');
   const connection = connections.find((c) => c.id === connectionId);
+  const discoverVia = append ? fixedConnectionId : connectionId;
 
   React.useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
@@ -136,7 +143,7 @@ export function AddModuleDialog({
     setError(null);
     setFieldErr({});
     if (step === 1) {
-      if (!connection) return setFieldErr({ connection: 'Choose the connection this module calls through, or connect a new system.' });
+      if (!append && !connection) return setFieldErr({ connection: 'Choose the connection this module calls through, or connect a new system.' });
       if (kind === 'http') {
         setStep(2);
         return;
@@ -144,10 +151,10 @@ export function AddModuleDialog({
       const source: ModuleSource | null =
         kind === 'mcp'
           ? url.trim()
-            ? { kind: 'mcp', url: url.trim(), connectionId }
+            ? { kind: 'mcp', url: url.trim(), connectionId: discoverVia }
             : null
           : specUrl.trim() || specFileId
-            ? { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined, connectionId }
+            ? { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined, connectionId: discoverVia }
             : null;
       if (kind === 'openapi' && !specUrl.trim() && specWaiting) {
         setFieldErr({ spec: specWaiting });
@@ -170,9 +177,6 @@ export function AddModuleDialog({
         setFound(d);
         // Reads start selected; writes and money movement are opt-in so nothing that changes data is exposed by default.
         setSelected(new Map(d.operations.filter((o) => o.access === 'read').map((o) => [o.name, o.access])));
-        setDisplayName(d.system);
-        setName(d.suggestedName);
-        setSystem(d.system);
         setStep(2);
       } catch (e) {
         // Discovery failures are about the address the user typed, so they sit on that field.
@@ -183,53 +187,52 @@ export function AddModuleDialog({
       }
       return;
     }
-    if (step === 2) {
-      if (kind === 'http') {
-        setTouched(true);
-        if (!/^[a-z][a-z0-9_]{2,}$/.test(http.name) || !/^https:\/\/[^\s]+$/.test(http.url)) return;
-        const host = (() => {
-          try {
-            return new URL(http.url.replace(/\{[^}]+\}/g, 'x')).hostname.split('.')[0];
-          } catch {
-            return '';
-          }
-        })();
-        if (!displayName) setDisplayName(host.charAt(0).toUpperCase() + host.slice(1));
-        if (!name) setName(kebab(host));
-        if (!system) setSystem(host.charAt(0).toUpperCase() + host.slice(1));
-      } else if (!selected.size) {
-        setError('Choose at least one operation to expose.');
-        return;
-      }
-      setStep(3);
-    }
   }
 
   const type: ModuleType = kind === 'http' ? 'http' : kind === 'openapi' ? 'openapi' : 'mcp';
   const chosen: DiscoveredOperation[] = kind === 'http' ? [] : (found?.operations ?? []).filter((o) => selected.has(o.name)).map((o) => ({ ...o, access: selected.get(o.name)! }));
   const httpInputs = inputsOf(http);
 
-  async function create() {
+  /** Saves straight from the operations step: the module is named from what was read, and renamed on its page. */
+  async function finish() {
     setError(null);
-    const errs = { display: displayName.trim() ? undefined : 'Give the module a display name.', name: kebab(name) ? undefined : 'Give the module a name, e.g. servicenow.' };
-    setFieldErr(errs);
-    if (errs.display || errs.name) return;
+    if (kind === 'http') {
+      setTouched(true);
+      if (!/^[a-z][a-z0-9_]{2,}$/.test(http.name) || !/^https:\/\/[^\s]+$/.test(http.url)) return;
+    } else if (!chosen.length) {
+      setError('Choose at least one operation.');
+      return;
+    }
+    // The source the operations were read from: the service reads it again, so a picked operation's method and path
+    // come from the document or server, never from this dialog.
+    const source: ModuleSource = kind === 'mcp' ? { kind: 'mcp', url: url.trim(), connectionId: discoverVia } : { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined, connectionId: discoverVia };
     try {
+      if (append) {
+        await onAppend?.({ source, operations: chosen });
+        return;
+      }
+      const host = (() => {
+        try {
+          return new URL(http.url.replace(/\{[^}]+\}/g, 'x')).hostname.split('.')[0];
+        } catch {
+          return '';
+        }
+      })();
+      const label = kind === 'http' ? host.charAt(0).toUpperCase() + host.slice(1) : (found?.system ?? '');
       await onCreate({
-        name: kebab(name),
-        displayName: displayName.trim(),
-        system: system.trim() || displayName.trim(),
+        name: kind === 'http' ? kebab(host) : (found?.suggestedName ?? kebab(label)),
+        displayName: label,
+        system: label,
         type,
         endpoint: found?.endpoint ?? '',
         connectionId,
         operations: kind === 'http' ? undefined : chosen,
+        source: kind === 'http' ? undefined : source,
         http: kind === 'http' ? http : undefined,
+        uniqueName: true,
       });
     } catch (e) {
-      const message = (e as Error).message;
-      if (/named .* already exists|^Name the module/.test(message)) setFieldErr({ name: message });
-      else if (/display name/.test(message)) setFieldErr({ display: message });
-      else setError(message);
+      setError((e as Error).message);
     }
   }
 
@@ -238,8 +241,8 @@ export function AddModuleDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="lg"
-      title="Add module"
-      description={`Step ${step} of ${STEPS.length} · ${['Where the operations come from', kind === 'http' ? 'Build the operation' : 'Choose what workflows may call', 'Name it and save a draft'][step - 1]}`}
+      title={append ? `Import operations into ${moduleName ?? 'this module'}` : 'Import operations'}
+      description={`Step ${step} of ${STEPS.length} · ${['Where the operations come from', kind === 'http' ? 'Build the operation' : 'Choose what workflows may call'][step - 1]}`}
       headerExtra={<Stepper steps={STEPS} current={step} className="pt-3" testId="module-stepper" />}
       bodyRef={bodyRef}
       panelClassName="h-[min(85vh,42rem)]"
@@ -248,13 +251,13 @@ export function AddModuleDialog({
           <Button variant="outline" onClick={() => (step === 1 ? onOpenChange(false) : (setError(null), setStep(step - 1)))} disabled={creating || discovering}>
             {step === 1 ? 'Cancel' : 'Back'}
           </Button>
-          {step < 3 ? (
-            <LoadingButton isLoading={discovering} loadingText={kind === 'mcp' ? 'Reading the server…' : 'Reading the spec…'} onClick={next}>
+          {step < 2 ? (
+            <LoadingButton isLoading={discovering} loadingText={kind === 'mcp' ? 'Reading the server…' : 'Reading the spec…'} onClick={next} data-testid="import-next">
               Next
             </LoadingButton>
           ) : (
-            <LoadingButton isLoading={creating} loadingText="Saving…" onClick={create}>
-              Save draft
+            <LoadingButton isLoading={creating} loadingText="Saving…" onClick={finish} data-testid="import-save">
+              {append ? `Import ${plural(chosen.length, 'operation')}` : 'Save draft'}
             </LoadingButton>
           )}
         </div>
@@ -265,7 +268,7 @@ export function AddModuleDialog({
       {step === 1 && (
         <div className="flex flex-col gap-5">
           <RadioGroup value={kind} onValueChange={(k) => setKind(k as Kind)} className="grid gap-2 sm:grid-cols-2">
-            {KINDS.map((k) => (
+            {kinds.map((k) => (
               <label key={k.kind} htmlFor={`mk-${k.kind}`} className={cn('flex items-start gap-3 rounded-md border p-3', k.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer', kind === k.kind && 'border-primary bg-primary/5')}>
                 <RadioGroupItem value={k.kind} id={`mk-${k.kind}`} disabled={!!k.disabled} className="mt-0.5" />
                 <k.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -276,6 +279,7 @@ export function AddModuleDialog({
               </label>
             ))}
           </RadioGroup>
+          {!append && (
           <FormField id="mod-conn" label="Connection" error={fieldErr.connection} hint="The integration whose credential the gateway uses. Its scopes cap what any operation here can do.">
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-2">
@@ -306,12 +310,13 @@ export function AddModuleDialog({
                 </Button>
               </div>
               {connection && connection.status !== 'healthy' && connection.status !== 'expiring' && (
-                <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                <p className="flex items-center gap-1.5 text-xs text-warning-text">
                   <AlertTriangle className="size-3.5" /> This connection is not healthy, so calls will fail until it is fixed in Integrations. <ConnectionChip connection={connection} />
                 </p>
               )}
             </div>
           </FormField>
+          )}
           {kind === 'mcp' && (
             <FormField id="mcp-url" label="Server URL" error={fieldErr.url} hint="Streamable HTTP endpoint. The gateway lists its tools now and keeps that list as the reviewed snapshot.">
               <Input id="mcp-url" value={url} aria-invalid={!!fieldErr.url} onChange={(e) => (setUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://servicenow.northfield.internal/mcp" className="font-mono text-sm" />
@@ -356,39 +361,6 @@ export function AddModuleDialog({
         </div>
       )}
 
-      {step === 3 && (
-        <div className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="m-display" label="Display name" error={fieldErr.display}>
-              <Input id="m-display" value={displayName} aria-invalid={!!fieldErr.display} onChange={(e) => (setDisplayName(e.target.value), setFieldErr((f) => ({ ...f, display: undefined })))} placeholder="e.g. ServiceNow" />
-            </FormField>
-            <FormField id="m-name" label="Module name" error={fieldErr.name} hint={`Workflows pin ${kebab(name) || 'this'}; it cannot change later.`}>
-              <Input id="m-name" value={name} aria-invalid={!!fieldErr.name} onChange={(e) => (setName(e.target.value), setFieldErr((f) => ({ ...f, name: undefined })))} placeholder="e.g. servicenow" className="font-mono" />
-            </FormField>
-          </div>
-          <FormField id="m-system" label="System">
-            <Input id="m-system" value={system} onChange={(e) => setSystem(e.target.value)} placeholder="e.g. ServiceNow" />
-          </FormField>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{kind === 'http' ? 'Operation' : plural(chosen.length, 'operation')}</span>
-            <ul className="divide-y rounded-md border">
-              {(kind === 'http' ? [{ name: http.name, description: `${http.method} ${http.url}`, access: http.access, extra: [...httpInputs.path, ...httpInputs.body].join(', ') }] : chosen.map((o) => ({ name: o.name, description: o.description, access: o.access, extra: o.input.map((x) => x.name).join(', ') }))).map((o) => (
-                <li key={o.name} className="flex items-start justify-between gap-3 px-3 py-2">
-                  <span className="min-w-0">
-                    <code className="font-mono text-sm">{o.name}</code>
-                    <span className="block truncate text-xs text-muted-foreground">{o.description}</span>
-                    {o.extra && <span className="block truncate text-xs text-muted-foreground">Inputs: {o.extra}</span>}
-                  </span>
-                  <AccessBadge access={o.access} />
-                </li>
-              ))}
-            </ul>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Saved as a draft owned by your team. Security reviews it once; then each workflow requests the operations it needs, with an expiry. Record bindings and limits are set on the module page.
-          </p>
-        </div>
-      )}
     </DialogShell>
   );
 }

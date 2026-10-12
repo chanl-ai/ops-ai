@@ -68,12 +68,24 @@ export const useUpdateAgent = (id: string) =>
 export const useDeleteAgent = () => useWrite((id: string) => api.agents.remove(id), ['agents', 'overview']);
 export const useAgentVersions = (id: string) => useQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
 export const useRestoreAgent = (id: string) => useWrite((v: number) => api.agents.restore(id, v), ['agents', 'agent']);
-export const useAgentStatus = (id: string) => useWrite((s: LifecycleStatus) => api.agents.setStatus(id, s), ['agents', 'agent', 'overview']);
+/** Opens an `agent_publish` review, so Reviews, Overview and Assurance refresh too. */
+export const useRequestAgentPublish = (id: string) =>
+  useWrite(({ version, note }: { version: number; note: string }) => api.agents.requestPublish(id, version, note), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
+export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.agents.setPaused(id, paused), ['agents', 'agent', 'overview']);
 export const useTestAgent = (id: string) => useMutation({ mutationFn: ({ message, runAsId }: { message: string; runAsId?: string }) => api.agents.test(id, message, runAsId) });
+/** The tools an agent may be granted; the catalogue changes only with the runtime. */
+export const useModelAliases = () => useQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000 });
+export const useGrantableTools = () => useQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
 export const useBulkUpdateAgents = () =>
-  useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.agents.bulkUpdate(ids, patch), ['agents', 'agent', 'overview']);
-export const useBulkDeleteAgents = () => useWrite((ids: string[]) => api.agents.bulkRemove(ids), ['agents', 'overview', 'tools']);
+  useWrite(({ ids, patch }: { ids: string[]; patch: { paused?: boolean; owner?: string } }) => api.agents.bulkUpdate!(ids, patch), ['agents', 'agent', 'overview']);
+export const useBulkDeleteAgents = () => useWrite((ids: string[]) => api.agents.bulkRemove!(ids), ['agents', 'overview', 'tools']);
+/** Whether the agents backend has bulk routes; the list hides its bulk actions when it does not. */
+export const agentsBulkSupported = !!api.agents.bulkUpdate && !!api.agents.bulkRemove;
 
+/** The fields and operators a branch may route on; they change only with the runtime, so they are fetched once. */
+export const useRouteFields = () => useQuery({ queryKey: ['workflow-route-fields'], queryFn: () => api.workflows.routeFields(), staleTime: Infinity });
+/** One test run of the draft on a sample case; writes nothing, so nothing is invalidated. */
+export const useTestWorkflow = (id: string) => useMutation({ mutationFn: (graph?: WorkflowGraph) => api.workflows.test(id, { graph }) });
 export const useCreateWorkflow = () => useWrite((i: WorkflowInput) => api.workflows.create(i), ['workflows', 'lookups']);
 export const useValidateWorkflow = (id: string) =>
   useWrite(({ graph, target }: { graph: WorkflowGraph; target?: 'draft' | 'live' }) => api.workflows.validate(id, graph, target), ['workflow']);
@@ -112,13 +124,15 @@ export const useWorkflowRuns = (id: string, p: ListParams<RunFilters>) =>
   useQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () => api.workflows.runs(id, p), ...paged });
 export const useWorkflowVersions = (id: string) => useQuery({ queryKey: qk.workflowVersions(id), queryFn: () => api.workflows.versions(id) });
 export const useBulkUpdateWorkflows = () =>
-  useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.workflows.bulkUpdate(ids, patch), ['workflows', 'overview']);
+  useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.workflows.bulkUpdate!(ids, patch), ['workflows', 'overview']);
+/** Whether the workflows backend has bulk routes; the list hides its bulk actions when it does not. */
+export const workflowsBulkSupported = !!api.workflows.bulkUpdate;
 
 export const useDecideReview = () =>
-  useWrite(({ id, ...i }: ReviewDecisionInput & { id: string }) => api.reviews.decide(id, i), ['reviews', 'overview', 'model-risk', 'logs']);
+  useWrite(({ id, ...i }: ReviewDecisionInput & { id: string }) => api.reviews.decide(id, i), ['reviews', 'overview', 'model-risk', 'logs', 'skills', 'templates', 'notifications', 'assurance', 'agent', 'agents']);
 export const useAssignReviews = () => useWrite(({ ids, assignee }: { ids: string[]; assignee?: string }) => api.reviews.assign(ids, assignee), ['reviews']);
 export const useBulkDecideReviews = () =>
-  useWrite(({ ids, decision, reason }: { ids: string[]; decision: ReviewDecision; reason?: string }) => api.reviews.bulkDecide(ids, decision, reason), ['reviews', 'overview']);
+  useWrite(({ ids, decision, reason, stepUpToken }: { ids: string[]; decision: ReviewDecision; reason?: string; stepUpToken?: string }) => api.reviews.bulkDecide(ids, decision, reason, { stepUpToken }), ['reviews', 'overview']);
 
 export const useCreatePolicy = () => useWrite((i: GatePolicyInput) => api.policies.create(i), ['policies']);
 export const useUpdatePolicy = () => useWrite(({ id, ...i }: GatePolicyInput & { id: string }) => api.policies.update(id, i), ['policies', 'reviews']);

@@ -2,6 +2,10 @@ import type { BulkResult } from '@/lib/types/domain';
 import type { ListParams, ListResult } from '@/lib/types/query';
 import type {
   ApprovalRequestInput,
+  BlankModuleInput,
+  HttpOperationInput,
+  ImportOperationsInput,
+  ModuleDetailsPatch,
   DiscoveryResult,
   ModuleActivity,
   ModuleApproval,
@@ -14,6 +18,7 @@ import type {
   ModuleView,
   ModuleViewCounts,
   OperationPatch,
+  ReviewDecisionInput,
   ToolModule,
   ToolModuleDetail,
 } from '@/lib/types/tool-modules';
@@ -26,6 +31,15 @@ export interface ToolModulesApi {
   discover(source: ModuleSource): Promise<DiscoveryResult>;
   /** Saves a draft module; it needs a security review before any workflow can be approved for it. */
   create(input: ModuleInput): Promise<ToolModuleDetail>;
+  /** Saves a draft with a name and a type only: no operations, no connection. Drafts skip review gates until publish. */
+  createBlankModule(input: BlankModuleInput): Promise<ToolModuleDetail>;
+  updateModuleDetails(id: string, patch: ModuleDetailsPatch): Promise<ToolModuleDetail>;
+  /** One operation built by hand (method, URL, headers, body); works for every module type. */
+  addOperation(id: string, input: HttpOperationInput): Promise<ToolModuleDetail>;
+  /** Appends operations chosen from discovery; marks drift when the server no longer lists ones the module has. */
+  importOperations(id: string, input: ImportOperationsInput): Promise<ToolModuleDetail>;
+  /** Attaches or changes the integration the gateway authenticates through; null detaches it (drafts only). */
+  setConnection(id: string, connectionId: string | null): Promise<ToolModuleDetail>;
   remove(id: string): Promise<void>;
   /** Modules some workflow still holds an approval for are skipped. */
   bulkRemove(ids: string[]): Promise<BulkResult>;
@@ -35,6 +49,8 @@ export interface ToolModulesApi {
   publishVersion(id: string, note: string): Promise<ToolModuleDetail>;
   discardChanges(id: string): Promise<ToolModuleDetail>;
   requestReview(id: string, note: string): Promise<ToolModuleDetail>;
+  /** Security's decision: an approver or admin on the Security team, never the requester (403 otherwise). Approving the current version publishes it. */
+  decideReview(id: string, reviewId: string, input: ReviewDecisionInput): Promise<ToolModuleDetail>;
   requestApproval(id: string, input: ApprovalRequestInput): Promise<ModuleApproval>;
   /** Owner team only, and never the requester. */
   decideApproval(id: string, approvalId: string, decision: 'approved' | 'rejected', reason?: string): Promise<ModuleApproval>;

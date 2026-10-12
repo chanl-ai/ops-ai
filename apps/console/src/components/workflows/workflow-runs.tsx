@@ -6,19 +6,17 @@ import { Activity } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { DetailSheet } from '@/components/shared/detail-sheet';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { useTestFromRun, useWorkflowRuns } from '@/hooks/queries';
-import { Button } from '@/components/ui/button';
-import { FlaskConical } from 'lucide-react';
 import { toast } from 'sonner';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import type { WorkflowRun } from '@/lib/types/domain';
 import type { RunFilters } from '@/lib/types/query';
 
-import { duration, RUN_STATUS_OPTIONS, RunStatusBadge, RunTrace } from './run-trace';
+import { duration, RUN_STATUS_OPTIONS, RunStatusBadge } from './run-trace';
+import { RunSheet } from './run-sheet';
 
 type Row = WorkflowRun & { onRowClick: (r: WorkflowRun) => void };
 
@@ -30,6 +28,7 @@ const columns: ColumnDef<Row>[] = [
       <div>
         <div className="font-mono text-xs">{row.original.id}</div>
         <div className="text-sm">{row.original.subject}</div>
+        {row.original.trigger && <div className="text-xs text-muted-foreground">{row.original.trigger}</div>}
       </div>
     ),
     enableHiding: false,
@@ -84,43 +83,23 @@ export function WorkflowRuns({ workflowId }: { workflowId: string }) {
         }}
         emptyState={<ListEmpty icon={Activity} noun="runs" filtered={list.isFiltered} description="Runs appear here once the workflow is published and triggered." />}
       />
-      <DetailSheet
-        open={!!active}
-        onOpenChange={(o) => !o && setActiveId(null)}
-        title={active ? `${active.id} · ${active.subject}` : ''}
-        description={active ? `Started ${relativeTime(active.startedAt)}` : undefined}
-        navigation={
-          active
-            ? {
-                currentIndex: idx,
-                totalCount: runs.length,
-                onPrev: idx > 0 ? () => setActiveId(runs[idx - 1].id) : undefined,
-                onNext: idx < runs.length - 1 ? () => setActiveId(runs[idx + 1].id) : undefined,
-              }
-            : undefined
+      <RunSheet
+        run={active}
+        onClose={() => setActiveId(null)}
+        navigation={{
+          currentIndex: idx,
+          totalCount: runs.length,
+          onPrev: idx > 0 ? () => setActiveId(runs[idx - 1].id) : undefined,
+          onNext: idx < runs.length - 1 ? () => setActiveId(runs[idx + 1].id) : undefined,
+        }}
+        saving={saveAsTest.isPending}
+        onSaveAsTest={(r) =>
+          saveAsTest.mutate(r.id, {
+            onSuccess: (t) => toast.success('Saved as a test case', { description: `${t.name}. It runs on every publish request.` }),
+            onError: (e) => toast.error('Couldn’t save the test case', { description: e.message }),
+          })
         }
-        testId="run-sheet"
-        scrollKey={active?.id}
-        footerActions={
-          active && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={saveAsTest.isPending}
-              onClick={() =>
-                saveAsTest.mutate(active.id, {
-                  onSuccess: (t) => toast.success('Saved as a test case', { description: `${t.name}. It runs on every publish request.` }),
-                  onError: (e) => toast.error('Couldn’t save the test case', { description: e.message }),
-                })
-              }
-            >
-              <FlaskConical className="size-3.5" /> Save as test case
-            </Button>
-          )
-        }
-      >
-        {active && <RunTrace run={active} />}
-      </DetailSheet>
+      />
     </>
   );
 }

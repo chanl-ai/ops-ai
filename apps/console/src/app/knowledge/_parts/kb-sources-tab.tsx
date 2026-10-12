@@ -21,7 +21,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAttachSources, useDetachSource, useSetKbSourceRules, useSourcesList } from '@/hooks/knowledge-queries';
+import { useIntegrationOptions } from '@/hooks/integration-queries';
+import { useAttachSources, useCreateSource, useDetachSource, useSetKbSourceRules, useSourcesList } from '@/hooks/knowledge-queries';
+import { NewSourceDialog } from '@/components/sources/new-source-dialog';
 import { useSticky } from '@/hooks/use-sticky';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { KbSourceView, KnowledgeBaseDetail, Rule } from '@/lib/types/knowledge';
@@ -38,6 +40,9 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
   const detach = useDetachSource(kb.id);
   const setRules = useSetKbSourceRules(kb.id);
   const [attachOpen, setAttachOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const connections = useIntegrationOptions(addOpen);
+  const create = useCreateSource();
   const [picked, setPicked] = React.useState<string[]>([]);
   const [editing, setEditing] = React.useState<KbSourceView | null>(null);
   const editingShown = useSticky(editing);
@@ -109,7 +114,7 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
               row={row}
               actions={[
                 { label: 'Edit contribution', icon: SlidersHorizontal, onClick: (r) => openRules(r.original) },
-                { label: 'Open source', icon: ExternalLink, onClick: (r) => router.push(`/sources/${r.original.sourceId}`) },
+                { label: 'Open source', icon: ExternalLink, onClick: (r) => router.push(`/integrations/sources/${r.original.sourceId}`) },
                 { label: 'Detach', icon: Unlink, variant: 'destructive', onClick: (r) => setDetaching(r.original) },
               ]}
             />
@@ -134,27 +139,45 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
         searchPlaceholder="Search attached sources…"
         hideViewSwitcher
         toolbarExtra={
-          <Button
-            size="sm"
-            onClick={() => {
-              setPicked([]);
-              setAttachOpen(true);
-            }}
-          >
-            <Plus className="size-4" /> Attach sources
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="kb-add-source">
+              <Plus className="size-4" /> Add source
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setPicked([]);
+                setAttachOpen(true);
+              }}
+              data-testid="kb-attach-sources"
+            >
+              <Plus className="size-4" /> Attach sources
+            </Button>
+          </div>
         }
         emptyState={
           <EmptyState
             icon={Plug}
-            title="This knowledge base reads no sources"
-            description="Attach a source and the next refresh indexes its items."
-            action={{ label: 'Attach sources', onClick: () => setAttachOpen(true) }}
-            secondaryAction={{ label: 'Open Sources', href: '/sources' }}
+            title="Attach a source"
+            description="A knowledge base indexes what its sources fetch. Attach one that exists, or add a new one; the first index build starts once it has a source."
+            action={{ label: 'Attach existing', onClick: () => (setPicked([]), setAttachOpen(true)) }}
+            secondaryAction={{ label: 'Add source', onClick: () => setAddOpen(true) }}
           />
         }
       />
 
+      <NewSourceDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        connections={connections.data ?? []}
+        existingNames={(allSources.data?.data ?? []).map((x) => x.name)}
+        isPending={create.isPending}
+        onSubmit={async (input) => {
+          const s = await create.mutateAsync({ input, sync: false, kbIds: [kb.id] });
+          toast.success(`Added ${s.name} to ${kb.name} as a draft`, { description: 'Set its scope and schedule, then sync it; the index builds from what it fetches.' });
+          router.push(`/integrations/sources/${s.id}?tab=settings`);
+        }}
+      />
       <DialogShell
         open={attachOpen}
         onOpenChange={setAttachOpen}
@@ -187,7 +210,7 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
         {unattached.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Every source is already attached.{' '}
-            <Link href="/sources" className="underline underline-offset-4">
+            <Link href="/integrations" className="underline underline-offset-4">
               Add a new source
             </Link>
             .
@@ -205,7 +228,7 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
                   </span>
                 </span>
                 {kb.collections.length > 0 && !kb.collections.includes(s.collection) && (
-                  <Badge variant="outline" className="font-normal text-amber-700 dark:text-amber-300">
+                  <Badge variant="outline" className="font-normal text-warning-text">
                     Outside its collections
                   </Badge>
                 )}

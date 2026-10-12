@@ -1,11 +1,22 @@
 node_modules
 .next
+.next-isolated
 next-env.d.ts
 *.tsbuildinfo
 .env*
+!.env.example
 
 # Python
 .venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# make up: service logs and pids
+.logs/
+.run/
+
+# codeloop working state (cards, wiki, stage outputs) at the repository root only; docs/specs is tracked
+/.codeloop/
+/shape/
+/specs/

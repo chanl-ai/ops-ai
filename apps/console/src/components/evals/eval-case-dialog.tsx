@@ -27,7 +27,8 @@ export function checkComplete(c: EvalCheck) {
   return !!c.text?.trim();
 }
 
-function CheckRow({ check, onChange, onRemove, options, index }: { check: EvalCheck; onChange: (c: EvalCheck) => void; onRemove: () => void; options?: EvalCaseOptions; index: number }) {
+/** One check's editor; reused by the skill test dialog. */
+export function CheckRow({ check, onChange, onRemove, options, index }: { check: EvalCheck; onChange: (c: EvalCheck) => void; onRemove: () => void; options?: EvalCaseOptions; index: number }) {
   const meta = CHECK_TYPES.find((t) => t.value === check.type)!;
   const tools = options?.tools ?? [];
   const sel = (id: string, value: string | undefined, items: string[], placeholder: string, set: (v: string) => void, mono = false) => (
@@ -101,7 +102,7 @@ function CheckRow({ check, onChange, onRemove, options, index }: { check: EvalCh
           </Button>
         </div>
       )}
-      <p className={cn('text-xs', check.type === 'rubric' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>{meta.hint}</p>
+      <p className={cn('text-xs', check.type === 'rubric' ? 'text-warning-text' : 'text-muted-foreground')}>{meta.hint}</p>
     </div>
   );
 }

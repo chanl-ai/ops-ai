@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowLeft, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TitleSwitcher } from '@/components/shared/title-switcher';
 import {
   BulkSelectionContext,
   useBulkSelectionProvider,
@@ -42,6 +43,8 @@ interface PageLayoutProps {
   // Metadata
   badge?: ReactNode;
   tabs?: ReactNode;
+  /** List pages of a sidebar section: the title becomes a menu of the section's pages (TitleSwitcher). */
+  switcher?: boolean;
 
   // Navigation
   backHref?: string;
@@ -69,6 +72,7 @@ export function PageLayout({
   breadcrumbs,
   badge,
   tabs,
+  switcher,
   backHref,
   onTitleClick,
   children,
@@ -222,9 +226,9 @@ export function PageLayout({
                   )}
                   data-testid="page-title"
                   onClick={onTitleClick}
-                  title={title}
+                  title={switcher ? undefined : title}
                 >
-                  {title}
+                  {switcher ? <TitleSwitcher title={title} /> : title}
                 </h2>
               ) : (
                 <div

@@ -11,7 +11,8 @@ export type ModuleStatus = 'draft' | 'in_review' | 'published' | 'revoked';
 /** Computed by the API from the security review, workflow approvals and drift. */
 export type ModuleApprovalState = 'draft' | 'approved' | 'needs_approval' | 'expiring' | 'expired';
 /** `expiring` holds modules whose approvals expire within 30 days; already expired ones have their own view. */
-export type ModuleView = 'all' | 'needs_approval' | 'expiring' | 'expired' | 'failing';
+/** `security_review`: modules with a security review waiting on Security (the Reviews page's Tool modules tab). */
+export type ModuleView = 'all' | 'needs_approval' | 'expiring' | 'expired' | 'failing' | 'security_review';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 export type Environment = 'dev' | 'test' | 'production';
 
@@ -53,6 +54,8 @@ export interface ToolModule {
   connectionId?: string;
   connection: ConnectionRef | null;
   updatedAt: string;
+  /** The review waiting on Security, if any. */
+  pendingReview?: { id: string; version: string; requestedBy: string; requestedAt: string } | null;
 }
 
 export type ModuleFilters = { type?: string[]; access?: string[]; approvalState?: string[] };
@@ -105,8 +108,19 @@ export interface ModuleOperation {
   access: ToolAccess;
   /** Exposed through the gateway; hidden operations stay in the manifest but cannot be called. */
   enabled: boolean;
+  /** How the gateway runs it; only `http` operations have a call a builder edits. */
+  executor: 'http' | 'mcp' | 'stub' | 'local';
   method?: HttpMethod;
+  /** After the module endpoint; the origin is always the endpoint's. */
   path?: string;
+  /** Literal values or `{{NAME}}` secret references; a literal credential is refused on save. */
+  headers: { key: string; value: string }[];
+  /** JSON template with `{{arg}}` placeholders. */
+  body?: string;
+  /** Jinja2 template over the parsed response as `data`; failing at call time returns the raw answer with an error. */
+  responseTransform?: string;
+  /** This operation's limit, 1000 to 120000; unset uses the module's timeout. */
+  timeoutMs?: number;
   input: SchemaField[];
   /** Output field paths masked before the response is shown or stored. */
   maskedOutput: string[];
@@ -128,7 +142,14 @@ export interface ModuleOperation {
   approvedWorkflows: number;
 }
 
-export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description'>>;
+/**
+ * A staged edit. Method, path or body changes are major; headers, transform and timeout minor. `responseTransform` or
+ * `timeoutMs` null clears it. Calls keep the published call until the change is published.
+ */
+export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description' | 'method' | 'path' | 'headers' | 'body'>> & {
+  responseTransform?: string | null;
+  timeoutMs?: number | null;
+};
 
 export type ApprovalStatus = 'requested' | 'approved' | 'rejected' | 'expired' | 'revoked';
 
@@ -183,6 +204,9 @@ export interface ModuleVersion {
 }
 
 /** Security's review of one major version; minors within it reuse the decision. */
+/** Security's decision on a pending review: approve, or ask for changes with at least one finding. */
+export type ReviewDecisionInput = { decision: 'approved' } | { decision: 'changes_requested'; findings: string[]; note?: string };
+
 export interface SecurityReview {
   id: string;
   major: number;
@@ -251,6 +275,10 @@ export interface ModuleTestResult {
   testApprovalToken?: string;
   status: number;
   latencyMs: number;
+  /** Test environment: true when the answer is the stub (every write), false when a read reached the system. */
+  stubbed?: boolean;
+  /** Test environment: the host a read reached. */
+  reachedHost?: string;
   /** Inputs the gateway filled or checked from the run context. */
   bound: { arg: string; value: string; source: BindingSource }[];
   /** A write or money call would pause here for an approval token. */
@@ -303,7 +331,34 @@ export interface ModuleInput {
   endpoint: string;
   /** The integration the gateway authenticates through. */
   connectionId: string;
+  /**
+   * Where `operations` were discovered. The service re-reads it and takes each operation's method, path, inputs and
+   * headers from there, so only the names and the access class the owner confirmed come from the caller.
+   */
+  source?: ModuleSource;
   /** Selected operations from discovery, with the access class the owner confirmed. */
   operations?: DiscoveredOperation[];
   http?: HttpOperationInput;
+  /** Import without a naming step: a taken name gets a numeric suffix instead of a 409. */
+  uniqueName?: boolean;
+}
+
+/** "New module": a name and a type. It saves a draft with no operations and no connection; the page does the rest. */
+export interface BlankModuleInput {
+  displayName: string;
+  /** Kebab-case name workflows pin; cannot change once a workflow is approved for the module. */
+  name: string;
+  type: ModuleType;
+  description?: string;
+}
+
+export interface ModuleDetailsPatch {
+  displayName?: string;
+  description?: string;
+}
+
+/** Operations chosen from an MCP server or OpenAPI document, appended to an existing module. */
+export interface ImportOperationsInput {
+  source: ModuleSource;
+  operations: DiscoveredOperation[];
 }

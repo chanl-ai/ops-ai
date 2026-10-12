@@ -368,7 +368,7 @@ export const MODULE_SEEDS: ModuleSeed[] = [
     findings: ['Holds limited to 72 hours', 'Release needs a person'],
     operations: [
       { name: 'get_wire_history', method: 'GET', path: '/accounts/{accountId}/wires?days={days}', input: [f('accountId', 'string', true), f('days', 'integer', false, 'Look-back window, 1–30')], binding: bind('accountId', 'case.account'), masked: ['lastPayee.name'], rate: 300, stub: { attempts: 3, mfa: 'passed', lastPayee: { name: '[redacted]', ageHours: 6 } } },
-      { name: 'place_wire_hold', method: 'POST', path: '/wires/{wireId}/hold', input: [f('wireId', 'string', true), f('action', 'string', true, undefined, { enum: ['hold', 'release'] }), f('hours', 'integer', true, 'Up to 72')], binding: null, rate: 60, amountMax: 250_000, stub: { held: true, releaseAt: '2026-10-05T14:00:00Z', callbackRequired: true } },
+      { name: 'place_wire_hold', method: 'POST', path: '/wires/{wireId}/hold', input: [f('wireId', 'string', true), f('action', 'string', true, undefined, { enum: ['hold', 'release'] }), f('hours', 'integer', true, 'Up to 72')], binding: null, rate: 60, stub: { held: true, releaseAt: '2026-10-05T14:00:00Z', callbackRequired: true } },
     ],
     versions: [
       { version: '1.5.0', daysAgo: 160, by: 'Maya Okafor', note: 'Hold release', changes: [ch('place_wire_hold', 'access_widened', 'Adds the release action', true)] },

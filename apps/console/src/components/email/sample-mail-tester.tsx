@@ -85,7 +85,7 @@ export function SampleMailTester({ onRun, isPending }: { onRun: (input: SampleMa
                   {result.fields.map((f) => (
                     <React.Fragment key={f.key}>
                       <dt className="text-muted-foreground">{f.label}</dt>
-                      <dd className={f.value ? '' : 'text-amber-700 dark:text-amber-400'}>{f.value ?? 'Not found in the email'}</dd>
+                      <dd className={f.value ? '' : 'text-warning-text'}>{f.value ?? 'Not found in the email'}</dd>
                     </React.Fragment>
                   ))}
                 </dl>

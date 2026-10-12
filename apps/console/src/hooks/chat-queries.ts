@@ -4,6 +4,7 @@ import * as React from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { modelRefusalText } from '@/lib/model-refusals';
 import type { ChatFilters, ChatMessage, ChatThreadInput, ChatThreadPatch, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { ListParams } from '@/lib/types/query';
 
@@ -98,9 +99,14 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
   };
   emit();
   let started = false;
+  // A reply ends with `done` or `error`. A stream that stops without either dropped mid-reply (proxy, network, server).
+  let ended = false;
+  let messageId: string | undefined;
   try {
     for await (const ev of api.chat.send(threadId, input, ctrl.signal)) {
+      if (ev.type === 'done' || ev.type === 'error') ended = true;
       if (ev.type === 'start') {
+        messageId = ev.messageId;
         started = true;
         patch(threadId, (t) => ({ ...t, userMessage: ev.userMessage ?? t.userMessage, assistant: { ...t.assistant, id: ev.messageId }, phase: 'thinking' }));
       } else if (ev.type === 'status') patch(threadId, (t) => ({ ...t, phase: ev.phase }));
@@ -110,7 +116,7 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
       else if (ev.type === 'text') patch(threadId, (t) => ({ ...t, phase: 'writing', assistant: { ...t.assistant, content: t.assistant.content + ev.delta } }));
       else if (ev.type === 'citations') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, citations: ev.citations } }));
       else if (ev.type === 'done') patch(threadId, (t) => ({ ...t, assistant: ev.message }));
-      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: ev.message } }));
+      else if (ev.type === 'error') patch(threadId, (t) => ({ ...t, assistant: { ...ev.partial, error: modelRefusalText(ev.code) ?? ev.message } }));
     }
   } catch (e) {
     if (!ctrl.signal.aborted && !started) {
@@ -119,6 +125,18 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
     }
   } finally {
     if (controllers[threadId] === ctrl) delete controllers[threadId];
+  }
+  if (started && !ended && !ctrl.signal.aborted) {
+    // Dropped mid-reply: keep the server's copy if it stored one, otherwise offer to send again.
+    patch(threadId, (t) => ({ ...t, streaming: false }));
+    await qc.invalidateQueries({ queryKey: ['chat'] });
+    const stored = qc.getQueryData<{ messages?: { id: string }[] }>(ck.thread(threadId))?.messages?.some((m) => m.id === messageId);
+    if (!stored) {
+      patch(threadId, (t) => ({ ...t, failed: { message: 'The connection dropped before the reply finished. Nothing was lost on your side; send it again.', input } }));
+      return;
+    }
+    if (!controllers[threadId]) clear(threadId);
+    return;
   }
   // The server stored the turn (finished, stopped or failed part-way); show its copy, then drop the live one.
   patch(threadId, (t) => ({ ...t, streaming: false }));
@@ -141,6 +159,9 @@ export function useStreamingThreadIds() {
   const ids = React.useSyncExternalStore(subscribe, streamingIds, () => '');
   return React.useMemo(() => new Set(ids ? ids.split(',') : []), [ids]);
 }
+
+/** Stops every reply in flight; the chat pages call it when the person leaves chat altogether. */
+export const abortAllReplies = () => Object.values(controllers).forEach((c) => c.abort());
 
 export function useSendMessage() {
   const qc = useQueryClient();

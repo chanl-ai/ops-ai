@@ -26,9 +26,9 @@ import { cn } from '@/lib/utils';
 type Row = Webhook & { onRowClick: (w: Webhook) => void };
 
 const STATUS_TONE: Record<Webhook['status'], string> = {
-  active: 'text-emerald-700 dark:text-emerald-400',
+  active: 'text-success-text',
   paused: 'text-muted-foreground',
-  failing: 'text-red-600 dark:text-red-400',
+  failing: 'text-destructive',
 };
 
 function columns(showTeam: boolean): ColumnDef<Row>[] {
@@ -59,7 +59,7 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
         const { successRate7d: rate, deliveries7d: n } = row.original;
         if (rate == null) return <span className="text-sm whitespace-nowrap text-muted-foreground">No deliveries</span>;
         return (
-          <span className={cn('whitespace-nowrap tabular-nums', rate < 0.95 && 'font-medium text-red-600 dark:text-red-400')}>
+          <span className={cn('whitespace-nowrap tabular-nums', rate < 0.95 && 'font-medium text-destructive')}>
             {pct(rate)} <span className="text-xs text-muted-foreground">of {count(n)}</span>
           </span>
         );

@@ -8,12 +8,15 @@ import { toast } from 'sonner';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { EvidenceExportButton } from '@/components/files/file-actions';
 import { isOpen, type ReviewRow, reviewColumns } from '@/components/reviews/review-columns';
+import { StepUpCancelled, useStepUpGate } from '@/components/auth/reauth-dialog';
 import { ReviewDecisionForm, ReviewDetailBody } from '@/components/reviews/review-detail';
 import { BulkDecisionDialog } from '@/components/reviews/bulk-decision-dialog';
 import { ModelValidationDecisionForm } from '@/components/reviews/model-validation';
 import { ReviewsPageLayout } from '@/components/reviews/reviews-page-layout';
 import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
 import { DetailSheet } from '@/components/shared/detail-sheet';
+import { ToolModuleReviews } from '@/components/reviews/tool-module-reviews';
+import { useToolModules } from '@/hooks/tool-module-queries';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
@@ -24,6 +27,8 @@ import { Button } from '@/components/ui/button';
 import { useAssignReviews, useBulkDecideReviews, useDecideReview, useLookups, useReview, useReviews } from '@/hooks/queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { useListParams } from '@/hooks/use-list-params';
+import { useTeam } from '@/hooks/use-team';
+import { useSession } from '@/hooks/auth-queries';
 import { useRunAsPrincipals } from '@/hooks/run-as-queries';
 import type { ConditionInput } from '@/lib/types/model-risk';
 import { pct } from '@/lib/format';
@@ -34,10 +39,17 @@ const RISK_OPTIONS = (['critical', 'high', 'medium', 'low'] as const).map((r) =>
 const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({ label, value }));
 
 export default function ReviewsPage() {
-  const [view, setView] = React.useState<ReviewView>('open');
+  // `tool_modules` is the Tool modules tab: tools-service's module reviews, listed beside the agents queue.
+  const [view, setView] = React.useState<ReviewView | 'tool_modules'>('open');
+  const moduleReviews = useToolModules({ page: 1, pageSize: 1, view: 'security_review' });
   const list = useListParams<ReviewFilters>('title');
-  const query = useReviews({ ...list.params, view });
+  const query = useReviews({ ...list.params, view: view === 'tool_modules' ? 'open' : view });
   const { data: lookups } = useLookups();
+  // Who is deciding: the signed-in person, by name and by email (platform-recorded requests carry the email), so the
+  // requester of a publish is blocked from approving it.
+  const { session } = useSession();
+  const me = [session?.user.name, session?.user.email, session ? undefined : lookups?.currentUser.name].filter((x): x is string => !!x);
+  const { team } = useTeam();
   const decide = useDecideReview();
   const assign = useAssignReviews();
   const bulkDecide = useBulkDecideReviews();
@@ -74,39 +86,62 @@ export default function ReviewsPage() {
     [rows],
   );
 
-  const onDecide = (decision: ReviewDecision, reason: string, conditions?: ConditionInput[], actingAsId?: string) => {
+  // Money approvals need a step-up the API checks; the gate asks once per 5 minutes and retries with the token.
+  const stepUp = useStepUpGate();
+  const onDecide = (decision: ReviewDecision, reason: string, conditions?: ConditionInput[], actingAsId?: string, addTestCase?: boolean) => {
     if (!active) return;
     setPendingDecision(decision);
-    decide.mutate(
-      { id: active.id, decision, reason, conditions, actingAsId },
-      {
-        onSuccess: (updated) => {
-          if (updated.status === 'in_review' && decision === 'approved') {
-            toast(`${updated.id} needs a second approver`, { description: `Your approval is recorded. Someone else in ${updated.policy.reviewers} must also approve.` });
-            return;
-          }
-          if (updated.kind === 'model_validation' && updated.modelValidation) {
-            const mv = updated.modelValidation;
-            toast.success(
-              decision === 'approved' ? (mv.scope === 'tier_change' ? `${mv.entryName} is now ${mv.toTier} tier` : `Validated ${mv.entryName}${mv.conditions?.length ? ` with ${mv.conditions.length === 1 ? '1 condition' : `${mv.conditions.length} conditions`}` : ''}`) : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${mv.requestedBy}`,
-              { description: 'Recorded in the model inventory and the audit log.' },
-            );
-          } else if (updated.kind === 'publish_request' && updated.publish) {
-            toast.success(
-              decision === 'approved' ? `${updated.workflowName} v${updated.publish.toVersion} is live` : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${updated.publish.requestedBy}`,
-              { description: decision === 'approved' ? 'New runs use it. Deployments move when you update them.' : 'The requester has your reason.' },
-            );
-          } else {
-            const verb = decision === 'approved' ? 'Approved' : decision === 'rejected' ? 'Rejected' : 'Returned to agent';
-            toast.success(`${verb} · ${updated.id}`, { description: decision === 'approved' ? 'The workflow run has resumed.' : 'The agent has the reason.' });
-          }
-          const next = rows[activeIndex + 1];
-          setActiveId(next && isOpen(next) ? next.id : null);
-        },
-        onError: (e) => toast.error(`Couldn’t record the decision on ${active.id}`, { description: e.message }),
-        onSettled: () => setPendingDecision(null),
-      },
-    );
+    const target = active;
+    const decided = (updated: Review) => {
+    if (updated.status === 'in_review' && decision === 'approved') {
+      toast(`${updated.id} needs a second approver`, { description: `Your approval is recorded. Someone else in ${updated.policy.reviewers} must also approve.` });
+      return;
+    }
+    if (updated.kind === 'model_validation' && updated.modelValidation) {
+      const mv = updated.modelValidation;
+      toast.success(
+        decision === 'approved' ? (mv.scope === 'tier_change' ? `${mv.entryName} is now ${mv.toTier} tier` : `Validated ${mv.entryName}${mv.conditions?.length ? ` with ${mv.conditions.length === 1 ? '1 condition' : `${mv.conditions.length} conditions`}` : ''}`) : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${mv.requestedBy}`,
+        { description: 'Recorded in the model inventory and the audit log.' },
+      );
+    } else if (updated.kind === 'skill_publish' && updated.skillPublish) {
+      const sp = updated.skillPublish;
+      toast.success(
+        decision === 'approved' ? `Published ${sp.skillName} v${sp.toVersion}` : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${sp.requestedBy}`,
+        { description: decision === 'approved' ? 'Agents keep their pinned version until their owners move it.' : 'The requester has your reason.' },
+      );
+    } else if (updated.kind === 'template_submission' && updated.templateSubmission) {
+      const ts = updated.templateSubmission;
+      toast.success(
+        decision === 'approved' ? `Published template ${ts.templateName}` : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${ts.submittedBy}`,
+        { description: decision === 'approved' ? 'Every team can now pick it under Agents → Templates.' : 'The submitter has your reason.' },
+      );
+    } else if (updated.kind === 'agent_publish' && updated.agentPublish) {
+      const ap = updated.agentPublish;
+      toast.success(
+        decision === 'approved' ? `Published ${ap.agentName} v${ap.version}` : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${ap.requestedBy}`,
+        { description: decision === 'approved' ? 'Workflows can pin it now; each adopts it on its next publish.' : 'The requester has your reason.' },
+      );
+    } else if (updated.kind === 'publish_request' && updated.publish) {
+      toast.success(
+        decision === 'approved' ? `${updated.workflowName} v${updated.publish.toVersion} is live` : decision === 'rejected' ? `Rejected ${updated.id}` : `Returned ${updated.id} to ${updated.publish.requestedBy}`,
+        { description: decision === 'approved' ? 'New runs use it. Deployments move when you update them.' : 'The requester has your reason.' },
+      );
+    } else {
+      const verb = decision === 'approved' ? 'Approved' : decision === 'rejected' ? 'Rejected' : 'Returned to agent';
+      toast.success(`${verb} · ${updated.id}`, { description: decision === 'approved' ? 'The workflow run has resumed.' : 'The agent has the reason.' });
+    }
+    if (addTestCase && decision !== 'approved' && updated.testTarget) {
+      toast(`Added a draft case to ${updated.testTarget.name}’s suite`, { description: 'It shows under Assurance → Suites. The owner activates it before the gate runs it.' });
+    }
+    const next = rows[activeIndex + 1];
+    setActiveId(next && isOpen(next) ? next.id : null);
+    };
+    stepUp
+      .withStepUp(`Approving ${target.id}`, (stepUpToken) => decide.mutateAsync({ id: target.id, decision, reason, conditions, actingAsId, addTestCase, stepUpToken }), { upfront: decision === 'approved' && !!target.movesMoney })
+      .then(decided, (e) => {
+        if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
+      })
+      .finally(() => setPendingDecision(null));
   };
 
   const counts = query.data?.viewCounts;
@@ -124,7 +159,13 @@ export default function ReviewsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={4}>
-            <StatCard label="Open reviews" value={counts?.open} icon={Inbox} footer={{ text: `${stats?.unassigned ?? 0} unassigned`, subtext: `${counts?.mine ?? 0} assigned to you` }} />
+            {/* These count the agents queue (runs and publishes); module reviews are tools-service's and counted on their tab. */}
+            <StatCard
+              label="Open reviews"
+              value={counts?.open}
+              icon={Inbox}
+              footer={{ text: `${stats?.unassigned ?? 0} unassigned, ${counts?.mine ?? 0} assigned to you`, subtext: `Runs and publishes; ${moduleReviews.data?.viewCounts.security_review ?? 0} module reviews under Tool modules` }}
+            />
             <StatCard
               label="Past SLA"
               value={counts?.overdue}
@@ -169,12 +210,13 @@ export default function ReviewsPage() {
               { id: 'open', label: `All open · ${counts?.open ?? 0}`, icon: Inbox },
               { id: 'overdue', label: `Past SLA · ${counts?.overdue ?? 0}`, icon: Clock },
               { id: 'resolved', label: `Resolved · ${counts?.resolved ?? 0}` },
+              { id: 'tool_modules', label: `Tool modules · ${moduleReviews.data?.viewCounts.security_review ?? 0}` },
             ]}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}
             onSelectPreset={(id) => {
-              setView(id as ReviewView);
+              setView(id as ReviewView | 'tool_modules');
               list.reset();
               setSelectionResetKey((k) => k + 1);
             }}
@@ -184,6 +226,9 @@ export default function ReviewsPage() {
             canSave={false}
           />
 
+          {view === 'tool_modules' ? (
+            <ToolModuleReviews />
+          ) : (
           <DataTableWithViews
             columns={reviewColumns}
             data={tableRows}
@@ -242,6 +287,7 @@ export default function ReviewsPage() {
               />
             }
           />
+          )}
         </div>
       )}
 
@@ -261,6 +307,7 @@ export default function ReviewsPage() {
           setSelectionResetKey((k) => k + 1);
         }}
       />
+      {stepUp.dialog}
       {shown && shown.kind !== 'reassign' && (
         <BulkDecisionDialog
           open={!!bulk && bulk.kind !== 'reassign'}
@@ -270,7 +317,14 @@ export default function ReviewsPage() {
           isPending={bulkDecide.isPending}
           onConfirm={async (ids, reason) => {
             const kind = shown.kind as ReviewDecision;
-            const res = await bulkDecide.mutateAsync({ ids, decision: kind, reason });
+            // One step-up covers the whole batch when any of it moves money.
+            let res;
+            try {
+              res = await stepUp.withStepUp(`Approving ${ids.length} reviews`, (stepUpToken) => bulkDecide.mutateAsync({ ids, decision: kind, reason, stepUpToken }));
+            } catch (e) {
+              if (e instanceof StepUpCancelled) return;
+              throw e;
+            }
             toastBulk(res, kind === 'approved' ? 'Approved' : kind === 'rejected' ? 'Rejected' : 'Returned', 'review');
             setSelectionResetKey((k) => k + 1);
           }}
@@ -328,9 +382,9 @@ export default function ReviewsPage() {
             <ReviewDetailBody review={active} />
             {isOpen(active) &&
               (active.kind === 'model_validation' ? (
-                <ModelValidationDecisionForm review={active} currentUser={lookups?.currentUser.name} owners={lookups?.owners ?? []} principals={principals.data ?? []} principalsLoading={principals.isPending} pending={pendingDecision} onDecide={onDecide} />
+                <ModelValidationDecisionForm review={active} currentUser={me} owners={lookups?.owners ?? []} principals={principals.data ?? []} principalsLoading={principals.isPending} pending={pendingDecision} onDecide={onDecide} />
               ) : (
-                <ReviewDecisionForm review={active} currentUser={lookups?.currentUser.name} pending={pendingDecision} onDecide={onDecide} />
+                <ReviewDecisionForm review={active} currentUser={me} pending={pendingDecision} onDecide={(d, r, addTestCase) => onDecide(d, r, undefined, undefined, addTestCase)} platformTeam={team?.scope === 'all'} />
               ))}
           </div>
         )}

@@ -46,8 +46,8 @@ export function WorkflowDialog({
     setErrors(e);
     if (e.name || e.trigger) return;
     try {
+      // The page navigates to the new workflow; closing here would replace that URL with the list's.
       await onSubmit(values);
-      onOpenChange(false);
     } catch (err) {
       setSubmitError((err as Error).message);
     }

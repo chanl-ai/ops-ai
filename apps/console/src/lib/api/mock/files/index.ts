@@ -56,6 +56,8 @@ interface PendingUpload {
   ticket: UploadTicket;
   input: UploadRequest & { team: string };
   transferred: boolean;
+  /** Small text uploads keep their text so other mocks can read them (a SKILL.md import, for example). */
+  text?: string;
 }
 
 const ext = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
@@ -115,6 +117,10 @@ export interface FileLinks {
   intake: (a: { name: string; size: number; team: string; ref: Omit<FileReference, 'addedAt'>; infected?: boolean; hold?: Omit<LegalHold, 'at'> }) => FileRecord;
   /** Current state for a referencing record (scan may finish after it was linked). */
   state: (fileId: string) => { scan: ScanStatus; blocked?: string } | undefined;
+  /** A clean file's name and text, for mocks that parse what was uploaded. Refuses other teams' and unscanned files. */
+  read: (fileId: string) => { name: string; size: number; purpose: FilePurpose; text?: string };
+  /** Writes an export file (purpose `export`) owned by `team` and referenced by `ref`. */
+  writeExport: (a: { name: string; size: number; team: string; text: string; ref: Omit<FileReference, 'addedAt'> }) => FileRecord;
 }
 
 export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLinks } {
@@ -381,6 +387,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
           resolve();
         };
         setTimeout(tick, 90);
+        if (body.size < 256_000 && ['md', 'txt', 'json', 'csv'].includes(ext(p.input.name))) void body.text().then((t) => (p.text = t));
       }),
 
     completeUpload: (fileId, { digest }) =>
@@ -391,7 +398,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         pending.delete(fileId);
         const same = files.find((f) => f.team === p.input.team && f.digest === digest && f.scan.status !== 'infected');
         if (same) return { file: row(same), deduplicated: true };
-        const f = makeFile({ name: p.input.name, size: p.input.size, purpose: p.input.purpose, team: p.input.team, by: me, digest, retentionClass: p.input.retentionClass });
+        const f = makeFile({ name: p.input.name, size: p.input.size, purpose: p.input.purpose, team: p.input.team, by: me, digest, retentionClass: p.input.retentionClass, content: p.text });
         f.id = fileId;
         files.unshift(f);
         auditLog(f, 'uploaded', `Uploaded ${f.name}`, [
@@ -617,6 +624,22 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
     state: (fid) => {
       const f = files.find((x) => x.id === fid);
       return f && { scan: settle(f).scan.status, blocked: blockedText(f) };
+    },
+    read: (fid) => {
+      const f = files.find((x) => x.id === fid) ?? notFound('File');
+      settle(f);
+      if (!inTeam(f.team)) throw new ApiError(`${f.name} belongs to another team.`, 403);
+      if (f.scan.status === 'pending') throw new ApiError(`${f.name} is still being scanned.`, 409);
+      const blocked = blockedText(f);
+      if (blocked) throw new ApiError(`${f.name}: ${blocked}`, 409);
+      return { name: f.name, size: f.size, purpose: f.purpose, text: f.content };
+    },
+    writeExport: (a) => {
+      const f = makeFile({ name: a.name, size: a.size, purpose: 'export', team: a.team, by: me, digest: fakeDigest(`${a.name}:${Date.now()}`), scanned: 'clean', content: a.text });
+      f.references.push({ ...a.ref, addedAt: f.uploadedAt });
+      files.unshift(f);
+      auditLog(f, 'created', `Exported ${a.ref.name}`, [{ field: 'Purpose', after: 'export' }]);
+      return row(f);
     },
   };
 

@@ -164,7 +164,7 @@ function MetricView({ widget }: WidgetProps<MetricWidget>) {
           <div key={m.label} className="bg-card p-3">
             <p className="text-xs text-muted-foreground">{m.label}</p>
             <p className="text-xl font-semibold tabular-nums">{m.value}</p>
-            {m.delta && <p className={cn('text-xs', m.tone === 'good' ? 'text-emerald-700 dark:text-emerald-300' : m.tone === 'bad' ? 'text-destructive' : 'text-muted-foreground')}>{m.delta}</p>}
+            {m.delta && <p className={cn('text-xs', m.tone === 'good' ? 'text-success-text' : m.tone === 'bad' ? 'text-destructive' : 'text-muted-foreground')}>{m.delta}</p>}
           </div>
         ))}
       </div>
@@ -173,9 +173,9 @@ function MetricView({ widget }: WidgetProps<MetricWidget>) {
 }
 
 const APPROVAL_STATE: Record<ApprovalWidget['state'], { label: string; icon: typeof Clock; cls: string }> = {
-  pending: { label: 'Waiting for approval', icon: Clock, cls: 'text-amber-700 dark:text-amber-300' },
+  pending: { label: 'Waiting for approval', icon: Clock, cls: 'text-warning-text' },
   awaiting_second: { label: 'Waiting on a second approver', icon: ShieldCheck, cls: 'text-sky-700 dark:text-sky-300' },
-  approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-emerald-700 dark:text-emerald-300' },
+  approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-success-text' },
   rejected: { label: 'Rejected', icon: XCircle, cls: 'text-destructive' },
 };
 
@@ -314,7 +314,7 @@ function FormView({ widget, onAction }: WidgetProps<FormWidget>) {
           })}
         </fieldset>
         {submitted ? (
-          <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-success-text">
             <CheckCircle2 className="size-3.5" /> {widget.result}
           </p>
         ) : (

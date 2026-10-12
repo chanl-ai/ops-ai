@@ -1,0 +1,7 @@
+# 6 files import a database driver outside a store (check_standards rule 15). This number may only go down: move the queries into the service's store and remove the line.
+services/agents-service/src/ops_agents/api/app.py
+services/agents-service/src/ops_agents/api/deps.py
+services/models-service/src/ops_models/__main__.py
+services/models-service/src/ops_models/app.py
+services/models-service/src/ops_models/seed.py
+services/tools-service/src/ops_tools/__main__.py

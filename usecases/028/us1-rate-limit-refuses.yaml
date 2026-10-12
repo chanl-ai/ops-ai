@@ -1,0 +1,9 @@
+# US1: uc-011 api: an operation limited to 1 a minute refuses the next call 429 RATE_LIMITED with resetAt, logged denied.
+# The runner gives each run its own database and ports.
+id: us1-rate-limit-refuses
+accept: US1
+failure_mode: the call past the limit runs, or its refusal is not logged, or each gateway process counts on its own
+layers:
+  cli:
+    run: "make usecase-test UC=uc-011 LAYER=api"
+    expect: { exit: 0, stdout: "uc-011 api  15 checks passed" }

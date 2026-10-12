@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Code2, Mail, MessageSquare, Phone } from 'lucide-react';
 
-import { LiveBadge } from '@/components/status-badges';
+import { AgentAvailabilityBadge } from '@/components/status-badges';
 import { count, initials, pct } from '@/lib/format';
 import type { Agent, Channel } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
@@ -35,7 +35,7 @@ export function AgentAvatar({ name, className }: { name: string; className?: str
 
 /** Grid card adapted from the shared component library's agents preview: identity, model and channels, then four metrics. */
 export function AgentCard({ agent }: { agent: Agent }) {
-  const draft = agent.status === 'draft';
+  const draft = agent.availability === 'not_published';
   const metrics: [string, string][] = [
     ['Tasks · 24h', draft ? '—' : count(agent.tasks24h)],
     ['Auto-resolved', draft ? '—' : pct(agent.autoResolvedRate)],
@@ -70,7 +70,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
             </div>
           ))}
         </div>
-        <LiveBadge status={agent.status} />
+        <AgentAvailabilityBadge availability={agent.availability} />
       </div>
     </Link>
   );

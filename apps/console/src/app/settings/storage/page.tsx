@@ -36,7 +36,7 @@ function TestResult({ result }: { result: ConnectionTest }) {
     <ul className="flex flex-col gap-1 rounded-md border bg-muted/30 px-3 py-2 text-xs" data-testid="storage-test-result">
       {result.steps.map((s) => (
         <li key={s.label} className="flex items-start gap-2">
-          {s.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />}
+          {s.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />}
           <span>
             <span className="font-medium">{s.label}</span> · <span className="text-muted-foreground">{s.detail}</span>
           </span>

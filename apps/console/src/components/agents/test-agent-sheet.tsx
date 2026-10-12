@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { BookOpen, Bot, Check, FlaskConical, ListPlus, Send, UserCheck, Wrench } from 'lucide-react';
+import Link from 'next/link';
+import { BookOpen, Bot, Check, FlaskConical, ListPlus, Route, Send, Sparkles, UserCheck, Wrench } from 'lucide-react';
 
 import { PermissionNote } from '@/components/run-as/permission-note';
+import { RunStatusBadge } from '@/components/workflows/run-trace';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -92,11 +94,32 @@ export function TestAgentSheet({
                 </div>
                 {m.turn && (
                   <div className="ml-9 flex flex-col gap-1.5 text-xs">
+                    {m.turn.skills?.map((s) => (
+                      <div key={s.skillId} className="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-2 py-1" data-testid="loaded-skill">
+                        <Sparkles className="size-3 text-primary" />
+                        <span>
+                          Loaded skill <span className="font-medium">{s.name}</span> <span className="font-mono">v{s.version}</span>
+                        </span>
+                        <span className="truncate text-muted-foreground">· matched “{s.matched}”</span>
+                      </div>
+                    ))}
                     {m.turn.toolCalls.map((t) => (
                       <div key={t.name} className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1">
                         <Wrench className="size-3 text-muted-foreground" />
                         <code className="font-mono">{t.name}</code>
                         <span className="truncate text-muted-foreground">→ {t.output}</span>
+                      </div>
+                    ))}
+                    {m.turn.startedRuns?.map((r) => (
+                      <div key={r.runId} className="flex flex-wrap items-center gap-2 rounded-md border border-chart-4/30 bg-chart-4/5 px-2 py-1" data-testid="started-run">
+                        <Route className="size-3 text-chart-4" />
+                        <span>
+                          Started workflow <span className="font-medium">{r.workflowName}</span> ·{' '}
+                          <Link href={`/cases?run=${encodeURIComponent(r.runId)}`} className="font-mono underline underline-offset-2" data-testid="started-run-link">
+                            run {r.runId}
+                          </Link>
+                        </span>
+                        <RunStatusBadge status={r.status} />
                       </div>
                     ))}
                     {m.turn.citations.map((c) => (
@@ -105,7 +128,7 @@ export function TestAgentSheet({
                       </div>
                     ))}
                     {m.turn.wouldPause && (
-                      <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-amber-800 dark:text-amber-300">
+                      <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-warning-text">
                         <UserCheck className="size-3.5 shrink-0" />
                         <span>
                           In production this pauses at <span className="font-medium">{m.turn.wouldPause.gate}</span> for {m.turn.wouldPause.reviewers}.

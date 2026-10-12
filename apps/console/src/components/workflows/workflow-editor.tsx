@@ -36,7 +36,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import type { Review, Workflow, ValidationRun, WorkflowDetail, WorkflowGraph } from '@/lib/types/domain';
+import { plural } from '@/lib/format';
+import type { Review, RouteFields, Workflow, ValidationRun, WorkflowDetail, WorkflowGraph, WorkflowTestRun } from '@/lib/types/domain';
+import { RoutesEditor } from './routes-editor';
 import { cn } from '@/lib/utils';
 
 import { ANSWER_SHAPES, QUERY_MODES } from '@/components/knowledge/retrieval-meta';
@@ -97,6 +99,7 @@ function Inspector({
   agents,
   toolOptions,
   lookupOptions,
+  routeFields,
   issues,
   nodes,
   selected,
@@ -110,6 +113,7 @@ function Inspector({
   agents: { slug: string; name: string }[];
   toolOptions: { name: string; access: string }[];
   lookupOptions: LookupOptions;
+  routeFields?: RouteFields;
   issues: GraphIssue[];
   nodes: FlowNode[];
   selected: FlowNode | null;
@@ -145,9 +149,9 @@ function Inspector({
             <button
               key={g.id}
               onClick={() => onSelect(g.id)}
-              className="flex items-start gap-2.5 rounded-lg border border-dashed border-amber-500/50 p-2.5 text-left hover:bg-amber-500/5"
+              className="flex items-start gap-2.5 rounded-lg border border-dashed border-warning/50 p-2.5 text-left hover:bg-warning/5"
             >
-              <UserCheck className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <UserCheck className="mt-0.5 size-4 shrink-0 text-warning-text" />
               <div className="min-w-0">
                 <div className="text-sm font-medium">{g.data.label}</div>
                 <div className="text-xs text-muted-foreground">
@@ -160,7 +164,7 @@ function Inspector({
         <div className="flex flex-col gap-2" data-testid="graph-checks">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Checks · {issues.length ? `${issues.length} to fix` : 'all clear'}</p>
           {issues.length === 0 ? (
-            <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+            <p className="flex items-center gap-2 text-sm text-success-text">
               <CheckCircle2 className="size-4" /> Every step is wired and configured.
             </p>
           ) : (
@@ -173,7 +177,7 @@ function Inspector({
                     onClick={() => i.nodeId && onSelect(i.nodeId)}
                     className="flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-muted disabled:hover:bg-transparent"
                   >
-                    <AlertTriangle className={cn('mt-0.5 size-3.5 shrink-0', i.severity === 'error' ? 'text-red-600' : 'text-amber-600')} />
+                    <AlertTriangle className={cn('mt-0.5 size-3.5 shrink-0', i.severity === 'error' ? 'text-destructive' : 'text-warning-text')} />
                     {i.message}
                   </button>
                 </li>
@@ -259,6 +263,14 @@ function Inspector({
           </Field>
         );
       })}
+      {selected.type === 'branch' && (d.branches?.length ?? 0) > 1 && (
+        <>
+          <Separator />
+          <Field label="Routes" hint="Each run takes the first path whose comparison holds, otherwise the default.">
+            <RoutesEditor branches={d.branches ?? []} routes={d.routes ?? {}} defaultRoute={d.defaultRoute} fields={routeFields} onChange={(patch) => onChange(patch)} />
+          </Field>
+        </>
+      )}
       {selected.type === 'review' && (
         <>
           <Separator />
@@ -302,8 +314,8 @@ function Inspector({
           </label>
           <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
             <p className="mb-1.5 font-medium text-foreground">Outputs</p>
-            <p><span className="font-medium text-emerald-600">Approved</span> continues with the agent&apos;s proposal.</p>
-            <p><span className="font-medium text-red-600">Rejected</span> returns the reviewer&apos;s reason to the agent.</p>
+            <p><span className="font-medium text-success-text">Approved</span> continues with the agent&apos;s proposal.</p>
+            <p><span className="font-medium text-destructive">Rejected</span> returns the reviewer&apos;s reason to the agent.</p>
             <p><span className="font-medium">SLA lapsed</span> follows the dashed path.</p>
           </div>
         </>
@@ -327,7 +339,11 @@ export interface WorkflowEditorProps {
   agents: { slug: string; name: string }[];
   toolOptions: { name: string; access: string }[];
   lookupOptions: LookupOptions;
+  /** The fields and operators a branch may route on, from the runtime. */
+  routeFields?: RouteFields;
   onValidate: (graph: WorkflowGraph) => Promise<ValidationRun>;
+  /** Runs the draft once on a sample case through the API; the canvas lights the nodes it reached. */
+  onTestRun: (graph: WorkflowGraph) => Promise<WorkflowTestRun>;
   onRequestPublish: (graph: WorkflowGraph, note: string, validationRunId: string | undefined, checksFailing: number) => Promise<Review>;
   isRequesting: boolean;
   /** Persists the canvas draft (null discards it). Called as the user edits. */
@@ -344,13 +360,22 @@ export interface WorkflowEditorProps {
 /** What autosave compares, so an unchanged graph is never re-sent. */
 const snapshot = (g: Pick<WorkflowGraph, 'nodes' | 'edges' | 'emailConfig'>) => JSON.stringify({ nodes: g.nodes, edges: g.edges, emailConfig: g.emailConfig });
 
-function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents, toolOptions, lookupOptions, onValidate, onRequestPublish, isRequesting, onSaveDraft, tabs, extraActions, showCanvas, children }: WorkflowEditorProps) {
+function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents, toolOptions, lookupOptions, routeFields, onValidate, onTestRun, onRequestPublish, isRequesting, onSaveDraft, tabs, extraActions, showCanvas, children }: WorkflowEditorProps) {
   // Open on the saved draft when there is one, so edits survive leaving the page.
   const start = workflow.draft?.graph ?? workflow.graph;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(start.nodes as FlowNode[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(start.edges as Edge[]);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [validation, setValidation] = React.useState<ValidationRun | undefined>();
+  // A failing check the service ties to a node (`node:<id>` or `agent:<id>`) shows on that node, not in a toast.
+  const apiErrors = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const r of validation?.results ?? []) {
+      const m = /^(?:node|agent):(.+)$/.exec(r.caseId);
+      if (m && !r.draft.passed) out[m[1]] = r.draft.failure ?? r.caseName;
+    }
+    return out;
+  }, [validation]);
   const [validating, setValidating] = React.useState(false);
   const [validationError, setValidationError] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -428,7 +453,7 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
 
   const draftGraph = (): WorkflowGraph => ({
     workflowId: workflow.id,
-    nodes: nodes.map(({ id, type, position, data }) => ({ id, type: type ?? 'step', position, data: { ...data, status: undefined } })),
+    nodes: nodes.map(({ id, type, position, data }) => ({ id, type: type ?? 'step', position, data: { ...data, status: undefined, apiError: undefined } })),
     edges: edges.map(({ id, source, target, sourceHandle, label, type }) => ({ id, source, target, sourceHandle, label: typeof label === 'string' ? label : undefined, type })),
     ...(emailConfig ? { emailConfig } : {}),
   });
@@ -484,36 +509,26 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
   }, [saveState]);
   const [discardOpen, setDiscardOpen] = React.useState(false);
 
-  const testRun = () => {
-    const start = nodes.find((n) => n.type === 'trigger');
-    if (!start) return toast.error('Add a trigger before running a test');
-    const path: string[] = [];
-    let cur: FlowNode | undefined = start;
-    while (cur && !path.includes(cur.id)) {
-      path.push(cur.id);
-      if (cur.type === 'review') break;
-      const id: string = cur.id;
-      const next = edges.find((e) => e.source === id && (e.sourceHandle == null || ['mid', 'Gate', 'approved'].includes(e.sourceHandle))) ?? edges.find((e) => e.source === id);
-      cur = next ? nodes.find((n) => n.id === next.target) : undefined;
-    }
+  const testRun = async () => {
     setRunning(true);
     setNodes((ns) => ns.map((n) => ({ ...n, data: { ...n.data, status: undefined } })));
-    path.forEach((id, i) => {
+    try {
+      const run = await onTestRun(draftGraph());
+      // The service reports which nodes the run reached; light them in order so the path reads left to right.
+      run.visited.forEach((id, i) => {
+        setTimeout(() => {
+          setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, status: i === run.visited.length - 1 ? 'active' : 'success' } } : n)));
+        }, 300 * i);
+      });
       setTimeout(() => {
-        setNodes((ns) =>
-          ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, status: 'active' } } : path.slice(0, i).includes(n.id) ? { ...n, data: { ...n.data, status: 'success' } } : n)),
-        );
-        if (i === path.length - 1) {
-          setRunning(false);
-          const last = nodes.find((n) => n.id === id);
-          if (last?.type === 'review') {
-            toast('Test run paused for review', { description: `In production this run would wait for ${last.data.reviewers} (${last.data.sla} SLA).` });
-          } else {
-            toast.success('Test run completed');
-          }
-        }
-      }, 450 * (i + 1));
-    });
+        setRunning(false);
+        if (run.status === 'stopped') toast.warning('Test run stopped', { description: `It still waited after ${plural(run.pausesApproved, 'approval')}; check for a loop.` });
+        else toast.success('Test run completed', { description: run.pausesApproved ? `${plural(run.pausesApproved, 'review')} approved along the way.` : `${plural(run.visited.length, 'step')} ran.` });
+      }, 300 * run.visited.length);
+    } catch (e) {
+      setRunning(false);
+      toast.error('Test run failed', { description: (e as Error).message });
+    }
   };
 
   return (
@@ -550,7 +565,7 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
           )}
           {extraActions}
           {workflow.pendingPublish ? (
-            <Button size="sm" variant="outline" className="border-amber-500/50 text-amber-800 dark:text-amber-300" asChild>
+            <Button size="sm" variant="outline" className="border-warning/50 text-warning-text" asChild>
               <Link href={`/reviews?review=${workflow.pendingPublish.reviewId}`}>Awaiting approval · v{workflow.pendingPublish.toVersion}</Link>
             </Button>
           ) : (
@@ -569,7 +584,7 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
         </div>
       </div>
       {workflow.pendingPublish && showCanvas && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-900 lg:px-6 dark:text-amber-200" role="status" data-testid="pending-publish-banner">
+        <div className="flex flex-wrap items-center gap-2 border-b border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning-text lg:px-6" role="status" data-testid="pending-publish-banner">
           v{workflow.pendingPublish.toVersion} is waiting for approval from another publisher. The canvas shows your draft; changes you make now are saved but are not part of that request.
           <Link href={`/reviews?review=${workflow.pendingPublish.reviewId}`} className="ml-auto font-medium underline underline-offset-2">
             Open request
@@ -597,7 +612,7 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
           }}
         >
           <ReactFlow
-            nodes={nodes}
+            nodes={Object.keys(apiErrors).length ? nodes.map((n) => (apiErrors[n.id] ? { ...n, data: { ...n.data, apiError: apiErrors[n.id] } } : n)) : nodes}
             edges={edges}
             onNodesChange={(c) => {
               onNodesChange(c);
@@ -631,6 +646,7 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
             agents={agents}
             toolOptions={toolOptions}
             lookupOptions={lookupOptions}
+            routeFields={routeFields}
             issues={issues}
             nodes={nodes}
             selected={selected}

@@ -1,0 +1,15 @@
+{
+  "id": "us1-a-builder-manages-a-tool-module",
+  "accept": "US1",
+  "failure_mode": "the requester decides their own approval, a literal credential is saved, or a module is lost on restart",
+  "sha": "221f7d5139aa53d145ebb7e9166c0fae6694075a",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_c007; ports agents 8960, tools 8961, models 8962, platform 65148, console 3160\n\n== uc-010 api: A builder manages a tool module (docs/usecases/tools-service/scripts/test-uc-010-api.py)\nPASS a blank module is saved as a draft (201)\nPASS a literal credential in a header is refused (400)\nPASS an operation on a host off the egress allow-list is refused (422)\nPASS the operation is added with a vault reference instead\nPASS requesting a security review moves the draft to review\nPASS a minor change publishes the next minor version\nPASS a workflow approval is requested (201)\nPASS the requester cannot decide their own request (403)\nPASS someone else approves it\nPASS the draft and its operation survive a restart\nPASS the decided approval survives a restart\n\nPASS        uc-010 api  11 checks passed\n\nexit 0"
+    }
+  ]
+}

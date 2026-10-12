@@ -1,6 +1,8 @@
 import type { AuditEntry } from '@/lib/types/governance';
 import type { NotificationSettings, SettingsLookups, UsageReport, UsageRow, WebhookDelivery } from '@/lib/types/settings';
 
+import { acceptedName, registerInvite } from '../invites';
+import { currentSignInPolicy } from '../sign-in-policy';
 import { ApiError } from '../../contract';
 import type { SettingsApi } from '../../settings-contract';
 import * as F from '../fixtures';
@@ -42,6 +44,13 @@ const ROLE_LABEL = Object.fromEntries(LOOKUPS.roles.map((r) => [r.value, r.label
 export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): SettingsApi {
   const teamName = (tid: string) => teamDirectory.all().find((t) => t.id === tid)?.name ?? tid;
   const members = seedMembers(teamDirectory.all());
+  // Every invite gets a link token in the invites registry; acceptance there turns the member active here.
+  const linkFor = (m: (typeof members)[number]) => registerInvite({ email: m.email, team: m.team, teamId: m.teamId, role: ROLE_LABEL[m.role] ?? m.role, invitedBy: me, invitedAt: m.invitedAt ?? new Date().toISOString() });
+  for (const m of members) if (m.status === 'invited') m.inviteToken = linkFor(m);
+  const withAcceptance = (m: (typeof members)[number]) => {
+    const name = m.status === 'invited' ? acceptedName(m.email, m.teamId) : undefined;
+    return name ? { ...m, name, status: 'active' as const, inviteToken: undefined, lastActiveAt: new Date().toISOString() } : m;
+  };
   const notifications: Record<string, NotificationSettings> = {};
   const webhooks = seedWebhooks(teamName);
   const deliveries: Record<string, WebhookDelivery[]> = {};
@@ -77,17 +86,20 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
 
   return {
     members: {
-      list: (p) => respond((m) => list(scoped(members), p, { text: (x) => `${x.name} ${x.email}`, value: field, facetKeys: ['role', 'status', 'teamId'] }, m)),
+      list: (p) => respond((m) => list(scoped(members).map(withAcceptance), p, { text: (x) => `${x.name} ${x.email}`, value: field, facetKeys: ['role', 'status', 'teamId'] }, m)),
       invite: (input) =>
         respond(() => {
           const t = targetTeam(input.teamId);
           const res = bulk(input.emails, (email) => {
             const e = email.trim().toLowerCase();
             if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return 'Not an email address';
-            if (!e.endsWith('@northfieldbank.com')) return 'Outside northfieldbank.com';
+            // Settings → Sign-in decides which email domains may be invited; empty allows any.
+            const allowed = currentSignInPolicy().allowedDomains;
+            if (allowed.length && !allowed.some((d) => e.endsWith(`@${d}`))) return `Not an allowed domain in Sign-in settings (${allowed.join(', ')})`;
             if (members.some((x) => x.email === e && x.teamId === t.id)) return `Already in ${t.name}`;
             const name = e.split('@')[0].split('.').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-            members.unshift({ id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited', invitedAt: new Date().toISOString() });
+            const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, invitedAt: new Date().toISOString() };
+            members.unshift({ ...invited, inviteToken: linkFor(invited) });
             log({ action: 'created', target: { type: 'member', name: e, href: '/settings/members' }, summary: `Invited to ${t.name} as ${ROLE_LABEL[input.role]}`, diff: [{ field: 'Role', after: ROLE_LABEL[input.role] }] });
           });
           return res;

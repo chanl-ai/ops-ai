@@ -23,12 +23,22 @@ import { ICONS, CAT_COLORS, type StepData } from "./node-types"
 
 // ── Step Node ──
 
+/** A check the service failed for this node, from the last validation. */
+function NodeError({ data }: { data: StepData }) {
+  if (typeof data.apiError !== "string") return null
+  return (
+    <p className="border-t border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[10px] leading-snug text-destructive" role="alert" data-testid="node-error">
+      {data.apiError}
+    </p>
+  )
+}
+
 export const StepNode = memo(function StepNode({ data, selected }: NodeProps & { data: StepData }) {
   const Icon = ICONS[data.icon] || Brain
   const c = CAT_COLORS[data.category] || CAT_COLORS.ai
   const isAI = data.category === "ai"
-  const statusDot = data.status === "success" ? "bg-green-500"
-    : data.status === "error" ? "bg-red-500"
+  const statusDot = data.status === "success" ? "bg-success"
+    : data.status === "error" ? "bg-destructive"
     : data.status === "active" ? "bg-indigo-400 animate-pulse" : null
 
   return (
@@ -66,6 +76,7 @@ export const StepNode = memo(function StepNode({ data, selected }: NodeProps & {
         )}
       </div>
       <Handle type="source" position={Position.Right} className="!bg-muted-foreground !w-2 !h-2" />
+      <NodeError data={data} />
     </div>
   )
 })
@@ -102,12 +113,12 @@ export const EndNode = memo(function EndNode({ data, selected }: NodeProps & { d
   return (
     <div className={cn(
       "rounded-xl border-2 w-[160px] transition-all",
-      isError ? "border-red-500/40 bg-red-500/5" : "border-green-500/40 bg-green-500/5",
+      isError ? "border-destructive/40 bg-destructive/5" : "border-success/40 bg-success/5",
       selected && "ring-2 ring-primary",
     )}>
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground !w-2 !h-2" />
       <div className="p-3 flex items-center gap-2 justify-center">
-        {isError ? <XCircle className="size-4 text-red-600 dark:text-red-400" /> : <CheckCircle className="size-4 text-green-600 dark:text-green-400" />}
+        {isError ? <XCircle className="size-4 text-destructive" /> : <CheckCircle className="size-4 text-success-text" />}
         <p className="text-xs font-medium">{data.label}</p>
       </div>
     </div>
@@ -122,7 +133,7 @@ export const RouterNode = memo(function RouterNode({ data, selected }: NodeProps
       "rounded-xl border-2 border-indigo-500/40 bg-card shadow-lg w-[210px] transition-all",
       "shadow-indigo-500/10",
       data.status === "active" && "border-indigo-500 ring-2 ring-indigo-500/30",
-      data.status === "success" && "border-emerald-500/60",
+      data.status === "success" && "border-success/60",
       selected && "ring-2 ring-primary",
     )}>
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground !w-2 !h-2" />
@@ -143,9 +154,10 @@ export const RouterNode = memo(function RouterNode({ data, selected }: NodeProps
       </div>
       {/* Multiple outputs */}
       <Handle type="source" position={Position.Right} id="top" className="!bg-blue-400 !w-2 !h-2" style={{ top: '25%' }} />
-      <Handle type="source" position={Position.Right} id="mid" className="!bg-amber-400 !w-2 !h-2" style={{ top: '50%' }} />
+      <Handle type="source" position={Position.Right} id="mid" className="!bg-warning !w-2 !h-2" style={{ top: '50%' }} />
       <Handle type="source" position={Position.Right} id="bot" className="!bg-purple-400 !w-2 !h-2" style={{ top: '75%' }} />
-      <Handle type="source" position={Position.Bottom} id="fallback" className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} id="fallback" className="!bg-muted-foreground !w-2 !h-2" />
+      <NodeError data={data} />
     </div>
   )
 })
@@ -156,16 +168,16 @@ export const RouterNode = memo(function RouterNode({ data, selected }: NodeProps
 export const ReviewNode = memo(function ReviewNode({ data, selected }: NodeProps & { data: StepData }) {
   return (
     <div className={cn(
-      "w-[230px] rounded-xl border-2 border-dashed border-amber-500/60 bg-card shadow-md transition-all",
-      data.status === "active" && "border-solid border-amber-500 shadow-lg shadow-amber-500/20",
+      "w-[230px] rounded-xl border-2 border-dashed border-warning/60 bg-card shadow-md transition-all",
+      data.status === "active" && "border-solid border-warning shadow-lg shadow-warning/20",
       selected && "ring-2 ring-primary",
     )}>
       <Handle type="target" position={Position.Left} className="!bg-muted-foreground !w-2 !h-2" />
-      <div className="flex items-center gap-1.5 rounded-t-xl border-b border-amber-500/30 bg-amber-500/10 px-3 py-1">
-        <UserCheck className="size-3 text-amber-600 dark:text-amber-400" />
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Human review</span>
+      <div className="flex items-center gap-1.5 rounded-t-xl border-b border-warning/40 bg-warning/10 px-3 py-1">
+        <UserCheck className="size-3 text-warning-text" />
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-warning-text">Human review</span>
         {data.sla && (
-          <span className="ml-auto flex items-center gap-1 text-[9px] text-amber-700 dark:text-amber-400">
+          <span className="ml-auto flex items-center gap-1 text-[9px] text-warning-text">
             <Clock className="size-2.5" /> {data.sla}
           </span>
         )}
@@ -181,13 +193,14 @@ export const ReviewNode = memo(function ReviewNode({ data, selected }: NodeProps
         )}
       </div>
       {data.status === "active" && (
-        <div className="flex items-center gap-1.5 rounded-b-xl border-t border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
-          <span className="size-1.5 animate-pulse rounded-full bg-amber-500" /> Waiting on reviewer
+        <div className="flex items-center gap-1.5 rounded-b-xl border-t border-warning/40 bg-warning/10 px-3 py-1.5 text-[10px] font-medium text-warning-text">
+          <span className="size-1.5 animate-pulse rounded-full bg-warning" /> Waiting on reviewer
         </div>
       )}
-      <Handle type="source" position={Position.Right} id="approved" className="!bg-emerald-500 !w-2 !h-2" style={{ top: "30%" }} />
-      <Handle type="source" position={Position.Right} id="rejected" className="!bg-red-500 !w-2 !h-2" style={{ top: "62%" }} />
+      <Handle type="source" position={Position.Right} id="approved" className="!bg-success !w-2 !h-2" style={{ top: "30%" }} />
+      <Handle type="source" position={Position.Right} id="rejected" className="!bg-destructive !w-2 !h-2" style={{ top: "62%" }} />
       <Handle type="source" position={Position.Bottom} id="timeout" className="!bg-muted-foreground !w-2 !h-2" />
+      <NodeError data={data} />
     </div>
   )
 })
@@ -214,10 +227,11 @@ export const BranchNode = memo(function BranchNode({ data, selected }: NodeProps
         {branches.map((b) => (
           <div key={b} className="relative flex h-6 items-center justify-end pr-3 text-[10px] text-muted-foreground">
             {b}
-            <Handle type="source" position={Position.Right} id={b} className="!bg-slate-400 !w-2 !h-2" style={{ top: "50%" }} />
+            <Handle type="source" position={Position.Right} id={b} className="!bg-muted-foreground !w-2 !h-2" style={{ top: "50%" }} />
           </div>
         ))}
       </div>
+      <NodeError data={data} />
     </div>
   )
 })

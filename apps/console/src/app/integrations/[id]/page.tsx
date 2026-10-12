@@ -31,9 +31,12 @@ import { ApiError } from '@/lib/api';
 import { plural, shortDate } from '@/lib/format';
 import type { IntegrationDetail } from '@/lib/types/integrations';
 
-const TABS = ['overview', 'scopes', 'used-by', 'activity', 'audit'] as const;
+import { KnowledgeTab } from './_parts/knowledge-tab';
+import { SetupTab } from './_parts/setup-tab';
+
+const TABS = ['setup', 'overview', 'knowledge', 'scopes', 'used-by', 'activity', 'audit'] as const;
 type Tab = (typeof TABS)[number];
-const LABEL: Record<Tab, string> = { overview: 'Overview', scopes: 'Scopes', 'used-by': 'Used by', activity: 'Activity', audit: 'Audit' };
+const LABEL: Record<Tab, string> = { setup: 'Setup', overview: 'Overview', knowledge: 'Knowledge sync', scopes: 'Scopes', 'used-by': 'Used by', activity: 'Activity', audit: 'Audit' };
 
 export default function IntegrationPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,7 +57,11 @@ export default function IntegrationPage() {
 
 function IntegrationView({ i }: { i: IntegrationDetail }) {
   const router = useRouter();
-  const [tab, setTab] = useTabParam(TABS, 'overview');
+  const draft = i.status === 'draft';
+  // A draft opens on Setup; a live connection has no Setup tab, so a stale ?tab=setup shows the overview.
+  const [rawTab, setTab] = useTabParam(TABS, draft ? 'setup' : 'overview');
+  const tab: Tab = !draft && rawTab === 'setup' ? 'overview' : rawTab;
+  const shownTabs = TABS.filter((t) => draft || t !== 'setup');
   const reconnect = useReconnectIntegration();
   const rotate = useRotateIntegration();
   const check = useCheckIntegration();
@@ -98,7 +105,7 @@ function IntegrationView({ i }: { i: IntegrationDetail }) {
       backHref="/integrations"
       actions={
         <div className="flex items-center gap-2">
-          <LoadingButton variant="outline" isLoading={check.isPending} disabled={i.status === 'revoked'} onClick={recheck}>
+          <LoadingButton variant="outline" isLoading={check.isPending} disabled={i.status === 'revoked' || draft} onClick={recheck}>
             <RefreshCw className="size-4" /> Re-check
           </LoadingButton>
           <DropdownMenu>
@@ -108,14 +115,14 @@ function IntegrationView({ i }: { i: IntegrationDetail }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={i.status === 'healthy'} onClick={() => setDialog('reconnect')}>
+              <DropdownMenuItem disabled={i.status === 'healthy' || draft} onClick={() => setDialog('reconnect')}>
                 <LogIn className="size-4" /> {oauth ? 'Reconnect and renew consent' : 'Reconnect'}
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={oauth || i.status === 'revoked'} onClick={openRotate}>
+              <DropdownMenuItem disabled={oauth || draft || i.status === 'revoked'} onClick={openRotate}>
                 <KeyRound className="size-4" /> Rotate credential reference
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={i.status === 'revoked'}
+                disabled={i.status === 'revoked' || draft}
                 onClick={() => {
                   setWanted([]);
                   setWhy('');
@@ -159,16 +166,18 @@ function IntegrationView({ i }: { i: IntegrationDetail }) {
           />
           <Tabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
             <TabsList>
-              {TABS.map((t) => (
+              {shownTabs.map((t) => (
                 <TabsTrigger key={t} value={t}>
                   {LABEL[t]}
                   {t === 'used-by' && <span className="ml-1 text-muted-foreground tabular-nums">{total}</span>}
-                  {t === 'scopes' && i.scopeRequests.some((r) => r.status === 'pending') && <span className="ml-1 text-amber-700 tabular-nums dark:text-amber-400">1</span>}
+                  {t === 'scopes' && i.scopeRequests.some((r) => r.status === 'pending') && <span className="ml-1 text-warning-text tabular-nums">1</span>}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
+          {tab === 'setup' && <SetupTab connection={i} />}
           {tab === 'overview' && <OverviewPanel i={i} onFix={fix} fixing={reconnect.isPending || rotate.isPending} onRecheck={recheck} rechecking={check.isPending} />}
+          {tab === 'knowledge' && <KnowledgeTab connection={i} />}
           {tab === 'scopes' && (
             <ScopesPanel
               i={i}

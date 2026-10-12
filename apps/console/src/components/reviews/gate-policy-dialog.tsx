@@ -107,7 +107,7 @@ export function GatePolicyDialog({
       >
         {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
         {confirming && (
-          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="alert">
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-text" role="alert">
             From the next run, {values.reviewers || 'the reviewer group'} reviews runs where <code className="font-mono text-xs">{values.condition}</code>. Runs already paused keep their current gate.
           </p>
         )}

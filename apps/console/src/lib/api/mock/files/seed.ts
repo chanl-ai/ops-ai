@@ -4,7 +4,7 @@ const DAY = 86_400_000;
 export const daysAgo = (d: number) => new Date(Date.now() - d * DAY).toISOString();
 
 export const RETENTION_CLASSES: RetentionClass[] = [
-  { id: 'rc_knowledge', name: 'Knowledge content', days: null, purposes: ['knowledge_source', 'tool_spec', 'avatar'], worm: false, keepUntilEnd: false },
+  { id: 'rc_knowledge', name: 'Knowledge content', days: null, purposes: ['knowledge_source', 'tool_spec', 'avatar', 'skill_resource'], worm: false, keepUntilEnd: false },
   { id: 'rc_case', name: 'Case records · 7 years', days: 2555, purposes: ['case_attachment'], worm: false, keepUntilEnd: true },
   { id: 'rc_chat', name: 'Chat attachments · 1 year', days: 365, purposes: ['chat_attachment'], worm: false, keepUntilEnd: false },
   { id: 'rc_import', name: 'Test imports · 2 years', days: 730, purposes: ['test_import'], worm: false, keepUntilEnd: false },
@@ -21,6 +21,7 @@ export const LIMITS: PurposeLimit[] = [
   { purpose: 'export', allowedTypes: ['csv', 'zip'], maxSizeMb: 200 },
   { purpose: 'tool_spec', allowedTypes: ['json', 'yaml', 'yml'], maxSizeMb: 2 },
   { purpose: 'avatar', allowedTypes: ['png', 'jpg', 'svg'], maxSizeMb: 1 },
+  { purpose: 'skill_resource', allowedTypes: ['md', 'zip', 'pdf', 'docx', 'txt', 'csv', 'json'], maxSizeMb: 10 },
 ];
 
 export const STORAGE: Omit<StorageSettings, 'updatedAt'> & { updatedDaysAgo: number } = {
@@ -47,6 +48,8 @@ export const SUGGESTED: Record<FilePurpose, FileSensitivity> = {
   export: 'restricted',
   tool_spec: 'internal',
   avatar: 'public',
+  skill_resource: 'internal',
+  idp_metadata: 'internal',
 };
 
 export interface FileSeed {

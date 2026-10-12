@@ -47,6 +47,27 @@ export interface ToolCallRow {
   tokens?: { input: number; output: number };
   /** Model calls only, in CAD. */
   cost?: number;
+  /** Who the call runs as (`sub`): a user for chat and approvals, a workflow identity for workflow steps, a process principal for mailbox runs. Filled by the tools-service executions log. */
+  subject?: CallIdentity<'user' | 'workflow' | 'process' | 'service'>;
+  /** Who acts on the subject's behalf (`act`), e.g. the agent; absent when the subject acts directly. */
+  actor?: CallIdentity<'user' | 'agent' | 'workflow' | 'service'>;
+  /** The step (idempotency key) within the run. */
+  step?: string;
+  deploymentId?: string;
+  /** The id of the approval token that allowed a write. */
+  approvalTokenId?: string;
+  decision?: 'allow' | 'deny';
+  denyReason?: string;
+  /** A failed call: the gateway's code (e.g. `CONNECT_FAILED`, `UPSTREAM_TIMEOUT`), its message and the side it broke on. */
+  errorCode?: string;
+  errorMessage?: string;
+  failureSide?: 'ours' | 'upstream';
+}
+
+export interface CallIdentity<K extends string> {
+  kind: K;
+  id: string;
+  name: string;
 }
 
 export interface ToolCallDetail extends ToolCallRow {
@@ -97,7 +118,10 @@ export type AuditTargetType =
   | 'session'
   | 'model'
   | 'file'
-  | 'storage';
+  | 'storage'
+  | 'skill'
+  | 'template'
+  | 'sign_in_policy';
 
 export interface AuditActor {
   kind: 'person' | 'workflow';

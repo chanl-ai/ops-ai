@@ -47,7 +47,9 @@ interface Conn {
   expiresAt?: string;
   rotateBy?: string;
   credentialRef?: string;
-  base: 'healthy' | 'needs_reconnect' | 'revoked' | 'error';
+  /** Drafts on OAuth: who granted consent on the Setup tab. */
+  consentBy?: string;
+  base: 'draft' | 'healthy' | 'needs_reconnect' | 'revoked' | 'error';
   lastError?: string;
   lastCheckedAt: string;
   checks: HealthCheck[];
@@ -85,6 +87,7 @@ export function createIntegrationsMock(deps: {
     });
   };
 
+  const switches: Record<string, { syncKnowledge?: boolean; exposeTools?: boolean }> = {};
   const conns: Conn[] = CONNECTIONS.map((c, i) => ({
     id: c.id,
     catalogId: c.catalogId,
@@ -111,6 +114,7 @@ export function createIntegrationsMock(deps: {
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const statusOf = (c: Conn): IntegrationStatus => {
+    if (c.base === 'draft') return 'draft';
     if (c.base === 'revoked') return 'revoked';
     if (c.base === 'error') return 'error';
     const left = c.expiresAt ? new Date(c.expiresAt).getTime() - Date.now() : Infinity;
@@ -155,6 +159,9 @@ export function createIntegrationsMock(deps: {
       lastCheckedAt: c.lastCheckedAt,
       lastError: statusOf(c) === 'needs_reconnect' && !c.lastError ? 'Consent expired. Reconnect to resume.' : c.lastError,
       usedBy: { sources: ds.filter((d) => d.type === 'source').length, modules: ds.filter((d) => d.type === 'tool_module').length, mailboxes: ds.filter((d) => d.type === 'mailbox').length },
+      // Until someone flips a switch, it follows what already reads through the connection.
+      syncKnowledge: switches[c.id]?.syncKnowledge ?? ds.some((d) => d.type === 'source'),
+      exposeTools: switches[c.id]?.exposeTools ?? ds.some((d) => d.type === 'tool_module'),
     };
   }
 
@@ -180,10 +187,11 @@ export function createIntegrationsMock(deps: {
       audit: auditSink.entries().filter((e) => e.target.href === href),
       fix: fixFor(c),
       systemOwner: cat.owner,
+      consentBy: c.consentBy,
     };
   }
 
-  const audit = (c: Conn, action: 'connected' | 'revoked' | 'edited', summary: string, diff: { field: string; before?: string; after?: string }[], reason?: string) =>
+  const audit = (c: Conn, action: 'created' | 'connected' | 'revoked' | 'edited', summary: string, diff: { field: string; before?: string; after?: string }[], reason?: string) =>
     auditSink.log({ action, target: { type: 'integration', name: c.name, href: `/integrations/${c.id}` }, summary, diff, reason, owner: c.ownerTeam });
 
   const runCheck = (c: Conn, by: string) => {
@@ -226,7 +234,7 @@ export function createIntegrationsMock(deps: {
         const src = m === 'empty' ? [] : rows;
         const viewCounts = { all: src.length, attention: 0, expiring: 0, revoked: 0 };
         for (const v of ['attention', 'expiring', 'revoked'] as const) viewCounts[v] = src.filter((r) => inView(r, v)).length;
-        const rank: Record<IntegrationStatus, number> = { error: 0, needs_reconnect: 1, expiring: 2, revoked: 3, healthy: 4 };
+        const rank: Record<IntegrationStatus, number> = { draft: 0, error: 1, needs_reconnect: 2, expiring: 3, revoked: 4, healthy: 5 };
         return {
           ...list(
             rows.filter((r) => inView(r, p.view)).sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name)),
@@ -297,6 +305,80 @@ export function createIntegrationsMock(deps: {
           { field: 'Expires', after: new Date(c.expiresAt!).toLocaleDateString('en-CA', { dateStyle: 'medium' }) },
         ]);
         return row(c);
+      }),
+
+    createDraft: (input) =>
+      respond(() => {
+        const cat = catalogOf(input.catalogId);
+        if (!cat.available) throw new ApiError(`${cat.name} is not available yet: ${cat.unavailableReason ?? 'not offered'}.`, 409);
+        if (!cat.authMethods.includes(input.authMethod)) throw new ApiError(`${cat.name} does not accept that sign-in method.`, 400);
+        const name = input.name.trim();
+        if (!name) throw new ApiError('Name the connection.', 400);
+        if (conns.some((c) => c.name.toLowerCase() === name.toLowerCase())) throw new ApiError(`A connection named ${name} already exists.`, 409);
+        // Reads start selected, as in the guided connect; writes stay opt-in on the Setup tab.
+        const c: Conn = {
+          id: id('int'),
+          catalogId: cat.id,
+          name,
+          instanceUrl: `https://${cat.instanceHint.replace(/^https?:\/\//, '')}`,
+          tenant: cat.kind === 'm365' || cat.kind === 'sharepoint' ? 'northfield.onmicrosoft.com' : undefined,
+          authMethod: input.authMethod,
+          scopes: cat.scopes.filter((x) => x.access === 'read').map((x) => x.id),
+          ownerTeam: teamOwner() ?? 'Platform',
+          createdBy: me,
+          createdAt: new Date().toISOString(),
+          base: 'draft',
+          lastCheckedAt: new Date().toISOString(),
+          checks: [],
+          scopeRequests: [],
+        };
+        conns.unshift(c);
+        audit(c, 'created', `Saved ${name} as a draft connection to ${cat.name}`, [{ field: 'Sign-in', after: input.authMethod }]);
+        return row(c);
+      }),
+
+    saveSetup: (cid, patch) =>
+      respond(() => {
+        const c = find(cid);
+        if (c.base !== 'draft') throw new ApiError('This connection is live. Request scopes or rotate its credential instead.', 409);
+        const cat = catalogOf(c.catalogId);
+        const unknown = (patch.scopes ?? []).filter((s) => !cat.scopes.some((x) => x.id === s));
+        if (unknown.length) throw new ApiError(`${cat.name} does not offer ${unknown.join(', ')}.`, 400);
+        if (patch.credentialRef !== undefined) c.credentialRef = checkCredential(patch.credentialRef);
+        if (patch.scopes) {
+          c.scopes = [...patch.scopes];
+          // Consent covers the exact scopes on the consent screen, so changing them asks again.
+          c.consentBy = undefined;
+        }
+        if (patch.consentBy !== undefined) c.consentBy = patch.consentBy;
+        if (patch.ownerTeam !== undefined) c.ownerTeam = patch.ownerTeam;
+        if (patch.expiresAt !== undefined) c.expiresAt = patch.expiresAt;
+        if (patch.instanceUrl !== undefined) c.instanceUrl = patch.instanceUrl.trim();
+        const changed = Object.keys(patch).map((k) => ({ scopes: 'Scopes', credentialRef: 'Credential', consentBy: 'Consent', ownerTeam: 'Owner', expiresAt: 'Expiry', instanceUrl: 'Instance URL' })[k] ?? k);
+        audit(c, 'edited', `Set up ${changed.join(', ').toLowerCase()} on draft ${c.name}`, []);
+        return detail(c);
+      }),
+
+    activate: (cid) =>
+      respond(() => {
+        const c = find(cid);
+        if (c.base !== 'draft') throw new ApiError('This connection is already live.', 409);
+        const missing = [
+          !c.scopes.length && 'at least one scope',
+          (c.authMethod === 'oauth_consent' ? !c.consentBy : !c.credentialRef) && (c.authMethod === 'oauth_consent' ? 'consent' : 'a vault reference'),
+          !c.ownerTeam && 'an owner team',
+          (!c.expiresAt || new Date(c.expiresAt).getTime() <= Date.now()) && 'an expiry date in the future',
+        ].filter(Boolean);
+        if (missing.length) throw new ApiError(`Before it can connect it needs ${missing.join(', ')}.`, 400);
+        c.base = 'healthy';
+        c.rotateBy = c.credentialRef ? inDays(90) : undefined;
+        runCheck(c, me);
+        const cat = catalogOf(c.catalogId);
+        audit(c, 'connected', `Connected ${cat.name}`, [
+          { field: 'Sign-in', after: c.authMethod === 'oauth_consent' ? `Consent by ${c.consentBy}` : c.credentialRef },
+          { field: 'Scopes', after: cat.scopes.filter((s) => c.scopes.includes(s.id)).map((s) => s.label).join(', ') },
+        ]);
+        return detail(c);
       }),
 
     reconnect: (cid) =>
@@ -387,6 +469,16 @@ export function createIntegrationsMock(deps: {
         audit(c, 'edited', `Requested ${wanted.length === 1 ? 'a scope' : `${wanted.length} scopes`}; waiting for ${cat.owner}`, [{ field: 'Requested scopes', after: cat.scopes.filter((s) => wanted.includes(s.id)).map((s) => s.label).join(', ') }], input.justification.trim());
         return detail(c);
       }),
+    setSwitches: (cid, patch) =>
+      respond(() => {
+        const c = find(cid);
+        const before = row(c);
+        switches[cid] = { ...switches[cid], ...patch };
+        const after = row(c);
+        const diff = (['syncKnowledge', 'exposeTools'] as const).filter((k) => before[k] !== after[k]).map((k) => ({ field: k === 'syncKnowledge' ? 'Sync knowledge' : 'Expose tools', before: before[k] ? 'On' : 'Off', after: after[k] ? 'On' : 'Off' }));
+        if (diff.length) audit(c, 'edited', diff.map((d) => `${d.field} ${d.after.toLowerCase()}`).join(', '), diff);
+        return after;
+      }),
   };
 
   return {
@@ -423,4 +515,4 @@ export function createIntegrationsMock(deps: {
   };
 }
 
-const STATUS_TEXT: Record<IntegrationStatus, string> = { healthy: 'Healthy', needs_reconnect: 'Needs reconnect', expiring: 'Expiring', revoked: 'Revoked', error: 'Error' };
+const STATUS_TEXT: Record<IntegrationStatus, string> = { draft: 'Draft', healthy: 'Healthy', needs_reconnect: 'Needs reconnect', expiring: 'Expiring', revoked: 'Revoked', error: 'Error' };

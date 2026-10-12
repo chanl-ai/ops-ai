@@ -1,0 +1,9 @@
+# US3: uc-028 checks 6 and 7: a key over its limit answers the test turn 429 rate_limited, with one denied row and no
+# retry. The stream's error frame and the reload are in tests/api/test_turns_through_models_service.py.
+id: us3-a-refusal-reaches-the-caller
+accept: US3
+failure_mode: a refusal surfaces as a generic failed turn, or is retried
+layers:
+  cli:
+    run: "make usecase-test UC=uc-028 LAYER=api OPS_USECASE_DB=ops_usecase_c009 OPS_USECASE_AGENTS_PORT=8890 OPS_USECASE_TOOLS_PORT=8891 OPS_USECASE_MODELS_PORT=8892 OPS_USECASE_CONSOLE_PORT=3118"
+    expect: { exit: 0, stdout: "uc-028 api  8 checks passed" }

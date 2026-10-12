@@ -26,7 +26,7 @@ function Preview({ preview }: { preview: FilePreview }) {
   if (preview.kind === 'pdf')
     return (
       <div className="flex flex-col gap-1.5">
-        <div className="max-h-64 overflow-auto rounded-md border bg-white p-4 text-xs leading-relaxed whitespace-pre-wrap text-zinc-800 shadow-xs dark:bg-zinc-900 dark:text-zinc-200">{preview.firstPage}</div>
+        <div className="max-h-64 overflow-auto rounded-md border bg-card p-4 text-xs leading-relaxed whitespace-pre-wrap text-card-foreground shadow-xs">{preview.firstPage}</div>
         <p className="text-xs text-muted-foreground">Page 1 of {preview.pages}</p>
       </div>
     );

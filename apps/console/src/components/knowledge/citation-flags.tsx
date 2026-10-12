@@ -14,7 +14,7 @@ export function CitationFlags({ citation: c, className }: { citation: Citation; 
       )}
       {c.inForceOn && c.supersededToday && <span className="text-[10px] text-muted-foreground">superseded since</span>}
       {c.stale && (
-        <Badge variant="outline" className="h-4 border-amber-300 px-1 text-[10px] font-normal text-amber-700 dark:border-amber-800 dark:text-amber-400">
+        <Badge variant="outline" className="h-4 border-warning/40 px-1 text-[10px] font-normal text-warning-text">
           Stale
         </Badge>
       )}

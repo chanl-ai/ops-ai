@@ -19,7 +19,7 @@ export function CitationPopover({ citation, onOpenDocument, onOpenTrace }: { cit
           type="button"
           className={cn(
             'mx-0.5 inline-flex h-4 min-w-4 -translate-y-0.5 items-center justify-center rounded bg-primary/10 px-1 align-middle text-[10px] font-semibold tabular-nums text-primary hover:bg-primary/20',
-            citation.connectionRevoked ? 'ring-1 ring-destructive/50' : citation.stale && 'ring-1 ring-amber-400',
+            citation.connectionRevoked ? 'ring-1 ring-destructive/50' : citation.stale && 'ring-1 ring-warning',
           )}
           aria-label={`Citation ${citation.n}: ${citation.title}${flagWords(citation) ? ` (${flagWords(citation)})` : ''}`}
         >

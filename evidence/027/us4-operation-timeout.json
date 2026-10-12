@@ -1,0 +1,15 @@
+{
+  "id": "us4-operation-timeout",
+  "accept": "US4",
+  "failure_mode": "the per-operation timeout is ignored, or a timeout is not logged",
+  "sha": "8535924c40dd35b6b24f95a0a57d1552f487c1d1",
+  "env": "local",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "PASS the operation is added with a vault reference instead\nPASS requesting a security review moves the draft to review\nPASS a minor change publishes the next minor version\nPASS a workflow approval is requested (201)\nPASS the requester cannot decide their own request (403)\nPASS someone else approves it\nPASS the draft and its operation survive a restart\nPASS the decided approval survives a restart\nPASS the bank operation runs once published\nPASS an edit off the module endpoint (400) or with a literal credential (400) is refused\nPASS while the edit is pending, calls run the published call\nPASS a path edit publishes the next major version\nPASS a response transform shapes what the agent gets\nPASS a transform that fails returns the answer and the error, not a 500\nPASS an operation's own timeout stops the call with UPSTREAM_TIMEOUT, logged\nPASS the edited call survives a restart\n\nPASS        uc-010 api  19 checks passed\n\nexit 0"
+    }
+  ]
+}

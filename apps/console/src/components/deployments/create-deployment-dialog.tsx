@@ -17,6 +17,12 @@ import { cn } from '@/lib/utils';
 
 import { CHANNELS } from './deployment-meta';
 
+/**
+ * MCP hands off to the MCP tab instead of continuing (see `onChooseMcp`). Console chat is not offered: the platform
+ * creates it for every published agent.
+ */
+const WIZARD_CHANNELS: DeployChannel[] = (Object.keys(CHANNELS) as DeployChannel[]).filter((c) => c !== 'chat');
+
 const STEPS = ['Channel', 'Configure', 'Review'] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DOMAIN_RE = /^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
@@ -70,15 +76,22 @@ export function CreateDeploymentDialog({
   workflows,
   fixedWorkflowId,
   initialChannel,
+  onChooseMcp,
   onSubmit,
   isPending,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workflows: Pick<Workflow, 'id' | 'name' | 'status' | 'version'>[];
+  /** Workflows and agents' wrapper workflows; a wrapper is listed as "Agent · <name>". */
+  workflows: Pick<Workflow, 'id' | 'name' | 'status' | 'version' | 'wrapsAgentName'>[];
   fixedWorkflowId?: string;
   /** Channel preselected on open, e.g. `email` from the palette's Connect mailbox. */
   initialChannel?: DeployChannel;
+  /**
+   * Called when MCP is chosen. Exposing a workflow is the create action for that channel, so the wizard closes
+   * and the caller shows the MCP tab's exposed-workflows table instead of collecting settings here.
+   */
+  onChooseMcp?: () => void;
   onSubmit: (input: DeploymentInput) => Promise<unknown>;
   isPending: boolean;
 }) {
@@ -160,11 +173,12 @@ export function CreateDeploymentDialog({
           {step < 3 ? (
             <Button
               onClick={() => {
+                if (step === 1 && v.channel === 'mcp' && onChooseMcp) return (onOpenChange(false), onChooseMcp());
                 if (step === 2 && !valid) return setTouched(true);
                 setStep(step + 1);
               }}
             >
-              Next
+              {step === 1 && v.channel === 'mcp' ? 'Choose workflows' : 'Next'}
             </Button>
           ) : (
             <LoadingButton
@@ -192,7 +206,7 @@ export function CreateDeploymentDialog({
           aria-label="Channel"
           onKeyDown={(e) => {
             // Arrow keys move the selection, as in a native radio group; only the selected option is tabbable.
-            const keys = Object.keys(CHANNELS) as DeployChannel[];
+            const keys = WIZARD_CHANNELS;
             const delta = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
             if (!delta) return;
             e.preventDefault();
@@ -201,7 +215,7 @@ export function CreateDeploymentDialog({
             e.currentTarget.querySelector<HTMLButtonElement>(`[data-channel="${next}"]`)?.focus();
           }}
         >
-          {(Object.keys(CHANNELS) as DeployChannel[]).map((c) => {
+          {WIZARD_CHANNELS.map((c) => {
             const meta = CHANNELS[c];
             return (
               <button
@@ -211,7 +225,7 @@ export function CreateDeploymentDialog({
                 data-channel={c}
                 aria-checked={v.channel === c}
                 tabIndex={v.channel === c ? 0 : -1}
-                onClick={() => set('channel', c)}
+                onClick={() => (c === 'mcp' && onChooseMcp ? (onOpenChange(false), onChooseMcp()) : set('channel', c))}
                 className={cn('flex items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/40', v.channel === c && 'border-primary bg-primary/5')}
               >
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
@@ -240,15 +254,15 @@ export function CreateDeploymentDialog({
             <Input id="dp-name" autoFocus value={v.name} onChange={(e) => set('name', e.target.value)} placeholder={v.channel === 'email' ? 'e.g. Support inbox' : v.channel === 'api' ? 'e.g. Mobile app' : 'e.g. Website chat'} aria-invalid={!!err('name')} />
           </FormField>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="dp-wf" label="Workflow" error={err('workflowId')} hint={fixedWorkflowId ? undefined : 'Only published workflows can be deployed.'}>
+            <FormField id="dp-wf" label="Workflow or agent" error={err('workflowId')} hint={fixedWorkflowId ? undefined : 'Only published workflows and agents can be deployed.'}>
               <Select value={v.workflowId} onValueChange={(x) => set('workflowId', x)} disabled={!!fixedWorkflowId}>
                 <SelectTrigger id="dp-wf" className="w-full" aria-invalid={!!err('workflowId')}>
-                  <SelectValue placeholder="Choose a workflow" />
+                  <SelectValue placeholder="Choose a workflow or agent" />
                 </SelectTrigger>
                 <SelectContent>
                   {(fixedWorkflowId ? workflows.filter((w) => w.id === fixedWorkflowId) : published).map((w) => (
                     <SelectItem key={w.id} value={w.id}>
-                      {w.name} · v{w.version}
+                      {w.wrapsAgentName ? `Agent · ${w.wrapsAgentName}` : `${w.name} · v${w.version}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -314,7 +328,7 @@ export function CreateDeploymentDialog({
                     aria-invalid={!!(err('inbound') ?? err('mailbox'))}
                   />
                   {v.mailboxConnected ? (
-                    <span className="flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400" data-testid="mailbox-connected">
+                    <span className="flex items-center gap-1 text-sm text-success-text" data-testid="mailbox-connected">
                       <CheckCircle2 className="size-4" /> Connected
                     </span>
                   ) : (

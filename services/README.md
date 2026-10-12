@@ -1,18 +1,13 @@
 # Services
 
-Status: draft for review. Each folder holds a README describing the planned service; only
-`knowledge-ingest/` and `files/` have code so far.
+Deployable services. Each is named after the console section it serves; reusable libraries live in `packages/`.
+Full map, layering rules and cross-service contracts: `docs/architecture/service-map.md`.
 
-| Folder | Service | Status |
-|---|---|---|
-| `control-plane/` | Control-plane API: registry, release gate, cases, governance | Not started |
-| `interpreter/` | Workflow interpreter (Temporal worker), node types, agent-block host | Not started |
-| `data-gateway/` | Data gateway: tool and knowledge modules, approvals, policy, call log | Not started |
-| `ai-gateway/` | Key-and-budget service in front of Portkey | Not started |
-| `mailbox-intake/` | Shared-mailbox polling, scan, archive | Not started |
-| `knowledge-ingest/` | Knowledge source sync, metadata checks, indexing | Library in progress: parsing, splitting, metadata, dedupe, rules; no server |
-| `files/` | Files service: uploads, downloads, dedupe, scanning hook, retention and legal holds over S3 or Azure Blob | Library in progress: service, S3, Azure Blob and local stores; no server or PostgreSQL repository |
-| `eval-runner/` | Suites, agent evals, evidence bundles | Not started |
-| `shared/` | Generated contract models, settings, logging, tracing, clients | Not started |
+| Folder | State |
+|---|---|
+| `agents-service/` | Prototype: chat, graphs on threads, leases, timers |
+| `tools-service/` | Prototype: tool gateway with OPA and approval tokens |
+| `files-service/` | Service logic with tests, no server yet; backends in `packages/ops_storage` |
+| `platform-service/`, `hitl-service/`, `models-service/`, `kb-service/` | Not started (`kb-service` will use `packages/ops_ingest`) |
 
-Service map, contract flow, standards and the walking-skeleton scope: `docs/backend/overview.md`.
+Python services share one uv workspace at the repo root. Each has a `Makefile` with `install`, `run` and `verify`.

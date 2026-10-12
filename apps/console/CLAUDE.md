@@ -19,15 +19,18 @@ A rule that is not checked by the script is still a rule; the script covers the 
 
 - Every value a screen shows comes from a hook backed by `OpsApi` (`src/lib/api/contract.ts`). Adding data means: type → contract → `http.ts` → mock → hook.
 - Counts, totals and stats are computed by the API, never aggregated in a component.
-- `NEXT_PUBLIC_OPS_API_URL` set → real HTTP client; unset → mock. Nothing else reads env.
+- `NEXT_PUBLIC_OPS_API_URL` set → every area uses the real HTTP client; unset → mock. `NEXT_PUBLIC_OPS_CHAT_API_URL` set → `api.chat` uses HTTP to that service (the Runtime) and every other area stays as above (`pnpm dev:runtime`). `NEXT_PUBLIC_OPS_CASES_API_URL` set → `api.cases.runs`/`run` and `api.reviews` use the agents service the same way. `NEXT_PUBLIC_AUTH_PROVIDER` picks the sign-in adapter. Only `src/lib/api/index.ts` reads env.
 
 ## Components (reuse before writing)
 
 | Need | Use | Never |
 | --- | --- | --- |
 | Page header | `PageLayout` (icon, title, one-line description, actions, `backHref` on record pages) | hand-built headers |
+| Switch between a section's pages | `TitleSwitcher` via `PageLayout` `switcher` (pages from `sectionFor` in `lib/nav.ts`) | a tab strip of sibling routes under the header |
 | List | `DataTableWithViews` + `DataTableColumnHeader` + faceted filters with counts + server pagination via `useListParams` + `selectColumn` + bulk actions | raw `<table>`, client-side paging of full lists |
 | Create one thing (≤ 7 fields) | `DialogShell` size `md`, then navigate to its page to edit | a `/new` page |
+| Create an entity | One-screen New X dialog (name plus one required field) → draft on its detail page; the guided wizard, template or import is the second button | a wizard as the only way in |
+| Sign in / step-up | AuthProvider seam via `hooks/auth-queries`; `useStepUpGate` before money approvals (the API refuses them without a step-up) | importing an adapter directly |
 | Create in steps | `DialogShell` + `Stepper` ("Step X of N", Back/Next, editable review step, fixed body height) | a wizard page |
 | Revisitable settings | Form on the page (`SettingsSection`, sticky unsaved bar, versioned save) | a settings dialog |
 | Inspect a row | `DetailSheet` with prev/next and `scrollKey` | navigating away for a peek |
@@ -64,4 +67,4 @@ buttons say the action, placeholders start with "e.g." and never look like real 
 
 1. `pnpm verify` passes.
 2. Every changed route returns 200 and renders in Chrome without console errors.
-3. An independent reviewer (a person or a fresh coding agent, in a browser, this file and `docs/ui/page-plan.md` as the standard) has exercised the change, and its blockers and majors are fixed.
+3. An independent reviewer (a person or a fresh coding agent, in a browser, this file and `docs/console/page-plan.md` as the standard) has exercised the change, and its blockers and majors are fixed.

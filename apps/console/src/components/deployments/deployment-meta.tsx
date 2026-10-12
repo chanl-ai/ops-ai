@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Code2, Mail, MessageSquare } from 'lucide-react';
+import { Code2, Mail, MessageSquare, MessagesSquare, Plug } from 'lucide-react';
 
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 
@@ -15,6 +15,8 @@ export const CHANNELS: Record<DeployChannel, { label: string; description: strin
   widget: { label: 'Chat widget', description: 'Embed on a website; customers chat with the workflow', icon: MessageSquare },
   api: { label: 'API', description: 'Your systems call the workflow over HTTPS', icon: Code2 },
   email: { label: 'Mailbox', description: 'A shared mailbox; each email opens a case with drafted actions', icon: Mail },
+  mcp: { label: 'MCP', description: 'Staff assistants call the workflow as a tool on the workspace MCP URL', icon: Plug },
+  chat: { label: 'Console chat', description: 'Staff chat with the agent in the console; created for every published agent', icon: MessagesSquare },
 };
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
@@ -42,12 +44,12 @@ type MailSync = NonNullable<NonNullable<Deployment['email']>['sync']>;
 export function DeploymentStatusBadge({ status, sync }: { status: Deployment['status']; sync?: MailSync }) {
   const s =
     status !== 'active'
-      ? { label: 'Paused', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' }
+      ? { label: 'Paused', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' }
       : sync?.status === 'error'
         ? { label: 'Not reading mail', cls: 'border-destructive/30 bg-destructive/10 text-destructive', dot: 'bg-destructive' }
         : sync?.status === 'syncing'
           ? { label: 'Syncing mail', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' }
-          : { label: 'Active', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' };
+          : { label: 'Active', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' };
   return (
     <span className={cn(pill, s.cls)} title={sync?.status === 'error' ? 'Reconnect needed' : undefined}>
       <span className={cn('size-1.5 rounded-full', s.dot)} />
@@ -71,17 +73,17 @@ export function VersionCell({ d }: { d: Pick<Deployment, 'version' | 'latestVers
   return (
     <span className="text-sm whitespace-nowrap tabular-nums">
       <span className="font-mono">v{d.version}</span>{' '}
-      {behind > 0 ? <span className="text-xs text-amber-700 dark:text-amber-400">{behind} behind</span> : <span className="text-xs text-muted-foreground">latest</span>}
+      {behind > 0 ? <span className="text-xs text-warning-text">{behind} behind</span> : <span className="text-xs text-muted-foreground">latest</span>}
     </span>
   );
 }
 
-function CodeBlock({ label, code }: { label: string; code: string }) {
+export function CodeBlock({ label, code, onCopy }: { label: string; code: string; onCopy?: () => void }) {
   return (
     <div className="overflow-hidden rounded-lg border">
       <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-1.5">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <CopyButton text={code} variant="ghost" size="sm" />
+        <CopyButton text={code} variant="ghost" size="sm" onCopy={onCopy} />
       </div>
       <pre className="overflow-x-auto bg-zinc-950 p-3 font-mono text-[11.5px] leading-relaxed text-zinc-200">{code}</pre>
     </div>
@@ -115,6 +117,31 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
         <div className="text-sm">
           <span className="text-muted-foreground">Rate limit: </span>
           {d.api.rateLimitPerMinute.toLocaleString()} requests a minute
+        </div>
+      </div>
+    );
+  }
+  if (d.channel === 'chat') {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">Staff pick this agent on the Chat page while this deployment is active. It pauses and resumes with the agent and follows the wrapper workflow's published version.</p>
+        <div className="text-sm">
+          <Link href="/chat" className="underline underline-offset-2">
+            Open Chat
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (d.channel === 'mcp' && d.mcp) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">Assistants connected to the workspace MCP URL see this workflow as a tool. It follows the release pointer, so it always runs the newest published version.</p>
+        <CodeBlock label="Tool name" code={d.mcp.toolId} />
+        <div className="text-sm">
+          <Link href="/deployments?tab=mcp" className="underline underline-offset-2">
+            Manage on the MCP tab
+          </Link>
         </div>
       </div>
     );

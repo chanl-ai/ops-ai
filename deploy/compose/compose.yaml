@@ -1,0 +1,30 @@
+# Local dev stack: PostgreSQL for the agents and tools services, and OPA for the tools service. Port 5477 so it sits
+# beside other local Postgres instances. The project name stays ops-runtime so the existing data volume is reused.
+name: ops-runtime
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ops
+      POSTGRES_PASSWORD: ops
+      POSTGRES_DB: ops_runtime
+    ports:
+      - "${OPS_PG_PORT:-5477}:5432"
+    volumes:
+      - ops-runtime-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ops -d ops_runtime"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  # The tool gateway's policy engine: the official OPA image serving services/tools-service/policy. Port 8181 is OPA's
+  # default; only the gateway calls it.
+  opa:
+    image: openpolicyagent/opa:1.21.1
+    command: ["run", "--server", "--watch", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"]
+    ports:
+      - "${OPS_OPA_PORT:-8181}:8181"
+    volumes:
+      - ../../services/tools-service/policy:/policy:ro
+volumes:
+  ops-runtime-pg:

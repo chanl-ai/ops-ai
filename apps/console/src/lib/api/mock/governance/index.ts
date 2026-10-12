@@ -23,7 +23,7 @@ const VIEW: Record<Exclude<AuditView, 'all'>, (e: AuditEntry) => boolean> = {
 
 const req = () => `req_${Math.random().toString(36).slice(2, 12)}`;
 
-export type AuditWrite = Pick<AuditEntry, 'action' | 'target' | 'summary'> & Partial<Pick<AuditEntry, 'diff' | 'reason'>> & { owner?: string };
+export type AuditWrite = Pick<AuditEntry, 'action' | 'target' | 'summary'> & Partial<Pick<AuditEntry, 'diff' | 'reason'>> & { owner?: string; actor?: AuditEntry['actor'] };
 /** Lets other mocks (model risk, evals, integrations) write to and read the same audit log; set when the governance mock is created. */
 export const auditSink: { log: (e: AuditWrite) => void; entries: () => AuditEntry[] } = { log: () => undefined, entries: () => [] };
 
@@ -47,11 +47,12 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
   const audit: Owned<AuditEntry>[] = [...AUDIT_SEED, ...loginSeeds()].sort((a, b) => a.min - b.min).map(toEntry);
 
   /** Appends an audit entry as the current user, in the current team unless an owner says otherwise. */
-  const log = (e: Pick<AuditEntry, 'action' | 'target' | 'summary'> & Partial<Pick<AuditEntry, 'diff' | 'reason'>> & { owner?: string }) => {
+  /** `actor` overrides the current user, for sign-in events whose person is not who the console runs as. */
+  const log = (e: AuditWrite) => {
     const cur = teamDirectory.current();
     const owner = e.owner ?? (cur.scope === 'all' ? undefined : cur.ownerGroups[0]);
     const t = teamDirectory.ofOwner(owner);
-    audit.unshift({ diff: [], ...e, owner, id: id('aud'), at: new Date().toISOString(), actor: { kind: 'person', name: me, detail: emailOf(me) }, teamId: t.id, team: t.name, requestId: req() });
+    audit.unshift({ diff: [], ...e, owner, id: id('aud'), at: new Date().toISOString(), actor: e.actor ?? { kind: 'person', name: me, detail: emailOf(me) }, teamId: t.id, team: t.name, requestId: req() });
   };
   auditSink.log = log;
   auditSink.entries = () => audit.filter((e) => inTeam(e.owner)).map(strip);

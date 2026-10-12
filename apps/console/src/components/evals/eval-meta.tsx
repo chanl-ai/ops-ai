@@ -71,7 +71,7 @@ export function OutcomeText({ status, detail }: { status: 'pass' | 'fail' | 'adv
       </span>
     );
   return (
-    <span className={cn('inline-flex items-center gap-1.5 text-xs', status === 'pass' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+    <span className={cn('inline-flex items-center gap-1.5 text-xs', status === 'pass' ? 'text-success-text' : 'text-destructive')}>
       {status === 'pass' ? <CheckCircle2 className="size-3.5 shrink-0" /> : <XCircle className="size-3.5 shrink-0" />}
       {status === 'pass' ? 'Passed' : (detail ?? 'Failed')}
     </span>
@@ -80,7 +80,7 @@ export function OutcomeText({ status, detail }: { status: 'pass' | 'fail' | 'adv
 
 export function RegressionBadge() {
   return (
-    <Badge variant="outline" className="gap-1 border-red-300 text-red-700 dark:border-red-900 dark:text-red-300">
+    <Badge variant="outline" className="gap-1 border-destructive/40 text-destructive">
       <AlertTriangle className="size-3" /> Regression
     </Badge>
   );
@@ -96,8 +96,8 @@ export function EvalSummaryLine({ summary, className }: { summary: EvalVersionSu
           <span className="font-medium text-foreground">
             Evals {summary.passed}/{summary.total}
           </span>
-          {summary.regressions > 0 && <span className="text-red-600 dark:text-red-400">{summary.regressions === 1 ? '1 regression' : `${summary.regressions} regressions`}</span>}
-          <span className={injectionOk ? undefined : 'text-red-600 dark:text-red-400'}>
+          {summary.regressions > 0 && <span className="text-destructive">{summary.regressions === 1 ? '1 regression' : `${summary.regressions} regressions`}</span>}
+          <span className={injectionOk ? undefined : 'text-destructive'}>
             Injection {summary.injection.passed}/{summary.injection.total}
           </span>
         </span>

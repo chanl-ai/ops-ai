@@ -88,7 +88,7 @@ export function TierDialog({ open, onOpenChange, name, current, onSubmit, isPend
           <Textarea id="tier-reason" aria-invalid={!!error.reason} value={reason} onChange={(e) => (setReason(e.target.value), setError({ ...error, reason: undefined }))} placeholder="e.g. Now posts provisional credit without a person for amounts under $200" className="min-h-20" />
         </FormField>
         {needsApproval && (
-          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-text">
             A change to or from high or critical needs second-line approval. It opens a review for Model Risk and applies when they approve.
           </p>
         )}

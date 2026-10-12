@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Building2, Pause, Play, Plus, Route, UserCheck } from 'lucide-react';
+import { Building2, Pause, Play, PlayCircle, Plus, Route, UserCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -14,9 +14,12 @@ import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { selectColumn } from '@/components/shared/select-column';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { LiveBadge } from '@/components/status-badges';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { StartRunDialog } from '@/components/workflows/start-run-dialog';
 import { WorkflowDialog } from '@/components/workflows/workflow-dialog';
-import { useBulkUpdateWorkflows, useCreateWorkflow, useLookups, useWorkflows } from '@/hooks/queries';
+import { useStartableWorkflows, useStartRun } from '@/hooks/case-queries';
+import { useBulkUpdateWorkflows, useCreateWorkflow, useLookups, useWorkflows, workflowsBulkSupported } from '@/hooks/queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
@@ -35,7 +38,14 @@ const columns: ColumnDef<Row>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow" />,
     cell: ({ row }) => (
       <div className="min-w-52">
-        <div className="font-medium">{row.original.name}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{row.original.name}</span>
+          {row.original.wrapsAgentName && (
+            <Badge variant="outline" className="font-normal" title="Created by the platform so this agent can be deployed; it publishes when the agent does" data-testid={`wraps-chip-${row.original.id}`}>
+              Wraps {row.original.wrapsAgentName}
+            </Badge>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground">Starts when: {row.original.trigger}</div>
       </div>
     ),
@@ -64,7 +74,7 @@ const columns: ColumnDef<Row>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Review gates" />,
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1.5 tabular-nums">
-        <UserCheck className="size-3.5 text-amber-600" /> {row.original.gateCount}
+        <UserCheck className="size-3.5 text-warning-text" /> {row.original.gateCount}
       </span>
     ),
   },
@@ -78,7 +88,7 @@ const columns: ColumnDef<Row>[] = [
       return (
         <div className="flex items-center gap-2">
           <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.round(v * 100)}%` }} />
+            <div className="h-full rounded-full bg-warning" style={{ width: `${Math.round(v * 100)}%` }} />
           </div>
           <span className="text-xs tabular-nums text-muted-foreground">{Math.round(v * 100)}%</span>
         </div>
@@ -92,7 +102,7 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="flex flex-col items-start gap-1">
         <LiveBadge status={row.original.status} />
-        {row.original.pendingPublish && <span className="text-[11px] whitespace-nowrap text-amber-700 dark:text-amber-400">v{row.original.pendingPublish.toVersion} awaiting approval</span>}
+        {row.original.pendingPublish && <span className="text-[11px] whitespace-nowrap text-warning-text">v{row.original.pendingPublish.toVersion} awaiting approval</span>}
       </div>
     ),
     filterFn: facetFilterFn,
@@ -124,6 +134,11 @@ export default function WorkflowsPage() {
   const list = useListParams<WorkflowFilters>('name');
   const query = useWorkflows(list.params);
   const create = useCreateWorkflow();
+  const startRun = useStartRun();
+  const [startOpen, setStartOpen] = React.useState(false);
+  const startable = useStartableWorkflows(startOpen);
+  // A workflow that takes an agent id starts from Chat, where the agent is chosen; this dialog has no agent field.
+  const startableHere = React.useMemo(() => (startable.data ?? []).filter((w) => w.input.every((f) => f.type !== 'agent')), [startable.data]);
   const [createOpen, setCreateOpen] = useCreateParam();
   const { data: lookups } = useLookups();
   const bulkUpdate = useBulkUpdateWorkflows();
@@ -138,13 +153,19 @@ export default function WorkflowsPage() {
 
   return (
     <PageLayout
+      switcher
       icon={Route}
       title="Workflows"
       description="Agents, tools and review gates wired into one run"
       actions={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" /> New workflow
-        </Button>
+        <>
+          <Button variant="outline" onClick={() => setStartOpen(true)}>
+            <PlayCircle className="size-4" /> Start run
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" /> New workflow
+          </Button>
+        </>
       }
     >
       {query.isPending ? (
@@ -162,11 +183,15 @@ export default function WorkflowsPage() {
           filters={[{ column: 'status', title: 'Status', options: STATUS_OPTIONS.map((o) => ({ ...o, count: facets.status?.[o.value] ?? 0 })) }]}
           onColumnFiltersChange={list.onColumnFiltersChange}
           selectionResetKey={resetKey}
-          bulkActions={[
-            { label: 'Pause', icon: Pause, variant: 'outline', onClick: (rows) => setBulk({ kind: 'pause', rows }) },
-            { label: 'Resume', icon: Play, variant: 'outline', onClick: (rows) => setBulk({ kind: 'resume', rows }) },
-            { label: 'Change owner', icon: Building2, variant: 'outline', onClick: (rows) => setBulk({ kind: 'owner', rows }) },
-          ]}
+          bulkActions={
+            workflowsBulkSupported
+              ? [
+                  { label: 'Pause', icon: Pause, variant: 'outline', onClick: (rows) => setBulk({ kind: 'pause', rows }) },
+                  { label: 'Resume', icon: Play, variant: 'outline', onClick: (rows) => setBulk({ kind: 'resume', rows }) },
+                  { label: 'Change owner', icon: Building2, variant: 'outline', onClick: (rows) => setBulk({ kind: 'owner', rows }) },
+                ]
+              : undefined
+          }
           serverPagination={{
             enabled: true,
             total: query.data?.pagination.total ?? 0,
@@ -218,6 +243,21 @@ export default function WorkflowsPage() {
           toastBulk(res, 'Moved', 'workflow', nameOf);
           setBulk(null);
           setResetKey((k) => k + 1);
+        }}
+      />
+      <StartRunDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        workflows={startableHere}
+        loading={startable.isPending}
+        loadError={startable.isError ? startable.error.message : undefined}
+        isPending={startRun.isPending}
+        onSubmit={async (input) => {
+          const { threadId, run } = await startRun.mutateAsync(input);
+          // Agent runs are chat threads, which Cases leaves out; until chat reads threads there is no page to open.
+          if (!run) return void toast.success('Run finished', { description: `Thread ${threadId} ran to its end. Agent runs are not cases; the agent's reply is in the thread's run state.`, duration: 10_000 });
+          toast.success(`Started ${run.id}`);
+          router.push(`/cases?run=${encodeURIComponent(run.id)}`);
         }}
       />
       <WorkflowDialog

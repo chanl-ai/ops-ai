@@ -43,7 +43,7 @@ export function OverviewPanel({ i, onFix, fixing, onRecheck, rechecking }: { i: 
         </Alert>
       ) : (
         <Alert>
-          <CheckCircle2 className="size-4 text-emerald-600" />
+          <CheckCircle2 className="size-4 text-success-text" />
           <AlertTitle>Signing in and answering</AlertTitle>
           <AlertDescription>The last check issued a token and a read call answered.</AlertDescription>
         </Alert>
@@ -70,7 +70,7 @@ export function OverviewPanel({ i, onFix, fixing, onRecheck, rechecking }: { i: 
           <TableBody>
             {i.checks.map((c) => (
               <TableRow key={c.id}>
-                <TableCell>{c.ok ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="size-3.5" /> Passed</span> : <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400"><CircleX className="size-3.5" /> Failed</span>}</TableCell>
+                <TableCell>{c.ok ? <span className="inline-flex items-center gap-1 text-xs text-success-text"><CheckCircle2 className="size-3.5" /> Passed</span> : <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive"><CircleX className="size-3.5" /> Failed</span>}</TableCell>
                 <TableCell className="text-xs whitespace-nowrap text-muted-foreground" title={dateTime(c.at)}>{relativeTime(c.at)}</TableCell>
                 <TableCell className="text-xs tabular-nums">{c.latencyMs} ms</TableCell>
                 <TableCell className="max-w-96 truncate text-sm" title={c.message}>{c.message}</TableCell>
@@ -133,7 +133,7 @@ export function ScopesPanel({ i, onRequest }: { i: IntegrationDetail; onRequest:
                   <TableCell className="text-xs">{s.access === 'write' ? 'Write' : 'Read'}</TableCell>
                   <TableCell className="max-w-96 text-sm whitespace-normal">{s.description}</TableCell>
                   <TableCell className="text-xs whitespace-nowrap">
-                    {granted ? <span className="text-emerald-700 dark:text-emerald-400">Granted</span> : requested ? <span className="text-amber-700 dark:text-amber-400">Requested</span> : 'Not granted'}
+                    {granted ? <span className="text-success-text">Granted</span> : requested ? <span className="text-warning-text">Requested</span> : 'Not granted'}
                   </TableCell>
                 </TableRow>
               );
@@ -203,15 +203,15 @@ export function ActivityPanel({ i }: { i: IntegrationDetail }) {
         <Link href="/logs/tool-calls" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
           All tool calls <ArrowUpRight className="size-3.5" />
         </Link>
-        <Link href="/sources" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
-          All sources <ArrowUpRight className="size-3.5" />
+        <Link href="?tab=knowledge" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+          Knowledge sync <ArrowUpRight className="size-3.5" />
         </Link>
       </div>
       <ul className="divide-y rounded-md border bg-card">
         {i.activity.map((a) => (
           <li key={a.id}>
             <Link href={a.href} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50">
-              {a.ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : <CircleX className="size-4 shrink-0 text-red-600" />}
+              {a.ok ? <CheckCircle2 className="size-4 shrink-0 text-success-text" /> : <CircleX className="size-4 shrink-0 text-destructive" />}
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   {a.kind === 'call' ? <code className="font-mono text-[13px]">{a.label}</code> : a.label}

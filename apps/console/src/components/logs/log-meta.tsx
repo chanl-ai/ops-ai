@@ -1,7 +1,7 @@
 import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, ShieldCheck, User, XCircle } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOperation, CallStatus, GatewayKind } from '@/lib/types/governance';
+import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOperation, CallStatus, GatewayKind, ToolCallRow } from '@/lib/types/governance';
 import { cn } from '@/lib/utils';
 
 export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
@@ -20,7 +20,7 @@ export function GatewayIcon({ gateway, className }: { gateway: GatewayKind; clas
 }
 
 export function OperationBadge({ operation }: { operation: CallOperation }) {
-  const tone = operation === 'money_movement' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300' : operation === 'write' ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300' : '';
+  const tone = operation === 'money_movement' ? 'border-destructive/40 bg-destructive/10 text-destructive' : operation === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
   return (
     <Badge variant="outline" className={cn('font-normal', tone)}>
       {OPERATION_LABEL[operation]}
@@ -38,7 +38,7 @@ export function ApprovalCell({ approval }: { approval: CallApproval }) {
     );
   if (!approval.tokenId)
     return (
-      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-amber-700 dark:text-amber-400">
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
         <Clock className="size-3.5" /> Waiting · {approval.reviewId}
       </span>
     );
@@ -50,10 +50,10 @@ export function ApprovalCell({ approval }: { approval: CallApproval }) {
 }
 
 const STATUS: Record<CallStatus, { icon: typeof CheckCircle2; cls: string }> = {
-  ok: { icon: CheckCircle2, cls: 'text-emerald-700 dark:text-emerald-400' },
-  error: { icon: XCircle, cls: 'text-red-600 dark:text-red-400' },
-  denied: { icon: Ban, cls: 'text-red-600 dark:text-red-400' },
-  awaiting_approval: { icon: Clock, cls: 'text-amber-700 dark:text-amber-400' },
+  ok: { icon: CheckCircle2, cls: 'text-success-text' },
+  error: { icon: XCircle, cls: 'text-destructive' },
+  denied: { icon: Ban, cls: 'text-destructive' },
+  awaiting_approval: { icon: Clock, cls: 'text-warning-text' },
 };
 
 export function CallStatusText({ status }: { status: CallStatus }) {
@@ -103,14 +103,17 @@ export const TARGET_LABEL: Record<AuditTargetType, string> = {
   model: 'Model',
   file: 'File',
   storage: 'Storage',
+  skill: 'Skill',
+  template: 'Template',
+  sign_in_policy: 'Sign-in policy',
 };
 
 export function ActionBadge({ action }: { action: AuditAction }) {
   const tone =
     action === 'deleted' || action === 'revoked' || action === 'rejected'
-      ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'
+      ? 'border-destructive/40 bg-destructive/10 text-destructive '
       : action === 'published' || action === 'approved' || action === 'granted'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+        ? 'border-success/40 bg-success/10 text-success-text '
         : '';
   return (
     <Badge variant="outline" className={cn('font-normal', tone)}>
@@ -132,6 +135,27 @@ export function ActorCell({ kind, name, detail }: { kind: 'person' | 'workflow';
           {detail}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Who made a call: the identity it runs as and, when someone acts for them, "via" that actor. Rows from a log that
+ * does not carry identity yet show the workflow and its agent, which is the same pair in workflow steps.
+ */
+export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'actor' | 'workflowName' | 'agentName'> }) {
+  const who = call.subject?.name ?? call.workflowName;
+  const via = call.subject ? call.actor?.name : call.agentName;
+  return (
+    <div className="max-w-56 min-w-36" data-testid="caller-cell">
+      <div className="truncate text-sm" title={who}>
+        {who}
+      </div>
+      {via && (
+        <div className="truncate text-xs text-muted-foreground" title={via}>
+          via {via}
+        </div>
+      )}
     </div>
   );
 }

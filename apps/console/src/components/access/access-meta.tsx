@@ -11,7 +11,7 @@ export const CAPABILITY_LABEL: Record<Capability, string> = { author: 'Author', 
 export const RESOURCE_KIND_LABEL = { module: 'System module', knowledge_base: 'Knowledge base' } as const;
 
 export function ScopeBadge({ scope }: { scope: GrantScope }) {
-  const tone = scope === 'money_movement' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300' : scope === 'write' ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300' : '';
+  const tone = scope === 'money_movement' ? 'border-destructive/40 bg-destructive/10 text-destructive' : scope === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
   return (
     <Badge variant="outline" className={cn('font-normal', tone)}>
       {SCOPE_LABEL[scope]}
@@ -24,13 +24,13 @@ export function ExpiryText({ expiresAt, status }: { expiresAt: string; status: G
   const days = Math.round((new Date(expiresAt).getTime() - Date.now()) / 86_400_000);
   if (status === 'expired')
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap text-red-600 dark:text-red-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap text-destructive">
         <CircleSlash className="size-3.5" /> Expired {relativeTime(expiresAt)}
       </span>
     );
   if (status === 'expiring')
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap text-amber-700 dark:text-amber-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap text-warning-text">
         <AlertTriangle className="size-3.5" /> In {days === 1 ? '1 day' : `${days} days`}
       </span>
     );

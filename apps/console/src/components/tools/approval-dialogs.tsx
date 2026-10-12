@@ -144,7 +144,7 @@ export function RequestApprovalDialog({
             ))}
           </div>
         </FormField>
-        {money.length > 0 && <p className="text-xs text-red-700 dark:text-red-400">{money.map((o) => o.name).join(', ')} moves money: every call still needs a person’s approval and a second person’s check.</p>}
+        {money.length > 0 && <p className="text-xs text-destructive">{money.map((o) => o.name).join(',')} moves money: every call still needs a person’s approval and a second person’s check.</p>}
         <FormField id="ra-exp" label="Expires after" hint={environment === 'production' ? 'Production approvals last at most 12 months.' : 'Test approvals last at most 90 days.'}>
           <Select value={days} onValueChange={setDays}>
             <SelectTrigger id="ra-exp" className="w-full">

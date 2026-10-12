@@ -126,8 +126,8 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
                 <span className="font-medium text-foreground">
                   {validation.passed}/{validation.total} passed
                 </span>
-                <span className={validation.regressions ? 'text-red-600 dark:text-red-400' : undefined}>{plural(validation.regressions, 'regression')} vs live</span>
-                <span className={validation.checksFailing ? 'text-amber-700 dark:text-amber-400' : undefined}>{plural(validation.checksFailing, 'check')} failing</span>
+                <span className={validation.regressions ? 'text-destructive' : undefined}>{plural(validation.regressions, 'regression')} vs live</span>
+                <span className={validation.checksFailing ? 'text-warning-text' : undefined}>{plural(validation.checksFailing, 'check')} failing</span>
               </span>
             ) : (
               <span className="text-xs text-muted-foreground">Requested without running the suite</span>
@@ -145,12 +145,12 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
                   v{a.version}
                 </span>
                 {a.summary ? <EvalSummaryLine summary={a.summary} /> : <span className="text-xs text-muted-foreground">{a.blockerKind === 'running' ? 'Running' : 'Not run'}</span>}
-                <span className={cn('ml-auto text-xs', a.blocker ? 'font-medium text-red-600 dark:text-red-400' : a.advisory.length ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+                <span className={cn('ml-auto text-xs', a.blocker ? 'font-medium text-destructive' : a.advisory.length ? 'text-warning-text' : 'text-muted-foreground')}>
                   {a.blocker ? 'Blocks publishing' : a.advisory.length ? 'Needs a reason' : 'Passes'}
                 </span>
               </div>
               {a.advisory.map((x) => (
-                <p key={x} className="text-xs text-amber-700 dark:text-amber-400">
+                <p key={x} className="text-xs text-warning-text">
                   {x}
                 </p>
               ))}
@@ -158,7 +158,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
           ))}
         </ul>
         {gate && gate.reasonRequired && !gate.blockers.length && (
-          <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+          <p className="flex items-start gap-1.5 text-xs text-warning-text">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Failing agent evals are advisory at model tier {gate.tier}. Approving needs a written reason, which goes into the evidence bundle.
           </p>
         )}
@@ -224,7 +224,8 @@ export function ModelValidationDecisionForm({
   onDecide,
 }: {
   review: Review;
-  currentUser?: string;
+  /** The deciding person's name and, under platform sign-in, email. */
+  currentUser?: string[];
   owners: string[];
   principals: RunAsPrincipal[];
   principalsLoading: boolean;
@@ -246,7 +247,7 @@ export function ModelValidationDecisionForm({
 
   const mv = review.modelValidation!;
   const acting = principals.find((p) => p.id === actingAs);
-  const ownRequest = !acting && !!currentUser && mv.requestedBy === currentUser;
+  const ownRequest = !acting && !!currentUser?.includes(mv.requestedBy);
   const locked = !!acting || ownRequest;
   const conditionProblem = (c: ConditionInput) => (!c.text.trim() ? 'Describe the condition.' : !c.owner ? 'Choose who owns it.' : !c.dueDate ? 'Pick a due date.' : null);
   const submit = (decision: ReviewDecision) => {

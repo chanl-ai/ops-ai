@@ -72,7 +72,7 @@ export function SaveVersionDialog({
           <Input id="save-note" autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Require a callback before any release" />
         </FormField>
         {pinnedWorkflows.length > 0 && (
-          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+          <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning-text">
             {pinnedWorkflows.join(', ')} keep{pinnedWorkflows.length === 1 ? 's' : ''} running the current version until republished.
           </p>
         )}

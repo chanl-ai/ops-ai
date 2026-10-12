@@ -68,7 +68,7 @@ function columns(showTeam: boolean, onRevoke: (k: ApiKey) => void): ColumnDef<Ap
         const at = row.original.expiresAt;
         if (!at) return <span className="text-xs text-muted-foreground">Never</span>;
         const days = Math.round((new Date(at).getTime() - Date.now()) / 86_400_000);
-        return <span className={days <= 30 ? 'text-xs font-medium whitespace-nowrap text-amber-700 dark:text-amber-400' : 'text-xs whitespace-nowrap text-muted-foreground'}>{days <= 30 ? `In ${days} days` : shortDate(at)}</span>;
+        return <span className={days <= 30 ? 'text-xs font-medium whitespace-nowrap text-warning-text' : 'text-xs whitespace-nowrap text-muted-foreground'}>{days <= 30 ? `In ${days} days` : shortDate(at)}</span>;
       },
     },
     {

@@ -31,7 +31,7 @@ export function KbOverview({
 }) {
   const never = kb.health === 'never';
   const HealthIcon = kb.health === 'healthy' ? CheckCircle2 : kb.health === 'failed' ? XCircle : kb.health === 'indexing' ? Loader2 : AlertTriangle;
-  const iconClass = kb.health === 'healthy' ? 'text-emerald-600' : kb.health === 'failed' ? 'text-destructive' : kb.health === 'indexing' ? 'animate-spin text-blue-500' : 'text-amber-500';
+  const iconClass = kb.health === 'healthy' ? 'text-success-text' : kb.health === 'failed' ? 'text-destructive' : kb.health === 'indexing' ? 'animate-spin text-blue-500' : 'text-warning-text';
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,7 +60,7 @@ export function KbOverview({
             {kb.attached.map((l) => (
               <Row
                 key={l.sourceId}
-                href={`/sources/${l.sourceId}`}
+                href={`/integrations/sources/${l.sourceId}`}
                 leading={<SourceTypeIcon type={l.source.type} />}
                 title={l.source.name}
                 description={`${plural(l.itemsContributed, 'item')}${l.rules.length ? ` · ${plural(l.rules.length, 'rule')}` : ''} · synced ${relativeTime(l.source.lastSyncAt)}`}

@@ -49,11 +49,11 @@ export default function OverviewPage() {
             <StatCard label="Completed without review" value={pct(o.autoResolvedRate)} icon={CheckCheck} footer={{ text: 'Finished with no gate hit', subtext: 'Weighted by volume' }} />
             <Link href="/cases" className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" data-testid="overview-cases">
               <StatCard
-                label="Open email cases"
+                label="Open runs waiting on a person"
                 value={o.cases?.open ?? 0}
                 icon={Mail}
                 className="h-full transition-colors hover:border-primary/40"
-                footer={{ text: `${o.cases?.breaching ?? 0} past SLA`, subtext: `${o.cases?.awaitingApproval ?? 0} waiting on an approval` }}
+                footer={{ text: `${o.cases?.breaching ?? 0} past SLA`, subtext: `${o.cases?.awaitingApproval ?? 0} with actions to approve` }}
               />
             </Link>
           </StatCardGrid>
@@ -154,7 +154,7 @@ export default function OverviewPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                              <div className={cn('h-full rounded-full', rate > 0.3 ? 'bg-amber-500' : 'bg-primary')} style={{ width: `${rate * 100}%` }} />
+                              <div className={cn('h-full rounded-full', rate > 0.3 ? 'bg-warning' : 'bg-primary')} style={{ width: `${rate * 100}%` }} />
                             </div>
                             <span className="text-xs tabular-nums text-muted-foreground">{pct(rate)}</span>
                           </div>
@@ -162,7 +162,7 @@ export default function OverviewPage() {
                         <TableCell className="pr-6 text-right tabular-nums">
                           {w.openReviews > 0 ? (
                             <span className="inline-flex items-center gap-1">
-                              {w.openReviews > 2 && <AlertCircle className="size-3.5 text-amber-600" />}
+                              {w.openReviews > 2 && <AlertCircle className="size-3.5 text-warning-text" />}
                               {w.openReviews}
                             </span>
                           ) : (

@@ -1,0 +1,12 @@
+{
+  "accounts": [
+    {"accountId": "CHQ-2219", "holder": "Priya Natarajan", "type": "Personal chequing", "status": "Active", "balance": "$18,412.06", "dailyWireLimit": "$25,000 online, $100,000 in branch", "lastWire": "W-88190, $2,400 on 3 Oct"},
+    {"accountId": "CHQ-1182", "holder": "Hartwell Dental Corp", "type": "Business chequing", "status": "Active", "balance": "$241,880.55", "dailyWireLimit": "$250,000", "lastWire": "W-88213, $48,500 to a new payee, today"},
+    {"accountId": "SAV-3307", "holder": "Daniel Okoye", "type": "Personal savings", "status": "KYC refresh due", "balance": "$6,120.00", "dailyWireLimit": "$25,000 online, $100,000 in branch", "lastWire": "None in 12 months"}
+  ],
+  "customers": [
+    {"customerId": "CUS-4471", "name": "Priya Natarajan", "email": "priya.n@example.com", "segment": "Personal", "branch": "Halifax Spring Garden", "since": "2016", "status": "Active", "openItems": "Card dispute DSP-2210, $212.40 at Harbourline Electronics"},
+    {"customerId": "CUS-5102", "name": "Daniel Okoye", "email": "d.okoye@example.com", "segment": "Personal", "branch": "Dartmouth Crossing", "since": "2021", "status": "KYC refresh due", "openItems": "Proof of address older than 3 years"},
+    {"customerId": "CUS-3008", "name": "Hartwell Dental Corp", "email": "accounts@hartwelldental.example", "segment": "Small business", "branch": "Halifax Spring Garden", "since": "2012", "status": "Active", "openItems": "None"}
+  ]
+}

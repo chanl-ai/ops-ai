@@ -3,7 +3,7 @@ import type { OpsApi } from '@/lib/api/contract';
 import { ApiError } from '@/lib/api/contract';
 import type { KnowledgeApi } from '@/lib/api/knowledge-contract';
 import type { ApprovalState, ApprovalWidget, ChatMessage, ChatStreamEvent, ChatThread, ChatThreadRow, ChatWidget } from '@/lib/types/chat';
-import type { Agent, Review } from '@/lib/types/domain';
+import type { Agent, Review, RunStatus, WorkflowRun } from '@/lib/types/domain';
 import type { PlaygroundAnswer, RetrievalSettings, RetrieveInput } from '@/lib/types/knowledge';
 
 import type { FileLinks } from '../files';
@@ -20,15 +20,17 @@ const CHAT_OVERRIDES: Partial<RetrievalSettings> = { answerShape: 'answer_with_c
 
 /**
  * `?chat=fail-next` makes the next reply stop part-way with an error, so the partial-reply state can be reviewed
- * while every other request still succeeds.
+ * while every other request still succeeds. `?chat=fail-next:<code>` ends it the way a models-service refusal does,
+ * with that code on the error frame (e.g. `fail-next:rate_limited`).
  */
-function takeFailNext() {
+function takeFailNext(): false | { code?: string } {
   if (typeof window === 'undefined') return false;
   try {
-    if (new URLSearchParams(window.location.search).get('chat') === 'fail-next') sessionStorage.setItem('ops-mock-chat-fail', '1');
-    const on = sessionStorage.getItem('ops-mock-chat-fail') === '1';
+    const q = new URLSearchParams(window.location.search).get('chat');
+    if (q?.startsWith('fail-next')) sessionStorage.setItem('ops-mock-chat-fail', q);
+    const on = sessionStorage.getItem('ops-mock-chat-fail');
     sessionStorage.removeItem('ops-mock-chat-fail');
-    return on;
+    return on ? { code: on.split(':')[1] || undefined } : false;
   } catch {
     return false;
   }
@@ -65,6 +67,19 @@ type Deps = {
   slaByQueue: () => QueueSla[];
   /** Attachments arrive as file ids; each send records the chat as a reference and refuses quarantined files. */
   files: FileLinks;
+  /** Starts the runs of granted workflow tools the question is about; each comes with its gate review when it paused. */
+  workflowTools: (agentId: string, question: string) => { toolName: string; workflowName: string; run: WorkflowRun; review: Review | null }[];
+};
+
+const RUN_STATE: Record<RunStatus, string> = { waiting_review: 'Waiting on review', running: 'Running', completed: 'Completed', failed: 'Failed' };
+// A started run's card and its gate widget share the run id, so deciding the gate can update the card.
+const runCardId = (runId: string) => `wfrun-${runId}`;
+const gateId = (runId: string) => `wfgate-${runId}`;
+/** After a gate decision, the run card reads the state the decision moved the run to. */
+const settleRunCard = (widgets: ChatWidget[], gate: ApprovalWidget) => {
+  if (!gate.id.startsWith('wfgate-') || gate.state === 'pending' || gate.state === 'awaiting_second') return;
+  const card = widgets.find((w) => w.id === runCardId(gate.id.slice('wfgate-'.length)));
+  if (card?.kind === 'record') card.status = gate.state === 'approved' ? RUN_STATE.completed : RUN_STATE.failed;
 };
 
 export function createChatMock(deps: Deps): ChatApi {
@@ -163,6 +178,7 @@ export function createChatMock(deps: Deps): ChatApi {
           const r = await deps.reviews().get(w.reviewId);
           w.state = approvalState(r);
           if (r.decidedAt) Object.assign(w, { decidedBy: r.assignee, reason: r.decisionReason });
+          settleRunCard(t.messages.find((m) => m.widgets?.includes(w))?.widgets ?? [], w);
         } catch {
           // Keep the last known state when the review cannot be read.
         }
@@ -331,6 +347,66 @@ export function createChatMock(deps: Deps): ChatApi {
       }
       const plan = planTurn(question, { attachments: (input.attachments ?? []).map((a) => a.name), reviewers: review?.policy.reviewers ?? 'Card Disputes', sla: deps.slaByQueue() });
 
+      // A granted workflow tool the question is about runs instead of the scripted plan: the agent starts the workflow
+      // and the thread shows the run, plus its gate when the run paused for a person.
+      const started = input.regenerate ? [] : deps.workflowTools(t.agentId, question);
+      if (started.length) {
+        plan.steps = [];
+        plan.ground = false;
+        const asOf = now();
+        for (const s of started) {
+          const call = { id: id('tc'), name: s.toolName, server: 'Workflows', input: { subject: s.run.subject }, output: { runId: s.run.id, status: s.run.status, reviewId: s.review?.id }, status: 'success' as const, durationMs: 420, gated: s.review ? { gate: s.review.policy.name, reviewers: s.review.policy.reviewers } : undefined };
+          msg.toolCalls = [...(msg.toolCalls ?? []), call];
+          yield { type: 'status', phase: 'calling_tool' };
+          yield { type: 'tool_start', call: structuredClone({ ...call, status: 'running' as const, output: undefined }) };
+          await sleep(300);
+          yield { type: 'tool_end', call: structuredClone(call) };
+          const card: ChatWidget = {
+            kind: 'record',
+            id: runCardId(s.run.id),
+            title: `Started workflow ${s.workflowName}`,
+            subtitle: s.run.id,
+            status: RUN_STATE[s.run.status],
+            app: 'Workflows',
+            tool: s.toolName,
+            asOf,
+            fields: [
+              { label: 'Started by', value: (s.run.trigger ?? '').replace(/^Started by /, '') },
+              ...(s.review ? [{ label: 'Waiting on', value: `${s.review.policy.reviewers} · SLA ${s.review.policy.sla}` }] : []),
+            ],
+            href: `/cases?run=${encodeURIComponent(s.run.id)}`,
+          };
+          msg.widgets = [...(msg.widgets ?? []), card];
+          yield { type: 'widget', widget: structuredClone(card) };
+          if (s.review) {
+            const gate: ChatWidget = {
+              kind: 'approval',
+              id: gateId(s.run.id),
+              title: s.review.policy.name,
+              app: 'Workflows',
+              tool: s.toolName,
+              asOf,
+              reviewId: s.review.id,
+              action: `Let ${s.run.id} continue`,
+              summary: `${(s.run.trigger ?? '').replace(/^Started by agent /, '')} started this run for: ${s.run.subject}`,
+              fields: [
+                { label: 'Gate', value: s.review.policy.condition },
+                { label: 'Reviewers', value: s.review.policy.reviewers },
+                { label: 'Review', value: s.review.id },
+              ],
+              risk: s.review.risk,
+              movesMoney: s.review.movesMoney,
+              state: 'pending',
+            };
+            msg.widgets = [...msg.widgets, gate];
+            yield { type: 'widget', widget: structuredClone(gate) };
+          }
+        }
+        plan.text = started
+          .map((s) => (s.review ? `I started ${s.workflowName} as ${s.run.id}. It paused at "${s.review.policy.name}" for ${s.review.policy.reviewers}; it acts only once that review is approved (${s.review.id}).` : `I started ${s.workflowName} as ${s.run.id}. It is running.`))
+          .join(' ');
+      }
+
       for (const step of plan.steps) {
         const call = { ...step.call, id: id('tc'), status: 'running' as const, output: undefined };
         msg.toolCalls = [...(msg.toolCalls ?? []), call];
@@ -343,7 +419,7 @@ export function createChatMock(deps: Deps): ChatApi {
         yield { type: 'tool_end', call: structuredClone(done) };
         for (const w of step.widgets) {
           // A drafted approval mirrors its review: if REV-3020 was already decided, the widget says so.
-          const widget: ChatWidget = w.kind === 'approval' && review ? { ...w, state: approvalState(review), decidedBy: review.decidedAt ? review.assignee : undefined } : w;
+          const widget: ChatWidget = w.kind === 'approval' && review ? { ...w, state: approvalState(review), decidedBy: review.decidedAt ? review.assignee : undefined, movesMoney: review.movesMoney } : w;
           msg.widgets = [...(msg.widgets ?? []), widget];
           yield { type: 'widget', widget: structuredClone(widget) };
         }
@@ -391,9 +467,9 @@ export function createChatMock(deps: Deps): ChatApi {
         if (stopped()) return;
       }
       if (failPart) {
-        msg.error = 'The connection to the model dropped. The text above is what arrived.';
+        msg.error = failPart.code ? `The model call was refused (${failPart.code}).` : 'The connection to the model dropped. The text above is what arrived.';
         touch(t);
-        yield { type: 'error', message: msg.error, partial: snapshot() };
+        yield { type: 'error', message: msg.error, partial: snapshot(), code: failPart.code };
         return;
       }
       if (msg.citations) yield { type: 'citations', citations: structuredClone(msg.citations) };
@@ -412,8 +488,9 @@ export function createChatMock(deps: Deps): ChatApi {
       const w = findWidget(tid, mid, wid);
       if (w.kind === 'approval') {
         if (action.type === 'submit') throw new ApiError('An approval is approved or rejected, not submitted.', 400);
-        const r = await deps.reviews().decide(w.reviewId, action.type === 'approve' ? { decision: 'approved' } : { decision: 'rejected', reason: action.reason });
+        const r = await deps.reviews().decide(w.reviewId, action.type === 'approve' ? { decision: 'approved', stepUpToken: action.stepUpToken } : { decision: 'rejected', reason: action.reason });
         Object.assign(w, { state: approvalState(r), decidedBy: deps.me, reason: action.type === 'reject' ? action.reason : undefined });
+        settleRunCard(threadOr404(tid).messages.find((m) => m.id === mid)?.widgets ?? [], w);
         return structuredClone(w);
       }
       return respond(() => {

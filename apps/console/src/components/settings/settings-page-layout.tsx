@@ -3,15 +3,18 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, ChartColumn, HardDrive, KeyRound, Settings, Users, Webhook, type LucideIcon } from 'lucide-react';
+import { Bell, ChartColumn, Globe, HardDrive, KeyRound, KeySquare, LogIn, Settings, Users, Webhook, type LucideIcon } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { cn } from '@/lib/utils';
 
 export const SETTINGS_NAV: { id: string; title: string; href: string; icon: LucideIcon; description: string }[] = [
   { id: 'members', title: 'Members and roles', href: '/settings/members', icon: Users, description: 'Who is in the team and what they can do' },
+  { id: 'sign-in', title: 'Sign-in', href: '/settings/sign-in', icon: LogIn, description: 'Sign-in methods, single sign-on, two-step verification and sessions' },
   { id: 'notifications', title: 'Notifications', href: '/settings/notifications', icon: Bell, description: 'Where approvals, SLA warnings and alerts go' },
   { id: 'webhooks', title: 'Webhooks', href: '/settings/webhooks', icon: Webhook, description: 'Send events to the bank’s other systems' },
+  { id: 'egress', title: 'Egress', href: '/settings/egress', icon: Globe, description: 'Hosts and private ranges tool calls may reach' },
+  { id: 'secrets', title: 'Secrets', href: '/settings/secrets', icon: KeySquare, description: 'Credentials tool calls send, never shown again' },
   { id: 'api-keys', title: 'API keys', href: '/settings/api-keys', icon: KeyRound, description: 'Keys for systems that start runs or read logs' },
   { id: 'storage', title: 'Storage', href: '/settings/storage', icon: HardDrive, description: 'Where files are kept, upload limits, scanning and retention' },
   { id: 'usage', title: 'Usage and cost', href: '/settings/usage', icon: ChartColumn, description: 'Tokens, model cost and tool calls for chargeback' },

@@ -192,8 +192,8 @@ export function QueryResult({
           <TabsContent value="answer" className="flex flex-col gap-3 p-4">
             {result.noAnswer && !streaming ? (
               <div className="flex flex-col gap-3">
-                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
-                  <MinusCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+                  <MinusCircle className="mt-0.5 size-4 shrink-0 text-warning-text" />
                   <div>
                     <div className="font-medium">No answer</div>
                     <p className="text-muted-foreground">{settings.noAnswerMessage}</p>

@@ -12,7 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { relativeTime } from '@/lib/format';
-import type { Version } from '@/lib/types/domain';
+import { AgentVersionBadge } from '@/components/status-badges';
+import type { AgentVersion, Version } from '@/lib/types/domain';
+
+/** Workflow versions are published when written; agent versions carry a state and a separate save. */
+export type VersionEntry = Version | AgentVersion;
+const savedOf = (v: VersionEntry) => ('savedAt' in v ? { by: v.savedBy, at: v.savedAt } : { by: v.publishedBy, at: v.publishedAt });
 
 /**
  * Publish history with restore. A restore publishes a new version that copies the old one, so history
@@ -29,7 +34,7 @@ export function VersionHistory({
   currentLabel = 'Live',
   restoreConsequence,
 }: {
-  versions?: Version[];
+  versions?: VersionEntry[];
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -41,8 +46,8 @@ export function VersionHistory({
   /** What happens after the restore, shown in the confirm. */
   restoreConsequence?: string;
 }) {
-  const [target, setTarget] = React.useState<Version | null>(null);
-  const current = versions?.find((v) => v.current);
+  const [target, setTarget] = React.useState<VersionEntry | null>(null);
+  const newest = Math.max(0, ...(versions ?? []).map((v) => v.version));
 
   if (isPending)
     return (
@@ -65,12 +70,15 @@ export function VersionHistory({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm font-semibold">v{v.version}</span>
-                  {v.current && <Badge className="h-5 px-1.5 text-[10px]">{currentLabel}</Badge>}
+                  {'state' in v ? <AgentVersionBadge state={v.state} testId={`version-state-v${v.version}`} /> : v.current && <Badge className="h-5 px-1.5 text-[10px]">{currentLabel}</Badge>}
                   <span className="text-sm font-medium">{v.note}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {v.publishedBy} · {relativeTime(v.publishedAt)}
+                  {'state' in v ? `Saved by ${savedOf(v).by} · ${relativeTime(savedOf(v).at)}` : `${savedOf(v).by} · ${relativeTime(savedOf(v).at)}`}
+                  {'state' in v && v.publishedAt && v.state !== 'published' && ` · published ${relativeTime(v.publishedAt)}`}
+                  {'state' in v && v.state === 'published' && v.publishedBy && ` · published by ${v.publishedBy}`}
                 </p>
+                {'state' in v && v.decisionReason && <p className="mt-1 text-xs text-muted-foreground">Reviewer: “{v.decisionReason}”</p>}
                 {v.evalSummary && <EvalSummaryLine summary={v.evalSummary} className="mt-1" />}
                 {v.changes.length > 1 && (
                   <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground">
@@ -94,7 +102,7 @@ export function VersionHistory({
         onOpenChange={(o) => !o && setTarget(null)}
         size="sm"
         title={`Restore v${target?.version}?`}
-        description={`Saves a new version, v${(current?.version ?? 0) + 1}, with the ${noun} exactly as it was in v${target?.version}. ${restoreConsequence ?? 'New runs use it immediately.'}`}
+        description={`Saves a new version, v${newest + 1}, with the ${noun} exactly as it was in v${target?.version}. ${restoreConsequence ?? 'New runs use it immediately.'}`}
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button variant="outline" onClick={() => setTarget(null)} disabled={restoring}>

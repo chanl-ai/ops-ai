@@ -2,8 +2,10 @@ import type { Tool, ToolType } from '@/lib/types/domain';
 import type { ToolCallDetail, ToolCallRow } from '@/lib/types/governance';
 import type {
   CredentialKind,
+  BlankModuleInput,
   DiscoveredOperation,
   Environment,
+  HttpOperationInput,
   ModuleApproval,
   ModuleOperation,
   ModuleRef,
@@ -11,6 +13,7 @@ import type {
   ModuleVersion,
   ModuleView,
   OperationChange,
+  OperationPatch,
   RunContextOption,
   SchemaField,
   SecurityReview,
@@ -19,23 +22,35 @@ import type {
   ToolModuleDetail,
 } from '@/lib/types/tool-modules';
 
+import { amountRefused } from './amount';
 import { ApiError } from '../../contract';
 import type { ToolModulesApi } from '../../tool-modules-contract';
 import * as F from '../fixtures';
 import { rng } from '../governance/catalog';
 import { seedToolCalls } from '../governance/seed-calls';
+import { auditSink } from '../governance';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam, teamOwner } from '../teams';
 import { MODULE_CONNECTION } from '../integrations/seed';
 import type { ConnectionLink } from '../integrations';
 import { daysAgo, DAY, DISCOVERY, f, inDays, MODULE_SEEDS, RUN_CONTEXTS, type ModuleSeed } from './seed';
 
+/** Headers that carry a credential: a literal value in one is refused (tools-service `CREDENTIAL_HEADER`). */
+const CREDENTIAL_HEADER = /^(authorization|x-api-key|cookie)$/i;
+const SECRET_REF = /^\{\{[A-Z][A-Z0-9_]*\}\}$/;
+
 interface Op {
   id: string;
   toolId: string;
   name: string;
+  /** Unset on seeded operations: an operation with a method runs `http`, one without is an MCP tool. */
+  executor?: ModuleOperation['executor'];
   method?: ModuleOperation['method'];
   path?: string;
+  headers?: { key: string; value: string }[];
+  body?: string;
+  responseTransform?: string;
+  timeoutMs?: number;
   input: SchemaField[];
   maskedOutput: string[];
   binding: SubjectBinding | null;
@@ -107,6 +122,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   using: (connId: string) => ToolModule[];
   /** A module's latest gateway calls, newest first. */
   recentCalls: (moduleId: string, n: number) => ToolCallRow[];
+  /** Each endpoint host and the ids of the modules calling it, for the egress allow-list. */
+  hostsInUse: () => Record<string, string[]>;
 } {
   const { tools, agents } = deps;
   const me = F.CURRENT_USER.name;
@@ -222,6 +239,35 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   }
 
   const mods: Mod[] = MODULE_SEEDS.map(fromSeed);
+  /** A draft with a name and a type and nothing else; operations, connection and settings are added on its page. */
+  const blankMod = (input: BlankModuleInput, owner: string, at: string): Mod => ({
+    id: id('mod'),
+    name: kebab(input.name),
+    displayName: input.displayName.trim(),
+    system: input.displayName.trim(),
+    description: input.description?.trim() ?? '',
+    type: input.type,
+    status: 'draft',
+    ownerTeam: owner,
+    ownerContacts: [me],
+    endpoint: '',
+    auth: { kind: 'none' },
+    timeoutMs: 8000,
+    egressHosts: [],
+    dataClassification: 'confidential',
+    reachable: true,
+    drift: false,
+    updatedAt: at,
+    version: '0.1.0',
+    ops: [],
+    approvals: [],
+    reviews: [],
+    versions: [{ version: '0.1.0', major: 0, status: 'draft', publishedBy: me, note: 'First version', changes: [], pinnedBy: [], reachability: [] }],
+    pending: [],
+    baseline: null,
+  });
+  // Seed: one draft that has a name and nothing else yet.
+  mods.push({ ...blankMod({ displayName: 'Document service', name: 'document-service', type: 'http', description: 'Fetches signed loan documents for the lending inbox.' }, 'Lending Ops', daysAgo(1)), id: 'mod_document_service' });
   // A tool not yet in any module (created before modules existed) gets nothing here; every seeded tool is covered.
 
   // ── Derived views ─────────────────────────────────────────────────────────
@@ -279,6 +325,10 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       connectionId: m.connectionId,
       connection: conn ? { id: conn.id, name: conn.name, kind: conn.kind, status: conn.status, expiresAt: conn.expiresAt } : null,
       updatedAt: m.updatedAt,
+      pendingReview: (() => {
+        const r = m.reviews.find((x) => x.decision === 'pending');
+        return r ? { id: r.id, version: r.version, requestedBy: r.requestedBy, requestedAt: r.requestedAt } : null;
+      })(),
     };
   }
 
@@ -291,7 +341,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           ? r.approvalState === 'expired'
           : v === 'expiring'
             ? r.approvalState !== 'expired' && !!r.nextExpiry && new Date(r.nextExpiry).getTime() - Date.now() < EXPIRING_MS
-            : r.errorRate >= FAILING_RATE || !r.reachable;
+            : v === 'security_review'
+              ? !!r.pendingReview
+              : r.errorRate >= FAILING_RATE || !r.reachable;
 
   function runContexts(m: Mod): RunContextOption[] {
     // Only the current team's workflows: running as another team's workflow would borrow its approval.
@@ -318,8 +370,13 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           description: t.description,
           access: t.access,
           enabled: t.enabled,
+          executor: o.executor ?? (o.method ? 'http' : 'mcp'),
           method: o.method,
           path: o.path,
+          headers: o.headers ?? [],
+          body: o.body,
+          responseTransform: o.responseTransform,
+          timeoutMs: o.timeoutMs,
           input: o.input,
           maskedOutput: o.maskedOutput,
           binding: o.binding,
@@ -370,6 +427,44 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     }
   }
 
+  /** One hand-built HTTP operation as a discovered one; refuses literal credentials in headers. */
+  function httpOperation(h: HttpOperationInput): { op: DiscoveredOperation; origin: string } {
+    const keyLike = h.headers.find((x) => /^(authorization|x-api-key|cookie)$/i.test(x.key.trim()) && x.value.trim() && !/^\{\{[A-Z][A-Z0-9_]*\}\}$/.test(x.value.trim()));
+    if (keyLike) throw new ApiError(`The ${keyLike.key} header holds a literal value. Reference the vault instead, e.g. {{CORE_API_KEY}}.`, 400);
+    if (!/^[a-z][a-z0-9_]{2,}$/.test(h.name)) throw new ApiError('Name the operation in lower case letters, digits and underscores.', 400);
+    let url: URL;
+    try {
+      url = new URL(h.url.replace(/\{([a-zA-Z0-9_]+)\}/g, 'x'));
+    } catch {
+      throw new ApiError('Enter the full https URL of the operation.', 400);
+    }
+    const path = h.url.slice(url.origin.length) || '/';
+    const vars = [...new Set([...h.url.matchAll(/\{([a-zA-Z0-9_]+)\}/g), ...(h.body ?? '').matchAll(/\{\{\s*([a-z][a-zA-Z0-9_]*)\s*\}\}/g)].map((x) => x[1]))];
+    return { origin: url.origin, op: { name: h.name, description: h.description, access: h.access, method: h.method, path, group: 'operations', input: vars.map((v) => f(v, 'string', true)) } };
+  }
+
+  const audit = (m: Mod, action: 'created' | 'edited', summary: string, diff?: { field: string; before?: string; after?: string }[]) =>
+    auditSink.log({ action, target: { type: 'tool', name: m.displayName, href: `/tools/${m.id}` }, summary, diff, owner: m.ownerTeam });
+
+  /** Appends operations as grantable tools. A draft takes them straight into its first version; a published module stages them. */
+  function appendOps(m: Mod, opsIn: DiscoveredOperation[]) {
+    for (const o of opsIn) {
+      if (m.ops.some((x) => x.name === o.name)) throw new ApiError(`${o.name} is already in this module.`, 409);
+      if (tools.some((t) => t.name === o.name)) throw new ApiError(`An operation named ${o.name} already exists in another module.`, 409);
+    }
+    const start = m.ops.length;
+    const added: Op[] = opsIn.map((o, i) => {
+      const t: Tool = { id: id('tl'), name: o.name, description: o.description, type: toolTypeOf(m.type), system: m.system, access: o.access, requiresReview: o.access !== 'read', enabled: true, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: sampleInput(o.input), moduleId: m.id, module: m.displayName };
+      tools.unshift(t);
+      return { id: `${m.id}_op${start + i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: [], binding: null, rateLimitPerMin: 60, requiresApproval: o.access !== 'read', amountMax: undefined, stub: { ok: true } };
+    });
+    m.ops.push(...added);
+    const changes = opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access === 'money_movement' ? 'money movement' : o.access} operation`, major: o.access !== 'read' }));
+    if (m.status === 'draft') m.versions[m.versions.length - 1].changes.push(...changes);
+    else stage(m, changes);
+    touch(m);
+  }
+
   function bumped(m: Mod, major: boolean) {
     const [a, b] = m.version.split('.').map(Number);
     return major ? `${a + 1}.0.0` : `${a}.${b + 1}.0`;
@@ -403,13 +498,76 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.northfield.internal/api`, operations: d.operations, warnings: d.warnings ?? [] };
   }
 
+  /** The service's call-shape rules (tools-service `_checked_shape`): validated before anything is staged. */
+  function checkedShape(m: Mod, o: Op, patch: OperationPatch): Partial<Op> {
+    const keys = (['method', 'path', 'headers', 'body', 'responseTransform', 'timeoutMs'] as const).filter((k) => k in patch);
+    if (!keys.length) return {};
+    if ((o.executor ?? (o.method ? 'http' : 'mcp')) !== 'http') throw new ApiError(`${o.name} is not an HTTP operation; its call comes from its server or seed.`, 400);
+    const out: Partial<Op> = {};
+    if (patch.method !== undefined) out.method = patch.method;
+    if (patch.path !== undefined) {
+      const path = patch.path.trim();
+      if (!path.startsWith('/')) throw new ApiError('Enter the path after the module endpoint, starting with /.', 400);
+      if (!m.endpoint) throw new ApiError('Set the module’s endpoint before editing a path.', 400);
+      out.path = path;
+    }
+    if (patch.headers !== undefined) {
+      for (const h of patch.headers) {
+        if (CREDENTIAL_HEADER.test(h.key.trim()) && h.value.trim() && !SECRET_REF.test(h.value.trim())) throw new ApiError(`The ${h.key} header holds a literal value. Reference the vault instead, e.g. {{CORE_API_KEY}}.`, 400);
+      }
+      out.headers = patch.headers.filter((h) => h.key.trim()).map((h) => ({ key: h.key.trim(), value: h.value.trim() }));
+    }
+    if (patch.body !== undefined) {
+      const body = patch.body?.trim() || undefined;
+      if (body) {
+        try {
+          JSON.parse(body.replace(/\{\{\s*[a-z][a-zA-Z0-9_]*\s*\}\}/g, 'null'));
+        } catch (e) {
+          throw new ApiError(`The body is not a JSON template: ${(e as Error).message}.`, 400);
+        }
+      }
+      out.body = body;
+    }
+    if (patch.responseTransform !== undefined) {
+      const t = patch.responseTransform?.trim() || undefined;
+      // The service parses with Jinja2; the mock checks the delimiters balance, which catches the common slip.
+      if (t && ((t.match(/\{\{/g) ?? []).length !== (t.match(/\}\}/g) ?? []).length || (t.match(/\{%/g) ?? []).length !== (t.match(/%\}/g) ?? []).length)) throw new ApiError('The response transform does not parse: an unclosed {{ or {%.', 400);
+      out.responseTransform = t;
+    }
+    if (patch.timeoutMs !== undefined) {
+      if (patch.timeoutMs !== null && !(patch.timeoutMs >= 1_000 && patch.timeoutMs <= 120_000)) throw new ApiError('Set a timeout between 1 and 120 seconds (1000 to 120000 ms).', 400);
+      out.timeoutMs = patch.timeoutMs ?? undefined;
+    }
+    return Object.fromEntries(Object.entries(out).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(o[k as keyof Op]))) as Partial<Op>;
+  }
+
+  /** Applies a validated call-shape edit and says what changed: method, path or body major; the rest minor. */
+  function shapeChanges(o: Op, shape: Partial<Op>): OperationChange[] {
+    const out: OperationChange[] = [];
+    if ('method' in shape || 'path' in shape || 'body' in shape) {
+      const before = `${o.method} ${o.path}`;
+      const after = `${shape.method ?? o.method} ${shape.path ?? o.path}`;
+      out.push({ operation: o.name, kind: 'schema_changed', detail: (before !== after ? `Call ${before} → ${after}` : 'Call unchanged') + ('body' in shape ? '; body edited' : ''), major: true });
+    }
+    const minor = [
+      'headers' in shape && 'Headers edited',
+      'responseTransform' in shape && `Response transform ${shape.responseTransform ? 'set' : 'removed'}`,
+      'timeoutMs' in shape && (shape.timeoutMs ? `Timeout ${shape.timeoutMs / 1000} s` : 'Timeout back to the module’s'),
+    ].filter(Boolean);
+    if (minor.length) out.push({ operation: o.name, kind: 'settings', detail: minor.join('; '), major: false });
+    Object.assign(o, shape);
+    const named = [...(o.path ?? '').matchAll(/\{([a-zA-Z0-9_]+)\}/g), ...(o.body ?? '').matchAll(/\{\{\s*([a-z][a-zA-Z0-9_]*)\s*\}\}/g)].map((x) => x[1]!);
+    for (const n of new Set(named)) if (!o.input.some((f) => f.name === n)) o.input.push({ name: n, type: 'string', required: true, description: '' });
+    return out;
+  }
+
   const api: ToolModulesApi = {
     list: (p) =>
       respond((md) => {
         const scoped = mods.filter((m) => inTeam(ownersOf(m))).map(row);
         const src = md === 'empty' ? [] : scoped;
-        const viewCounts = { all: src.length, needs_approval: 0, expiring: 0, expired: 0, failing: 0 };
-        for (const v of ['needs_approval', 'expiring', 'expired', 'failing'] as const) viewCounts[v] = src.filter((r) => inView(r, v)).length;
+        const viewCounts = { all: src.length, needs_approval: 0, expiring: 0, expired: 0, failing: 0, security_review: 0 };
+        for (const v of ['needs_approval', 'expiring', 'expired', 'failing', 'security_review'] as const) viewCounts[v] = src.filter((r) => inView(r, v)).length;
         const calls24h = src.reduce((s, r) => s + r.calls24h, 0);
         const errors = src.reduce((s, r) => s + r.calls24h * r.errorRate, 0);
         const scopedMods = mods.filter((m) => src.some((r) => r.id === m.id));
@@ -443,8 +601,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
 
     create: (input) =>
       respond(() => {
-        const name = kebab(input.name);
+        let name = kebab(input.name);
         if (!name) throw new ApiError('Name the module.', 400);
+        if (input.uniqueName) for (let n = 2; mods.some((m) => m.name === name); n++) name = `${kebab(input.name)}-${n}`;
         if (mods.some((m) => m.name === name)) throw new ApiError(`A module named ${name} already exists.`, 409);
         if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
         let opsIn: DiscoveredOperation[] = input.operations ?? [];
@@ -454,19 +613,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (conn.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
         if (input.type === 'code') throw new ApiError('Code modules need the sandbox, which is not available yet.', 422);
         if (input.http) {
-          const h = input.http;
-          const keyLike = h.headers.find((x) => /^(authorization|x-api-key|cookie)$/i.test(x.key.trim()) && x.value.trim() && !/^\{\{[A-Z][A-Z0-9_]*\}\}$/.test(x.value.trim()));
-          if (keyLike) throw new ApiError(`The ${keyLike.key} header holds a literal value. Reference the vault instead, e.g. {{CORE_API_KEY}}.`, 400);
-          let url: URL;
-          try {
-            url = new URL(h.url.replace(/\{([a-zA-Z0-9_]+)\}/g, 'x'));
-          } catch {
-            throw new ApiError('Enter the full https URL of the operation.', 400);
-          }
-          endpoint = url.origin;
-          const path = h.url.slice(url.origin.length) || '/';
-          const vars = [...new Set([...h.url.matchAll(/\{([a-zA-Z0-9_]+)\}/g), ...(h.body ?? '').matchAll(/\{\{\s*([a-z][a-zA-Z0-9_]*)\s*\}\}/g)].map((m) => m[1]))];
-          opsIn = [{ name: kebab(h.name).replace(/-/g, '_'), description: h.description, access: h.access, method: h.method, path, group: 'operations', input: vars.map((v) => f(v, 'string', true)) }];
+          const built = httpOperation(input.http);
+          endpoint = built.origin;
+          opsIn = [built.op];
         }
         if (!opsIn.length) throw new ApiError('Choose at least one operation to expose.', 400);
         for (const o of opsIn) if (tools.some((t) => t.name === o.name)) throw new ApiError(`An operation named ${o.name} already exists in another module.`, 409);
@@ -517,6 +666,85 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         return detail(m);
       }),
 
+    createBlankModule: (input) =>
+      respond(() => {
+        const name = kebab(input.name);
+        if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
+        if (!name) throw new ApiError('Give the module a name, e.g. servicenow.', 400);
+        if (mods.some((x) => x.name === name)) throw new ApiError(`A module named ${name} already exists.`, 409);
+        const m = blankMod(input, teamOwner() ?? 'Platform', new Date().toISOString());
+        mods.unshift(m);
+        audit(m, 'created', `Created ${m.displayName} as a draft ${m.type} module`);
+        return detail(m);
+      }),
+
+    updateModuleDetails: (mid, patch) =>
+      respond(() => {
+        const m = find(mid);
+        if (patch.displayName !== undefined && !patch.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
+        const diff = [
+          ...(patch.displayName !== undefined && patch.displayName.trim() !== m.displayName ? [{ field: 'Display name', before: m.displayName, after: patch.displayName.trim() }] : []),
+          ...(patch.description !== undefined && patch.description.trim() !== m.description ? [{ field: 'Description', before: m.description, after: patch.description.trim() }] : []),
+        ];
+        if (patch.displayName !== undefined) m.displayName = patch.displayName.trim();
+        if (patch.description !== undefined) m.description = patch.description.trim();
+        for (const o of m.ops) toolOf(o).module = m.displayName;
+        touch(m);
+        if (diff.length) audit(m, 'edited', `Edited ${diff.map((d) => d.field.toLowerCase()).join(' and ')}`, diff);
+        return detail(m);
+      }),
+
+    addOperation: (mid, input) =>
+      respond(() => {
+        const m = find(mid);
+        const { op, origin } = httpOperation(input);
+        if (!m.endpoint) m.endpoint = origin;
+        try {
+          const host = new URL(origin).hostname;
+          if (!m.egressHosts.includes(host)) m.egressHosts.push(host);
+        } catch {
+          // httpOperation already rejected anything that is not a URL.
+        }
+        appendOps(m, [op]);
+        audit(m, 'edited', `Added operation ${op.name}`, [{ field: 'Operations', after: op.name }]);
+        return detail(m);
+      }),
+
+    importOperations: (mid, input) =>
+      respond(() => {
+        const m = find(mid);
+        if (!input.operations.length) throw new ApiError('Choose at least one operation to import.', 400);
+        const fresh = input.operations.filter((o) => !m.ops.some((x) => x.name === o.name));
+        if (!fresh.length) throw new ApiError('Every chosen operation is already in this module.', 409);
+        const listed = discovered(input.source).operations.map((o) => o.name);
+        appendOps(m, fresh);
+        if (!m.endpoint) m.endpoint = input.source.kind === 'mcp' ? input.source.url : (input.source.specUrl ?? '');
+        // The server no longer lists an operation this module already holds: that is drift from what was reviewed.
+        const gone = m.ops.filter((o) => input.source.kind === 'mcp' && !listed.includes(o.name) && !fresh.some((x) => x.name === o.name));
+        if (gone.length && m.type === 'mcp') m.drift = true;
+        audit(m, 'edited', `Imported ${fresh.length === 1 ? '1 operation' : `${fresh.length} operations`}`, [{ field: 'Operations', after: fresh.map((o) => o.name).join(', ') }]);
+        return detail(m);
+      }),
+
+    setConnection: (mid, connId) =>
+      respond(() => {
+        const m = find(mid);
+        const before = deps.connection(m.connectionId)?.name;
+        if (connId === null) {
+          if (m.status !== 'draft') throw new ApiError('A module in review or published keeps its connection. Change it to another one instead.', 409);
+          Object.assign(m, { connectionId: undefined, catalogId: undefined, auth: { kind: 'none' } });
+        } else {
+          const conn = deps.connection(connId);
+          if (!conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
+          if (conn.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Connections or pick another one.`, 409);
+          const kind: CredentialKind = conn.authMethod === 'api_key' ? 'api_key' : conn.authMethod === 'mtls' ? 'mtls' : 'oauth_client_credentials';
+          Object.assign(m, { connectionId: conn.id, catalogId: conn.catalogId, auth: { kind } });
+        }
+        touch(m);
+        audit(m, 'edited', connId ? `Connected through ${deps.connection(connId)?.name}` : 'Detached its connection', [{ field: 'Connection', before, after: connId ? deps.connection(connId)?.name : undefined }]);
+        return detail(m);
+      }),
+
     remove: (mid) =>
       respond(() => {
         const m = find(mid);
@@ -545,9 +773,11 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (patch.requiresApproval === false && money) throw new ApiError('Operations that move money always need a person’s approval.', 422);
         if (patch.rateLimitPerMin !== undefined && (!Number.isInteger(patch.rateLimitPerMin) || patch.rateLimitPerMin < 1 || patch.rateLimitPerMin > 10_000)) throw new ApiError('Set a rate limit between 1 and 10,000 calls a minute.', 400);
         if (patch.amountMax !== undefined && (!money || patch.amountMax <= 0)) throw new ApiError('Only money movement operations take an amount limit, and it must be above zero.', 400);
+        if (patch.amountMax !== undefined && !o.input.some((x) => x.name === 'amount')) throw new ApiError(`${o.name} has no amount input, so an amount limit would have nothing to check.`, 422);
         if (patch.binding && !o.input.some((x) => x.name === patch.binding!.arg)) throw new ApiError(`${patch.binding.arg} is not an input of ${o.name}.`, 400);
+        const shape = checkedShape(m, o, patch);
         if (!m.baseline) m.baseline = { ops: structuredClone(m.ops), tools: Object.fromEntries(m.ops.map((x) => [x.toolId, { enabled: toolOf(x).enabled, description: toolOf(x).description }])) };
-        const changes: OperationChange[] = [];
+        const changes: OperationChange[] = shapeChanges(o, shape);
         if (patch.enabled !== undefined && patch.enabled !== t.enabled) {
           // Hiding an operation a workflow is approved for breaks that workflow, so it is a major change.
           const users = [...new Set(approvalsOf(m).filter((a) => a.status === 'approved' && a.operations.includes(o.name)).map((a) => a.workflowName))];
@@ -621,10 +851,33 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       respond(() => {
         const m = find(mid);
         if (m.reviews.some((r) => r.decision === 'pending')) throw new ApiError('A security review is already open for this module.', 409);
+        if (!m.ops.length) throw new ApiError('Add at least one operation before requesting a security review.', 422);
         m.reviews.push({ id: id('rev'), major: majorOf(m.version), version: m.version, decision: 'pending', requestedBy: me, requestedAt: new Date().toISOString(), findings: [], note: note.trim() || undefined });
         if (m.status === 'draft') m.status = 'in_review';
         const v = m.versions[m.versions.length - 1];
         if (v.status === 'draft') v.status = 'in_review';
+        touch(m);
+        return detail(m);
+      }),
+
+    // tools-service's rules: never the requester, a reason to ask for changes. The mock has no roles, so the Security
+    // team rule (signed-in callers only) is not modelled; any other user decides, as in dev mode.
+    decideReview: (mid, rid, input) =>
+      respond(() => {
+        const m = find(mid);
+        const r = m.reviews.find((x) => x.id === rid) ?? notFound('Review');
+        if (r.decision !== 'pending') throw new ApiError('This review was already decided.', 409);
+        if (r.requestedBy === me) throw new ApiError('You requested this review. Someone in Security must decide it.', 403);
+        if (input.decision === 'changes_requested' && !input.findings.some((f) => f.trim())) throw new ApiError('Say what has to change.', 400);
+        const now = new Date().toISOString();
+        Object.assign(r, { decision: input.decision, reviewer: me, decidedAt: now, findings: input.decision === 'changes_requested' ? input.findings.filter((f) => f.trim()) : [], note: input.decision === 'changes_requested' ? input.note?.trim() || undefined : undefined });
+        if (r.version === m.version && input.decision === 'approved') {
+          for (const v of m.versions) if (v.status === 'published') v.status = 'deprecated';
+          const v = m.versions.find((x) => x.version === r.version);
+          if (v) Object.assign(v, { status: 'published', publishedAt: now });
+          m.status = 'published';
+          m.drift = false;
+        } else if (r.version === m.version && m.status === 'in_review') m.status = 'draft';
         touch(m);
         return detail(m);
       }),
@@ -703,11 +956,14 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const missing = o.input.filter((x) => x.required && (args[x.name] === undefined || args[x.name] === '')).map((x) => x.name);
         const latencyMs = input.target === 'stub' ? 12 + Math.round(Math.random() * 30) : Math.round((t.p95Ms || 300) * (0.35 + Math.random() * 0.4));
         if (missing.length) return { decision: 'invalid' as const, status: 422, latencyMs, bound, wouldPause: false, invalid: missing.map((field) => ({ field, message: 'Required.' })), output: { error: 'invalid_input', missing }, masked: [], callId };
-        if (o.amountMax && Number(args.amount ?? 0) > o.amountMax) return deny('constraint');
+        if (amountRefused(o, args)) return deny('constraint');
         const wouldPause = t.access !== 'read' && o.requiresApproval;
         if (wouldPause && input.target === 'sandbox' && !input.simulateApproval) return deny('approval_token_missing');
         const testApprovalToken = wouldPause && input.simulateApproval ? `test-apt_${Math.random().toString(36).slice(2, 8)}` : undefined;
-        return { decision: 'allow' as const, status: 200, latencyMs, bound, wouldPause, testApprovalToken, output: o.stub, masked: o.maskedOutput, callId };
+        // Mirrors tools-service: on the test environment a read reaches the system (the mock answers with the stub), a write answers from the stub and says so.
+        const sandbox = input.target === 'sandbox';
+        const reached = sandbox && t.access === 'read' ? { stubbed: false, reachedHost: new URL(m.endpoint).hostname } : sandbox ? { stubbed: true } : {};
+        return { decision: 'allow' as const, status: 200, latencyMs, bound, wouldPause, testApprovalToken, output: o.stub, masked: o.maskedOutput, callId, ...reached };
       }),
 
     activity: (mid) =>
@@ -737,6 +993,17 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   return {
     api,
     using: (connId) => mods.filter((m) => m.connectionId === connId).map(row),
+    hostsInUse: () => {
+      const out: Record<string, string[]> = {};
+      for (const m of mods) {
+        try {
+          (out[new URL(m.endpoint).hostname] ??= []).push(m.id);
+        } catch {
+          // A draft with no endpoint yet calls no host.
+        }
+      }
+      return out;
+    },
     recentCalls: (mid, n) => {
       const m = mods.find((x) => x.id === mid);
       if (!m) return [];

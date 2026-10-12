@@ -55,7 +55,8 @@ export function TeamSwitcher({
   onSelect: (teamId: string) => void;
   /** Owner groups a new team can take responsibility for. */
   ownerGroups: string[];
-  onCreate: (input: TeamInput) => Promise<unknown>;
+  /** Absent when teams are created elsewhere (platform settings); the menu then has no Add team. */
+  onCreate?: (input: TeamInput) => Promise<unknown>;
   isCreating: boolean;
 }) {
   const { isMobile } = useSidebar();
@@ -126,17 +127,21 @@ export function TeamSwitcher({
                 </DropdownMenuItem>
               );
             })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2" onSelect={() => setAdding(true)}>
-              <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
-                <Plus className="size-4" />
-              </div>
-              <div className="font-medium text-muted-foreground">Add team</div>
-            </DropdownMenuItem>
+            {onCreate && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 p-2" onSelect={() => setAdding(true)}>
+                  <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
+                    <Plus className="size-4" />
+                  </div>
+                  <div className="font-medium text-muted-foreground">Add team</div>
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
-      <AddTeamDialog open={adding} onOpenChange={setAdding} ownerGroups={ownerGroups} onSubmit={onCreate} isPending={isCreating} />
+      {onCreate && <AddTeamDialog open={adding} onOpenChange={setAdding} ownerGroups={ownerGroups} onSubmit={onCreate} isPending={isCreating} />}
     </SidebarMenu>
   );
 }

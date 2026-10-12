@@ -25,7 +25,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
             <Loader2 className="size-3 animate-spin" /> Running
           </span>
         ) : call.status === 'success' ? (
-          <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 text-xs text-success-text">
             <CheckCircle2 className="size-3" /> {ms(call.durationMs)}
           </span>
         ) : (
@@ -34,7 +34,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
           </span>
         )}
         {call.gated && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-800 dark:text-amber-300">
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] text-warning-text">
             <ShieldCheck className="size-3" /> Drafted for approval · {call.gated.gate}
           </span>
         )}

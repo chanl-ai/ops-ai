@@ -16,13 +16,13 @@ import { BindingText, errorTone, pctText } from './module-meta';
 export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | 'requiresApproval' | 'fourEyes'> }) {
   if (op.fourEyes)
     return (
-      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-red-700 dark:text-red-400">
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-destructive">
         <Users className="size-3.5" /> Four eyes
       </span>
     );
   if (op.access === 'read') return <span className="text-xs text-muted-foreground">None</span>;
   return op.requiresApproval ? (
-    <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-amber-700 dark:text-amber-400">
+    <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
       <UserCheck className="size-3.5" /> Every call
     </span>
   ) : (
@@ -31,7 +31,8 @@ export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | '
 }
 
 /** The module's operations; a row opens the operation sheet, the switch exposes or hides it (a staged change). */
-export function OperationsTable({ operations, onOpen, onToggle, toggling }: { operations: ModuleOperation[]; onOpen: (op: ModuleOperation) => void; onToggle: (op: ModuleOperation, enabled: boolean) => void; toggling: boolean }) {
+/** `stagedCalls` names operations whose call (method, path or body) is staged: the row shows the staged call, labelled, since calls still run the published one. */
+export function OperationsTable({ operations, onOpen, onToggle, toggling, stagedCalls }: { operations: ModuleOperation[]; onOpen: (op: ModuleOperation) => void; onToggle: (op: ModuleOperation, enabled: boolean) => void; toggling: boolean; stagedCalls?: Set<string> }) {
   return (
     <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
@@ -55,6 +56,7 @@ export function OperationsTable({ operations, onOpen, onToggle, toggling }: { op
                 {o.method && (
                   <div className="truncate font-mono text-[11px] text-muted-foreground">
                     {o.method} {o.path}
+                    {stagedCalls?.has(o.name) && <span className="font-sans text-warning-text"> · staged, not yet called</span>}
                   </div>
                 )}
                 {!o.enabled && <div className="text-xs text-muted-foreground">Hidden: calls are refused</div>}

@@ -188,7 +188,7 @@ function ImportDialog({ open, onOpenChange, onImport, isPending }: { open: boole
           testId="test-import-upload"
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {rows && invalid > 0 && <p className="text-sm text-amber-700 dark:text-amber-400">{invalid} row{invalid === 1 ? '' : 's'} without a name or input will be skipped.</p>}
+        {rows && invalid > 0 && <p className="text-sm text-warning-text">{invalid} row{invalid === 1 ? '' : 's'} without a name or input will be skipped.</p>}
         {rows && (
           <ul className="max-h-48 divide-y overflow-y-auto rounded-md border text-sm">
             {rows.slice(0, 8).map((r, i) => (
@@ -242,7 +242,7 @@ export function TestCases({ workflowId, liveGraph, tools }: { workflowId: string
           {s ? (
             <>
               Last run {relativeTime(last.data!.ranAt)} on the {last.data!.target} version: <span className="font-semibold tabular-nums">{s.passed}</span>/{s.total} passed
-              {s.regressions > 0 && <span className="text-red-600 dark:text-red-400"> · {s.regressions} regressions</span>}
+              {s.regressions > 0 && <span className="text-destructive"> · {s.regressions} regressions</span>}
             </>
           ) : (
             <span className="text-muted-foreground">Not run yet.</span>
@@ -313,7 +313,7 @@ export function TestCases({ workflowId, liveGraph, tools }: { workflowId: string
                     <TableCell className="text-xs text-muted-foreground">{t.source === 'run' ? 'From a run' : t.source === 'csv' ? 'CSV' : 'Manual'}</TableCell>
                     <TableCell>
                       {r ? (
-                        <span className={cn('inline-flex items-center gap-1.5 text-xs', r.draft.passed ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+                        <span className={cn('inline-flex items-center gap-1.5 text-xs', r.draft.passed ? 'text-success-text' : 'text-destructive')}>
                           {r.draft.passed ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
                           {r.draft.passed ? 'Passed' : r.draft.failure}
                         </span>

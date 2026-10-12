@@ -1,0 +1,8 @@
+# US3: uc-038 drives it live through /v1/calls against postman-echo.com and an unresolvable allowed host.
+id: us3-live-call-reaches-a-public-host
+accept: US3
+failure_mode: the gateway cannot reach a real public host, or a 5xx is counted as ours
+layers:
+  cli:
+    run: "OPS_LIVE_EGRESS=1 make usecase-test UC=uc-038 LAYER=api"
+    expect: { exit: 0, stdout: "uc-038 api  7 checks passed" }

@@ -132,7 +132,7 @@ export function SourceOverview({
         >
           {s.errorGroups.length === 0 ? (
             <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
-              <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" /> No failed items.
+              <CheckCircle2 className="size-4 text-success-text" /> No failed items.
             </div>
           ) : (
             <Rows>

@@ -26,7 +26,8 @@ export type IntegrationKind =
 
 export type AuthMethod = 'oauth_consent' | 'service_principal' | 'api_key' | 'mtls';
 /** `expiring`: healthy, but consent or credential ends within 30 days. Computed by the API. */
-export type IntegrationStatus = 'healthy' | 'needs_reconnect' | 'expiring' | 'revoked' | 'error';
+/** `draft`: created in one screen and not yet signed in; nothing can use it until it is activated. */
+export type IntegrationStatus = 'draft' | 'healthy' | 'needs_reconnect' | 'expiring' | 'revoked' | 'error';
 export type IntegrationView = 'all' | 'attention' | 'expiring' | 'revoked';
 export type IntegrationFilters = { kind?: string[]; authMethod?: string[]; status?: string[]; ownerTeam?: string[] };
 export type IntegrationViewCounts = Record<IntegrationView, number>;
@@ -82,6 +83,10 @@ export interface Integration {
   lastCheckedAt: string;
   lastError?: string;
   usedBy: UsedByCounts;
+  /** Content from this system is synced into the Wiki and its knowledge bases. */
+  syncKnowledge: boolean;
+  /** Agents may call this system's operations as tools. */
+  exposeTools: boolean;
 }
 
 export type DependantType = 'source' | 'tool_module' | 'mailbox';
@@ -144,6 +149,8 @@ export interface IntegrationDetail extends Integration {
   fix?: { action: FixAction; label: string };
   /** The system owner who approves scope requests. */
   systemOwner: string;
+  /** Drafts on OAuth: who granted consent on the Setup tab. */
+  consentBy?: string;
 }
 
 export type CatalogCategory = 'Core systems' | 'Productivity' | 'Knowledge' | 'CRM' | 'Risk & compliance' | 'Internal';
@@ -182,6 +189,16 @@ export interface ConnectInput {
   ownerTeam: string;
   expiresAt: string;
 }
+
+/** One-screen connect: the system, a name and the sign-in method. Scopes, credential, owner and expiry follow on the page. */
+export interface DraftConnectInput {
+  catalogId: string;
+  name: string;
+  authMethod: AuthMethod;
+}
+
+/** What a draft's Setup tab saves; each field is optional so a section saves on its own. */
+export type ConnectionSetupPatch = Partial<Pick<ConnectInput, 'instanceUrl' | 'scopes' | 'credentialRef' | 'consentBy' | 'ownerTeam' | 'expiresAt'>>;
 
 export interface RevokeImpact {
   dependants: Dependant[];

@@ -14,7 +14,9 @@ const MAX_RECENT = 6;
 interface Deps {
   /** Team-scoped rows, so the palette never finds another team's records. */
   workflows: () => { id: string; name: string; owner: string; status: string }[];
-  agents: () => { id: string; name: string; role: string; status: string }[];
+  agents: () => { id: string; name: string; role: string }[];
+  /** Skill hits for a lower-cased query, already team-scoped. */
+  skills: (q: string) => SearchHit[];
   cases: CasesApi;
   knowledge: KnowledgeApi;
   chat: ChatApi;
@@ -39,9 +41,11 @@ export function createSearchMock(deps: Deps): SearchApi {
       const empty = mode() === 'empty';
       const wf = empty ? [] : deps.workflows().filter((w) => matches(q, w.name, w.id, w.owner));
       const ag = empty ? [] : deps.agents().filter((a) => matches(q, a.name, a.role));
+      const sk = deps.skills(q);
       const groups: { group: SearchGroup; hits: SearchHit[]; total: number }[] = [
         { group: 'workflows', total: wf.length, hits: wf.slice(0, PER_GROUP).map((w) => ({ id: w.id, group: 'workflows', title: w.name, detail: `${w.owner} · ${w.status}`, href: `/workflows/${w.id}` })) },
         { group: 'agents', total: ag.length, hits: ag.slice(0, PER_GROUP).map((a) => ({ id: a.id, group: 'agents', title: a.name, detail: a.role, href: `/agents/${a.id}` })) },
+        { group: 'skills', total: sk.length, hits: sk.slice(0, PER_GROUP) },
         {
           group: 'cases',
           total: cases.pagination.total,

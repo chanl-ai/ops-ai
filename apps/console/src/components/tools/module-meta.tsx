@@ -37,10 +37,10 @@ export function ModuleMark({ name, className }: { name: string; className?: stri
 
 const APPROVAL_STATE: Record<ModuleApprovalState, { label: string; cls: string; dot: string }> = {
   draft: { label: 'Draft', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
-  approved: { label: 'Approved', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
-  needs_approval: { label: 'Needs approval', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
-  expiring: { label: 'Expiring', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
-  expired: { label: 'Expired', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500' },
+  approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
+  needs_approval: { label: 'Needs approval', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' },
+  expiring: { label: 'Expiring', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' },
+  expired: { label: 'Expired', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
 };
 export const APPROVAL_STATE_LABEL = Object.fromEntries(Object.entries(APPROVAL_STATE).map(([k, v]) => [k, v.label])) as Record<ModuleApprovalState, string>;
 
@@ -55,10 +55,10 @@ export function ApprovalStateBadge({ state }: { state: ModuleApprovalState }) {
 }
 
 const APPROVAL_STATUS: Record<ApprovalStatus, { label: string; cls: string }> = {
-  requested: { label: 'Requested', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300' },
-  approved: { label: 'Approved', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
-  rejected: { label: 'Rejected', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
-  expired: { label: 'Expired', cls: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' },
+  requested: { label: 'Requested', cls: 'border-warning/40 bg-warning/10 text-warning-text' },
+  approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  expired: { label: 'Expired', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
   revoked: { label: 'Revoked', cls: 'border-border bg-muted text-muted-foreground' },
 };
 
@@ -84,7 +84,7 @@ export function ExpiryText({ at, className }: { at?: string; className?: string 
   return (
     <span
       title={new Date(at).toLocaleDateString('en-CA', { dateStyle: 'medium' })}
-      className={cn('text-xs whitespace-nowrap tabular-nums', days < 0 ? 'font-medium text-red-600 dark:text-red-400' : days <= 7 ? 'font-medium text-amber-700 dark:text-amber-400' : days <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground', className)}
+      className={cn('text-xs whitespace-nowrap tabular-nums', days < 0 ? 'font-medium text-destructive' : days <= 7 ? 'font-medium text-warning-text' : days <= 30 ? 'text-warning-text' : 'text-muted-foreground', className)}
     >
       {label}
     </span>
@@ -120,5 +120,5 @@ export const CREDENTIAL_KIND: Record<CredentialKind | 'none', string> = {
 
 export const ENV_LABEL: Record<Environment, string> = { dev: 'Dev', test: 'Test', production: 'Production' };
 
-export const errorTone = (rate: number) => (rate >= 0.02 ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground');
+export const errorTone = (rate: number) => (rate >= 0.02 ? 'font-medium text-destructive' : 'text-muted-foreground');
 export const pctText = (rate: number) => `${(rate * 100).toFixed(1)}%`;
