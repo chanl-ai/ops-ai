@@ -52,7 +52,7 @@ const columns: ColumnDef<Row>[] = [
     header: 'Status',
     cell: ({ row }) => (
       <div className="flex flex-col gap-0.5">
-        <CallStatusText status={row.original.status} />
+        <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />
         {row.original.failureSide && (
           <span className="text-xs whitespace-nowrap text-muted-foreground" title={row.original.errorMessage}>
             {row.original.failureSide === 'ours' ? 'Our side' : 'Upstream'} · {row.original.errorCode}

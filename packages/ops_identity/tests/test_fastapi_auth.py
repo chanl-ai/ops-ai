@@ -50,7 +50,7 @@ def test_the_mode_comes_from_auth_mode_not_from_a_platform_url() -> None:
 async def test_dev_names_the_second_person_and_never_overrides_an_explicit_team() -> None:
     app = app_with(Auth.from_settings(settings(), audience="tools"))
     default = (await get(app)).json()
-    assert (default["tenant_id"], default["team_id"], default["team_ids"]) == ("local", "team_all", ["team_all"])
+    assert (default["tenant_id"], default["team_id"], default["team_ids"]) == ("local", "team_ops", ["team_ops"])
     other = (await get(app, **{"X-Dev-User": "m.o@bank.test", "X-Team-Id": "team_cards"})).json()
     assert (other["email"], other["name"], other["team_id"]) == ("m.o@bank.test", "m.o@bank.test", "team_cards")
 

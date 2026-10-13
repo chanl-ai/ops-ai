@@ -11,9 +11,16 @@ from typing import Any
 from fake_bank_https import HOST, fake_bank
 from usecase_harness import AGENTS_PORT, agents, check, data, finish, service_headers, tools
 
+from ops_service_kit.ids import input_hash
+from ops_tools.tokens import Binding, mint
+
 SECURITY = {"X-Dev-User": "Nadia Petrov"}
 OTHER = {"X-Dev-User": "Priya Shah"}
 RUN = int(time.time())
+THREAD = f"gth_uc042_{RUN}"
+INPUT = {"accountId": "CHQ-2219"}
+# The dev review key from the settings defaults; the review service signs approval tokens with it.
+REVIEW_KEY = "dev-review-key-not-secret"
 OK, FAILS, WRITES = f"get_account_{RUN}", f"get_missing_{RUN}", f"close_account_{RUN}"
 
 
@@ -27,14 +34,19 @@ def published_module(gw: Any, name: str, ops: list[dict[str, Any]]) -> str:
     return str(made["id"])
 
 
-def call(gw: Any, tool: str, step: str) -> int:
+def send(gw: Any, tool: str, step: str, token: str | None = None) -> Any:
     body = {
         "tool": tool,
-        "input": {"accountId": "CHQ-2219"},
+        "input": INPUT,
         "key": f"{tool}-{step}",
-        "runContext": {"thread": f"gth_uc042_{RUN}", "step": step, "act": "agent:uc042"},
+        "runContext": {"thread": THREAD, "step": step, "act": "agent:uc042"},
+        "approvalToken": token,
     }
-    return gw.post("/v1/calls", json=body, headers=service_headers("tools")).status_code
+    return gw.post("/v1/calls", json=body, headers=service_headers("tools"))
+
+
+def call(gw: Any, tool: str, step: str) -> int:
+    return int(send(gw, tool, step).status_code)
 
 
 def row(gw: Any, module_id: str) -> dict[str, Any]:
@@ -87,7 +99,7 @@ with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}
                 "description": "",
                 "access": "write",
                 "method": "POST",
-                "url": f"{url}/accounts/{{accountId}}",
+                "url": f"{url}/accounts/{{accountId}}/holds",
             },
         ],
     )
@@ -118,16 +130,27 @@ with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}
         statuses,
     )
 
+    token = mint(Binding(THREAD, "f", WRITES, input_hash(INPUT), ["reviewer@bank.test"]), REVIEW_KEY, ttl_s=300)
+    ran, replay = send(gw, WRITES, "f", token), send(gw, WRITES, "f", token)
+    ran_id = (ran.json().get("data") or {}).get("callId")
+    check(
+        "the approved write runs, and the same write sent again replays it",
+        ran.status_code == replay.status_code == 200 and (replay.json().get("data") or {}).get("replayOf") == ran_id,
+        [ran.text[:150], replay.text[:150]],
+    )
+
     after = row(gw, busy)
     check(
-        "the module row counts the four calls that ran, one in four failed, with a measured p95",
-        after["calls24h"] == 4 and after["errorRate"] == 0.25 and after["p95Ms"] > 0,
+        "the module row counts the five calls that ran, one in five failed, with a measured p95",
+        after["calls24h"] == 5 and after["errorRate"] == 0.2 and after["p95Ms"] > 0,
         {k: after[k] for k in ("calls24h", "errorRate", "p95Ms")},
     )
     page = data(gw.get(f"/v1/tool-modules/{busy}"))
     counts = [(op(page, n)["calls24h"], op(page, n)["errorRate"]) for n in (OK, FAILS, WRITES)]
     check(
-        "each operation counts its own calls; the refused write counts none", counts == [(3, 0), (1, 1), (0, 0)], counts
+        "each operation counts its own calls; the write counts its one run, not the refusal or the replay",
+        counts == [(3, 0), (1, 1), (1, 0)],
+        counts,
     )
     still = row(gw, quiet)
     check("a module nobody called stays at zero", still["calls24h"] == 0, still["calls24h"])
@@ -136,11 +159,26 @@ with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}
     today = datetime.now(UTC).date().isoformat()
     days = {d["date"]: (d["count"], d["errors"]) for d in activity["days"]}
     check(
-        "the activity chart's today is the four calls and the other thirteen days are empty",
-        len(days) == 14 and days.get(today) == (4, 1) and sum(c for c, _ in days.values()) == 4,
+        "the activity chart's today is the five calls and the other thirteen days are empty",
+        len(days) == 14 and days.get(today) == (5, 1) and sum(c for c, _ in days.values()) == 5,
         days,
     )
     check("the refused write is counted as denied", activity["denied24h"] == 1, activity["denied24h"])
+
+    log = data(gw.get("/v1/executions", params={"moduleId": busy, "pageSize": 200}))["data"]
+    by: dict[str, int] = {}
+    for r in log:
+        by[r["status"]] = by.get(r["status"], 0) + 1
+    replays = [r.get("replayOf") for r in log if r["status"] == "replayed"]
+    check(
+        "the log adds up to the summary: ok and failed rows are the calls, failed rows the errors, denied rows the "
+        "denials, and the replay names the call it repeated",
+        by.get("ok", 0) + by.get("error", 0) == after["calls24h"]
+        and by.get("error", 0) == round(after["calls24h"] * after["errorRate"])
+        and by.get("denied", 0) == activity["denied24h"]
+        and replays == [ran_id],
+        {"rows": by, "replays": replays},
+    )
 
     month = approve(gw, busy, 30)
     state = row(gw, busy)["approvalState"]

@@ -11,9 +11,9 @@ routes); no service resolves tokens, keys or dev headers itself.
 With OPS_AUTH_MODE=platform, tokens are verified against platform-service's key set for the service's audience and
 API keys are introspected on its internal port with this service's Ed25519 service token. With `dev` (Settings
 refuses it outside dev) every request is the fixed dev user in tenant `local`; `X-Dev-User` names a second person and
-`X-Team-Id` picks the team, defaulting to the dev seed's `team_all`. `on_principal` runs after each resolution, for a
-service that keeps per-request state (agents-service sets its tenant scope there). The mode comes from
-`settings.auth_mode` alone, never from whether OPS_PLATFORM_URL is set.
+`X-Team-Id` picks the team, defaulting to Operations (`team_ops`), as platform-service's dev seed names it.
+`on_principal` runs after each resolution, for a service that keeps per-request state (agents-service sets its tenant
+scope there). The mode comes from `settings.auth_mode` alone, never from whether OPS_PLATFORM_URL is set.
 
 The service token minted for introspection names the service by its audience, so in production each service's own
 key must be bound to that name in platform-service's OPS_SERVICE_PUBLIC_KEYS; a key shared between services is
@@ -38,7 +38,8 @@ from .resolve import Identity, ServiceAuth, mint_service_token
 from .service_keys import service_signer, service_verifiers
 
 DEV_TENANT = "local"
-DEV_TEAM = "team_all"
+# Operations, under the id platform-service's dev seed gives it: the dev user acts in a team every service knows.
+DEV_TEAM = "team_ops"
 
 
 async def _no_keys() -> dict[str, Any]:

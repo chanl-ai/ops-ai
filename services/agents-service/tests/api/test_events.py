@@ -25,6 +25,7 @@ from ops_agents.api.routers.events import team_frames
 from ops_agents.graphs.models import Grade
 from ops_agents.store.events import thread_events
 from ops_agents.store.graphs import metadata
+from ops_identity.fastapi import DEV_TEAM
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run
 from tests.conftest import SEED, FakeGraphModels, decide, last_run, scripted_model, sse_events
@@ -165,7 +166,7 @@ async def test_team_stream_carries_only_that_teams_lifecycle(stack: tuple[AsyncC
 
 async def test_team_stream_follows_new_events(stack: tuple[AsyncClient, Runtime, Spy]) -> None:
     client, rt, _ = stack
-    stream = team_frames(rt, "team_all", 0, follow=True)
+    stream = team_frames(rt, DEV_TEAM, 0, follow=True)  # paused() names no team: the dev user's default
     await paused(client)
     seen = [(await anext(stream))["event"], (await anext(stream))["event"]]
     await stream.aclose()

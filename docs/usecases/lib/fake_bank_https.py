@@ -146,6 +146,9 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             self._record(raw)
+            if self.path.startswith("/v1/accounts/") and self.path.endswith("/holds"):
+                # A write that succeeds, for a use case that replays an approved write.
+                return self._send(200, {"hold": "placed"})
             if self.path != "/v1/mcp":
                 return self._send(404, {"error": "not found"})
             msg: dict[str, Any] = json.loads(raw or b"{}")

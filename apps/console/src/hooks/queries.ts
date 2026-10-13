@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, brand } from '@/lib/api';
 import type {
   AgentInput,
   AgentPatch,
@@ -40,6 +40,9 @@ export const qk = {
 const paged = { placeholderData: keepPreviousData };
 
 export const useOverview = () => useQuery({ queryKey: qk.overview, queryFn: api.overview.get });
+/** The demo brand from the console's env, when one is set. */
+export const useBrand = () => brand;
+
 export const useLookups = () => useQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
 
 export const useAgents = (p: ListParams<AgentFilters>) => useQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...paged });

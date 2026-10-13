@@ -45,6 +45,26 @@ the real routes, the real gateway and the in-process fake bank. Zero real model 
 - Console `pnpm verify` on the export: exit 0.
 - Verdict: accept.
 
+## c2c935b: the call log names a replay as a replay and the 409 as a denial
+
+- Check on an export of e8c3fb1: tools-service `make verify` 103 passed; `/v1/executions` maps `replayed` to its own
+  status with `replayOf` (stored in `gateway_calls.replay_of`, migration 0010), and the 409 for a write already running
+  is recorded as decision deny with WRITE_IN_PROGRESS, so it shows denied and counts in denied24h. No status filter on
+  the executions route needed the reverse mapping.
+- Probe re-run: the approved place_hold sent twice under one key now reads 1 call on the operation and, in the log, one
+  `ok` row and one `replayed` row whose replayOf is the first call's id. The 0585ac3 defect is fixed.
+- Verdict: accept.
+
+## 5332623: a replayed call reads "Replay of <call>" in the executions and tool-call tables
+
+- Console `pnpm verify` on the export: exit 0. Seen on the builder's stack below.
+- Verdict: accept.
+
+## ffdb8d2: uc-042 replays an approved write and adds the log up against the summary
+
+- `make usecase-test UC=uc-042 LAYER=api` on the export: 11 checks passed.
+- Verdict: accept.
+
 ## Card
 
 walk repeated: on the builder's `make up ISOLATED=1 AUTH=platform` stack, module mod_aef7b3232e4e read 4 calls, error
@@ -52,5 +72,9 @@ rate 0.25, today 4 with 1 error (GET :9720/v1/tool-modules/mod_aef7b3232e4e 200)
 POST :9720/v1/calls (echo_get_tpj6, a real call to postman-echo.com) 200 ok -> the module read 5 calls, error rate 0.2,
 today 5 with 1 error, echo_get_tpj6 at 4 (GET :9720/v1/tool-modules/mod_aef7b3232e4e 200).
 
-verdict: changes requested (0585ac3: the executions log lists replays as ok and 409 in-progress refusals as errors,
-which the counts exclude, so the card's metric does not hold once a write is replayed).
+walk repeated, after the fix: on the builder's isolated stack, mod_2f6c30be1487 read 1 call, today 1, denied 0, and
+its recent calls one `ok` and one `replayed` with replayOf gwc_43be87a3b25b (GET :9720/v1/tool-modules/mod_2f6c30be1487
+200, GET :9720/v1/tool-modules/mod_2f6c30be1487/activity 200) -> signed in as James in the console at
+localhost:4016/tools/mod_2f6c30be1487?tab=activity, the table read "Replay of gwc_43be87a3b25b", no page errors.
+
+verdict: approve

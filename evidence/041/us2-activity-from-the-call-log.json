@@ -2,15 +2,15 @@
   "id": "us2-activity-from-the-call-log",
   "accept": "US2",
   "failure_mode": "the chart invents days from the 24 h count",
-  "sha": "7d43eedc652431a212d99ef46fbaa24396216001",
+  "sha": "a12946d15b629506104de09da5e3772796cd6aa4",
   "env": "local",
-  "workspace": "export of 7d43eed",
+  "workspace": "export of a12946d",
   "pass": true,
   "layers": [
     {
       "layer": "cli",
       "pass": true,
-      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_r24451_2be250 (this run's, dropped at the end); ports agents 51948, tools 51949, models 51950, platform 51952, console 51951\n\n== uc-042 api: A module's call counts and activity come from real calls (docs/usecases/tools-service/scripts/test-uc-042-api.py)\nPASS a new module shows zero calls, errors and latency\nPASS three calls succeed, one fails upstream, a write without approval is refused\nPASS the module row counts the four calls that ran, one in four failed, with a measured p95\nPASS each operation counts its own calls; the refused write counts none\nPASS a module nobody called stays at zero\nPASS the activity chart's today is the four calls and the other thirteen days are empty\nPASS the refused write is counted as denied\nPASS a 30-day approval granted today is approved, not expiring\nPASS an approval with five days left makes the module expiring\n\nPASS        uc-042 api  9 checks passed\n\nexit 0"
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_r89045_a4d4a4 (this run's, dropped at the end); ports agents 54581, tools 54582, models 54583, platform 54585, console 54584\n\n== uc-042 api: A module's call counts and activity come from real calls (docs/usecases/tools-service/scripts/test-uc-042-api.py)\nPASS a new module shows zero calls, errors and latency\nPASS three calls succeed, one fails upstream, a write without approval is refused\nPASS the approved write runs, and the same write sent again replays it\nPASS the module row counts the five calls that ran, one in five failed, with a measured p95\nPASS each operation counts its own calls; the write counts its one run, not the refusal or the replay\nPASS a module nobody called stays at zero\nPASS the activity chart's today is the five calls and the other thirteen days are empty\nPASS the refused write is counted as denied\nPASS the log adds up to the summary: ok and failed rows are the calls, failed rows the errors, denied rows the denials, and the replay names the call it repeated\nPASS a 30-day approval granted today is approved, not expiring\nPASS an approval with five days left makes the module expiring\n\nPASS        uc-042 api  11 checks passed\n\nexit 0"
     }
   ]
 }

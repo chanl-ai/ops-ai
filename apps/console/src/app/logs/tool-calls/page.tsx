@@ -91,7 +91,7 @@ const columns: ColumnDef<Row>[] = [
   { accessorKey: 'operation', header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />, cell: ({ row }) => <OperationBadge operation={row.original.operation} />, filterFn: facetFilterFn },
   { accessorKey: 'record', header: ({ column }) => <DataTableColumnHeader column={column} title="Bound record" />, cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.record ?? '—'}</span> },
   { id: 'approval', accessorFn: (r) => r.approval.kind, header: ({ column }) => <DataTableColumnHeader column={column} title="Approval" />, cell: ({ row }) => <ApprovalCell approval={row.original.approval} />, filterFn: facetFilterFn },
-  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <CallStatusText status={row.original.status} />, filterFn: facetFilterFn },
+  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />, filterFn: facetFilterFn },
   { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
 ];

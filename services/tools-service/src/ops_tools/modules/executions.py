@@ -7,7 +7,16 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-STATUS = {"ok": "ok", "replayed": "ok", "error": "error", "refused": "denied", "in_progress": "error", "running": "ok"}
+# A replay ran nothing, so it is its own status, not a success; a write refused because the same one was running is a
+# denial. Both stay out of a module's call counts (CallLog.traffic) and the 409 counts as denied.
+STATUS = {
+    "ok": "ok",
+    "replayed": "replayed",
+    "error": "error",
+    "refused": "denied",
+    "in_progress": "denied",
+    "running": "ok",
+}
 SUBJECT_KINDS = {"user": "user", "workflow": "workflow", "process": "process"}
 ACTOR_KINDS = {"user": "user", "agent": "agent", "workflow": "workflow", "graph": "workflow"}
 
@@ -59,6 +68,8 @@ def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | 
         row["approvalTokenId"] = r["approval_token_id"]
     if r["decision"] == "deny" and r["reasons"]:
         row["denyReason"] = "; ".join(r["reasons"])
+    if r.get("replay_of"):
+        row["replayOf"] = r["replay_of"]
     error = r.get("error")
     if r["outcome"] == "error" and isinstance(error, dict):
         # Which side the call broke on and why, as the executor named it; the message names the host, never an

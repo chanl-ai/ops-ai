@@ -3276,6 +3276,17 @@
             ],
             "title": "Record"
           },
+          "replayOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replayof"
+          },
           "runId": {
             "title": "Runid",
             "type": "string"
@@ -3285,7 +3296,8 @@
               "ok",
               "error",
               "denied",
-              "awaiting_approval"
+              "awaiting_approval",
+              "replayed"
             ],
             "title": "Status",
             "type": "string"

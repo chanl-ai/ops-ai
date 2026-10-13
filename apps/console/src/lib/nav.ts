@@ -69,8 +69,8 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Activity', tabTitle: 'Tool calls', url: '/logs/tool-calls', icon: IconListDetails, children: [{ title: 'Audit log', url: '/logs/audit' }] },
       { title: 'Access', url: '/access', icon: IconShieldLock },
-      // Assurance holds testing and governance evidence in one place; the model inventory is one view of it.
-      { title: 'Assurance', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
+      // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
+      { title: 'Evals', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
       { title: 'Settings', url: '/settings', icon: IconSettings },
     ],
   },

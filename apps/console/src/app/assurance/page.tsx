@@ -145,7 +145,7 @@ export default function AssurancePage() {
     <PageLayout
       switcher
       icon={ShieldCheck}
-      title="Assurance"
+      title="Evals"
       description="Suites, runs, gates and evidence for every agent, skill and workflow"
       tabs={
         <div className="flex flex-col gap-2">

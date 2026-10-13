@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { useLookups } from '@/hooks/queries';
+import { useBrand, useLookups } from '@/hooks/queries';
 import { crumbsFor } from '@/lib/nav';
 
 /** `actions` sits at the right of the bar (search, notifications); the layout passes them in. */
@@ -12,6 +12,7 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
   const { data: lookups } = useLookups();
+  const brand = useBrand();
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -26,7 +27,7 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {lookups && <span className="hidden text-sm text-muted-foreground xl:inline">{lookups.workspace.name} · {lookups.workspace.environment}</span>}
+          {lookups && <span className="hidden text-sm text-muted-foreground xl:inline">{brand.name ?? lookups.workspace.name} · {lookups.workspace.environment}</span>}
           {actions}
         </div>
       </div>

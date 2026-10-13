@@ -133,3 +133,77 @@ PROBE 2d: call_row reads workflow name from the approval record, not a directory
 All 4 probes pass.
 
 ---
+
+Gate results at 3f30c82:
+- Code review only (1 console file, 4 ins / 2 del)
+
+## 3f30c82 — fix(console): the module page's request-approval dialog takes useWorkflows
+
+| Field | Value |
+|---|---|
+| check | code review |
+| result | PASSED |
+| rule | The request-approval dialog was wired to `lookups?.workflows` (the mock's fixture list). Now it reads from `useWorkflows({ page: 1, pageSize: 200 })`, the same hook the Workflows page uses — so it names the workflows agents-service actually has, not fixture placeholders. |
+| verdict | accept |
+| defect | — |
+| caveat | `pageSize: 200` is a hard cap; a tenant with >200 workflows would not see them all in the dialog. Acceptable for now — no tenant is near that. |
+
+---
+
+Gate results at f31cb45:
+- Code review only (1 make file + 1 doc, 13 ins / 2 del)
+
+## f31cb45 — build(make): `make restart [SVC=]` runs alembic between stop and start
+
+| Field | Value |
+|---|---|
+| check | code review |
+| result | PASSED |
+| rule | `make restart` was a bare `$(STACK) restart`, which started a service on code whose migration had not run (crashed on missing columns). Now it stops, migrates (each service's chain, or one with `SVC=`), then starts. Console is skipped (no database). `make/dev.mk` documents the gotcha in `docs/architecture/make.md`. |
+| verdict | accept |
+| defect | — |
+
+---
+
+Gate results at 32783c1:
+- tools-service pytest: 103/103 PASSED (after all migrations applied)
+- ops_identity pytest: 4/4 PASSED
+- agents-service test_events: 5/5 PASSED (1 pre-existing database error)
+- `grep -rn team_all services/*/src packages/*/src apps/console/src` → empty
+
+## 32783c1 — fix(identity): ops_identity DEV_TEAM is team_ops, not team_all
+
+| Field | Value |
+|---|---|
+| check | 103/103 tools + 4/4 identity + 5/5 events + grep verification |
+| result | PASSED |
+| rule | `DEV_TEAM` was `"team_all"`, a placeholder that no seed uses any more. Now `"team_ops"` — Operations, as platform-service's dev seed names it. `team_ops` scope changed from `"owned"` to `"all"` in teams.ts, seed/tool_modules.json, and test fixtures, matching platform-service's people.json (the dev user acts across teams). The `test_events::test_team_stream_follows_new_events` test was following `team_all` while threads landed in `team_ops` — fixed by importing `DEV_TEAM`. `grep -rn team_all` across all source directories is empty. |
+| verdict | accept |
+| defect | — |
+| caveat | The scope `"all"` on team_ops means the dev user sees every module without an X-Team-Id header. `"owned"` would have hidden seeded modules (16 tests failed). This matches platform-service's intent: the dev user acts across teams. |
+
+---
+
+## Card-level verdict — c-039
+
+**5 commits reviewed**: 762f66d, c5ed407, 3f30c82, f31cb45, 32783c1. All accepted.
+
+**What the card delivers:**
+- Workflow approvals name the workflows agents-service actually has, not fixture placeholders. Tools-service reads them from agents-service's new internal route (`GET /v1/internal/workflows`, service_principal guard) via `AgentsWorkflows`, a 30s per-tenant cache that raises `ServiceUnavailable` on any failure — never an empty list or stale guess.
+- `request_approval` validates the workflow exists in agents-service (400 if unknown) and that its owning team has a local record (422, fail-closed). The approval stores `workflow_team_id` so visibility follows the team that owned the workflow at request time.
+- Seeds use `team_ops` (Operations' dev id) instead of the placeholder `team_all`. `DEV_TEAM` in ops_identity is `team_ops`. `grep -rn team_all` across all source dirs is empty.
+- `_run_contexts` produces one sample context per workflow (caseId="sample", empty bindings) — the builder types the bound values, marked as a sample. No runtime path reads `tests/`.
+- `call_row` gets workflow names from the approval record, not a directory lookup.
+- The console's request-approval dialog reads `useWorkflows` (agents-service's registry), not `lookups` (the mock's fixture list).
+- `make restart` applies each service's alembic chain between stop and start, so a restart of newer code never meets a table without its new columns.
+
+**Gate results across the card:**
+- agents-service: 115 passed, 1 failed, 4 errors (all pre-existing database-dependent tests) at 762f66d; test_internal_workflows 2/2
+- tools-service: 99/99 at c5ed407, 103/103 at 32783c1 (growing as migrations from other cards were applied)
+- ops_identity: 4/4
+- agents-service test_events: 5/5 (1 pre-existing database error)
+- 8 adversarial probes across all shas: all passed (4 for sha 1 auth guard + cache + team_all elimination; 4 for sha 2 cache isolation + 503 propagation + SAMPLE_CASE + approval-sourced names)
+
+walk repeated: approval request for a real workflow (dispute_email) → 201 with workflowName from agents-service; unknown workflow → 400 "Choose a workflow"; unknown team → 422 fail-closed; agents-service down → 503 workflows_unavailable; per-tenant cache isolation confirmed (tenant A's answer never served to tenant B); no team_all in source; console dialog reads useWorkflows not lookups
+
+verdict: approve

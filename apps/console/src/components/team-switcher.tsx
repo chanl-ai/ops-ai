@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useBrand } from '@/hooks/queries';
 import { AlertCircle, ChevronsUpDown, CreditCard, RotateCw, HandCoins, Layers, PiggyBank, Plus, ShieldAlert, Store, UserPlus, Users, type LucideIcon } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -75,6 +76,7 @@ export function TeamSwitcher({
   }, [teams, onSelect]);
 
   const Logo = TEAM_ICONS[activeTeam?.icon ?? 'platform'];
+  const brand = useBrand();
 
   if (error && !activeTeam)
     return (
@@ -100,9 +102,14 @@ export function TeamSwitcher({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" aria-label={`Team: ${activeTeam?.name ?? 'loading'}. Switch team`}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <Logo className="size-4" />
-              </div>
+              {brand.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- a data: URL or local file from env, not an optimisable asset
+                <img src={brand.logo} alt="" className="aspect-square size-8 rounded-md" />
+              ) : (
+                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <Logo className="size-4" />
+                </div>
+              )}
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-semibold">{activeTeam?.name ?? ' '}</span>
                 <span className="truncate text-xs text-muted-foreground">{subtitle}</span>

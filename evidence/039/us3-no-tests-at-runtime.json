@@ -1,0 +1,16 @@
+{
+  "id": "us3-no-tests-at-runtime",
+  "accept": "US3",
+  "failure_mode": "a runtime path or seed reads tests/ or names a placeholder team, or the panel offers fixture cases",
+  "sha": "0cc641824b64a6b6206ff62392c87e7b118a9409",
+  "env": "local",
+  "workspace": "export of 0cc6418",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)\ndatabase ops_usecase_r94394_3a5455 (this run's, dropped at the end); ports agents 62868, tools 62869, models 62870, platform 62872, console 62871\n\n== uc-041 api: Workflow approvals use agents-service workflows (docs/usecases/tools-service/scripts/test-uc-041-api.py)\nPASS agents-service lists its workflows to a service token, the seeded ones owned by team_ops\nPASS an approval is requested for agents-service's dispute_email (201)\nPASS the requester cannot decide it (403)\nPASS someone else in the module's owner team approves it\nPASS a call as that workflow runs and is logged with its name\nPASS a workflow agents-service does not have is refused (400)\nPASS a workflow whose team tools-service has no record of fails closed (422 naming the team)\nPASS with agents-service stopped, a request is 503 workflows_unavailable, never a guess\n\nPASS        uc-041 api  8 checks passed\n\nexit 0"
+    }
+  ]
+}

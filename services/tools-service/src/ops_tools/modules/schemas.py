@@ -455,7 +455,7 @@ class ToolCallRow(Out):
     operation: Literal["read", "write", "money_movement", "completion"]
     record: str | None = None
     approval: CallApproval
-    status: Literal["ok", "error", "denied", "awaiting_approval"]
+    status: Literal["ok", "error", "denied", "awaiting_approval", "replayed"]
     latency_ms: int
     subject: CallIdentity | None = None
     actor: CallIdentity | None = None
@@ -468,6 +468,8 @@ class ToolCallRow(Out):
     error_code: str | None = None
     error_message: str | None = None
     failure_side: Literal["ours", "upstream"] | None = None
+    # The call a replayed write repeated: it ran nothing and returned that call's result.
+    replay_of: str | None = None
 
 
 class ExecutionList(ListResult[ToolCallRow]):

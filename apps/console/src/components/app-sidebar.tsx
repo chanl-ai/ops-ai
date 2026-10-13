@@ -22,12 +22,13 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { useLookups, useOpenReviewCount } from '@/hooks/queries';
+import { useBrand, useLookups, useOpenReviewCount } from '@/hooks/queries';
 import { useTeam } from '@/hooks/use-team';
 import { NAV, navMatch } from '@/lib/nav';
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const brand = useBrand();
   const { data: openReviews } = useOpenReviewCount();
   const { data: lookups, isError: lookupsFailed, refetch: retryLookups } = useLookups();
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
@@ -41,7 +42,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           onRetry={() => void retryTeams()}
           teams={teams}
           activeTeam={team}
-          subtitle={`${lookups?.workspace.name ?? 'Northfield Bank'} · Ops AI`}
+          subtitle={`${brand.name ?? lookups?.workspace.name ?? 'Northfield Bank'} · Ops AI`}
           onSelect={switchTeam}
           ownerGroups={lookups?.owners ?? []}
           onCreate={canCreate ? (input) => create.mutateAsync(input) : undefined}

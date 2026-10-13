@@ -293,5 +293,17 @@ export function seedToolCalls(): ToolCallDetail[] {
   denied('wf_branch_chat', 'get_transactions', 1420, 'Grant expired: Card Platform · get_transactions expired 2 days ago.');
   denied('wf_mortgage', 'transfer_funds', 3100, 'No grant for Core Banking · transfer_funds on this workflow identity.');
 
+  // Mirrors tools-service: the same approved write sent again runs nothing and is listed as a replay of the first
+  // call; sent while the first is still running, it is refused (409) and listed as denied.
+  const write = out.find((c) => c.gateway === 'data' && c.operation === 'write' && c.status === 'ok');
+  if (write) {
+    const later = (min: number) => new Date(new Date(write.at).getTime() + min * 60_000).toISOString();
+    seq++;
+    out.push({ ...write, id: `call_${String(seq).padStart(4, '0')}`, at: later(1), status: 'replayed', replayOf: write.id, latencyMs: 3, requestId: `req_${(seq * 7919).toString(36)}rep` });
+    seq++;
+    const reason = 'the same write is already running; retry after it finishes';
+    out.push({ ...write, id: `call_${String(seq).padStart(4, '0')}`, at: later(0.1), status: 'denied', decision: 'deny', denyReason: reason, latencyMs: 2, response: { error: reason }, error: reason, requestId: `req_${(seq * 7919).toString(36)}409` });
+  }
+
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }

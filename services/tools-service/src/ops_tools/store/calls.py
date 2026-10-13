@@ -41,6 +41,8 @@ gateway_calls = sa.Table(
     sa.Column("error", sa.JSON),
     # A fingerprint of the approval token that allowed a write, never the token itself.
     sa.Column("approval_token_id", sa.String(64)),
+    # On a replayed write, the call whose result it returned.
+    sa.Column("replay_of", sa.String(64)),
 )
 
 

@@ -28,7 +28,7 @@ class Principal:
 async def principal(p: CurrentPrincipal) -> Principal:
     set_tenant(p.tenant_id)
     # Team access is held for platform callers only. Dev acts across teams, as it always has: the console sends its
-    # selected team while scripts and seeds create threads in team_all.
+    # selected team while scripts and seeds create threads in other teams.
     set_team(None if p.auth_method == "dev" else p.team_id)
     return Principal(name=p.name or p.email, email=p.email, team_id=p.team_id or "", tenant_id=p.tenant_id, sub=p.sub)
 

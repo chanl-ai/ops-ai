@@ -78,3 +78,10 @@ export const authProvider: AuthProvider = createAuthProvider();
 
 export { ApiError, type Lookups, type OpsApi } from './contract';
 export { currentTeamId, DEFAULT_TEAM_ID, setCurrentTeamId, teamStore } from './team-context';
+
+/** A demo can show another organisation's name and mark without a code change: both come from the console's own
+ * env (gitignored .env.local), never from the repo. Unset, the workspace's own name and the team icon are shown. */
+export const brand = {
+  name: process.env.NEXT_PUBLIC_BRAND_NAME || undefined,
+  logo: process.env.NEXT_PUBLIC_BRAND_LOGO || undefined,
+};

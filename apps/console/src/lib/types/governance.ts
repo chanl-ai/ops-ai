@@ -10,7 +10,8 @@ export type GatewayKind = 'data' | 'ai';
 export type CallOperation = 'read' | 'write' | 'money_movement' | 'completion';
 /** How a write was authorised: a person's approval token, a gate policy that auto-approves, or none (reads, model calls). */
 export type ApprovalKind = 'person' | 'policy' | 'none';
-export type CallStatus = 'ok' | 'error' | 'denied' | 'awaiting_approval';
+/** `replayed`: the same approved write sent again; it ran nothing and returned the first call's result (`replayOf`). */
+export type CallStatus = 'ok' | 'error' | 'denied' | 'awaiting_approval' | 'replayed';
 
 export interface CallApproval {
   kind: ApprovalKind;
@@ -62,6 +63,8 @@ export interface ToolCallRow {
   errorCode?: string;
   errorMessage?: string;
   failureSide?: 'ours' | 'upstream';
+  /** On a replayed write, the call whose result it returned. */
+  replayOf?: string;
 }
 
 export interface CallIdentity<K extends string> {

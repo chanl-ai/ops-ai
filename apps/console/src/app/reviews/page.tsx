@@ -131,7 +131,7 @@ export default function ReviewsPage() {
       toast.success(`${verb} · ${updated.id}`, { description: decision === 'approved' ? 'The workflow run has resumed.' : 'The agent has the reason.' });
     }
     if (addTestCase && decision !== 'approved' && updated.testTarget) {
-      toast(`Added a draft case to ${updated.testTarget.name}’s suite`, { description: 'It shows under Assurance → Suites. The owner activates it before the gate runs it.' });
+      toast(`Added a draft case to ${updated.testTarget.name}’s suite`, { description: 'It shows under Evals → Suites. The owner activates it before the gate runs it.' });
     }
     const next = rows[activeIndex + 1];
     setActiveId(next && isOpen(next) ? next.id : null);

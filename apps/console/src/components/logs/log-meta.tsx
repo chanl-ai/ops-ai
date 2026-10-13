@@ -1,4 +1,4 @@
-import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, ShieldCheck, User, XCircle } from 'lucide-react';
+import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, Repeat, ShieldCheck, User, XCircle } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOperation, CallStatus, GatewayKind, ToolCallRow } from '@/lib/types/governance';
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
 export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', money_movement: 'Moves money', completion: 'Model call' };
 export const APPROVAL_LABEL: Record<ApprovalKind, string> = { person: 'Person', policy: 'Policy', none: 'None' };
-export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval' };
+export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay' };
 
 export const options = <K extends string>(labels: Record<K, string>) => (Object.entries(labels) as [K, string][]).map(([value, label]) => ({ value, label }));
 
@@ -54,13 +54,15 @@ const STATUS: Record<CallStatus, { icon: typeof CheckCircle2; cls: string }> = {
   error: { icon: XCircle, cls: 'text-destructive' },
   denied: { icon: Ban, cls: 'text-destructive' },
   awaiting_approval: { icon: Clock, cls: 'text-warning-text' },
+  replayed: { icon: Repeat, cls: 'text-muted-foreground' },
 };
 
-export function CallStatusText({ status }: { status: CallStatus }) {
+/** A replay names the call it repeated, so a row is never read as a second call that ran. */
+export function CallStatusText({ status, replayOf }: { status: CallStatus; replayOf?: string }) {
   const s = STATUS[status];
   return (
     <span className={cn('inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap', s.cls)}>
-      <s.icon className="size-3.5" /> {CALL_STATUS_LABEL[status]}
+      <s.icon className="size-3.5" /> {status === 'replayed' && replayOf ? `Replay of ${replayOf}` : CALL_STATUS_LABEL[status]}
     </span>
   );
 }

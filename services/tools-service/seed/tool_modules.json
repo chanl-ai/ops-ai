@@ -2374,7 +2374,7 @@
    "ownerGroups": [
     "Operations"
    ],
-   "scope": "owned"
+   "scope": "all"
   },
   {
    "id": "team_security",
