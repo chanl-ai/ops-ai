@@ -161,7 +161,6 @@ def test_the_dev_key_is_refused_outside_dev() -> None:
             environment="production",
             auth_mode="platform",
             review_key=SecretStr("r" * 40),
-            service_token=SecretStr("s" * 40),
         )
     with pytest.raises(ValueError, match="64 hex"):
         Settings(secrets_key=SecretStr("not-hex"))

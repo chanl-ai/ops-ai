@@ -1,0 +1,16 @@
+{
+  "id": "us1-settings-without-shared-token",
+  "accept": "US1",
+  "failure_mode": "Settings still demand the shared token outside dev, or a leftover value breaks start-up",
+  "sha": "397db7b5cc6cb6c12689b7ffbd9b6cd137bebd4e",
+  "env": "local",
+  "workspace": "export of 397db7b",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "..                                                                       [100%]\n\nexit 0"
+    }
+  ]
+}

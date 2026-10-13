@@ -111,8 +111,6 @@ class Settings(BaseSettings):
     # An expired approval token is renewed from its recorded approvals while they are younger than this; older, the
     # call needs a fresh review (durability-failure-and-audit.md, approval expiry).
     approval_renewal_max_age_seconds: int = 86400
-    # Internal routes (the timer fire endpoint) take this bearer token; the default works in dev only.
-    service_token: SecretStr = SecretStr("dev-service-token-not-secret")
     # Chat approvals by the person who asked the agent. An owner decision is pending; True keeps today's behaviour.
     # Money reviews in Reviews always need distinct approvers, and workflow reviews are never decided by the requester.
     allow_self_approval_in_chat: bool = True
@@ -129,8 +127,6 @@ class Settings(BaseSettings):
             raise ValueError(f"auth_mode 'dev' is refused when environment is {self.environment}")
         if self.environment != "dev" and self.review_key.get_secret_value() == "dev-review-key-not-secret":
             raise ValueError("review_key must be set outside dev; the default is public")
-        if self.environment != "dev" and self.service_token.get_secret_value() == "dev-service-token-not-secret":
-            raise ValueError("service_token must be set outside dev; the default is public")
         key = self.secrets_key.get_secret_value()
         if len(key) != 64 or any(c not in "0123456789abcdefABCDEF" for c in key):
             raise ValueError("secrets_key must be 64 hex characters (an AES-256 key)")

@@ -74,3 +74,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-040 | tools-service | Security decides a tool module review | api, ui | passing |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | passing |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | passing |
+| uc-047 | console | Sub-pages show as rows in the sidebar | ui | passing |

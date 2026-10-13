@@ -108,6 +108,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/calls-through-the-registry.md` | uc-011: a tool call runs through the registry and is logged with its caller |
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
+| `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |

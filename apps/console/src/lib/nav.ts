@@ -1,7 +1,7 @@
 import type { Icon } from '@tabler/icons-react';
-import { IconBook2, IconDatabase, IconHome, IconListDetails, IconMail, IconMessages, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck } from '@tabler/icons-react';
+import { IconBook2, IconDatabase, IconFolder, IconHome, IconListDetails, IconMail, IconMessages, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck } from '@tabler/icons-react';
 
-/** A route shown as a tab under its parent item rather than as its own sidebar row. */
+/** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
 export interface NavChild {
   title: string;
   url: string;
@@ -37,21 +37,20 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Agents', url: '/agents', icon: IconRobot },
       // A deployment only exists for a published workflow, so it lives under Workflows.
-      { title: 'Workflows', url: '/workflows', icon: IconRoute, children: [{ title: 'Deployments', url: '/deployments' }] },
+      { title: 'Workflows', tabTitle: 'All workflows', url: '/workflows', icon: IconRoute, children: [{ title: 'Deployments', url: '/deployments' }] },
       { title: 'Skills', url: '/skills', icon: IconSparkles },
     ],
   },
   {
     label: 'Data Hub',
     items: [
-      // The Wiki holds the content agents read: pages, documents, collections and the edits waiting on them.
+      // The Wiki holds the content agents read: pages, collections and the edits waiting on them.
       {
         title: 'Wiki',
         tabTitle: 'Pages',
         url: '/wiki',
         icon: IconBook2,
         children: [
-          { title: 'Documents', url: '/files' },
           { title: 'Collections', url: '/wiki/collections' },
           { title: 'Changes', url: '/knowledge/changes' },
         ],
@@ -61,6 +60,8 @@ export const NAV: NavGroup[] = [
       // One row per system, with switches for syncing knowledge and exposing tools.
       { title: 'Connections', url: '/integrations', icon: IconPlugConnected },
       { title: 'Tools', url: '/tools', icon: IconTool },
+      // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
+      { title: 'Files', url: '/files', icon: IconFolder },
     ],
   },
   // Oversight is its own job (risk, audit, platform admins), separate from building agents or curating data.
@@ -70,7 +71,7 @@ export const NAV: NavGroup[] = [
       { title: 'Activity', tabTitle: 'Tool calls', url: '/logs/tool-calls', icon: IconListDetails, children: [{ title: 'Audit log', url: '/logs/audit' }] },
       { title: 'Access', url: '/access', icon: IconShieldLock },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
-      { title: 'Evals', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
+      { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
       { title: 'Settings', url: '/settings', icon: IconSettings },
     ],
   },

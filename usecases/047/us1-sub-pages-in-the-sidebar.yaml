@@ -1,0 +1,9 @@
+# US1: uc-047 ui: every parent lists its sub-pages as rows, open by default, a closed parent remembered and reopened for its current page.
+# The runner gives each run its own database and ports.
+id: us1-sub-pages-in-the-sidebar
+accept: US1
+failure_mode: a child page has no sidebar row, or a closed parent hides the current page
+layers:
+  cli:
+    run: "make usecase-test UC=uc-047 LAYER=ui"
+    expect: { exit: 0, stdout: "uc-047 ui   7 checks passed" }

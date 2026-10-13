@@ -1,0 +1,9 @@
+# US2: uc-047 ui: on a child page only its sub-row is active.
+# The runner gives each run its own database and ports.
+id: us2-active-sub-row
+accept: US2
+failure_mode: the parent and the child both look active
+layers:
+  cli:
+    run: "make usecase-test UC=uc-047 LAYER=ui"
+    expect: { exit: 0, stdout: "uc-047 ui   7 checks passed" }

@@ -100,6 +100,6 @@ capped at ten real model calls unless the owner approves more.
 | Key | Today | Steps |
 |---|---|---|
 | Review key (`OPS_REVIEW_KEY`) | HMAC, shared by agents-service and tools-service | Set the new value for both and restart both; tokens minted with the old key are refused, so re-approve open reviews with live tokens |
-| Service token (`OPS_SERVICE_TOKEN`) | Shared secret for timer fire and the fence route | Set for both services and any scheduler; restart |
+| Service keys (`OPS_SERVICE_SIGNING_KEY`, `OPS_SERVICE_SIGNING_KID`, `OPS_SERVICE_PUBLIC_KEYS`) | Each service signs its calls to another with its own Ed25519 key; a callee trusts the public keys it lists, each bound to one service | Give the service a new `OPS_SERVICE_SIGNING_KEY` and, with it, a new `OPS_SERVICE_SIGNING_KID`; add its public key to every callee's `OPS_SERVICE_PUBLIC_KEYS` beside the old one; restart the callees, then the caller; then drop the old kid from each callee's list and restart the callees again. An `OPS_SERVICE_TOKEN` left over from before is ignored; remove it |
 | Model keys | Provider key names, read at start | Change in your secrets manager; `make restart SVC=agents` |
 | Database credential | In `OPS_DATABASE_URL` | Change, then restart every service and rerun migrations under the new role |

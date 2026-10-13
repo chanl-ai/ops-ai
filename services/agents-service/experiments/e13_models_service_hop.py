@@ -43,13 +43,18 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, TurnRequest
+from ops_identity import dev_service_signer, mint_service_token
 
 ROOT = Path(__file__).resolve().parents[3]
 MODELS_DIR = ROOT / "services" / "models-service"
 DB = "ops_e13"
 PG = f"postgresql+asyncpg://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{DB}"
 PORT = 8893
-SERVICE = {"Authorization": "Bearer dev-service-token-not-secret"}
+# agents-service's Ed25519 token for models-service (the dev key, dev only); the shared static token is gone (c-045).
+SERVICE = {
+    "Authorization": "Bearer "
+    + mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600)
+}
 CALL_CAP = 10
 QUESTION = "What is the daily wire limit for a personal account?"
 # E8's plain turn ran on the runtime default.

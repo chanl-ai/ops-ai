@@ -1,0 +1,16 @@
+{
+  "id": "us2-docs-name-the-service-keys",
+  "accept": "US2",
+  "failure_mode": "the runbook keeps telling operators to set and rotate a secret nothing reads",
+  "sha": "397db7b5cc6cb6c12689b7ffbd9b6cd137bebd4e",
+  "env": "local",
+  "workspace": "export of 397db7b",
+  "pass": true,
+  "layers": [
+    {
+      "layer": "cli",
+      "pass": true,
+      "output": "\nexit 0"
+    }
+  ]
+}
