@@ -5,7 +5,10 @@
 ##@ Database
 
 db-up: ## PostgreSQL and OPA in compose, waiting until healthy
-	$(COMPOSE) up -d --wait postgres opa
+	@# --no-recreate: every checkout, worktree and verify export shares this compose project, and its OPA mounts the
+	@# policy folder by path; recreating from another checkout re-mounts OPA there and drops the review key the running
+	@# tools-service loaded. A changed compose file therefore needs `docker compose ... up -d --force-recreate`.
+	$(COMPOSE) up -d --wait --no-recreate postgres opa
 
 db-down: ## Stop compose (data volume kept)
 	$(COMPOSE) down

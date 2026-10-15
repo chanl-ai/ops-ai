@@ -14,14 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { ConnectionRef } from '@/lib/types/integrations';
 import { plural } from '@/lib/format';
 import type { ToolAccess } from '@/lib/types/domain';
 import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource, ModuleType } from '@/lib/types/tool-modules';
 import { cn } from '@/lib/utils';
 
 import { HttpOperationBuilder, inputsOf } from './http-operation-builder';
-import { ConnectionChip, IntegrationStatusBadge, SystemMark } from '@/components/integrations/integration-meta';
 import { OperationPicker } from './operation-picker';
 
 const STEPS = ['Source', 'Operations'] as const;
@@ -52,37 +50,26 @@ const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace
 /**
  * Import operations from an MCP server, an OpenAPI spec or one HTTP request. `create` saves a new draft module named
  * from what was read and opens its page; `append` adds the chosen operations to an existing module and offers MCP
- * and OpenAPI only, through the module's own connection.
+ * and OpenAPI only. A module's endpoint and its secret headers are how it reaches the system, so there is no
+ * connection record to pick (docs/architecture/tool-lifecycle.md).
  */
 export function AddModuleDialog({
   open,
   onOpenChange,
-  connections,
-  connectionsLoading,
-  newConnectionId,
-  onConnectNew,
   onDiscover,
   discovering,
   onCreate,
   creating,
   mode = 'create',
-  fixedConnectionId,
   moduleName,
   onAppend,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode?: 'create' | 'append';
-  /** Append mode: the module's connection, used for discovery; may be unset on a draft. */
-  fixedConnectionId?: string;
   /** Append mode: shown in the title. */
   moduleName?: string;
   onAppend?: (input: ImportOperationsInput) => Promise<void>;
-  connections: ConnectionRef[];
-  connectionsLoading: boolean;
-  /** Set after "Connect a new system" finishes, so the new connection is picked. */
-  newConnectionId?: string;
-  onConnectNew: () => void;
   onDiscover: (source: ModuleSource) => Promise<DiscoveryResult>;
   discovering: boolean;
   onCreate: (input: ModuleInput) => Promise<void>;
@@ -95,13 +82,12 @@ export function AddModuleDialog({
   const [fileName, setFileName] = React.useState('');
   const [specFileId, setSpecFileId] = React.useState('');
   const [specWaiting, setSpecWaiting] = React.useState<string | undefined>();
-  const [connectionId, setConnectionId] = React.useState('');
   const [found, setFound] = React.useState<DiscoveryResult | null>(null);
   const [selected, setSelected] = React.useState<Map<string, ToolAccess>>(new Map());
   const [http, setHttp] = React.useState<HttpOperationInput>(EMPTY_HTTP);
   const [error, setError] = React.useState<string | null>(null);
   /** Errors that belong to one field render under it, not in the banner. */
-  const [fieldErr, setFieldErr] = React.useState<Partial<Record<'url' | 'spec' | 'display' | 'name' | 'connection', string>>>({});
+  const [fieldErr, setFieldErr] = React.useState<Partial<Record<'url' | 'spec' | 'display' | 'name', string>>>({});
   const [touched, setTouched] = React.useState(false);
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -114,7 +100,6 @@ export function AddModuleDialog({
     setFileName('');
     setSpecFileId('');
     setSpecWaiting(undefined);
-    setConnectionId('');
     setFound(null);
     setSelected(new Map());
     setHttp(EMPTY_HTTP);
@@ -123,15 +108,9 @@ export function AddModuleDialog({
     setTouched(false);
   }, [open]);
 
-  React.useEffect(() => {
-    if (newConnectionId) setConnectionId(newConnectionId);
-  }, [newConnectionId]);
 
   const append = mode === 'append';
   const kinds = append ? KINDS.filter((k) => k.kind !== 'http') : KINDS;
-  const usable = connections.filter((c) => c.status !== 'revoked');
-  const connection = connections.find((c) => c.id === connectionId);
-  const discoverVia = append ? fixedConnectionId : connectionId;
 
   React.useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
@@ -143,7 +122,6 @@ export function AddModuleDialog({
     setError(null);
     setFieldErr({});
     if (step === 1) {
-      if (!append && !connection) return setFieldErr({ connection: 'Choose the connection this module calls through, or connect a new system.' });
       if (kind === 'http') {
         setStep(2);
         return;
@@ -151,10 +129,10 @@ export function AddModuleDialog({
       const source: ModuleSource | null =
         kind === 'mcp'
           ? url.trim()
-            ? { kind: 'mcp', url: url.trim(), connectionId: discoverVia }
+            ? { kind: 'mcp', url: url.trim() }
             : null
           : specUrl.trim() || specFileId
-            ? { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined, connectionId: discoverVia }
+            ? { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined }
             : null;
       if (kind === 'openapi' && !specUrl.trim() && specWaiting) {
         setFieldErr({ spec: specWaiting });
@@ -175,7 +153,7 @@ export function AddModuleDialog({
       try {
         const d = await onDiscover(source);
         setFound(d);
-        // Reads start selected; writes and money movement are opt-in so nothing that changes data is exposed by default.
+        // Reads start selected; writes are opt-in so nothing that changes data is exposed by default.
         setSelected(new Map(d.operations.filter((o) => o.access === 'read').map((o) => [o.name, o.access])));
         setStep(2);
       } catch (e) {
@@ -205,7 +183,7 @@ export function AddModuleDialog({
     }
     // The source the operations were read from: the service reads it again, so a picked operation's method and path
     // come from the document or server, never from this dialog.
-    const source: ModuleSource = kind === 'mcp' ? { kind: 'mcp', url: url.trim(), connectionId: discoverVia } : { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined, connectionId: discoverVia };
+    const source: ModuleSource = kind === 'mcp' ? { kind: 'mcp', url: url.trim() } : { kind: 'openapi', specUrl: specUrl.trim() || undefined, fileName: specFileId ? fileName : undefined, fileId: specFileId || undefined };
     try {
       if (append) {
         await onAppend?.({ source, operations: chosen });
@@ -225,7 +203,6 @@ export function AddModuleDialog({
         system: label,
         type,
         endpoint: found?.endpoint ?? '',
-        connectionId,
         operations: kind === 'http' ? undefined : chosen,
         source: kind === 'http' ? undefined : source,
         http: kind === 'http' ? http : undefined,
@@ -279,44 +256,6 @@ export function AddModuleDialog({
               </label>
             ))}
           </RadioGroup>
-          {!append && (
-          <FormField id="mod-conn" label="Connection" error={fieldErr.connection} hint="The integration whose credential the gateway uses. Its scopes cap what any operation here can do.">
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <Select
-                  value={connectionId}
-                  onValueChange={(v) => {
-                    setConnectionId(v);
-                    setFieldErr({});
-                  }}
-                  disabled={connectionsLoading}
-                >
-                  <SelectTrigger id="mod-conn" className="min-w-56 flex-1" aria-invalid={!!fieldErr.connection}>
-                    <SelectValue placeholder={connectionsLoading ? 'Loading connections…' : usable.length ? 'Choose a connection' : 'No connections yet'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {usable.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          <SystemMark kind={c.kind} size="sm" /> {c.name}
-                          {c.status !== 'healthy' && <IntegrationStatusBadge status={c.status} />}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button type="button" variant="outline" onClick={onConnectNew}>
-                  <Plus className="size-4" /> Connect a new system
-                </Button>
-              </div>
-              {connection && connection.status !== 'healthy' && connection.status !== 'expiring' && (
-                <p className="flex items-center gap-1.5 text-xs text-warning-text">
-                  <AlertTriangle className="size-3.5" /> This connection is not healthy, so calls will fail until it is fixed in Integrations. <ConnectionChip connection={connection} />
-                </p>
-              )}
-            </div>
-          </FormField>
-          )}
           {kind === 'mcp' && (
             <FormField id="mcp-url" label="Server URL" error={fieldErr.url} hint="Streamable HTTP endpoint. The gateway lists its tools now and keeps that list as the reviewed snapshot.">
               <Input id="mcp-url" value={url} aria-invalid={!!fieldErr.url} onChange={(e) => (setUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://servicenow.northfield.internal/mcp" className="font-mono text-sm" />
@@ -349,7 +288,7 @@ export function AddModuleDialog({
       {step === 2 && kind !== 'http' && found && (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            {found.system} lists {plural(found.operations.length, 'operation')} at version {found.version}. Reads are selected; writes and money movement are opt-in.
+            {found.system} lists {plural(found.operations.length, 'operation')} at version {found.version}. Reads are selected; writes are opt-in.
           </p>
           {found.warnings.map((w) => (
             <Alert key={w}>

@@ -1,8 +1,0 @@
-# US3: uc-041 api, agents-service and tools-service together on the run's own database and ports.
-id: us3-no-tests-at-runtime
-accept: US3
-failure_mode: a runtime path or seed reads tests/ or names a placeholder team, or the panel offers fixture cases
-layers:
-  cli:
-    run: "make usecase-test UC=uc-041 LAYER=api"
-    expect: { exit: 0, stdout: "uc-041 api  8 checks passed" }

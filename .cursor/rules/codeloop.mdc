@@ -5,11 +5,17 @@ alwaysApply: true
 
 # codeloop protocol
 
-Active card: c-004, Coding agents learn how to build, test and navigate ops-ai (stage research)
+The active card is printed at session start by `codeloop guard session`, not written here: this file
+is tracked and is the same in every worktree, while each worktree or session works its own card.
 
 With no active card, do not start from the chat: run `codeloop card list --band P1` (then P2) and
 `codeloop card activate <id>` on the top one, or `codeloop start "<title>"` when the person asks for
 something new that fits one story.
+
+Every session starts with the codeloop monitor block (`codeloop guard session` prints it): what
+waits for the person, what is failing with its fix, what is stale. Read it first. If your own story
+is failing, fix that before anything else, using the fix line it prints. Tell the person what is
+waiting for them; do not approve it yourself.
 
 Before any work, run `codeloop brief <active card>`. It names the stage, the skill, the output
 path and the check that must pass. Work only that stage, and write only its output.

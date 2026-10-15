@@ -20,7 +20,7 @@ const DATED = /(^|\/)\d{4}-\d{2}-\d{2}[-_.]/;
 // Topic names only: a number or sequence prefix (01-, ADR-0001-, E2-) fails; ids live in the title.
 const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*\.(md|html|pdf|png|svg)$/;
 
-const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' })
+const files = execFileSync('git', ['ls-files', '--cached'], { encoding: 'utf8' })
   .split('\n')
   .filter((f) => f && !IGNORED.test(f) && existsSync(f));
 

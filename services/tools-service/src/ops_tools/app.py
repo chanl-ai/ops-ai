@@ -58,6 +58,19 @@ class CallIn(_Wire):
     approval_token: str | None = Field(default=None, alias="approvalToken")
 
 
+class GrantableOperation(Out):
+    """A tool an agent may be granted: a published operation, with what a model needs to choose and call it."""
+
+    name: str
+    description: str
+    access: str
+    input_schema: dict[str, Any]
+    requires_approval: bool
+    approvers: int
+    module_id: str | None
+    module_name: str
+
+
 class CallResult(Out):
     call_id: str
     decision: str
@@ -88,7 +101,7 @@ def _approvers(token: str | None) -> list[str]:
         return []
 
 
-WRITES = {"write", "money_movement"}
+WRITES = {"write"}
 
 
 def _allowed(call_id: str, ok: bool, output: Any, view: Any, *, replay_of: str | None = None) -> JSONResponse:
@@ -188,14 +201,38 @@ def create_gateway_app(
             return JSONResponse({"status": "policy_drift"}, status_code=503)
         return {"status": "ok"}
 
-    @app.get("/v1/tools/{name}", tags=["gateway"])
-    async def tool_access(name: str, _: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    @app.get(
+        "/v1/internal/operations",
+        tags=["gateway"],
+        response_model=Envelope[list[GrantableOperation]],
+        responses=error_responses(),
+    )
+    async def grantable_operations(caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Internal (service token): the operations an agent of the caller's tenant may be granted. agents-service
+        lists, grants and hands a run its tools from here; it keeps no catalogue of its own."""
+        rows = await registry.grantable(caller.tenant_id or registry.tenant_id)
+        data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]
+        return JSONResponse({"success": True, "data": data})
+
+    @app.get("/v1/tools/{name}", tags=["gateway"], responses=error_responses())
+    async def tool_access(name: str, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
         on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
-        access = registry.access(name)
+        tenant = caller.tenant_id or registry.tenant_id
+        access = await registry.access_for(name, tenant)
         if access == "unknown":
             return _refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"])
-        return JSONResponse({"success": True, "data": {"name": name, "access": access}})
+        policy = await registry.policy_for(name, tenant)
+        approval = (
+            {
+                "approvers": policy["approvers"],
+                "approverTeam": policy["approver_team"],
+                "selfApproval": policy["self_approval"],
+            }
+            if policy
+            else {"approvers": 1, "approverTeam": None, "selfApproval": False}
+        )
+        return JSONResponse({"success": True, "data": {"name": name, "access": access, "approval": approval}})
 
     @app.post("/v1/fences", tags=["gateway"])
     async def raise_fence(body: FenceIn, _: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -262,10 +299,13 @@ def create_gateway_app(
             row.update(decision="deny", reasons=[reason])
             await log.record(**row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason})
             return _refused(call_id, status, code, [reason], **({"invalid": problems} if problems else {}))
+        policy = await registry.policy_for(body.tool, caller.tenant_id or registry.tenant_id) if resolved else None
         decision = await opa.decide(
             {
                 "tool": body.tool,
                 "access": access,
+                # From the registry, never the caller: how many distinct people the token must name.
+                "approvers_required": policy["approvers"] if policy else None,
                 "input_hash": digest,
                 "run_context": {**ctx.model_dump(), "sub": caller.sub},
                 "token": body.approval_token,

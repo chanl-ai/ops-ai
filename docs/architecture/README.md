@@ -19,6 +19,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Services | [service-map.md](service-map.md) | Service boundaries, naming, packages versus services, deployment targets, migration steps | Day one |
 | Inside the runtime | [runtime.md](runtime.md) | API process, kernel, compiled definitions, graphs, the LangGraph adapter, the engine seam, libraries | Builder |
 | Human in the loop | [human-in-the-loop.md](human-in-the-loop.md) | Interrupts, reviews, approval tokens, step-up, two approvers, SLA timers | Builder |
+| Tool lifecycle | [tool-lifecycle.md](tool-lifecycle.md) | Connect, import, review, access, grant, call, approve and show a tool, with what is built and what is not | Builder |
 | Channels | [channels-and-deployments.md](channels-and-deployments.md) | Deployments, the adapter contract, identity per channel, external keys, the mailbox adapter | Builder |
 | Identity | [identity-and-tenancy.md](identity-and-tenancy.md) | Sign-in, delegation, process principals, the tools gateway, tenancy, prototype shortcuts | Builder |
 | Versions | [definitions-and-versions.md](definitions-and-versions.md) | Draft to publish, pointers, the pin per thread, migrate | Builder |

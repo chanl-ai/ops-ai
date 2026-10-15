@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useCurrentPerson } from '@/hooks/auth-queries';
 import { Inbox, ListChecks, Mail, SearchX, Tags, UserPlus, Users, XCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -23,7 +24,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAssignCases, useCase, useCaseQueues, useCloseCases, useDecideAction, useEditAction, useSetCaseField } from '@/hooks/case-queries';
-import { useLookups } from '@/hooks/queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { useSticky } from '@/hooks/use-sticky';
 import { ApiError } from '@/lib/api';
@@ -49,7 +49,6 @@ export default function CaseOrRunPage() {
 function CaseDetailPage({ id }: { id: string }) {
   const [tab, setTab] = useTabParam(TABS, 'actions');
   const query = useCase(id);
-  const { data: lookups } = useLookups();
   const { data: queues } = useCaseQueues();
   const decide = useDecideAction(id);
   const edit = useEditAction(id);
@@ -59,7 +58,7 @@ function CaseDetailPage({ id }: { id: string }) {
   const [busy, setBusy] = React.useState<{ actionId: string; kind: 'approve' | 'reject' | 'edit' } | null>(null);
   const [dialog, setDialog] = React.useState<'assign' | 'close' | null>(null);
   const [editingField, setEditingField] = React.useState<CaseField | null>(null);
-  const me = lookups?.currentUser.name;
+  const me = useCurrentPerson().name;
 
   if (query.isPending) return <RecordSkeleton />;
   if (query.isError)

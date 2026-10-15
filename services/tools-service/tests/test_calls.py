@@ -237,3 +237,41 @@ async def test_the_registry_and_the_agents_catalogue_agree_on_every_access_class
         found = await store.operation_named(tenant, t["name"])
         assert found is not None, f"{t['name']} is in the registry"
         assert (found[1]["access"], found[1]["executor"]) == (t["access"], "local"), t["name"]
+
+
+async def test_an_approved_write_runs_after_opa_reloads_its_data_and_loses_the_review_key(gateway: Gateway) -> None:
+    """OPA's file watch reloads data.ops from the mounted policy folder, dropping the key the gateway wrote at start
+    (c-048 G23: every approved write on the shared stack read as unsigned)."""
+    async with httpx.AsyncClient(base_url=OPA_URL) as opa:
+        (await opa.put("/v1/data/ops", json={"identities": ["service:agents"]})).raise_for_status()
+    args = {"accountId": "CHQ-2219", "hours": 24}
+    ran = await gateway.call("place_hold", args, step="s1", token=gateway.token("place_hold", args, step="s1"))
+    assert ran.status_code == 200, ran.text
+    forged = mint(
+        Binding(gateway.thread, "s2", gateway.tool("place_hold"), input_hash(args), ["Maya Okafor"]),
+        "x" * 32,
+        ttl_s=300,
+    )
+    refused = await gateway.call("place_hold", args, step="s2", token=forged)
+    assert refused.status_code == 403
+    assert "approval token is not signed by the review service" in refused.json()["error"]["details"]["reasons"]
+
+
+async def test_a_write_whose_policy_needs_two_approvers_refuses_a_token_naming_one(
+    gateway: Gateway, engine: AsyncEngine, tenant: str
+) -> None:
+    store = ModuleStore(engine)
+    m = await store.get(tenant, MODULE)
+    assert m is not None
+    for o in m["operations"]:
+        if o["name"] == gateway.tool("place_hold"):
+            o["approvers"] = 2
+    await store.put(m, expected_revision=m["revision"])
+    args = {"accountId": "CHQ-2219", "hours": 24}
+    one = await gateway.call("place_hold", args, step="s1", token=gateway.token("place_hold", args, step="s1"))
+    assert one.status_code == 403
+    assert "this write needs 2 approvers; the token has 1" in one.json()["error"]["details"]["reasons"]
+    assert not gateway.received
+    pair = Binding(gateway.thread, "s2", gateway.tool("place_hold"), input_hash(args), ["Maya Okafor", "Dana Reyes"])
+    two = await gateway.call("place_hold", args, step="s2", token=mint(pair, REVIEW_KEY, ttl_s=300))
+    assert two.status_code == 200, two.text

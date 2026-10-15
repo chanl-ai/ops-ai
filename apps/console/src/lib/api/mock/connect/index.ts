@@ -14,8 +14,6 @@ export interface ConnectDeps {
   tierOf: (workflowId: string) => Risk;
   /** The live tools store; exposing a workflow to agents registers a `workflow` tool in it. */
   tools: Tool[];
-  /** True when any agent in the workflow may move money, so its tool carries the money chip. */
-  movesMoney: (workflowId: string) => boolean;
   teams: string[];
   me: string;
 }
@@ -61,7 +59,7 @@ export function createConnectMock(deps: ConnectDeps) {
       p95Ms: 0,
       grantedAgentIds: [],
       sampleInput: JSON.stringify({ subject: 'e.g. Customer disputes a $1,240.18 charge' }, null, 2),
-      workflow: { workflowId: w.id, tier: deps.tierOf(w.id), approval, movesMoney: deps.movesMoney(w.id) },
+      workflow: { workflowId: w.id, tier: deps.tierOf(w.id), approval },
     };
   };
   const newDeployment = (w: Workflow, createdAt: string): Deployment => ({

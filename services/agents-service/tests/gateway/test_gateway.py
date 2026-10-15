@@ -110,15 +110,15 @@ async def test_token_signed_with_another_key_is_refused(gateway: Gateway) -> Non
     assert reasons(r) == ["approval token is not signed by the review service"]
 
 
-async def test_money_write_needs_two_approvers(gateway: Gateway) -> None:
+async def test_a_two_approver_write_needs_two_approvers(gateway: Gateway) -> None:
     one = gateway.token("place_wire_hold", HOLD, step="s11", approvers=["dana@bank.test"])
     r = await gateway.call("place_wire_hold", HOLD, step="s11", token=one)
     assert r.status_code == 403
-    assert reasons(r) == ["moving money needs two approvers; the token has 1"]
+    assert reasons(r) == ["this write needs 2 approvers; the token has 1"]
 
     same_twice = gateway.token("place_wire_hold", HOLD, step="s11", approvers=["dana@bank.test", "dana@bank.test"])
     r = await gateway.call("place_wire_hold", HOLD, step="s11", token=same_twice)
-    assert reasons(r) == ["moving money needs two approvers; the token has 1"]
+    assert reasons(r) == ["this write needs 2 approvers; the token has 1"]
 
     two = gateway.token("place_wire_hold", HOLD, step="s11", approvers=["dana@bank.test", "lee@bank.test"])
     r = await gateway.call("place_wire_hold", HOLD, step="s11", token=two)

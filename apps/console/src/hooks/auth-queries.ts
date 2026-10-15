@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 
 import { authProvider, isExpired, type ReauthInput, type Session } from '@/lib/auth';
 
+import { useLookups } from './queries';
+
 export type SessionStatus = 'loading' | 'signed_in' | 'signed_out' | 'expired';
 
 /**
@@ -60,3 +62,15 @@ export const useCompleteSsoStepUp = () => useAuthWrite((code: string) => authPro
 /** A stable function returning the step-up an IdP round trip left (cleared on read), or null. */
 export const useTakeStepUp = () => React.useCallback(() => authProvider.takeStepUp(), []);
 export const useSignOut = () => useAuthWrite(() => authProvider.signOut(), true);
+
+/**
+ * The person using the console: the signed-in session's name, and every form a request may record them by (name and
+ * email; platform-recorded requests carry the email). The workspace lookup's user stands in only when no adapter
+ * session exists, as with the mock provider; under a real sign-in it is a fixed seed value, never the viewer.
+ */
+export function useCurrentPerson(): { name: string; ids: string[] } {
+  const { session } = useSession();
+  const lookups = useLookups();
+  const name = session?.user.name ?? lookups.data?.currentUser.name ?? '';
+  return { name, ids: [session?.user.name, session?.user.email, session ? undefined : lookups.data?.currentUser.name].filter((x): x is string => !!x) };
+}

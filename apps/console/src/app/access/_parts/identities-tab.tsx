@@ -44,11 +44,6 @@ const columns: ColumnDef<Row>[] = [
         <span className="text-xs text-muted-foreground">—</span>
       ),
   },
-  {
-    accessorKey: 'moneyMovement',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Moves money" />,
-    cell: ({ row }) => (row.original.moneyMovement ? <Badge variant="outline" className="border-destructive/40 bg-destructive/10 font-normal text-destructive">Yes</Badge> : <span className="text-xs text-muted-foreground">No</span>),
-  },
   { accessorKey: 'lastUsedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Last call" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{row.original.lastUsedAt ? relativeTime(row.original.lastUsedAt) : 'Never'}</span> },
 ];
 
@@ -64,7 +59,6 @@ function IdentityCard(identity: Row) {
           <h3 className="truncate text-sm font-medium">{identity.workflowName}</h3>
           <p className="truncate font-mono text-xs text-muted-foreground">{identity.principal}</p>
         </div>
-        {identity.moneyMovement && <Badge variant="outline" className="shrink-0 text-[10px]">Moves money</Badge>}
       </div>
       <div className="mt-3 flex items-center justify-between border-t pt-3">
         <div>

@@ -147,7 +147,6 @@ export function ToolsSection({ draft, set, tools, onGrant }: { draft: AgentDraft
               <li key={t.id} className="flex items-center gap-1.5 rounded-md border bg-card py-1 pr-1 pl-2.5 text-sm">
                 <span className="text-xs text-muted-foreground">{t.server} ·</span>
                 <code className="font-mono text-xs">{t.name}</code>
-                {t.access === 'money_movement' && <span className="text-[11px] text-destructive">moves money · four eyes</span>}
                 {t.approval && <UserCheck className="size-3.5 text-warning-text" aria-label={t.approval} />}
                 <Button variant="ghost" size="icon" className="size-6" aria-label={`Remove ${t.name}`} onClick={() => set('toolIds', draft.toolIds.filter((x) => x !== t.id))}>
                   <X className="size-3.5" />

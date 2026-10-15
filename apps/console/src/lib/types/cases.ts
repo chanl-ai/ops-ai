@@ -41,7 +41,7 @@ export interface ApprovalRule {
   label: string;
   kind: ActionKind;
   approverGroup: string;
-  /** Two approvers from the group; required for anything that moves money. */
+  /** Two approvers from the group. */
   fourEyes: boolean;
   /** Below this amount the action runs without sign-off; null means always ask. */
   autoApproveBelow: number | null;
@@ -124,7 +124,7 @@ export interface CaseAction {
   status: ActionStatus;
   result?: string;
   rejectedReason?: string;
-  /** Set when the action moves money or changes a production system; approving it asks for confirmation with this text. */
+  /** Set when the action changes a production system; approving it asks for confirmation with this text. */
   consequence?: string;
 }
 

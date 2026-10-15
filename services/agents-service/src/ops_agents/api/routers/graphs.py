@@ -267,7 +267,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
                 "This step is decided in Reviews: POST /reviews/{threadId}/decision.", code="resume_via_review"
             )
         if (
-            body.resume.decision == "approved" and isinstance(payload, dict) and payload.get("moves_money")  # pyright: ignore[reportUnknownMemberType]
+            body.resume.decision == "approved" and isinstance(payload, dict) and payload.get("step_up")  # pyright: ignore[reportUnknownMemberType]
         ):
             require_step_up(rt, me.email, body.resume.step_up_token)
         if (

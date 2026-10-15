@@ -144,14 +144,15 @@ export function createMockApi(): OpsApi {
     };
   });
 
-  const movesMoney = (r: Review) => tools.some((t) => t.name === r.actionTool && t.access === 'money_movement');
-  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name, movesMoney: movesMoney(r) });
+  // Approving a call whose operation needs two approvers asks for a step-up, as agents-service does.
+  const needsStepUp = (r: Review) => !!r.actionTool && F.TWO_APPROVER_TOOLS.has(r.actionTool);
+  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name, stepUp: needsStepUp(r) });
   /** 422 unless the token came from a re-authentication by the signed-in person in the last 5 minutes. */
   const requireStepUp = (token?: string) => {
     const v = verifyMockStepUp(token ?? '');
     const who = currentMockUser()?.email;
     // No session means nobody to match the token to, so it is refused like a token from another account.
-    if (!v.ok || !who || v.email !== who) throw new ApiError(!who ? 'Sign in again to approve this money movement.' : v.ok ? 'Re-authenticate to approve this money movement: the step-up belongs to another account.' : v.reason === 'expired' ? 'Re-authenticate to approve this money movement: your step-up expired after 5 minutes.' : 'Re-authenticate to approve this money movement: it needs a step-up first.', 422);
+    if (!v.ok || !who || v.email !== who) throw new ApiError(!who ? 'Sign in again to approve this action.' : v.ok ? 'Re-authenticate to approve this actiont: the step-up belongs to another account.' : v.reason === 'expired' ? 'Re-authenticate to approve this actiont: your step-up expired after 5 minutes.' : 'Re-authenticate to approve this actiont: it needs a step-up first.', 422);
   };
   const teamReviews = () => reviews.filter((r) => inTeam(r.skillPublish?.ownerTeam ?? r.templateSubmission?.submittedTeam ?? (r.agentPublish ? agents.find((a) => a.id === r.agentPublish!.agentId)?.owner : undefined) ?? wfOwner(r.workflowId)));
 
@@ -271,7 +272,9 @@ export function createMockApi(): OpsApi {
       return n ? [{ workflowId: w.id, workflowName: w.name, pinnedVersion: (n.data.agentVersion as number) ?? a.version, status: w.status }] : [];
     });
     const publishedVersion = agentStore.publishedOf(a.id);
-    return { ...a, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
+    // As agents-service reports them: grants whose tool the catalogue no longer offers.
+    const staleToolIds = a.toolIds.filter((tid) => !tools.some((t) => t.id === tid && t.enabled));
+    return { ...a, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -523,7 +526,7 @@ export function createMockApi(): OpsApi {
   };
   const skills = createSkillsMock({ agents: () => agents.map(agentRow), tools: () => tools, kbNames: () => knowledge.kbNames(), reviews: () => reviews, bumpAgent, files: files.links, cases: cases.api, chat, teams: F.OWNERS, me });
   const modelRisk = createModelRiskMock({ agents: () => agents.map(agentRow), workflows: () => workflows.map(workflowRow), graph: (wid) => graphs[wid], lastValidation: (wid) => validations[wid], reviews: () => reviews, toolSystem: (tid) => tools.find((t) => t.id === tid)?.system, owners: F.OWNERS, me, evals });
-  const accessRank = ['read', 'write', 'money_movement'] as const;
+  const accessRank = ['read', 'write'] as const;
   const agentPublish = createAgentPublishMock({
     store: agentStore,
     agents: () => agents.map(agentRow),
@@ -549,7 +552,7 @@ export function createMockApi(): OpsApi {
     seedTier: modelRisk.seedTier,
     toolAccess: (aid) => tools.filter((t) => t.grantedAgentIds.includes(aid)).map((t) => t.access).sort((x, y) => accessRank.indexOf(y) - accessRank.indexOf(x))[0],
   });
-  const connect = createConnectMock({ workflows: () => workflows.map(workflowRow), deployments, tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'), tools, movesMoney: (wid) => agents.some((a) => workflows.find((w) => w.id === wid)?.agentSlugs.includes(a.slug) && tools.some((t) => t.access === 'money_movement' && a.toolIds.includes(t.id))), teams: F.OWNERS, me });
+  const connect = createConnectMock({ workflows: () => workflows.map(workflowRow), deployments, tierOf: (wid) => modelRisk.tierOf(wid, 'workflow'), tools, teams: F.OWNERS, me });
   const assurance = createAssuranceMock({
     agents: () => agents.map(agentRow),
     workflows: () => workflows.map(workflowRow),
@@ -795,7 +798,7 @@ export function createMockApi(): OpsApi {
         }),
       // The catalogue an agent grants from: tools the module owner exposes, named the way the runtime names them.
       grantableTools: () =>
-        respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, description: t.description, access: t.access, approval: t.requiresReview ? 'Review before it runs' : null }))),
+        respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, moduleId: null, description: t.description, access: t.access, inputSchema: {}, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }))),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       test: (aid, message, runAsId) =>
         respond(() => {
@@ -1015,9 +1018,9 @@ export function createMockApi(): OpsApi {
             Object.assign(r, { status: input.decision, decidedAt: new Date().toISOString(), decisionReason: input.reason, assignee: me, approvals: input.decision === 'approved' ? [me] : [] });
             return r;
           }
-          // Money approvals need a step-up from the last 5 minutes, in every channel; the audit records it.
-          if (input.decision === 'approved' && movesMoney(r)) requireStepUp(input.stepUpToken);
-          if (input.decision === 'approved' && movesMoney(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}); step-up verified`, owner: wfOwner(r.workflowId) });
+          // A call that needs two approvers needs a step-up from the last 5 minutes, in every channel; the audit records it.
+          if (input.decision === 'approved' && needsStepUp(r)) requireStepUp(input.stepUpToken);
+          if (input.decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}); step-up verified`, owner: wfOwner(r.workflowId) });
           if (input.decision === 'approved' && r.policy.fourEyes && !r.approvals.length) {
             Object.assign(r, { approvals: [me], assignee: me, status: 'in_review' });
             return r;
@@ -1038,9 +1041,9 @@ export function createMockApi(): OpsApi {
       bulkDecide: (ids, decision, reason, opts) =>
         respond(() => {
           if (decision !== 'approved' && !reason?.trim()) throw new ApiError('A reason is required to reject or return.', 400);
-          // One step-up covers the batch; without it nothing in a batch that moves money is decided.
-          const money = decision === 'approved' && ids.some((rid) => { const r = reviews.find((x) => x.id === rid); return !!r && isOpen(r) && movesMoney(r); });
-          if (money) requireStepUp(opts?.stepUpToken);
+          // One step-up covers the batch; without it nothing in a batch that needs one is decided.
+          const stepUp = decision === 'approved' && ids.some((rid) => { const r = reviews.find((x) => x.id === rid); return !!r && isOpen(r) && needsStepUp(r); });
+          if (stepUp) requireStepUp(opts?.stepUpToken);
           return bulk(ids, (rid) => {
             const r = reviews.find((x) => x.id === rid);
             if (!r) return 'Not found';
@@ -1049,7 +1052,7 @@ export function createMockApi(): OpsApi {
             if (decision === 'approved' && (r.risk === 'critical' || r.risk === 'high')) return `${r.risk} risk needs an individual decision`;
             if (decision === 'approved' && r.policy.fourEyes) return 'Needs two approvers';
             Object.assign(r, { status: decision, decidedAt: new Date().toISOString(), decisionReason: reason, assignee: r.assignee ?? me });
-            if (decision === 'approved' && movesMoney(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}) in bulk; step-up verified`, owner: wfOwner(r.workflowId) });
+            if (decision === 'approved' && needsStepUp(r)) auditSink.log({ action: 'approved', target: { type: 'review', name: r.id, href: `/reviews?review=${r.id}` }, summary: `Approved ${r.id} (${r.actionTool}) in bulk; step-up verified`, owner: wfOwner(r.workflowId) });
             resumeStartedRun(r);
           });
         }),
@@ -1142,7 +1145,7 @@ export function createMockApi(): OpsApi {
       create: (input) =>
         respond(() => {
           if (tools.some((t) => t.name === input.name)) throw new ApiError(`A tool named ${input.name} already exists.`, 409);
-          const t: Tool = { id: id('tl'), ...input, requiresReview: input.access === 'money_movement' || input.requiresReview, enabled: false, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: '{\n  \n}' };
+          const t: Tool = { id: id('tl'), ...input, requiresReview: input.requiresReview, enabled: false, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: '{\n  \n}' };
           tools.unshift(t);
           return t;
         }),
@@ -1150,7 +1153,6 @@ export function createMockApi(): OpsApi {
         respond(() => {
           const t = tools.find((x) => x.id === tid) ?? notFound('Tool');
           Object.assign(t, input);
-          if (t.access === 'money_movement') t.requiresReview = true;
           return t;
         }),
       remove: (tid) =>
@@ -1176,7 +1178,6 @@ export function createMockApi(): OpsApi {
           bulk(ids, (tid) => {
             const t = tools.find((x) => x.id === tid);
             if (!t) return 'Not found';
-            if (patch.requiresReview === false && t.access === 'money_movement') return 'Moves money; review stays on';
             Object.assign(t, patch);
           }),
         ),

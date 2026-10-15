@@ -12,12 +12,14 @@ from typing import Any
 
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
 from ops_tools.modules.seed import aggregates, load
-from ops_tools.store.modules import ModuleStore, StaleModuleError
+from ops_tools.store.modules import ModuleStore, RetiredAccessError, StaleModuleError
 
 SERVICE = Path(__file__).parents[1]
 REGISTRY = {"tool_modules", "module_operations", "module_versions", "security_reviews", "module_approvals"}
@@ -70,11 +72,12 @@ async def test_seed_loads_the_console_modules_once(store: ModuleStore, seed: dic
     assert found[1]["access"] == "read"
 
 
-async def test_money_movement_always_needs_approval(seed: dict[str, Any]) -> None:
-    mods = aggregates(seed, tenant_id="t", now=datetime.now(UTC))
-    money = [o for m in mods for o in m["operations"] if o["access"] == "money_movement"]
-    assert money, "the seed has money movement operations"
-    assert all(o["requires_approval"] for o in money)
+async def test_the_seed_has_only_read_and_write_and_two_approver_writes_need_approval(seed: dict[str, Any]) -> None:
+    ops = [o for m in aggregates(seed, tenant_id="t", now=datetime.now(UTC)) for o in m["operations"]]
+    assert {o["access"] for o in ops} == {"read", "write"}
+    two = [o for o in ops if o["approvers"] == 2]
+    assert {"place_wire_hold", "transfer_funds", "issue_provisional_credit"} <= {o["name"] for o in two}
+    assert all(o["requires_approval"] for o in two)
 
 
 async def test_a_stale_write_is_refused(store: ModuleStore, seed: dict[str, Any], tenant: str) -> None:
@@ -106,3 +109,37 @@ async def test_a_changed_seed_reaches_untouched_modules_and_spares_edited_ones(
     assert core is not None and cards is not None
     assert core["description"] == "edited by a person"
     assert cards["description"] == "the seed changed"
+
+
+async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebuilt(seed: dict[str, Any]) -> None:
+    """A database built before Read and Write only (tools_0011) and holding a money_movement row: `make up` sees its
+    chain behind the code's head and rebuilds it, and migrating it in place (KEEP_DATA=1) fails on the row instead of
+    keeping one the code refuses to read (c-048 T003)."""
+    url = make_url(Settings().database_url)
+    scratch = url.set(database=f"{url.database}_tools_retired_access")
+    admin = create_async_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    async with admin.connect() as c:
+        await c.execute(sa.text(f'DROP DATABASE IF EXISTS "{scratch.database}" WITH (FORCE)'))
+        await c.execute(sa.text(f'CREATE DATABASE "{scratch.database}"'))
+    await admin.dispose()
+    target = scratch.render_as_string(hide_password=False)
+    _alembic(target, "upgrade", "tools_0011_approval_policy")
+    engine = create_async_engine(target)
+    agg: dict[str, Any] = {**aggregates(seed, tenant_id="t", now=datetime.now(UTC))[0], "egress_hosts": []}
+    agg["operations"] = [{**agg["operations"][0], "access": "money_movement"}, *agg["operations"][1:]]
+    await ModuleStore(engine).put(agg, expected_revision=None)
+    # Read, the row is refused, never treated as a read.
+    with pytest.raises(RetiredAccessError, match="money_movement"):
+        await ModuleStore(engine).get("t", agg["id"])
+    await engine.dispose()
+
+    # scripts/schema_sync.py's rule: a chain whose recorded version is not the code's head is rebuilt by `make up`.
+    engine = create_async_engine(target)
+    async with engine.connect() as c:
+        recorded = (await c.execute(sa.text("SELECT version_num FROM alembic_version_tools"))).scalar()
+    await engine.dispose()
+    head = ScriptDirectory.from_config(Config(str(SERVICE / "alembic.ini"))).get_current_head()
+    assert recorded == "tools_0011_approval_policy" and head == "tools_0012_access_rw", "make up rebuilds it"
+    with pytest.raises(subprocess.CalledProcessError) as kept:
+        _alembic(target, "upgrade", "head")
+    assert b"ck_module_operations_access" in kept.value.stderr

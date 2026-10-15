@@ -7,7 +7,7 @@
 
 /** The data gateway fronts bank systems and knowledge; the AI gateway fronts models. */
 export type GatewayKind = 'data' | 'ai';
-export type CallOperation = 'read' | 'write' | 'money_movement' | 'completion';
+export type CallOperation = 'read' | 'write' | 'completion';
 /** How a write was authorised: a person's approval token, a gate policy that auto-approves, or none (reads, model calls). */
 export type ApprovalKind = 'person' | 'policy' | 'none';
 /** `replayed`: the same approved write sent again; it ran nothing and returned the first call's result (`replayOf`). */
@@ -164,12 +164,11 @@ export interface WorkflowIdentity {
   status: 'active' | 'suspended';
   grants: number;
   expiringSoon: number;
-  moneyMovement: boolean;
   lastUsedAt?: string;
 }
 
 export type ResourceKind = 'module' | 'knowledge_base';
-export type GrantScope = 'read' | 'write' | 'money_movement';
+export type GrantScope = 'read' | 'write';
 export type GrantStatus = 'active' | 'expiring' | 'expired';
 
 export interface AccessGrant {
@@ -232,7 +231,6 @@ export interface AccessStats {
   identities: number;
   activeGrants: number;
   expiringSoon: number;
-  moneyMovementGrants: number;
 }
 
 export interface AccessOptions {

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, Bot, Coins, KeyRound, Plus, ShieldCheck, UserPlus } from 'lucide-react';
+import { AlertTriangle, Bot, KeyRound, Plus, ShieldCheck, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { GrantDialog } from '@/components/access/grant-dialog';
@@ -63,11 +63,10 @@ export default function AccessPage() {
       }
     >
       <div className="flex flex-col gap-4">
-        <StatCardGrid columns={4}>
+        <StatCardGrid columns={3}>
           <StatCard label="Workflow identities" value={stats ? count(stats.identities) : undefined} loading={summary.isPending} icon={Bot} footer={{ text: 'One per workflow', subtext: 'Used at the data and AI gateways' }} />
           <StatCard label="Active grants" value={stats ? count(stats.activeGrants) : undefined} loading={summary.isPending} icon={KeyRound} footer={{ text: 'Modules and knowledge bases', subtext: 'Expired grants not counted' }} />
           <StatCard label="Expiring in 14 days" value={stats ? count(stats.expiringSoon) : undefined} loading={summary.isPending} icon={AlertTriangle} footer={{ text: stats?.expiringSoon ? 'Extend or let lapse' : 'Nothing expiring', subtext: 'See Expiring soon under Grants' }} />
-          <StatCard label="Money-movement grants" value={stats ? count(stats.moneyMovementGrants) : undefined} loading={summary.isPending} icon={Coins} footer={{ text: 'Always expire within 180 days', subtext: 'Every call still needs approval' }} />
         </StatCardGrid>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number])}>

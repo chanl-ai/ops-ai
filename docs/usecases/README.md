@@ -75,3 +75,11 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | passing |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | passing |
 | uc-047 | console | Sub-pages show as rows in the sidebar | ui | passing |
+| uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | passing |
+| uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api | passing |
+| uc-052 | console | Access is Read or Write in the console | ui | passing |
+| uc-053 | console | The requester cannot approve a workflow's access; another person can | ui | passing |
+| uc-054 | console | Import presets access per operation and asks for no connection | ui | passing |
+| uc-055 | console | A bank API goes from import to a governed agent call | ui | failing |
+| uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | passing |
+| uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | passing |

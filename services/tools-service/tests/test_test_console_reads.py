@@ -74,3 +74,52 @@ async def test_a_sandbox_read_that_fails_reports_the_side_and_status(g: Gateway)
     out = await _test(g, "limited", {})
     error = out["output"]["error"]
     assert (out["stubbed"], error["code"], error["side"], out["status"]) == (False, "RATE_LIMITED", "upstream", 429)
+
+
+async def _as_owner(g: Gateway, base: str, args: dict[str, Any], **headers: str) -> Any:
+    body = {"operation": g.tool(base), "contextId": "owner", "target": "sandbox", "input": args}
+    return await g.client.post(f"{BASE}/test", json=body, headers=headers)
+
+
+async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway) -> None:
+    """No workflow holds an approval for the module; its owner still tries it (c-048 T008, G9)."""
+    r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"})
+    assert r.status_code == 200, r.text
+    out = r.json()["data"]
+    assert (out["decision"], out["stubbed"]) == ("allow", False), out
+    assert [x["path"] for x in g.received] == ["/v1/accounts/CHQ-2219"], "the system was called"
+
+
+async def test_the_owners_write_answers_from_the_stub_and_never_reaches_the_system(g: Gateway) -> None:
+    r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24})
+    out = r.json()["data"]
+    assert (out["decision"], out["stubbed"]) == ("allow", True), out
+    assert g.received == [], "a test console never writes to the system"
+
+
+async def test_a_team_that_does_not_own_the_module_cannot_try_it_as_owner(g: Gateway) -> None:
+    r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"}, **{"X-Team-Id": "team_cards"})
+    assert r.status_code == 403, r.text
+    assert g.received == []
+
+
+async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_waiting(g: Gateway) -> None:
+    """A workflow asked for access but not yet approved lists a run context; the panel's default (the first) must still
+    be the owner's, so the owner's try is not refused as that workflow's no_approval (c-048 T019)."""
+    request = {
+        "workflowId": "wf_dispute",
+        "environment": "production",
+        "operations": [g.tool("place_hold")],
+        "expiresInDays": 30,
+        "justification": "asked, not decided",
+    }
+    assert (await g.client.post(f"{BASE}/approvals", json=request)).status_code == 201
+    first = (await g.client.get(BASE)).json()["data"]["runContexts"][0]
+    body = {
+        "operation": g.tool("place_hold"),
+        "contextId": first["id"],
+        "target": "sandbox",
+        "input": {"accountId": "CHQ-2219", "hours": 24},
+    }
+    out = (await g.client.post(f"{BASE}/test", json=body)).json()["data"]
+    assert (first["id"], out["decision"], out["stubbed"]) == ("owner", "allow", True), out

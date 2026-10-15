@@ -139,7 +139,7 @@ export interface OpsApi {
     get(id: string): Promise<Review>;
     decide(id: string, input: ReviewDecisionInput): Promise<Review>;
     assign(ids: string[], assignee?: string): Promise<BulkResult>;
-    /** Approving money movements needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */
+    /** Approving calls that need two approvers needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */
     bulkDecide(ids: string[], decision: ReviewDecision, reason?: string, opts?: { stepUpToken?: string }): Promise<BulkResult>;
   };
   policies: {

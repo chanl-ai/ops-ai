@@ -297,7 +297,7 @@ export function TestConsole({
               <Alert>
                 <UserCheck className="size-4" />
                 <AlertTitle>In a run, this call waits for an approval</AlertTitle>
-                <AlertDescription>{op?.fourEyes ? 'A person approves it, and a second person checks it, before the gateway sends it.' : 'The gateway sends it only with an approval token bound to this exact input.'}</AlertDescription>
+                <AlertDescription>{op?.approvers === 2 ? 'Two different people approve it before the gateway sends it.' : 'The gateway sends it only with an approval token bound to this exact input.'}</AlertDescription>
               </Alert>
             )}
             {result.bound.length > 0 && (

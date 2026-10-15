@@ -13,11 +13,11 @@ import { cn } from '@/lib/utils';
 import { BindingText, errorTone, pctText } from './module-meta';
 
 /** How a call to this operation is supervised, in one line. */
-export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | 'requiresApproval' | 'fourEyes'> }) {
-  if (op.fourEyes)
+export function SupervisionText({ op }: { op: Pick<ModuleOperation, 'access' | 'requiresApproval' | 'approvers'> }) {
+  if (op.access === 'write' && op.approvers === 2)
     return (
-      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-destructive">
-        <Users className="size-3.5" /> Four eyes
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
+        <Users className="size-3.5" /> Two approvers
       </span>
     );
   if (op.access === 'read') return <span className="text-xs text-muted-foreground">None</span>;

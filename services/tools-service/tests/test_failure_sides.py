@@ -108,7 +108,14 @@ async def test_the_executions_log_shows_the_side_a_call_broke_on(gateway: Gatewa
     op_id = next(o["id"] for o in detail["operations"] if o["name"] == gateway.tool("limited"))
     edited = await gateway.client.patch(f"{base}/operations/{op_id}", json={"path": "/slow", "timeoutMs": 1_000})
     assert edited.status_code == 200, edited.text
-    assert (await gateway.client.post(f"{base}/versions", json={"note": "c-038"})).status_code == 200
+    requested = await gateway.client.post(f"{base}/versions", json={"note": "c-038"})
+    assert requested.status_code == 200
+    # A new path is a major change: it runs only once Security approves the version.
+    review = next(x["id"] for x in requested.json()["data"]["reviews"] if x["decision"] == "pending")
+    decided = await gateway.client.post(
+        f"{base}/reviews/{review}/decide", json={"decision": "approved"}, headers={"X-Dev-User": "Nadia Petrov"}
+    )
+    assert decided.status_code == 200, decided.text
     r = await gateway.call("limited", {}, step="s1")
     out = r.json()["data"]["output"]
     assert (out["error"]["code"], out["error"]["side"]) == ("UPSTREAM_TIMEOUT", "upstream")

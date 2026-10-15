@@ -69,10 +69,10 @@ export interface ApprovalWidget extends WidgetBase {
   summary: string;
   fields: { label: string; value: string }[];
   risk: 'critical' | 'high' | 'medium' | 'low';
-  /** Set when approving moves money or changes a production system; the approval is confirmed with this text. */
+  /** Set when approving changes a production system; the approval is confirmed with this text. */
   consequence?: string;
-  /** True when approving runs a money-movement operation; the console asks for a step-up first. Set by the server. */
-  movesMoney?: boolean;
+  /** True when the operation being approved needs two approvers; the console asks for a step-up first. Set by the server. */
+  stepUp?: boolean;
   state: ApprovalState;
   decidedBy?: string;
   reason?: string;
@@ -106,7 +106,7 @@ export interface MetricWidget extends WidgetBase {
 export type ChatWidget = TableWidget | ChartWidget | RecordWidget | ApprovalWidget | FormWidget | MetricWidget;
 export type WidgetKind = ChatWidget['kind'];
 
-/** `stepUpToken`: approving a money movement needs a re-authentication from the last 5 minutes. */
+/** `stepUpToken`: approving a call that needs a step-up needs a re-authentication from the last 5 minutes. */
 export type WidgetAction = { type: 'approve'; stepUpToken?: string } | { type: 'reject'; reason: string } | { type: 'submit'; values: Record<string, string> };
 
 // ── Messages ──

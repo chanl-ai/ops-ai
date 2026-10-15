@@ -15,7 +15,7 @@ The script starts its own services on the scripted model; no model key is needed
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Ask `ag_fraud` to "Place a 24-hour hold on wire W-88213" | An approval widget, pending, `movesMoney: true`, routed to Fraud Operations; the tool has not run |
+| 1 | Ask `ag_fraud` to "Place a 24-hour hold on wire W-88213" | An approval widget, pending, `stepUp: true`, routed to Fraud Operations; the tool has not run |
 | 2 | Approve without a step-up token (`POST .../widgets/{id}/actions`) | 422, message names step-up |
 | 3 | Approve with a step-up token | 200, state `approved` |
 | 4 | Approve again | 409 |

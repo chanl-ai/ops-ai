@@ -54,6 +54,8 @@ class Agent(Out):
     model: str
     channels: list[str]
     tool_ids: list[str]
+    # Granted ids the tool directory no longer offers; the next save drops them.
+    stale_tool_ids: list[str]
     collections: list[str]
     owner: str
     paused: bool
@@ -109,11 +111,16 @@ class AgentTestTurn(Out):
 
 
 class Tool(Out):
+    """A published tools-service operation an agent may be granted; `server` is its module's name."""
+
     id: str
     name: str
     server: str
+    module_id: str | None
     description: str
-    access: Literal["read", "write", "money_movement"]
+    access: Literal["read", "write"]
+    input_schema: dict[str, Any]
+    requires_approval: bool
     approval: str | None
 
 
@@ -499,6 +506,14 @@ class Evidence(Out):
     detail: str
 
 
+class ReviewOrigin(Out):
+    """Where a review came from: a chat with an agent (the conversation to open), or a workflow run."""
+
+    kind: Literal["chat", "workflow"]
+    thread_id: str | None = None
+    agent_name: str | None = None
+
+
 class ThreadReview(Out):
     """A paused workflow or agent step as a console `Review`, pending or decided."""
 
@@ -521,7 +536,9 @@ class ThreadReview(Out):
     created_at: str
     reasoning: list[str]
     evidence: list[Evidence]
-    moves_money: bool
+    # The operation needs two approvers, so approving asks for a step-up.
+    step_up: bool
+    origin: ReviewOrigin
     decided_at: str | None = None
     decision_reason: str | None = None
     # The resume value a decided review was recorded with.

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 # `workflow`: the tool starts a published workflow, whose own review steps are the gate (workflows-as-tools.md).
-Access = Literal["read", "write", "money_movement", "workflow"]
+Access = Literal["read", "write", "workflow"]
 
 
 @dataclass(frozen=True)

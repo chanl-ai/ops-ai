@@ -21,12 +21,12 @@ from ops_service_kit.errors import ApiError, Conflict, Forbidden
 
 from ...store.reviews import ReviewStore
 from .. import hitl_facade
-from ..auth import Principal, principal, require_step_up
+from ..auth import Principal, principal, require_step_up, teams_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..runs import config, graph_store, pending, resolve
 from ..schemas import Approval, BulkResult, Envelope, Review, ReviewList
-from ..tool_access import access_of
+from ..tool_access import policy_of
 
 router = APIRouter(prefix="/v1/threads", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -37,37 +37,42 @@ class ApprovalInput(WireModel):
     step_up_token: str | None = None
 
 
-def needed_approvers(access: str) -> int:
-    return 2 if access == "money_movement" else 1
-
-
 @router.post("/{thread_id}/approvals", response_model=Envelope[Approval])
 async def approve(rt: Rt, me: Me, thread_id: str, body: ApprovalInput) -> JSONResponse:
-    return ok(await record_approval(rt, me.email, thread_id, body.step_up_token))
+    return ok(await record_approval(rt, me.email, thread_id, body.step_up_token, approver_teams=teams_of(me)))
 
 
-async def record_approval(rt: Runtime, approver: str, thread_id: str, step_up_token: str | None) -> dict[str, Any]:
-    """Records `approver`'s approval of the call the thread waits on; the token is set once enough have approved."""
+async def record_approval(
+    rt: Runtime,
+    approver: str,
+    thread_id: str,
+    step_up_token: str | None,
+    *,
+    approver_teams: list[str] | None = None,
+) -> dict[str, Any]:
+    """Records `approver`'s approval of the call the thread waits on; the token is set once as many distinct people as
+    the operation's policy names have approved. `approver_teams` None (dev) approves for any team."""
     row, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     call: dict[str, Any] | None = waiting[0]["payload"].get("call") if waiting else None
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
-    if hitl_facade.is_own_request(rt, row, approver, waiting[0]["payload"]):
+    if await hitl_facade.is_own_request(rt, row, approver, waiting[0]["payload"]):
         raise Forbidden("You started this, so someone else has to approve it.")
-    access = await access_of(rt, call["tool"])
-    if access == "money_movement":
+    policy = await policy_of(rt, call["tool"])
+    hitl_facade.require_approver_team(policy, approver_teams, call["tool"])
+    if policy.approvers > 1:
         require_step_up(rt, approver, step_up_token)
     digest = input_hash(call["input"])
     # Two approvers means two people: approving the same input again does not count as the second. Only approvals
     # of this exact input count: an approval of an earlier draft of the call is not one of these.
     found = await ReviewStore(graph_store(rt).engine).approve(
-        thread_id, call["step"], approver, digest, distinct=needed_approvers(access) > 1
+        thread_id, call["step"], approver, digest, distinct=policy.approvers > 1
     )
     if found is None:
         raise Forbidden("You already approved this; a second, different person has to approve it.")
     approvers = found
-    needed = needed_approvers(access)
+    needed = policy.approvers
     token = (
         mint_approval(
             Binding(thread_id, call["step"], call["tool"], digest, approvers),
@@ -125,7 +130,13 @@ async def get_review(rt: Rt, thread_id: str) -> JSONResponse:
 @console_router.post("/{thread_id}/decision", response_model=Envelope[Review])
 async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> JSONResponse:
     review = await hitl_facade.decide(
-        rt, me.email, thread_id, decision=body.decision, reason=body.reason or None, step_up_token=body.step_up_token
+        rt,
+        me.email,
+        thread_id,
+        decision=body.decision,
+        reason=body.reason or None,
+        step_up_token=body.step_up_token,
+        approver_teams=teams_of(me),
     )
     return ok(review)
 
@@ -149,7 +160,13 @@ async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
     for thread_id in body.ids:
         try:
             await hitl_facade.decide(
-                rt, me.email, thread_id, decision=body.decision, reason=body.reason, step_up_token=body.step_up_token
+                rt,
+                me.email,
+                thread_id,
+                decision=body.decision,
+                reason=body.reason,
+                step_up_token=body.step_up_token,
+                approver_teams=teams_of(me),
             )
             updated.append(thread_id)
         except ApiError as e:

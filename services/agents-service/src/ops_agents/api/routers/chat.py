@@ -57,7 +57,7 @@ from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
 from .. import hitl_facade
 from ..agent_registry import refuse_new_turns
-from ..auth import Principal, principal
+from ..auth import Principal, principal, teams_of
 from ..chat_threads import (
     CHAT_GRAPH,
     NEW_TITLE,
@@ -467,6 +467,7 @@ async def widget_action(
         decision="approved" if isinstance(action, ApproveAction) else "rejected",
         reason=action.reason.strip() if isinstance(action, RejectAction) else None,
         step_up_token=action.step_up_token if isinstance(action, ApproveAction) else None,
+        approver_teams=teams_of(me),
     )
     await update_meta(rt, thread_id, lastMessageAt=now_iso())
     decided = next(m for m in (await messages_of(rt, [thread_id]))[thread_id] if m.id == message_id)

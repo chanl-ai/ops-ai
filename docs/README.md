@@ -44,6 +44,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/runtime.md` | Inside agents-service: kernel, graphs, compiled definitions, the LangGraph adapter, process types, engine seam, libraries |
 | `architecture/workflows-as-tools.md` | Workflows as agent tools: an agent starts a published workflow as a child thread and gets its result or a review handle |
 | `architecture/human-in-the-loop.md` | Interrupt kinds, review rules, approval tokens, step-up, two approvers, SLA timers, pauses per channel |
+| `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
 | `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
@@ -108,6 +109,12 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/calls-through-the-registry.md` | uc-011: a tool call runs through the registry and is logged with its caller |
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
+| `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of c-048 on the shared stack |
+| `usecases/console/stale-grants-removed.md` | uc-056: a grant whose operation is no longer offered shows in the grant dialog and saving drops it |
+| `usecases/console/chat-holds-in-reviews.md` | uc-057: a write held in a chat appears in Reviews marked From chat and is approved there |
+| `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
+| `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
+| `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
 | `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
@@ -119,6 +126,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/chat-starts-a-workflow.md` | uc-020: chat starts a workflow |
 | `usecases/agents-service/approval-outlives-its-token.md` | uc-027: an approval outlives its token |
 | `usecases/agents-service/agent-runs-on-its-model.md` | uc-028: an agent runs on the model its publisher chose |
+| `usecases/agents-service/agent-calls-registry-operations.md` | uc-048: an agent is granted a published tools-service operation and calls it through the gateway |
+| `usecases/agents-service/write-approval-policy.md` | uc-049: a write runs only after as many distinct people as its operation's policy names approve it |
 | `usecases/tools-service/failure-side-and-real-reads.md` | uc-038: a failed tool call says which side failed, and a test call reaches the real system |
 | `usecases/platform-service/sign-in-and-sessions.md` | uc-021: sign in, session, refresh with rotation, sign out |
 | `usecases/platform-service/members-and-roles.md` | uc-023: invites, role changes, the last admin, and a removal that ends sessions and keys |

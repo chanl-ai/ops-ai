@@ -79,7 +79,7 @@ export type GroupId = "trigger" | "ai" | "tool" | "human" | "logic" | "output"
 
 const F = {
   agent: { key: "agentSlug", label: "Agent", input: "select", options: "agents", required: true, hint: "Its tools, knowledge and guardrails come with it." } as FieldSpec,
-  tool: { key: "description", label: "Tool", input: "select", options: "tools", required: true, mono: true, hint: "Money-moving tools should sit behind an approval gate." } as FieldSpec,
+  tool: { key: "description", label: "Tool", input: "select", options: "tools", required: true, mono: true, hint: "Writes should sit behind an approval gate." } as FieldSpec,
 }
 
 export const NODE_KINDS: NodeKind[] = [

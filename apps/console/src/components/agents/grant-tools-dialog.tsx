@@ -14,8 +14,7 @@ import type { GrantableTool } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
 
 /**
- * Pick which operations an agent may call, grouped by the module they belong to. Money operations state the
- * four-eyes rule because every call waits for one person's approval and a second person's check. Workflows exposed
+ * Pick which operations an agent may call, grouped by the module they belong to. Workflows exposed
  * to agents are their own group: calling one starts a run, which keeps the workflow's review gates.
  */
 export function GrantToolsDialog({
@@ -24,6 +23,7 @@ export function GrantToolsDialog({
   tools,
   loading,
   granted,
+  stale,
   onSubmit,
   isPending,
 }: {
@@ -32,6 +32,8 @@ export function GrantToolsDialog({
   tools: GrantableTool[];
   loading: boolean;
   granted: string[];
+  /** Granted ids the catalogue no longer offers; listed apart so they can be removed, and dropped on save anyway. */
+  stale: string[];
   onSubmit: (toolIds: string[]) => Promise<unknown>;
   isPending: boolean;
 }) {
@@ -94,7 +96,29 @@ export function GrantToolsDialog({
             <Skeleton key={i} className="h-14 rounded-lg" />
           ))}
         </div>
-      ) : visible.length === 0 ? (
+      ) : (
+        <div className="flex flex-col gap-3">
+          {stale.some((id) => selected.has(id)) && (
+            <div className="flex flex-col gap-1" data-testid="stale-grants">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">No longer offered</p>
+              <ul className="flex flex-col divide-y rounded-lg border border-warning/40">
+                {stale
+                  .filter((id) => selected.has(id))
+                  .map((id) => (
+                    <li key={id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                      <span className="min-w-0">
+                        <code className="font-mono text-sm">{id}</code>
+                        <span className="block text-xs text-muted-foreground">Unpublished, hidden or removed from its module. Saving drops it.</span>
+                      </span>
+                      <Button variant="outline" size="sm" onClick={() => toggle(id, false)} aria-label={`Remove ${id}`}>
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+          {visible.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No operations match “{search}”.</p>
       ) : (
         <div className="flex flex-col gap-3">
@@ -113,19 +137,20 @@ export function GrantToolsDialog({
                             <code className="font-mono text-sm">{t.name}</code>
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">{t.description}</span>
+                          {Object.keys(t.inputSchema.properties ?? {}).length > 0 && (
+                            <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                              {Object.keys(t.inputSchema.properties ?? {})
+                                .map((f) => (t.inputSchema.required?.includes(f) ? f : `${f}?`))
+                                .join(', ')}
+                            </span>
+                          )}
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
                           <AccessBadge access={t.access} />
-                          {t.access === 'money_movement' ? (
-                            <span className="flex items-center gap-1 text-[11px] text-destructive">
-                              <Users className="size-3" /> Four eyes on every call
+                          {(t.approval || t.requiresApproval) && (
+                            <span className="flex items-center gap-1 text-[11px] text-warning-text">
+                              <UserCheck className="size-3" /> {t.approval ?? 'Waits for approval'}
                             </span>
-                          ) : (
-                            t.approval && (
-                              <span className="flex items-center gap-1 text-[11px] text-warning-text">
-                                <UserCheck className="size-3" /> {t.approval}
-                              </span>
-                            )
                           )}
                         </span>
                       </label>
@@ -134,6 +159,8 @@ export function GrantToolsDialog({
               </ul>
             </div>
           ))}
+            </div>
+          )}
         </div>
       )}
     </DialogShell>

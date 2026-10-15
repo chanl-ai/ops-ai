@@ -5,7 +5,7 @@ package ops.gateway
 
 import rego.v1
 
-writes := {"write", "money_movement"}
+writes := {"write"}
 
 is_write if input.access in writes
 
@@ -75,10 +75,12 @@ reasons contains "approval token has expired" if {
 	claims.exp * 1000000000 <= now_ns
 }
 
-reasons contains sprintf("moving money needs two approvers; the token has %d", [count(approvers)]) if {
-	input.access == "money_movement"
+# The operation's write approval policy, from the gateway's registry: a token naming fewer distinct people is refused.
+reasons contains sprintf("this write needs %d approvers; the token has %d", [input.approvers_required, count(approvers)]) if {
+	is_write
 	claims
-	count(approvers) < 2
+	is_number(input.approvers_required)
+	count(approvers) < input.approvers_required
 }
 
 decision := {"allow": count(reasons) == 0, "reasons": sort([r | some r in reasons])}

@@ -47,7 +47,7 @@ export interface AgentPublishDeps {
   evals: EvalsMock;
   workflowTier: (workflowId: string) => Risk;
   /** Highest access class among the agent's granted tools. */
-  toolAccess: (agentId: string) => 'read' | 'write' | 'money_movement' | undefined;
+  toolAccess: (agentId: string) => 'read' | 'write' | undefined;
   me: string;
   /** Runs after a version is published, so the agent's wrapper workflow can follow it. */
   onPublished?: (agentId: string, version: number) => void;
@@ -106,8 +106,8 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
       return { tier: top.tier, reason: `Highest tier among the live workflows that pin it: ${top.name} (${top.tier})` };
     }
     const access = deps.toolAccess(a.id);
-    const tier: Risk = access === 'money_movement' ? 'high' : access === 'write' ? 'medium' : 'low';
-    return { tier, reason: access ? `No live workflow pins it; its ${access.replace('_', ' ')} tools set the tier` : 'No live workflow pins it and it holds no write tools' };
+    const tier: Risk = access === 'write' ? 'medium' : 'low';
+    return { tier, reason: access ? `No live workflow pins it; its ${access} tools set the tier` : 'No live workflow pins it and it holds no write tools' };
   };
 
   const bodyFor = (a: Agent, version: number, note: string, requestedBy: string): AgentPublishRequest => {

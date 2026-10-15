@@ -15,7 +15,7 @@ with agents() as api:
     widget = next((e["widget"] for e in events if e["type"] == "widget" and e["widget"]["kind"] == "approval"), None)
     check("write tool paused on an approval widget", widget is not None, [e["type"] for e in events])
     assert widget is not None
-    check("widget is pending and moves money", widget["state"] == "pending" and widget["movesMoney"] is True, widget)
+    check("widget is pending and asks for a step-up", widget["state"] == "pending" and widget["stepUp"] is True, widget)
     gated = next((e["call"] for e in events if e["type"] == "tool_end"), {})
     check("call routed to Fraud Operations", gated.get("gated", {}).get("reviewers") == "Fraud Operations", gated)
 

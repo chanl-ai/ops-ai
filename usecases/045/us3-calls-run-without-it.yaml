@@ -1,8 +1,0 @@
-# US3: uc-041 api: an approval request and a call as the workflow both run over service tokens, with no shared token.
-id: us3-calls-run-without-it
-accept: US3
-failure_mode: some path still sends or checks the static token and breaks once it is gone
-layers:
-  cli:
-    run: "make usecase-test UC=uc-041 LAYER=api"
-    expect: { exit: 0, stdout: "uc-041 api  8 checks passed" }

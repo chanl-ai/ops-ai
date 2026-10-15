@@ -5,8 +5,11 @@ Status: current. Prototype: chat and graphs work on seed data; see "What differs
 The agents service owns agents, workflows, their versions, chat and the runs that execute them
 (`docs/architecture/service-map.md`). Today it serves the console's chat API: agents, threads, replies streamed over
 SSE from a Pydantic AI agent loop (spec 15), gated writes that stop for approval and continue once approved, and
-citations from a keyword passage store. The agent catalogue, demo tools and passages are seed data in
-`services/agents-service/tests/fixtures/seed/`.
+citations from a keyword passage store. The tools an agent may hold are tools-service's published operations: `GET
+/v1/tools`, the grant check and every run read them from tools-service (`activities/tool_directory.py`), and every
+call, read or write, runs through its gateway's `/v1/calls` (c-048 G1). The stack's seeded agents, granted seeded
+operations, are in `services/agents-service/seed/chat_agents.json`; passages and the fixture tools the unit tests
+run on stay in `services/agents-service/tests/fixtures/seed/`.
 
 ## Code
 
@@ -42,6 +45,8 @@ State is saved after every node by the checkpointer, so a pause survives a resta
 | Port | `OPS_PORT` | `8700` |
 | Model | `OPS_MODEL_ALIAS` | `gpt-5.5` (a `claude-*` alias selects Anthropic) |
 | Model key | `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` for a `claude-*` alias | none |
+| Tool gateway | `OPS_GATEWAY_URL` | none: tools then run in process from the fixture catalogue (unit tests only); the stack sets tools-service |
+| Seeded agents | `OPS_AGENTS_SEED_FILE` | `chat_agents.json` in the seed directory (the fixture agents); the stack sets `seed/chat_agents.json` |
 
 Values carry the `OPS_` prefix because a shared secret store may already define `DATABASE_URL` for another
 service. Without a model key the service starts, `/health` reports the missing key and sending a message returns 503.

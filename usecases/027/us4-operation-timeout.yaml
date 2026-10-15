@@ -1,9 +1,0 @@
-# US4: uc-010 api: an operation's 1 s timeout stops a slow call with UPSTREAM_TIMEOUT (c-038's name), logged in executions.
-# The runner gives each run its own database and ports.
-id: us4-operation-timeout
-accept: US4
-failure_mode: the per-operation timeout is ignored, or a timeout is not logged
-layers:
-  cli:
-    run: "make usecase-test UC=uc-010 LAYER=api"
-    expect: { exit: 0, stdout: "uc-010 api  19 checks passed" }

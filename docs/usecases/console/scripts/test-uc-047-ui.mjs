@@ -31,6 +31,10 @@ await withUiStack(
       check('every parent lists its sub-pages as sidebar rows, open by default', JSON.stringify(listed) === JSON.stringify(CHILDREN), listed);
       check("on a one-child section's own page its own sub-row is the active one", JSON.stringify(await active()) === '["All workflows"]', await active());
 
+      await open('/wiki');
+      check("on a multi-child section's own page the parent row lights alone", JSON.stringify(await active()) === '["Wiki"]', await active());
+
+      await open('/workflows');
       await subRows.filter({ hasText: 'Deployments' }).click();
       await page.waitForURL((u) => u.pathname === '/deployments', { timeout: 60_000 });
       await page.waitForTimeout(800);

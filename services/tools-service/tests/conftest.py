@@ -57,6 +57,13 @@ def pytest_configure(config: pytest.Config) -> None:
         pytest.exit(why, returncode=4)
 
 
+@pytest.fixture(autouse=True)
+def _no_dev_egress_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dev .env maps a fake bank's name with OPS_EGRESS_RESOLVE, which Settings refuses outside dev; tests build their
+    own resolution and never read the stack's."""
+    monkeypatch.delenv("OPS_EGRESS_RESOLVE", raising=False)
+
+
 @pytest.fixture(scope="session")
 def seed() -> dict[str, Any]:
     return json.loads((FIXTURES / "tool_modules.json").read_text())

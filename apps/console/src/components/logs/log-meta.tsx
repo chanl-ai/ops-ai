@@ -5,7 +5,7 @@ import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOper
 import { cn } from '@/lib/utils';
 
 export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
-export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', money_movement: 'Moves money', completion: 'Model call' };
+export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', completion: 'Model call' };
 export const APPROVAL_LABEL: Record<ApprovalKind, string> = { person: 'Person', policy: 'Policy', none: 'None' };
 export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay' };
 
@@ -20,7 +20,7 @@ export function GatewayIcon({ gateway, className }: { gateway: GatewayKind; clas
 }
 
 export function OperationBadge({ operation }: { operation: CallOperation }) {
-  const tone = operation === 'money_movement' ? 'border-destructive/40 bg-destructive/10 text-destructive' : operation === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
+  const tone = operation === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
   return (
     <Badge variant="outline" className={cn('font-normal', tone)}>
       {OPERATION_LABEL[operation]}

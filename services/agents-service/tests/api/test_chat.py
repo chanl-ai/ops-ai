@@ -68,12 +68,12 @@ async def test_reply_streams_console_frames_and_is_stored(client: AsyncClient) -
     assert stored["title"].startswith("What is the daily wire limit")
 
 
-async def test_money_approval_needs_step_up_then_continues(client: AsyncClient) -> None:
+async def test_a_two_approver_approval_needs_step_up_then_continues(client: AsyncClient) -> None:
     thread = await new_thread(client)
     _, events = await send(client, thread["id"], {"content": "Place a 24-hour hold on wire W-88213"})
     widget = next(e["widget"] for e in events if e["type"] == "widget" and e["widget"]["kind"] == "approval")
     assert widget["state"] == "pending" and widget["fields"][0] == {"label": "Wire", "value": "W-88213"}
-    assert widget["movesMoney"] is True
+    assert widget["stepUp"] is True
     gated = next(e["call"] for e in events if e["type"] == "tool_end")
     assert gated["gated"]["reviewers"] == "Fraud Operations"
     mid = events[0]["messageId"]

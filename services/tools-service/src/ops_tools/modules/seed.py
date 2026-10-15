@@ -4,7 +4,7 @@ until expiry) and become timestamps against `now`.
 
 The rules mirror the mock's `fromSeed` (apps/console/src/lib/api/mock/tool-modules/index.ts): an operation's access,
 description and traffic come from the console's tool record when one exists, writes need approval unless the seed
-says otherwise, money movement always does, and each major version has one security review.
+says otherwise, an operation two people approve always does, and each major version has one security review.
 """
 
 from __future__ import annotations
@@ -199,7 +199,6 @@ def aggregates(
         for i, o in enumerate(s["operations"]):
             base = tools.get(o["name"]) or o.get("tool") or {"description": o["name"], "access": "read"}
             access = base["access"]
-            money = access == "money_movement"
             ops.append(
                 {
                     "id": f"{s['id']}_op{i + 1}",
@@ -218,7 +217,8 @@ def aggregates(
                     "masked_output": o.get("masked") or [],
                     "binding": o.get("binding"),
                     "rate_limit_per_min": o.get("rate") or 60,
-                    "requires_approval": money or (access == "write" and o.get("requiresApproval") is not False),
+                    "requires_approval": access == "write" and o.get("requiresApproval") is not False,
+                    "approvers": int(base.get("approvers") or 1),
                     "amount_max": o.get("amountMax"),
                     "stub": o.get("stub") or {"ok": True},
                 }
@@ -358,8 +358,8 @@ async def load(
     catalog: list[dict[str, Any]] | None = None,
 ) -> int:
     """Writes the seeded modules: missing ones are added, ones nobody has edited since the seed wrote them (revision
-    0) are replaced so a changed seed reaches an existing dev database, and edited ones are left alone. Returns how
-    many it added."""
+    0) are replaced so a changed seed reaches an existing dev database, and edited ones are left alone; an unedited
+    Runtime module the seed no longer writes is removed. Returns how many it added."""
     added = 0
     mods = aggregates(seed, tenant_id=tenant_id, now=now, catalog=catalog)
     # A module may only name listed hosts, so the seed lists the hosts its modules call first.
@@ -373,4 +373,9 @@ async def load(
             added += 1
         elif stored["revision"] == 0:
             await store.put(agg, expected_revision=0, seeded=True)
+    # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
+    if RUNTIME_MODULE not in {m["id"] for m in mods}:
+        stale = await store.get(tenant_id, RUNTIME_MODULE)
+        if stale is not None and stale["revision"] == 0:
+            await store.delete(tenant_id, RUNTIME_MODULE)
     return added

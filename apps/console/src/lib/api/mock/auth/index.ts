@@ -60,7 +60,7 @@ export function currentMockUser(): { id: string; email: string; name: string; me
   return u ? { id: u.id, email: u.email, name: u.name, method: u.method, mfaEnrolled: u.mfaEnrolled } : null;
 }
 
-/** Checks a step-up token from reauthenticate, for mocks that guard money approvals. */
+/** Checks a step-up token from reauthenticate, for mocks that guard step-up approvals. */
 export function verifyMockStepUp(token: string): { ok: true; email: string } | { ok: false; reason: 'unknown' | 'expired' } {
   const t = token ? bridge?.stepUp(token) : undefined;
   if (!t) return { ok: false, reason: 'unknown' };
@@ -78,7 +78,7 @@ export function setMockPassword(email: string, password: string): void {
  * blocked). ?mock=signed-out and ?mock=expired switch to the two designed states, as ?mock= does for the API.
  */
 /**
- * `stepUpUrl`: the agents service that verifies money decisions. When set, "Confirm it is you" also re-authenticates
+ * `stepUpUrl`: the agents service that verifies step-up decisions. When set, "Confirm it is you" also re-authenticates
  * there and keeps the signed step-up token it returns, because that service refuses a token it did not mint.
  */
 export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthProvider {

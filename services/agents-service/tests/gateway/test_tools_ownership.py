@@ -27,7 +27,7 @@ ADMIN = "postgresql://ops:ops@localhost:5477/postgres"
 async def test_tool_access_is_internal_and_comes_from_the_gateway_registry(gateway: Gateway) -> None:
     assert (await gateway.client.get("/v1/tools/place_wire_hold", headers={"Authorization": ""})).status_code == 401
     tools = GatewayClient(gateway.client, token=service_token)
-    assert await tools.tool_access("place_wire_hold") == "money_movement"
+    assert await tools.tool_access("place_wire_hold") == "write"
     assert await tools.tool_access("send_reply") == "write"
     assert await tools.tool_access("lookup_account") == "read"
     assert await tools.tool_access("drop_tables") == "unknown"

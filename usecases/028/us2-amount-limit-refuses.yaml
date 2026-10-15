@@ -1,9 +1,0 @@
-# US2: uc-011 api: a money call over its amount limit is refused 403 amount_over_limit before the policy, logged denied;
-# missing, non-numeric and negative amounts are refused too (the parity check's cases).
-id: us2-amount-limit-refuses
-accept: US2
-failure_mode: an over-limit, missing or negative amount reaches the upstream
-layers:
-  cli:
-    run: "make usecase-test UC=uc-011 LAYER=api"
-    expect: { exit: 0, stdout: "uc-011 api  15 checks passed" }

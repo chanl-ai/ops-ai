@@ -14,7 +14,7 @@ import { useReauthenticate, useSession, useSignInPolicy, useStartSsoStepUp, useT
 import type { StepUp } from '@/lib/auth';
 
 /**
- * Step-up before a money movement. Password accounts confirm with their password, plus the authenticator code when
+ * Step-up before approving a call that needs one. Password accounts confirm with their password, plus the authenticator code when
  * enrolled. SSO and Google accounts go back to their identity provider, which applies its own MFA, and return here
  * with a step-up waiting; the person then presses Approve again. Either way the token is good for 5 minutes.
  */
@@ -63,7 +63,7 @@ export function ReauthDialog({ open, onOpenChange, action, onVerified }: { open:
       onOpenChange={onOpenChange}
       size="md"
       title="Confirm it is you"
-      description={`${action} moves money. Confirm your identity to continue; you will not be asked again for 5 minutes.`}
+      description={`${action} needs two approvers. Confirm your identity to continue; you will not be asked again for 5 minutes.`}
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={reauth.isPending || startSso.isPending}>
@@ -113,7 +113,7 @@ export function ReauthDialog({ open, onOpenChange, action, onVerified }: { open:
 // One step-up per browser tab, reused until it expires, so Reviews, bulk approve and chat ask once per 5 minutes.
 let cached: StepUp | null = null;
 const fresh = () => (cached && new Date(cached.expiresAt).getTime() > Date.now() ? cached.token : undefined);
-/** The API refuses a money approval without a step-up with 422 and a message naming step-up. */
+/** The API refuses such an approval without a step-up with 422 and a message naming step-up. */
 export const isStepUpRefusal = (e: unknown) => e instanceof Error && (e as Error & { status?: number }).status === 422 && /step-up/i.test(e.message);
 
 /**
@@ -131,7 +131,7 @@ export function useStepUpGate() {
     toast.success('Identity confirmed', { description: 'Approve now; the confirmation lasts 5 minutes.' });
   }, [takeStepUp]);
   const ask = React.useCallback((label: string) => new Promise<string>((resolve, reject) => setPending({ label, resolve, reject })), []);
-  /** `upfront`: the server marked the action as moving money, so ask before sending rather than after its 422. */
+  /** `upfront`: the server marked the action as needing a step-up, so ask before sending rather than after its 422. */
   const withStepUp = React.useCallback(async <T,>(label: string, run: (token?: string) => Promise<T>, opts?: { upfront?: boolean }): Promise<T> => {
     try {
       return await run(fresh() ?? (opts?.upfront ? await ask(label) : undefined));

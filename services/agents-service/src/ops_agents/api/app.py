@@ -25,6 +25,7 @@ from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.gateway import GatewayClient, GatewayReplySender, GatewayToolExecutor
 from ops_agents.activities.knowledge import KeywordPassageStore
+from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsOperations
 from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor, ReplySender
 from ops_agents.graphs import agent_wrapper
 from ops_agents.graphs.checkpointer import open_checkpointer
@@ -120,7 +121,7 @@ def create_app(
     """Tests inject a scripted model, an in-memory database, an in-memory checkpointer and fake graph models;
     `completions_client` reaches an in-process models-service; `auth` resolves callers against a stand-in for
     platform-service."""
-    catalog = load_catalog(settings.seed_dir)
+    catalog = load_catalog(settings.seed_dir, settings.agents_seed_file)
     db = engine or create_async_engine(settings.database_url, pool_pre_ping=True)
     model_error: str | None = None
     # With models-service and its key, turns run there on their agent's alias and no provider key is read here.
@@ -140,7 +141,11 @@ def create_app(
         httpx.AsyncClient(base_url=settings.gateway_url, timeout=30) if settings.gateway_url else None
     )
     gateway_client = GatewayClient(gateway_http, token=service_token_for(settings, "tools")) if gateway_http else None
-    tools = GatewayToolExecutor(catalog, gateway_client) if gateway_client else LocalToolExecutor(catalog)
+    tools = GatewayToolExecutor(gateway_client) if gateway_client else LocalToolExecutor(catalog)
+    # With a gateway, the tools agents may hold and the grants a run hands the model come from tools-service.
+    directory: ToolDirectory = (
+        ToolsOperations(gateway_http, service_token_for(settings, "tools")) if gateway_http else CatalogTools(catalog)
+    )
     replies: ReplySender = GatewayReplySender(gateway_client) if gateway_client else LocalReplySender()
     # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
     # (store/model_calls.py, api/model_ledger.py).
@@ -168,6 +173,7 @@ def create_app(
             else StaticModelAliases({settings.model_alias})
         )
         rt.tools = gateway_client
+        rt.tool_directory = directory
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)
         # Published versions and the registry are database rows: they load, list and publish with no model key.
@@ -191,6 +197,7 @@ def create_app(
                     files=channels,
                     meter=rt.usage,
                     workflows=ChildRuns(rt),
+                    tools=directory,
                 )
                 rt.graphs = build_graphs(deps, saver)
                 rt.saver = saver
@@ -209,7 +216,7 @@ def create_app(
                     poller = asyncio.create_task(poll_forever(rt, settings.timer_poll_seconds))
                     stack.callback(poller.cancel)
             await seed_workflows(rt.graph_store, settings.seed_dir)
-            await agent_registry.load(rt, load_catalog(settings.seed_dir))
+            await agent_registry.load(rt, load_catalog(settings.seed_dir, settings.agents_seed_file))
             await workflow_registry.load(rt, settings.seed_dir)
             app.state.runtime = rt
             log.info(

@@ -132,7 +132,7 @@ async def test_crash_after_the_gateway_sent_replays_instead_of_sending_again(
     assert [r["effect"] for r in rows] == [True, False]
 
 
-async def test_money_approval_needs_a_second_person(runtime: httpx.AsyncClient) -> None:
+async def test_a_two_approver_write_needs_a_second_person(runtime: httpx.AsyncClient) -> None:
     tid = await new_thread(runtime, "agent_wrapper")
     message = "Place a 24-hour hold on wire W-88213, the payee was added this morning."
     events = await run(runtime, tid, {"input": {"agent_id": "ag_fraud", "message": message}})

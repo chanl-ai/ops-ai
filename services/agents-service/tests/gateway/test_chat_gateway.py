@@ -13,7 +13,7 @@ from tests.gateway.test_dispute_e2e import apps, runtime  # noqa: F401  # pyrigh
 LEE = "lee@northfieldbank.com"
 
 
-async def test_a_chat_money_action_runs_on_two_approvals_through_the_gateway(
+async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gateway(
     runtime: httpx.AsyncClient,  # noqa: F811
     gateway: Gateway,
 ) -> None:

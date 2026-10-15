@@ -25,8 +25,10 @@ async def test_list_serves_the_console_contract(api: Api, seed: dict[str, Any]) 
     assert set(data["facets"]) == {"type", "access", "approvalState"}
     expired = await _ok(await api.call("GET", "", params={"view": "expired"}))
     assert [m["id"] for m in expired["data"]] == ["mod_sharepoint"], "the one module whose only approval lapsed"
-    money = await _ok(await api.call("GET", "", params={"access": "money_movement", "pageSize": 50}))
-    assert money["data"] and all("money_movement" in m["accessClasses"] for m in money["data"])
+    writes = await _ok(await api.call("GET", "", params={"access": "write", "pageSize": 50}))
+    assert writes["data"] and all("write" in m["accessClasses"] for m in writes["data"])
+    retired = await api.call("GET", "", params={"access": "money_movement"})
+    assert retired.status_code == 200 and retired.json()["data"]["data"] == [], "no module has the retired class"
 
 
 async def test_a_team_sees_only_its_modules_and_is_told_who_owns_the_rest(api: Api) -> None:
@@ -101,10 +103,10 @@ async def test_a_major_change_opens_a_security_review_and_a_minor_one_does_not(a
     assert major["approvalState"] == "needs_approval"
 
 
-async def test_money_movement_cannot_drop_its_approval(api: Api) -> None:
+async def test_an_operation_two_people_approve_cannot_drop_its_approval(api: Api) -> None:
     detail = await _ok(await api.call("GET", "/mod_payments_hub"))
-    money = next(o for o in detail["operations"] if o["access"] == "money_movement")
-    r = await api.call("PATCH", f"/mod_payments_hub/operations/{money['id']}", json={"requiresApproval": False})
+    two = next(o for o in detail["operations"] if o["approvers"] == 2)
+    r = await api.call("PATCH", f"/mod_payments_hub/operations/{two['id']}", json={"requiresApproval": False})
     assert r.status_code == 422
 
 

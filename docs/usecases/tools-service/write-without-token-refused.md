@@ -15,8 +15,8 @@ The script starts its own services on the scripted model; no model key is needed
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | `POST /v1/calls` for the write tool `request_document` with no approval token | 403; reasons are exactly "write needs an approval token" |
-| 2 | Repeat on another step with a token minted for that thread, step, tool and input | 200; tool output `completed` |
+| 1 | `POST /v1/calls` for the seeded write `update_address` (Core banking) with no approval token | 403; reasons are exactly "write needs an approval token" |
+| 2 | Repeat on another step with a token minted for that thread, step, tool and input | 200; the stub answers `updated: true` |
 
 ## Acceptance layers
 

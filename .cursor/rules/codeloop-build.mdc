@@ -13,7 +13,7 @@ Run `codeloop card show <id>` first; the card says which stage it is in. Gates a
 | interview | interview | {spec}/interview.md | `codeloop check questions {id} --min 3` |  |
 | mock | mock |  | `codeloop check mock {id}` |  |
 | spec | spec | {spec}/tasks.md | `codeloop spec check {id}` | spec (owner, after the check passes) |
-| build | api |  | `codeloop task check {id} --all-done && npm test` |  |
+| build | api |  | `codeloop task check {id} --all-done && scripts/verify-head.sh` |  |
 | verify | verify | evidence/{nnn}/verify.md | `codeloop verify {id}` | local (owner, after the check passes) |
 | review | review | evidence/{nnn}/review.md | `codeloop check file evidence/{nnn}/review.md --has 'verdict: approve'` | pr (reviewer, after the check passes) |
 | staging | release | evidence/{nnn}/staging.md | `codeloop check file evidence/{nnn}/staging.md --has 'result: pass'` |  |
@@ -58,7 +58,7 @@ Run `codeloop card show <id>` first; the card says which stage it is in. Gates a
 2. Run `codeloop wiki inject --files <files you expect to touch>` and read every page it prints.
 3. Do the work with the `api` skill (.claude/skills/api/SKILL.md).
 4. Keep the change inside what the card asks for.
-5. Run `codeloop card advance <id>`. It runs `codeloop task check {id} --all-done && npm test`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
+5. Run `codeloop card advance <id>`. It runs `codeloop task check {id} --all-done && scripts/verify-head.sh`. If it exits 2, read the output, fix the work and run it again. Stop after 3 failures: the card parks as stuck for the owner.
 
 ## verify
 

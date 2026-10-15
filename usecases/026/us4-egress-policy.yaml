@@ -1,9 +1,0 @@
-# US4: uc-012 steps 1 to 3: unlisted host refused, unlisted private address refused with nothing sent, listed range connects.
-# Own database and ports: ops_usecase is shared.
-id: us4-egress-policy
-accept: US4
-failure_mode: a host off the allow-list, or a private address behind an allowed name, is reached
-layers:
-  cli:
-    run: "make usecase-test UC=uc-012 LAYER=api OPS_USECASE_DB=ops_usecase_c026 OPS_USECASE_AGENTS_PORT=8970 OPS_USECASE_TOOLS_PORT=8971 OPS_USECASE_MODELS_PORT=8972 OPS_USECASE_CONSOLE_PORT=3170"
-    expect: { exit: 0, stdout: "uc-012 api  11 checks passed" }

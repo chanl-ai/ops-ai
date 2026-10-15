@@ -31,7 +31,7 @@ Status: current, updated 2026-10-11 against HEAD; every decision is an option un
 | Timer | A row with a due time for an SLA warn, breach or maximum wait. Fired only through `fire(thread, timer)` | `timers`, `ops_agents/api/timers.py` |
 | Process principal | A non-human identity owned by a team, used as `sub` for runs nobody started in person (a mailbox, a schedule) | Designed |
 | Delegation token | A short-lived token with `sub` (who the work is for) and `act` (who does it: the graph version) | Designed; today `runContext.sub` is asserted by the caller |
-| Side-effect class | `none`, `read`, `write` idempotent, `write` not idempotent, `money`. Sets retries and whether a token is needed | Access class in the tools registry: `read`, `write`, `money_movement` |
+| Side-effect class | `none`, `read`, `write` idempotent, `write` not idempotent, `money`. Sets retries and whether a token is needed | Access class in the tools registry: `read` or `write`; how many people approve a write is the operation's approval policy (`approvers` 1 or 2) |
 | Manual handling | Where a failed or stuck run lands for a person. No run ends silently | Reached by route-to-people (built-in `manual_handling` step); from retries and the recursion limit, designed |
 | Budget | Caps on a thread's model calls, tokens and cost. A spent budget pauses the thread for a person | `thread_budgets`; usage per call in `usage_records` |
 

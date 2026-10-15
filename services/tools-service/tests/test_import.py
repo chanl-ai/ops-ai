@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.store.modules import ModuleStore
 
@@ -21,7 +22,7 @@ async def _listed(api: Api) -> None:
     assert r.status_code in (200, 201), r.text
 
 
-async def test_discovery_maps_the_document_and_marks_everything_a_write(bank_api: Api) -> None:
+async def test_discovery_maps_the_document_and_presets_access_from_the_method(bank_api: Api) -> None:
     await _listed(bank_api)
     r = await bank_api.call("POST", "/discover", json=SOURCE)
     assert r.status_code == 200, r.text
@@ -29,7 +30,12 @@ async def test_discovery_maps_the_document_and_marks_everything_a_write(bank_api
     assert (found["system"], found["version"], found["endpoint"]) == ("Statements API", "2.3.0", ENDPOINT)
     ops = {o["name"]: o for o in found["operations"]}
     assert set(ops) == {"get_account", "place_hold", "get_statements"}
-    assert {o["access"] for o in ops.values()} == {"write"}, "a name that looks like a read proves nothing"
+    assert {n: o["access"] for n, o in ops.items()} == {
+        "get_account": "read",
+        "place_hold": "write",
+        "get_statements": "read",
+    }
+    assert found["noAuth"] is False, "the document declares an API key scheme"
     assert [f["name"] for f in ops["place_hold"]["input"]] == ["accountId", "hours", "reason"]
     assert ops["get_statements"]["input"][0] == {"name": "month", "type": "string", "required": True, "format": "date"}
     assert any("upload_file" in w for w in found["warnings"])
@@ -128,3 +134,60 @@ async def test_create_from_a_source_takes_the_document_not_the_caller(bank_api: 
     assert stored["operations"][0]["headers"] == [{"key": "X-Api-Key", "value": "{{STATEMENTS_KEY}}"}]
     r = await bank_api.call("POST", "", json={**body, "name": "other", "operations": [{**forged, "name": "wipe_all"}]})
     assert r.status_code == 400, "an operation the source does not describe is refused on create too"
+
+
+async def test_an_imported_write_answers_from_its_example_response(bank_api: Api, engine: AsyncEngine) -> None:
+    """Until the module is connected and published, a write tried from the console answers from the stub; the stub is
+    the document's example response, not a placeholder (c-048 T006)."""
+    await _listed(bank_api)
+    hold: dict[str, Any] = {
+        "name": "place_hold",
+        "description": "",
+        "access": "write",
+        "method": "POST",
+        "path": "/holds",
+        "group": "holds",
+        "input": [],
+    }
+    r = await bank_api.call(
+        "POST", "/mod_document_service/operations/import", json={"source": SOURCE, "operations": [hold]}
+    )
+    assert r.status_code == 200, r.text
+    m = await ModuleStore(engine).get(bank_api.tenant, "mod_document_service")
+    assert m is not None
+    stored = next(o for o in m["operations"] if o["name"] == "place_hold")
+    assert stored["stub"] == {"holdId": "HLD-900", "status": "placed"}
+
+
+async def test_a_module_is_created_from_its_source_without_a_connection_record(
+    bank_api: Api, engine: AsyncEngine
+) -> None:
+    """A module's endpoint and its secret headers are its connection (tool-lifecycle.md); the import dialog sends
+    none, and a named connection that does not exist is still refused (c-048 T006)."""
+    await _listed(bank_api)
+    op: dict[str, Any] = {
+        "name": "get_account",
+        "description": "",
+        "access": "read",
+        "method": "GET",
+        "path": "/accounts/{accountId}",
+        "group": "accounts",
+        "input": [],
+    }
+    body: dict[str, Any] = {
+        "name": "holds-api",
+        "displayName": "Holds API",
+        "system": "Holds API",
+        "type": "openapi",
+        "endpoint": ENDPOINT,
+        "operations": [op],
+        "source": SOURCE,
+        "uniqueName": True,
+    }
+    r = await bank_api.call("POST", "", json=body)
+    assert r.status_code == 201, r.text
+    stored = await ModuleStore(engine).get(bank_api.tenant, r.json()["data"]["id"])
+    assert stored is not None
+    assert (stored["connection_id"], stored["auth"]) == (None, {"kind": "none"})
+    gone = await bank_api.call("POST", "", json={**body, "connectionId": "int_nobody"})
+    assert gone.status_code == 400, gone.text

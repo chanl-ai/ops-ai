@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { useLookups } from '@/hooks/queries';
+import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useTeam } from '@/hooks/use-team';
 import { api } from '@/lib/api';
 import type { ConnectInput, ConnectionSetupPatch, DraftConnectInput, IntegrationFilters, IntegrationView } from '@/lib/types/integrations';
@@ -50,14 +50,14 @@ export const useRequestScopes = () => useIntegrationWrite(({ id, scopes, justifi
 export function useConnectFlow(open: boolean) {
   const catalog = useIntegrationCatalog(open);
   const { team, teams } = useTeam();
-  const lookups = useLookups();
+  const person = useCurrentPerson();
   const connect = useConnectIntegration();
   return {
     catalog: catalog.data ?? [],
     catalogState: catalog,
     teams: teams.map((t) => t.name),
     defaultTeam: team?.name ?? '',
-    currentUser: lookups.data?.currentUser.name ?? '',
+    currentUser: person.name,
     connecting: connect.isPending,
     connect: connect.mutateAsync,
   };

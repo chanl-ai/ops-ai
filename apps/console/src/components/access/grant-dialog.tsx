@@ -56,15 +56,12 @@ export function GrantDialog({
 
   const mod = options?.modules.find((m) => m.value === resource);
   const scope = kind === 'knowledge_base' ? 'read' : (mod?.access ?? 'read');
-  const money = scope === 'money_movement';
   const systems = [...new Set(options?.modules.map((m) => m.system) ?? [])];
 
   const submit = async () => {
     if (!workflowId) return setError({ field: 'workflow', message: 'Choose a workflow.' });
     if (!resource) return setError({ field: 'resource', message: `Choose a ${kind === 'module' ? 'module' : 'knowledge base'}.` });
     if (!expiry) return setError({ field: 'expiry', message: 'Choose when the access expires.' });
-    if (money && Number(expiry) > 180) return setError({ field: 'expiry', message: 'Money-movement access must expire within 180 days.' });
-    if (money && !reason.trim()) return setError({ field: 'reason', message: 'Give the approval reference, e.g. the model risk committee decision.' });
     try {
       await onSubmit({ workflowId, resourceKind: kind, resource, scope, expiresInDays: Number(expiry), reason });
       onOpenChange(false);
@@ -168,14 +165,14 @@ export function GrantDialog({
           </Select>
         </FormField>
 
-        <FormField id="grant-expiry" label="Expires" error={fieldError('expiry')} hint={money ? 'Money-movement access expires within 180 days and is renewed on re-approval.' : 'Every grant expires. Extend it before then if the workflow still needs it.'}>
+        <FormField id="grant-expiry" label="Expires" error={fieldError('expiry')} hint='Every grant expires. Extend it before then if the workflow still needs it.'>
           <Select value={expiry} onValueChange={(v) => (setExpiry(v), setError(null))}>
             <SelectTrigger id="grant-expiry" className="w-full" aria-invalid={!!fieldError('expiry')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {EXPIRY.map((e) => (
-                <SelectItem key={e.value} value={e.value} disabled={money && Number(e.value) > 180}>
+                <SelectItem key={e.value} value={e.value}>
                   {e.label}
                 </SelectItem>
               ))}
@@ -183,7 +180,7 @@ export function GrantDialog({
           </Select>
         </FormField>
 
-        <FormField id="grant-reason" label="Reason" optional={!money} error={fieldError('reason')}>
+        <FormField id="grant-reason" label="Reason" optional error={fieldError('reason')}>
           <Textarea id="grant-reason" value={reason} onChange={(e) => (setReason(e.target.value), setError(null))} placeholder="e.g. Approved by the model risk committee, decision MRC-000" rows={2} aria-invalid={!!fieldError('reason')} />
         </FormField>
       </div>

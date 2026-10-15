@@ -41,6 +41,7 @@ SEED = Path(__file__).parent / "fixtures" / "seed"
 ROOT = Path(__file__).parents[1]
 _WIRE = re.compile(r"\bW-\d+\b")
 _START_WORKFLOW = re.compile(r"Start workflow (\w+):(.*)", re.S)
+_CALL = re.compile(r"\bcall (\w+) (\{.*\})", re.S)
 _CHILD = re.compile(r"gth_\w+")
 
 
@@ -91,6 +92,10 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if (start := _START_WORKFLOW.search(text)) and f"workflow__{start.group(1)}" in tools:
         args = {"sender": "maria.lopez@example.com", "subject": "Disputed charge", "body": start.group(2).strip()}
         return ModelResponse(parts=[ToolCallPart(f"workflow__{start.group(1)}", args)])
+    # "call <tool> <json>" calls any tool the turn was granted with those arguments: how a use case drives a registry
+    # operation by name without a provider.
+    if (call := _CALL.search(text)) and call.group(1) in tools:
+        return ModelResponse(parts=[ToolCallPart(call.group(1), json.loads(call.group(2)))])
     if "CHQ-" in text and "lookup_account" in tools:
         return ModelResponse(parts=[ToolCallPart("lookup_account", {"query": "CHQ-2219"})])
     return ModelResponse(parts=[TextPart("I could not find that.")])
@@ -136,6 +141,13 @@ class FakeGraphModels:
         score = self.scores[min(self.graded, len(self.scores) - 1)]
         self.graded += 1
         return Grade(score=score, feedback="Fine.")
+
+
+@pytest.fixture(autouse=True)
+def _no_dev_egress_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dev .env maps a fake bank's name with OPS_EGRESS_RESOLVE, which Settings refuses outside dev; tests build their
+    own resolution and never read the stack's."""
+    monkeypatch.delenv("OPS_EGRESS_RESOLVE", raising=False)
 
 
 @pytest.fixture(scope="session")

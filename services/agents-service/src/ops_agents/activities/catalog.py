@@ -65,6 +65,8 @@ class ToolDefinition(_Model):
     view_title: str | None = None
     view_fields: list[tuple[str, str]] = []
     approval: ApprovalTemplate | None = None
+    # Distinct people who approve a call to this write (the registry's `approvers`; 2 also asks for a step-up).
+    approvers: int = 1
 
     def grant(self) -> ToolGrant:
         return ToolGrant(self.name, self.server, self.description, self.access, self.input_schema)
@@ -135,12 +137,12 @@ class Catalog(_Model):
         return [t.grant() for name in agent.tools if (t := self.tool(name))]
 
 
-def load_catalog(seed_dir: Path) -> Catalog:
+def load_catalog(seed_dir: Path, agents_file: Path | None = None) -> Catalog:
     def read(name: str) -> Any:
         return json.loads((seed_dir / name).read_text())
 
     return Catalog(
-        agents=read("chat_agents.json"),
+        agents=json.loads(agents_file.read_text()) if agents_file else read("chat_agents.json"),
         tools=read("tools.json"),
         datasets=read("datasets.json"),
         passages=read("passages.json"),

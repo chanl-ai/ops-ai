@@ -16,7 +16,6 @@ export function EmailConfigTab({
   queues,
   approverGroups,
   actionOptions,
-  moneyTools,
   onTestSample,
   testing,
 }: {
@@ -24,7 +23,6 @@ export function EmailConfigTab({
   queues: string[];
   approverGroups: string[];
   actionOptions: string[];
-  moneyTools: string[];
   onTestSample: (config: EmailWorkflowConfig, input: SampleMailInput) => Promise<SampleMailResult>;
   testing: boolean;
 }) {
@@ -32,6 +30,6 @@ export function EmailConfigTab({
   if (!config) return null;
   if (tab === 'intents') return <IntentsTab config={config} onChange={setConfig} actionOptions={actionOptions} />;
   if (tab === 'routing') return <RoutingTab config={config} onChange={setConfig} queues={queues} />;
-  if (tab === 'approvals') return <ApprovalsTab config={config} onChange={setConfig} actionOptions={actionOptions} moneyTools={moneyTools} approverGroups={approverGroups} />;
+  if (tab === 'approvals') return <ApprovalsTab config={config} onChange={setConfig} actionOptions={actionOptions} approverGroups={approverGroups} />;
   return <SampleMailTester onRun={(input) => onTestSample(config, input)} isPending={testing} />;
 }

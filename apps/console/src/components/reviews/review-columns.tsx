@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
+import { Badge } from '@/components/ui/badge';
 import { ConfidenceBar, KIND_LABEL, ReviewStatusBadge, RiskBadge, SlaText } from '@/components/status-badges';
 import { selectColumn } from '@/components/shared/select-column';
 import { facetFilterFn } from '@/hooks/use-list-params';
@@ -22,9 +23,17 @@ export const reviewColumns: ColumnDef<ReviewRow>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Request" />,
     cell: ({ row }) => (
       <div className="min-w-60">
-        <div className="font-medium">{row.original.title}</div>
+        <div className="flex items-center gap-2 font-medium">
+          {row.original.title}
+          {row.original.origin?.kind === 'chat' && (
+            <Badge variant="outline" className="font-normal" data-testid="review-from-chat">
+              From chat
+            </Badge>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground">
-          <span className="font-mono">{row.original.id}</span> · {row.original.customer}
+          <span className="font-mono">{row.original.id}</span>
+          {row.original.customer && ` · ${row.original.customer}`}
         </div>
       </div>
     ),
@@ -33,7 +42,10 @@ export const reviewColumns: ColumnDef<ReviewRow>[] = [
   {
     accessorKey: 'workflowId',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow" />,
-    cell: ({ row }) => <span className="text-muted-foreground">{row.original.workflowName}</span>,
+    cell: ({ row }) => {
+      const o = row.original.origin;
+      return <span className="text-muted-foreground">{o?.kind === 'chat' ? `Chat with ${o.agentName}` : row.original.workflowName}</span>;
+    },
     filterFn: facetFilterFn,
     enableSorting: false,
   },

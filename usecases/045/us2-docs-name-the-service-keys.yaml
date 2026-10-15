@@ -1,8 +1,0 @@
-# US2: the runbook and the identity doc name the Ed25519 service keys and never ask for OPS_SERVICE_TOKEN.
-id: us2-docs-name-the-service-keys
-accept: US2
-failure_mode: the runbook keeps telling operators to set and rotate a secret nothing reads
-layers:
-  cli:
-    run: "grep -q OPS_SERVICE_SIGNING_KEY docs/architecture/operations.md && ! grep -q 'Service token (`OPS_SERVICE_TOKEN`)' docs/architecture/operations.md && ! grep -q 'OPS_SERVICE_TOKEN` is still a setting' docs/architecture/identity-and-tenancy.md"
-    expect: { exit: 0 }

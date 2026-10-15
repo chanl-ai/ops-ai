@@ -153,7 +153,7 @@ export const CATALOG: CatalogSeed[] = [
       sc('accounts.read', 'Read accounts', 'Accounts', 'read', 'Reads balances, rates and payment schedules of deposit and loan accounts.'),
       sc('customers.read', 'Read customer profiles', 'Customers', 'read', 'Reads names, contact details and products held. SIN and date of birth stay masked.'),
       sc('servicing.write', 'Servicing changes', 'Accounts', 'write', 'Changes addresses, payment dates and alert settings.'),
-      sc('transfers.write', 'Internal transfers', 'Money movement', 'write', 'Moves money between a customer’s own accounts. Every call still needs a person’s approval.'),
+      sc('transfers.write', 'Internal transfers', 'Transfers', 'write', 'Moves funds between a customer’s own accounts. Every call still needs a person’s approval.'),
     ],
   },
   {

@@ -16,6 +16,7 @@ from pydantic import Field
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.types import TurnRequest, TurnResult
+from ops_agents.activities.tool_directory import ToolsUnavailable, grants_for
 from ops_contracts.chat import WireModel
 from ops_service_kit.errors import ApiError, Conflict, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.ids import new_id
@@ -95,19 +96,44 @@ class TestInput(WireModel):
 SORTS = {"name", "updatedAt", "tasks24h", "version", "owner", "availability"}
 
 
-async def _view(rt: Runtime, agent_id: str, tasks: dict[str, int] | None = None) -> dict[str, Any]:
+async def _offered(rt: Runtime) -> set[str] | None:
+    """The tool ids the directory offers now; None when tools-service cannot answer."""
+    try:
+        return {t["id"] for t in await known_tools(rt)}
+    except ToolsUnavailable:
+        return None
+
+
+def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
+    """Granted ids the directory no longer offers (unpublished, hidden, drifted or deleted). `workflow:` grants are
+    judged by the workflow runner. Unknown when tools-service cannot answer: an agent page should not fail on it, so
+    nothing is reported stale then."""
+    if offered is None:
+        return []
+    return [t for t in tool_ids if not t.startswith("workflow:") and t not in offered]
+
+
+async def _view(
+    rt: Runtime, agent_id: str, tasks: dict[str, int] | None = None, offered: set[str] | None = None
+) -> dict[str, Any]:
     reg = registry(rt)
     row = await reg.row(agent_id)
     spec = (await reg.version(agent_id, int(row["version"])))["spec"]
     counts = tasks if tasks is not None else await tasks_24h(rt)
-    return agent_view(row, spec, counts.get(agent_id, 0))
+    view = agent_view(row, spec, counts.get(agent_id, 0))
+    view["staleToolIds"] = _stale(view["toolIds"], offered if offered is not None else await _offered(rt))
+    return view
 
 
-def _check_tools(rt: Runtime, tool_ids: list[str]) -> None:
-    known = {t["id"] for t in known_tools(rt)}
-    unknown = [t for t in tool_ids if t not in known]
+async def _checked_tools(rt: Runtime, tool_ids: list[str], granted: list[str]) -> list[str]:
+    """The grants to save: a newly added id the directory does not offer is refused; one already granted that is no
+    longer offered (stale) is dropped, so a stale grant never blocks saving the rest (c-048 T010)."""
+    known = {t["id"] for t in await known_tools(rt)}
+    offered = [t for t in tool_ids if t.startswith("workflow:") or t in known]
+    unknown = [t for t in tool_ids if t not in offered and t not in granted]
     if unknown:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
+    return offered
 
 
 async def require_known_alias(rt: Runtime, alias: str) -> None:
@@ -136,7 +162,8 @@ async def list_agents(
 ) -> JSONResponse:
     reg = registry(rt)
     tasks = await tasks_24h(rt)
-    rows = [await _view(rt, r["id"], tasks) for r in await reg.rows()]
+    offered = await _offered(rt)
+    rows = [await _view(rt, r["id"], tasks, offered) for r in await reg.rows()]
     if search:
         s = search.lower()
         rows = [a for a in rows if s in a["name"].lower() or s in a["role"].lower() or s in a["slug"]]
@@ -185,7 +212,7 @@ async def update_agent(rt: Rt, me: Me, agent_id: str, body: AgentPatch) -> JSONR
     spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
     patch = body.model_dump(exclude_none=True, exclude={"note", "guardrails"}, by_alias=True)
     if body.tool_ids is not None:
-        _check_tools(rt, body.tool_ids)
+        patch["toolIds"] = await _checked_tools(rt, body.tool_ids, list(spec.get("toolIds") or []))
     spec.update(patch)
     if body.guardrails is not None:
         spec["guardrails"] = body.guardrails.model_dump(by_alias=True)
@@ -312,7 +339,7 @@ async def test_agent(rt: Rt, agent_id: str, body: TestInput) -> JSONResponse:
         turn_id=new_id("turn"),
         run_id=new_id("run"),
         settings=rt.catalog.settings_for(defn, rt.settings.model_alias),
-        tools=rt.catalog.grants_for(defn),
+        tools=await grants_for(rt.directory(), list(defn.tools)),
         transcript=[],
         user_turn=body.message,
         kb_ids=defn.default_kb_ids,

@@ -29,7 +29,7 @@ delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
 | Tool write | Delegation token, approval token, lease generation | OPA: token signed by the review service, `inputHash`, `tool`, `thread`, `step` match, not expired, two distinct approvers for money; tools-service: fence, dedupe |
 | Model call | The identity's model key | models-service (planned); today a key-admission port admits every key and a thread budget pauses the thread ([human-in-the-loop.md](human-in-the-loop.md)) |
 
-The access class (`read`, `write`, `money_movement`) comes from the gateway's own registry; the caller never declares
+The access class (`read` or `write`) comes from the gateway's own registry; the caller never declares
 it. A refusal lists every failed condition and reaches the model as a tool error, so the turn continues. Nine refusal
 reasons are tested ([gateway-approval-token](../services/agents-service/experiments/gateway-approval-token.md)).
 

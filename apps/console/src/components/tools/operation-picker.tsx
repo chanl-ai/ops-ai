@@ -13,7 +13,6 @@ import type { DiscoveredOperation } from '@/lib/types/tool-modules';
 const ACCESS_OPTIONS: { value: ToolAccess; label: string }[] = [
   { value: 'read', label: 'Read' },
   { value: 'write', label: 'Write' },
-  { value: 'money_movement', label: 'Moves money' },
 ];
 
 /**

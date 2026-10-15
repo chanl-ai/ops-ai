@@ -1,9 +1,0 @@
-# US3: uc-040 api and ui: approval publishes the module and the page shows it approved; a change request sends a new module to draft with the reason.
-# The runner gives each run its own database and ports.
-id: us3-module-page-state
-accept: US3
-failure_mode: the module page shows the old state after a decision
-layers:
-  cli:
-    run: "make usecase-test UC=uc-040 LAYER=api"
-    expect: { exit: 0, stdout: "uc-040 api  7 checks passed" }

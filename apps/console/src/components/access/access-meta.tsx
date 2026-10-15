@@ -5,13 +5,13 @@ import { relativeTime, shortDate } from '@/lib/format';
 import type { Capability, GrantScope, GrantStatus } from '@/lib/types/governance';
 import { cn } from '@/lib/utils';
 
-export const SCOPE_LABEL: Record<GrantScope, string> = { read: 'Read', write: 'Write', money_movement: 'Moves money' };
+export const SCOPE_LABEL: Record<GrantScope, string> = { read: 'Read', write: 'Write' };
 export const GRANT_STATUS_LABEL: Record<GrantStatus, string> = { active: 'Active', expiring: 'Expiring soon', expired: 'Expired' };
 export const CAPABILITY_LABEL: Record<Capability, string> = { author: 'Author', approve: 'Approve', publish: 'Publish' };
 export const RESOURCE_KIND_LABEL = { module: 'System module', knowledge_base: 'Knowledge base' } as const;
 
 export function ScopeBadge({ scope }: { scope: GrantScope }) {
-  const tone = scope === 'money_movement' ? 'border-destructive/40 bg-destructive/10 text-destructive' : scope === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
+  const tone = scope === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
   return (
     <Badge variant="outline" className={cn('font-normal', tone)}>
       {SCOPE_LABEL[scope]}

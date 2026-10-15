@@ -16,7 +16,8 @@ const defaultTeam = readFileSync(new URL('../team-context.ts', root), 'utf8').ma
 const teamList = new Function(`return ${teamsTs.match(/const teams: Team\[\] = (\[[\s\S]*?\n\]);/)[1].replaceAll('DEFAULT_TEAM_ID', JSON.stringify(defaultTeam))}`)();
 
 const toolNames = new Set(s.MODULE_SEEDS.flatMap((m) => m.operations.map((o) => o.name)));
-const tools = F.TOOLS.filter((t) => toolNames.has(t.name)).map(({ name, description, access, enabled }) => ({ name, description, access, enabled }));
+// `approvers` (2 for writes two people approve) is the registry's write approval policy; absent means one.
+const tools = F.TOOLS.filter((t) => toolNames.has(t.name)).map(({ name, description, access, enabled, approvers }) => ({ name, description, access, enabled, ...(approvers ? { approvers } : {}) }));
 const kindOf = Object.fromEntries(I.CATALOG.map((c) => [c.id, c.kind]));
 const wanted = new Set(Object.values(I.MODULE_CONNECTION));
 const connections = I.CONNECTIONS.map((c) => ({ id: c.id, name: c.name, kind: kindOf[c.catalogId], base: c.base, expiresIn: c.expiresIn ?? null, authMethod: c.authMethod, catalogId: c.catalogId, inModules: wanted.has(c.id) }));

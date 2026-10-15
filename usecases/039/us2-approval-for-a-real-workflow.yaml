@@ -1,8 +1,0 @@
-# US2: uc-041 api, agents-service and tools-service together on the run's own database and ports.
-id: us2-approval-for-a-real-workflow
-accept: US2
-failure_mode: a real workflow is refused, the requester decides their own approval, or an unknown team falls to the all-scope team
-layers:
-  cli:
-    run: "make usecase-test UC=uc-041 LAYER=api"
-    expect: { exit: 0, stdout: "uc-041 api  8 checks passed" }

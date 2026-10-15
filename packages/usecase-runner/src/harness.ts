@@ -112,7 +112,11 @@ export interface StackOptions {
    * and point the console's Tools pages at it. `bank` adds the https fake bank on this machine's private address
    * (docs/usecases/lib/fake_bank_https.py), which tools-service reaches as `https://api.bank.test`.
    */
-  tools?: { bank?: boolean };
+  tools?: {
+    bank?: boolean;
+    /** Point the agents service at this tools-service as its gateway, so agents are granted and call its operations. */
+    gateway?: boolean;
+  };
 }
 
 /** What the stack started, for a use case to drive: the fake bank's host and the private range it serves on. */
@@ -177,7 +181,11 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
   const agents = await serve(
     'agents',
     AGENTS_PORT,
-    ['uv', 'run', 'python', 'scripts/scripted_server.py', '--port', String(AGENTS_PORT), '--db', DB, '--cors', consoleUrl],
+    [
+      'uv', 'run', 'python', 'scripts/scripted_server.py', '--port', String(AGENTS_PORT), '--db', DB, '--cors', consoleUrl,
+      // Agents take their tools from tools-service's registry; tools-service starts below, and is asked on first use.
+      ...(options.tools?.gateway ? ['--gateway-url', `http://127.0.0.1:${TOOLS_PORT}`] : []),
+    ],
     join(ROOT, 'services/agents-service'),
     // Under platform sign-in the agents service verifies the console's tokens against platform-service (started
     // below on known ports; its key set is read on first use), so dev headers no longer work there.
@@ -212,6 +220,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         OPS_GATEWAY_PORT: String(TOOLS_PORT),
         OPS_OPA_URL: opa.url,
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
+        // Workflow approvals name agents-service's workflows (c-039); without this tools-service would ask the dev port.
+        OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
         ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
         ...bankSettings,

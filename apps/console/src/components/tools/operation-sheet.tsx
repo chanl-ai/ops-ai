@@ -68,14 +68,16 @@ export function OperationSheet({
   }, [op, endpoint]);
   if (!op || !d) return <DetailSheet open={false} onOpenChange={onOpenChange} title="">{null}</DetailSheet>;
 
-  const money = op.access === 'money_movement';
+  const write = op.access === 'write';
+  // Two approvers means a person approves every call, so the switch cannot turn per-call approval off.
+  const twoApprovers = write && op.approvers === 2;
   const patch: OperationPatch = {};
   if (d.description.trim() !== op.description) patch.description = d.description;
   const nextBinding = d.bound ? d.binding : null;
   if (JSON.stringify(nextBinding) !== JSON.stringify(op.binding)) patch.binding = nextBinding;
   if (Number(d.rate) !== op.rateLimitPerMin) patch.rateLimitPerMin = Number(d.rate);
   if (d.requiresApproval !== op.requiresApproval) patch.requiresApproval = d.requiresApproval;
-  if (money && Number(d.amountMax) !== (op.amountMax ?? 0)) patch.amountMax = Number(d.amountMax);
+  if (write && d.amountMax.trim() && Number(d.amountMax) !== (op.amountMax ?? 0)) patch.amountMax = Number(d.amountMax);
   // The HTTP call: staged like every other edit, and calls keep the published call until the next publish.
   const http = op.executor === 'http';
   const base = baseOf(endpoint);
@@ -96,7 +98,7 @@ export function OperationSheet({
   const unused = http ? unusedInputs(op, d.http) : [];
   const dirty = Object.keys(patch).length > 0;
   const rateError = !/^\d+$/.test(d.rate) || Number(d.rate) < 1 ? 'Enter a whole number of calls.' : undefined;
-  const amountError = money && !(Number(d.amountMax) > 0) ? 'Enter an amount above zero.' : undefined;
+  const amountError = write && d.amountMax.trim() && !(Number(d.amountMax) > 0) ? 'Enter an amount above zero, or leave it blank for no limit.' : undefined;
   const set = (p: Partial<Draft>) => setD({ ...d, ...p });
   const setBinding = (p: Partial<SubjectBinding>) => setD({ ...d, binding: { ...d.binding, ...p } });
 
@@ -261,8 +263,8 @@ export function OperationSheet({
             <FormField id="op-rate" label="Rate limit" hint="Calls a minute for this operation, across every caller." error={rateError}>
               <Input id="op-rate" inputMode="numeric" value={d.rate} onChange={(e) => set({ rate: e.target.value })} aria-invalid={!!rateError} />
             </FormField>
-            {money && (
-              <FormField id="op-amount" label="Amount limit" hint="CAD per call. Raising it is a major version." error={amountError}>
+            {write && (
+              <FormField id="op-amount" label="Amount limit" optional hint="CAD per call, for a write that carries an amount. Raising it is a major version." error={amountError}>
                 <Input id="op-amount" inputMode="decimal" value={d.amountMax} onChange={(e) => set({ amountMax: e.target.value })} aria-invalid={!!amountError} />
               </FormField>
             )}
@@ -272,10 +274,10 @@ export function OperationSheet({
               <div>
                 <p className="text-sm font-medium">Every call waits for an approval</p>
                 <p className="text-xs text-muted-foreground">
-                  {money ? 'Money movement always needs a person, and the approver must differ from whoever drafted the action.' : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
+                  {twoApprovers ? 'Two different people approve every call, as the operation’s approval policy requires.' : 'Off: only a gate policy’s approval token lets the call run. Turning it off is a major version.'}
                 </p>
               </div>
-              <Switch checked={d.requiresApproval} disabled={money} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
+              <Switch checked={d.requiresApproval} disabled={twoApprovers} onCheckedChange={(v) => set({ requiresApproval: v })} aria-label="Every call waits for an approval" />
             </div>
           )}
         </Section>

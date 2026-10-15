@@ -1,9 +1,0 @@
-# US2: uc-028 checks 1 to 4 and 8: the turn runs on the agent's alias through models-service, and the run's record and
-# models-service's call log agree on alias, request hash and tokens. Own database and ports: ops_usecase is shared.
-id: us2-an-agent-runs-on-its-alias
-accept: US2
-failure_mode: a turn runs on the runtime's alias, or the record and the call log name different calls
-layers:
-  cli:
-    run: "make usecase-test UC=uc-028 LAYER=api OPS_USECASE_DB=ops_usecase_c009 OPS_USECASE_AGENTS_PORT=8890 OPS_USECASE_TOOLS_PORT=8891 OPS_USECASE_MODELS_PORT=8892 OPS_USECASE_CONSOLE_PORT=3118"
-    expect: { exit: 0, stdout: "uc-028 api  8 checks passed" }

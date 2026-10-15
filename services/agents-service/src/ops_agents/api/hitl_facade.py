@@ -30,7 +30,7 @@ from .auth import require_step_up
 from .deps import Runtime
 from .runs import config, execute, graph_store, pending, resolve
 from .timers import sla_view
-from .tool_access import access_of
+from .tool_access import WritePolicy, policy_of
 
 # Chat agents run on threads too; only workflows are runs on the Cases page.
 log = get_logger("ops_agents.api.hitl_facade")
@@ -38,8 +38,8 @@ CASE_GRAPHS_EXCLUDED = {"agent_wrapper"}
 
 
 def is_chat_graph(graph: str) -> bool:
-    """Agent graphs: the shared wrapper and the per-agent `agent:<id>` graphs a publish registers. Their approvals are
-    decided in the conversation, so neither Cases nor the Reviews list shows them."""
+    """Agent graphs: the shared wrapper and the per-agent `agent:<id>` graphs a publish registers. Cases never shows
+    them; Reviews lists a chat's write approvals (c-048 T013), decided there or in the conversation."""
     return graph in CASE_GRAPHS_EXCLUDED or graph.startswith("agent:")
 
 
@@ -130,18 +130,36 @@ def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
 CHAT_GRAPH = "agent_wrapper"
 
 
-def is_own_request(rt: Runtime, row: dict[str, Any], approver: str, payload: dict[str, Any]) -> bool:
-    """True when `approver` asked for the paused step and policy forbids deciding your own. A chat thread's asker may
-    decide while `allow_self_approval_in_chat` is on (an owner decision pending); a workflow's requester never can."""
+def require_approver_team(policy: WritePolicy, approver_teams: list[str] | None, tool: str) -> None:
+    """Refuses an approver outside the operation's approving team; `approver_teams` None (dev) approves for any."""
+    if approver_teams is not None and policy.approver_team and policy.approver_team not in approver_teams:
+        raise Forbidden(f"Only someone on {policy.approver_team} approves {tool}.")
+
+
+def _is_chat(row: dict[str, Any]) -> bool:
+    """A chat thread (POST /chat/threads): its id is the conversation's, and its meta names the agent."""
+    meta: dict[str, Any] = row.get("meta") or {}
+    return bool(meta.get("chat"))
+
+
+async def is_own_request(rt: Runtime, row: dict[str, Any], approver: str, payload: dict[str, Any]) -> bool:
+    """True when `approver` asked for the paused step and policy forbids deciding your own. Outside dev nobody decides
+    their own. In dev a chat thread's asker may, when the operation's policy allows it (`selfApproval`) or
+    `allow_self_approval_in_chat` is on; a workflow's requester never can."""
     if approver != requester_of(row, payload):
         return False
-    return not (row["graph"] == CHAT_GRAPH and rt.settings.allow_self_approval_in_chat)
-
-
-async def _moves_money(rt: Runtime, payload: dict[str, Any]) -> bool:
+    if row["graph"] != CHAT_GRAPH or rt.settings.environment != "dev":
+        return True
+    if rt.settings.allow_self_approval_in_chat:
+        return False
     tool = _get(payload.get("call"), "tool")
-    access = await access_of(rt, str(tool)) if tool else ""
-    return bool(payload.get("moves_money")) or access == "money_movement"
+    return not (tool and (await policy_of(rt, str(tool))).self_approval)
+
+
+async def _needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
+    """Approving needs a step-up when the operation is approved by two people."""
+    tool = _get(payload.get("call"), "tool")
+    return bool(payload.get("step_up")) or bool(tool and (await policy_of(rt, str(tool))).approvers > 1)
 
 
 async def run_row(
@@ -359,10 +377,23 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
     """A paused review step as a console `Review`; `status` is pending until a decision is recorded."""
     payload: dict[str, Any] = interrupt["payload"]
     call: dict[str, Any] = payload.get("call") or {}
-    access = await access_of(rt, call["tool"]) if call.get("tool") else "unknown"
+    policy = await policy_of(rt, call["tool"]) if call.get("tool") else None
+    access = policy.access if policy else "unknown"
+    two = bool(policy and policy.approvers > 1)
     due = _sla_due(await sla_view(rt, row["id"]))
-    title = f"Send reply to {payload['to']}" if payload.get("to") else f"Review {_title(row['graph'])}"
+    chat = _is_chat(row)
+    agent_name = str(row["meta"].get("agentName") or row["meta"].get("agentId") or "")
+    if chat and call.get("tool"):
+        title = f"Run {call['tool']} for {agent_name}"
+    elif payload.get("to"):
+        title = f"Send reply to {payload['to']}"
+    else:
+        title = f"Review {_title(row['graph'])}"
+    origin: dict[str, Any] = (
+        {"kind": "chat", "threadId": row["id"], "agentName": agent_name} if chat else {"kind": "workflow"}
+    )
     return {
+        "origin": origin,
         "id": row["id"],
         "title": title,
         "customer": payload.get("to") or "",
@@ -370,7 +401,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
         "workflowName": row["meta"].get("workflowName") or _title(row["graph"]),
         "agentSlug": row["graph"],
         "kind": "approval",
-        "risk": "high" if access == "money_movement" else "medium" if access == "write" else "low",
+        "risk": "high" if two else "medium" if access == "write" else "low",
         "confidence": float(payload.get("score") or 0),
         "proposal": str(payload.get("draft") or ""),
         "actionTool": call.get("tool") or "",
@@ -382,7 +413,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
             "reviewers": "Reviewers",
             "sla": "Per workflow",
             "onTimeout": "Per workflow",
-            "fourEyes": access == "money_movement",
+            "fourEyes": two,
         },
         "slaMinutes": _minutes_until(due, now) or 0,
         "approvals": await _approvers(rt, row["id"], call["step"]) if call.get("step") else [],
@@ -390,7 +421,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
         "createdAt": row["updated_at"],
         "reasoning": _reasoning(payload),
         "evidence": [{"kind": "tool", "label": call["tool"], "detail": str(call.get("input") or {})}] if call else [],
-        "movesMoney": await _moves_money(rt, payload),
+        "stepUp": await _needs_step_up(rt, payload),
     }
 
 
@@ -405,6 +436,8 @@ def _reasoning(payload: dict[str, Any]) -> list[str]:
 
 def _decided(d: dict[str, Any]) -> dict[str, Any]:
     review: dict[str, Any] = dict(d["review"])
+    # A decision recorded before reviews named their origin was a workflow's: chat approvals were not listed then.
+    review.setdefault("origin", {"kind": "workflow"})
     return review | {"status": d["decision"], "decidedAt": d["decided_at"], "decisionReason": d["reason"]}
 
 
@@ -413,7 +446,9 @@ async def all_reviews(rt: Runtime) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     decisions = await _decisions(rt)
     for row in await graph_store(rt).threads(None):
-        if is_chat_graph(row["graph"]):
+        # A chat's write approval is listed, so a second approver need not be sent a chat link; other agent graph
+        # threads take no review here yet.
+        if is_chat_graph(row["graph"]) and not _is_chat(row):
             continue
         try:
             _, graph = await resolve(rt, row["id"])
@@ -500,8 +535,10 @@ async def decide(
     decision: str,
     reason: str | None,
     step_up_token: str | None,
+    approver_teams: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Records the decision, then resumes the thread with it. See the module docstring for the retry contract. A
+    """`approver_teams` are the deciding person's teams; None (dev) decides from any team. Records the decision, then
+    resumes the thread with it. See the module docstring for the retry contract. A
     publish request's id is decided under the publish rules instead (publish_reviews.decide)."""
     if publish_reviews.is_request_id(thread_id):
         return await publish_reviews.decide(rt, approver, thread_id, decision=decision, reason=reason)
@@ -527,9 +564,11 @@ async def decide(
 
     interrupt = waiting[0]
     payload: dict[str, Any] = interrupt["payload"]
-    if is_own_request(rt, row, approver, payload):
+    if await is_own_request(rt, row, approver, payload):
         raise Forbidden("You asked for this, so someone else has to decide it.")
-    if decision == "approved" and await _moves_money(rt, payload):
+    if decision == "approved" and (tool := _get(payload.get("call"), "tool")):
+        require_approver_team(await policy_of(rt, str(tool)), approver_teams, str(tool))
+    if decision == "approved" and await _needs_step_up(rt, payload):
         require_step_up(rt, approver, step_up_token)
     resume: dict[str, Any] = {"decision": decision}
     if reason:
@@ -537,7 +576,7 @@ async def decide(
     if step_up_token:
         resume["step_up_token"] = step_up_token
     if decision == "approved" and rt.gateway and payload.get("call"):
-        approval = await record_approval(rt, approver, thread_id, step_up_token)
+        approval = await record_approval(rt, approver, thread_id, step_up_token, approver_teams=approver_teams)
         if approval["approvalToken"] is None:
             return await get_review(rt, thread_id) | {"status": "in_review", "approvals": approval["approvers"]}
         resume["approval_token"] = approval["approvalToken"]

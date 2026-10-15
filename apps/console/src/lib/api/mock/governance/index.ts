@@ -69,7 +69,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
     return rest;
   };
   const scopedRoles = () => (teamDirectory.current().scope === 'all' ? roles : roles.filter((r) => r.teamId === teamDirectory.current().id));
-  const scopeLabel = (s: string) => (s === 'money_movement' ? 'Moves money' : s[0].toUpperCase() + s.slice(1));
+  const scopeLabel = (s: string) => s[0].toUpperCase() + s.slice(1);
 
   const governance: GovernanceApi = {
     toolCalls: {
@@ -136,7 +136,6 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
               status: 'active' as const,
               grants: mine.length,
               expiringSoon: mine.filter((g) => g.status === 'expiring').length,
-              moneyMovement: mine.some((g) => g.scope === 'money_movement'),
               lastUsedAt: calls.find((c) => c.workflowId === w.id)?.at,
             };
           });
@@ -147,7 +146,6 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
               identities: m === 'empty' ? 0 : rows.length,
               activeGrants: src.length,
               expiringSoon: src.filter((g) => g.status === 'expiring').length,
-              moneyMovementGrants: src.filter((g) => g.scope === 'money_movement').length,
             },
           };
         }),
@@ -169,8 +167,6 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
           if (!known) throw new ApiError('Pick a module or knowledge base from the list.', 400);
           if (input.resourceKind === 'knowledge_base' && input.scope !== 'read') throw new ApiError('Knowledge bases are granted read access only.', 400);
           if (!Number.isInteger(input.expiresInDays) || input.expiresInDays < 1 || input.expiresInDays > 365) throw new ApiError('Choose when the access expires, at most 365 days from now.', 400);
-          if (input.scope === 'money_movement' && input.expiresInDays > 180) throw new ApiError('Money-movement grants must expire within 180 days.', 400);
-          if (input.scope === 'money_movement' && !input.reason.trim()) throw new ApiError('Give the approval reference for money-movement access.', 400);
           if (grants.some((g) => g.workflowId === w.id && g.resource === input.resource && statusOf(g) !== 'expired')) throw new ApiError(`${w.name} already has access to ${input.resource}.`, 409);
           const g: Owned<AccessGrant> = {
             id: id('gr'),
@@ -206,7 +202,6 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
           bulk(ids, (gid) => {
             const g = grants.find((x) => x.id === gid);
             if (!g) return 'Not found';
-            if (g.scope === 'money_movement' && days > 180) return 'Money movement is capped at 180 days';
             const before = g.expiresAt;
             const wasExpired = statusOf(g) === 'expired';
             g.expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();

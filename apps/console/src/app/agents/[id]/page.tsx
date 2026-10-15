@@ -406,6 +406,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
         tools={tools.data ?? []}
         loading={tools.isPending}
         granted={draft.toolIds}
+        stale={agent.staleToolIds}
         isPending={false}
         onSubmit={async (toolIds) => set('toolIds', toolIds)}
       />

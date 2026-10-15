@@ -194,7 +194,7 @@ function Inspector({
   const kind = resolveKind(selected);
   const options: Record<OptionSource, { value: string; label: string }[]> = {
     agents: agents.map((a) => ({ value: a.slug, label: a.name })),
-    tools: toolOptions.map((t) => ({ value: t.name, label: t.access === 'money_movement' ? `${t.name} · moves money` : t.name })),
+    tools: toolOptions.map((t) => ({ value: t.name, label: t.name })),
     collections: lookupOptions.collections.map((c) => ({ value: c, label: c })),
     workflows: lookupOptions.workflows.filter((w) => w.id !== workflow.id).map((w) => ({ value: w.name, label: w.name })),
     owners: lookupOptions.owners.map((o) => ({ value: o, label: o })),
@@ -334,8 +334,6 @@ export interface WorkflowEditorProps {
   workflow: WorkflowDetail;
   reviewerGroups: string[];
   slaOptions: string[];
-  /** Names of tools that move money; publishing warns when one is reachable without a review gate. */
-  moneyTools: string[];
   agents: { slug: string; name: string }[];
   toolOptions: { name: string; access: string }[];
   lookupOptions: LookupOptions;
@@ -360,7 +358,7 @@ export interface WorkflowEditorProps {
 /** What autosave compares, so an unchanged graph is never re-sent. */
 const snapshot = (g: Pick<WorkflowGraph, 'nodes' | 'edges' | 'emailConfig'>) => JSON.stringify({ nodes: g.nodes, edges: g.edges, emailConfig: g.emailConfig });
 
-function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents, toolOptions, lookupOptions, routeFields, onValidate, onTestRun, onRequestPublish, isRequesting, onSaveDraft, tabs, extraActions, showCanvas, children }: WorkflowEditorProps) {
+function EditorInner({ workflow, reviewerGroups, slaOptions, agents, toolOptions, lookupOptions, routeFields, onValidate, onTestRun, onRequestPublish, isRequesting, onSaveDraft, tabs, extraActions, showCanvas, children }: WorkflowEditorProps) {
   // Open on the saved draft when there is one, so edits survive leaving the page.
   const start = workflow.draft?.graph ?? workflow.graph;
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(start.nodes as FlowNode[]);
@@ -407,8 +405,8 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, moneyTools, agents,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setSidebarOpen, showCanvas]);
   const issues = React.useMemo(
-    () => graphIssues({ nodes: nodes as WorkflowGraph['nodes'], edges: edges as WorkflowGraph['edges'] }, { agentSlugs: agents.map((a) => a.slug), toolNames: toolOptions.map((t) => t.name), moneyTools }),
-    [nodes, edges, agents, toolOptions, moneyTools],
+    () => graphIssues({ nodes: nodes as WorkflowGraph['nodes'], edges: edges as WorkflowGraph['edges'] }, { agentSlugs: agents.map((a) => a.slug), toolNames: toolOptions.map((t) => t.name) }),
+    [nodes, edges, agents, toolOptions],
   );
   const counter = React.useRef(0);
 

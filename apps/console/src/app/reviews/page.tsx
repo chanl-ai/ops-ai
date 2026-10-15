@@ -28,7 +28,7 @@ import { useAssignReviews, useBulkDecideReviews, useDecideReview, useLookups, us
 import { useSticky } from '@/hooks/use-sticky';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
-import { useSession } from '@/hooks/auth-queries';
+import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useRunAsPrincipals } from '@/hooks/run-as-queries';
 import type { ConditionInput } from '@/lib/types/model-risk';
 import { pct } from '@/lib/format';
@@ -47,8 +47,7 @@ export default function ReviewsPage() {
   const { data: lookups } = useLookups();
   // Who is deciding: the signed-in person, by name and by email (platform-recorded requests carry the email), so the
   // requester of a publish is blocked from approving it.
-  const { session } = useSession();
-  const me = [session?.user.name, session?.user.email, session ? undefined : lookups?.currentUser.name].filter((x): x is string => !!x);
+  const me = useCurrentPerson().ids;
   const { team } = useTeam();
   const decide = useDecideReview();
   const assign = useAssignReviews();
@@ -86,7 +85,7 @@ export default function ReviewsPage() {
     [rows],
   );
 
-  // Money approvals need a step-up the API checks; the gate asks once per 5 minutes and retries with the token.
+  // Approving a call that needs two approvers needs a step-up the API checks; the gate asks once per 5 minutes and retries with the token.
   const stepUp = useStepUpGate();
   const onDecide = (decision: ReviewDecision, reason: string, conditions?: ConditionInput[], actingAsId?: string, addTestCase?: boolean) => {
     if (!active) return;
@@ -137,7 +136,7 @@ export default function ReviewsPage() {
     setActiveId(next && isOpen(next) ? next.id : null);
     };
     stepUp
-      .withStepUp(`Approving ${target.id}`, (stepUpToken) => decide.mutateAsync({ id: target.id, decision, reason, conditions, actingAsId, addTestCase, stepUpToken }), { upfront: decision === 'approved' && !!target.movesMoney })
+      .withStepUp(`Approving ${target.id}`, (stepUpToken) => decide.mutateAsync({ id: target.id, decision, reason, conditions, actingAsId, addTestCase, stepUpToken }), { upfront: decision === 'approved' && !!target.stepUp })
       .then(decided, (e) => {
         if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
       })
@@ -317,7 +316,7 @@ export default function ReviewsPage() {
           isPending={bulkDecide.isPending}
           onConfirm={async (ids, reason) => {
             const kind = shown.kind as ReviewDecision;
-            // One step-up covers the whole batch when any of it moves money.
+            // One step-up covers the whole batch when any of it needs one.
             let res;
             try {
               res = await stepUp.withStepUp(`Approving ${ids.length} reviews`, (stepUpToken) => bulkDecide.mutateAsync({ ids, decision: kind, reason, stepUpToken }));
