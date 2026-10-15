@@ -82,7 +82,7 @@ module_operations = _child(
     sa.Column("name", sa.String(120), nullable=False),
     sa.Column("tool_id", sa.String(64), nullable=False),
     sa.Column("description", sa.Text, nullable=False),
-    # The access class the gateway enforces; set here by the owner, never by the caller (read, write, money_movement).
+    # The access class the gateway enforces; set here by the owner, never by the caller (read or write).
     sa.Column("access", sa.String(16), nullable=False),
     sa.Column("enabled", sa.Boolean, nullable=False),
     # How the gateway runs it: `http` calls the module's endpoint, `stub` answers with `stub` (a seeded system with no
@@ -104,6 +104,13 @@ module_operations = _child(
     sa.Column("rate_limit_per_min", sa.Integer, nullable=False),
     sa.Column("requires_approval", sa.Boolean, nullable=False),
     sa.Column("amount_max", sa.Numeric(14, 2)),
+    # The write approval policy (docs/architecture/tool-lifecycle.md): how many distinct people approve a call, the
+    # team they come from (None: the module's owning team), and whether the person who asked may be one of them.
+    sa.Column("approvers", sa.Integer, nullable=False, server_default="1"),
+    sa.Column("approver_team", sa.String(64)),
+    sa.Column("self_approval", sa.Boolean, nullable=False, server_default=sa.false()),
+    # Read or write only (migration tools_0012): a database holding any other class is rebuilt, never read.
+    sa.CheckConstraint("access IN ('read', 'write')", name="ck_module_operations_access"),
     sa.Column("stub", sa.JSON, nullable=False),
     # The gateway resolves a call by tool name, so an operation name is unique within a tenant.
     sa.UniqueConstraint("tenant_id", "name", name="ux_module_operations_name"),
@@ -177,7 +184,31 @@ module_egress_hosts = sa.Table(
 
 # The fields of an operation that say how it is called; a staged change to any of them waits for publish.
 CALL_SHAPE = ("method", "path", "headers", "body", "response_transform", "timeout_ms")
-OPERATION_DEFAULTS: dict[str, Any] = {"response_transform": None, "timeout_ms": None}
+# The write approval policy, which a staged edit must not loosen before Security reviews it either.
+APPROVAL_POLICY = ("approvers", "approver_team", "self_approval")
+# Every field of an operation whose edit can be major, so Security reviews it: where and how it is called, what it may
+# be sent, whether it is exposed, and how a write to it is approved and limited. Calls see these from the published
+# operations while edits are staged (operation_named), and publish compares them with the published ones to decide
+# major; one list, so the two cannot drift. Headers, transform and timeout are minor (c-027).
+REVIEWED = (
+    "method",
+    "path",
+    "body",
+    "input",
+    "access",
+    "requires_approval",
+    "enabled",
+    "binding",
+    "amount_max",
+    *APPROVAL_POLICY,
+)
+OPERATION_DEFAULTS: dict[str, Any] = {
+    "response_transform": None,
+    "timeout_ms": None,
+    "approvers": 1,
+    "approver_team": None,
+    "self_approval": False,
+}
 # Defaults per child table, for rows written before a column existed.
 CHILD_DEFAULTS: dict[str, dict[str, Any]] = {"operations": OPERATION_DEFAULTS, "approvals": {"workflow_team_id": None}}
 
@@ -194,6 +225,39 @@ Aggregate = dict[str, Any]
 
 # The allow-list's host column, named here without importing store.egress (which imports this module).
 _listed_hosts = sa.table("egress_hosts", sa.column("tenant_id"), sa.column("host"))
+
+
+def served_operations(agg: Aggregate) -> list[dict[str, Any]]:
+    """The module's operations as calls see them. While edits are staged (a baseline exists), that is the published
+    operations: an operation added since is not served, and every reviewed field (and the call shape) comes from the
+    published one, so nothing Security has not approved reaches a call, the tools list or an agent's grants."""
+    baseline = cast(list[dict[str, Any]] | None, agg.get("baseline"))
+    ops = cast(list[dict[str, Any]], agg["operations"])
+    if baseline is None:
+        return ops
+    published = {o["id"]: o for o in baseline}
+    out: list[dict[str, Any]] = []
+    for op in ops:
+        before = published.get(op["id"])
+        if before is None:
+            continue
+        # A baseline written before a field existed holds none of it and keeps the operation's.
+        out.append(
+            {
+                **op,
+                **{k: before.get(k) for k in CALL_SHAPE},
+                **{k: before[k] for k in REVIEWED if k in before},
+            }
+        )
+    return out
+
+
+class RetiredAccessError(RuntimeError):
+    """A stored operation names an access class that no longer exists ("money_movement"). It is refused rather than
+    read as anything else: such a database predates Read and Write only (c-048 T003) and is rebuilt by `make up`."""
+
+
+ACCESS_CLASSES = frozenset({"read", "write"})
 
 
 class HostNotAllowedError(RuntimeError):
@@ -224,6 +288,11 @@ class ModuleStore:
                 .order_by(table.c.module_id, table.c.position)
             )
             for r in (await c.execute(q)).mappings():
+                if key == "operations" and r["access"] not in ACCESS_CLASSES:
+                    raise RetiredAccessError(
+                        f"operation {r['name']} in {r['module_id']} has access {r['access']!r}, which is no longer an "
+                        "access class; rebuild the database with `make up`"
+                    )
                 out[r["module_id"]][key].append(dict(r))
         hosts: dict[str, list[str]] = {i: [] for i in ids}
         q = (
@@ -266,13 +335,9 @@ class ModuleStore:
         agg = await self.get(tenant_id, module_id)
         if agg is None:
             return None
-        op = next(o for o in agg["operations"] if o["name"] == name)
-        # A staged edit to the call shape runs only once published: while changes are pending, calls take the shape
-        # from the baseline (the published operations), so an unreviewed path or method never reaches the system.
-        baseline = cast(list[dict[str, Any]], agg.get("baseline") or [])
-        published = next((o for o in baseline if o["id"] == op["id"]), None)
-        if published is not None:
-            op = {**op, **{k: published.get(k) for k in CALL_SHAPE}}
+        op = next((o for o in served_operations(agg) if o["name"] == name), None)
+        if op is None:
+            return None
         return agg, op
 
     async def names_taken(self, tenant_id: str, names: list[str]) -> set[str]:

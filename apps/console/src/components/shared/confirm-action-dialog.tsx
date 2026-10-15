@@ -8,7 +8,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 
 /**
- * Confirms an approval that moves money or changes a production system. Used by the case actions tab and the
+ * Confirms an approval that changes a production system. Used by the case actions tab and the
  * chat approval widget so both state the same consequence before anything runs.
  */
 export function ConfirmActionDialog({

@@ -15,19 +15,20 @@ import { ApprovalStatusBadge, ENV_LABEL, ExpiryText } from './module-meta';
 export function ApprovalsTable({
   approvals,
   operations,
-  currentUser,
+  me,
   onDecide,
   onRevoke,
   busy,
 }: {
   approvals: ModuleApproval[];
   operations: ModuleOperation[];
-  currentUser: string;
+  /** The signed-in person's name and email; a request records whichever its service saw. */
+  me: string[];
   onDecide: (a: ModuleApproval, decision: 'approved' | 'rejected') => void;
   onRevoke: (a: ModuleApproval) => void;
   busy: boolean;
 }) {
-  const money = new Set(operations.filter((o) => o.fourEyes).map((o) => o.name));
+  const twoApprovers = new Set(operations.filter((o) => o.access === 'write' && o.approvers === 2).map((o) => o.name));
   return (
     <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
@@ -45,7 +46,7 @@ export function ApprovalsTable({
         <TableBody>
           {approvals.map((a) => {
             const open = a.status === 'requested';
-            const mine = a.requestedBy === currentUser;
+            const mine = me.includes(a.requestedBy);
             return (
               <TableRow key={a.id} className={cn((a.status === 'revoked' || a.status === 'rejected') && 'opacity-60')}>
                 <TableCell className="min-w-48">
@@ -58,7 +59,7 @@ export function ApprovalsTable({
                 <TableCell className="min-w-56">
                   <span className="flex flex-wrap gap-1">
                     {a.operations.map((o) => (
-                      <code key={o} className={cn('rounded border px-1 font-mono text-[11px]', money.has(o) && 'border-destructive/40 bg-destructive/10 text-destructive')}>
+                      <code key={o} className={cn('rounded border px-1 font-mono text-[11px]', twoApprovers.has(o) && 'border-warning/40 bg-warning/10 text-warning-text')}>
                         {o}
                       </code>
                     ))}

@@ -6,7 +6,7 @@ export type ReviewKind = 'approval' | 'exception' | 'escalation' | 'policy_overr
 export type ReviewDecision = 'approved' | 'rejected' | 'returned';
 export type LifecycleStatus = 'live' | 'draft' | 'paused';
 export type Channel = 'voice' | 'chat' | 'email' | 'api';
-export type ToolAccess = 'read' | 'write' | 'money_movement';
+export type ToolAccess = 'read' | 'write';
 /** `workflow`: a published workflow exposed to agents; calling it starts a run of that workflow. */
 export type ToolType = 'http' | 'code' | 'mcp' | 'workflow';
 
@@ -22,6 +22,8 @@ export interface Agent {
   model: string;
   channels: Channel[];
   toolIds: string[];
+  /** Granted tool ids the catalogue no longer offers (unpublished, hidden or deleted); saving the agent drops them. */
+  staleToolIds: string[];
   collections: string[];
   owner: string;
   /**
@@ -126,15 +128,23 @@ export interface WorkflowGraph {
   emailConfig?: EmailWorkflowConfig;
 }
 
-/** A tool an agent may be granted, from the runtime's catalogue (GET /v1/tools); `id` is the tool name. */
+/**
+ * A tool an agent may be granted (GET /v1/tools): a published tools-service operation; `id` is its name. A run hands
+ * the model `description` and `inputSchema`, and calls it through the tool gateway.
+ */
 export interface GrantableTool {
   id: string;
   name: string;
-  /** The server or module the tool belongs to. */
+  /** The module the operation belongs to. */
   server: string;
+  moduleId: string | null;
   description: string;
   access: ToolAccess;
-  /** The approval a call waits for, named; null when calls run without one. */
+  /** JSON Schema of the operation's input, as the model receives it. */
+  inputSchema: { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
+  /** Whether every call waits for a person's approval. */
+  requiresApproval: boolean;
+  /** The approval a call waits for, named; null when the operation has no named template. */
   approval: string | null;
 }
 
@@ -188,9 +198,14 @@ export interface Evidence {
   detail: string;
 }
 
+/** Where a review was raised: an agent's write held in a chat conversation, or a workflow's paused step. Publish
+ * requests carry none. */
+export type ReviewOrigin = { kind: 'chat'; threadId: string; agentName: string } | { kind: 'workflow' };
+
 export interface Review {
   id: string;
   title: string;
+  origin?: ReviewOrigin;
   customer: string;
   workflowId: string;
   workflowName: string;
@@ -217,8 +232,8 @@ export interface Review {
   evidence: Evidence[];
   /** Present on publish requests: what would ship and how it tested. */
   publish?: PublishRequestInfo;
-  /** True when approving runs a money-movement operation; the console asks for a step-up first. Set by the API. */
-  movesMoney?: boolean;
+  /** True when the operation being approved needs two approvers; the console asks for a step-up first. Set by the API. */
+  stepUp?: boolean;
   /** Present on model validation reviews (second-line approval by Model Risk). */
   modelValidation?: import('./model-risk').ModelValidationRequest;
   /** Present on skill publish requests (spec 11). */
@@ -253,7 +268,7 @@ export interface ReviewDecisionInput {
   actingAsId?: string;
   /** Reject or return only: propose the reviewed input as a draft case in `testTarget`'s suite. */
   addTestCase?: boolean;
-  /** Approving a money movement: the AuthProvider's step-up token from a re-authentication in the last 5 minutes. */
+  /** Approving a call that needs a step-up: the AuthProvider's token from a re-authentication in the last 5 minutes. */
   stepUpToken?: string;
 }
 
@@ -290,7 +305,7 @@ export interface Tool {
   moduleId?: string;
   module?: string;
   /** Set when `type` is `workflow`: the workflow it starts, its risk tier and whether it pauses for a person. */
-  workflow?: { workflowId: string; tier: Risk; approval: WorkflowToolApproval; movesMoney: boolean };
+  workflow?: { workflowId: string; tier: Risk; approval: WorkflowToolApproval };
 }
 
 export interface ToolInput {

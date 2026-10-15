@@ -3,7 +3,10 @@
 Each path and method becomes one operation, named by its operationId in snake case, or `<method>_<path>` when it has
 none. Path and query parameters and the JSON request body's top-level properties merge into one input list. An API
 key or bearer scheme in a header becomes a `{{NAME}}` secret reference, resolved by the executor at call time.
-Every operation is discovered as a write: a name that looks like a read proves nothing, so the owner marks reads.
+Access is pre-set from the method: GET is a read, everything else a write, and the builder confirms each one on
+import (HEAD is skipped: it answers no body). Each operation's example response becomes its stub. A document whose
+operations carry no auth header is flagged (`noAuth`, and a warning), since its calls would go out with no
+credentials.
 """
 
 from __future__ import annotations
@@ -13,6 +16,8 @@ from typing import Any, cast
 from urllib.parse import urljoin, urlsplit
 
 METHODS = ("get", "post", "put", "patch", "delete")
+# HEAD answers no body, so it cannot be a tool; a document listing one is told so in the warnings.
+SKIPPED = ("head",)
 FIELD_TYPES = {"string", "number", "integer", "boolean", "object", "array"}
 NAME = re.compile(r"^[a-z][a-z0-9_]{2,}$")
 
@@ -81,6 +86,27 @@ def _secret_headers(spec: dict[str, Any], op: dict[str, Any]) -> list[dict[str, 
     return headers
 
 
+def _example_response(spec: dict[str, Any], op: dict[str, Any]) -> Any:
+    """The JSON example of the operation's first success response: the media type's `example`, else its first
+    `examples` value, else the schema's `example`; None when the document gives none."""
+    responses: dict[str, Any] = op.get("responses") or {}
+    for code in sorted(c for c in responses if str(c).startswith("2")):
+        media = _deref(
+            spec, cast(dict[str, Any], _deref(spec, responses[code]).get("content") or {}).get("application/json")
+        )
+        if "example" in media:
+            return media["example"]
+        examples: dict[str, Any] = media.get("examples") or {}
+        for example in examples.values():
+            value = _deref(spec, example)
+            if "value" in value:
+                return value["value"]
+        schema = _deref(spec, media.get("schema"))
+        if "example" in schema:
+            return schema["example"]
+    return None
+
+
 def discover(spec: Any, spec_url: str) -> dict[str, Any]:
     """The console's DiscoveryResult for `spec`, with each operation's headers and method kept for import."""
     if not isinstance(spec, dict) or not str(cast(dict[str, Any], spec).get("openapi", "")).startswith("3."):
@@ -98,6 +124,9 @@ def discover(spec: Any, spec_url: str) -> dict[str, Any]:
     for path, item_raw in paths.items():
         item = _deref(doc, item_raw)
         shared: list[Any] = item.get("parameters") or []
+        for method in SKIPPED:
+            if method in item:
+                warnings.append(f"{method.upper()} {path} was skipped: it answers no body, so it cannot be a tool.")
         for method in METHODS:
             if method not in item:
                 continue
@@ -130,21 +159,31 @@ def discover(spec: Any, spec_url: str) -> dict[str, Any]:
                     prop, _field(doc, prop, prop_schema, required=prop in required_props, description=None)
                 )
             segments = [s for s in path.split("/") if s and not s.startswith("{")]
+            example = _example_response(doc, op)
             operations.append(
                 {
                     "name": name,
                     "description": str(op.get("summary") or op.get("description") or name),
-                    "access": "write",
+                    "access": "read" if method == "get" else "write",
                     "method": method.upper(),
                     "path": path,
                     "group": segments[0] if segments else "operations",
                     "input": list(fields.values()),
                     "headers": _secret_headers(doc, op),
+                    **({"stub": example} if example is not None else {}),
                 }
             )
     if not operations:
         raise SpecError("The document lists no operations.")
+    no_auth = not any(o["headers"] for o in operations)
+    if no_auth:
+        warnings.append(
+            "This document declares no API key or bearer security scheme, so its calls would go out with no "
+            "credentials. Add an auth header (for example Authorization: Bearer {{SECRET}}) to each operation after "
+            "import."
+        )
     return {
+        "noAuth": no_auth,
         "type": "openapi",
         "system": title,
         "suggestedName": kebab(title),

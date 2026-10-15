@@ -72,7 +72,7 @@ export function ToolChips({ tools, max = 4, outOfScope = [] }: { tools: Pick<Ski
   return (
     <div className="flex flex-wrap gap-1">
       {tools.slice(0, max).map((t) => (
-        <Badge key={t.toolId} variant="secondary" className={cn('font-mono text-[11px] font-normal', outOfScope.includes(t.toolId) && 'border-warning/40 bg-warning/10 text-warning-text', t.access === 'money_movement' && 'border-destructive/40')}>
+        <Badge key={t.toolId} variant="secondary" className={cn('font-mono text-[11px] font-normal', outOfScope.includes(t.toolId) && 'border-warning/40 bg-warning/10 text-warning-text')}>
           {t.name}
         </Badge>
       ))}

@@ -34,7 +34,6 @@ const columns: ColumnDef<Tool>[] = [
     cell: ({ row }) => (
       <span className="flex gap-1">
         <AccessBadge access={row.original.access} />
-        {row.original.workflow?.movesMoney && <AccessBadge access="money_movement" />}
       </span>
     ),
   },

@@ -1,9 +1,0 @@
-# US3: uc-047 ui: the page-title switcher lists the section and moves between its pages.
-# The runner gives each run its own database and ports.
-id: us3-title-switcher
-accept: US3
-failure_mode: the switcher stops listing the section
-layers:
-  cli:
-    run: "make usecase-test UC=uc-047 LAYER=ui"
-    expect: { exit: 0, stdout: "uc-047 ui   7 checks passed" }

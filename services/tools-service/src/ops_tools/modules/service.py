@@ -32,9 +32,10 @@ from .. import mcp, transform
 from ..egress import CURRENT_TENANT, EgressDenied, EgressPolicy, egress_client
 from ..executor import HttpExecutor, McpExecutor
 from ..limits import amount_refusal
+from ..registry import approval_policy
 from ..secrets import SecretResolver
 from ..store.calls import CallLog
-from ..store.modules import CALL_SHAPE, Aggregate, HostNotAllowedError, ModuleStore, StaleModuleError
+from ..store.modules import CALL_SHAPE, REVIEWED, Aggregate, HostNotAllowedError, ModuleStore, StaleModuleError
 from . import openapi
 from .directory import Directory, Team
 from .executions import call_row
@@ -52,9 +53,11 @@ def _rates(t: dict[str, Any]) -> dict[str, Any]:
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
 EXPIRING = timedelta(days=7)
 FAILING_RATE = 0.02
-ACCESS_ORDER = ("read", "write", "money_movement")
-WRITES = {"write", "money_movement"}
+ACCESS_ORDER = ("read", "write")
+WRITES = {"write"}
 # The case id of a run context with no case: the builder types the bound values (c-039).
+# The run context of the module's own team trying it, with no workflow and no case (c-048 T008).
+OWNER_CONTEXT = "owner"
 SAMPLE_CASE = "sample"
 STATUS_ORDER = {"requested": 0, "approved": 1, "expired": 2, "rejected": 3, "revoked": 4}
 CREDENTIAL_HEADER = re.compile(r"^(authorization|x-api-key|cookie)$", re.IGNORECASE)
@@ -125,6 +128,34 @@ def _sample_field(name: str) -> dict[str, Any]:
 def _workflow_names(mods: list[Aggregate]) -> dict[str, str]:
     """Each workflow's name as its approvals recorded it from agents-service, for the call log."""
     return {a["workflow_id"]: a["workflow_name"] for m in mods for a in m["approvals"]}
+
+
+def _plain(value: Any) -> Any:
+    return json.loads(json.dumps(value, default=str))
+
+
+def _differs_from_published(m: Aggregate) -> bool:
+    """Whether the operations about to go live differ from the published ones (the baseline) in anything Security
+    reviews. Publish decides major from this, never from the edit history alone, so a change reaches calls without
+    review by no route: an edit, an import, or a declined version's edits left in place."""
+    baseline = cast(list[dict[str, Any]] | None, m.get("baseline"))
+    if baseline is None:
+        return False
+    published = {o["id"]: o for o in baseline}
+    for o in m["operations"]:
+        before = published.get(o["id"])
+        if before is None:
+            return True
+        if any(_plain(o.get(k)) != _plain(before.get(k)) for k in REVIEWED if k in before):
+            return True
+    return False
+
+
+def _refuse_during_review(m: Aggregate, what: str) -> None:
+    """While a version waits for Security, what it approves must be exactly what calls switch to: an edit, a discard
+    or another version on top would ride along unreviewed or leave the approval deciding nothing."""
+    if any(v["status"] == "in_review" for v in m["versions"]):
+        raise Conflict(f"A version is waiting for Security's review; {what} once it is decided.")
 
 
 class ModuleService:
@@ -265,14 +296,23 @@ class ModuleService:
         return r["errorRate"] >= FAILING_RATE or not r["reachable"]
 
     def _run_contexts(self, m: Aggregate, team: Team) -> list[dict[str, Any]]:
-        """One context per workflow this module is approved for or asked for, with no case: the builder types the
-        bound values, which the panel marks as a sample (c-039). Only the caller's team's workflows: running as another
-        team's workflow would borrow its approval."""
+        """The module owner first, which needs no workflow approval (c-048 T008), so the run panel's default is a try
+        the owner can always make; then one context per workflow this module is approved for or asked for, with no
+        case: the builder types the bound values, which the panel marks as a sample (c-039). Only the caller's team's
+        workflows: running as another team's workflow would borrow its approval."""
         seen: dict[str, dict[str, Any]] = {}
         for a in m["approvals"]:
             if a["workflow_id"] not in seen and self.dir.sees(team, self._workflow_groups(a)):
                 seen[a["workflow_id"]] = a
-        return [
+        owner: dict[str, Any] = {
+            "id": OWNER_CONTEXT,
+            "label": "Module owner, no case",
+            "workflowId": "",
+            "workflowName": "",
+            "caseId": SAMPLE_CASE,
+            "bindings": {},
+        }
+        return [owner] + [
             {
                 "id": w,
                 "label": f"{a['workflow_name']} · sample values",
@@ -284,7 +324,10 @@ class ModuleService:
             for w, a in seen.items()
         ]
 
-    def _operation(self, o: dict[str, Any], approvals: list[dict[str, Any]], t: dict[str, Any]) -> dict[str, Any]:
+    def _operation(
+        self, m: Aggregate, o: dict[str, Any], approvals: list[dict[str, Any]], t: dict[str, Any]
+    ) -> dict[str, Any]:
+        policy = approval_policy(m, o)
         out: dict[str, Any] = {
             "id": o["id"],
             "toolId": o["tool_id"],
@@ -297,7 +340,9 @@ class ModuleService:
             "binding": o["binding"],
             "rateLimitPerMin": o["rate_limit_per_min"],
             "requiresApproval": o["requires_approval"],
-            "fourEyes": o["access"] == "money_movement",
+            "approvers": policy["approvers"],
+            "approverTeam": policy["approver_team"],
+            "selfApproval": policy["self_approval"],
             "idempotent": o["access"] != "read",
             **_rates(t),
             "approvedWorkflows": len(
@@ -332,7 +377,7 @@ class ModuleService:
             "egressHosts": m["egress_hosts"],
             "dataClassification": m["data_classification"],
             "operations": [
-                self._operation(o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC)) for o in m["operations"]
+                self._operation(m, o, approvals, traffic.get((m["id"], o["name"]), NO_TRAFFIC)) for o in m["operations"]
             ],
             "pendingChanges": m["pending"],
             "approvals": [self._approval_out(a) for a in ordered],
@@ -501,7 +546,6 @@ class ModuleService:
                 "operations": sum(r["operationCount"] for r in rows),
                 "calls24h": calls,
                 "errorRate": errors / calls if calls else 0,
-                "moneyOperations": sum(1 for m in mods for o in m["operations"] if o["access"] == "money_movement"),
                 "expiringApprovals": expiring_approvals,
                 "expiringModules": counts["expiring"],
             },
@@ -630,8 +674,7 @@ class ModuleService:
 
     @staticmethod
     def _added(o: dict[str, Any], *, major: bool) -> dict[str, Any]:
-        kind = "money movement" if o["access"] == "money_movement" else o["access"]
-        return {"operation": o["name"], "kind": "added", "detail": f"New {kind} operation", "major": major}
+        return {"operation": o["name"], "kind": "added", "detail": f"New {o['access']} operation", "major": major}
 
     def _new_op(self, module_id: str, index: int, o: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -654,7 +697,8 @@ class ModuleService:
             "rate_limit_per_min": 60,
             "requires_approval": o["access"] != "read",
             "amount_max": None,
-            "stub": {"ok": True},
+            # The source's example response when it gives one, so a stubbed call answers like the system.
+            "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
         }
 
     async def _names_free(self, who: Caller, ops: list[dict[str, Any]]) -> None:
@@ -679,11 +723,15 @@ class ModuleService:
             raise Conflict(f"A module named {name} already exists.")
         if not i["display_name"].strip():
             raise ValidationFailed("Give the module a display name.")
-        conn = self.dir.connections.get(i["connection_id"])
-        if conn is None:
-            raise ValidationFailed("Choose the connection this module calls through.")
-        if conn.status(self.clock()) == "revoked":
-            raise Conflict(f"{conn.name} is revoked. Reconnect it in Integrations or pick another connection.")
+        # A module's endpoint and its secret headers are its connection (docs/architecture/tool-lifecycle.md); a
+        # connection record is optional, and when one is named it must exist and be live.
+        conn = None
+        if i.get("connection_id") is not None:
+            conn = self.dir.connections.get(i["connection_id"])
+            if conn is None:
+                raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
+            if conn.status(self.clock()) == "revoked":
+                raise Conflict(f"{conn.name} is revoked. Reconnect it in Integrations or pick another connection.")
         if i["type"] == "code":
             raise Unprocessable("Code modules need the sandbox, which is not available yet.")
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
@@ -716,10 +764,10 @@ class ModuleService:
             "system": i["system"].strip() or i["display_name"].strip(),
             "description": f"{i['system']} operations behind the data gateway.",
             "endpoint": endpoint,
-            "auth": {"kind": conn.credential_kind},
+            "auth": {"kind": conn.credential_kind if conn else "none"},
             "egress_hosts": [host] if host else [],
-            "catalog_id": conn.catalog_id,
-            "connection_id": conn.id,
+            "catalog_id": conn.catalog_id if conn else None,
+            "connection_id": conn.id if conn else None,
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
         }
@@ -779,12 +827,24 @@ class ModuleService:
                 pending.append(c)
         m["pending"] = pending
 
+    @staticmethod
+    def _take_baseline(m: Aggregate) -> None:
+        """Keeps the published operations as the baseline calls run while edits wait for review. A module never
+        published runs no call, so its edits apply as made and the first review approves them."""
+        ever_published = m["status"] == "published" or any(
+            v["status"] in ("published", "deprecated") for v in m["versions"]
+        )
+        if m["baseline"] is None and ever_published:
+            m["baseline"] = json.loads(json.dumps(m["operations"], default=str))
+
     async def _append(self, who: Caller, m: Aggregate, ops_in: list[dict[str, Any]]) -> None:
         """Appends operations. A draft takes them straight into its first version; a published module stages them."""
+        _refuse_during_review(m, "add operations")
         for o in ops_in:
             if any(x["name"] == o["name"] for x in m["operations"]):
                 raise Conflict(f"{o['name']} is already in this module.")
         await self._names_free(who, ops_in)
+        self._take_baseline(m)
         start = len(m["operations"])
         m["operations"] = [*m["operations"], *(self._new_op(m["id"], start + n + 1, o) for n, o in enumerate(ops_in))]
         changes = [self._added(o, major=o["access"] != "read") for o in ops_in]
@@ -857,24 +917,30 @@ class ModuleService:
         o = next((x for x in m["operations"] if x["id"] == op_id), None)
         if o is None:
             raise NotFound("Operation")
-        money = o["access"] == "money_movement"
-        if patch.get("requires_approval") is False and money:
-            raise Unprocessable("Operations that move money always need a person's approval.")
+        _refuse_during_review(m, "edit operations")
+        two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
+        if patch.get("requires_approval") is False and two:
+            raise Unprocessable("An operation two people approve always needs a person's approval.")
         rate = patch.get("rate_limit_per_min")
         if rate is not None and not 1 <= rate <= 10_000:
             raise ValidationFailed("Set a rate limit between 1 and 10,000 calls a minute.")
         amount = patch.get("amount_max")
-        if amount is not None and (not money or amount <= 0):
-            raise ValidationFailed("Only money movement operations take an amount limit, and it must be above zero.")
+        if amount is not None and (o["access"] != "write" or amount <= 0):
+            raise ValidationFailed("Only write operations take an amount limit, and it must be above zero.")
         if amount is not None and not any(f["name"] == "amount" for f in o["input"]):
             # The gateway reads the limit from the `amount` input; on an operation without one it could never hold.
             raise Unprocessable(f"{o['name']} has no amount input, so an amount limit would have nothing to check.")
+        approvers = patch.get("approvers")
+        if approvers is not None and approvers not in (1, 2):
+            raise ValidationFailed("A write is approved by one person or by two different people.")
+        team = patch.get("approver_team")
+        if team is not None and self.dir.team_by_id(team) is None:
+            raise Unprocessable(f"{team} is not a team in this workspace.")
         binding = patch.get("binding")
         if binding and not any(f["name"] == binding["arg"] for f in o["input"]):
             raise ValidationFailed(f"{binding['arg']} is not an input of {o['name']}.")
         shape = self._checked_shape(m, o, patch, fields)
-        if m["baseline"] is None:
-            m["baseline"] = json.loads(json.dumps(m["operations"], default=str))
+        self._take_baseline(m)
         changes: list[dict[str, Any]] = self._shape_changes(o, shape)
         name = o["name"]
         if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
@@ -910,6 +976,21 @@ class ModuleService:
             detail = f"Amount limit ${before or 0:g} → ${amount:g}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": amount > (before or 0)})
             o["amount_max"] = amount
+        # Fewer approvers, another approving team or the asker approving their own call loosens the policy, so each
+        # is a major change that Security reviews; tightening is minor.
+        if approvers is not None and approvers != int(o.get("approvers") or 1):
+            detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
+            o["approvers"] = approvers
+        if team is not None and team != o.get("approver_team"):
+            detail = f"Approved by {team}"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
+            o["approver_team"] = team
+        own = patch.get("self_approval")
+        if own is not None and own != bool(o.get("self_approval")):
+            detail = "The person who asked may approve" if own else "The person who asked may not approve"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": own})
+            o["self_approval"] = own
         if patch.get("description") is not None and patch["description"].strip() != o["description"]:
             changes.append({"operation": name, "kind": "settings", "detail": "Description edited", "major": False})
             o["description"] = patch["description"].strip()
@@ -1004,11 +1085,18 @@ class ModuleService:
 
     async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         m = await self._find(who, module_id)
-        if not m["pending"]:
+        reviewed_change = _differs_from_published(m)
+        if not m["pending"] and not reviewed_change:
             raise ValidationFailed("There are no changes to publish.")
         if not note.strip():
             raise ValidationFailed("Say what changed.")
-        major = any(c["major"] for c in m["pending"])
+        _refuse_during_review(m, "publish another version")
+        major = reviewed_change or any(c["major"] for c in m["pending"])
+        if not m["pending"]:
+            # Edits a declined version left in place: sent to Security again as they stand.
+            m["pending"] = [
+                {"operation": "*", "kind": "settings", "detail": "Changes Security declined, sent again", "major": True}
+            ]
         a, b = (int(x) for x in m["version"].split(".")[:2])
         version = f"{a + 1}.0.0" if major else f"{a}.{b + 1}.0"
         now = self.clock()
@@ -1031,7 +1119,9 @@ class ModuleService:
         ]
         if major:
             m["reviews"] = [*m["reviews"], self._new_review(who, major_of(version), version, note)]
-        m.update(version=version, pending=[], baseline=None)
+        # A major version waits for Security: until it approves, calls keep the published call shape and approval policy
+        # (the baseline), so a loosened policy or a new path does not run in the meantime.
+        m.update(version=version, pending=[], baseline=m["baseline"] if major else None)
         return await self._detail(await self._save(m), who.team)
 
     def _new_review(self, who: Caller, major: int, version: str, note: str) -> dict[str, Any]:
@@ -1050,6 +1140,7 @@ class ModuleService:
 
     async def discard(self, who: Caller, module_id: str) -> dict[str, Any]:
         m = await self._find(who, module_id)
+        _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
             raise ValidationFailed("There are no changes to discard.")
         m.update(operations=copy.deepcopy(m["baseline"]), pending=[], baseline=None)
@@ -1102,8 +1193,18 @@ class ModuleService:
                 if v["version"] == r["version"]:
                     v.update(status="published", published_at=now)
             m.update(status="published", drift=False)
-        elif decision == "changes_requested" and current and m["status"] == "in_review":
-            m["status"] = "draft"
+            if not m["pending"]:
+                # The reviewed operations are now the published ones; edits staged since keep the baseline.
+                m["baseline"] = None
+        elif decision == "changes_requested" and current:
+            # Asking for changes ends this review, so the owner can address the findings and request another. A module
+            # never published goes back to draft; a published one keeps serving its published operations (the
+            # baseline), and the version Security declined is withdrawn.
+            if m["status"] == "in_review":
+                m["status"] = "draft"
+                m["versions"] = [{**v, "status": "draft"} if v["status"] == "in_review" else v for v in m["versions"]]
+            else:
+                m["versions"] = [{**v, "status": "revoked"} if v["status"] == "in_review" else v for v in m["versions"]]
         return await self._detail(await self._save(m), who.team)
 
     # ── Workflow approvals ────────────────────────────────────────────────
@@ -1198,13 +1299,16 @@ class ModuleService:
         """What the gateway would decide for this call in this run context, and the answer when it allows: on the
         sandbox target a read is the real call, through the same executor and egress policy as /v1/calls, on the
         published call shape; a write answers from the stub (`stubbed`), so the test console never writes to a system.
-        A test call is not a gateway call: it spends no rate and is not in the executions log."""
+        A test call is not a gateway call: it spends no rate and is not in the executions log. The `owner` context is
+        the module's own team trying it (whoever passes the module's team guard): no workflow approval is needed,
+        reads run for real, writes answer from the stub, and a bound field takes the value typed (c-048 T008)."""
         m = await self._find(who, module_id)
         o = next((x for x in m["operations"] if x["name"] == i["operation"]), None)
         if o is None:
             raise NotFound("Operation")
-        ctx = next((c for c in self._run_contexts(m, who.team) if c["id"] == i["context_id"]), None)
-        if ctx is None and i["context_id"] != "owner":
+        owner = i["context_id"] == OWNER_CONTEXT
+        ctx = None if owner else next((c for c in self._run_contexts(m, who.team) if c["id"] == i["context_id"]), None)
+        if ctx is None and not owner:
             raise ValidationFailed("Choose a run context.")
         call_id = new_id("test")
         sandbox = i["target"] == "sandbox"
@@ -1227,8 +1331,6 @@ class ModuleService:
             return deny("operation_hidden")
         if m["status"] != "published" and sandbox:
             return deny("module_not_published")
-        if ctx is None and sandbox:
-            return deny("no_approval")
         if m["status"] == "published" and ctx is not None:
             mine = [a for a in self._approvals(m) if a["workflow_id"] == ctx["workflowId"]]
             active = [a for a in mine if a["status"] == "approved"]
@@ -1242,8 +1344,8 @@ class ModuleService:
         if b:
             value = (ctx or {}).get("bindings", {}).get(b["bindTo"]) if ctx else None
             source = b["bindTo"]
-            if not value and ctx is not None and ctx["caseId"] == SAMPLE_CASE:
-                # A sample context has no case: the value the builder typed stands in for it, marked as a sample.
+            if not value and (ctx is None or ctx["caseId"] == SAMPLE_CASE):
+                # The owner, or a sample context, has no case: the value typed stands in for it, marked as a sample.
                 value, source = args.get(b["arg"]), "sample"
             if not value:
                 if b["required"]:
@@ -1270,7 +1372,8 @@ class ModuleService:
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
         would_pause = o["access"] in WRITES and o["requires_approval"]
-        if would_pause and sandbox and not i.get("simulate_approval"):
+        # The owner's write answers from the stub, so there is nothing for an approval to guard.
+        if would_pause and sandbox and ctx is not None and not i.get("simulate_approval"):
             return deny("approval_token_missing")
         out: dict[str, Any] = {
             "decision": "allow",
@@ -1381,7 +1484,7 @@ class ModuleService:
     @staticmethod
     def _public(result: dict[str, Any]) -> dict[str, Any]:
         """The console's DiscoveryResult: an operation's headers stay on the service until import."""
-        ops = [{k: v for k, v in o.items() if k != "headers"} for o in result["operations"]]
+        ops = [{k: v for k, v in o.items() if k not in ("headers", "stub")} for o in result["operations"]]
         return {**result, "operations": ops}
 
     async def discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:

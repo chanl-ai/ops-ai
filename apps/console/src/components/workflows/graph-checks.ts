@@ -12,9 +12,9 @@ export interface GraphIssue {
 
 /**
  * Structural checks a workflow must pass to run sensibly: every step wired in, every agent and tool
- * chosen, every gate assigned, and no money-moving step reachable without a review gate.
+ * chosen and every gate assigned.
  */
-export function graphIssues(g: G, ctx: { agentSlugs: string[]; toolNames: string[]; moneyTools: string[] }): GraphIssue[] {
+export function graphIssues(g: G, ctx: { agentSlugs: string[]; toolNames: string[] }): GraphIssue[] {
   const issues: GraphIssue[] = [];
   const trigger = g.nodes.find((n) => n.type === 'trigger' && n.data.kind !== 'error');
   if (!trigger) issues.push({ severity: 'error', message: 'Add a trigger so the workflow can start.' });
@@ -45,22 +45,5 @@ export function graphIssues(g: G, ctx: { agentSlugs: string[]; toolNames: string
       issues.push({ nodeId: n.id, severity: 'warning', message: `${name} has no Approved path; approved runs will stop.` });
   }
 
-  if (trigger && unguardedMoney(g, trigger.id, ctx.moneyTools))
-    issues.push({ severity: 'warning', message: 'A step that moves money can be reached without a review gate.' });
   return issues;
-}
-
-function unguardedMoney(g: G, start: string, moneyTools: string[]) {
-  const seen = new Set<string>();
-  const stack = [start];
-  while (stack.length) {
-    const id = stack.pop()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const n = g.nodes.find((x) => x.id === id);
-    if (!n || n.type === 'review') continue;
-    if (moneyTools.includes(n.data.description)) return true;
-    g.edges.filter((e) => e.source === id).forEach((e) => stack.push(e.target));
-  }
-  return false;
 }

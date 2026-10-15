@@ -10,7 +10,7 @@ Status: current. Id: `uc-023`. Service: `platform-service`. Layers: api.
 | Free use-case ports | the runner picks free ports and its own database; or set the OPS_USECASE_* ports and OPS_USECASE_DB |
 
 The script starts platform-service in dev on the run's database: its own migration chain, the dev seed (tenant
-`ten_local`, team `team_ops` with Priya Shah admin, James Richardson builder, Maya Okafor approver, all on the demo
+`local` (the tenant dev auth and every service seed use), team `team_ops` with Priya Shah admin, James Richardson builder, Maya Okafor approver, all on the demo
 password `northfield-demo`), the public app and the internal one. No model is called. Invited addresses carry a per-run suffix, so a reused database never answers "already invited".
 
 ## Steps and expected results

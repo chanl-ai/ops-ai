@@ -77,7 +77,7 @@ async def test_decision_resumes_once_and_a_repeat_sends_nothing(stack: tuple[Asy
     client, _ = stack
     tid = await paused_dispute(client)
     review = await data(client, f"/reviews/{tid}")
-    assert (review["status"], review["actionTool"], review["movesMoney"]) == ("pending", "send_reply", False)
+    assert (review["status"], review["actionTool"], review["stepUp"]) == ("pending", "send_reply", False)
 
     # The body the console's Reviews page sends, including fields only other review kinds use.
     console_body = {"decision": "approved", "reason": "", "addTestCase": False, "conditions": None}
@@ -116,16 +116,16 @@ async def test_decision_stands_when_its_resume_fails_and_a_retry_resumes(stack: 
     assert sum(r["nodes"].count("send_reply") for r in runs) == 1
 
 
-async def test_money_approval_without_step_up_is_refused_and_not_recorded(
+async def test_a_two_approver_approval_without_step_up_is_refused_and_not_recorded(
     stack: tuple[AsyncClient, Runtime], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, _ = stack
     tid = await paused_dispute(client)
 
-    async def moves_money(rt: Runtime, payload: dict[str, Any]) -> bool:
+    async def needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
         return True
 
-    monkeypatch.setattr(hitl_facade, "_moves_money", moves_money)
+    monkeypatch.setattr(hitl_facade, "_needs_step_up", needs_step_up)
     res = await client.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
     assert res.status_code == 422 and res.json()["error"]["code"] == "step_up_required"
     assert (await data(client, f"/reviews/{tid}"))["status"] == "pending"
@@ -139,10 +139,10 @@ async def test_money_approval_without_step_up_is_refused_and_not_recorded(
 async def money_paused(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> str:
     tid = await paused_dispute(client)
 
-    async def moves_money(rt: Runtime, payload: dict[str, Any]) -> bool:
+    async def needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
         return True
 
-    monkeypatch.setattr(hitl_facade, "_moves_money", moves_money)
+    monkeypatch.setattr(hitl_facade, "_needs_step_up", needs_step_up)
     return tid
 
 

@@ -40,7 +40,7 @@ async def test_a_gated_write_in_an_agent_step_waits_for_its_review(client: Async
     payload: dict[str, Any] = interrupt.get("payload") or {}
     assert payload.get("kind") == "approval" and payload["call"]["tool"] == "place_wire_hold"
     review = (await client.get(f"/reviews/{tid}")).json()["data"]
-    assert review["actionTool"] == "place_wire_hold" and review["movesMoney"] is True
+    assert review["actionTool"] == "place_wire_hold" and review["stepUp"] is True
 
 
 async def test_deciding_it_resumes_the_agent_and_finishes_the_workflow(client: AsyncClient) -> None:

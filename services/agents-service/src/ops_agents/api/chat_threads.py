@@ -70,8 +70,10 @@ class AssistantBuilder:
         status = str(c.get("status") or "")
         gated, output = None, c.get("output")
         definition = self.catalog.tool(str(c.get("tool")))
-        if status == "gated" and definition and definition.approval:
-            gated = ToolGate(gate=definition.approval.gate, reviewers=definition.approval.reviewers)
+        if status == "gated":
+            # A registry operation has no template: the gate is the approval itself, decided by a reviewer.
+            tpl = definition.approval if definition else None
+            gated = ToolGate(gate=tpl.gate if tpl else "Approval", reviewers=tpl.reviewers if tpl else "a reviewer")
             output = {"status": "awaiting_approval"}
         return ToolCall(
             id=str(c["id"]),
@@ -101,10 +103,13 @@ class AssistantBuilder:
             review_id=str(p.get("review_id")),
             action=str(p.get("action") or ""),
             summary=fill(tpl.summary, values) if tpl else str(p.get("needed") or ""),
-            fields=[LabelValue(label=label, value=fill(v, values)) for label, v in (tpl.fields if tpl else [])],
+            # Without a template the reviewer sees every input the call will send, exactly as the model wrote it.
+            fields=[LabelValue(label=label, value=fill(v, values)) for label, v in tpl.fields]
+            if tpl
+            else [LabelValue(label=k, value=v) for k, v in values.items()],
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
-            moves_money=bool(p.get("moves_money")) or None,
+            step_up=bool(p.get("step_up")) or None,
             state=state,
             decided_by=decision["decided_by"] if decision else None,
             reason=decision["reason"] if decision else None,

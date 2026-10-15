@@ -48,7 +48,7 @@ def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | 
         "runId": r["thread_id"] or "",
         "target": r["tool"],
         "system": module["system"] if module else "",
-        "operation": r["access"] if r["access"] in ("read", "write", "money_movement") else "read",
+        "operation": r["access"] if r["access"] in ("read", "write") else "read",
         "approval": approval,
         "status": STATUS.get(r["outcome"], "error"),
         "latencyMs": r["latency_ms"] or 0,

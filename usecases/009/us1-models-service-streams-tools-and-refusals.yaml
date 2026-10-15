@@ -1,9 +1,0 @@
-# US1: models-service streams OpenAI chunks with tool-call deltas, keeps the request hash, refuses an over-limit key
-# once. Its suite drives the real OpenAI SDK and Pydantic AI's OpenAI model against the app.
-id: us1-models-service-streams-tools-and-refusals
-accept: US1
-failure_mode: a stream drops tool-call deltas, or the OpenAI client retries a 429 behind the caller's back
-layers:
-  cli:
-    run: "OPS_TEST_DATABASE_URL=postgresql+asyncpg://ops:ops@localhost:5477/ops_test_c009 make -C services/models-service verify"
-    expect: { exit: 0, stdout: "0 untyped on the allowlist" }

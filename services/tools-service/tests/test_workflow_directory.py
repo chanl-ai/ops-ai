@@ -124,7 +124,8 @@ async def test_each_tenant_asks_for_its_own_workflows_and_is_cached_briefly(agen
 
 async def test_the_test_panel_runs_as_an_approval_workflow_with_typed_sample_values(api: Api) -> None:
     detail = (await api.call("GET", "/mod_core_banking")).json()["data"]
-    contexts = detail["runContexts"]
+    owner, *contexts = detail["runContexts"]
+    assert owner["id"] == "owner", "the owner's try comes first, so the panel's default needs no approval"
     assert contexts and all(c["caseId"] == "sample" and c["bindings"] == {} for c in contexts), contexts
     assert {c["id"] for c in contexts} == {c["workflowId"] for c in contexts}, "one context per workflow, no case"
 

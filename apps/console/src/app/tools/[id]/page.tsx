@@ -38,7 +38,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useIntegrationOptions } from '@/hooks/integration-queries';
 import { useToolCall } from '@/hooks/governance-queries';
-import { useLookups, useWorkflows } from '@/hooks/queries';
+import { useCurrentPerson } from '@/hooks/auth-queries';
+import { useWorkflows } from '@/hooks/queries';
 import {
   useAddOperation,
   useDecideModuleApproval,
@@ -74,7 +75,7 @@ export default function ModulePage() {
   const [tab, setTab] = useTabParam(TABS, 'operations');
   const query = useToolModule(id);
   const activity = useModuleActivity(id, tab === 'activity');
-  const { data: lookups } = useLookups();
+  const me = useCurrentPerson().ids;
   // The workflows an approval can name are the registry's (agents-service), the same list the Workflows page shows.
   const { data: approvalWorkflows } = useWorkflows({ page: 1, pageSize: 200 });
   const updateOp = useUpdateOperation();
@@ -335,7 +336,7 @@ export default function ModulePage() {
                 <ApprovalsTable
                   approvals={m.approvals}
                   operations={m.operations}
-                  currentUser={lookups?.currentUser.name ?? ''}
+                  me={me}
                   busy={decide.isPending || revoke.isPending}
                   onRevoke={setRevoking}
                   onDecide={(a, decision) => (decision === 'rejected' ? setRejecting(a) : setApproving(a))}
@@ -473,10 +474,6 @@ export default function ModulePage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         moduleName={m.displayName}
-        fixedConnectionId={m.connection?.id}
-        connections={[]}
-        connectionsLoading={false}
-        onConnectNew={() => undefined}
         onDiscover={(source) => discover.mutateAsync(source)}
         discovering={discover.isPending}
         creating={importOps.isPending}
@@ -598,7 +595,7 @@ export default function ModulePage() {
         title={`Approve ${approving?.workflowName ?? ''} in ${approving ? ENV_LABEL[approving.environment].toLowerCase() : ''}?`}
         consequence={
           approving
-            ? `${approving.workflowName} can call ${approving.operations.join(', ')} in ${ENV_LABEL[approving.environment].toLowerCase()} from now until ${shortDate(approving.expiresAt)}.${approving.operations.some((n) => m.operations.find((o) => o.name === n)?.fourEyes) ? ' Money operations still need a person’s approval on every call.' : ''}`
+            ? `${approving.workflowName} can call ${approving.operations.join(', ')} in ${ENV_LABEL[approving.environment].toLowerCase()} from now until ${shortDate(approving.expiresAt)}.${approving.operations.some((n) => m.operations.find((o) => o.name === n)?.approvers === 2) ? ' Operations that need two approvers still need them on every call.' : ''}`
             : ''
         }
         details={

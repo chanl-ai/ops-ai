@@ -573,9 +573,9 @@ export const DISCOVERY: Record<string, { version: string; operations: Discovered
       op('get_account', 'Read an account', 'read', 'accounts', [f('accountId', 'string', true)], 'GET', '/accounts/{accountId}'),
       op('list_accounts', 'Accounts for a customer', 'read', 'accounts', [f('customerId', 'string', true)], 'GET', '/customers/{customerId}/accounts'),
       op('update_account_alerts', 'Change alert preferences', 'write', 'accounts', [f('accountId', 'string', true), f('alerts', 'object', true)], 'PATCH', '/accounts/{accountId}/alerts'),
-      op('create_payment', 'Create a payment', 'money_movement', 'payments', [f('fromAccount', 'string', true), f('payee', 'string', true), f('amount', 'number', true)], 'POST', '/payments'),
+      op('create_payment', 'Create a payment', 'write', 'payments', [f('fromAccount', 'string', true), f('payee', 'string', true), f('amount', 'number', true)], 'POST', '/payments'),
     ],
-    warnings: ['create_payment moves money: every call needs a person’s approval and a four-eyes check.'],
+    warnings: ['create_payment is a write: every call needs two people to approve it.'],
   },
 };
 

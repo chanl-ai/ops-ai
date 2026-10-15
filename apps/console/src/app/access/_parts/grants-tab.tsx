@@ -199,7 +199,7 @@ export function GrantsTab({ workflowId, onClearWorkflow }: { workflowId?: string
         open={bulk?.kind === 'extend'}
         onOpenChange={(o) => !o && setBulk(null)}
         title={shown?.rows.length === 1 ? 'Extend access' : `Extend ${shown?.rows.length ?? 0} grants`}
-        description="Sets a new expiry counted from today. Grants that never expire are skipped; money movement is capped at 180 days."
+        description="Sets a new expiry counted from today. Grants that never expire are skipped."
         fieldLabel="Extend by"
         prompt="Choose how long to extend"
         options={EXTEND}

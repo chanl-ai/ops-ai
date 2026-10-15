@@ -16,7 +16,5 @@ __pycache__/
 .logs/
 .run/
 
-# codeloop working state (cards, wiki, stage outputs) at the repository root only; docs/specs is tracked
-/.codeloop/
-/shape/
-/specs/
+# codeloop store lives in .codeloop/ and is tracked; only its runtime state is ignored
+.codeloop/state/

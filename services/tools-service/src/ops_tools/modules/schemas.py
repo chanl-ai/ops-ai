@@ -12,7 +12,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_service_kit.http import ListResult, Out
 
-Access = Literal["read", "write", "money_movement"]
+Access = Literal["read", "write"]
 ModuleType = Literal["mcp", "openapi", "http", "code"]
 Method = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
 Environment = Literal["dev", "test", "production"]
@@ -133,8 +133,12 @@ class ModuleOperation(Out):
     binding: SubjectBinding | None
     rate_limit_per_min: int
     requires_approval: bool
-    four_eyes: bool
     amount_max: float | None = None
+    # The write approval policy: distinct approvers (1 or 2), the team they come from, and whether the person who
+    # asked may approve (honoured in dev only).
+    approvers: int
+    approver_team: str
+    self_approval: bool
     idempotent: bool
     calls24h: int = Field(alias="calls24h")
     error_rate: float
@@ -224,7 +228,6 @@ class ModuleStats(Out):
     operations: int
     calls24h: int = Field(alias="calls24h")
     error_rate: float
-    money_operations: int
     expiring_approvals: int
     expiring_modules: int
 
@@ -346,7 +349,8 @@ class ModuleIn(In):
     system: str
     type: ModuleType
     endpoint: str
-    connection_id: str
+    # Optional: the endpoint plus the operations' secret headers are the connection; none means auth kind "none".
+    connection_id: str | None = None
     operations: list[DiscoveredOperationIn] | None = None
     # Where `operations` were discovered. Given, the service re-reads it and takes each operation's method, path,
     # inputs and headers from there; the caller's copies only pick operations and confirm reads.
@@ -392,6 +396,9 @@ class OperationPatchIn(In):
     binding: SubjectBindingIn | None = None
     amount_max: float | None = None
     description: str | None = None
+    approvers: int | None = None
+    approver_team: str | None = None
+    self_approval: bool | None = None
 
 
 class NoteIn(In):
@@ -452,7 +459,7 @@ class ToolCallRow(Out):
     case_id: str | None = None
     target: str
     system: str
-    operation: Literal["read", "write", "money_movement", "completion"]
+    operation: Literal["read", "write", "completion"]
     record: str | None = None
     approval: CallApproval
     status: Literal["ok", "error", "denied", "awaiting_approval", "replayed"]
@@ -497,6 +504,8 @@ class DiscoveryResult(Out):
     endpoint: str
     operations: list[DiscoveredOperation]
     warnings: list[str]
+    # No operation carries an auth header: imported as is, calls go out with no credentials.
+    no_auth: bool = False
 
 
 class ModuleSourceIn(In):

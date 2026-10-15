@@ -15,15 +15,18 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 
 from ops_agent_kernel.types import Resume, TranscriptMessage, TurnRequest
+from ops_agents.activities.gateway import acting_as
 from ops_agents.activities.tools import fill
 from ops_service_kit.ids import new_id
 
 from .common import (
     GraphDeps,
+    agent_grants,
     approval_token,
     interrupt_from_state,
     interrupt_to_state,
     kernel_turn,
+    needs_step_up,
     ports_with_workflows,
 )
 
@@ -67,12 +70,14 @@ def build(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
             settings=deps.catalog.settings_for(a, deps.model_alias),
-            tools=[*deps.catalog.grants_for(a), *offers],
+            tools=[*await agent_grants(deps, a), *offers],
             transcript=transcript,
             user_turn=state["message"],
             kb_ids=state.get("kb_ids") or a.default_kb_ids,
         )
-        result = await kernel_turn("agent", req, ports, deps.meter, deps.model_alias)
+        # The agent is the actor of every call its turn makes, in the gateway's log.
+        with acting_as(f"agent:{a.id}"):
+            result = await kernel_turn("agent", req, ports, deps.meter, deps.model_alias)
         return {
             "messages": [{"role": "user", "content": state["message"]}, {"role": "assistant", "content": result.text}],
             "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
@@ -92,7 +97,7 @@ def build(
                 "action": fill(tpl.action, values) if tpl else p["needed"],
                 "input": p["input"],
                 "input_hash": p["input_hash"],
-                "moves_money": p["access"] == "money_movement",
+                "step_up": await needs_step_up(deps, p["tool"]),
                 "reviewers": tpl.reviewers if tpl else None,
                 "call": {"tool": p["tool"], "input": p["input"], "step": p["key"]},
                 "server": p["server"],
@@ -113,7 +118,7 @@ def build(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
             settings=deps.catalog.settings_for(a, deps.model_alias),
-            tools=[*deps.catalog.grants_for(a), *offers],
+            tools=[*await agent_grants(deps, a), *offers],
             resume=Resume(
                 interrupt=interrupt_from_state(state.get("pending") or {}),
                 decision="approved" if approved else "rejected",
@@ -125,7 +130,8 @@ def build(
                 else None,
             ),
         )
-        result = await kernel_turn("resume", req, ports, deps.meter, deps.model_alias)
+        with acting_as(f"agent:{a.id}"):
+            result = await kernel_turn("resume", req, ports, deps.meter, deps.model_alias)
         return {
             "messages": [{"role": "assistant", "content": result.text}],
             "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,

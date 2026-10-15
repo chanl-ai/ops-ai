@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, Download, CalendarX, Clock, Landmark, Plus, Route, ShieldAlert, Trash2, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, Download, CalendarX, Clock, Plus, Route, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -18,14 +18,12 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { selectColumn } from '@/components/shared/select-column';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { ConnectDialog } from '@/components/integrations/connect-dialog';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddModuleDialog } from '@/components/tools/add-module-dialog';
 import { NewModuleDialog } from '@/components/tools/new-module-dialog';
 import { WorkflowToolsTable } from '@/components/tools/workflow-tools-table';
 import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, MODULE_TYPE, ModuleMark, ModuleTypeBadge, pctText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
-import { useConnectFlow, useIntegrationOptions } from '@/hooks/integration-queries';
 import { useTools } from '@/hooks/queries';
 import { useBulkDeleteModules, useCreateBlankModule, useCreateModule, useDeleteModule, useDiscoverModule, useToolModules } from '@/hooks/tool-module-queries';
 import { useSticky } from '@/hooks/use-sticky';
@@ -175,10 +173,6 @@ export default function ToolsPage() {
   const remove = useDeleteModule();
   const bulkRemove = useBulkDeleteModules();
   const [adding, setAdding] = React.useState(false);
-  const [connecting, setConnecting] = React.useState(false);
-  const [newConnectionId, setNewConnectionId] = React.useState<string | undefined>();
-  const connections = useIntegrationOptions(adding);
-  const flow = useConnectFlow(connecting);
   const [deleting, setDeleting] = React.useState<ToolModule | null>(null);
   const [bulk, setBulk] = React.useState<ToolModule[] | null>(null);
   const shownBulk = useSticky(bulk);
@@ -216,10 +210,9 @@ export default function ToolsPage() {
         <QueryError what="modules" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
       ) : (
         <div className="flex flex-col gap-4">
-          <StatCardGrid columns={4}>
+          <StatCardGrid columns={3}>
             <StatCard label="Modules" value={stats?.modules} icon={Boxes} footer={{ text: `${plural(stats?.operations ?? 0, 'operation')}`, subtext: 'Across every module you can see' }} />
             <StatCard label="Calls · 24h" value={stats ? count(stats.calls24h) : undefined} icon={Activity} footer={{ text: `${pctText(stats?.errorRate ?? 0)} failed`, subtext: 'Through the data gateway' }} />
-            <StatCard label="Money operations" value={stats?.moneyOperations} icon={Landmark} footer={{ text: 'A person approves every call', subtext: 'And a second person checks it' }} />
             <StatCard label="Expiring soon" value={stats?.expiringModules} icon={CalendarClock} footer={{ text: `${plural(stats?.expiringApprovals ?? 0, 'approval')} within 30 days`, subtext: `${plural(counts?.expired ?? 0, 'module')} already expired` }} />
           </StatCardGrid>
           <SavedViewTabs
@@ -257,7 +250,7 @@ export default function ToolsPage() {
             searchPlaceholder="Search modules or systems…"
             filters={[
               { column: 'type', title: 'Type', options: (['mcp', 'openapi', 'http', 'code'] as const).map((t) => ({ label: MODULE_TYPE[t].label, value: t, count: facets.type?.[t] ?? 0 })) },
-              { column: 'access', title: 'Access', options: [{ label: 'Read', value: 'read' }, { label: 'Write', value: 'write' }, { label: 'Moves money', value: 'money_movement' }].map((o) => ({ ...o, count: facets.access?.[o.value] ?? 0 })) },
+              { column: 'access', title: 'Access', options: [{ label: 'Read', value: 'read' }, { label: 'Write', value: 'write' }].map((o) => ({ ...o, count: facets.access?.[o.value] ?? 0 })) },
               { column: 'approvalState', title: 'Approval', options: (['draft', 'approved', 'needs_approval', 'expiring', 'expired'] as const).map((s) => ({ label: APPROVAL_STATE_LABEL[s], value: s, count: facets.approvalState?.[s] ?? 0 })) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
@@ -281,20 +274,13 @@ export default function ToolsPage() {
 
       <AddModuleDialog
         open={adding}
-        onOpenChange={(o) => {
-          setAdding(o);
-          if (!o) setNewConnectionId(undefined);
-        }}
-        connections={connections.data ?? []}
-        connectionsLoading={connections.isPending}
-        newConnectionId={newConnectionId}
-        onConnectNew={() => setConnecting(true)}
+        onOpenChange={setAdding}
         onDiscover={(s) => discover.mutateAsync(s)}
         discovering={discover.isPending}
         creating={create.isPending}
         onCreate={async (input) => {
           const m = await create.mutateAsync(input);
-          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Rename it, attach its connection and request a security review on its page.' });
+          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Rename it, add its credential header and request a security review on its page.' });
           setAdding(false);
           router.push(`/tools/${m.id}`);
         }}
@@ -305,24 +291,9 @@ export default function ToolsPage() {
         creating={createBlank.isPending}
         onCreate={async (input) => {
           const m = await createBlank.mutateAsync(input);
-          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Add operations and attach its connection here.' });
+          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Add operations here.' });
           setCreatingBlank(false);
           router.push(`/tools/${m.id}`);
-        }}
-      />
-      <ConnectDialog
-        open={connecting}
-        onOpenChange={setConnecting}
-        catalog={flow.catalog}
-        teams={flow.teams}
-        defaultTeam={flow.defaultTeam}
-        currentUser={flow.currentUser}
-        connecting={flow.connecting}
-        onConnect={async (input) => {
-          const i = await flow.connect(input);
-          toast.success(`Connected ${i.name}`, { description: 'Picked for this module.' });
-          setNewConnectionId(i.id);
-          setConnecting(false);
         }}
       />
       <DeleteDialog

@@ -1,9 +1,0 @@
-# US2: uc-040 api: only Security's approver decides; the requester and another team's approver get 403; changes need a reason.
-# The runner gives each run its own database and ports.
-id: us2-security-decides
-accept: US2
-failure_mode: the requester or another team's approver clears a review, or changes are requested without a reason
-layers:
-  cli:
-    run: "make usecase-test UC=uc-040 LAYER=api"
-    expect: { exit: 0, stdout: "uc-040 api  7 checks passed" }

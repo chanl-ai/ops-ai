@@ -4,56 +4,189 @@
     "server": "Core Banking",
     "description": "Look up a Northfield deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
     "access": "read",
-    "input_schema": {"type": "object", "properties": {"query": {"type": "string", "description": "Account number or holder name"}}, "required": ["query"]},
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Account number or holder name"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
     "kind": "lookup",
     "dataset": "accounts",
-    "match_fields": ["accountId", "holder"],
+    "match_fields": [
+      "accountId",
+      "holder"
+    ],
     "view_title": "{accountId} · {holder}",
-    "view_fields": [["Type", "{type}"], ["Balance", "{balance}"], ["Daily wire limit", "{dailyWireLimit}"], ["Last wire", "{lastWire}"]]
+    "view_fields": [
+      [
+        "Type",
+        "{type}"
+      ],
+      [
+        "Balance",
+        "{balance}"
+      ],
+      [
+        "Daily wire limit",
+        "{dailyWireLimit}"
+      ],
+      [
+        "Last wire",
+        "{lastWire}"
+      ]
+    ]
   },
   {
     "name": "place_wire_hold",
     "server": "Payments Hub",
     "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
-    "access": "money_movement",
-    "input_schema": {"type": "object", "properties": {"wireId": {"type": "string", "description": "Wire id, e.g. W-88213"}, "hours": {"type": "integer", "minimum": 1, "maximum": 72}, "reason": {"type": "string"}}, "required": ["wireId", "hours", "reason"]},
+    "access": "write",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "wireId": {
+          "type": "string",
+          "description": "Wire id, e.g. W-88213"
+        },
+        "hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 72
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "wireId",
+        "hours",
+        "reason"
+      ]
+    },
     "kind": "draft",
     "approval": {
       "title": "Hold outbound wire {wireId}",
       "action": "Hold wire {wireId} for {hours} hours",
       "summary": "{reason}",
-      "fields": [["Wire", "{wireId}"], ["Hold", "{hours} hours"], ["Reason", "{reason}"]],
+      "fields": [
+        [
+          "Wire",
+          "{wireId}"
+        ],
+        [
+          "Hold",
+          "{hours} hours"
+        ],
+        [
+          "Reason",
+          "{reason}"
+        ]
+      ],
       "risk": "critical",
       "consequence": "Approving holds this outbound wire. The payee receives nothing until the hold is released.",
       "gate": "Money movement review",
       "reviewers": "Fraud Operations",
       "result": "Hold {reference} placed on wire {wireId} for {hours} hours."
-    }
+    },
+    "approvers": 2
   },
   {
     "name": "lookup_customer",
     "server": "Customer Hub",
     "description": "Look up a Northfield customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
     "access": "read",
-    "input_schema": {"type": "object", "properties": {"query": {"type": "string", "description": "Customer name, id or email"}}, "required": ["query"]},
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Customer name, id or email"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
     "kind": "lookup",
     "dataset": "customers",
-    "match_fields": ["customerId", "name", "email"],
+    "match_fields": [
+      "customerId",
+      "name",
+      "email"
+    ],
     "view_title": "{name}",
-    "view_fields": [["Customer", "{customerId}"], ["Segment", "{segment}"], ["Home branch", "{branch}"], ["Customer since", "{since}"], ["Open items", "{openItems}"]]
+    "view_fields": [
+      [
+        "Customer",
+        "{customerId}"
+      ],
+      [
+        "Segment",
+        "{segment}"
+      ],
+      [
+        "Home branch",
+        "{branch}"
+      ],
+      [
+        "Customer since",
+        "{since}"
+      ],
+      [
+        "Open items",
+        "{openItems}"
+      ]
+    ]
   },
   {
     "name": "request_document",
     "server": "Customer Hub",
     "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
     "access": "write",
-    "input_schema": {"type": "object", "properties": {"customerId": {"type": "string"}, "document": {"type": "string"}, "reason": {"type": "string"}}, "required": ["customerId", "document", "reason"]},
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "customerId": {
+          "type": "string"
+        },
+        "document": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "customerId",
+        "document",
+        "reason"
+      ]
+    },
     "kind": "draft",
     "approval": {
       "title": "Request a document from {customerId}",
       "action": "Send a request for {document}",
       "summary": "{reason}",
-      "fields": [["Customer", "{customerId}"], ["Document", "{document}"], ["Reason", "{reason}"]],
+      "fields": [
+        [
+          "Customer",
+          "{customerId}"
+        ],
+        [
+          "Document",
+          "{document}"
+        ],
+        [
+          "Reason",
+          "{reason}"
+        ]
+      ],
       "risk": "medium",
       "gate": "Customer outreach review",
       "reviewers": "Card Services",

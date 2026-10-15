@@ -1,5 +1,6 @@
-"""Write tool calls through the tool gateway. Lookups (read tools) stay local: they touch no customer and need no
-approval, and keeping them in-process saves a hop on every turn.
+"""Tool calls through the tool gateway, reads and writes alike: every tool an agent holds is a tools-service
+operation (activities/tool_directory.py), and tools-service is where it runs, under the agent service's identity
+and the gateway's policy. Nothing runs from the fixture catalogue here.
 
 The gateway checks the approval token against the run's thread and step, so the executor sends both. The thread comes
 from `RUN_CONTEXT` when the caller set it (the chat route does), otherwise from the LangGraph config of the node that
@@ -9,7 +10,8 @@ the call's idempotency key, which a resumed call keeps across processes.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -17,9 +19,6 @@ from typing import Any, Protocol
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
-
-from .catalog import Catalog
-from .tools import LocalToolExecutor
 
 
 @dataclass(frozen=True)
@@ -45,6 +44,18 @@ def current_run_context() -> RunContext:
         )
     except (ImportError, RuntimeError):
         return RunContext(thread=None)
+
+
+@contextmanager
+def acting_as(act: str) -> Generator[None]:
+    """Calls made inside name `act` (e.g. `agent:ag_dispute`) as their actor in the gateway's log, on the run's thread
+    and lease generation."""
+    base = current_run_context()
+    token = RUN_CONTEXT.set(RunContext(thread=base.thread, act=act, generation=base.generation))
+    try:
+        yield
+    finally:
+        RUN_CONTEXT.reset(token)
 
 
 class GatewayRefused(Exception):
@@ -77,11 +88,17 @@ class GatewayClient:
 
     async def tool_access(self, tool: str) -> str:
         """The tool's access class as tools-service's registry has it; "unknown" when it is not registered."""
+        return str((await self.tool_policy(tool))["access"])
+
+    async def tool_policy(self, tool: str) -> dict[str, Any]:
+        """The tool's access class and write approval policy (`approval`: approvers, approverTeam, selfApproval) as
+        tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         r = await self.client.get(f"/v1/tools/{tool}", headers=self._auth())
         if r.status_code == 404:
-            return "unknown"
+            return {"access": "unknown", "approval": None}
         r.raise_for_status()
-        return str(r.json()["data"]["access"])
+        data: dict[str, Any] = r.json()["data"]
+        return data
 
     async def raise_fence(self, thread_id: str, generation: int) -> int:
         """Raises the thread's write fence in tools-service to `generation` (E2c) and returns the fence. Raises
@@ -141,19 +158,14 @@ class GatewayClient:
 
 
 class GatewayToolExecutor:
-    def __init__(self, catalog: Catalog, gateway: GatewayClient) -> None:
-        self._catalog = catalog
+    def __init__(self, gateway: GatewayClient) -> None:
         self._gateway = gateway
-        self._local = LocalToolExecutor(catalog)
 
     async def execute(
         self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
     ) -> ToolOutcome:
-        definition = self._catalog.tool(tool)
-        if definition is None:
-            return ToolOutcome(False, f"Tool {tool} is not granted to this agent.")
-        if definition.kind == "lookup":
-            return await self._local.execute(tool, arguments, key=key, approval_token=approval_token)
+        # The kernel calls only tools in the turn's grants; the gateway resolves the name in the registry and refuses
+        # one it does not hold or that is hidden, unpublished or drifted.
         try:
             data = await self._gateway.call(tool, arguments, key=key, approval_token=approval_token)
         except GatewayRefused as e:

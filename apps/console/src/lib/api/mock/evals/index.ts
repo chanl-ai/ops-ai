@@ -81,7 +81,7 @@ export function createEvalsMock(deps: EvalsDeps) {
   const contentAt = (a: Agent, v: number) => snapshots[a.id]?.[v] ?? seedContent[a.id] ?? contentOf(a);
 
   // ── Cases ──
-  const writeToolOf = (c: AgentContent) => c.toolNames.find((t) => ['write', 'money_movement'].includes(deps.toolAccess(t) ?? '')) ?? 'transfer_funds';
+  const writeToolOf = (c: AgentContent) => c.toolNames.find((t) => deps.toolAccess(t) === 'write') ?? 'transfer_funds';
   const principalName = (pid?: string) => PRINCIPALS.find((p) => p.id === pid)?.name;
   const ownCases: EvalCase[] = Object.entries(AGENT_CASES).flatMap(([agentId, seeds]) =>
     seeds.map((s, i) => ({

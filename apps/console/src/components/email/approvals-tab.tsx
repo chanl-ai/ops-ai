@@ -28,13 +28,11 @@ export function ApprovalsTab({
   config,
   onChange,
   actionOptions,
-  moneyTools,
   approverGroups,
 }: {
   config: EmailWorkflowConfig;
   onChange: (c: EmailWorkflowConfig) => void;
   actionOptions: string[];
-  moneyTools: string[];
   approverGroups: string[];
 }) {
   const [editing, setEditing] = React.useState<ApprovalRule | 'new' | null>(null);
@@ -104,7 +102,7 @@ export function ApprovalsTab({
 
   return (
     <div className="flex flex-col gap-4" data-testid="approvals-tab">
-      <ConfigNote>Every drafted action waits on a case until it is approved here, one action at a time. Money movement needs two people.</ConfigNote>
+      <ConfigNote>Every drafted action waits on a case until it is approved here, one action at a time.</ConfigNote>
       {ungoverned.length > 0 && (
         <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-text" role="status">
           No rule for {ungoverned.map((a) => `“${actionLabel(a)}”`).join(', ')}. {ungoverned.length === 1 ? 'It runs' : 'They run'} as soon as the agent drafts {ungoverned.length === 1 ? 'it' : 'them'}.
@@ -128,7 +126,6 @@ export function ApprovalsTab({
         onOpenChange={(o) => !o && setEditing(null)}
         rule={editing === 'new' ? null : editing}
         actionOptions={actionOptions.filter((a) => (editing && editing !== 'new' ? a === editing.action : true) || !config.approvals.some((r) => r.action === a))}
-        moneyTools={moneyTools}
         approverGroups={approverGroups}
         onSave={(rule) => {
           const exists = config.approvals.some((r) => r.id === rule.id);
@@ -157,7 +154,6 @@ function RuleDialog({
   onOpenChange,
   rule,
   actionOptions,
-  moneyTools,
   approverGroups,
   onSave,
 }: {
@@ -165,7 +161,6 @@ function RuleDialog({
   onOpenChange: (o: boolean) => void;
   rule: ApprovalRule | null;
   actionOptions: string[];
-  moneyTools: string[];
   approverGroups: string[];
   onSave: (r: ApprovalRule) => void;
 }) {
@@ -185,13 +180,11 @@ function RuleDialog({
     setErrors({});
   }, [open, rule]);
 
-  const moves = moneyTools.includes(action);
   const submit = () => {
     const e: Record<string, string> = {};
     if (!action) e.action = 'Choose the action this rule governs.';
     if (!group) e.group = 'Choose who approves it.';
     if (limit && !(Number(limit) > 0)) e.limit = 'Enter an amount above zero, or leave it empty.';
-    if (moves && !fourEyes) e.fourEyes = 'Actions that move money need two approvers.';
     setErrors(e);
     if (Object.keys(e).length) return;
     onSave({
@@ -250,7 +243,7 @@ function RuleDialog({
             </SelectContent>
           </Select>
         </FormField>
-        <FormField id="rule-four-eyes" label="Two approvers" error={errors.fourEyes} hint={moves ? 'Required: this tool moves money.' : 'A second person from the group must also approve.'}>
+        <FormField id="rule-four-eyes" label="Two approvers" error={errors.fourEyes} hint="A second person from the group must also approve.">
           <Switch id="rule-four-eyes" checked={fourEyes} onCheckedChange={setFourEyes} />
         </FormField>
         <FormField id="rule-limit" label="Run without sign-off under" optional error={errors.limit} hint="Leave empty to always ask. Applies to actions with an amount.">

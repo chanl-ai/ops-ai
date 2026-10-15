@@ -24,8 +24,8 @@ export function seedGrants(): (AccessGrant & { owner: string })[] {
     for (const tool of a.tools) {
       const m = moduleOf(tool);
       const soon = EXPIRY[`${w.id}|${tool}`];
-      // Every grant expires: money movement within 180 days, reads and writes within a year.
-      const expiresAt = soon != null ? inDays(soon) : m.access === 'money_movement' ? inDays(60 + ((n * 37) % 120)) : inDays(90 + ((n * 41) % 270));
+      // Every grant expires, within a year.
+      const expiresAt = soon != null ? inDays(soon) : inDays(90 + ((n * 41) % 270));
       out.push({
         ...base,
         id: `gr_${++n}`,
@@ -36,7 +36,6 @@ export function seedGrants(): (AccessGrant & { owner: string })[] {
         grantedAt: minsAgo(DAY * (20 + ((n * 13) % 140))),
         expiresAt,
         status: 'active',
-        reason: m.access === 'money_movement' ? 'Approved by the model risk committee for this workflow' : undefined,
       });
     }
     for (const kb of a.kbs) {

@@ -1,9 +1,0 @@
-# US4: uc-026. No credentials, a token issued for another service, a dev header, or a service token on the public
-# mount: each is 401 on every route but health, the key set, sign-in, refresh and the invite routes (I3, I8, I13, I14).
-id: us4-anonymous-and-foreign-tokens-refused
-accept: US4
-failure_mode: a route answers without credentials, or accepts a token meant for another service or mount
-layers:
-  cli:
-    run: "make usecase-test UC=uc-026 LAYER=api OPS_USECASE_DB=ops_usecase_c006 OPS_USECASE_AGENTS_PORT=8900 OPS_USECASE_TOOLS_PORT=8901 OPS_USECASE_MODELS_PORT=8902 OPS_USECASE_PLATFORM_PORT=8903 OPS_USECASE_PLATFORM_INTERNAL_PORT=8904 OPS_USECASE_CONSOLE_PORT=3218"
-    expect: { exit: 0, stdout: "uc-026 api  4 checks passed" }

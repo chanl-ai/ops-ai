@@ -155,7 +155,7 @@ export const TEMPLATE_SEEDS: Seed[] = [
     category: 'Risk and compliance',
     summary: 'Reviews a wire or card fraud alert, gathers evidence and proposes hold or release for an analyst to approve.',
     description:
-      'Built on the wire fraud playbook. Pulls the account’s recent wire and login history, scores account-takeover and mule indicators, and proposes an action. Placing or releasing a hold moves money and always pauses for a four-eyes review.',
+      'Built on the wire fraud playbook. Pulls the account’s recent wire and login history, scores account-takeover and mule indicators, and proposes an action. Placing or releasing a hold always pauses for a two-person review.',
     version: 6,
     riskTier: 'high',
     role: 'Reviews fraud alerts and proposes hold or release',
@@ -163,7 +163,7 @@ export const TEMPLATE_SEEDS: Seed[] = [
     channels: ['api'],
     expectedTools: [
       { name: 'get_wire_history', purpose: 'Recent wires, payees and MFA results', access: 'read' },
-      { name: 'place_wire_hold', purpose: 'Place or release the hold once an analyst approves', access: 'money_movement' },
+      { name: 'place_wire_hold', purpose: 'Place or release the hold once an analyst approves', access: 'write' },
       { name: 'search_knowledge', purpose: 'Find the playbook rule behind the proposal', access: 'read' },
     ],
     expectedKnowledge: ['Fraud & payments', 'Compliance'],

@@ -136,12 +136,10 @@ export default function WorkflowDetailPage() {
   const live = wf.status === 'live';
   const isEmail = wf.kind === 'email_intake';
   const visibleTabs = TABS.filter((t) => isEmail || !EMAIL_TABS.includes(t));
-  const moneyTools = (tools.data?.data ?? []).filter((t) => t.access === 'money_movement').map((t) => t.name);
   const emailProps = {
     queues: caseQueues.data?.queues ?? [],
     approverGroups: caseQueues.data?.approverGroups ?? [],
     actionOptions: [...(tools.data?.data ?? []).filter((t) => t.enabled).map((t) => t.name), 'send_reply'],
-    moneyTools,
     onTestSample: (config: EmailWorkflowConfig, input: SampleMailInput) => testSample.mutateAsync({ config, input }),
     testing: testSample.isPending,
   };
@@ -158,7 +156,6 @@ export default function WorkflowDetailPage() {
         workflow={wf}
         reviewerGroups={lookups?.reviewerGroups ?? []}
         slaOptions={lookups?.slaOptions ?? []}
-        moneyTools={moneyTools}
         agents={agentList.data?.data ?? []}
         toolOptions={(tools.data?.data ?? []).filter((t) => t.enabled)}
         lookupOptions={{ collections: lookups?.collections ?? [], owners: lookups?.owners ?? [], workflows: lookups?.workflows ?? [] }}

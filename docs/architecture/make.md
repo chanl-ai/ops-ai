@@ -79,6 +79,7 @@ shell or secrets manager to `OPS_*`.
 | `OPS_LOG_DIR`, `OPS_RUN_DIR` | `.logs`, `.run` (`/isolated` appended) | `env.mk` | `stack.sh` |
 | `OPS_READY_TIMEOUT` | 90 | you | `stack.sh up` wait |
 | `OPS_CONSOLE_DIST_DIR` | `.next` (`.next-isolated`) | `stack.sh` | `apps/console/next.config.ts` |
+| `OPS_GATEWAY_URL`, `OPS_AGENTS_SEED_FILE` | tools-service on `OPS_TOOLS_PORT`; `seed/chat_agents.json` | `stack.sh` (agents only) | agents: tools come from and run through tools-service; agents seeded with its operations |
 | `OPS_PORT`, `OPS_GATEWAY_PORT` | 8700, 8720 | settings default; `env.mk` when isolated | agents, tools |
 | `OPS_DATABASE_URL` | `postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime` | settings default; `env.mk` when isolated | agents, tools, Alembic |
 | `OPS_TEST_DATABASE_URL` | `…/ops_test` (`ops_test_isolated` with ISOLATED=1); a caller's explicit `OPS_DATABASE_URL` wins | `env.mk` | every `test` target and `python-verify`, through `scripts/test_db.py`, which creates and migrates it. The store conformance suites run beside it on `<that database>_conformance` (`packages/ops_store` `backends()`), created on first use, so a session that sets its own test database also gets its own conformance database |
@@ -94,6 +95,7 @@ shell or secrets manager to `OPS_*`.
 
 | Gotcha | Rule |
 |---|---|
+| `db-up` never recreates a running PostgreSQL or OPA (`--no-recreate`) | Every checkout, worktree and verify export shares the `ops-runtime` compose project, and OPA mounts the policy folder by path; a recreate from another checkout re-mounted OPA there and dropped the review key, so every approved write was refused. After changing `compose.yaml`, recreate on purpose with `docker compose -p ops-runtime -f deploy/compose/compose.yaml up -d --force-recreate` from the main checkout |
 | The live service's timer poller claims timers on whatever database it runs on | Tests never share a database with a running stack: `make test` and `make verify` use `OPS_TEST_DATABASE_URL`, and `scripts/test_db.py` refuses `ops_runtime` |
 | Use-case runs from two sessions shared database `ops_usecase` and ports 8790 to 8792, so one run's services or rows broke the other's checks | Each `make usecase-test` picks its own free ports and creates its own database, dropped when it ends; set `OPS_USECASE_*` only to pin one, and `make usecase-reset` drops what a killed run left |
 | Every tools-service start writes its review key and gateway policy into the OPA it is given, so with one OPA on :8181 a dev stack, another session's use case or a tree with a different policy rewrote them under a running suite, and the suite's approval tokens were refused ("not signed by the review service") | The gateway tests (agents `tests/gateway`, `tests/conformance`, tools-service `tests/`) and the use-case harness's `tools()` each start a private OPA container on a free port (`ops_service_kit.opa_server`); only the live stack uses :8181 |

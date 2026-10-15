@@ -26,7 +26,8 @@
       "post": {
         "operationId": "placeHold",
         "summary": "Hold an account",
-        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Hold"}}}}
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Hold"}}}},
+        "responses": {"201": {"description": "Hold placed", "content": {"application/json": {"example": {"holdId": "HLD-900", "status": "placed"}}}}}
       }
     },
     "/statements": {

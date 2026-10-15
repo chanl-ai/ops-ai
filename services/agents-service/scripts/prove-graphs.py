@@ -104,7 +104,7 @@ def approve(payload: dict[str, Any]) -> dict[str, Any]:
     # A money movement needs a step-up from the console; any non-empty token stands in for it here.
     return (
         {"decision": "approved", "stepUpToken": "stepup_prove_graphs"}
-        if payload.get("moves_money")
+        if payload.get("step_up")
         else {"decision": "approved"}
     )
 
@@ -128,9 +128,7 @@ def report(name: str, trace: Trace, extra: list[str]) -> None:
     out(f"nodes: {collapse(trace.nodes)}")
     for p in trace.interrupts:
         shown = {
-            k: v
-            for k, v in p.items()
-            if k in ("kind", "review_id", "tool", "action", "moves_money", "score", "attempts")
+            k: v for k, v in p.items() if k in ("kind", "review_id", "tool", "action", "step_up", "score", "attempts")
         }
         out(f"interrupt: {json.dumps(shown)}")
     for line in extra:

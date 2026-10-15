@@ -395,7 +395,7 @@ export function createChatMock(deps: Deps): ChatApi {
                 { label: 'Review', value: s.review.id },
               ],
               risk: s.review.risk,
-              movesMoney: s.review.movesMoney,
+              stepUp: s.review.stepUp,
               state: 'pending',
             };
             msg.widgets = [...msg.widgets, gate];
@@ -419,7 +419,7 @@ export function createChatMock(deps: Deps): ChatApi {
         yield { type: 'tool_end', call: structuredClone(done) };
         for (const w of step.widgets) {
           // A drafted approval mirrors its review: if REV-3020 was already decided, the widget says so.
-          const widget: ChatWidget = w.kind === 'approval' && review ? { ...w, state: approvalState(review), decidedBy: review.decidedAt ? review.assignee : undefined, movesMoney: review.movesMoney } : w;
+          const widget: ChatWidget = w.kind === 'approval' && review ? { ...w, state: approvalState(review), decidedBy: review.decidedAt ? review.assignee : undefined, stepUp: review.stepUp } : w;
           msg.widgets = [...(msg.widgets ?? []), widget];
           yield { type: 'widget', widget: structuredClone(widget) };
         }

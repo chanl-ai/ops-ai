@@ -41,7 +41,7 @@ TENANT = "local"
 log = get_logger("ops_tools")
 
 
-async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str, Any]]) -> None:
+async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str, Any]] | None) -> None:
     engine = create_async_engine(settings.database_url)
     added = await load(ModuleStore(engine), seed, tenant_id=TENANT, now=datetime.now(UTC), catalog=catalog)
     await engine.dispose()
@@ -55,7 +55,9 @@ def main() -> None:
     seed = json.loads(settings.tools_seed_file.read_text())
     dev = settings.environment == "dev"
     if dev:
-        asyncio.run(_seed(settings, seed, json.loads((settings.seed_dir / "tools.json").read_text())))
+        # Without the agents' fixture catalogue: seeded operations run from their stubs (or their endpoints once
+        # connected), and no "Runtime demo tools" module offers the fixture tools to agents (c-048 G1).
+        asyncio.run(_seed(settings, seed, None))
     engine = create_async_engine(settings.database_url)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     store, calls = ModuleStore(engine), CallLog(engine)

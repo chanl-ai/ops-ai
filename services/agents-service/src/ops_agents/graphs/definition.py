@@ -33,11 +33,13 @@ from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
     GraphDeps,
+    agent_grants,
     approval_token,
     emit,
     interrupt_from_state,
     interrupt_to_state,
     kernel_turn,
+    needs_step_up,
     reply_call,
 )
 from .sla import HumanSettings, review_loop, seconds
@@ -346,7 +348,7 @@ def compile_definition(
                     turn_id=new_id("turn"),
                     run_id=new_id("run"),
                     settings=deps.catalog.settings_for(pinned, deps.model_alias),
-                    tools=deps.catalog.grants_for(pinned),
+                    tools=await agent_grants(deps, pinned),
                     transcript=[],
                     user_turn=text,
                     kb_ids=pinned.default_kb_ids,
@@ -386,7 +388,7 @@ def compile_definition(
                     "action": fill(tpl.action, values) if tpl else p["needed"],
                     "input": p["input"],
                     "input_hash": p["input_hash"],
-                    "moves_money": p["access"] == "money_movement",
+                    "step_up": await needs_step_up(deps, p["tool"]),
                     "reviewers": tpl.reviewers if tpl else None,
                     "call": {"tool": p["tool"], "input": p["input"], "step": p["key"]},
                     "server": p["server"],
@@ -407,7 +409,7 @@ def compile_definition(
                 turn_id=new_id("turn"),
                 run_id=new_id("run"),
                 settings=deps.catalog.settings_for(pinned, deps.model_alias),
-                tools=deps.catalog.grants_for(pinned),
+                tools=await agent_grants(deps, pinned),
                 resume=Resume(
                     interrupt=interrupt_from_state(state.get("pending") or {}),
                     decision="approved" if approved else "rejected",

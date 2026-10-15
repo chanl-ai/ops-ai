@@ -22,7 +22,7 @@ export interface AgentWrapperDeps {
   tierOf: (workflowId: string) => Risk;
   /** Sets a new wrapper's inventory tier from its agent's grants. */
   seedTier: (workflowId: string, tier: Risk, reason: string) => void;
-  toolAccess: (agentId: string) => 'read' | 'write' | 'money_movement' | undefined;
+  toolAccess: (agentId: string) => 'read' | 'write' | undefined;
 }
 
 const SYSTEM = 'Platform';
@@ -74,8 +74,8 @@ export function createAgentWrappers(deps: AgentWrapperDeps) {
       deps.workflows.push(w);
       deps.graphs[w.id] = graphFor(w.id, a, pub);
       const access = deps.toolAccess(a.id);
-      const tier: Risk = access === 'money_movement' ? 'high' : access === 'write' ? 'medium' : 'low';
-      deps.seedTier(w.id, tier, access ? `Wraps ${a.name}, whose ${access.replace('_', ' ')} tools set the tier` : `Wraps ${a.name}, which holds read tools only`);
+      const tier: Risk = access === 'write' ? 'medium' : 'low';
+      deps.seedTier(w.id, tier, access ? `Wraps ${a.name}, whose ${access} tools set the tier` : `Wraps ${a.name}, which holds read tools only`);
     }
     if (!chatOf(w.id)) {
       deps.deployments.push({ id: id('dp'), name: `${a.name} · Console chat`, workflowId: w.id, workflowName: w.name, channel: 'chat', environment: 'production', version: w.version, latestVersion: w.version, status: a.paused ? 'paused' : 'active', traffic24h: Math.round(a.tasks24h * 0.15), errors24h: 0, createdAt: at, updatedAt: at });

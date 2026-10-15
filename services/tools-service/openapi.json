@@ -462,8 +462,7 @@
           "access": {
             "enum": [
               "read",
-              "write",
-              "money_movement"
+              "write"
             ],
             "title": "Access",
             "type": "string"
@@ -533,8 +532,7 @@
           "access": {
             "enum": [
               "read",
-              "write",
-              "money_movement"
+              "write"
             ],
             "title": "Access",
             "type": "string"
@@ -604,6 +602,11 @@
           "endpoint": {
             "title": "Endpoint",
             "type": "string"
+          },
+          "noAuth": {
+            "default": false,
+            "title": "Noauth",
+            "type": "boolean"
           },
           "operations": {
             "items": {
@@ -901,6 +904,29 @@
         "title": "Envelope[ToolModuleDetail]",
         "type": "object"
       },
+      "Envelope_list_GrantableOperation__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/GrantableOperation"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[GrantableOperation]]",
+        "type": "object"
+      },
       "Envelope_list_SecretMeta__": {
         "additionalProperties": false,
         "properties": {
@@ -1027,6 +1053,64 @@
         "title": "FenceIn",
         "type": "object"
       },
+      "GrantableOperation": {
+        "additionalProperties": false,
+        "description": "A tool an agent may be granted: a published operation, with what a model needs to choose and call it.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "approvers": {
+            "title": "Approvers",
+            "type": "integer"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "inputSchema": {
+            "additionalProperties": true,
+            "title": "Inputschema",
+            "type": "object"
+          },
+          "moduleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moduleid"
+          },
+          "moduleName": {
+            "title": "Modulename",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requiresApproval": {
+            "title": "Requiresapproval",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "access",
+          "inputSchema",
+          "requiresApproval",
+          "approvers",
+          "moduleId",
+          "moduleName"
+        ],
+        "title": "GrantableOperation",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1065,8 +1149,7 @@
           "access": {
             "enum": [
               "read",
-              "write",
-              "money_movement"
+              "write"
             ],
             "title": "Access",
             "type": "string"
@@ -1470,8 +1553,15 @@
         "additionalProperties": false,
         "properties": {
           "connectionId": {
-            "title": "Connectionid",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
           },
           "displayName": {
             "title": "Displayname",
@@ -1544,8 +1634,7 @@
           "displayName",
           "system",
           "type",
-          "endpoint",
-          "connectionId"
+          "endpoint"
         ],
         "title": "ModuleIn",
         "type": "object"
@@ -1596,8 +1685,7 @@
           "access": {
             "enum": [
               "read",
-              "write",
-              "money_movement"
+              "write"
             ],
             "title": "Access",
             "type": "string"
@@ -1615,6 +1703,14 @@
           },
           "approvedWorkflows": {
             "title": "Approvedworkflows",
+            "type": "integer"
+          },
+          "approverTeam": {
+            "title": "Approverteam",
+            "type": "string"
+          },
+          "approvers": {
+            "title": "Approvers",
             "type": "integer"
           },
           "binding": {
@@ -1663,10 +1759,6 @@
             ],
             "title": "Executor",
             "type": "string"
-          },
-          "fourEyes": {
-            "title": "Foureyes",
-            "type": "boolean"
           },
           "headers": {
             "items": {
@@ -1753,6 +1845,10 @@
             ],
             "title": "Responsetransform"
           },
+          "selfApproval": {
+            "title": "Selfapproval",
+            "type": "boolean"
+          },
           "timeoutMs": {
             "anyOf": [
               {
@@ -1782,7 +1878,9 @@
           "binding",
           "rateLimitPerMin",
           "requiresApproval",
-          "fourEyes",
+          "approvers",
+          "approverTeam",
+          "selfApproval",
           "idempotent",
           "calls24h",
           "errorRate",
@@ -1908,10 +2006,6 @@
             "title": "Modules",
             "type": "integer"
           },
-          "moneyOperations": {
-            "title": "Moneyoperations",
-            "type": "integer"
-          },
           "operations": {
             "title": "Operations",
             "type": "integer"
@@ -1922,7 +2016,6 @@
           "operations",
           "calls24h",
           "errorRate",
-          "moneyOperations",
           "expiringApprovals",
           "expiringModules"
         ],
@@ -2296,6 +2389,28 @@
             ],
             "title": "Amountmax"
           },
+          "approverTeam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approverteam"
+          },
+          "approvers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvers"
+          },
           "binding": {
             "anyOf": [
               {
@@ -2414,6 +2529,17 @@
               }
             ],
             "title": "Responsetransform"
+          },
+          "selfApproval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selfapproval"
           },
           "timeoutMs": {
             "anyOf": [
@@ -3259,7 +3385,6 @@
             "enum": [
               "read",
               "write",
-              "money_movement",
               "completion"
             ],
             "title": "Operation",
@@ -3366,8 +3491,7 @@
             "items": {
               "enum": [
                 "read",
-                "write",
-                "money_movement"
+                "write"
               ],
               "type": "string"
             },
@@ -3558,8 +3682,7 @@
             "items": {
               "enum": [
                 "read",
-                "write",
-                "money_movement"
+                "write"
               ],
               "type": "string"
             },
@@ -5312,6 +5435,136 @@
           }
         },
         "summary": "Raise Fence",
+        "tags": [
+          "gateway"
+        ]
+      }
+    },
+    "/v1/internal/operations": {
+      "get": {
+        "description": "Internal (service token): the operations an agent of the caller's tenant may be granted. agents-service\nlists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
+        "operationId": "grantable_operations_v1_internal_operations_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_GrantableOperation__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Grantable Operations",
         "tags": [
           "gateway"
         ]
@@ -10690,15 +10943,95 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
           }
         },
         "summary": "Tool Access",

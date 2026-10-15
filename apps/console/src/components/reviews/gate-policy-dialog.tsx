@@ -174,7 +174,7 @@ export function GatePolicyDialog({
         <label htmlFor="gate-four-eyes" className="flex items-start justify-between gap-4 rounded-lg border p-3">
           <span>
             <span className="block text-sm font-medium">Require two approvers</span>
-            <span className="block text-xs text-muted-foreground">Both from the reviewer group. Use for anything that moves money.</span>
+            <span className="block text-xs text-muted-foreground">Both from the reviewer group, for a step that needs a second person.</span>
           </span>
           <Switch id="gate-four-eyes" checked={values.fourEyes} onCheckedChange={(v) => set('fourEyes', v)} />
         </label>

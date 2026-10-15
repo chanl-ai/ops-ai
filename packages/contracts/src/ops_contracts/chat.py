@@ -119,8 +119,8 @@ class ApprovalWidget(WidgetBase):
     fields: list[LabelValue]
     risk: Risk
     consequence: str | None = None
-    # Approving runs a money-movement operation, so the console asks for a step-up before sending the approval.
-    moves_money: bool | None = None
+    # The operation needs two approvers, so the console asks for a step-up before sending the approval.
+    step_up: bool | None = None
     state: ApprovalState
     decided_by: str | None = None
     reason: str | None = None

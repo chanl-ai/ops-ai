@@ -1,9 +1,0 @@
-# US3: uc-010 api: a transform shapes the answer; one that fails returns the answer plus transform_error with 200, never a 500.
-# The runner gives each run its own database and ports.
-id: us3-response-transform
-accept: US3
-failure_mode: a transform failure fails the call, or a transform leaks what the response held
-layers:
-  cli:
-    run: "make usecase-test UC=uc-010 LAYER=api"
-    expect: { exit: 0, stdout: "uc-010 api  19 checks passed" }

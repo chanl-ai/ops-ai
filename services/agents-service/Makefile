@@ -38,7 +38,7 @@ clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache
 
 db-up: ## PostgreSQL and OPA in compose (same as the root db-up)
-	$(COMPOSE) up -d --wait postgres opa
+	$(COMPOSE) up -d --wait --no-recreate postgres opa  # never recreate the shared containers (make/db.mk)
 
 db-down: ## Stop compose
 	$(COMPOSE) down

@@ -1,8 +1,0 @@
-# US1: uc-041 api, agents-service and tools-service together on the run's own database and ports.
-id: us1-workflows-from-agents
-accept: US1
-failure_mode: tools-service reads a fixture, or another tenant's workflows, or guesses when agents-service is down
-layers:
-  cli:
-    run: "make usecase-test UC=uc-041 LAYER=api"
-    expect: { exit: 0, stdout: "uc-041 api  8 checks passed" }

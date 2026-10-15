@@ -1,5 +1,5 @@
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
-"""The Runtime's side: write tools go to the gateway with the run's thread and step, lookups stay local."""
+"""The Runtime's side: every tool call, read or write, goes to the gateway with the run's thread and step."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.gateway import (
     RUN_CONTEXT,
     GatewayClient,
@@ -16,19 +15,21 @@ from ops_agents.activities.gateway import (
     RunContext,
 )
 
-from .conftest import SEED, Gateway, service_token
+from .conftest import Gateway, service_token
 
 DOC = {"customerId": "C-1042", "document": "proof of address", "reason": "Address changed last week."}
 
 
 def executor(gateway: Gateway) -> GatewayToolExecutor:
-    return GatewayToolExecutor(load_catalog(SEED), GatewayClient(gateway.client, token=service_token))
+    return GatewayToolExecutor(GatewayClient(gateway.client, token=service_token))
 
 
-async def test_lookup_stays_local(gateway: Gateway) -> None:
+async def test_a_read_runs_through_the_gateway_and_is_logged(gateway: Gateway) -> None:
+    RUN_CONTEXT.set(RunContext(thread=gateway.thread))
     out = await executor(gateway).execute("lookup_account", {"query": "CHQ-2219"}, key="k1", approval_token=None)
-    assert out.ok
-    assert await gateway.log.for_thread(gateway.thread) == []
+    assert out.ok, out.output
+    rows = await gateway.log.for_thread(gateway.thread)
+    assert [(r["tool"], r["access"], r["decision"]) for r in rows] == [("lookup_account", "read", "allow")]
 
 
 async def test_refusal_reaches_the_model_as_a_tool_error(gateway: Gateway) -> None:

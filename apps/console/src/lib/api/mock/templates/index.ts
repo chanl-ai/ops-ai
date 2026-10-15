@@ -30,7 +30,7 @@ export interface TemplatesDeps {
   };
 }
 
-type AgentRecord = Omit<Agent, 'usedIn' | 'publishedVersion' | 'availability'>;
+type AgentRecord = Omit<Agent, 'usedIn' | 'publishedVersion' | 'availability' | 'staleToolIds'>;
 
 /**
  * Builds the template deps from the main mock's stores, so creating from a template does the same bookkeeping
@@ -148,7 +148,7 @@ export function createTemplatesMock(deps: TemplatesDeps) {
       ownerTeam: sentBy,
       submittedTeam: sentBy,
       submittedBy: by,
-      riskTier: Object.values(a.toolAccess).includes('money_movement') || a.toolNames.some((n) => /hold|credit|transfer|issue/.test(n)) ? 'high' : a.toolNames.length > 1 ? 'medium' : 'low',
+      riskTier: a.toolNames.some((n) => /hold|credit|transfer|issue/.test(n)) ? 'high' : a.toolNames.length > 1 ? 'medium' : 'low',
       role: a.role,
       model: a.model,
       channels: a.channels,

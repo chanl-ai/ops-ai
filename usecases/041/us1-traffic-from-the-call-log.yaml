@@ -1,9 +1,0 @@
-# US1: uc-042 api: each operation and the module count the calls that reached the system in the last 24 h, with error rate and p95; a refused call is not a call.
-# The runner gives each run its own database and ports.
-id: us1-traffic-from-the-call-log
-accept: US1
-failure_mode: seeded constants are shown, or refusals counted as calls
-layers:
-  cli:
-    run: "make usecase-test UC=uc-042 LAYER=api"
-    expect: { exit: 0, stdout: "uc-042 api  11 checks passed" }

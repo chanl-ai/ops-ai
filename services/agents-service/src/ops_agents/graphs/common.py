@@ -20,7 +20,8 @@ from ops_agent_kernel.events import (
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolExecutor, ToolOutcome
 from ops_agent_kernel.types import Interrupt, PendingCall, ToolCallRecord, ToolGrant, TurnRequest, TurnResult
-from ops_agents.activities.catalog import Catalog
+from ops_agents.activities.catalog import AgentDefinition, Catalog
+from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
 from ops_metering import Usage
 
@@ -42,6 +43,19 @@ class GraphDeps:
     meter: Meter | None = None
     # Starts a published workflow as a child thread when an agent calls it as a tool; None offers no workflow tools.
     workflows: WorkflowRunner | None = None
+    # The tools an agent may be granted (tools-service's registry); None reads the fixture catalogue (unit tests).
+    tools: ToolDirectory | None = None
+
+
+async def needs_step_up(deps: GraphDeps, tool: str) -> bool:
+    """Whether approving a call to `tool` needs a step-up: its operation is approved by two people."""
+    ops = await (deps.tools or CatalogTools(deps.catalog)).operations()
+    return any(o.name == tool and o.approvers > 1 for o in ops)
+
+
+async def agent_grants(deps: GraphDeps, agent: AgentDefinition) -> list[ToolGrant]:
+    """The registry's grants for the tools `agent` holds, with each one's description and input schema."""
+    return await grants_for(deps.tools or CatalogTools(deps.catalog), list(agent.tools))
 
 
 WORKFLOW_TOOL_PREFIX = "workflow__"

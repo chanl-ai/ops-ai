@@ -23,6 +23,8 @@ class Principal:
     # From the verified token or key, or "local" in dev; never from a header, body or path (I1).
     tenant_id: str
     sub: str = ""
+    # The teams the person belongs to; None for the dev principal, which acts across teams.
+    team_ids: tuple[str, ...] | None = None
 
 
 async def principal(p: CurrentPrincipal) -> Principal:
@@ -30,7 +32,14 @@ async def principal(p: CurrentPrincipal) -> Principal:
     # Team access is held for platform callers only. Dev acts across teams, as it always has: the console sends its
     # selected team while scripts and seeds create threads in other teams.
     set_team(None if p.auth_method == "dev" else p.team_id)
-    return Principal(name=p.name or p.email, email=p.email, team_id=p.team_id or "", tenant_id=p.tenant_id, sub=p.sub)
+    return Principal(
+        name=p.name or p.email,
+        email=p.email,
+        team_id=p.team_id or "",
+        tenant_id=p.tenant_id,
+        sub=p.sub,
+        team_ids=None if p.auth_method == "dev" else tuple(p.team_ids),
+    )
 
 
 @dataclass(frozen=True)
@@ -64,8 +73,13 @@ def step_up_ref(token: str | None) -> str | None:
 def require_step_up(rt: Runtime, subject: str, token: str | None) -> None:
     """Refuses unless `token` is a step-up this service minted for `subject` in the last five minutes."""
     if not (token or "").strip():
-        raise StepUpRequired("Re-authenticate to approve this money movement: it needs a step-up first.")
+        raise StepUpRequired("Re-authenticate to approve this: two people approve it, and each needs a step-up first.")
     try:
         verify_step_up(token or "", subject, step_up_signer(rt))
     except TokenError as e:
         raise StepUpRequired(f"The step-up was refused ({e.reason}): {e} Re-authenticate and try again.") from e
+
+
+def teams_of(me: Principal) -> list[str] | None:
+    """The teams a person approves for; None for the dev principal, which acts across teams."""
+    return None if me.team_ids is None else list(me.team_ids)

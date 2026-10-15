@@ -24,7 +24,7 @@ HOLD = ToolGrant(
     "place_wire_hold",
     "Payments Hub",
     "Hold a wire",
-    "money_movement",
+    "write",
     {
         "type": "object",
         "properties": {"wireId": {"type": "string"}, "hours": {"type": "integer"}, "reason": {"type": "string"}},

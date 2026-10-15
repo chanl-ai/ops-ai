@@ -130,7 +130,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True
     )
-    # A write or money movement stops at a gate: the library ends the run with a deferred request (spec 15 5).
+    # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
     tool.requires_approval = grant.gated
     return tool
 

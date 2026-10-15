@@ -19,7 +19,7 @@ The scripts start the agents service on the scripted model. The ui script also s
 | 1 | Start uc-004's dispute workflow on the first dispute email | The run pauses at the review |
 | 2 | Cases, Needs a person | A row for the run with state Waiting on a person |
 | 3 | Open the row | The run sheet lists the node steps (extract three times, draft, grade) with the review step waiting |
-| 4 | Reviews, open the review and approve | No step-up is asked: the reply is a `write`, not a money movement. The decision is accepted |
+| 4 | Reviews, open the review and approve | No step-up is asked: the reply is a `write` one person approves. The decision is accepted |
 | 5 | Decide the same review again (api) | Accepted, with no second resume |
 | 6 | Cases | The row is Done and has left Needs a person; `send_reply` ran once |
 

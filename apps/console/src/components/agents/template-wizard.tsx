@@ -366,7 +366,6 @@ export function TemplateWizard({
                               <Checkbox checked={cfg.toolIds.includes(t.id)} onCheckedChange={(c) => set('toolIds', c ? [...cfg.toolIds, t.id] : cfg.toolIds.filter((x) => x !== t.id))} aria-label={t.name} />
                               <code className="font-mono text-xs">{t.name}</code>
                               <AccessBadge access={t.access} />
-                              {t.workflow?.movesMoney && <AccessBadge access="money_movement" />}
                               {t.requiresReview && <UserCheck className="size-3.5 text-warning-text" aria-label="Pauses for review" />}
                               {detail.expectedTools.some((x) => x.name === t.name) && <span className="ml-auto text-xs text-muted-foreground">expected</span>}
                               {t.workflow && (

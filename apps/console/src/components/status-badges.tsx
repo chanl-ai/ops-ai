@@ -73,7 +73,6 @@ export const KIND_LABEL: Record<ReviewKind, string> = {
 const ACCESS: Record<ToolAccess, { label: string; cls: string }> = {
   read: { label: 'Read', cls: 'border-border bg-muted text-muted-foreground' },
   write: { label: 'Write', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
-  money_movement: { label: 'Moves money', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
 };
 
 export function AccessBadge({ access }: { access: ToolAccess }) {

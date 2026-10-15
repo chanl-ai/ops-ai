@@ -14,6 +14,7 @@ Status: current. Id: `uc-047`. Service: `console`. Layers: ui.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Sign in and open Workflows | the sidebar lists All workflows, Deployments, Collections, Changes, Tool calls, Audit log, Suites and Model inventory as indented rows under their parents (a section with one child also lists its own page); All workflows is the active row |
+| 1b | Open the Wiki | the Wiki row is the only active row (a section with several children has no own-page sub-row) |
 | 2 | Choose Deployments in the sidebar | `/deployments` opens; Deployments is the only active row |
 | 3 | Hide the Wiki's pages, then reload | Collections stays hidden |
 | 4 | Open `/knowledge/changes` | the Wiki opens for its current page; Changes is the only active row |

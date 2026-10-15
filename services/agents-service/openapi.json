@@ -77,6 +77,13 @@
             "title": "Slug",
             "type": "string"
           },
+          "staleToolIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Staletoolids",
+            "type": "array"
+          },
           "tasks24h": {
             "title": "Tasks24H",
             "type": "integer"
@@ -131,6 +138,7 @@
           "model",
           "channels",
           "toolIds",
+          "staleToolIds",
           "collections",
           "owner",
           "paused",
@@ -3435,6 +3443,47 @@
         "title": "ReviewList",
         "type": "object"
       },
+      "ReviewOrigin": {
+        "additionalProperties": false,
+        "description": "Where a review came from: a chat with an agent (the conversation to open), or a workflow run.",
+        "properties": {
+          "agentName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agentname"
+          },
+          "kind": {
+            "enum": [
+              "chat",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "threadId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threadid"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ReviewOrigin",
+        "type": "object"
+      },
       "ReviewPolicy": {
         "additionalProperties": false,
         "properties": {
@@ -4441,9 +4490,8 @@
             "title": "Kind",
             "type": "string"
           },
-          "movesMoney": {
-            "title": "Movesmoney",
-            "type": "boolean"
+          "origin": {
+            "$ref": "#/components/schemas/ReviewOrigin"
           },
           "policy": {
             "$ref": "#/components/schemas/ReviewPolicy"
@@ -4496,6 +4544,10 @@
             "title": "Status",
             "type": "string"
           },
+          "stepUp": {
+            "title": "Stepup",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -4529,7 +4581,8 @@
           "createdAt",
           "reasoning",
           "evidence",
-          "movesMoney"
+          "stepUp",
+          "origin"
         ],
         "title": "ThreadReview",
         "type": "object"
@@ -4739,12 +4792,12 @@
       },
       "Tool": {
         "additionalProperties": false,
+        "description": "A published tools-service operation an agent may be granted; `server` is its module's name.",
         "properties": {
           "access": {
             "enum": [
               "read",
-              "write",
-              "money_movement"
+              "write"
             ],
             "title": "Access",
             "type": "string"
@@ -4768,9 +4821,29 @@
             "title": "Id",
             "type": "string"
           },
+          "inputSchema": {
+            "additionalProperties": true,
+            "title": "Inputschema",
+            "type": "object"
+          },
+          "moduleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moduleid"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "requiresApproval": {
+            "title": "Requiresapproval",
+            "type": "boolean"
           },
           "server": {
             "title": "Server",
@@ -4781,8 +4854,11 @@
           "id",
           "name",
           "server",
+          "moduleId",
           "description",
           "access",
+          "inputSchema",
+          "requiresApproval",
           "approval"
         ],
         "title": "Tool",

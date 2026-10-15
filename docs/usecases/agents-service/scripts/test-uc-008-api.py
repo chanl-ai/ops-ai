@@ -23,7 +23,7 @@ with agents() as api:
     review = data(api.get(f"/reviews/{tid}"))
     check(
         "the review is pending and does not move money",
-        review["status"] == "pending" and not review["movesMoney"],
+        review["status"] == "pending" and not review["stepUp"],
         review,
     )
     decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})

@@ -20,7 +20,7 @@ export interface TemplateTool {
   name: string;
   /** Why the template expects it, shown on the card and in Configure. */
   purpose: string;
-  access: 'read' | 'write' | 'money_movement';
+  access: 'read' | 'write';
 }
 
 export interface AgentTemplate {

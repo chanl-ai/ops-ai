@@ -67,7 +67,6 @@ export interface ModuleStats {
   calls24h: number;
   /** Failed calls over all calls, last 24h. */
   errorRate: number;
-  moneyOperations: number;
   /** Workflow approvals that expire within 30 days. */
   expiringApprovals: number;
   /** Modules whose approvals expire within 30 days; equals the Expiring soon view count. */
@@ -127,11 +126,14 @@ export interface ModuleOperation {
   /** Null when the operation names no customer record (reference data); confirmed at review. */
   binding: SubjectBinding | null;
   rateLimitPerMin: number;
-  /** Each call waits for an approval token bound to the exact input. Always on for money movement. */
+  /** Each call waits for an approval token bound to the exact input. */
   requiresApproval: boolean;
-  /** Money movement: the approver must differ from whoever requested or drafted the action. */
-  fourEyes: boolean;
-  /** Per-call ceiling in CAD, money movement only. */
+  /** A write's approval policy: how many distinct people approve each call, the team they come from, and whether the
+   * person who asked may approve (honoured in dev only). */
+  approvers: 1 | 2;
+  approverTeam: string;
+  selfApproval: boolean;
+  /** Per-call ceiling in CAD. */
   amountMax?: number;
   /** Writes carry `runId:actionId` as the idempotency key. */
   idempotent: boolean;
@@ -281,7 +283,7 @@ export interface ModuleTestResult {
   reachedHost?: string;
   /** Inputs the gateway filled or checked from the run context. */
   bound: { arg: string; value: string; source: BindingSource }[];
-  /** A write or money call would pause here for an approval token. */
+  /** A write would pause here for an approval token. */
   wouldPause: boolean;
   output: unknown;
   masked: string[];
@@ -289,8 +291,8 @@ export interface ModuleTestResult {
 }
 
 export type ModuleSource =
-  | { kind: 'mcp'; url: string; connectionId?: string }
-  | { kind: 'openapi'; specUrl?: string; fileName?: string; /** Uploaded spec, from the Files API. */ fileId?: string; connectionId?: string };
+  | { kind: 'mcp'; url: string }
+  | { kind: 'openapi'; specUrl?: string; fileName?: string; /** Uploaded spec, from the Files API. */ fileId?: string };
 
 export interface DiscoveredOperation {
   name: string;
@@ -329,8 +331,6 @@ export interface ModuleInput {
   system: string;
   type: ModuleType;
   endpoint: string;
-  /** The integration the gateway authenticates through. */
-  connectionId: string;
   /**
    * Where `operations` were discovered. The service re-reads it and takes each operation's method, path, inputs and
    * headers from there, so only the names and the access class the owner confirmed come from the caller.

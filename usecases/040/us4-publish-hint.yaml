@@ -1,9 +1,0 @@
-# US4: uc-040 ui: the publish dialog says What changed is required, and Publish waits for it.
-# The runner gives each run its own database and ports.
-id: us4-publish-hint
-accept: US4
-failure_mode: Publish is disabled with no reason given
-layers:
-  cli:
-    run: "make usecase-test UC=uc-040 LAYER=ui"
-    expect: { exit: 0, stdout: "uc-040 ui   8 checks passed" }

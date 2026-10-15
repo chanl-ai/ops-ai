@@ -90,6 +90,31 @@ SPEC: dict[str, Any] = {
 }
 
 
+# The same bank described with no security scheme and with a write, for import's presets and its no-auth warning.
+OPEN_SPEC: dict[str, Any] = {
+    "openapi": "3.0.3",
+    "info": {"title": "Holds API", "version": "1.0.0"},
+    "servers": [{"url": f"https://{HOST}/v1"}],
+    "paths": {
+        "/accounts/{accountId}": {
+            "get": {
+                "operationId": "getAccount",
+                "summary": "Balance for an account",
+                "parameters": [{"name": "accountId", "in": "path", "required": True, "schema": {"type": "string"}}],
+            }
+        },
+        "/accounts/{accountId}/holds": {
+            "post": {
+                "operationId": "placeHold",
+                "summary": "Place a hold on an account",
+                "parameters": [{"name": "accountId", "in": "path", "required": True, "schema": {"type": "string"}}],
+                "responses": {"200": {"content": {"application/json": {"example": {"hold": "placed"}}}}},
+            }
+        },
+    },
+}
+
+
 @dataclass
 class FakeBank:
     address: str
@@ -128,6 +153,8 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
             self._record(b"")
             if self.path == "/v1/openapi.json":
                 return self._send(200, SPEC)
+            if self.path == "/v1/openapi-open.json":
+                return self._send(200, OPEN_SPEC)
             if self.path.split("?")[0] == "/v1/slow":
                 # Answers after SLOW_S, for a use case that shows an operation's own timeout stopping the call.
                 time.sleep(SLOW_S)

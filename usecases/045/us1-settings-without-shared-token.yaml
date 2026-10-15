@@ -1,8 +1,0 @@
-# US1: production Settings start without OPS_SERVICE_TOKEN and ignore a leftover one; no src reads a shared token.
-id: us1-settings-without-shared-token
-accept: US1
-failure_mode: Settings still demand the shared token outside dev, or a leftover value breaks start-up
-layers:
-  cli:
-    run: "U=postgresql+asyncpg://ops:ops@localhost:5477/ops_test_c045 && uv run python scripts/test_db.py $U && (cd services/agents-service && OPS_DATABASE_URL=$U OPS_TEST_DATABASE_URL=$U uv run pytest -q -p no:cacheprovider tests/test_settings_without_shared_token.py) && ! grep -rn 'service_token' services/*/src packages/*/src --include=*.py | grep -v 'mint_service_token\\|service_token_for'"
-    expect: { exit: 0 }

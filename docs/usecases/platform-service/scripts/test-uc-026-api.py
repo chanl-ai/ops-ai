@@ -40,7 +40,7 @@ with platform() as (api, _):
     james = data(
         api.post("/v1/auth/sign-in", json={"email": "j.richardson@northfieldbank.com", "password": "northfield-demo"})
     )
-    claims = {"sub": "usr_builder", "sid": "x", "tenant_id": "ten_local", "team_ids": ["team_ops"], "aud": ["tools"]}
+    claims = {"sub": "usr_builder", "sid": "x", "tenant_id": "local", "team_ids": ["team_ops"], "aud": ["tools"]}
     r = api.get("/v1/auth/session", headers={"Authorization": f"Bearer {mint(claims, dev_signer(), ttl_s=60)}"})
     real = api.get("/v1/auth/session", headers={"Authorization": f"Bearer {james['token']}"})
     check(
@@ -49,7 +49,7 @@ with platform() as (api, _):
         (r.status_code, real.status_code),
     )
 
-    service = mint_service_token(dev_service_signer(), service="usecases", audience="platform", tenant_id="ten_local")
+    service = mint_service_token(dev_service_signer(), service="usecases", audience="platform", tenant_id="local")
     r = api.get("/v1/me", headers={"Authorization": f"Bearer {service}"})
     check("a service token on the public mount is 401", r.status_code == 401, r.status_code)
 

@@ -1,5 +1,5 @@
 {
-  "tenant": { "id": "ten_local", "name": "Local tenant", "allowedDomains": [] },
+  "tenant": { "id": "local", "name": "Local tenant", "allowedDomains": [] },
   "teams": [
     { "id": "team_ops", "name": "Operations", "ownerGroups": ["operations"], "scope": "all" },
     { "id": "team_security", "name": "Security", "ownerGroups": ["security"], "scope": "all" }

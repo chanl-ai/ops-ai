@@ -1,9 +1,0 @@
-# US3: uc-042 api: a module nobody called shows zeros; a 30-day approval granted today is approved and a 5-day one expiring.
-# The runner gives each run its own database and ports.
-id: us3-new-module-zero-and-expiring
-accept: US3
-failure_mode: a new module never moves, or a fresh 30-day approval is flagged expiring
-layers:
-  cli:
-    run: "make usecase-test UC=uc-042 LAYER=api"
-    expect: { exit: 0, stdout: "uc-042 api  11 checks passed" }

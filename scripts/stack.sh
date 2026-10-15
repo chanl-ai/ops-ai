@@ -44,7 +44,8 @@ cmd_of() {
   case "$1" in
     # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start.
     platform) echo "uv run --directory services/platform-service python -m ops_platform" ;;
-    agents) echo "$(auth_env)uv run --directory services/agents-service python -m ops_agents.api" ;;
+    # Agents call tools through tools-service's gateway and are seeded with agents granted its operations (c-048).
+    agents) echo "$(auth_env)env OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_SEED_FILE=seed/chat_agents.json uv run --directory services/agents-service python -m ops_agents.api" ;;
     tools) echo "$(auth_env)uv run --directory services/tools-service python -m ops_tools" ;;
     # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
     console)

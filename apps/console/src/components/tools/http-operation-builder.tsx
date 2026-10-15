@@ -41,7 +41,7 @@ export function HttpOperationBuilder({ value, onChange, errors, callOnly }: { va
             <FormField id="http-name" label="Operation name" hint="Lower case with underscores; agents see this name." error={errors?.name}>
               <Input id="http-name" value={value.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. get_statement" className="font-mono" aria-invalid={!!errors?.name} />
             </FormField>
-            <FormField id="http-access" label="Access" hint={value.access === 'money_movement' ? 'Every call needs a person’s approval and a second approver.' : value.access === 'write' ? 'Calls wait for an approval token unless a gate policy covers them.' : 'Reads run without approval.'}>
+            <FormField id="http-access" label="Access" hint={value.access === 'write' ? 'Calls wait for an approval token unless a gate policy covers them.' : 'Reads run without approval.'}>
               <Select value={value.access} onValueChange={(v) => set('access', v as ToolAccess)}>
                 <SelectTrigger id="http-access" className="w-full">
                   <SelectValue />
@@ -49,7 +49,6 @@ export function HttpOperationBuilder({ value, onChange, errors, callOnly }: { va
                 <SelectContent>
                   <SelectItem value="read">Read</SelectItem>
                   <SelectItem value="write">Write</SelectItem>
-                  <SelectItem value="money_movement">Moves money</SelectItem>
                 </SelectContent>
               </Select>
             </FormField>

@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useCurrentPerson } from '@/hooks/auth-queries';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Archive, ArchiveRestore, Bot, Link2, MessageSquareDashed, MessagesSquare, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
@@ -39,7 +40,6 @@ import {
   useWidgetAction,
 } from '@/hooks/chat-queries';
 import { useKnowledgeBases } from '@/hooks/knowledge-queries';
-import { useLookups } from '@/hooks/queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { teamOfError } from '@/hooks/use-team';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
@@ -67,8 +67,7 @@ function visibleMessages(thread: ChatThread | undefined, live: LiveTurn | undefi
 export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const lookups = useLookups();
-  const me = lookups.data?.currentUser.name;
+  const me = useCurrentPerson().name || undefined;
   const [railOpen, setRailOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [debounced, setDebounced] = React.useState('');
@@ -105,7 +104,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const remove = useDeleteThread();
   const feedback = useMessageFeedback();
   const widgetAction = useWidgetAction();
-  // Approving a money movement from a chat widget needs the same step-up as in Reviews; the API enforces it.
+  // Approving from a chat widget needs the same step-up as in Reviews when the API marks it; the API enforces it.
   const stepUp = useStepUpGate();
   const [deleting, setDeleting] = React.useState<Pick<ChatThreadRow, 'id' | 'title'> | null>(null);
   const deletingShown = useSticky(deleting);
@@ -187,7 +186,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           onWidgetAction={async (messageId, widgetId, action) => {
             try {
               const target = thread.data?.messages.find((m) => m.id === messageId)?.widgets?.find((x) => x.id === widgetId);
-              const money = action.type === 'approve' && target?.kind === 'approval' && !!target.movesMoney;
+              const money = action.type === 'approve' && target?.kind === 'approval' && !!target.stepUp;
               const w = await stepUp.withStepUp('Approving this action', (stepUpToken) => widgetAction.mutateAsync({ threadId, messageId, widgetId, action: action.type === 'approve' ? { ...action, stepUpToken } : action }), { upfront: money });
               if (w.kind === 'approval')
                 toast.success(

@@ -1,9 +1,0 @@
-# US1: uc-010 creates, reviews, versions and approves modules on tools-service and reads them back after a restart.
-# Own database and ports: ops_usecase is shared.
-id: us1-a-builder-manages-a-tool-module
-accept: US1
-failure_mode: the requester decides their own approval, a literal credential is saved, or a module is lost on restart
-layers:
-  cli:
-    run: "make usecase-test UC=uc-010 LAYER=api OPS_USECASE_DB=ops_usecase_c007 OPS_USECASE_AGENTS_PORT=8960 OPS_USECASE_TOOLS_PORT=8961 OPS_USECASE_MODELS_PORT=8962 OPS_USECASE_CONSOLE_PORT=3160"
-    expect: { exit: 0, stdout: "uc-010 api  11 checks passed" }

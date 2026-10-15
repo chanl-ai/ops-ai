@@ -167,13 +167,22 @@ export function ReviewDetailBody({ review }: { review: Review }) {
         </Section>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Paused by the <Link href="/reviews/policies" className="underline underline-offset-2">{policy.name}</Link> gate in{' '}
-        <Link href={`/workflows/${review.workflowId}`} className="underline underline-offset-2">
-          {review.workflowName}
-        </Link>
-        .
-      </p>
+      {review.origin?.kind === 'chat' ? (
+        <p className="text-xs text-muted-foreground">
+          Held in a conversation with {review.origin.agentName}; approving here resumes it.{' '}
+          <Link href={`/chat/${review.origin.threadId}`} className="underline underline-offset-2" data-testid="review-open-conversation">
+            Open the conversation
+          </Link>
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Paused by the <Link href="/reviews/policies" className="underline underline-offset-2">{policy.name}</Link> gate in{' '}
+          <Link href={`/workflows/${review.workflowId}`} className="underline underline-offset-2">
+            {review.workflowName}
+          </Link>
+          .
+        </p>
+      )}
     </div>
   );
 }

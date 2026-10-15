@@ -2028,8 +2028,9 @@
   {
    "name": "place_wire_hold",
    "description": "Place or release a hold on an outbound wire",
-   "access": "money_movement",
-   "enabled": true
+   "access": "write",
+   "enabled": true,
+   "approvers": 2
   },
   {
    "name": "run_credit_check",
@@ -2064,8 +2065,9 @@
   {
    "name": "issue_provisional_credit",
    "description": "Post a provisional credit to a card account",
-   "access": "money_movement",
-   "enabled": true
+   "access": "write",
+   "enabled": true,
+   "approvers": 2
   },
   {
    "name": "search_knowledge",
@@ -2088,8 +2090,9 @@
   {
    "name": "transfer_funds",
    "description": "Move funds between a customer’s own accounts",
-   "access": "money_movement",
-   "enabled": false
+   "access": "write",
+   "enabled": false,
+   "approvers": 2
   }
  ],
  "moduleConnection": {
@@ -2740,7 +2743,7 @@
     {
      "name": "create_payment",
      "description": "Create a payment",
-     "access": "money_movement",
+     "access": "write",
      "group": "payments",
      "input": [
       {
@@ -2760,7 +2763,8 @@
       }
      ],
      "method": "POST",
-     "path": "/payments"
+     "path": "/payments",
+     "approvers": 2
     }
    ],
    "warnings": [

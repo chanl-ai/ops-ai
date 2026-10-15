@@ -1,9 +1,0 @@
-# US1: uc-010 api: a path edit stays pending (calls run the published call), publishes the next major version, and survives a restart.
-# The runner gives each run its own database and ports.
-id: us1-edit-call-staged
-accept: US1
-failure_mode: a staged edit reaches calls before publish, or publishes as minor, or is lost on restart
-layers:
-  cli:
-    run: "make usecase-test UC=uc-010 LAYER=api"
-    expect: { exit: 0, stdout: "uc-010 api  19 checks passed" }

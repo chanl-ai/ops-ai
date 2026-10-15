@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     cors_origins: list[str] = ["http://localhost:3016", "http://localhost:3017"]
     seed_dir: Path = _SEED_DIR
+    # The chat agents to seed, when not seed_dir's chat_agents.json. The stack sets services/agents-service/seed/'s,
+    # whose grants are tools-service operations; the fixture agents grant the fixture tools the unit tests run on.
+    agents_seed_file: Path | None = None
     turn_deadline_seconds: float = 120.0
     # A run holds its thread's lease and renews it every third of the TTL; a lease past expiry belongs to a dead
     # process, and the sweeper (every sweep_interval) continues that thread from its last checkpoint.
@@ -111,8 +114,9 @@ class Settings(BaseSettings):
     # An expired approval token is renewed from its recorded approvals while they are younger than this; older, the
     # call needs a fresh review (durability-failure-and-audit.md, approval expiry).
     approval_renewal_max_age_seconds: int = 86400
-    # Chat approvals by the person who asked the agent. An owner decision is pending; True keeps today's behaviour.
-    # Money reviews in Reviews always need distinct approvers, and workflow reviews are never decided by the requester.
+    # In dev, lets the person who asked a chat agent approve its write whatever the operation's selfApproval says.
+    # Ignored outside dev, where nobody approves their own (docs/architecture/tool-lifecycle.md, "Write approval");
+    # workflow reviews are never decided by the requester.
     allow_self_approval_in_chat: bool = True
     # Dev only: an agent or workflow publish request is approved as it is made, so one person can take a draft live.
     # Ignored outside dev, where publishing waits for a reviewer.

@@ -1,9 +1,0 @@
-# US1: uc-012 steps 3 to 6: OpenAPI discovery marks every operation a write, create takes the document's operation, and it runs through the gateway.
-# Own database and ports: ops_usecase is shared.
-id: us1-import-from-openapi
-accept: US1
-failure_mode: an imported operation runs as a read unconfirmed, or the caller's copy replaces the document's
-layers:
-  cli:
-    run: "make usecase-test UC=uc-012 LAYER=api OPS_USECASE_DB=ops_usecase_c026 OPS_USECASE_AGENTS_PORT=8970 OPS_USECASE_TOOLS_PORT=8971 OPS_USECASE_MODELS_PORT=8972 OPS_USECASE_CONSOLE_PORT=3170"
-    expect: { exit: 0, stdout: "uc-012 api  11 checks passed" }

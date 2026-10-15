@@ -14,7 +14,7 @@ import type { ApprovalRequestInput, Environment, ModuleOperation } from '@/lib/t
 
 const EXPIRY: Record<Environment, number[]> = { production: [30, 90, 180, 365], test: [14, 30, 90], dev: [14, 30, 90] };
 
-/** A workflow asks the module's owner team for some operations, for a fixed time. Money operations are flagged. */
+/** A workflow asks the module's owner team for some operations, for a fixed time. Operations whose calls need two approvers are flagged. */
 export function RequestApprovalDialog({
   open,
   onOpenChange,
@@ -51,7 +51,7 @@ export function RequestApprovalDialog({
   }, [open]);
 
   const exposed = operations.filter((o) => o.enabled);
-  const money = exposed.filter((o) => ops.has(o.name) && o.fourEyes);
+  const twoApprovers = exposed.filter((o) => ops.has(o.name) && o.access === 'write' && o.approvers === 2);
   const errs = { workflow: !workflowId ? 'Choose a workflow.' : undefined, ops: !ops.size ? 'Choose at least one operation.' : undefined, why: why.trim().length < 10 ? 'Explain why the workflow needs these operations.' : undefined };
   const invalid = Object.values(errs).some(Boolean);
 
@@ -144,7 +144,7 @@ export function RequestApprovalDialog({
             ))}
           </div>
         </FormField>
-        {money.length > 0 && <p className="text-xs text-destructive">{money.map((o) => o.name).join(',')} moves money: every call still needs a person’s approval and a second person’s check.</p>}
+        {twoApprovers.length > 0 && <p className="text-xs text-warning-text">{twoApprovers.map((o) => o.name).join(', ')}: every call still needs two different people to approve it.</p>}
         <FormField id="ra-exp" label="Expires after" hint={environment === 'production' ? 'Production approvals last at most 12 months.' : 'Test approvals last at most 90 days.'}>
           <Select value={days} onValueChange={setDays}>
             <SelectTrigger id="ra-exp" className="w-full">

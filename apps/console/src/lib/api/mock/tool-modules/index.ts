@@ -151,8 +151,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         tools.push(t);
       }
       Object.assign(t, { moduleId: s.id, module: s.displayName, system: s.system, type: toolTypeOf(s.type) });
-      const money = t.access === 'money_movement';
-      return { id: `${s.id}_op${i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: o.masked ?? [], binding: o.binding, rateLimitPerMin: o.rate ?? 60, requiresApproval: money || (t.access === 'write' && o.requiresApproval !== false), amountMax: o.amountMax, stub: o.stub };
+      const two = F.TWO_APPROVER_TOOLS.has(o.name);
+      return { id: `${s.id}_op${i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: o.masked ?? [], binding: o.binding, rateLimitPerMin: o.rate ?? 60, requiresApproval: two || (t.access === 'write' && o.requiresApproval !== false), amountMax: o.amountMax, stub: o.stub };
     });
     const last = s.versions[s.versions.length - 1];
     const status = s.status ?? 'published';
@@ -311,7 +311,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       ownerTeam: m.ownerTeam,
       endpoint: m.endpoint,
       operationCount: m.ops.length,
-      accessClasses: (['read', 'write', 'money_movement'] as const).filter((acc) => ops.some(({ t }) => t.access === acc)),
+      accessClasses: (['read', 'write'] as const).filter((acc) => ops.some(({ t }) => t.access === acc)),
       approvalState,
       nextExpiry,
       pendingApprovals,
@@ -382,7 +382,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           binding: o.binding,
           rateLimitPerMin: o.rateLimitPerMin,
           requiresApproval: o.requiresApproval,
-          fourEyes: t.access === 'money_movement',
+          approvers: F.TWO_APPROVER_TOOLS.has(o.name) ? (2 as const) : (1 as const),
+          approverTeam: m.ownerTeam,
+          selfApproval: false,
           amountMax: o.amountMax,
           idempotent: t.access !== 'read',
           // Last 24 hours as measured; hiding is staged and does not rewrite history.
@@ -459,7 +461,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       return { id: `${m.id}_op${start + i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: [], binding: null, rateLimitPerMin: 60, requiresApproval: o.access !== 'read', amountMax: undefined, stub: { ok: true } };
     });
     m.ops.push(...added);
-    const changes = opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access === 'money_movement' ? 'money movement' : o.access} operation`, major: o.access !== 'read' }));
+    const changes = opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access} operation`, major: o.access !== 'read' }));
     if (m.status === 'draft') m.versions[m.versions.length - 1].changes.push(...changes);
     else stage(m, changes);
     touch(m);
@@ -471,10 +473,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   }
 
   function discovered(source: Parameters<ToolModulesApi['discover']>[0]) {
-    const conn = deps.connection(source.connectionId);
-    if (source.connectionId && !conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
-    if (conn?.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations first.`, 409);
-    const known = conn ? DISCOVERY[conn.catalogId] : undefined;
     if (source.kind === 'mcp') {
       let host: string;
       try {
@@ -485,17 +483,19 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (e instanceof ApiError) throw e;
         throw new ApiError('That is not a complete address. Enter it with https://.', 400);
       }
-      const d = known ?? (host.includes('servicenow') ? DISCOVERY.cat_servicenow : DISCOVERY.mcp);
+      const d = host.includes('servicenow') ? DISCOVERY.cat_servicenow : DISCOVERY.mcp;
       const label = host.split('.')[0];
-      const system = host.includes('servicenow') || conn?.catalogId === 'cat_servicenow' ? 'ServiceNow' : label.charAt(0).toUpperCase() + label.slice(1);
-      return { type: 'mcp' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.url, operations: d.operations, warnings: d.warnings ?? [] };
+      const system = host.includes('servicenow') ? 'ServiceNow' : label.charAt(0).toUpperCase() + label.slice(1);
+      return { type: 'mcp' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.url, operations: d.operations, warnings: d.warnings ?? [], noAuth: false };
     }
     const ref = source.specUrl || source.fileName;
     if (!ref) throw new ApiError('Add the spec as a URL or a file.', 400);
     const base = (source.fileName ?? new URL(source.specUrl!).hostname).split(/[./]/)[0];
     const system = base.charAt(0).toUpperCase() + base.slice(1);
-    const d = known ?? DISCOVERY.openapi;
-    return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.northfield.internal/api`, operations: d.operations, warnings: d.warnings ?? [] };
+    const d = DISCOVERY.openapi;
+    // As tools-service presets it: GET reads, every other method writes.
+    const operations = d.operations.map((o) => (o.method ? { ...o, access: o.method === 'GET' ? ('read' as const) : ('write' as const) } : o));
+    return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.northfield.internal/api`, operations, warnings: d.warnings ?? [], noAuth: false };
   }
 
   /** The service's call-shape rules (tools-service `_checked_shape`): validated before anything is staged. */
@@ -587,7 +587,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
             operations: src.reduce((s, r) => s + r.operationCount, 0),
             calls24h,
             errorRate: calls24h ? errors / calls24h : 0,
-            moneyOperations: scopedMods.reduce((s, m) => s + m.ops.filter((o) => toolOf(o).access === 'money_movement').length, 0),
             expiringModules: viewCounts.expiring,
             expiringApprovals: scopedMods.reduce((s, m) => s + approvalsOf(m).filter((a) => a.status === 'approved' && a.expiresAt && new Date(a.expiresAt).getTime() - Date.now() < EXPIRING_MS).length, 0),
           },
@@ -608,9 +607,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
         let opsIn: DiscoveredOperation[] = input.operations ?? [];
         let endpoint = input.endpoint;
-        const conn = deps.connection(input.connectionId);
-        if (!conn) throw new ApiError('Choose the connection this module calls through.', 400);
-        if (conn.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
         if (input.type === 'code') throw new ApiError('Code modules need the sandbox, which is not available yet.', 422);
         if (input.http) {
           const built = httpOperation(input.http);
@@ -620,14 +616,13 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (!opsIn.length) throw new ApiError('Choose at least one operation to expose.', 400);
         for (const o of opsIn) if (tools.some((t) => t.name === o.name)) throw new ApiError(`An operation named ${o.name} already exists in another module.`, 409);
         const mid = id('mod');
-        const version = input.http ? '1.0.0' : (DISCOVERY[conn.catalogId]?.version ?? '1.0.0');
+        const version = '1.0.0';
         const owner = teamOwner() ?? 'Platform';
         const ops: Op[] = opsIn.map((o, i) => {
           const t: Tool = { id: id('tl'), name: o.name, description: o.description, type: toolTypeOf(input.type), system: input.system, access: o.access, requiresReview: o.access !== 'read', enabled: true, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: sampleInput(o.input), moduleId: mid, module: input.displayName };
           tools.unshift(t);
           return { id: `${mid}_op${i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: [], binding: null, rateLimitPerMin: 60, requiresApproval: o.access !== 'read', amountMax: undefined, stub: { ok: true } };
         });
-        const kind: CredentialKind = conn.authMethod === 'api_key' ? 'api_key' : conn.authMethod === 'mtls' ? 'mtls' : 'oauth_client_credentials';
         const m: Mod = {
           id: mid,
           name,
@@ -639,7 +634,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           ownerTeam: owner,
           ownerContacts: [me],
           endpoint,
-          auth: { kind },
+          // No credential until the builder adds its header as a secret reference.
+          auth: { kind: 'none' },
           timeoutMs: 8000,
           egressHosts: (() => {
             try {
@@ -649,7 +645,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
             }
           })(),
           dataClassification: 'confidential',
-          catalogId: conn.catalogId,
           reachable: true,
           drift: false,
           updatedAt: new Date().toISOString(),
@@ -657,8 +652,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           ops,
           approvals: [],
           reviews: [],
-          versions: [{ version, major: majorOf(version), status: 'draft', publishedBy: me, note: 'First version', changes: opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access === 'money_movement' ? 'money movement' : o.access} operation`, major: true })), pinnedBy: [], reachability: [{ environment: 'test', ok: true, checkedAt: new Date().toISOString() }] }],
-          connectionId: conn.id,
+          versions: [{ version, major: majorOf(version), status: 'draft', publishedBy: me, note: 'First version', changes: opsIn.map((o) => ({ operation: o.name, kind: 'added' as const, detail: `New ${o.access} operation`, major: true })), pinnedBy: [], reachability: [{ environment: 'test', ok: true, checkedAt: new Date().toISOString() }] }],
           pending: [],
           baseline: null,
         };
@@ -769,10 +763,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const m = find(mid);
         const o = m.ops.find((x) => x.id === opId) ?? notFound('Operation');
         const t = toolOf(o);
-        const money = t.access === 'money_movement';
-        if (patch.requiresApproval === false && money) throw new ApiError('Operations that move money always need a person’s approval.', 422);
+        if (patch.requiresApproval === false && F.TWO_APPROVER_TOOLS.has(o.name)) throw new ApiError('Operations that need two approvers always need a person’s approval.', 422);
         if (patch.rateLimitPerMin !== undefined && (!Number.isInteger(patch.rateLimitPerMin) || patch.rateLimitPerMin < 1 || patch.rateLimitPerMin > 10_000)) throw new ApiError('Set a rate limit between 1 and 10,000 calls a minute.', 400);
-        if (patch.amountMax !== undefined && (!money || patch.amountMax <= 0)) throw new ApiError('Only money movement operations take an amount limit, and it must be above zero.', 400);
+        if (patch.amountMax !== undefined && (t.access !== 'write' || patch.amountMax <= 0)) throw new ApiError('Only write operations take an amount limit, and it must be above zero.', 400);
         if (patch.amountMax !== undefined && !o.input.some((x) => x.name === 'amount')) throw new ApiError(`${o.name} has no amount input, so an amount limit would have nothing to check.`, 422);
         if (patch.binding && !o.input.some((x) => x.name === patch.binding!.arg)) throw new ApiError(`${patch.binding.arg} is not an input of ${o.name}.`, 400);
         const shape = checkedShape(m, o, patch);
