@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "codeloop presence start"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "codeloop presence end"
+      },
+      {
+        "command": "codeloop guard release"
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "codeloop presence event subagentStart"
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "codeloop presence event subagentStop"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "codeloop guard bash --format cursor"
+      }
+    ],
+    "stop": [
+      {
+        "command": "codeloop guard stop"
+      }
+    ]
+  }
+}

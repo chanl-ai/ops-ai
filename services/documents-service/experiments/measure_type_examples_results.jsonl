@@ -1,0 +1,7 @@
+{"file": "TEST001_scan.pdf", "phase": "teacher", "path": "model", "right": 11, "total": 12, "wrong": ["notice_kind"], "calls": 1, "cost": 0.006751, "seconds": 30.86, "extraction": "ext_506dfbd6c0244c77"}
+{"corrected": "TEST001_scan.pdf notice_kind", "status": 200}
+{"file": "VAR01.pdf", "phase": "teacher", "path": "model", "right": 14, "total": 14, "wrong": [], "calls": 1, "cost": 0.007103, "seconds": 31.7, "extraction": "ext_e7e5f466c59e4eb1"}
+{"file": "TEST003_scan.pdf", "phase": "before", "path": "model", "right": 11, "total": 11, "wrong": [], "calls": 1, "cost": 0.005324, "seconds": 35.65, "extraction": "ext_a592a0ef106c4e16"}
+{"file": "VAR02.pdf", "phase": "before", "path": "model", "right": 13, "total": 14, "wrong": ["notice_kind"], "calls": 1, "cost": 0.006593, "seconds": 32.51, "extraction": "ext_436028a6db704a89"}
+{"examples": 1, "fields": ["notice_kind"]}
+{"file": "TEST003_scan.pdf", "phase": "after", "path": "model", "right": 9, "total": 11, "wrong": ["attorney_name", "notice_kind"], "calls": 1, "cost": 0.005086, "seconds": 20.07, "extraction": "ext_e1079533ae734873"}

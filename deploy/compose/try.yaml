@@ -1,0 +1,47 @@
+# For trying Ops AI out, never for production: a PostgreSQL (profile postgres) and the fake model (profile fake-model),
+# added to app.yaml. With the postgres profile, set OPS_DATABASE_URL to
+# postgresql+asyncpg://ops:<OPS_TRY_POSTGRES_PASSWORD>@postgres:5432/ops.
+#   docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/try.yaml --env-file <env file> \
+#     --profile postgres --profile fake-model up -d --build
+services:
+  postgres:
+    profiles: [postgres]
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ops
+      POSTGRES_PASSWORD: ${OPS_TRY_POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ops
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ops -d ops"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  # An OpenAI-compatible fake answering from the committed rules; it never calls a provider. Connect it with
+  # connect_model.py --base-url http://fake-model:8746/v1 (docs/deploy/compose.md, "Connect a model").
+  fake-model:
+    profiles: [fake-model]
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/models:${OPS_IMAGE_TAG:-dev}
+    restart: unless-stopped
+    working_dir: /app/services/models-service/scripts
+    command: ["python", "-m", "fake_openai", "/app/services/models-service/seed/demo-fake-openai"]
+    environment:
+      FAKE_OPENAI_HOST: 0.0.0.0
+      FAKE_OPENAI_PORT: "8746"
+    healthcheck:
+      test: ["CMD", "python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8746/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres-data:

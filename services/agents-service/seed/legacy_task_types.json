@@ -1,0 +1,6 @@
+{
+  "read": "document_check",
+  "reply": "acknowledgement",
+  "write": "write_approval",
+  "decision": "generic_decision"
+}

@@ -1,0 +1,3 @@
+# 1 untyped operations. This number may only go down: type a route and remove its line; check_openapi.py fails if it grows.
+# It streams file bytes (application/octet-stream or the file type), which has no JSON schema.
+get_content_v1_files__file_id__content_get

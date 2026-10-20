@@ -1,0 +1,3573 @@
+{
+ "rules": [
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0001",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0001 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0001",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of tax levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0001",
+     "quote": "SYN-2026-0001",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Fictional State Department of Revenue - Collections Division",
+     "quote": "Fictional State Department of Revenue - Collections Division",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Morgan Example",
+     "quote": "Morgan Example",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002",
+     "quote": "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-12-3456",
+     "quote": "000-12-3456",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "3456",
+     "quote": "3456",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0001",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0001 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0001",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of tax levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0001",
+     "quote": "SYN-2026-0001",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Fictional State Department of Revenue - Collections Division",
+     "quote": "Fictional State Department of Revenue - Collections Division",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Morgan Example",
+     "quote": "Morgan Example",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002",
+     "quote": "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-12-3456",
+     "quote": "000-12-3456",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "3456",
+     "quote": "3456",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*55\\ Legal\\ Lab\\ Way,\\ Sample\\ City,\\ ZZ\\ 00008",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "55 Legal Lab Way, Sample City, ZZ 00008 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*55\\ Legal\\ Lab\\ Way,\\ Sample\\ City,\\ ZZ\\ 00008",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0003",
+     "quote": "SYN-2026-0003",
+     "page": 1
+    },
+    "court": {
+     "value": "Civil Test Court of Sample City",
+     "quote": "Civil Test Court of Sample City",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Example Recovery Partners",
+     "quote": "Example Recovery Partners",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Taylor Testcase",
+     "quote": "Taylor Testcase",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "303 QA Boulevard, Sample City, ZZ 00007",
+     "quote": "303 QA Boulevard, Sample City, ZZ 00007",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-33-6789",
+     "quote": "000-33-6789",
+     "page": 2
+    },
+    "ssn_last4": {
+     "value": "6789",
+     "quote": "6789",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Harper Fixture, Esq.",
+     "quote": "Harper Fixture, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": "55 Legal Lab Way, Sample City, ZZ 00008",
+     "quote": "55 Legal Lab Way, Sample City, ZZ 00008",
+     "page": 1
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*55\\ Legal\\ Lab\\ Way,\\ Sample\\ City,\\ ZZ\\ 00008",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "55 Legal Lab Way, Sample City, ZZ 00008 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*55\\ Legal\\ Lab\\ Way,\\ Sample\\ City,\\ ZZ\\ 00008",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0003",
+     "quote": "SYN-2026-0003",
+     "page": 1
+    },
+    "court": {
+     "value": "Civil Test Court of Sample City",
+     "quote": "Civil Test Court of Sample City",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Example Recovery Partners",
+     "quote": "Example Recovery Partners",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Taylor Testcase",
+     "quote": "Taylor Testcase",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "303 QA Boulevard, Sample City, ZZ 00007",
+     "quote": "303 QA Boulevard, Sample City, ZZ 00007",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-33-6789",
+     "quote": "000-33-6789",
+     "page": 2
+    },
+    "ssn_last4": {
+     "value": "6789",
+     "quote": "6789",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Harper Fixture, Esq.",
+     "quote": "Harper Fixture, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": "55 Legal Lab Way, Sample City, ZZ 00008",
+     "quote": "55 Legal Lab Way, Sample City, ZZ 00008",
+     "page": 1
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0004",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0004 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0004",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Administrative levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0004",
+     "quote": "SYN-2026-0004",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Example County Child Support Unit",
+     "quote": "Example County Child Support Unit",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Jamie Synthetic",
+     "quote": "Jamie Synthetic",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "17 Placeholder Place, Sample City, ZZ 00011",
+     "quote": "17 Placeholder Place, Sample City, ZZ 00011",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": "4321",
+     "quote": "4321",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*60\\ Counsel\\ Court,\\ Suite\\ 2,\\ Sample\\ City,\\ ZZ\\ 00016",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "60 Counsel Court, Suite 2, Sample City, ZZ 00016 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*60\\ Counsel\\ Court,\\ Suite\\ 2,\\ Sample\\ City,\\ ZZ\\ 00016",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Information subpoena and restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0006",
+     "quote": "SYN-2026-0006",
+     "page": 1
+    },
+    "court": {
+     "value": "District Test Court, Example County",
+     "quote": "District Test Court, Example County",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Atlas Fictional Capital",
+     "quote": "Atlas Fictional Capital",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Parker Demo",
+     "quote": "Parker Demo",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "44 Debtor Drive, Sample City, ZZ 00015",
+     "quote": "44 Debtor Drive, Sample City, ZZ 00015",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-66-0006",
+     "quote": "000-66-0006",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "0006",
+     "quote": "0006",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Leslie Sample, Esq.",
+     "quote": "Leslie Sample, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Sample Legal Group",
+     "quote": "Sample Legal Group",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "60 Counsel Court, Suite 2, Sample City, ZZ 00016",
+     "quote": "60 Counsel Court, Suite 2, Sample City, ZZ 00016",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Recipient Operations",
+     "quote": "Northfield Bank Recipient Operations",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0007",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0007 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0007",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Levy transmittal",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0007",
+     "quote": "SYN-2026-0007",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Sampleville Revenue Enforcement Office",
+     "quote": "Sampleville Revenue Enforcement Office",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Alex Placeholder",
+     "quote": "Alex Placeholder",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0008",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0008 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0008",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Tax warrant",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0008",
+     "quote": "SYN-2026-0008",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Fictional Department of Tax Compliance",
+     "quote": "Fictional Department of Tax Compliance",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Willow Demo Catering LLC",
+     "quote": "Willow Demo Catering LLC",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "81 Test Kitchen Road, Sample City, ZZ 00019",
+     "quote": "81 Test Kitchen Road, Sample City, ZZ 00019",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": "00-0000008",
+     "quote": "00-0000008",
+     "page": 1
+    },
+    "state_tax_id": {
+     "value": "ST-TEST-0008",
+     "quote": "ST-TEST-0008",
+     "page": 1
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-BUNDLE\\-0009",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-BUNDLE-0009 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-BUNDLE\\-0009",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Combined writs",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-BUNDLE-0009",
+     "quote": "SYN-BUNDLE-0009",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0010",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0010 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0010",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of state tax levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0010",
+     "quote": "SYN-2026-0010",
+     "page": 1
+    },
+    "court": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": "Prototype State Revenue Office",
+     "quote": "Prototype State Revenue Office",
+     "page": 1
+    },
+    "creditor": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Rowan OCR Example",
+     "quote": "Rowan OCR Example",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "19 Raster Road, Sample City, ZZ 00025",
+     "quote": "19 Raster Road, Sample City, ZZ 00025",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-10-1010",
+     "quote": "000-10-1010",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "1010",
+     "quote": "1010",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Recipient",
+     "quote": "Northfield Bank Test Recipient",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*SYN\\-2026\\-0011",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "SYN-2026-0011 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*SYN\\-2026\\-0011",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Writ of execution",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0011",
+     "quote": "SYN-2026-0011",
+     "page": 1
+    },
+    "court": {
+     "value": "Sample County Test Court",
+     "quote": "Sample County Test Court",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Fixture Medical Services",
+     "quote": "Fixture Medical Services",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Dakota Example",
+     "quote": "Dakota Example",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "110 Edge Case Lane, Sample City, ZZ 00026",
+     "quote": "110 Edge Case Lane, Sample City, ZZ 00026",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-00-0000",
+     "quote": "000-00-0000",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "0000",
+     "quote": "0000",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_firm": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*88\\ Attorney\\ Avenue,\\ Floor\\ 4,\\ Sample\\ City,\\ ZZ\\ 00030",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*88\\ Attorney\\ Avenue,\\ Floor\\ 4,\\ Sample\\ City,\\ ZZ\\ 00030",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0012",
+     "quote": "SYN-2026-0012",
+     "page": 1
+    },
+    "court": {
+     "value": "Supreme Test Court, Sample County",
+     "quote": "Supreme Test Court, Sample County",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Crescent Demo Finance",
+     "quote": "Crescent Demo Finance",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Sage Prototype",
+     "quote": "Sage Prototype",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "212 Validation Way, Sample City, ZZ 00028",
+     "quote": "212 Validation Way, Sample City, ZZ 00028",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": "000-12-0012",
+     "quote": "000-12-0012",
+     "page": 1
+    },
+    "ssn_last4": {
+     "value": "0012",
+     "quote": "0012",
+     "page": 1
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Cameron Fixture, Esq.",
+     "quote": "Cameron Fixture, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Fixture Counsel PLLC",
+     "quote": "Fixture Counsel PLLC",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030",
+     "quote": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030",
+     "page": 1
+    },
+    "garnishee": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "garnishee_address": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "amount": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "date_served": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "response_deadline": {
+     "value": null,
+     "quote": null,
+     "page": null
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$4,812\\.37",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$4,812.37 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$4,812\\.37",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0101",
+     "quote": "SYN-2026-0101",
+     "page": 1
+    },
+    "court": {
+     "value": "Supreme Test Court, Sample County",
+     "quote": "Supreme Test Court, Sample County",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Harbor Demo Lending",
+     "quote": "Harbor Demo Lending",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Elliot Sample",
+     "quote": "Elliot Sample",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "14 Variant Row, Sample City, ZZ 00101",
+     "quote": "14 Variant Row, Sample City, ZZ 00101",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Morgan Clerk, Esq.",
+     "quote": "Morgan Clerk, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Clerk Test LLP",
+     "quote": "Clerk Test LLP",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "7 Counsel Plaza, Sample City, ZZ 00102",
+     "quote": "7 Counsel Plaza, Sample City, ZZ 00102",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$4,812.37",
+     "quote": "$4,812.37",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 2, 2026",
+     "quote": "October 2, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 22, 2026",
+     "quote": "October 22, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$12,050\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$12,050.00 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$12,050\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0102",
+     "quote": "SYN-2026-0102",
+     "page": 1
+    },
+    "court": {
+     "value": "Civil Test Court of Sample City",
+     "quote": "Civil Test Court of Sample City",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Granite Fictional Credit",
+     "quote": "Granite Fictional Credit",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Noor Example",
+     "quote": "Noor Example",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "230 Layout Lane, Apt 5, Sample City, ZZ 00103",
+     "quote": "230 Layout Lane, Apt 5, Sample City, ZZ 00103",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Riley Brief, Esq.",
+     "quote": "Riley Brief, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Brief and Partners",
+     "quote": "Brief and Partners",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "19 Docket Street, Sample City, ZZ 00104",
+     "quote": "19 Docket Street, Sample City, ZZ 00104",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$12,050.00",
+     "quote": "$12,050.00",
+     "page": 1
+    },
+    "date_served": {
+     "value": "September 28, 2026",
+     "quote": "September 28, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 19, 2026",
+     "quote": "October 19, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$987\\.65",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$987.65 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$987\\.65",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0103",
+     "quote": "SYN-2026-0103",
+     "page": 1
+    },
+    "court": {
+     "value": "District Test Court, Example County",
+     "quote": "District Test Court, Example County",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Atlas Fictional Capital",
+     "quote": "Atlas Fictional Capital",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Casey Testline",
+     "quote": "Casey Testline",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "5 Repeat Road, Sample City, ZZ 00105",
+     "quote": "5 Repeat Road, Sample City, ZZ 00105",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Jordan Motion, Esq.",
+     "quote": "Jordan Motion, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Motion Legal Group",
+     "quote": "Motion Legal Group",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "40 Filing Avenue, Suite 3, Sample City, ZZ 00106",
+     "quote": "40 Filing Avenue, Suite 3, Sample City, ZZ 00106",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$987.65",
+     "quote": "$987.65",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 5, 2026",
+     "quote": "October 5, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 26, 2026",
+     "quote": "October 26, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$25,400\\.10",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$25,400.10 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$25,400\\.10",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0104",
+     "quote": "SYN-2026-0104",
+     "page": 1
+    },
+    "court": {
+     "value": "Sample County Test Court",
+     "quote": "Sample County Test Court",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Beacon Demo Recovery",
+     "quote": "Beacon Demo Recovery",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Indigo Prototype LLC",
+     "quote": "Indigo Prototype LLC",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "88 Template Terrace, Sample City, ZZ 00107",
+     "quote": "88 Template Terrace, Sample City, ZZ 00107",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Avery Counsel, Esq.",
+     "quote": "Avery Counsel, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Counsel Fixture PC",
+     "quote": "Counsel Fixture PC",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "2 Bench Square, Floor 6, Sample City, ZZ 00108",
+     "quote": "2 Bench Square, Floor 6, Sample City, ZZ 00108",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$25,400.10",
+     "quote": "$25,400.10",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 7, 2026",
+     "quote": "October 7, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 28, 2026",
+     "quote": "October 28, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$3,333\\.33",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$3,333.33 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$3,333\\.33",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0105",
+     "quote": "SYN-2026-0105",
+     "page": 1
+    },
+    "court": {
+     "value": "Prototype County Civil Court",
+     "quote": "Prototype County Civil Court",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Crescent Demo Finance",
+     "quote": "Crescent Demo Finance",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Rowan Duplicate",
+     "quote": "Rowan Duplicate",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "61 Sameform Street, Sample City, ZZ 00109",
+     "quote": "61 Sameform Street, Sample City, ZZ 00109",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Sky Pleading, Esq.",
+     "quote": "Sky Pleading, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Pleading Test LLP",
+     "quote": "Pleading Test LLP",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "11 Verdict Way, Sample City, ZZ 00110",
+     "quote": "11 Verdict Way, Sample City, ZZ 00110",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$3,333.33",
+     "quote": "$3,333.33",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 9, 2026",
+     "quote": "October 9, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 30, 2026",
+     "quote": "October 30, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$6,250\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$6,250.00 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$6,250\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0106",
+     "quote": "SYN-2026-0106",
+     "page": 1
+    },
+    "court": {
+     "value": "Supreme Test Court, Sample County",
+     "quote": null,
+     "page": null
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Summit Example Finance",
+     "quote": null,
+     "page": null
+    },
+    "debtor_name": {
+     "value": "Quinn Caption",
+     "quote": null,
+     "page": null
+    },
+    "debtor_address": {
+     "value": "300 Column Court, Sample City, ZZ 00111",
+     "quote": "300 Column Court, Sample City, ZZ 00111",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Blair Sidebar, Esq.",
+     "quote": "Blair Sidebar, Esq.",
+     "page": 1
+    },
+    "attorney_firm": {
+     "value": "Sidebar Counsel PLLC",
+     "quote": "Sidebar Counsel PLLC",
+     "page": 1
+    },
+    "attorney_address": {
+     "value": "9 Caption Close, Sample City, ZZ 00112",
+     "quote": "9 Caption Close, Sample City, ZZ 00112",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 1
+    },
+    "amount": {
+     "value": "$6,250.00",
+     "quote": "$6,250.00",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 1, 2026",
+     "quote": "October 1, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 21, 2026",
+     "quote": "October 21, 2026",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$1,499\\.99",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "restraining_notice",
+    "confidence": 0.95,
+    "reason": "$1,499.99 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$1,499\\.99",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Restraining notice",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-2026-0107",
+     "quote": "SYN-2026-0107",
+     "page": 1
+    },
+    "court": {
+     "value": "Civil Test Court of Sample City",
+     "quote": "Civil Test Court of Sample City",
+     "page": 1
+    },
+    "issuing_agency": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "creditor": {
+     "value": "Meridian Fictional Bank",
+     "quote": "Meridian Fictional Bank",
+     "page": 1
+    },
+    "debtor_name": {
+     "value": "Kai Overflow",
+     "quote": "Kai Overflow",
+     "page": 1
+    },
+    "debtor_address": {
+     "value": "17 Second Page Drive, Sample City, ZZ 00113",
+     "quote": "17 Second Page Drive, Sample City, ZZ 00113",
+     "page": 1
+    },
+    "ssn_full": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ssn_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "state_tax_id": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "attorney_name": {
+     "value": "Emery Addendum, Esq.",
+     "quote": "Emery Addendum, Esq.",
+     "page": 2
+    },
+    "attorney_firm": {
+     "value": "Addendum Law",
+     "quote": "Addendum Law",
+     "page": 2
+    },
+    "attorney_address": {
+     "value": "4 Continuation Way, Sample City, ZZ 00114",
+     "quote": "4 Continuation Way, Sample City, ZZ 00114",
+     "page": 2
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 2
+    },
+    "garnishee_address": {
+     "value": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "quote": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+     "page": 2
+    },
+    "amount": {
+     "value": "$1,499.99",
+     "quote": "$1,499.99",
+     "page": 1
+    },
+    "date_served": {
+     "value": "October 3, 2026",
+     "quote": "October 3, 2026",
+     "page": 2
+    },
+    "response_deadline": {
+     "value": "October 23, 2026",
+     "quote": "October 23, 2026",
+     "page": 2
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$7,482\\.19",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "tax_levy",
+    "confidence": 0.95,
+    "reason": "$7,482.19 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$7,482\\.19",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-TL-2026-0101",
+     "quote": "SYN-TL-2026-0101",
+     "page": 1
+    },
+    "authority": {
+     "value": "Fictional State Department of Revenue",
+     "quote": "Fictional State Department of Revenue",
+     "page": 1
+    },
+    "taxpayer_name": {
+     "value": "Riley Fixture",
+     "quote": "Riley Fixture",
+     "page": 1
+    },
+    "taxpayer_address": {
+     "value": "48 Ledger Lane, Sample City, ZZ 00302",
+     "quote": "48 Ledger Lane, Sample City, ZZ 00302",
+     "page": 1
+    },
+    "taxpayer_id_last4": {
+     "value": "3301",
+     "quote": "3301",
+     "page": 1
+    },
+    "taxpayer_ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "tax_type": {
+     "value": "Individual income tax",
+     "quote": "Individual income tax",
+     "page": 1
+    },
+    "tax_period": {
+     "value": "2023",
+     "quote": "2023",
+     "page": 1
+    },
+    "amount_due": {
+     "value": "$7,482.19",
+     "quote": "$7,482.19",
+     "page": 1
+    },
+    "levy_date": {
+     "value": "October 6, 2026",
+     "quote": "October 6, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 27, 2026",
+     "quote": "October 27, 2026",
+     "page": 1
+    },
+    "release_conditions": {
+     "value": "this levy is released when the amount due is paid in full or an installment agreement is approved by the Department.",
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$31,906\\.40",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "tax_levy",
+    "confidence": 0.95,
+    "reason": "$31,906.40 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$31,906\\.40",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of levy on wages, salary, and other income",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-FED-2026-0202",
+     "quote": "SYN-FED-2026-0202",
+     "page": 1
+    },
+    "authority": {
+     "value": "Fictional Federal Revenue Service",
+     "quote": "Fictional Federal Revenue Service",
+     "page": 1
+    },
+    "taxpayer_name": {
+     "value": "Cobalt Example Supply Inc",
+     "quote": "Cobalt Example Supply Inc",
+     "page": 1
+    },
+    "taxpayer_address": {
+     "value": "910 Warehouse Test Road, Sample City, ZZ 00402",
+     "quote": "910 Warehouse Test Road, Sample City, ZZ 00402",
+     "page": 1
+    },
+    "taxpayer_id_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "taxpayer_ein": {
+     "value": "00-0004402",
+     "quote": "00-0004402",
+     "page": 1
+    },
+    "tax_type": {
+     "value": "Employment tax (Form 941)",
+     "quote": "Employment tax (Form 941)",
+     "page": 1
+    },
+    "tax_period": {
+     "value": "Q1 2025, Q2 2025",
+     "quote": "Q1 2025, Q2 2025",
+     "page": 1
+    },
+    "amount_due": {
+     "value": "$31,906.40",
+     "quote": "$31,906.40",
+     "page": 1
+    },
+    "levy_date": {
+     "value": "September 30, 2026",
+     "quote": "September 30, 2026",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "October 21, 2026",
+     "quote": "October 21, 2026",
+     "page": 1
+    },
+    "release_conditions": {
+     "value": "the levy is released when the liability is satisfied, becomes unenforceable, or release is in the taxpayer's best interest under the Service's procedures.",
+     "quote": null,
+     "page": null
+    },
+    "garnishee": {
+     "value": "Northfield Bank Recipient Operations",
+     "quote": "Northfield Bank Recipient Operations",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$2,315\\.77",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "tax_levy",
+    "confidence": 0.95,
+    "reason": "$2,315.77 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$2,315\\.77",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "State tax warrant and levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-TL-2026-0303",
+     "quote": "SYN-TL-2026-0303",
+     "page": 1
+    },
+    "authority": {
+     "value": "Prototype State Tax Commission",
+     "quote": "Prototype State Tax Commission",
+     "page": 1
+    },
+    "taxpayer_name": {
+     "value": "Avery Testwell",
+     "quote": "Avery Testwell",
+     "page": 1
+    },
+    "taxpayer_address": {
+     "value": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+     "quote": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+     "page": 1
+    },
+    "taxpayer_id_last4": {
+     "value": "5503",
+     "quote": "5503",
+     "page": 1
+    },
+    "taxpayer_ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "tax_type": {
+     "value": "Sales and use tax",
+     "quote": "Sales and use tax",
+     "page": 1
+    },
+    "tax_period": {
+     "value": "July 2025 to December 2025",
+     "quote": "July 2025 to December 2025",
+     "page": 1
+    },
+    "amount_due": {
+     "value": "$2,315.77",
+     "quote": "$2,315.77",
+     "page": 1
+    },
+    "levy_date": {
+     "value": "2026-10-02",
+     "quote": "2026-10-02",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "2026-10-23",
+     "quote": "2026-10-23",
+     "page": 1
+    },
+    "release_conditions": {
+     "value": "paid in full, or a bond for the amount due is filed with the Commission.",
+     "quote": "paid in full, or a bond for the amount due is filed with the Commission.",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$2,315\\.77",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "tax_levy",
+    "confidence": 0.95,
+    "reason": "$2,315.77 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$2,315\\.77",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "State tax warrant and levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-TL-2026-0303",
+     "quote": "SYN-TL-2026-0303",
+     "page": 1
+    },
+    "authority": {
+     "value": "Prototype State Tax Commission",
+     "quote": "Prototype State Tax Commission",
+     "page": 1
+    },
+    "taxpayer_name": {
+     "value": "Avery Testwell",
+     "quote": "Avery Testwell",
+     "page": 1
+    },
+    "taxpayer_address": {
+     "value": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+     "quote": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+     "page": 1
+    },
+    "taxpayer_id_last4": {
+     "value": "5503",
+     "quote": "5503",
+     "page": 1
+    },
+    "taxpayer_ein": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "tax_type": {
+     "value": "Sales and use tax",
+     "quote": "Sales and use tax",
+     "page": 1
+    },
+    "tax_period": {
+     "value": "July 2025 to December 2025",
+     "quote": "July 2025 to December 2025",
+     "page": 1
+    },
+    "amount_due": {
+     "value": "$2,315.77",
+     "quote": "$2,315.77",
+     "page": 1
+    },
+    "levy_date": {
+     "value": "2026-10-02",
+     "quote": "2026-10-02",
+     "page": 1
+    },
+    "response_deadline": {
+     "value": "2026-10-23",
+     "quote": "2026-10-23",
+     "page": 1
+    },
+    "release_conditions": {
+     "value": "paid in full, or a bond for the amount due is filed with the Commission.",
+     "quote": "paid in full, or a bond for the amount due is filed with the Commission.",
+     "page": 1
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$12,640\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "tax_levy",
+    "confidence": 0.95,
+    "reason": "$12,640.00 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$12,640\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "notice_kind": {
+     "value": "Notice of tax levy",
+     "quote": null,
+     "page": null
+    },
+    "case_no": {
+     "value": "SYN-TL-2026-0404",
+     "quote": "SYN-TL-2026-0404",
+     "page": 1
+    },
+    "authority": {
+     "value": "Example Commonwealth Revenue Office",
+     "quote": "Example Commonwealth Revenue Office",
+     "page": 1
+    },
+    "taxpayer_name": {
+     "value": "Harbor Demo Bakery LLC",
+     "quote": "Harbor Demo Bakery LLC",
+     "page": 1
+    },
+    "taxpayer_address": {
+     "value": "12 Pastry Test Court, Sample City, ZZ 00602",
+     "quote": "12 Pastry Test Court, Sample City, ZZ 00602",
+     "page": 1
+    },
+    "taxpayer_id_last4": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "taxpayer_ein": {
+     "value": "00-0006602",
+     "quote": "00-0006602",
+     "page": 1
+    },
+    "tax_type": {
+     "value": "Withholding tax",
+     "quote": "Withholding tax",
+     "page": 2
+    },
+    "tax_period": {
+     "value": "2024",
+     "quote": "2024",
+     "page": 2
+    },
+    "amount_due": {
+     "value": "$12,640.00",
+     "quote": "$12,640.00",
+     "page": 2
+    },
+    "levy_date": {
+     "value": "October 8, 2026",
+     "quote": "October 8, 2026",
+     "page": 2
+    },
+    "response_deadline": {
+     "value": "October 29, 2026",
+     "quote": "October 29, 2026",
+     "page": 2
+    },
+    "release_conditions": {
+     "value": "this levy is released on payment in full or on written notice from the Revenue Office.",
+     "quote": "this levy is released on payment in full or on written notice from the Revenue Office.",
+     "page": 2
+    },
+    "garnishee": {
+     "value": "Northfield Bank Test Intake",
+     "quote": "Northfield Bank Test Intake",
+     "page": 2
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30117",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30117 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30117",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30117",
+     "quote": "INV-30117",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Harbour Supplies Ltd",
+     "quote": "Harbour Supplies Ltd",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Facilities",
+     "quote": "Northfield Bank Facilities",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/02/2026",
+     "quote": "10/02/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/01/2026",
+     "quote": "11/01/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$162.50",
+     "quote": "$162.50",
+     "page": 1
+    },
+    "total": {
+     "value": "$1,412.50",
+     "quote": "$1,412.50",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30142",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30142 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30142",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30142",
+     "quote": "INV-30142",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Northern Paper Co",
+     "quote": "Northern Paper Co",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Branch 12",
+     "quote": "Northfield Bank Branch 12",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/05/2026",
+     "quote": "10/05/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/04/2026",
+     "quote": "11/04/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$41.39",
+     "quote": "$41.39",
+     "page": 1
+    },
+    "total": {
+     "value": "$359.79",
+     "quote": "$359.79",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30188",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30188 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30188",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30188",
+     "quote": "INV-30188",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Bluewater Logistics",
+     "quote": "Bluewater Logistics",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Operations",
+     "quote": "Northfield Bank Operations",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/07/2026",
+     "quote": "10/07/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/06/2026",
+     "quote": "11/06/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$910.54",
+     "quote": "$910.54",
+     "page": 1
+    },
+    "total": {
+     "value": "$7,914.69",
+     "quote": "$7,914.69",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30203",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30203 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30203",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30203",
+     "quote": "INV-30203",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Kestrel Office Goods",
+     "quote": "Kestrel Office Goods",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Legal",
+     "quote": "Northfield Bank Legal",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/09/2026",
+     "quote": "10/09/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/08/2026",
+     "quote": "11/08/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$13.00",
+     "quote": "$13.00",
+     "page": 1
+    },
+    "total": {
+     "value": "$112.99",
+     "quote": "$112.99",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30251",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30251 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30251",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30251",
+     "quote": "INV-30251",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Pinecrest Catering",
+     "quote": "Pinecrest Catering",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Events",
+     "quote": "Northfield Bank Events",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/12/2026",
+     "quote": "10/12/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/11/2026",
+     "quote": "11/11/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$313.30",
+     "quote": "$313.30",
+     "page": 1
+    },
+    "total": {
+     "value": "$2,723.30",
+     "quote": "$2,723.30",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30290",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30290 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30290",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30290",
+     "quote": "INV-30290",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Ridgeway Print Shop",
+     "quote": "Ridgeway Print Shop",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Marketing",
+     "quote": "Northfield Bank Marketing",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/14/2026",
+     "quote": "10/14/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/13/2026",
+     "quote": "11/13/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$7.31",
+     "quote": "$7.31",
+     "page": 1
+    },
+    "total": {
+     "value": "$63.51",
+     "quote": "$63.51",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30311",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30311 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30311",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30311",
+     "quote": "INV-30311",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Summit Cleaning Services",
+     "quote": "Summit Cleaning Services",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Facilities",
+     "quote": "Northfield Bank Facilities",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/16/2026",
+     "quote": "10/16/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/15/2026",
+     "quote": "11/15/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$97.50",
+     "quote": "$97.50",
+     "page": 1
+    },
+    "total": {
+     "value": "$847.50",
+     "quote": "$847.50",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30344",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30344 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30344",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30344",
+     "quote": "INV-30344",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Granite IT Partners",
+     "quote": "Granite IT Partners",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Technology",
+     "quote": "Northfield Bank Technology",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/19/2026",
+     "quote": "10/19/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/18/2026",
+     "quote": "11/18/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$650.00",
+     "quote": "$650.00",
+     "page": 1
+    },
+    "total": {
+     "value": "$5,650.00",
+     "quote": "$5,650.00",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*INV\\-30399",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "INV-30399 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*INV\\-30399",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "INV-30399",
+     "quote": "INV-30399",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Westfield Hardware",
+     "quote": "Westfield Hardware",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Facilities",
+     "quote": "Northfield Bank Facilities",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/21/2026",
+     "quote": "10/21/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "tax": {
+     "value": "$26.00",
+     "quote": "$26.00",
+     "page": 1
+    },
+    "total": {
+     "value": "$226.00",
+     "quote": "$226.00",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*TX\\-8812",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "TX-8812 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*TX\\-8812",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "TX-8812",
+     "quote": "TX-8812",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Cedar Lane Furniture",
+     "quote": "Cedar Lane Furniture",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Branch 4",
+     "quote": "Northfield Bank Branch 4",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/03/2026",
+     "quote": "10/03/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "10/31/2026",
+     "quote": "10/31/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$228.00",
+     "quote": "$228.00",
+     "page": 1
+    },
+    "total": {
+     "value": "$2,128.00",
+     "quote": "$2,128.00",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*TX\\-8840",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "supplier_invoice",
+    "confidence": 0.95,
+    "reason": "TX-8840 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*TX\\-8840",
+   "tool": "final_result",
+   "arguments": {
+    "invoice_no": {
+     "value": "TX-8840",
+     "quote": "TX-8840",
+     "page": 1
+    },
+    "vendor": {
+     "value": "Atlas Courier Group",
+     "quote": "Atlas Courier Group",
+     "page": 1
+    },
+    "bill_to": {
+     "value": "Northfield Bank Mailroom",
+     "quote": "Northfield Bank Mailroom",
+     "page": 1
+    },
+    "invoice_date": {
+     "value": "10/11/2026",
+     "quote": "10/11/2026",
+     "page": 1
+    },
+    "due_date": {
+     "value": "11/10/2026",
+     "quote": "11/10/2026",
+     "page": 1
+    },
+    "tax": {
+     "value": "$18.20",
+     "quote": "$18.20",
+     "page": 1
+    },
+    "total": {
+     "value": "$158.20",
+     "quote": "$158.20",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$3,210\\.44",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "$3,210.44 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$3,210\\.44",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Morgan Example",
+     "quote": "Morgan Example",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "4417",
+     "quote": "4417",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$3,210.44",
+     "quote": "$3,210.44",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$2,987.10",
+     "quote": "$2,987.10",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Quinn\\ Caption",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Quinn Caption is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Quinn\\ Caption",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Quinn Caption",
+     "quote": "Quinn Caption",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "8820",
+     "quote": "8820",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$12,004.00",
+     "quote": "$12,004.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$13,450.75",
+     "quote": "$13,450.75",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$88\\.12",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "$88.12 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$88\\.12",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Blair Sidebar",
+     "quote": "Blair Sidebar",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "0391",
+     "quote": "0391",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$88.12",
+     "quote": "$88.12",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$412.60",
+     "quote": "$412.60",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$54,300\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "$54,300.00 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$54,300\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Cameron Fixture",
+     "quote": "Cameron Fixture",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "5562",
+     "quote": "5562",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$54,300.00",
+     "quote": "$54,300.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$51,875.25",
+     "quote": "$51,875.25",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*\\$1,000\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "$1,000.00 is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*\\$1,000\\.00",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Leslie Sample",
+     "quote": "Leslie Sample",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "7708",
+     "quote": "7708",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$1,000.00",
+     "quote": "$1,000.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$1,642.33",
+     "quote": "$1,642.33",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Avery\\ Specimen",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Avery Specimen is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Avery\\ Specimen",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Avery Specimen",
+     "quote": "Avery Specimen",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "2245",
+     "quote": "2245",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$7,415.90",
+     "quote": "$7,415.90",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$6,999.99",
+     "quote": "$6,999.99",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Jordan\\ Mockup",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Jordan Mockup is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Jordan\\ Mockup",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Jordan Mockup",
+     "quote": "Jordan Mockup",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "9134",
+     "quote": "9134",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$2,500.00",
+     "quote": "$2,500.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$2,731.48",
+     "quote": "$2,731.48",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Riley\\ Template",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Riley Template is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Riley\\ Template",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Riley Template",
+     "quote": "Riley Template",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "6083",
+     "quote": "6083",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/30/2026",
+     "quote": "09/30/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$640.25",
+     "quote": "$640.25",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$505.00",
+     "quote": "$505.00",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Sam\\ Misprint",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Sam Misprint is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Sam\\ Misprint",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Sam Misprint",
+     "quote": "Sam Misprint",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "4602",
+     "quote": "4602",
+     "page": 1
+    },
+    "period_start": {
+     "value": "09/01/2026",
+     "quote": "09/01/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": null,
+     "quote": null,
+     "page": null
+    },
+    "opening_balance": {
+     "value": "$410.00",
+     "quote": "$410.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$388.15",
+     "quote": "$388.15",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Casey\\ Draft",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Casey Draft is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Casey\\ Draft",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Casey Draft",
+     "quote": "Casey Draft",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "3371",
+     "quote": "3371",
+     "page": 1
+    },
+    "period_start": {
+     "value": "08/16/2026",
+     "quote": "08/16/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/15/2026",
+     "quote": "09/15/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$9,120.00",
+     "quote": "$9,120.00",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$8,804.12",
+     "quote": "$8,804.12",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Drew\\ Placeholder",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": "bank_statement",
+    "confidence": 0.95,
+    "reason": "Drew Placeholder is printed on the page"
+   }
+  },
+  {
+   "when": "^Fields:.*Drew\\ Placeholder",
+   "tool": "final_result",
+   "arguments": {
+    "account_holder": {
+     "value": "Drew Placeholder",
+     "quote": "Drew Placeholder",
+     "page": 1
+    },
+    "account_last4": {
+     "value": "1158",
+     "quote": "1158",
+     "page": 1
+    },
+    "period_start": {
+     "value": "08/16/2026",
+     "quote": "08/16/2026",
+     "page": 1
+    },
+    "period_end": {
+     "value": "09/15/2026",
+     "quote": "09/15/2026",
+     "page": 1
+    },
+    "opening_balance": {
+     "value": "$310.40",
+     "quote": "$310.40",
+     "page": 1
+    },
+    "closing_balance": {
+     "value": "$1,295.40",
+     "quote": "$1,295.40",
+     "page": 1
+    }
+   }
+  },
+  {
+   "when": "^Document types:.*Staff\\ canteen\\ menu\\ for\\ the\\ week",
+   "tool": "final_result",
+   "arguments": {
+    "typeId": null,
+    "confidence": 0.2,
+    "reason": "A canteen menu is none of the team's document types"
+   }
+  }
+ ]
+}

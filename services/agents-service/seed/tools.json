@@ -1,0 +1,413 @@
+[
+ {
+  "name": "lookup_account",
+  "server": "Core Banking",
+  "description": "Look up a Northfield deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+  "access": "read",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string",
+     "description": "Account number or holder name"
+    }
+   },
+   "required": [
+    "query"
+   ]
+  },
+  "kind": "lookup",
+  "dataset": "accounts",
+  "match_fields": [
+   "accountId",
+   "holder"
+  ],
+  "view_title": "{accountId} \u00b7 {holder}",
+  "view_fields": [
+   [
+    "Type",
+    "{type}"
+   ],
+   [
+    "Balance",
+    "{balance}"
+   ],
+   [
+    "Daily wire limit",
+    "{dailyWireLimit}"
+   ],
+   [
+    "Last wire",
+    "{lastWire}"
+   ]
+  ]
+ },
+ {
+  "name": "place_wire_hold",
+  "server": "Payments Hub",
+  "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
+  "access": "write",
+  "requires_approval": true,
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "wireId": {
+     "type": "string",
+     "description": "Wire id, e.g. W-88213"
+    },
+    "hours": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 72
+    },
+    "reason": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "wireId",
+    "hours",
+    "reason"
+   ]
+  },
+  "kind": "draft",
+  "approval": {
+   "title": "Hold outbound wire {wireId}",
+   "action": "Hold wire {wireId} for {hours} hours",
+   "summary": "{reason}",
+   "fields": [
+    [
+     "Wire",
+     "{wireId}"
+    ],
+    [
+     "Hold",
+     "{hours} hours"
+    ],
+    [
+     "Reason",
+     "{reason}"
+    ]
+   ],
+   "risk": "critical",
+   "consequence": "Approving holds this outbound wire. The payee receives nothing until the hold is released.",
+   "gate": "Money movement review",
+   "reviewers": "Fraud Operations",
+   "result": "Hold {reference} placed on wire {wireId} for {hours} hours."
+  },
+  "approvers": 2
+ },
+ {
+  "name": "lookup_customer",
+  "server": "Customer Hub",
+  "description": "Look up a Northfield customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
+  "access": "read",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string",
+     "description": "Customer name, id or email"
+    }
+   },
+   "required": [
+    "query"
+   ]
+  },
+  "kind": "lookup",
+  "dataset": "customers",
+  "match_fields": [
+   "customerId",
+   "name",
+   "email"
+  ],
+  "view_title": "{name}",
+  "view_fields": [
+   [
+    "Customer",
+    "{customerId}"
+   ],
+   [
+    "Segment",
+    "{segment}"
+   ],
+   [
+    "Home branch",
+    "{branch}"
+   ],
+   [
+    "Customer since",
+    "{since}"
+   ],
+   [
+    "Open items",
+    "{openItems}"
+   ]
+  ]
+ },
+ {
+  "name": "request_document",
+  "server": "Customer Hub",
+  "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
+  "access": "write",
+  "requires_approval": true,
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "customerId": {
+     "type": "string"
+    },
+    "document": {
+     "type": "string"
+    },
+    "reason": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "customerId",
+    "document",
+    "reason"
+   ]
+  },
+  "kind": "draft",
+  "approval": {
+   "title": "Request a document from {customerId}",
+   "action": "Send a request for {document}",
+   "summary": "{reason}",
+   "fields": [
+    [
+     "Customer",
+     "{customerId}"
+    ],
+    [
+     "Document",
+     "{document}"
+    ],
+    [
+     "Reason",
+     "{reason}"
+    ]
+   ],
+   "risk": "medium",
+   "gate": "Customer outreach review",
+   "reviewers": "Card Services",
+   "result": "Request {reference} sent to {customerId} for {document}."
+  }
+ },
+ {
+  "name": "search_customers",
+  "server": "Northfield Core Banking",
+  "description": "Find customers by name, email, address or the last four digits of their SSN.",
+  "access": "read",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "query"
+   ]
+  },
+  "kind": "lookup",
+  "dataset": "customers",
+  "match_fields": [
+   "name",
+   "address",
+   "ssnLast4"
+  ],
+  "view_title": "{name}",
+  "view_fields": [
+   [
+    "Customer",
+    "{customerId}"
+   ],
+   [
+    "Address",
+    "{address}"
+   ],
+   [
+    "Segment",
+    "{segment}"
+   ]
+  ]
+ },
+ {
+  "name": "get_customer",
+  "server": "Northfield Core Banking",
+  "description": "One customer and their account ids.",
+  "access": "read",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "customerId": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "customerId"
+   ]
+  },
+  "kind": "lookup",
+  "dataset": "customers",
+  "match_fields": [
+   "customerId"
+  ],
+  "view_title": "{name}",
+  "view_fields": [
+   [
+    "Customer",
+    "{customerId}"
+   ],
+   [
+    "Address",
+    "{address}"
+   ],
+   [
+    "Segment",
+    "{segment}"
+   ]
+  ]
+ },
+ {
+  "name": "get_account",
+  "server": "Northfield Core Banking",
+  "description": "Balance, status and holds of one account.",
+  "access": "read",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "accountId": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "accountId"
+   ]
+  },
+  "kind": "lookup",
+  "dataset": "accounts",
+  "match_fields": [
+   "accountId"
+  ],
+  "view_title": "{accountId}",
+  "view_fields": [
+   [
+    "Holder",
+    "{holder}"
+   ],
+   [
+    "Type",
+    "{type}"
+   ],
+   [
+    "Balance",
+    "{balance}"
+   ],
+   [
+    "Status",
+    "{status}"
+   ]
+  ]
+ },
+ {
+  "name": "place_hold",
+  "server": "Northfield Core Banking",
+  "description": "Place a hold on funds in an account. Moves money: a reviewer approves every call.",
+  "access": "write",
+  "requires_approval": true,
+  "approvers": 1,
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "accountId": {
+     "type": "string"
+    },
+    "amount": {
+     "type": "number",
+     "minimum": 0.01
+    },
+    "reason": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "accountId",
+    "amount",
+    "reason"
+   ]
+  },
+  "kind": "draft",
+  "approval": {
+   "title": "Hold {amount} on account {accountId}",
+   "action": "Hold {amount} on {accountId}",
+   "summary": "{reason}",
+   "consequence": "Approving holds these funds; the customer cannot withdraw them until the hold is released.",
+   "fields": [
+    [
+     "Account",
+     "{accountId}"
+    ],
+    [
+     "Amount",
+     "{amount}"
+    ],
+    [
+     "Reason",
+     "{reason}"
+    ]
+   ],
+   "gate": "Levy review",
+   "reviewers": "Operations",
+   "result": "Hold {reference} placed on {accountId} for {amount}.",
+   "risk": "high"
+  },
+  "step_up": true
+ },
+ {
+  "name": "add_customer_note",
+  "server": "Northfield Core Banking",
+  "description": "Write a note on a customer's record.",
+  "access": "write",
+  "requires_approval": true,
+  "approvers": 1,
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "customerId": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "customerId",
+    "text"
+   ]
+  },
+  "kind": "draft",
+  "approval": {
+   "title": "Note on customer {customerId}",
+   "action": "Write a note on {customerId}",
+   "summary": "{text}",
+   "consequence": "Approving writes this note on the customer's record, where every teammate reads it.",
+   "fields": [
+    [
+     "Customer",
+     "{customerId}"
+    ],
+    [
+     "Note",
+     "{text}"
+    ]
+   ],
+   "gate": "Levy review",
+   "reviewers": "Operations",
+   "result": "Note {reference} written on {customerId}.",
+   "risk": "medium"
+  }
+ }
+]

@@ -1,0 +1,81 @@
+# The processes one Ops AI machine runs, in start order (deploy/host/ops_host.py). OPS_ENABLED_SERVICES picks which
+# start: `all`, or names from this file, so a machine that runs only tools-service is this file with
+# OPS_ENABLED_SERVICES=opa,tools. Settings every service shares come from the machine's env (fly.toml [env] and
+# secrets); this file holds what differs per process: the command, the service's own database login, its signing key,
+# and the keys deploy/images/service_keys.py says it uses.
+# Each service signs its calls to another with its own Ed25519 key, and every callee lists all public keys in
+# OPS_SERVICE_PUBLIC_KEYS (deploy/fly/generate_keys.py prints the set). The machine holds every login and key
+# (deploy/fly/staging/apps.py one-secrets stages them); `withhold` keeps each out of the processes that do not name it,
+# and OPS_DATABASE_URL, the superuser the release command migrates as, out of every process.
+
+[host]
+grace_seconds = 20
+max_restarts = 5
+restart_window_seconds = 300
+backoff_max_seconds = 30
+withhold = [
+  "DATABASE_URL", "OPS_DATABASE_URL", "OPS_DATABASE_URL_*", "OPS_SVC_KEY_*", "OPS_MODELS_KEY_*",
+  "OPS_PLATFORM_SIGNING_KEY", "OPS_REVIEW_KEY", "OPS_SECRETS_KEY", "OPS_BOOTSTRAP_ADMIN_PASSWORD",
+]
+
+[process.opa]
+command = ["opa", "run", "--server", "--addr", "127.0.0.1:8181", "--log-level", "error", "/app/services/tools-service/policy"]
+ready = "http://127.0.0.1:8181/health"
+
+[process.platform]
+command = ["/app/.venv/bin/python", "-m", "ops_platform"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_PLATFORM}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_PLATFORM}", OPS_SERVICE_SIGNING_KID = "svc-platform-1", OPS_PLATFORM_SIGNING_KEY = "${OPS_PLATFORM_SIGNING_KEY}" }
+ready = "http://127.0.0.1:8710/v1/health"
+
+[process.files]
+command = ["/app/.venv/bin/python", "-m", "ops_files"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_FILES}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_FILES}", OPS_SERVICE_SIGNING_KID = "svc-files-1", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}" }
+ready = "http://127.0.0.1:8750/health"
+
+[process.models]
+command = ["/app/.venv/bin/python", "-m", "ops_models"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_MODELS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_MODELS}", OPS_SERVICE_SIGNING_KID = "svc-models-1" }
+ready = "http://127.0.0.1:8730/health"
+
+# The fake model: answers from committed rules and never calls a provider. Staging's only model connection, bound by
+# deploy/fly/connect_model.py --base-url http://127.0.0.1:8746/v1.
+[process.fake]
+command = ["/app/.venv/bin/python", "-m", "fake_openai", "/app/services/models-service/seed/demo-fake-openai"]
+env = { FAKE_OPENAI_HOST = "127.0.0.1", FAKE_OPENAI_PORT = "8746", PYTHONPATH = "/app/services/models-service/scripts" }
+ready = "http://127.0.0.1:8746/health"
+
+[process.tools]
+command = ["/app/.venv/bin/python", "-m", "ops_tools"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_TOOLS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_TOOLS}", OPS_SERVICE_SIGNING_KID = "svc-tools-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}" }
+ready = "http://127.0.0.1:8720/health"
+
+[process.kb]
+command = ["/app/.venv/bin/python", "-m", "ops_kb"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_KB}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_KB}", OPS_SERVICE_SIGNING_KID = "svc-kb-1" }
+ready = "http://127.0.0.1:8740/health"
+
+[process.documents]
+command = ["/app/.venv/bin/python", "-m", "ops_documents"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_DOCUMENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_DOCUMENTS}", OPS_SERVICE_SIGNING_KID = "svc-documents-1", OPS_MODELS_KEY = "${OPS_MODELS_KEY_DOCUMENTS}" }
+ready = "http://127.0.0.1:8760/health"
+
+# No ready gate: its health answers 503 until a model is bound, and nothing below needs it to start.
+[process.agents]
+command = ["/app/.venv/bin/python", "-m", "ops_agents.api"]
+check = "http://127.0.0.1:8700/health"
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
+
+# The workflow runner's worker serves no port; it signs as agents-service, whose work it does, on its login.
+[process.worker]
+command = ["/app/.venv/bin/python", "-m", "ops_agents.api.worker"]
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
+
+[process.console]
+command = ["/app/apps/console/node_modules/.bin/next", "start", "-H", "127.0.0.1", "-p", "3016"]
+cwd = "/app/apps/console"
+ready = "http://127.0.0.1:3016/"
+
+# Last, so the public port opens once everything behind it answers.
+[process.caddy]
+command = ["caddy", "run", "--config", "/app/deploy/fly/Caddyfile", "--adapter", "caddyfile"]
+check = "http://127.0.0.1:8080/api/platform/v1/health"

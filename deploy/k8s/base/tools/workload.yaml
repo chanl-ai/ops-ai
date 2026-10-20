@@ -1,0 +1,96 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tools
+  labels:
+    app.kubernetes.io/name: tools
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tools
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tools
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tools
+        image: ops-ai/tools
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OPS_SERVICE_SIGNING_KID
+          value: svc-tools-1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        envFrom:
+        - configMapRef:
+            name: ops-settings
+        - configMapRef:
+            name: ops-origin
+        - secretRef:
+            name: ops-tools
+        ports:
+        - containerPort: 8720
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8720
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8720
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8720
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tools
+  labels:
+    app.kubernetes.io/name: tools
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: tools
+  ports:
+  - name: http
+    port: 8720
+    targetPort: 8720

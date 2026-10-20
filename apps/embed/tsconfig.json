@@ -1,0 +1,12 @@
+{
+  "extends": "../console/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/lib/api": ["./src/widget-api/index.ts"],
+      "~/*": ["./src/*"],
+      "@/*": ["../console/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@ops-ai/usecase-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Resolves a use case and layer to its script, runs it, and reports PASS or FAIL per check.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./harness": "./src/harness.ts"
+  },
+  "scripts": {
+    "test": "node --test src/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit && node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "playwright": "^1.56.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  },
+  "license": "Apache-2.0"
+}

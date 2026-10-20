@@ -1,0 +1,26 @@
+# Only what the image builds from; node_modules, .venv, .next, .data, .logs and docs stay out.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!pyproject.toml
+!uv.lock
+!apps/console
+!apps/embed/package.json
+!packages
+!services
+!deploy
+**/node_modules
+**/.next
+**/.next-*
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/tsconfig.tsbuildinfo
+deploy/host/tests
+**/.env
+**/.env.*
+**/.data
+**/.run
+**/.logs

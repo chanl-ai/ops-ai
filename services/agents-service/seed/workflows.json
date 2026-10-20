@@ -1,0 +1,112 @@
+[
+ {
+  "name": "dispute_email",
+  "version": 1,
+  "entry": "classify",
+  "nodes": [
+   {
+    "id": "classify",
+    "kind": "agent",
+    "config": {
+     "labels": [
+      "card_dispute",
+      "complaint",
+      "other"
+     ],
+     "max_attachments": 20
+    }
+   },
+   {
+    "id": "extract",
+    "kind": "extract"
+   },
+   {
+    "id": "collect",
+    "kind": "collect"
+   },
+   {
+    "id": "draft",
+    "kind": "draft"
+   },
+   {
+    "id": "grade",
+    "kind": "grade"
+   },
+   {
+    "id": "gate",
+    "kind": "condition",
+    "config": {
+     "rule": "score_gate",
+     "threshold": 0.8,
+     "max_attempts": 3,
+     "pass": "human",
+     "fail": "draft"
+    }
+   },
+   {
+    "id": "human",
+    "kind": "human"
+   },
+   {
+    "id": "decide",
+    "kind": "condition",
+    "config": {
+     "rule": "decision",
+     "approved": "send_reply",
+     "rejected": "close"
+    }
+   },
+   {
+    "id": "send_reply",
+    "kind": "tool",
+    "config": {
+     "tool": "send_reply"
+    }
+   },
+   {
+    "id": "done",
+    "kind": "end",
+    "config": {
+     "status": "replied"
+    }
+   },
+   {
+    "id": "close",
+    "kind": "end",
+    "config": {
+     "status": "closed"
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "classify",
+    "target": "extract"
+   },
+   {
+    "source": "extract",
+    "target": "collect"
+   },
+   {
+    "source": "collect",
+    "target": "draft"
+   },
+   {
+    "source": "draft",
+    "target": "grade"
+   },
+   {
+    "source": "grade",
+    "target": "gate"
+   },
+   {
+    "source": "human",
+    "target": "decide"
+   },
+   {
+    "source": "send_reply",
+    "target": "done"
+   }
+  ]
+ }
+]

@@ -1,0 +1,4 @@
+# Each overlay's secret env files (deploy/k8s/write_secrets.py) and its generated keys; never committed.
+*.env
+# The proof writes the outside database's address for the kind overlay each run.
+kind/postgres-endpoint.yaml

@@ -1,0 +1,182 @@
+{
+ "rules": [
+  {"when": "Document types:[\\s\\S]*RECEIPT-UC249", "tool": "final_result", "arguments": {"typeId": "payment_receipt", "confidence": 0.96, "reason": "The document is headed 'Payment receipt' and shows a payer, an amount paid and a reference."}},
+  {"when": "Fields:\\n- payer_name[\\s\\S]*RECEIPT-UC249", "tool": "final_result", "arguments": {"payer_name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "amount": {"value": "2,000.00", "quote": "CAD 2,000.00", "page": 1}, "paid_on": {"value": "2026-09-30", "quote": "2026-09-30", "page": 1}, "reference": {"value": "RECEIPT-UC249", "quote": "RECEIPT-UC249", "page": 1}}},
+  {"when": "Read this customer complaint", "tool": "final_result", "arguments": {"urgency": "high", "category": "disputed debt", "wantsHold": true}},
+  {"when": "Fields:\\n- customer_name[\\s\\S]*COMPLAINT-UC249", "tool": "final_result", "arguments": {"customer_name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "case_ref": {"value": null, "quote": null, "page": null}, "complaint": {"value": "You froze money on my account over a debt I already paid", "quote": "You froze money on my account over a debt I already paid", "page": 1}, "amount": {"value": "2,000.00", "quote": "2,000.00", "page": 1}}},
+  {"when": "Document types:[\\s\\S]*SYN-2026-0006", "tool": "final_result", "arguments": {"typeId": "restraining_notice", "confidence": 0.95, "reason": "The document explicitly labels itself 'INFORMATION SUBPOENA AND RESTRAINING NOTICE' and is addressed to Northfield Bank regarding a single defendant 'Parker Demo'."}},
+  {"when": "Fields:\\n- notice_kind[\\s\\S]*SYN-2026-0006", "tool": "final_result", "arguments": {"notice_kind": {"value": "INFORMATION SUBPOENA AND RESTRAINING NOTICE", "quote": "INFORMATION SUBPOENA AND RESTRAINING NOTICE", "page": 1}, "case_no": {"value": "SYN-2026-0006", "quote": "Case reference: SYN-2026-0006", "page": 1}, "court": {"value": "District Test Court, Example County", "quote": "Court\nDistrict Test Court, Example County", "page": 1}, "issuing_agency": {"value": null, "quote": null, "page": null}, "creditor": {"value": "Atlas Fictional Capital", "quote": "Plaintiff\nAtlas Fictional Capital", "page": 1}, "debtor_name": {"value": "Parker Demo", "quote": "Defendant\nParker Demo", "page": 1}, "debtor_address": {"value": "44 Debtor Drive, Sample City, ZZ 00015", "quote": "Defendant address\n44 Debtor Drive, Sample City, ZZ 00015", "page": 1}, "ssn_full": {"value": "000-66-0006", "quote": "SSN\n000-66-0006", "page": 1}, "ssn_last4": {"value": "0006", "quote": "SSN\n000-66-0006", "page": 1}, "ein": {"value": null, "quote": null, "page": null}, "state_tax_id": {"value": null, "quote": null, "page": null}, "attorney_name": {"value": "Leslie Sample, Esq.", "quote": "Leslie Sample, Esq. / Sample Legal Group", "page": 1}, "attorney_firm": {"value": "Sample Legal Group", "quote": "Leslie Sample, Esq. / Sample Legal Group", "page": 1}, "attorney_address": {"value": "60 Counsel Court, Suite 2, Sample City, ZZ 00016", "quote": "Attorney address\n60 Counsel Court, Suite 2, Sample City, ZZ 00016", "page": 1}, "garnishee": {"value": "Northfield Bank Recipient Operations", "quote": "TO\nNorthfield Bank Recipient Operations", "page": 1}, "garnishee_address": {"value": "999 Bank Recipient Way, Toronto, ON A1A 1A1", "quote": "Address\n999 Bank Recipient Way, Toronto, ON A1A 1A1", "page": 1}, "amount": {"value": null, "quote": null, "page": null}, "date_served": {"value": null, "quote": null, "page": null}, "response_deadline": {"value": null, "quote": null, "page": null}}},
+  {"when": "Document types:[\\s\\S]*SYN-2026-0012", "tool": "final_result", "arguments": {"typeId": "restraining_notice", "confidence": 0.98, "reason": "The page is titled \"RESTRAINING NOTICE\" and identifies a single \"Judgment debtor\" (Sage Prototype), indicating a restraining notice."}},
+  {"when": "Document types:[\\s\\S]*SYN-TL-2026-0101", "tool": "final_result", "arguments": {"typeId": "tax_levy", "confidence": 0.99, "reason": "The document prominently states 'NOTICE OF LEVY - STATE TAX' and names the 'Fictional State Department of Revenue', indicating a state tax authority levy."}},
+  {"when": "Fields:\\n- notice_kind[\\s\\S]*SYN-TL-2026-0101", "tool": "final_result", "arguments": {"notice_kind": {"value": "NOTICE OF LEVY - STATE TAX", "quote": "NOTICE OF LEVY - STATE TAX", "page": 1}, "case_no": {"value": "SYN-TL-2026-0101", "quote": "SYN-TL-2026-0101", "page": 1}, "authority": {"value": "Fictional State Department of Revenue", "quote": "Fictional State Department of Revenue", "page": 1}, "taxpayer_name": {"value": "Riley Fixture", "quote": "Riley Fixture", "page": 1}, "taxpayer_address": {"value": "48 Ledger Lane, Sample City, ZZ 00302", "quote": "48 Ledger Lane, Sample City, ZZ 00302", "page": 1}, "taxpayer_id_last4": {"value": "XXX-XX-3301", "quote": "XXX-XX-3301", "page": 1}, "taxpayer_ein": {"value": null, "quote": null, "page": null}, "tax_type": {"value": "Individual income tax", "quote": "Individual income tax", "page": 1}, "tax_period": {"value": "2023", "quote": "2023", "page": 1}, "amount_due": {"value": "$7,482.19", "quote": "$7,482.19", "page": 1}, "levy_date": {"value": "October 6, 2026", "quote": "October 6, 2026", "page": 1}, "response_deadline": {"value": "October 27, 2026", "quote": "October 27, 2026", "page": 1}, "release_conditions": {"value": "Release: this levy is released when the amount due is paid in full or an installment agreement is approved by the\nDepartment.", "quote": "Release: this levy is released when the amount due is paid in full or an installment agreement is approved by the\nDepartment.", "page": 1}, "garnishee": {"value": "Northfield Bank Test Intake", "quote": "Northfield Bank Test Intake", "page": 1}}},
+  {"when": "Document types:[\\s\\S]*SYN-FED-2026-0202", "tool": "final_result", "arguments": {"typeId": "tax_levy", "confidence": 0.97, "reason": "The page is titled as a notice of levy from a state department of revenue."}},
+  {"when": "Fields:\\n- notice_kind[\\s\\S]*SYN-FED-2026-0202", "tool": "final_result", "arguments": {"amount_due": {"value": "$31,906.40", "quote": "$31,906.40", "page": 1}, "authority": {"value": "Fictional Federal Revenue Service", "quote": "Fictional Federal Revenue Service", "page": 1}, "case_no": {"value": "SYN-FED-2026-0202", "quote": "SYN-FED-2026-0202", "page": 1}, "garnishee": {"value": "Northfield Bank Recipient Operations", "quote": "Northfield Bank Recipient Operations", "page": 1}, "levy_date": {"value": "September 30, 2026", "quote": "September 30, 2026", "page": 1}, "notice_kind": {"value": "Notice of levy on wages, salary, and other income", "quote": "Notice of levy on wages, salary, and other income", "page": 1}, "release_conditions": {"value": "the levy is released when the liability is satisfied, becomes unenforceable, or release is in the taxpayer's best interest under the Service's procedures.", "quote": "the levy is released when the liability is satisfied, becomes unenforceable, or release is in the taxpayer's best interest under the Service's procedures.", "page": 1}, "response_deadline": {"value": "October 21, 2026", "quote": "October 21, 2026", "page": 1}, "tax_period": {"value": "Q1 2025, Q2 2025", "quote": "Q1 2025, Q2 2025", "page": 1}, "tax_type": {"value": "Employment tax (Form 941)", "quote": "Employment tax (Form 941)", "page": 1}, "taxpayer_address": {"value": "910 Warehouse Test Road, Sample City, ZZ 00402", "quote": "910 Warehouse Test Road, Sample City, ZZ 00402", "page": 1}, "taxpayer_ein": {"value": "00-0004402", "quote": "00-0004402", "page": 1}, "taxpayer_id_last4": {"value": null, "quote": null, "page": null}, "taxpayer_name": {"value": "Cobalt Example Supply Inc", "quote": "Cobalt Example Supply Inc, taxpayer of record", "page": 1}}},
+  {"when": "Case reference: SYN-2026-0012", "tool": "final_result", "arguments": {"notice_kind": {"value": "Restraining notice", "quote": "RESTRAINING NOTICE", "page": 1}, "case_no": {"value": "SYN-2026-0012", "quote": "SYN-2026-0012", "page": 1}, "court": {"value": "Supreme Test Court, Sample County", "quote": "Supreme Test Court, Sample County", "page": 1}, "issuing_agency": {"value": null, "quote": null, "page": null}, "creditor": {"value": "Crescent Demo Finance", "quote": "Crescent Demo Finance", "page": 1}, "debtor_name": {"value": "Sage Prototype", "quote": "Sage Prototype", "page": 1}, "debtor_address": {"value": "212 Validation Way, Sample City, ZZ 00028", "quote": "212 Validation Way, Sample City, ZZ 00028", "page": 1}, "ssn_full": {"value": "000-12-0012", "quote": "000-12-0012", "page": 1}, "ssn_last4": {"value": "0012", "quote": "000-12-0012", "page": 1}, "ein": {"value": null, "quote": null, "page": null}, "state_tax_id": {"value": null, "quote": null, "page": null}, "attorney_name": {"value": "Cameron Fixture, Esq.", "quote": "Cameron Fixture, Esq.", "page": 1}, "attorney_firm": {"value": "Fixture Counsel PLLC", "quote": "Fixture Counsel PLLC", "page": 1}, "attorney_address": {"value": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030", "quote": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030", "page": 1}, "garnishee": {"value": "Northfield Bank", "quote": "Northfield Bank", "page": 1}, "garnishee_address": {"value": null, "quote": null, "page": null}, "amount": {"value": null, "quote": null, "page": null}, "date_served": {"value": null, "quote": null, "page": null}, "response_deadline": {"value": null, "quote": null, "page": null}}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*UC226 BODY ONLY", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "address": {"value": "12 Harbour Street, Halifax NS B3J 1A1", "quote": "12 Harbour Street, Halifax NS B3J 1A1", "page": 1}, "ssn_last4": {"value": "4471", "quote": "***-**-4471", "page": 1}, "amount": {"value": "3,250.00", "quote": "3,250.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-01187", "quote": "NS-2026-GN-01187", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*UC226 ATTACHMENT A", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "address": {"value": "12 Harbour Street, Halifax NS B3J 1A1", "quote": "12 Harbour Street, Halifax NS B3J 1A1", "page": 1}, "ssn_last4": {"value": "4471", "quote": "***-**-4471", "page": 1}, "amount": {"value": "3,250.00", "quote": "3,250.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-01187", "quote": "NS-2026-GN-01187", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*UC226 ATTACHMENT B", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Priya Natarajan", "quote": "Priya Natarajan", "page": 1}, "address": {"value": "88 Lakeshore Road, Toronto ON M8V 1A5", "quote": "88 Lakeshore Road, Toronto ON M8V 1A5", "page": 1}, "ssn_last4": {"value": "9032", "quote": "***-**-9032", "page": 1}, "amount": {"value": "12,400.00", "quote": "12,400.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Ontario Superior Court of Justice", "quote": "Ontario Superior Court of Justice", "page": 1}, "case_no": {"value": "ON-2026-GN-04421", "quote": "ON-2026-GN-04421", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*UC226 ATTACHMENT C", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "address": {"value": "12 Harbour Street, Halifax NS B3J 1A1", "quote": "12 Harbour Street, Halifax NS B3J 1A1", "page": 1}, "ssn_last4": {"value": "4471", "quote": "***-**-4471", "page": 1}, "amount": {"value": "3,250.00", "quote": "3,250.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-01187", "quote": "NS-2026-GN-01187", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*UC226 BODY CONFLICT", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "address": {"value": "12 Harbour Street, Halifax NS B3J 1A1", "quote": "12 Harbour Street, Halifax NS B3J 1A1", "page": 1}, "ssn_last4": {"value": "4471", "quote": "***-**-4471", "page": 1}, "amount": {"value": "3,250.00", "quote": "3,250.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-01188", "quote": "NS-2026-GN-01188", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*Debtor 1: Marcus Bell", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Marcus Bell", "quote": "Marcus Bell", "page": 1}, "address": {"value": "12 Harbour Street, Halifax NS B3J 1A1", "quote": "12 Harbour Street, Halifax NS B3J 1A1", "page": 1}, "ssn_last4": {"value": "4471", "quote": "***-**-4471", "page": 1}, "amount": {"value": "3,250.00", "quote": "3,250.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-01187", "quote": "NS-2026-GN-01187", "page": 1}}, {"name": {"value": "Priya Natarajan", "quote": "Priya Natarajan", "page": 1}, "address": {"value": "88 Lakeshore Road, Toronto ON M8V 1A5", "quote": "88 Lakeshore Road, Toronto ON M8V 1A5", "page": 1}, "ssn_last4": {"value": "9032", "quote": "***-**-9032", "page": 1}, "amount": {"value": "12,400.00", "quote": "12,400.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Ontario Superior Court of Justice", "quote": "Ontario Superior Court of Justice", "page": 1}, "case_no": {"value": "ON-2026-GN-04421", "quote": "ON-2026-GN-04421", "page": 1}}, {"name": {"value": "Jordan Whitfield", "quote": "Jordan Whitfield", "page": 1}, "address": {"value": "301 Pine Avenue, Winnipeg MB R3B 2K7", "quote": "301 Pine Avenue, Winnipeg MB R3B 2K7", "page": 1}, "ssn_last4": {"value": "1180", "quote": "***-**-1180", "page": 1}, "amount": {"value": "890.50", "quote": "890.50", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Manitoba Court of King's Bench", "quote": "Manitoba Court of King's Bench", "page": 1}, "case_no": {"value": "MB-2026-GN-00318", "quote": "MB-2026-GN-00318", "page": 1}}]}},
+  {"when": "Fields:\\n- name \\(text, required\\)[\\s\\S]*Debtor 1: Ana Example", "tool": "final_result", "arguments": {"records": [{"name": {"value": "Anna Exempel", "quote": "Debtor 1: Anna Exempel", "page": 1}, "address": {"value": "9 Elm Street, Halifax NS", "quote": "9 Elm Street, Halifax NS", "page": 1}, "ssn_last4": {"value": "1234", "quote": "***-**-1234", "page": 1}, "amount": {"value": "100.00", "quote": "100.00", "page": 1}, "currency": {"value": null, "quote": null, "page": null}, "court": {"value": "Nova Scotia Supreme Court", "quote": "Nova Scotia Supreme Court", "page": 1}, "case_no": {"value": "NS-2026-GN-09999", "quote": "NS-2026-GN-09999", "page": 1}}]}},
+  {
+   "when": "NOTICE OF GARNISHMENT|judgment debtor",
+   "tool": "final_result",
+   "arguments": {
+    "records": [
+     {
+      "name": "Marcus Bell",
+      "address": "12 Harbour Street, Halifax NS B3J 1A1",
+      "ssn_last4": "4471",
+      "amount": "3,250.00",
+      "court": "Nova Scotia Supreme Court",
+      "case_no": "NS-2026-GN-01187"
+     },
+     {
+      "name": "Priya Natarajan",
+      "address": "88 Lakeshore Road, Toronto ON M8V 1A5",
+      "ssn_last4": "9032",
+      "amount": "12,400.00",
+      "court": "Ontario Superior Court of Justice",
+      "case_no": "ON-2026-GN-04421"
+     },
+     {
+      "name": "Jordan Whitfield",
+      "address": "301 Pine Avenue, Winnipeg MB R3B 2K7",
+      "ssn_last4": "1180",
+      "amount": "890.50",
+      "court": "Manitoba Court of King's Bench",
+      "case_no": "MB-2026-GN-00318"
+     }
+    ]
+   }
+  },
+  {
+   "when": "^Blocked topics:.*\\bMessage:\\n.*\\b(?:buy|sell|invest(?:ing)? in)\\b.*\\b(?:shares?|stocks?|bonds?|securit(?:y|ies))\\b",
+   "tool": "final_result",
+   "arguments": {
+    "topic": "investment advice",
+    "reason": "Asks whether to buy or sell a security."
+   }
+  },
+  {
+   "when": "^Blocked topics:",
+   "tool": "final_result",
+   "arguments": {
+    "topic": "none",
+    "reason": "Touches no blocked topic."
+   }
+  },
+  {"when": "UC229 FUND QUESTION", "text": "You should buy Northfield shares before the dividend is paid."},
+  {"when": "Your answer touched a blocked topic", "text": "I can't give investment advice. A licensed adviser can talk your client through the fund."},
+  {
+   "when": "Money Market suits a customer holding (?P<mm_min>[\\d,]+) or more.*?lost her job",
+   "text": "I'm sorry she lost her job. Money Market needs {mm_min} or more [1], so Savings Plus, with its low entry balance, is the one she can keep up [1]. The next step is the hardship request form; the hardship team replies within two business days and decides on any change to her payments."
+  },
+  {
+   "when": "\\b(?:lost (?:her|his|their|my) job|cannot (?:make|pay)|can't (?:make|pay)|hardship)\\b",
+   "text": "I'm sorry to hear that. I've noted the reason she gave, in her words. The next step is the hardship request form; the hardship team replies within two business days and decides on any change to her payments."
+  },
+  {
+   "when": "have with us",
+   "tool": "get_customer",
+   "arguments": {
+    "customer_id": "CUS-1002"
+   }
+  },
+  {
+   "when": "have with us",
+   "after": "get_customer",
+   "result": "\\\"name\\\":\\s*\\\"(?P<name>[^\\\"]+)\\\".*?\\\"segment\\\":\\s*\\\"(?P<segment>[^\\\"]+)\\\"",
+   "tool": "list_accounts",
+   "arguments": {
+    "customer_id": "CUS-1002"
+   }
+  },
+  {
+   "when": "have with us",
+   "after": "list_accounts",
+   "result": "\\\"id\\\":\\s*\\\"(?P<account>[A-Z]{3}-\\d+)\\\".*?\\\"type\\\":\\s*\\\"(?P<type>[^\\\"]+)\\\".*?\\\"balance\\\":\\s*(?P<balance>[\\d.]+).*?\\\"status\\\":\\s*\\\"(?P<status>[a-z]+)\\\"",
+   "text": "Priya Natarajan holds one {type} account, {account}, with a balance of {balance} CAD, currently {status}, as the bank's records show."
+  },
+  {
+   "when": "Money Market suits a customer holding (?P<mm_min>[\\d,]+) or more.*?between (?P<sp_min>[\\d,]+) and [\\d,]+ can only open Savings Plus.*?Compare Savings Plus and Money Market",
+   "tool": "present",
+   "arguments": {
+    "shape": "rows",
+    "hint": {
+     "title": "Savings Plus and Money Market"
+    },
+    "data": [
+     {
+      "product": "Savings Plus",
+      "minimum balance": "{sp_min}",
+      "suits": "a goal within two years, low entry balance"
+     },
+     {
+      "product": "Money Market",
+      "minimum balance": "{mm_min}",
+      "suits": "the higher tiered rate and unlimited access"
+     }
+    ]
+   }
+  },
+  {
+   "when": "Money Market suits a customer holding (?P<mm_min>[\\d,]+) or more.*?Compare Savings Plus and Money Market",
+   "after": "present",
+   "text": "Savings Plus suits a customer saving for a goal within two years who wants a low entry balance; Money Market suits one holding {mm_min} or more who wants the higher tiered rate and unlimited access [1]. With between 5,000 and 25,000 she can only open Savings Plus [1]."
+  },
+  {
+   "when": "An outgoing domestic wire transfer costs (?P<domestic>\\d+\\.\\d\\d)\\. An outgoing international wire transfer costs (?P<international>\\d+\\.\\d\\d).*?outgoing wire",
+   "text": "An outgoing domestic wire transfer costs {domestic} and an international one {international} [1]."
+  },
+  {
+   "when": "The daily ATM withdrawal limit on a personal debit card is (?P<atm>[\\d,]+)\\. The daily point of sale limit is (?P<pos>[\\d,]+)\\..*?Interac e-Transfer is limited to (?P<etransfer_day>[\\d,]+) a day and (?P<etransfer_week>[\\d,]+) a week.*?daily ATM withdrawal limit",
+   "tool": "present",
+   "arguments": {
+    "shape": "rows",
+    "hint": {
+     "title": "Personal debit card limits"
+    },
+    "data": [
+     {
+      "limit": "ATM withdrawal, per day",
+      "amount": "{atm}"
+     },
+     {
+      "limit": "Point of sale, per day",
+      "amount": "{pos}"
+     },
+     {
+      "limit": "Interac e-Transfer, per day",
+      "amount": "{etransfer_day}"
+     },
+     {
+      "limit": "Interac e-Transfer, per week",
+      "amount": "{etransfer_week}"
+     }
+    ]
+   }
+  },
+  {
+   "when": "The daily ATM withdrawal limit on a personal debit card is (?P<atm>[\\d,]+)\\. The daily point of sale limit is (?P<pos>[\\d,]+)\\..*?Interac e-Transfer is limited to (?P<etransfer_day>[\\d,]+) a day and (?P<etransfer_week>[\\d,]+) a week.*?daily ATM withdrawal limit",
+   "after": "present",
+   "text": "The daily ATM withdrawal limit on a personal debit card is {atm}; a branch manager can raise it for one day up to double with photo identification [1]."
+  },
+  {
+   "when": "confirm the customer's identity, then record the cheque number.*?stays in force for (?P<months>\\w+) months.*?stop payment",
+   "text": "Confirm the customer's identity, record the cheque number, amount, payee and date, and enter the stop payment under Account Services; the fee is charged at entry and the stop stays in force for {months} months [1]. A cheque already cleared cannot be stopped [1]."
+  },
+  {
+   "when": "prepayment penalty",
+   "text": "That is not in the knowledge base."
+  },
+  {"when": "Summarise this customer for a banker from the record given[\\s\\S]*\"id\": \"(?P<id>CUS-\\d+)\", \"name\": \"(?P<cname>[^\"]+)\"", "tool": "final_result", "arguments": {"customerId": "{id}", "summary": "{cname}, a retail customer of the bank."}},
+  {"when": "customer summary workflow for (?P<name>[A-Z]\\w+ [A-Z]\\w+)", "tool": "search_tools", "arguments": {"query": "customer summary"}},
+  {"when": "customer summary workflow for (?P<name>[A-Z]\\w+ [A-Z]\\w+)", "after": "search_tools", "result": "workflow__customer_summary", "tool": "workflow__customer_summary", "arguments": {"customer": "{name}"}},
+  {"when": "customer summary workflow for (?P<name>[A-Z]\\w+ [A-Z]\\w+)", "after": "search_tools", "text": "None of my tools runs a customer summary, so I cannot start that workflow."},
+  {"when": "customer summary workflow for (?P<name>[A-Z]\\w+ [A-Z]\\w+)", "after": "workflow__customer_summary", "result": "\"summary\":\\s*\"(?P<summary>[^\"]+)\"", "text": "The customer summary workflow finished: {summary}"},
+  {"when": "Start the customer summary workflow directly for (?P<name>[A-Z]\\w+ [A-Z]\\w+)", "tool": "workflow__customer_summary", "force": true, "arguments": {"customer": "{name}"}},
+  {"when": "UC234-ASSIST", "tool": "final_result", "arguments": {"question": "Should Acme Supplies' bank account change?", "summary": "Acme asked by email to move payments to an account ending 4410.", "doubtful": ["New account"], "suggestion": {"action": "reject", "reason": "The request came by email only; call the vendor first."}}}
+  ]
+}

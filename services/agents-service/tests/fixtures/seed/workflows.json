@@ -1,0 +1,295 @@
+[
+ {
+  "name": "dispute_email",
+  "version": 1,
+  "entry": "classify",
+  "nodes": [
+   {
+    "id": "classify",
+    "kind": "agent",
+    "config": {
+     "labels": [
+      "card_dispute",
+      "complaint",
+      "other"
+     ],
+     "max_attachments": 20
+    }
+   },
+   {
+    "id": "extract",
+    "kind": "extract"
+   },
+   {
+    "id": "collect",
+    "kind": "collect"
+   },
+   {
+    "id": "draft",
+    "kind": "draft"
+   },
+   {
+    "id": "grade",
+    "kind": "grade"
+   },
+   {
+    "id": "gate",
+    "kind": "condition",
+    "config": {
+     "rule": "score_gate",
+     "threshold": 0.8,
+     "max_attempts": 3,
+     "pass": "human",
+     "fail": "draft"
+    }
+   },
+   {
+    "id": "human",
+    "kind": "human"
+   },
+   {
+    "id": "decide",
+    "kind": "condition",
+    "config": {
+     "rule": "decision",
+     "approved": "send_reply",
+     "rejected": "close"
+    }
+   },
+   {
+    "id": "send_reply",
+    "kind": "tool",
+    "config": {
+     "tool": "send_reply"
+    }
+   },
+   {
+    "id": "done",
+    "kind": "end",
+    "config": {
+     "status": "replied"
+    }
+   },
+   {
+    "id": "close",
+    "kind": "end",
+    "config": {
+     "status": "closed"
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "classify",
+    "target": "extract"
+   },
+   {
+    "source": "extract",
+    "target": "collect"
+   },
+   {
+    "source": "collect",
+    "target": "draft"
+   },
+   {
+    "source": "draft",
+    "target": "grade"
+   },
+   {
+    "source": "grade",
+    "target": "gate"
+   },
+   {
+    "source": "human",
+    "target": "decide"
+   },
+   {
+    "source": "send_reply",
+    "target": "done"
+   }
+  ]
+ },
+ {
+  "name": "levy-intake",
+  "version": 1,
+  "entry": "read",
+  "nodes": [
+   {
+    "id": "read",
+    "kind": "extract_records",
+    "config": {
+     "schema": "persons"
+    }
+   },
+   {
+    "id": "any_persons",
+    "kind": "condition",
+    "config": {
+     "rule": "route",
+     "routes": [
+      {
+       "when": {
+        "field": "record_count",
+        "op": "eq",
+        "value": 0
+       },
+       "to": "manual_read"
+      }
+     ],
+     "default": "persons"
+    }
+   },
+   {
+    "id": "persons",
+    "kind": "pass"
+   },
+   {
+    "id": "match",
+    "kind": "match",
+    "config": {
+     "search": "search_customers",
+     "customer": "get_customer",
+     "account": "get_account",
+     "min_address_chars": 6
+    }
+   },
+   {
+    "id": "open_cases",
+    "kind": "open_cases",
+    "config": {
+     "workflow": "levy-case"
+    }
+   },
+   {
+    "id": "done",
+    "kind": "end",
+    "config": {
+     "status": "cases_opened"
+    }
+   },
+   {
+    "id": "manual_read",
+    "kind": "end",
+    "config": {
+     "status": "needs_manual_read"
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "read",
+    "target": "any_persons"
+   },
+   {
+    "source": "persons",
+    "target": "match"
+   },
+   {
+    "source": "match",
+    "target": "open_cases"
+   },
+   {
+    "source": "open_cases",
+    "target": "done"
+   }
+  ]
+ },
+ {
+  "name": "levy-case",
+  "version": 1,
+  "entry": "review",
+  "nodes": [
+   {
+    "id": "review",
+    "kind": "human",
+    "config": {
+     "options": [
+      {
+       "name": "hold",
+       "editable": [
+        "amount"
+       ]
+      },
+      {
+       "name": "flag"
+      }
+     ]
+    }
+   },
+   {
+    "id": "choose",
+    "kind": "condition",
+    "config": {
+     "rule": "option",
+     "hold": "place_hold",
+     "flag": "flag_note",
+     "default": "review"
+    }
+   },
+   {
+    "id": "place_hold",
+    "kind": "tool",
+    "config": {
+     "tool": "place_hold",
+     "call": "hold",
+     "result": "hold"
+    }
+   },
+   {
+    "id": "hold_outcome",
+    "kind": "condition",
+    "config": {
+     "rule": "outcome",
+     "ok": "held",
+     "failed": "review"
+    }
+   },
+   {
+    "id": "flag_note",
+    "kind": "tool",
+    "config": {
+     "tool": "add_customer_note",
+     "call": "flag",
+     "result": "note"
+    }
+   },
+   {
+    "id": "note_outcome",
+    "kind": "condition",
+    "config": {
+     "rule": "outcome",
+     "ok": "flagged",
+     "failed": "review"
+    }
+   },
+   {
+    "id": "held",
+    "kind": "end",
+    "config": {
+     "status": "held"
+    }
+   },
+   {
+    "id": "flagged",
+    "kind": "end",
+    "config": {
+     "status": "flagged"
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "review",
+    "target": "choose"
+   },
+   {
+    "source": "place_hold",
+    "target": "hold_outcome"
+   },
+   {
+    "source": "flag_note",
+    "target": "note_outcome"
+   }
+  ]
+ }
+]

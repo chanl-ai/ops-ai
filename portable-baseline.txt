@@ -1,0 +1,65 @@
+# 100 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.
+# Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
+# packages/ops_checkpointer: 9
+1 sql packages/ops_checkpointer/src/ops_checkpointer/saver.py JSONB operator
+5 sql packages/ops_checkpointer/src/ops_checkpointer/saver.py ON CONFLICT
+3 sql packages/ops_checkpointer/src/ops_checkpointer/saver.py RETURNING
+# packages/ops_engine: 12
+2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
+3 sql packages/ops_engine/src/ops_engine/store/definitions.py row lock
+4 sql packages/ops_engine/src/ops_engine/store/runs.py row lock
+1 sql packages/ops_engine/src/ops_engine/store/steps.py row lock
+1 sql packages/ops_engine/src/ops_engine/store/work.py SKIP LOCKED
+1 sql packages/ops_engine/src/ops_engine/store/work.py row lock
+# services/agents-service: 39
+1 sql services/agents-service/migrations/versions/0006_gateway_calls_and_review_approvals.py postgresql_where option
+1 sql services/agents-service/migrations/versions/0007_timers_human_step_sla_timers.py postgresql_where option
+2 sql services/agents-service/migrations/versions/0009_timer_claims_fenced_claim_and_retry_cap.py postgresql_where option
+1 sql services/agents-service/src/ops_agents/api/hitl_facade.py RETURNING
+1 sql services/agents-service/src/ops_agents/store/agent_registry.py row lock
+2 sql services/agents-service/src/ops_agents/store/cases.py row lock
+4 sql services/agents-service/src/ops_agents/store/channels.py ON CONFLICT
+1 sql services/agents-service/src/ops_agents/store/channels.py dialect insert
+1 sql services/agents-service/src/ops_agents/store/graphs.py ON CONFLICT
+1 sql services/agents-service/src/ops_agents/store/graphs.py dialect insert
+1 sql services/agents-service/src/ops_agents/store/graphs.py row lock
+1 sql services/agents-service/src/ops_agents/store/leases.py ON CONFLICT
+1 sql services/agents-service/src/ops_agents/store/leases.py advisory lock
+2 sql services/agents-service/src/ops_agents/store/leases.py database clock
+1 sql services/agents-service/src/ops_agents/store/leases.py dialect insert
+2 sql services/agents-service/src/ops_agents/store/leases.py row lock
+1 sql services/agents-service/src/ops_agents/store/model_calls.py ON CONFLICT
+1 sql services/agents-service/src/ops_agents/store/model_calls.py dialect insert
+2 sql services/agents-service/src/ops_agents/store/timers.py SKIP LOCKED
+8 sql services/agents-service/src/ops_agents/store/timers.py database clock
+2 sql services/agents-service/src/ops_agents/store/timers.py row lock
+1 sql services/agents-service/src/ops_agents/store/typed_records.py row lock
+1 sql services/agents-service/src/ops_agents/store/usage.py ON CONFLICT
+# services/kb-service: 13
+2 sql services/kb-service/migrations/versions/0002_items_versions_and_chunks.py postgresql_using option
+1 sql services/kb-service/src/ops_kb/store/knowledge.py ON CONFLICT
+5 sql services/kb-service/src/ops_kb/store/knowledge.py database clock
+1 sql services/kb-service/src/ops_kb/store/knowledge.py dialect insert
+1 sql services/kb-service/src/ops_kb/store/knowledge.py postgresql_using option
+3 sql services/kb-service/src/ops_kb/store/knowledge.py row lock
+# services/models-service: 1
+1 sql services/models-service/migrations/versions/0005_one_current_alias_version.py postgresql_where option
+# services/platform-service: 11
+1 sql services/platform-service/migrations/versions/0017_signin_domain_verification.py postgresql_where option
+1 sql services/platform-service/src/ops_platform/store/members.py row lock
+5 sql services/platform-service/src/ops_platform/store/seeding.py ON CONFLICT
+1 sql services/platform-service/src/ops_platform/store/seeding.py dialect insert
+2 sql services/platform-service/src/ops_platform/store/signin.py ON CONFLICT
+1 sql services/platform-service/src/ops_platform/store/signin.py dialect insert
+# services/tools-service: 15
+1 sql services/tools-service/migrations/versions/0001_gateway_calls_and_fences.py postgresql_where option
+1 sql services/tools-service/migrations/versions/0016_threadless_write_once.py postgresql_where option
+2 sql services/tools-service/migrations/versions/0017_effect_scope.py postgresql_where option
+2 sql services/tools-service/src/ops_tools/store/calls.py ON CONFLICT
+1 sql services/tools-service/src/ops_tools/store/calls.py advisory lock
+2 sql services/tools-service/src/ops_tools/store/calls.py dialect insert
+1 sql services/tools-service/src/ops_tools/store/rate_windows.py ON CONFLICT
+2 sql services/tools-service/src/ops_tools/store/rate_windows.py database clock
+1 sql services/tools-service/src/ops_tools/store/rate_windows.py dialect insert
+1 sql services/tools-service/src/ops_tools/store/send_policies.py ON CONFLICT
+1 sql services/tools-service/src/ops_tools/store/send_policies.py dialect insert

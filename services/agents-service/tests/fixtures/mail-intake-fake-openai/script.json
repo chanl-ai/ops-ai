@@ -1,0 +1,213 @@
+{
+ "rules": [
+  {
+   "when": "Debtor 1: Marcus Bell",
+   "tool": "final_result",
+   "arguments": {
+    "records": [
+     {
+      "name": {
+       "value": "Marcus Bell",
+       "quote": "Marcus Bell",
+       "page": 1
+      },
+      "address": {
+       "value": "12 Harbour Street, Halifax NS B3J 1A1",
+       "quote": "12 Harbour Street, Halifax NS B3J 1A1",
+       "page": 1
+      },
+      "ssn_last4": {
+       "value": "4471",
+       "quote": "***-**-4471",
+       "page": 1
+      },
+      "amount": {
+       "value": "3,250.00",
+       "quote": "3,250.00",
+       "page": 1
+      },
+      "currency": {
+       "value": null,
+       "quote": null,
+       "page": null
+      },
+      "court": {
+       "value": "Nova Scotia Supreme Court",
+       "quote": "Nova Scotia Supreme Court",
+       "page": 1
+      },
+      "case_no": {
+       "value": "NS-2026-GN-01187",
+       "quote": "NS-2026-GN-01187",
+       "page": 1
+      }
+     },
+     {
+      "name": {
+       "value": "Priya Natarajan",
+       "quote": "Priya Natarajan",
+       "page": 1
+      },
+      "address": {
+       "value": "88 Lakeshore Road, Toronto ON M8V 1A5",
+       "quote": "88 Lakeshore Road, Toronto ON M8V 1A5",
+       "page": 1
+      },
+      "ssn_last4": {
+       "value": "9032",
+       "quote": "***-**-9032",
+       "page": 1
+      },
+      "amount": {
+       "value": "12,400.00",
+       "quote": "12,400.00",
+       "page": 1
+      },
+      "currency": {
+       "value": null,
+       "quote": null,
+       "page": null
+      },
+      "court": {
+       "value": "Ontario Superior Court of Justice",
+       "quote": "Ontario Superior Court of Justice",
+       "page": 1
+      },
+      "case_no": {
+       "value": "ON-2026-GN-04421",
+       "quote": "ON-2026-GN-04421",
+       "page": 1
+      }
+     },
+     {
+      "name": {
+       "value": "Jordan Whitfield",
+       "quote": "Jordan Whitfield",
+       "page": 1
+      },
+      "address": {
+       "value": "301 Pine Avenue, Winnipeg MB R3B 2K7",
+       "quote": "301 Pine Avenue, Winnipeg MB R3B 2K7",
+       "page": 1
+      },
+      "ssn_last4": {
+       "value": "1180",
+       "quote": "***-**-1180",
+       "page": 1
+      },
+      "amount": {
+       "value": "890.50",
+       "quote": "890.50",
+       "page": 1
+      },
+      "currency": {
+       "value": null,
+       "quote": null,
+       "page": null
+      },
+      "court": {
+       "value": "Manitoba Court of King's Bench",
+       "quote": "Manitoba Court of King's Bench",
+       "page": 1
+      },
+      "case_no": {
+       "value": "MB-2026-GN-00318",
+       "quote": "MB-2026-GN-00318",
+       "page": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "when": "Priya Natarajan \\| 88 Lakeshore Road",
+   "tool": "final_result",
+   "arguments": {
+    "records": [
+     {
+      "name": {
+       "value": "Priya Natarajan",
+       "quote": "Priya Natarajan",
+       "page": 1
+      },
+      "address": {
+       "value": "88 Lakeshore Road, Toronto ON M8V 1A5",
+       "quote": "88 Lakeshore Road, Toronto ON M8V 1A5",
+       "page": 1
+      },
+      "ssn_last4": {
+       "value": "9032",
+       "quote": "9032",
+       "page": 1
+      },
+      "amount": {
+       "value": "500.00",
+       "quote": "500.00",
+       "page": 1
+      },
+      "currency": {
+       "value": null,
+       "quote": null,
+       "page": null
+      },
+      "court": {
+       "value": "Ontario Superior Court of Justice",
+       "quote": "Ontario Superior Court of Justice",
+       "page": 1
+      },
+      "case_no": {
+       "value": "ON-2026-CSV-0001",
+       "quote": "ON-2026-CSV-0001",
+       "page": 1
+      }
+     }
+    ]
+   }
+  },
+  {
+   "when": "Debtor 1: Ana Example",
+   "tool": "final_result",
+   "arguments": {
+    "records": [
+     {
+      "name": {
+       "value": "Anna Exempel",
+       "quote": "Debtor 1: Anna Exempel",
+       "page": 1
+      },
+      "address": {
+       "value": "9 Elm Street, Halifax NS",
+       "quote": "9 Elm Street, Halifax NS",
+       "page": 1
+      },
+      "ssn_last4": {
+       "value": "1234",
+       "quote": "1234",
+       "page": 1
+      },
+      "amount": {
+       "value": "100.00",
+       "quote": "100.00",
+       "page": 1
+      },
+      "currency": {
+       "value": null,
+       "quote": null,
+       "page": null
+      },
+      "court": {
+       "value": "Nova Scotia Supreme Court",
+       "quote": "Nova Scotia Supreme Court",
+       "page": 1
+      },
+      "case_no": {
+       "value": "NS-2026-GN-09999",
+       "quote": "NS-2026-GN-09999",
+       "page": 1
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

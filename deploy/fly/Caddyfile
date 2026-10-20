@@ -1,0 +1,38 @@
+# One public origin: the console at /, each browser-facing service at /api/<service>/. The services bind 127.0.0.1 on
+# Fly, so this is the only way in; platform-service's internal port (8711), OPA and models-service are not routed.
+# Each upstream defaults to its port on this machine; OPS_UPSTREAM_<SERVICE> names another (compose's service names,
+# deploy/compose/app.yaml).
+{
+	admin off
+	auto_https off
+	servers {
+		# Fly's proxy terminates TLS and sets X-Forwarded-Proto; trusting it lets the services build https URLs.
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$OPS_PUBLIC_PORT:8080} {
+	handle_path /api/platform/* {
+		reverse_proxy {$OPS_UPSTREAM_PLATFORM:127.0.0.1:8710}
+	}
+	handle_path /api/agents/* {
+		reverse_proxy {$OPS_UPSTREAM_AGENTS:127.0.0.1:8700} {
+			flush_interval -1
+		}
+	}
+	handle_path /api/tools/* {
+		reverse_proxy {$OPS_UPSTREAM_TOOLS:127.0.0.1:8720}
+	}
+	handle_path /api/kb/* {
+		reverse_proxy {$OPS_UPSTREAM_KB:127.0.0.1:8740}
+	}
+	handle_path /api/files/* {
+		reverse_proxy {$OPS_UPSTREAM_FILES:127.0.0.1:8750}
+	}
+	handle_path /api/documents/* {
+		reverse_proxy {$OPS_UPSTREAM_DOCUMENTS:127.0.0.1:8760}
+	}
+	handle {
+		reverse_proxy {$OPS_UPSTREAM_CONSOLE:127.0.0.1:3016}
+	}
+}

@@ -1,0 +1,16 @@
+[project]
+name = "ops-agent-kernel"
+version = "0.1.0"
+description = "Agent loop per spec 15 on Pydantic AI; no Temporal, no database"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-service-kit", "ops-pii", "pydantic-ai-slim[anthropic,openai]>=2.55,<3", "jsonschema>=4.23"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_agent_kernel"]
+
+[tool.uv.sources]
+ops-service-kit = { workspace = true }

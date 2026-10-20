@@ -1,0 +1,96 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: models
+  labels:
+    app.kubernetes.io/name: models
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: models
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: models
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: models
+        image: ops-ai/models
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OPS_SERVICE_SIGNING_KID
+          value: svc-models-1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        envFrom:
+        - configMapRef:
+            name: ops-settings
+        - configMapRef:
+            name: ops-origin
+        - secretRef:
+            name: ops-models
+        ports:
+        - containerPort: 8730
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8730
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8730
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8730
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: models
+  labels:
+    app.kubernetes.io/name: models
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: models
+  ports:
+  - name: http
+    port: 8730
+    targetPort: 8730

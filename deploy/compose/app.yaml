@@ -1,0 +1,200 @@
+# Ops AI as containers: every service, the workflow worker, the console, OPA and one proxy, against a PostgreSQL that
+# runs outside this file. Images are named <OPS_IMAGE_PREFIX>/<service>:<OPS_IMAGE_TAG>: a release package loads them
+# from its image bundle, and a checkout builds them with build.yaml. Settings: app.env.example. Runbooks:
+# docs/deploy/compose.md, docs/deploy/release-package.md.
+#   docker compose -p ops-ai -f app.yaml [-f dba.yaml] --env-file <env file> up -d
+# dba.yaml is for a schema the DBA applied (deploy/database); try.yaml adds a PostgreSQL and the fake model for trying it
+# out. Only the proxy publishes a port; everything else is on the project's private network, platform-service's
+# internal port (8711) and models-service included.
+name: ops-ai
+
+# What every Python service reads. Secrets come from the env file, or as files under /run/secrets named after the
+# setting (Settings reads ops_review_key for OPS_REVIEW_KEY); nothing secret is in an image. Each service gets only
+# its own signing key and the keys it uses: the review key to agents, the worker and tools; the secrets key to tools
+# and files.
+x-settings: &settings
+  OPS_ENVIRONMENT: production
+  OPS_AUTH_MODE: platform
+  OPS_BIND_HOST: 0.0.0.0
+  OPS_SERVICE_PUBLIC_KEYS: ${OPS_SERVICE_PUBLIC_KEYS:?run generate_keys.py and set the keys (app.env.example)}
+  OPS_CORS_ORIGINS: '["${OPS_PUBLIC_ORIGIN:?set the origin people open, e.g. https://ops.bank.example}"]'
+  OPS_CONSOLE_URL: ${OPS_PUBLIC_ORIGIN}
+  OPS_PLATFORM_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/platform
+  OPS_FILES_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/files
+  OPS_PLATFORM_URL: http://platform:8710
+  OPS_PLATFORM_INTERNAL_URL: http://platform:8711
+  OPS_AGENTS_URL: http://agents:8700
+  OPS_GATEWAY_URL: http://tools:8720
+  OPS_TOOLS_URL: http://tools:8720
+  OPS_MODELS_URL: http://models:8730
+  OPS_KB_URL: http://kb:8740
+  OPS_FILES_URL: http://files:8750
+  OPS_DOCUMENTS_URL: http://documents:8760
+  OPS_OPA_URL: http://opa:8181
+  OPS_FILES_DIR: /data/files
+  OPS_KB_FILES_DIR: /data/kb-files
+  OPS_FILES_SCANNING: ${OPS_FILES_SCANNING:-eicar}
+  OPS_MAILBOX_SOURCE: none
+  OPS_MAIL_PROVIDER: ${OPS_MAIL_PROVIDER:-none}
+  OPS_MAIL_FROM: ${OPS_MAIL_FROM:-}
+  OPS_SMTP_HOST: ${OPS_SMTP_HOST:-}
+  OPS_SMTP_PORT: ${OPS_SMTP_PORT:-587}
+  OPS_SMTP_USERNAME: ${OPS_SMTP_USERNAME:-}
+  OPS_SMTP_PASSWORD: ${OPS_SMTP_PASSWORD:-}
+  OPS_BOOTSTRAP_TENANT_ID: ${OPS_BOOTSTRAP_TENANT_ID:-local}
+
+x-service: &service
+  restart: unless-stopped
+  init: true
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  # Every chain in `make migrate`'s order, then the first admin (deploy/images/migrate.sh). Every Python image holds
+  # every chain (they share one base), so this runs from platform's. Re-run on each upgrade before the services. Its
+  # login needs DDL rights; where the DBA applies the schema instead, dba.yaml makes it the first-admin step alone.
+  migrate:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/platform:${OPS_IMAGE_TAG:-dev}
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL:-${OPS_DATABASE_URL_PLATFORM:?set OPS_DATABASE_URL, or one OPS_DATABASE_URL_<SERVICE> per service (app.env.example)}}
+      OPS_BOOTSTRAP_TENANT_NAME: ${OPS_BOOTSTRAP_TENANT_NAME:-}
+      OPS_BOOTSTRAP_TEAM_NAME: ${OPS_BOOTSTRAP_TEAM_NAME:-Security}
+      OPS_BOOTSTRAP_ADMIN_EMAIL: ${OPS_BOOTSTRAP_ADMIN_EMAIL:-}
+      OPS_BOOTSTRAP_ADMIN_NAME: ${OPS_BOOTSTRAP_ADMIN_NAME:-}
+      OPS_BOOTSTRAP_ADMIN_PASSWORD: ${OPS_BOOTSTRAP_ADMIN_PASSWORD:-}
+
+  platform:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/platform:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_PLATFORM:-${OPS_DATABASE_URL}}
+      OPS_PLATFORM_SIGNING_KEY: ${OPS_PLATFORM_SIGNING_KEY:?}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_PLATFORM:?}
+      OPS_SERVICE_SIGNING_KID: svc-platform-1
+
+  # agents-service's /health answers 503 until a model is connected (docs/deploy/compose.md, "Connect a model"), so
+  # nothing waits on it being healthy.
+  agents:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/agents:${OPS_IMAGE_TAG:-dev}
+    environment: &agents-env
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_AGENTS:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_AGENTS:?}
+      OPS_SERVICE_SIGNING_KID: svc-agents-1
+      OPS_REVIEW_KEY: ${OPS_REVIEW_KEY:?}
+      OPS_MODELS_KEY: ${OPS_MODELS_KEY_AGENTS:-}
+
+  # The workflow runner: the agents image with the worker command. It serves no port; its check is the database.
+  worker:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/agents:${OPS_IMAGE_TAG:-dev}
+    command: ["python", "-m", "ops_agents.api.worker"]
+    healthcheck:
+      test: ["CMD", "python", "/app/deploy/images/healthcheck.py", "db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    environment: *agents-env
+
+  tools:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/tools:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_TOOLS:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_TOOLS:?}
+      OPS_SERVICE_SIGNING_KID: svc-tools-1
+      OPS_REVIEW_KEY: ${OPS_REVIEW_KEY:?}
+      OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
+
+  models:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/models:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_MODELS:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_MODELS:?}
+      OPS_SERVICE_SIGNING_KID: svc-models-1
+
+  kb:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/kb:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_KB:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_KB:?}
+      OPS_SERVICE_SIGNING_KID: svc-kb-1
+    volumes:
+      - kb-data:/data
+
+  files:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/files:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_FILES:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_FILES:?}
+      OPS_SERVICE_SIGNING_KID: svc-files-1
+      OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
+    volumes:
+      - files-data:/data
+
+  documents:
+    <<: *service
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/documents:${OPS_IMAGE_TAG:-dev}
+    environment:
+      <<: *settings
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_DOCUMENTS:-${OPS_DATABASE_URL}}
+      OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_DOCUMENTS:?}
+      OPS_SERVICE_SIGNING_KID: svc-documents-1
+      OPS_MODELS_KEY: ${OPS_MODELS_KEY_DOCUMENTS:-}
+
+  # tools-service's policy engine, with services/tools-service/policy built in.
+  opa:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/opa:${OPS_IMAGE_TAG:-dev}
+    restart: unless-stopped
+
+  # The console reads every service URL when it starts (deploy/images/console-start.mjs), so one image serves any host.
+  console:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/console:${OPS_IMAGE_TAG:-dev}
+    restart: unless-stopped
+    init: true
+    environment:
+      NEXT_PUBLIC_OPS_PLATFORM_API_URL: ${OPS_PUBLIC_ORIGIN}/api/platform
+      NEXT_PUBLIC_OPS_CHAT_API_URL: ${OPS_PUBLIC_ORIGIN}/api/agents
+      NEXT_PUBLIC_OPS_CASES_API_URL: ${OPS_PUBLIC_ORIGIN}/api/agents
+      NEXT_PUBLIC_OPS_REGISTRY_API_URL: ${OPS_PUBLIC_ORIGIN}/api/agents
+      NEXT_PUBLIC_OPS_TOOLS_API_URL: ${OPS_PUBLIC_ORIGIN}/api/tools
+      NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL: ${OPS_PUBLIC_ORIGIN}/api/kb
+      NEXT_PUBLIC_OPS_FILES_API_URL: ${OPS_PUBLIC_ORIGIN}/api/files
+      NEXT_PUBLIC_OPS_DOCUMENTS_API_URL: ${OPS_PUBLIC_ORIGIN}/api/documents
+
+  # One origin: the console at /, each browser-facing service at /api/<service>/ (deploy/fly/Caddyfile). Put the bank's
+  # TLS terminator or load balancer in front of this port.
+  proxy:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/proxy:${OPS_IMAGE_TAG:-dev}
+    restart: unless-stopped
+    ports:
+      - "${OPS_PUBLIC_PORT:-8890}:8080"
+    environment:
+      OPS_UPSTREAM_PLATFORM: platform:8710
+      OPS_UPSTREAM_AGENTS: agents:8700
+      OPS_UPSTREAM_TOOLS: tools:8720
+      OPS_UPSTREAM_KB: kb:8740
+      OPS_UPSTREAM_FILES: files:8750
+      OPS_UPSTREAM_DOCUMENTS: documents:8760
+      OPS_UPSTREAM_CONSOLE: console:3016
+    depends_on:
+      platform: { condition: service_healthy }
+      agents: { condition: service_started }
+      console: { condition: service_started }
+
+volumes:
+  files-data:
+  kb-data:

@@ -1,0 +1,48 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    app.kubernetes.io/name: migrate
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      containers:
+      - name: migrate
+        image: ops-ai/platform
+        imagePullPolicy: IfNotPresent
+        args:
+        - migrate
+        envFrom:
+        - configMapRef:
+            name: ops-settings
+        - configMapRef:
+            name: ops-origin
+        - secretRef:
+            name: ops-migrate
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp

@@ -1,0 +1,424 @@
+{
+  "about": "Synthetic restraining notices (c-248). TEST001-TEST012 are transcribed from photographs of synthetic test documents; every name, address, identifier and agency is fictional. VAR01-VAR07 are invented layout variants. `invented` lists what no photograph shows. `expected` holds each field as printed (null: must come back empty); `pages` names the page a value sits on when it is not page 1. scripts/make_restraining_fixtures.py renders the PDFs from this file.",
+  "notices": [
+    {
+      "id": "TEST001",
+      "source": "IMG_0813",
+      "edge": "A competing bank recipient address must not become the debtor's address.",
+      "invented": ["case reference digit after SYN-2026-000 (cut off in the photo)"],
+      "layout": "table",
+      "title": "NOTICE OF TAX LEVY",
+      "caseRef": "SYN-2026-0001",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Issuing authority", "rows": [
+              ["Agency", "Fictional State Department of Revenue - Collections Division"],
+              ["Return address", "400 Test Plaza, Suite 900, Sample City, ZZ 00001"],
+              ["Revenue officer", "Avery Quill"],
+              ["Officer address", "400 Test Plaza, Suite 900, Sample City, ZZ 00001"]]},
+            {"heading": "Taxpayer", "rows": [
+              ["Taxpayer", "Morgan Example"],
+              ["Address", "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002"],
+              ["Taxpayer ID", "000-12-3456"]]},
+            {"heading": "Recipient", "rows": [
+              ["TO / Garnishee", "Northfield Bank Test Intake"],
+              ["Recipient address", "999 Bank Recipient Way, Toronto, ON A1A 1A1"]]}
+          ],
+          "notes": "Test case: straightforward tax levy with a competing bank recipient address."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Notice of tax levy",
+        "case_no": "SYN-2026-0001",
+        "issuing_agency": "Fictional State Department of Revenue - Collections Division",
+        "debtor_name": "Morgan Example",
+        "debtor_address": "101 Mockingbird Lane, Unit 4, Sample City, ZZ 00002",
+        "ssn_full": "000-12-3456",
+        "ssn_last4": "3456",
+        "garnishee": "Northfield Bank Test Intake",
+        "garnishee_address": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+        "creditor": null,
+        "court": null,
+        "attorney_name": null
+      },
+      "scan": true
+    },
+    {
+      "id": "TEST003",
+      "source": "IMG_0812",
+      "edge": "The masked SSN on page 1 and the unmasked one on page 2 belong to one debtor; a page-2 number for someone else is not it.",
+      "invented": ["page 2 (not photographed): the unmasked SSN tied to the defendant, and a second number for another party"],
+      "layout": "table",
+      "title": "RESTRAINING NOTICE",
+      "caseRef": "SYN-2026-0003",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Caption", "rows": [
+              ["Court", "Civil Test Court of Sample City"],
+              ["Plaintiff", "Example Recovery Partners"],
+              ["Defendant", "Taylor Testcase"]]},
+            {"heading": "Defendant information", "rows": [
+              ["Address", "303 QA Boulevard, Sample City, ZZ 00007"],
+              ["SSN", "XXX-XX-6789"]]},
+            {"heading": "Counsel", "rows": [
+              ["Attorney", "Harper Fixture, Esq."],
+              ["Address", "55 Legal Lab Way, Sample City, ZZ 00008"]]}
+          ],
+          "notes": "Test case: masked value on page 1 and explicitly associated unmasked value on page 2."
+        },
+        {
+          "sections": [
+            {"heading": "Identifiers (continued from page 1)", "rows": [
+              ["Defendant", "Taylor Testcase"],
+              ["Full SSN of the defendant named on page 1", "000-33-6789"],
+              ["Plaintiff's representative tax ID", "000-44-2468"]]}
+          ],
+          "notes": "The full SSN above is the defendant's; the representative's number is not."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Restraining notice",
+        "case_no": "SYN-2026-0003",
+        "court": "Civil Test Court of Sample City",
+        "creditor": "Example Recovery Partners",
+        "debtor_name": "Taylor Testcase",
+        "debtor_address": "303 QA Boulevard, Sample City, ZZ 00007",
+        "ssn_full": "000-33-6789",
+        "ssn_last4": "6789",
+        "attorney_name": "Harper Fixture, Esq.",
+        "attorney_address": "55 Legal Lab Way, Sample City, ZZ 00008",
+        "garnishee": null
+      },
+      "pages_of": {"ssn_full": 2},
+      "scan": true
+    },
+    {
+      "id": "TEST004",
+      "source": "IMG_0811",
+      "edge": "A masked SSN stays masked: the last four are read and the full number stays empty.",
+      "invented": ["case reference after SYN-2026-00 (cut off); the photo is TEST004 or TEST005"],
+      "layout": "table",
+      "title": "ADMINISTRATIVE LEVY",
+      "caseRef": "SYN-2026-0004",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Agency", "rows": [
+              ["Issuing body", "Example County Child Support Unit"],
+              ["Agency address", "740 Government Test Road, Sample City, ZZ 00010"],
+              ["Authorized representative", "Quinn Record"]]},
+            {"heading": "Parent / debtor", "rows": [
+              ["Name", "Jamie Synthetic"],
+              ["Address", "17 Placeholder Place, Sample City, ZZ 00011"],
+              ["SSN", "***-**-4321"]]},
+            {"heading": "Other parent", "rows": [
+              ["Claimant", "Robin Demonstration"]]}
+          ],
+          "notes": "Test case: masked identifier only. It must remain masked."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Administrative levy",
+        "case_no": "SYN-2026-0004",
+        "issuing_agency": "Example County Child Support Unit",
+        "debtor_name": "Jamie Synthetic",
+        "debtor_address": "17 Placeholder Place, Sample City, ZZ 00011",
+        "ssn_last4": "4321",
+        "ssn_full": null
+      }
+    },
+    {
+      "id": "TEST006",
+      "source": "IMG_0810",
+      "edge": "Sender, debtor, attorney and recipient addresses compete; each goes to its own party.",
+      "invented": [],
+      "layout": "table",
+      "title": "INFORMATION SUBPOENA AND RESTRAINING NOTICE",
+      "caseRef": "SYN-2026-0006",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Sender", "rows": [
+              ["Sender", "Demo Process Services"],
+              ["Sender address", "10 Sender Street, Sample City, ZZ 00014"]]},
+            {"heading": "Case caption", "rows": [
+              ["Court", "District Test Court, Example County"],
+              ["Plaintiff", "Atlas Fictional Capital"],
+              ["Defendant", "Parker Demo"]]},
+            {"heading": "Debtor block", "rows": [
+              ["Defendant address", "44 Debtor Drive, Sample City, ZZ 00015"],
+              ["SSN", "000-66-0006"]]},
+            {"heading": "Attorney signature block", "rows": [
+              ["Attorney", "Leslie Sample, Esq. / Sample Legal Group"],
+              ["Attorney address", "60 Counsel Court, Suite 2, Sample City, ZZ 00016"]]},
+            {"heading": "Recipient", "rows": [
+              ["TO", "Northfield Bank Recipient Operations"],
+              ["Address", "999 Bank Recipient Way, Toronto, ON A1A 1A1"]]}
+          ],
+          "notes": "Test case: sender, debtor, attorney and recipient addresses compete."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Information subpoena and restraining notice",
+        "case_no": "SYN-2026-0006",
+        "court": "District Test Court, Example County",
+        "creditor": "Atlas Fictional Capital",
+        "debtor_name": "Parker Demo",
+        "debtor_address": "44 Debtor Drive, Sample City, ZZ 00015",
+        "ssn_full": "000-66-0006",
+        "ssn_last4": "0006",
+        "attorney_name": "Leslie Sample, Esq.",
+        "attorney_firm": "Sample Legal Group",
+        "attorney_address": "60 Counsel Court, Suite 2, Sample City, ZZ 00016",
+        "garnishee": "Northfield Bank Recipient Operations",
+        "garnishee_address": "999 Bank Recipient Way, Toronto, ON A1A 1A1"
+      }
+    },
+    {
+      "id": "TEST007",
+      "source": "IMG_0809",
+      "edge": "Absent fields come back empty; \"Not supplied on this form\" is not an address.",
+      "invented": [],
+      "layout": "table",
+      "title": "LEVY TRANSMITTAL",
+      "caseRef": "SYN-2026-0007",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Issuing agency", "rows": [
+              ["Agency", "Sampleville Revenue Enforcement Office"],
+              ["Return address", "9 Civic Fixture Plaza, Sampleville, ZZ 00017"]]},
+            {"heading": "Taxpayer", "rows": [
+              ["Name", "Alex Placeholder"],
+              ["Address", "Not supplied on this form"]]},
+            {"heading": "Instruction", "rows": [
+              ["Text", "Remit funds under the referenced synthetic order."]]}
+          ],
+          "notes": "Test case: absent address, identifier, attorney, plaintiff and officer."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Levy transmittal",
+        "case_no": "SYN-2026-0007",
+        "issuing_agency": "Sampleville Revenue Enforcement Office",
+        "debtor_name": "Alex Placeholder",
+        "debtor_address": null,
+        "ssn_full": null,
+        "ssn_last4": null,
+        "attorney_name": null,
+        "creditor": null
+      }
+    },
+    {
+      "id": "TEST008",
+      "source": "IMG_0808",
+      "edge": "Two identifiers and a trade name belong to one business debtor.",
+      "invented": [],
+      "layout": "table",
+      "title": "TAX WARRANT",
+      "caseRef": "SYN-2026-0008",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Authority", "rows": [
+              ["Department", "Fictional Department of Tax Compliance"],
+              ["Address", "808 Compliance Avenue, Sample City, ZZ 00018"],
+              ["Enforcement agent", "Devon Control"]]},
+            {"heading": "Taxpayer", "rows": [
+              ["Legal name", "Willow Demo Catering LLC"],
+              ["Trade name", "Willow Demo Kitchen"],
+              ["Address", "81 Test Kitchen Road, Sample City, ZZ 00019"],
+              ["Federal EIN", "00-0000008"],
+              ["State Tax ID", "ST-TEST-0008"]]}
+          ],
+          "notes": "Test case: two identifiers belong to one debtor. Canonical JSON should keep both; CSV expected uses | within the debtor group."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Tax warrant",
+        "case_no": "SYN-2026-0008",
+        "issuing_agency": "Fictional Department of Tax Compliance",
+        "debtor_name": "Willow Demo Catering LLC",
+        "debtor_address": "81 Test Kitchen Road, Sample City, ZZ 00019",
+        "ein": "00-0000008",
+        "state_tax_id": "ST-TEST-0008",
+        "ssn_full": null,
+        "ssn_last4": null
+      }
+    },
+    {
+      "id": "TEST009",
+      "source": "IMG_0807",
+      "edge": "One PDF holds two writs: one row with two case groups, each value kept with its own case. The flat fields below are the bundle's; the groups need tables (c-238).",
+      "invented": ["the banner (out of frame in the photo)"],
+      "layout": "table",
+      "title": "COMBINED WRITS - TEST BUNDLE",
+      "caseRef": "SYN-BUNDLE-0009",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Case A", "rows": [
+              ["Court", "Example County Special Civil Court"],
+              ["Plaintiff", "Alpha Demo Receivables"],
+              ["Debtor", "Cedar Sample LLC"],
+              ["Debtor address", "12 Cedar Fixture Rd, Sample City, ZZ 00020"],
+              ["EIN", "00-0000009"],
+              ["Court officer", "Emery Docket"],
+              ["Officer address", "2 Courthouse Test Sq, Sample City, ZZ 00021"]]},
+            {"heading": "Case B", "rows": [
+              ["Court", "Prototype County Civil Court"],
+              ["Plaintiff", "Beta Fictional Funding"],
+              ["Debtor", "Reese Example"],
+              ["Debtor address", "90 Prototype Place, Sample City, ZZ 00022"],
+              ["SSN", "000-99-0009"],
+              ["Court officer", "Finley Writ"],
+              ["Officer address", "3 Justice Demo Ave, Sample City, ZZ 00023"]]}
+          ],
+          "notes": "Test case: one PDF contains two distinct writs. The output stays one row with two case groups."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Combined writs",
+        "case_no": "SYN-BUNDLE-0009"
+      },
+      "groups": [
+        {"court": "Example County Special Civil Court", "creditor": "Alpha Demo Receivables", "debtor_name": "Cedar Sample LLC", "debtor_address": "12 Cedar Fixture Rd, Sample City, ZZ 00020", "ein": "00-0000009", "ssn_full": null},
+        {"court": "Prototype County Civil Court", "creditor": "Beta Fictional Funding", "debtor_name": "Reese Example", "debtor_address": "90 Prototype Place, Sample City, ZZ 00022", "ein": null, "ssn_full": "000-99-0009"}
+      ]
+    },
+    {
+      "id": "TEST010",
+      "source": "IMG_0806",
+      "edge": "An image-only, degraded page is read through OCR with the same values a text page gives.",
+      "invented": ["the footer (out of frame in the photo)"],
+      "layout": "lines",
+      "imageOnly": true,
+      "title": "NOTICE OF STATE TAX LEVY",
+      "lines": [
+        "**SYNTHETIC TEST DOCUMENT - NOT A REAL LEVY",
+        "**NOTICE OF STATE TAX LEVY",
+        "Case: SYN-2026-0010",
+        "",
+        "Issuing agency: Prototype State Revenue Office",
+        "Agency address: 700 OCR Test Boulevard, Sample City, ZZ 00024",
+        "Revenue officer: Greyson Scan",
+        "",
+        "Taxpayer: Rowan OCR Example",
+        "Taxpayer address: 19 Raster Road, Sample City, ZZ 00025",
+        "SSN: 000-10-1010",
+        "",
+        "TO: Northfield Bank Test Recipient",
+        "Recipient address: 999 Bank Recipient Way, Toronto, ON A1A 1A1",
+        "",
+        "This page is intentionally image-only and slightly degraded for OCR testing."
+      ],
+      "expected": {
+        "notice_kind": "Notice of state tax levy",
+        "case_no": "SYN-2026-0010",
+        "issuing_agency": "Prototype State Revenue Office",
+        "debtor_name": "Rowan OCR Example",
+        "debtor_address": "19 Raster Road, Sample City, ZZ 00025",
+        "ssn_full": "000-10-1010",
+        "ssn_last4": "1010",
+        "garnishee": "Northfield Bank Test Recipient",
+        "garnishee_address": "999 Bank Recipient Way, Toronto, ON A1A 1A1"
+      }
+    },
+    {
+      "id": "TEST011",
+      "source": "IMG_0805",
+      "edge": "An invalid-looking SSN (000-00-0000) is kept as printed and flagged, never replaced.",
+      "invented": ["case reference after SYN-2026-00 (cut off)"],
+      "layout": "table",
+      "title": "WRIT OF EXECUTION",
+      "caseRef": "SYN-2026-0011",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Caption", "rows": [
+              ["Court", "Sample County Test Court"],
+              ["Plaintiff", "Fixture Medical Services"],
+              ["Defendant", "Dakota Example"]]},
+            {"heading": "Defendant", "rows": [
+              ["Address", "110 Edge Case Lane, Sample City, ZZ 00026"],
+              ["SSN printed on source", "000-00-0000"]]},
+            {"heading": "Officer", "rows": [
+              ["Sheriff officer", "Hayden Process"],
+              ["Office address", "35 Sheriff Test Road, Sample City, ZZ 00027"]]}
+          ],
+          "notes": "Test case: preserve the source value but flag it as invalid-looking for review. Do not silently replace it."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Writ of execution",
+        "case_no": "SYN-2026-0011",
+        "court": "Sample County Test Court",
+        "creditor": "Fixture Medical Services",
+        "debtor_name": "Dakota Example",
+        "debtor_address": "110 Edge Case Lane, Sample City, ZZ 00026",
+        "ssn_full": "000-00-0000",
+        "ssn_last4": "0000"
+      }
+    },
+    {
+      "id": "TEST012",
+      "source": "IMG_0804",
+      "edge": "The attorney comes only from the signature block, never the letterhead sender.",
+      "invented": ["the footer (out of frame in the photo)"],
+      "layout": "table",
+      "title": "RESTRAINING NOTICE",
+      "caseRef": "SYN-2026-0012",
+      "pages": [
+        {
+          "sections": [
+            {"heading": "Case caption", "rows": [
+              ["Court", "Supreme Test Court, Sample County"],
+              ["Plaintiff", "Crescent Demo Finance"],
+              ["Judgment debtor", "Sage Prototype"],
+              ["Debtor address", "212 Validation Way, Sample City, ZZ 00028"],
+              ["SSN", "000-12-0012"]]},
+            {"heading": "Letterhead sender", "rows": [
+              ["Sender company", "Example Document Delivery"],
+              ["Sender address", "1 Sender Only Street, Sample City, ZZ 00029"]]},
+            {"heading": "Attorney signature", "rows": [
+              ["Counsel for plaintiff", "Cameron Fixture, Esq. / Fixture Counsel PLLC"],
+              ["Counsel address", "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030"]]}
+          ],
+          "notes": "Test case: attorney must come only from the signature block, not letterhead sender."
+        }
+      ],
+      "expected": {
+        "notice_kind": "Restraining notice",
+        "case_no": "SYN-2026-0012",
+        "court": "Supreme Test Court, Sample County",
+        "creditor": "Crescent Demo Finance",
+        "debtor_name": "Sage Prototype",
+        "debtor_address": "212 Validation Way, Sample City, ZZ 00028",
+        "ssn_full": "000-12-0012",
+        "ssn_last4": "0012",
+        "attorney_name": "Cameron Fixture, Esq.",
+        "attorney_firm": "Fixture Counsel PLLC",
+        "attorney_address": "88 Attorney Avenue, Floor 4, Sample City, ZZ 00030"
+      }
+    }
+  ],
+  "variants": {
+    "about": "Invented. VAR01-VAR05 share one layout (headings Parties, Judgment, Service, Counsel, Garnishee), so a template learned from them matches the rest: the matches and suggested cases. VAR06 puts the caption in two columns and VAR07 continues onto page 2; no template of VAR01's layout matches either: the unknown case. Each carries an amount, a date served and a response deadline, which the photographed set lacks.",
+    "layout": "parties",
+    "same": [
+      {"id": "VAR01", "caseRef": "SYN-2026-0101", "court": "Supreme Test Court, Sample County", "creditor": "Harbor Demo Lending", "debtor_name": "Elliot Sample", "debtor_address": "14 Variant Row, Sample City, ZZ 00101", "amount": "$4,812.37", "date_served": "October 2, 2026", "response_deadline": "October 22, 2026", "attorney": "Morgan Clerk, Esq. / Clerk Test LLP", "attorney_address": "7 Counsel Plaza, Sample City, ZZ 00102"},
+      {"id": "VAR02", "caseRef": "SYN-2026-0102", "court": "Civil Test Court of Sample City", "creditor": "Granite Fictional Credit", "debtor_name": "Noor Example", "debtor_address": "230 Layout Lane, Apt 5, Sample City, ZZ 00103", "amount": "$12,050.00", "date_served": "September 28, 2026", "response_deadline": "October 19, 2026", "attorney": "Riley Brief, Esq. / Brief and Partners", "attorney_address": "19 Docket Street, Sample City, ZZ 00104"},
+      {"id": "VAR03", "caseRef": "SYN-2026-0103", "court": "District Test Court, Example County", "creditor": "Atlas Fictional Capital", "debtor_name": "Casey Testline", "debtor_address": "5 Repeat Road, Sample City, ZZ 00105", "amount": "$987.65", "date_served": "October 5, 2026", "response_deadline": "October 26, 2026", "attorney": "Jordan Motion, Esq. / Motion Legal Group", "attorney_address": "40 Filing Avenue, Suite 3, Sample City, ZZ 00106"},
+      {"id": "VAR04", "caseRef": "SYN-2026-0104", "court": "Sample County Test Court", "creditor": "Beacon Demo Recovery", "debtor_name": "Indigo Prototype LLC", "debtor_address": "88 Template Terrace, Sample City, ZZ 00107", "amount": "$25,400.10", "date_served": "October 7, 2026", "response_deadline": "October 28, 2026", "attorney": "Avery Counsel, Esq. / Counsel Fixture PC", "attorney_address": "2 Bench Square, Floor 6, Sample City, ZZ 00108"},
+      {"id": "VAR05", "caseRef": "SYN-2026-0105", "court": "Prototype County Civil Court", "creditor": "Crescent Demo Finance", "debtor_name": "Rowan Duplicate", "debtor_address": "61 Sameform Street, Sample City, ZZ 00109", "amount": "$3,333.33", "date_served": "October 9, 2026", "response_deadline": "October 30, 2026", "attorney": "Sky Pleading, Esq. / Pleading Test LLP", "attorney_address": "11 Verdict Way, Sample City, ZZ 00110"}
+    ],
+    "garnishee": "Northfield Bank Test Intake",
+    "garnishee_address": "999 Bank Recipient Way, Toronto, ON A1A 1A1",
+    "other": [
+      {"id": "VAR06", "layout": "caption", "caseRef": "SYN-2026-0106", "court": "Supreme Test Court, Sample County", "creditor": "Summit Example Finance", "debtor_name": "Quinn Caption", "debtor_address": "300 Column Court, Sample City, ZZ 00111", "amount": "$6,250.00", "date_served": "October 1, 2026", "response_deadline": "October 21, 2026", "attorney": "Blair Sidebar, Esq. / Sidebar Counsel PLLC", "attorney_address": "9 Caption Close, Sample City, ZZ 00112"},
+      {"id": "VAR07", "layout": "continued", "caseRef": "SYN-2026-0107", "court": "Civil Test Court of Sample City", "creditor": "Meridian Fictional Bank", "debtor_name": "Kai Overflow", "debtor_address": "17 Second Page Drive, Sample City, ZZ 00113", "amount": "$1,499.99", "date_served": "October 3, 2026", "response_deadline": "October 23, 2026", "attorney": "Emery Addendum, Esq. / Addendum Law", "attorney_address": "4 Continuation Way, Sample City, ZZ 00114"}
+    ]
+  }
+}

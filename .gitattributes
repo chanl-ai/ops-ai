@@ -1,0 +1,4 @@
+# codeloop writes its agent protocol between markers in these files; the block stays local and is stripped on
+# commit by the strip-codeloop filter (git config filter.strip-codeloop.clean, see CONTRIBUTING.md).
+AGENTS.md filter=strip-codeloop
+CLAUDE.md filter=strip-codeloop

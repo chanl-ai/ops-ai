@@ -1,0 +1,5 @@
+{
+  "ops": {
+    "identities": ["service:agents"]
+  }
+}

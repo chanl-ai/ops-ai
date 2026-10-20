@@ -1,0 +1,33 @@
+# SQL Server 2025 Developer edition for the two-database test matrix (c-345; ADR-0017). Never a bank's database and
+# never public: no service and no IP, so only Fly's private network reaches it (`fly proxy 14330:1433 -a
+# <your-app>-mssql`). The SA password is the MSSQL_SA_PASSWORD secret. Runbook: docs/deploy/fly.md.
+#   fly deploy -c deploy/fly/mssql/fly.toml
+app = "<your-app>-mssql"
+primary_region = "ewr"
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+  image = "mcr.microsoft.com/mssql/server:2025-latest"
+
+[env]
+  ACCEPT_EULA = "Y"
+  MSSQL_PID = "Developer"
+  # The machine has 2 GB; SQL Server takes most of it unless capped, and the OS needs the rest.
+  MSSQL_MEMORY_LIMIT_MB = "1536"
+
+[[mounts]]
+  source = "mssql_data"
+  destination = "/var/opt/mssql"
+  initial_size = "3gb"
+
+[checks.sql]
+  type = "tcp"
+  port = 1433
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "120s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = 2048

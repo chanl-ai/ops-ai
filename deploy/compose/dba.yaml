@@ -1,0 +1,10 @@
+# For a schema the DBA applied from the release's database scripts (deploy/database, docs/deploy/database.md): the
+# migrate job runs no migration and only makes the first tenant, Security team and admin, on platform-service's own
+# runtime login, so no container holds a login with DDL rights. Each service connects with its own
+# OPS_DATABASE_URL_<SERVICE> and refuses to start on a schema older than its build.
+#   docker compose -p ops-ai -f app.yaml -f dba.yaml --env-file <env file> up -d
+services:
+  migrate:
+    command: ["/app/deploy/images/first_admin.sh"]
+    environment:
+      OPS_DATABASE_URL: ${OPS_DATABASE_URL_PLATFORM:?set OPS_DATABASE_URL_PLATFORM to platform-service's runtime login}

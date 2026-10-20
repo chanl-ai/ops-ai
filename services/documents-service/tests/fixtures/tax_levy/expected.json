@@ -1,0 +1,128 @@
+{
+ "TAXLEVY01.pdf": {
+  "edge": "A state levy whose taxpayer and agency addresses compete, with release conditions in a paragraph.",
+  "expected": {
+   "amount_due": "$7,482.19",
+   "authority": "Fictional State Department of Revenue",
+   "case_no": "SYN-TL-2026-0101",
+   "garnishee": "Northfield Bank Test Intake",
+   "levy_date": "October 6, 2026",
+   "notice_kind": "Notice of levy",
+   "release_conditions": "this levy is released when the amount due is paid in full or an installment agreement is approved by the Department.",
+   "response_deadline": "October 27, 2026",
+   "tax_period": "2023",
+   "tax_type": "Individual income tax",
+   "taxpayer_address": "48 Ledger Lane, Sample City, ZZ 00302",
+   "taxpayer_id_last4": "3301",
+   "taxpayer_name": "Riley Fixture"
+  },
+  "family": "tax_levy",
+  "invented": [
+   "the whole notice"
+  ],
+  "pages": {}
+ },
+ "TAXLEVY02.pdf": {
+  "edge": "A federal levy on a business: an EIN instead of an SSN, quarterly periods, and a deadline written as a number of days.",
+  "expected": {
+   "amount_due": "$31,906.40",
+   "authority": "Fictional Federal Revenue Service",
+   "case_no": "SYN-FED-2026-0202",
+   "garnishee": "Northfield Bank Recipient Operations",
+   "levy_date": "September 30, 2026",
+   "notice_kind": "Notice of levy on wages, salary, and other income",
+   "release_conditions": "the levy is released when the liability is satisfied, becomes unenforceable, or release is in the taxpayer's best interest under the Service's procedures.",
+   "response_deadline": "October 21, 2026",
+   "tax_period": "Q1 2025, Q2 2025",
+   "tax_type": "Employment tax (Form 941)",
+   "taxpayer_address": "910 Warehouse Test Road, Sample City, ZZ 00402",
+   "taxpayer_ein": "00-0004402",
+   "taxpayer_id_last4": null,
+   "taxpayer_name": "Cobalt Example Supply Inc"
+  },
+  "family": "tax_levy",
+  "invented": [
+   "the whole notice"
+  ],
+  "pages": {}
+ },
+ "TAXLEVY03.pdf": {
+  "edge": "Plain typed lines with no tables, also sent as a scan: the levy read through OCR.",
+  "expected": {
+   "amount_due": "$2,315.77",
+   "authority": "Prototype State Tax Commission",
+   "case_no": "SYN-TL-2026-0303",
+   "garnishee": "Northfield Bank Test Intake",
+   "levy_date": "2026-10-02",
+   "notice_kind": "State tax warrant and levy",
+   "release_conditions": "paid in full, or a bond for the amount due is filed with the Commission.",
+   "response_deadline": "2026-10-23",
+   "tax_period": "July 2025 to December 2025",
+   "tax_type": "Sales and use tax",
+   "taxpayer_address": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+   "taxpayer_id_last4": "5503",
+   "taxpayer_name": "Avery Testwell"
+  },
+  "family": "tax_levy",
+  "invented": [
+   "the whole notice"
+  ],
+  "pages": {}
+ },
+ "TAXLEVY03_scan.pdf": {
+  "edge": "Plain typed lines with no tables, also sent as a scan: the levy read through OCR.",
+  "expected": {
+   "amount_due": "$2,315.77",
+   "authority": "Prototype State Tax Commission",
+   "case_no": "SYN-TL-2026-0303",
+   "garnishee": "Northfield Bank Test Intake",
+   "levy_date": "2026-10-02",
+   "notice_kind": "State tax warrant and levy",
+   "release_conditions": "paid in full, or a bond for the amount due is filed with the Commission.",
+   "response_deadline": "2026-10-23",
+   "tax_period": "July 2025 to December 2025",
+   "tax_type": "Sales and use tax",
+   "taxpayer_address": "66 Warrant Way, Apt 2, Sample City, ZZ 00502",
+   "taxpayer_id_last4": "5503",
+   "taxpayer_name": "Avery Testwell"
+  },
+  "family": "tax_levy",
+  "imageOnly": true,
+  "invented": [
+   "the whole notice"
+  ],
+  "pages": {},
+  "scanOf": "TAXLEVY03.pdf"
+ },
+ "TAXLEVY04.pdf": {
+  "edge": "A state levy continued onto page 2, where the amount and dates sit.",
+  "expected": {
+   "amount_due": "$12,640.00",
+   "authority": "Example Commonwealth Revenue Office",
+   "case_no": "SYN-TL-2026-0404",
+   "garnishee": "Northfield Bank Test Intake",
+   "levy_date": "October 8, 2026",
+   "notice_kind": "Notice of tax levy",
+   "release_conditions": "this levy is released on payment in full or on written notice from the Revenue Office.",
+   "response_deadline": "October 29, 2026",
+   "tax_period": "2024",
+   "tax_type": "Withholding tax",
+   "taxpayer_address": "12 Pastry Test Court, Sample City, ZZ 00602",
+   "taxpayer_ein": "00-0006602",
+   "taxpayer_name": "Harbor Demo Bakery LLC"
+  },
+  "family": "tax_levy",
+  "invented": [
+   "the whole notice"
+  ],
+  "pages": {
+   "amount_due": 2,
+   "garnishee": 2,
+   "levy_date": 2,
+   "release_conditions": 2,
+   "response_deadline": 2,
+   "tax_period": 2,
+   "tax_type": 2
+  }
+ }
+}

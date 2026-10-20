@@ -1,0 +1,2833 @@
+{
+ "currentUser": "James Richardson",
+ "modules": [
+  {
+   "id": "mod_core_banking",
+   "name": "core-banking",
+   "displayName": "Core banking",
+   "system": "Core Banking",
+   "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+   "type": "openapi",
+   "ownerTeam": "Core Banking Platform",
+   "ownerContacts": [
+    "Daniel Brooks",
+    "Lena Fischer"
+   ],
+   "endpoint": "https://corebanking.api.northfield.internal/v3",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 8000,
+   "egressHosts": [
+    "corebanking.api.northfield.internal"
+   ],
+   "dataClassification": "restricted",
+   "catalogId": "cat_core_banking",
+   "rotate": {
+    "production": 41,
+    "test": 12
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Customer SIN and date of birth masked in every response",
+    "Writes require idempotency keys",
+    "Transfers capped at $2,500 per call"
+   ],
+   "operations": [
+    {
+     "name": "get_loan_account",
+     "tool": {
+      "description": "Balance, rate, next payment and arrears for a loan account",
+      "access": "read"
+     },
+     "method": "GET",
+     "path": "/loans/{loanAccountId}",
+     "input": [
+      {
+       "name": "loanAccountId",
+       "type": "string",
+       "required": true,
+       "description": "Loan account number",
+       "example": "LN-0048213"
+      },
+      {
+       "name": "include",
+       "type": "array",
+       "required": false,
+       "description": "Extra sections: schedule, arrears, collateral"
+      }
+     ],
+     "binding": {
+      "arg": "loanAccountId",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "masked": [
+      "borrower.sin",
+      "borrower.dateOfBirth"
+     ],
+     "rate": 120,
+     "stub": {
+      "loanAccountId": "LN-0048213",
+      "product": "Fixed 5-year mortgage",
+      "balance": 412880.14,
+      "rate": 4.89,
+      "nextPayment": {
+       "date": "2026-10-15",
+       "amount": 2318.4
+      },
+      "arrears": 0,
+      "borrower": {
+       "name": "Marcus Webb",
+       "sin": "[redacted]",
+       "dateOfBirth": "[redacted]"
+      }
+     }
+    },
+    {
+     "name": "get_customer_profile",
+     "tool": {
+      "description": "Name, contact details and products held by a customer",
+      "access": "read"
+     },
+     "method": "GET",
+     "path": "/customers/{customerId}",
+     "input": [
+      {
+       "name": "customerId",
+       "type": "string",
+       "required": true,
+       "description": "Customer number",
+       "example": "CUS-118842"
+      }
+     ],
+     "binding": {
+      "arg": "customerId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "masked": [
+      "sin",
+      "dateOfBirth"
+     ],
+     "rate": 120,
+     "stub": {
+      "customerId": "CUS-118842",
+      "name": "Marcus Webb",
+      "email": "marcus.webb@example.com",
+      "phone": "+1 416 555 0143",
+      "sin": "[redacted]",
+      "dateOfBirth": "[redacted]",
+      "products": [
+       "Mortgage LN-0048213",
+       "Chequing CHQ-1182"
+      ]
+     }
+    },
+    {
+     "name": "update_address",
+     "tool": {
+      "description": "Change a customer’s mailing address",
+      "access": "write"
+     },
+     "method": "PATCH",
+     "path": "/customers/{customerId}/address",
+     "input": [
+      {
+       "name": "customerId",
+       "type": "string",
+       "required": true,
+       "description": "Customer number"
+      },
+      {
+       "name": "line1",
+       "type": "string",
+       "required": true,
+       "description": "Street address"
+      },
+      {
+       "name": "line2",
+       "type": "string",
+       "required": false
+      },
+      {
+       "name": "city",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "province",
+       "type": "string",
+       "required": true,
+       "enum": [
+        "AB",
+        "BC",
+        "MB",
+        "NB",
+        "NL",
+        "NS",
+        "ON",
+        "PE",
+        "QC",
+        "SK"
+       ]
+      },
+      {
+       "name": "postalCode",
+       "type": "string",
+       "required": true,
+       "format": "A1A 1A1"
+      }
+     ],
+     "binding": {
+      "arg": "customerId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 30,
+     "stub": {
+      "updated": true,
+      "effective": "2026-10-04",
+      "previousAddressRetained": true
+     },
+     "requiresApproval": true
+    },
+    {
+     "name": "apply_payment_deferral",
+     "tool": {
+      "description": "Defer one or more loan payments under the hardship program",
+      "access": "write"
+     },
+     "method": "POST",
+     "path": "/loans/{loanAccountId}/deferrals",
+     "input": [
+      {
+       "name": "loanAccountId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payments",
+       "type": "integer",
+       "required": true,
+       "description": "Number of payments to defer (1–3)"
+      },
+      {
+       "name": "reasonCode",
+       "type": "string",
+       "required": true,
+       "enum": [
+        "job_loss",
+        "illness",
+        "disaster",
+        "other"
+       ]
+      }
+     ],
+     "binding": {
+      "arg": "loanAccountId",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 10,
+     "stub": {
+      "deferralId": "DEF-22184",
+      "payments": 2,
+      "resumesOn": "2027-01-15",
+      "interestCapitalised": 1904.22
+     },
+     "requiresApproval": true
+    },
+    {
+     "name": "get_payoff_statement",
+     "tool": {
+      "description": "Payoff amount and per-diem interest for a loan as of a date",
+      "access": "read"
+     },
+     "method": "GET",
+     "path": "/loans/{loanAccountId}/payoff",
+     "input": [
+      {
+       "name": "loanAccountId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "asOf",
+       "type": "string",
+       "required": true,
+       "description": "Payoff date",
+       "format": "date"
+      }
+     ],
+     "binding": {
+      "arg": "loanAccountId",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 60,
+     "stub": {
+      "loanAccountId": "LN-0048213",
+      "asOf": "2026-10-31",
+      "payoff": 411960.02,
+      "perDiem": 55.31,
+      "prepaymentCharge": 3120
+     }
+    },
+    {
+     "name": "transfer_funds",
+     "method": "POST",
+     "path": "/transfers",
+     "input": [
+      {
+       "name": "fromAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "toAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "number",
+       "required": true,
+       "description": "CAD"
+      },
+      {
+       "name": "memo",
+       "type": "string",
+       "required": false
+      }
+     ],
+     "binding": {
+      "arg": "fromAccount",
+      "bindTo": "case.customerId",
+      "mode": "within",
+      "required": true
+     },
+     "rate": 5,
+     "amountMax": 2500,
+     "stub": {
+      "transferId": "TRF-58812",
+      "status": "posted",
+      "amount": 500
+     },
+     "requiresApproval": true
+    }
+   ],
+   "versions": [
+    {
+     "version": "2.8.4",
+     "daysAgo": 210,
+     "by": "Daniel Brooks",
+     "note": "Timeout raised to 8 s for statement calls",
+     "changes": [
+      {
+       "operation": "get_loan_account",
+       "kind": "settings",
+       "detail": "Timeout 5 s → 8 s",
+       "major": false
+      }
+     ]
+    },
+    {
+     "version": "3.0.0",
+     "daysAgo": 96,
+     "by": "Daniel Brooks",
+     "note": "Hardship deferrals and transfers",
+     "changes": [
+      {
+       "operation": "apply_payment_deferral",
+       "kind": "added",
+       "detail": "New write operation",
+       "major": true
+      },
+      {
+       "operation": "transfer_funds",
+       "kind": "added",
+       "detail": "New money movement operation, capped at $2,500",
+       "major": true
+      }
+     ]
+    },
+    {
+     "version": "3.1.0",
+     "daysAgo": 52,
+     "by": "Lena Fischer",
+     "note": "Payoff statements",
+     "changes": [
+      {
+       "operation": "get_payoff_statement",
+       "kind": "added",
+       "detail": "New read operation; within major 3 because the module review covered statement reads",
+       "major": false
+      }
+     ]
+    },
+    {
+     "version": "3.2.0",
+     "daysAgo": 21,
+     "by": "Lena Fischer",
+     "note": "Address line 2 and postal code format",
+     "changes": [
+      {
+       "operation": "update_address",
+       "kind": "schema_changed",
+       "detail": "Adds optional line2; postalCode now validated as A1A 1A1",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_card_inbox"
+     ]
+    },
+    {
+     "version": "3.2.1",
+     "daysAgo": 6,
+     "by": "Daniel Brooks",
+     "note": "Masks date of birth in profile responses",
+     "changes": [
+      {
+       "operation": "get_customer_profile",
+       "kind": "settings",
+       "detail": "Masks dateOfBirth",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_lending_inbox"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_lending_inbox",
+     "operations": [
+      "get_loan_account",
+      "get_customer_profile",
+      "get_payoff_statement",
+      "apply_payment_deferral",
+      "update_address"
+     ],
+     "expiresIn": 3,
+     "decidedBy": "Daniel Brooks",
+     "justification": "Lending servicing inbox: hardship deferrals, payoff statements and address changes",
+     "constraints": "Deferrals: at most 3 payments per request",
+     "workflowName": "Lending servicing inbox",
+     "workflowTeamId": "team_lending"
+    },
+    {
+     "workflowId": "wf_card_inbox",
+     "operations": [
+      "get_customer_profile",
+      "update_address"
+     ],
+     "expiresIn": 148,
+     "decidedBy": "Lena Fischer",
+     "justification": "Address changes requested by email to card services",
+     "workflowName": "Card services inbox",
+     "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_dispute",
+     "operations": [
+      "get_customer_profile"
+     ],
+     "status": "requested",
+     "expiresIn": 180,
+     "requestedBy": "Grace Liu",
+     "justification": "Confirm the cardholder’s contact details before posting a provisional credit",
+     "ageDays": 2,
+     "workflowName": "Card dispute resolution",
+     "workflowTeamId": "team_cards"
+    }
+   ]
+  },
+  {
+   "id": "mod_card_platform",
+   "name": "card-platform",
+   "displayName": "Card platform",
+   "system": "Card Platform",
+   "description": "Card transactions, provisional credits and fee adjustments.",
+   "type": "openapi",
+   "ownerTeam": "Card Services",
+   "ownerContacts": [
+    "Grace Liu"
+   ],
+   "endpoint": "https://cards.api.northfield.internal/v2",
+   "auth": "mtls",
+   "timeoutMs": 6000,
+   "egressHosts": [
+    "cards.api.northfield.internal"
+   ],
+   "dataClassification": "restricted",
+   "rotate": {
+    "production": 9,
+    "test": 70
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Card numbers returned masked to the last four digits",
+    "Provisional credit capped at $5,000 per call and needs four eyes"
+   ],
+   "operations": [
+    {
+     "name": "get_transactions",
+     "method": "GET",
+     "path": "/accounts/{cardAccount}/transactions",
+     "input": [
+      {
+       "name": "cardAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "from",
+       "type": "string",
+       "required": true,
+       "format": "date"
+      },
+      {
+       "name": "to",
+       "type": "string",
+       "required": false,
+       "format": "date"
+      }
+     ],
+     "binding": {
+      "arg": "cardAccount",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "masked": [
+      "transactions[].pan"
+     ],
+     "rate": 120,
+     "stub": {
+      "cardAccount": "4519-••••-2231",
+      "transactions": [
+       {
+        "id": "TX-90812",
+        "merchant": "Lakeshore Outfitters",
+        "amount": 1240.18,
+        "posted": "2026-09-21",
+        "pan": "[redacted]"
+       }
+      ]
+     }
+    },
+    {
+     "name": "issue_provisional_credit",
+     "method": "POST",
+     "path": "/accounts/{cardAccount}/provisional-credits",
+     "input": [
+      {
+       "name": "cardAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "number",
+       "required": true,
+       "description": "CAD"
+      },
+      {
+       "name": "disputeId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": {
+      "arg": "cardAccount",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 20,
+     "amountMax": 5000,
+     "stub": {
+      "creditId": "PC-31877",
+      "amount": 1240.18,
+      "status": "posted",
+      "reversibleUntil": "2026-12-03"
+     },
+     "requiresApproval": true
+    },
+    {
+     "name": "waive_fee",
+     "tool": {
+      "description": "Reverse a card fee",
+      "access": "write"
+     },
+     "method": "POST",
+     "path": "/accounts/{cardAccount}/fee-reversals",
+     "input": [
+      {
+       "name": "cardAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "feeId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "number",
+       "required": true,
+       "description": "CAD"
+      }
+     ],
+     "binding": {
+      "arg": "cardAccount",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 30,
+     "stub": {
+      "reversalId": "FR-7781",
+      "amount": 39,
+      "status": "posted"
+     },
+     "requiresApproval": true
+    }
+   ],
+   "versions": [
+    {
+     "version": "2.3.0",
+     "daysAgo": 140,
+     "by": "Grace Liu",
+     "note": "Fee reversals",
+     "changes": [
+      {
+       "operation": "waive_fee",
+       "kind": "added",
+       "detail": "New write operation",
+       "major": true
+      }
+     ]
+    },
+    {
+     "version": "2.4.0",
+     "daysAgo": 33,
+     "by": "Grace Liu",
+     "note": "Dispute id on provisional credits",
+     "changes": [
+      {
+       "operation": "issue_provisional_credit",
+       "kind": "schema_changed",
+       "detail": "disputeId now required",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_dispute",
+      "wf_card_inbox"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_dispute",
+     "operations": [
+      "get_transactions",
+      "issue_provisional_credit"
+     ],
+     "expiresIn": 112,
+     "decidedBy": "Grace Liu",
+     "justification": "Dispute investigation and provisional credit under the Dispute Rights Guide",
+     "constraints": "Provisional credit up to $5,000",
+     "workflowName": "Card dispute resolution",
+     "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_card_inbox",
+     "operations": [
+      "get_transactions",
+      "issue_provisional_credit",
+      "waive_fee"
+     ],
+     "expiresIn": 11,
+     "decidedBy": "Grace Liu",
+     "justification": "Card services inbox: disputes and fee complaints by email",
+     "constraints": "Fee reversals up to $100",
+     "workflowName": "Card services inbox",
+     "workflowTeamId": "team_cards"
+    }
+   ]
+  },
+  {
+   "id": "mod_m365_mail",
+   "name": "m365-mail",
+   "displayName": "Microsoft 365 mail",
+   "system": "Outbound mail",
+   "description": "Reads mail threads and sends replies from the bank’s shared mailboxes.",
+   "type": "openapi",
+   "ownerTeam": "Messaging Platform",
+   "ownerContacts": [
+    "Omar Siddiqui"
+   ],
+   "endpoint": "https://graph.microsoft.com/v1.0",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 10000,
+   "egressHosts": [
+    "graph.microsoft.com",
+    "login.microsoftonline.com"
+   ],
+   "dataClassification": "confidential",
+   "catalogId": "cat_m365_mail",
+   "rotate": {
+    "production": -3,
+    "test": 200
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Replies only to the case requester: recipient bound from the authenticated sender",
+    "Application access policy limits the app to the two shared mailboxes"
+   ],
+   "operations": [
+    {
+     "name": "get_thread",
+     "tool": {
+      "description": "Messages in the case’s email thread",
+      "access": "read"
+     },
+     "method": "GET",
+     "path": "/users/{mailbox}/messages/{messageId}",
+     "input": [
+      {
+       "name": "mailbox",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "messageId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": {
+      "arg": "messageId",
+      "bindTo": "case.id",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 240,
+     "stub": {
+      "subject": "Change of address",
+      "from": "m.webb@example.com",
+      "messages": 2
+     }
+    },
+    {
+     "name": "send_reply",
+     "tool": {
+      "description": "Reply to the customer on the case thread",
+      "access": "write"
+     },
+     "method": "POST",
+     "path": "/users/{mailbox}/messages/{messageId}/reply",
+     "input": [
+      {
+       "name": "mailbox",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "messageId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string",
+       "required": true,
+       "description": "Recipient",
+       "format": "email"
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true,
+       "description": "Reply text"
+      }
+     ],
+     "binding": {
+      "arg": "to",
+      "bindTo": "case.requesterEmail",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 60,
+     "stub": {
+      "sent": true,
+      "messageId": "AAMkAGI2…",
+      "to": "m.webb@example.com"
+     },
+     "requiresApproval": true
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.0.0",
+     "daysAgo": 120,
+     "by": "Omar Siddiqui",
+     "note": "First version",
+     "changes": [
+      {
+       "operation": "get_thread",
+       "kind": "added",
+       "detail": "New read operation",
+       "major": true
+      },
+      {
+       "operation": "send_reply",
+       "kind": "added",
+       "detail": "New write operation",
+       "major": true
+      }
+     ]
+    },
+    {
+     "version": "1.1.0",
+     "daysAgo": 18,
+     "by": "Omar Siddiqui",
+     "note": "Plain-text replies",
+     "changes": [
+      {
+       "operation": "send_reply",
+       "kind": "settings",
+       "detail": "Sends plain text when the thread is plain text",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_card_inbox",
+      "wf_lending_inbox"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_card_inbox",
+     "operations": [
+      "get_thread",
+      "send_reply"
+     ],
+     "expiresIn": 205,
+     "decidedBy": "Omar Siddiqui",
+     "justification": "Reply to customers who wrote to card services",
+     "workflowName": "Card services inbox",
+     "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_lending_inbox",
+     "operations": [
+      "get_thread",
+      "send_reply"
+     ],
+     "expiresIn": 190,
+     "decidedBy": "Omar Siddiqui",
+     "justification": "Reply to customers who wrote to lending servicing",
+     "workflowName": "Lending servicing inbox",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_salesforce",
+   "name": "salesforce-crm",
+   "displayName": "Salesforce",
+   "system": "Salesforce",
+   "description": "Contacts, service cases and activity history in the bank’s Salesforce org, through its hosted MCP server.",
+   "type": "mcp",
+   "ownerTeam": "CRM Platform",
+   "ownerContacts": [
+    "Rafael Costa"
+   ],
+   "endpoint": "https://northfield.my.salesforce.com/services/mcp/v1",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 8000,
+   "egressHosts": [
+    "northfield.my.salesforce.com"
+   ],
+   "dataClassification": "confidential",
+   "catalogId": "cat_salesforce",
+   "drift": true,
+   "rotate": {
+    "production": 88
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Snapshot of 3 tools reviewed; the server must not add tools without a new review"
+   ],
+   "operations": [
+    {
+     "name": "find_contact",
+     "tool": {
+      "description": "Find a contact by email or phone",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "email",
+       "type": "string",
+       "required": false,
+       "format": "email"
+      },
+      {
+       "name": "phone",
+       "type": "string",
+       "required": false
+      }
+     ],
+     "binding": null,
+     "masked": [
+      "contact.birthdate"
+     ],
+     "rate": 120,
+     "stub": {
+      "contact": {
+       "id": "003Qy00000Fh2",
+       "name": "Marcus Webb",
+       "owner": "Lending Servicing",
+       "birthdate": "[redacted]"
+      }
+     }
+    },
+    {
+     "name": "get_case_history",
+     "tool": {
+      "description": "Service cases and notes for a contact",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "contactId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": {
+      "arg": "contactId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 120,
+     "stub": {
+      "cases": [
+       {
+        "number": "00418812",
+        "subject": "Payment deferral",
+        "status": "Closed"
+       }
+      ]
+     }
+    },
+    {
+     "name": "log_activity",
+     "tool": {
+      "description": "Log a call or email against a contact",
+      "access": "write"
+     },
+     "input": [
+      {
+       "name": "contactId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": {
+      "arg": "contactId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 60,
+     "requiresApproval": false,
+     "stub": {
+      "activityId": "00TQy000002rT",
+      "logged": true
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.2.0",
+     "daysAgo": 44,
+     "by": "Rafael Costa",
+     "note": "Activity logging",
+     "changes": [
+      {
+       "operation": "log_activity",
+       "kind": "added",
+       "detail": "New write operation",
+       "major": true
+      }
+     ],
+     "pinnedBy": [
+      "wf_card_inbox"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_card_inbox",
+     "operations": [
+      "find_contact",
+      "get_case_history"
+     ],
+     "expiresIn": 230,
+     "decidedBy": "Rafael Costa",
+     "justification": "Show the agent prior service cases for the sender",
+     "workflowName": "Card services inbox",
+     "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_lending_inbox",
+     "operations": [
+      "find_contact",
+      "log_activity"
+     ],
+     "status": "requested",
+     "expiresIn": 180,
+     "requestedBy": "Maya Okafor",
+     "justification": "Log each handled email on the contact so branches see it",
+     "ageDays": 1,
+     "workflowName": "Lending servicing inbox",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_case_mgmt",
+   "name": "case-management",
+   "displayName": "Case management system",
+   "system": "Case management system",
+   "description": "The bank’s case management system: signed agreements, statements and identity documents held on customer cases.",
+   "type": "mcp",
+   "status": "in_review",
+   "ownerTeam": "Enterprise Data",
+   "ownerContacts": [
+    "Anika Singh"
+   ],
+   "endpoint": "https://casemgmt.northfield.internal/mcp",
+   "auth": "mtls",
+   "timeoutMs": 12000,
+   "egressHosts": [
+    "casemgmt.northfield.internal"
+   ],
+   "dataClassification": "restricted",
+   "catalogId": "cat_case_mgmt",
+   "rotate": {
+    "production": 160,
+    "test": 160
+   },
+   "reviewPending": true,
+   "operations": [
+    {
+     "name": "search_documents",
+     "tool": {
+      "description": "Search the document store by customer and type",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "customerId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string",
+       "required": false,
+       "enum": [
+        "agreement",
+        "statement",
+        "id_document"
+       ]
+      }
+     ],
+     "binding": {
+      "arg": "customerId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "rate": 60,
+     "stub": {
+      "documents": [
+       {
+        "id": "DOC-77120",
+        "type": "agreement",
+        "title": "Mortgage commitment",
+        "signed": "2021-04-02"
+       }
+      ]
+     }
+    },
+    {
+     "name": "get_document",
+     "tool": {
+      "description": "Fetch one document’s text and metadata",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "documentId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "customerId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": {
+      "arg": "customerId",
+      "bindTo": "case.customerId",
+      "mode": "equals",
+      "required": true
+     },
+     "masked": [
+      "text.sin"
+     ],
+     "rate": 60,
+     "stub": {
+      "id": "DOC-77120",
+      "pages": 14,
+      "text": "This commitment… SIN [redacted]"
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "0.9.0",
+     "daysAgo": 4,
+     "by": "Anika Singh",
+     "note": "First version for review",
+     "changes": [
+      {
+       "operation": "search_documents",
+       "kind": "added",
+       "detail": "New read operation",
+       "major": true
+      },
+      {
+       "operation": "get_document",
+       "kind": "added",
+       "detail": "New read operation",
+       "major": true
+      }
+     ]
+    }
+   ],
+   "approvals": []
+  },
+  {
+   "id": "mod_sharepoint",
+   "name": "sharepoint-policies",
+   "displayName": "SharePoint policies",
+   "system": "SharePoint",
+   "description": "Read-only access to the policy and procedure sites.",
+   "type": "mcp",
+   "ownerTeam": "Digital Workplace",
+   "ownerContacts": [
+    "Tom Haddad"
+   ],
+   "endpoint": "https://northfield.sharepoint.com/_api/mcp",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 8000,
+   "egressHosts": [
+    "northfield.sharepoint.com"
+   ],
+   "dataClassification": "internal",
+   "catalogId": "cat_sharepoint",
+   "rotate": {
+    "production": 120
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Site list limited to Policies and Procedures"
+   ],
+   "operations": [
+    {
+     "name": "search_sites",
+     "tool": {
+      "description": "Search policy pages and files",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "query",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": null,
+     "rate": 120,
+     "stub": {
+      "results": [
+       {
+        "title": "Hardship program procedure",
+        "url": "https://northfield.sharepoint.com/sites/policies/hardship"
+       }
+      ]
+     }
+    },
+    {
+     "name": "get_file",
+     "tool": {
+      "description": "Read a policy file",
+      "access": "read"
+     },
+     "input": [
+      {
+       "name": "fileId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": null,
+     "rate": 120,
+     "stub": {
+      "title": "Hardship program procedure",
+      "version": "7.2"
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.0.3",
+     "daysAgo": 70,
+     "by": "Tom Haddad",
+     "note": "Retry on throttling",
+     "changes": [
+      {
+       "operation": "search_sites",
+       "kind": "settings",
+       "detail": "Retries 429 responses twice",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_advisor"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_advisor",
+     "operations": [
+      "search_sites",
+      "get_file"
+     ],
+     "environment": "test",
+     "expiresIn": -6,
+     "decidedBy": "Tom Haddad",
+     "justification": "Pilot: cite investment policy in portfolio notes",
+     "workflowName": "Quarterly portfolio review",
+     "workflowTeamId": "team_wealth"
+    }
+   ]
+  },
+  {
+   "id": "mod_payments_hub",
+   "name": "payments-hub",
+   "displayName": "Payments hub",
+   "system": "Payments Hub",
+   "description": "Wire history and holds on outbound wires.",
+   "type": "http",
+   "ownerTeam": "Payments Operations",
+   "ownerContacts": [
+    "Maya Okafor"
+   ],
+   "endpoint": "https://payments.northfield.internal/api",
+   "auth": "api_key",
+   "authHeader": "X-Api-Key",
+   "timeoutMs": 5000,
+   "egressHosts": [
+    "payments.northfield.internal"
+   ],
+   "dataClassification": "restricted",
+   "rotate": {
+    "production": 23
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Holds limited to 72 hours",
+    "Release needs a person"
+   ],
+   "operations": [
+    {
+     "name": "get_wire_history",
+     "method": "GET",
+     "path": "/accounts/{accountId}/wires?days={days}",
+     "input": [
+      {
+       "name": "accountId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "days",
+       "type": "integer",
+       "required": false,
+       "description": "Look-back window, 1–30"
+      }
+     ],
+     "binding": {
+      "arg": "accountId",
+      "bindTo": "case.account",
+      "mode": "equals",
+      "required": true
+     },
+     "masked": [
+      "lastPayee.name"
+     ],
+     "rate": 300,
+     "stub": {
+      "attempts": 3,
+      "mfa": "passed",
+      "lastPayee": {
+       "name": "[redacted]",
+       "ageHours": 6
+      }
+     }
+    },
+    {
+     "name": "place_wire_hold",
+     "method": "POST",
+     "path": "/wires/{wireId}/hold",
+     "input": [
+      {
+       "name": "wireId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string",
+       "required": true,
+       "enum": [
+        "hold",
+        "release"
+       ]
+      },
+      {
+       "name": "hours",
+       "type": "integer",
+       "required": true,
+       "description": "Up to 72"
+      }
+     ],
+     "binding": null,
+     "rate": 60,
+     "stub": {
+      "held": true,
+      "releaseAt": "2026-10-05T14:00:00Z",
+      "callbackRequired": true
+     },
+     "requiresApproval": true
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.5.0",
+     "daysAgo": 160,
+     "by": "Maya Okafor",
+     "note": "Hold release",
+     "changes": [
+      {
+       "operation": "place_wire_hold",
+       "kind": "access_widened",
+       "detail": "Adds the release action",
+       "major": true
+      }
+     ]
+    },
+    {
+     "version": "1.6.2",
+     "daysAgo": 12,
+     "by": "Maya Okafor",
+     "note": "Look-back window",
+     "changes": [
+      {
+       "operation": "get_wire_history",
+       "kind": "schema_changed",
+       "detail": "Adds optional days",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_wire"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_wire",
+     "operations": [
+      "get_wire_history",
+      "place_wire_hold"
+     ],
+     "expiresIn": 6,
+     "decidedBy": "Maya Okafor",
+     "justification": "Hold risky new-payee wires for an analyst",
+     "constraints": "Holds up to 72 hours",
+     "workflowName": "Outbound wire review",
+     "workflowTeamId": "team_fraud"
+    }
+   ]
+  },
+  {
+   "id": "mod_compliance_mcp",
+   "name": "compliance-screening",
+   "displayName": "Compliance screening",
+   "system": "Compliance MCP",
+   "description": "Watchlist screening and corporate registry lookups, served by Financial Crime’s MCP server.",
+   "type": "mcp",
+   "ownerTeam": "Financial Crime Ops",
+   "ownerContacts": [
+    "Priya Shah"
+   ],
+   "endpoint": "https://fincrime-mcp.northfield.internal/mcp",
+   "auth": "mtls",
+   "timeoutMs": 10000,
+   "egressHosts": [
+    "fincrime-mcp.northfield.internal"
+   ],
+   "dataClassification": "confidential",
+   "rotate": {
+    "production": 75
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Results never include case notes from other investigations"
+   ],
+   "operations": [
+    {
+     "name": "screen_watchlists",
+     "input": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "country",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "dateOfBirth",
+       "type": "string",
+       "required": false,
+       "format": "date"
+      }
+     ],
+     "binding": null,
+     "rate": 120,
+     "stub": {
+      "hits": [
+       {
+        "list": "PEP domestic",
+        "score": 0.41
+       }
+      ],
+      "cleared": true
+     }
+    },
+    {
+     "name": "corporate_registry",
+     "input": [
+      {
+       "name": "registryNumber",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "jurisdiction",
+       "type": "string",
+       "required": false
+      }
+     ],
+     "binding": null,
+     "rate": 60,
+     "stub": {
+      "name": "Aurelia Holdings Ltd.",
+      "owners": 3,
+      "status": "active"
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "2.1.0",
+     "daysAgo": 58,
+     "by": "Priya Shah",
+     "note": "Jurisdiction filter",
+     "changes": [
+      {
+       "operation": "corporate_registry",
+       "kind": "schema_changed",
+       "detail": "Adds optional jurisdiction",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_kyb",
+      "wf_mortgage"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_kyb",
+     "operations": [
+      "screen_watchlists",
+      "corporate_registry"
+     ],
+     "expiresIn": 13,
+     "decidedBy": "Priya Shah",
+     "justification": "Verify business owners before account opening",
+     "workflowName": "Business account onboarding",
+     "workflowTeamId": "team_onboarding"
+    },
+    {
+     "workflowId": "wf_mortgage",
+     "operations": [
+      "corporate_registry"
+     ],
+     "expiresIn": 160,
+     "decidedBy": "Priya Shah",
+     "justification": "Self-employed applicants’ businesses",
+     "workflowName": "Mortgage pre-approval",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_work_number",
+   "name": "work-number",
+   "displayName": "The Work Number",
+   "system": "The Work Number",
+   "description": "Employment and income verification from Equifax Workforce Solutions.",
+   "type": "http",
+   "ownerTeam": "Lending Ops",
+   "ownerContacts": [
+    "Maya Okafor"
+   ],
+   "endpoint": "https://api.theworknumber.com/v2",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 15000,
+   "egressHosts": [
+    "api.theworknumber.com"
+   ],
+   "dataClassification": "confidential",
+   "rotate": {
+    "production": 30
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Consent reference required on every call"
+   ],
+   "operations": [
+    {
+     "name": "verify_employment",
+     "method": "POST",
+     "path": "/verifications",
+     "input": [
+      {
+       "name": "applicantId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "employer",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "consentRef",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": null,
+     "masked": [
+      "salary.base"
+     ],
+     "rate": 30,
+     "stub": {
+      "employed": true,
+      "since": "2019-03-01",
+      "salary": {
+       "base": "[redacted]"
+      }
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "2.0.1",
+     "daysAgo": 90,
+     "by": "Maya Okafor",
+     "note": "Timeout 15 s",
+     "changes": [
+      {
+       "operation": "verify_employment",
+       "kind": "settings",
+       "detail": "Timeout 10 s → 15 s",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_mortgage"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_mortgage",
+     "operations": [
+      "verify_employment"
+     ],
+     "expiresIn": 200,
+     "decidedBy": "Maya Okafor",
+     "justification": "Income verification for pre-approval",
+     "workflowName": "Mortgage pre-approval",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_equifax",
+   "name": "equifax-credit",
+   "displayName": "Equifax credit",
+   "system": "Equifax",
+   "description": "Bureau reports and scores for consenting applicants.",
+   "type": "http",
+   "ownerTeam": "Lending Ops",
+   "ownerContacts": [
+    "Maya Okafor"
+   ],
+   "endpoint": "https://api.equifax.ca/credit/v1",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 15000,
+   "egressHosts": [
+    "api.equifax.ca"
+   ],
+   "dataClassification": "restricted",
+   "rotate": {
+    "production": 61
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Soft pulls only; hard pulls stay with the underwriter"
+   ],
+   "operations": [
+    {
+     "name": "run_credit_check",
+     "method": "POST",
+     "path": "/reports",
+     "input": [
+      {
+       "name": "applicantId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "consentRef",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "binding": null,
+     "masked": [
+      "report.sin"
+     ],
+     "rate": 30,
+     "stub": {
+      "score": 742,
+      "tradelines": 9,
+      "inquiries90d": 1,
+      "report": {
+       "sin": "[redacted]"
+      }
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.4.0",
+     "daysAgo": 75,
+     "by": "Maya Okafor",
+     "note": "Consent reference",
+     "changes": [
+      {
+       "operation": "run_credit_check",
+       "kind": "schema_changed",
+       "detail": "consentRef required",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_mortgage"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_mortgage",
+     "operations": [
+      "run_credit_check"
+     ],
+     "expiresIn": 200,
+     "decidedBy": "Maya Okafor",
+     "justification": "Credit check at pre-approval",
+     "workflowName": "Mortgage pre-approval",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_loan_origination",
+   "name": "loan-origination",
+   "displayName": "Loan origination",
+   "system": "Loan Origination",
+   "description": "Creates pre-approvals in the origination system.",
+   "type": "openapi",
+   "ownerTeam": "Lending Ops",
+   "ownerContacts": [
+    "Maya Okafor"
+   ],
+   "endpoint": "https://los.northfield.internal/api/v4",
+   "auth": "oauth_client_credentials",
+   "timeoutMs": 8000,
+   "egressHosts": [
+    "los.northfield.internal"
+   ],
+   "dataClassification": "confidential",
+   "rotate": {
+    "production": 140
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Pre-approvals above $1M need an underwriter"
+   ],
+   "operations": [
+    {
+     "name": "issue_preapproval",
+     "method": "POST",
+     "path": "/applications/{applicationId}/preapprovals",
+     "input": [
+      {
+       "name": "applicationId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "number",
+       "required": true,
+       "description": "CAD"
+      },
+      {
+       "name": "rate",
+       "type": "number",
+       "required": true,
+       "description": "%"
+      }
+     ],
+     "binding": null,
+     "rate": 30,
+     "stub": {
+      "preapprovalId": "PA-60231",
+      "amount": 612000,
+      "rate": 5.24,
+      "expires": "2027-01-02"
+     },
+     "requiresApproval": true
+    }
+   ],
+   "versions": [
+    {
+     "version": "4.2.0",
+     "daysAgo": 64,
+     "by": "Maya Okafor",
+     "note": "Rate hold",
+     "changes": [
+      {
+       "operation": "issue_preapproval",
+       "kind": "settings",
+       "detail": "120-day rate hold",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_mortgage"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_mortgage",
+     "operations": [
+      "issue_preapproval"
+     ],
+     "expiresIn": 175,
+     "decidedBy": "Maya Okafor",
+     "justification": "Issue pre-approvals after underwriter sign-off",
+     "workflowName": "Mortgage pre-approval",
+     "workflowTeamId": "team_lending"
+    }
+   ]
+  },
+  {
+   "id": "mod_branch_scheduler",
+   "name": "branch-scheduler",
+   "displayName": "Branch scheduler",
+   "system": "Branch Scheduler",
+   "description": "Branch and advisor appointment slots.",
+   "type": "http",
+   "ownerTeam": "Branch Network",
+   "ownerContacts": [
+    "Tom Haddad"
+   ],
+   "endpoint": "https://scheduler.northfield.internal/api",
+   "auth": "api_key",
+   "authHeader": "Authorization",
+   "timeoutMs": 5000,
+   "egressHosts": [
+    "scheduler.northfield.internal"
+   ],
+   "dataClassification": "internal",
+   "rotate": {
+    "production": 17
+   },
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Bookings are reversible by the customer; no approval needed"
+   ],
+   "operations": [
+    {
+     "name": "book_appointment",
+     "method": "POST",
+     "path": "/branches/{branch}/bookings",
+     "input": [
+      {
+       "name": "branch",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "slot",
+       "type": "string",
+       "required": true,
+       "format": "date-time"
+      },
+      {
+       "name": "topic",
+       "type": "string",
+       "required": false
+      }
+     ],
+     "binding": null,
+     "rate": 60,
+     "requiresApproval": true,
+     "stub": {
+      "bookingId": "BK-22019",
+      "branch": "King & Bay",
+      "slot": "2026-10-06T10:30"
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.1.0",
+     "daysAgo": 120,
+     "by": "Tom Haddad",
+     "note": "Topic field",
+     "changes": [
+      {
+       "operation": "book_appointment",
+       "kind": "schema_changed",
+       "detail": "Adds optional topic",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_branch_chat"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_branch_chat",
+     "operations": [
+      "book_appointment"
+     ],
+     "expiresIn": 300,
+     "decidedBy": "Tom Haddad",
+     "justification": "Book appointments from chat",
+     "workflowName": "Branch chat",
+     "workflowTeamId": "team_retail"
+    }
+   ]
+  },
+  {
+   "id": "mod_knowledge",
+   "name": "knowledge-search",
+   "displayName": "Knowledge search",
+   "system": "Data Hub",
+   "description": "Searches the knowledge bases in Data Hub with citations. Served by the platform.",
+   "type": "mcp",
+   "ownerTeam": "Platform",
+   "ownerContacts": [
+    "James Richardson"
+   ],
+   "endpoint": "https://data-gateway.northfield.internal/knowledge/mcp",
+   "auth": "none",
+   "timeoutMs": 4000,
+   "egressHosts": [],
+   "dataClassification": "internal",
+   "reviewer": "Nadia Petrov",
+   "findings": [
+    "Results filtered by the caller’s knowledge base grants"
+   ],
+   "operations": [
+    {
+     "name": "search_knowledge",
+     "input": [
+      {
+       "name": "query",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "collections",
+       "type": "array",
+       "required": false
+      }
+     ],
+     "binding": null,
+     "rate": 600,
+     "stub": {
+      "results": [
+       {
+        "title": "Wire Fraud Playbook §4.2",
+        "score": 0.82
+       }
+      ]
+     }
+    }
+   ],
+   "versions": [
+    {
+     "version": "1.3.0",
+     "daysAgo": 30,
+     "by": "James Richardson",
+     "note": "Collection filter",
+     "changes": [
+      {
+       "operation": "search_knowledge",
+       "kind": "schema_changed",
+       "detail": "Adds optional collections",
+       "major": false
+      }
+     ],
+     "pinnedBy": [
+      "wf_wire",
+      "wf_mortgage",
+      "wf_dispute",
+      "wf_kyb",
+      "wf_branch_chat"
+     ]
+    }
+   ],
+   "approvals": [
+    {
+     "workflowId": "wf_wire",
+     "operations": [
+      "search_knowledge"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "James Richardson",
+     "justification": "Cite bank knowledge",
+     "workflowName": "Outbound wire review",
+     "workflowTeamId": "team_fraud"
+    },
+    {
+     "workflowId": "wf_mortgage",
+     "operations": [
+      "search_knowledge"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "James Richardson",
+     "justification": "Cite bank knowledge",
+     "workflowName": "Mortgage pre-approval",
+     "workflowTeamId": "team_lending"
+    },
+    {
+     "workflowId": "wf_dispute",
+     "operations": [
+      "search_knowledge"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "James Richardson",
+     "justification": "Cite bank knowledge",
+     "workflowName": "Card dispute resolution",
+     "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_kyb",
+     "operations": [
+      "search_knowledge"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "James Richardson",
+     "justification": "Cite bank knowledge",
+     "workflowName": "Business account onboarding",
+     "workflowTeamId": "team_onboarding"
+    },
+    {
+     "workflowId": "wf_branch_chat",
+     "operations": [
+      "search_knowledge"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "James Richardson",
+     "justification": "Cite bank knowledge",
+     "workflowName": "Branch chat",
+     "workflowTeamId": "team_retail"
+    }
+   ]
+  }
+ ],
+ "tools": [
+  {
+   "name": "get_wire_history",
+   "description": "Wire attempts and MFA results for an account",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "place_wire_hold",
+   "description": "Place or release a hold on an outbound wire",
+   "access": "write",
+   "enabled": true,
+   "approvers": 2
+  },
+  {
+   "name": "run_credit_check",
+   "description": "Pull a bureau report and score",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "verify_employment",
+   "description": "Employment and income verification",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "issue_preapproval",
+   "description": "Create a pre-approval in the loan system",
+   "access": "write",
+   "enabled": true
+  },
+  {
+   "name": "screen_watchlists",
+   "description": "PEP, sanctions and adverse media screening",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "corporate_registry",
+   "description": "Look up a business and its owners",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "issue_provisional_credit",
+   "description": "Post a provisional credit to a card account",
+   "access": "write",
+   "enabled": true,
+   "approvers": 2
+  },
+  {
+   "name": "search_knowledge",
+   "description": "Semantic search with citations",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "book_appointment",
+   "description": "Book a branch or advisor appointment",
+   "access": "write",
+   "enabled": true
+  },
+  {
+   "name": "get_transactions",
+   "description": "Card transactions for a date range",
+   "access": "read",
+   "enabled": true
+  },
+  {
+   "name": "transfer_funds",
+   "description": "Move funds between a customer’s own accounts",
+   "access": "write",
+   "enabled": false,
+   "approvers": 2
+  }
+ ],
+ "moduleConnection": {
+  "mod_core_banking": "int_core_banking",
+  "mod_card_platform": "int_card_platform",
+  "mod_m365_mail": "int_m365_mail",
+  "mod_salesforce": "int_salesforce",
+  "mod_case_mgmt": "int_case_mgmt",
+  "mod_sharepoint": "int_sharepoint",
+  "mod_payments_hub": "int_payments_hub",
+  "mod_compliance_mcp": "int_compliance_mcp",
+  "mod_work_number": "int_work_number",
+  "mod_equifax": "int_equifax",
+  "mod_loan_origination": "int_loan_origination",
+  "mod_branch_scheduler": "int_branch_scheduler"
+ },
+ "connections": [
+  {
+   "id": "int_sharepoint",
+   "name": "SharePoint · policy sites",
+   "kind": "sharepoint",
+   "base": "healthy",
+   "expiresIn": 210,
+   "authMethod": "service_principal",
+   "catalogId": "cat_sharepoint",
+   "inModules": true
+  },
+  {
+   "id": "int_confluence",
+   "name": "Confluence · northfield.atlassian.net",
+   "kind": "confluence",
+   "base": "revoked",
+   "expiresIn": 35,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_confluence",
+   "inModules": false
+  },
+  {
+   "id": "int_github",
+   "name": "GitHub app · northfield-bank",
+   "kind": "github",
+   "base": "healthy",
+   "expiresIn": 300,
+   "authMethod": "service_principal",
+   "catalogId": "cat_github",
+   "inModules": false
+  },
+  {
+   "id": "int_notion",
+   "name": "Notion · Northfield Product",
+   "kind": "notion",
+   "base": "healthy",
+   "expiresIn": 18,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_notion",
+   "inModules": false
+  },
+  {
+   "id": "int_zendesk",
+   "name": "Zendesk · help centre",
+   "kind": "zendesk",
+   "base": "healthy",
+   "expiresIn": 120,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_zendesk",
+   "inModules": false
+  },
+  {
+   "id": "int_m365_mail",
+   "name": "Microsoft 365 · outbound mail app",
+   "kind": "m365",
+   "base": "healthy",
+   "expiresIn": 245,
+   "authMethod": "service_principal",
+   "catalogId": "cat_m365",
+   "inModules": true
+  },
+  {
+   "id": "int_m365_cards",
+   "name": "Microsoft 365 · cardservices@",
+   "kind": "m365",
+   "base": "healthy",
+   "expiresIn": 64,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_m365",
+   "inModules": false
+  },
+  {
+   "id": "int_m365_lending",
+   "name": "Microsoft 365 · lendingservicing@",
+   "kind": "m365",
+   "base": "needs_reconnect",
+   "expiresIn": -1,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_m365",
+   "inModules": false
+  },
+  {
+   "id": "int_core_banking",
+   "name": "Core banking",
+   "kind": "core_banking",
+   "base": "healthy",
+   "expiresIn": 135,
+   "authMethod": "service_principal",
+   "catalogId": "cat_core_banking",
+   "inModules": true
+  },
+  {
+   "id": "int_card_platform",
+   "name": "Card platform",
+   "kind": "internal_api",
+   "base": "healthy",
+   "expiresIn": 160,
+   "authMethod": "mtls",
+   "catalogId": "cat_card_platform",
+   "inModules": true
+  },
+  {
+   "id": "int_salesforce",
+   "name": "Salesforce",
+   "kind": "salesforce",
+   "base": "healthy",
+   "expiresIn": 12,
+   "authMethod": "oauth_consent",
+   "catalogId": "cat_salesforce",
+   "inModules": true
+  },
+  {
+   "id": "int_case_mgmt",
+   "name": "Case management system",
+   "kind": "case_management",
+   "base": "healthy",
+   "expiresIn": 330,
+   "authMethod": "mtls",
+   "catalogId": "cat_case_mgmt",
+   "inModules": true
+  },
+  {
+   "id": "int_payments_hub",
+   "name": "Payments hub",
+   "kind": "payments_hub",
+   "base": "healthy",
+   "expiresIn": 9,
+   "authMethod": "api_key",
+   "catalogId": "cat_payments_hub",
+   "inModules": true
+  },
+  {
+   "id": "int_compliance_mcp",
+   "name": "Compliance MCP",
+   "kind": "internal_mcp",
+   "base": "healthy",
+   "expiresIn": 200,
+   "authMethod": "mtls",
+   "catalogId": "cat_compliance_mcp",
+   "inModules": true
+  },
+  {
+   "id": "int_work_number",
+   "name": "The Work Number",
+   "kind": "credit_bureau",
+   "base": "error",
+   "expiresIn": 95,
+   "authMethod": "service_principal",
+   "catalogId": "cat_work_number",
+   "inModules": true
+  },
+  {
+   "id": "int_equifax",
+   "name": "Equifax",
+   "kind": "credit_bureau",
+   "base": "healthy",
+   "expiresIn": 75,
+   "authMethod": "service_principal",
+   "catalogId": "cat_equifax",
+   "inModules": true
+  },
+  {
+   "id": "int_loan_origination",
+   "name": "Loan origination",
+   "kind": "core_banking",
+   "base": "healthy",
+   "expiresIn": 140,
+   "authMethod": "service_principal",
+   "catalogId": "cat_loan_origination",
+   "inModules": true
+  },
+  {
+   "id": "int_aws_storage",
+   "name": "Amazon S3 · ops files",
+   "kind": "aws_s3",
+   "base": "healthy",
+   "expiresIn": 330,
+   "authMethod": "service_principal",
+   "catalogId": "cat_aws_s3",
+   "inModules": false
+  },
+  {
+   "id": "int_azure_storage",
+   "name": "Azure Blob · dev files",
+   "kind": "azure_blob",
+   "base": "healthy",
+   "expiresIn": 300,
+   "authMethod": "service_principal",
+   "catalogId": "cat_azure_blob",
+   "inModules": false
+  },
+  {
+   "id": "int_branch_scheduler",
+   "name": "Branch scheduler",
+   "kind": "internal_api",
+   "base": "healthy",
+   "expiresIn": 280,
+   "authMethod": "api_key",
+   "catalogId": "cat_branch_scheduler",
+   "inModules": true
+  }
+ ],
+ "teams": [
+  {
+   "id": "team_platform",
+   "name": "Platform",
+   "ownerGroups": [],
+   "scope": "all"
+  },
+  {
+   "id": "team_lending",
+   "name": "Lending Ops",
+   "ownerGroups": [
+    "Lending Ops"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_cards",
+   "name": "Card Services",
+   "ownerGroups": [
+    "Card Services"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_fraud",
+   "name": "Fraud Strategy",
+   "ownerGroups": [
+    "Fraud Strategy",
+    "Fraud Operations",
+    "Financial Crime Ops"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_onboarding",
+   "name": "Onboarding",
+   "ownerGroups": [
+    "Onboarding"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_retail",
+   "name": "Retail Banking",
+   "ownerGroups": [
+    "Retail Banking",
+    "Retail Product",
+    "Branch Network",
+    "Customer Care"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_wealth",
+   "name": "Wealth",
+   "ownerGroups": [
+    "Wealth"
+   ],
+   "scope": "owned"
+  },
+  {
+   "id": "team_ops",
+   "name": "Operations",
+   "ownerGroups": [
+    "Operations"
+   ],
+   "scope": "all"
+  },
+  {
+   "id": "team_security",
+   "name": "Security",
+   "ownerGroups": [
+    "Security"
+   ],
+   "scope": "all"
+  }
+ ],
+ "discovery": {
+  "cat_servicenow": {
+   "version": "1.0.0",
+   "operations": [
+    {
+     "name": "get_incident",
+     "description": "Read an incident",
+     "access": "read",
+     "group": "incidents",
+     "input": [
+      {
+       "name": "number",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "list_incidents",
+     "description": "Incidents for a caller",
+     "access": "read",
+     "group": "incidents",
+     "input": [
+      {
+       "name": "callerId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string",
+       "required": false
+      }
+     ]
+    },
+    {
+     "name": "create_incident",
+     "description": "Open an incident",
+     "access": "write",
+     "group": "incidents",
+     "input": [
+      {
+       "name": "shortDescription",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "callerId",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "add_work_note",
+     "description": "Add a work note to an incident",
+     "access": "write",
+     "group": "incidents",
+     "input": [
+      {
+       "name": "number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "get_request",
+     "description": "Read a catalog request",
+     "access": "read",
+     "group": "requests",
+     "input": [
+      {
+       "name": "number",
+       "type": "string",
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  "cat_docusign": {
+   "version": "2.1.0",
+   "operations": [
+    {
+     "name": "get_envelope_status",
+     "description": "Status of an envelope",
+     "access": "read",
+     "group": "envelopes",
+     "input": [
+      {
+       "name": "envelopeId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "GET",
+     "path": "/envelopes/{envelopeId}"
+    },
+    {
+     "name": "list_envelopes",
+     "description": "Envelopes for a customer",
+     "access": "read",
+     "group": "envelopes",
+     "input": [
+      {
+       "name": "customerEmail",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "GET",
+     "path": "/envelopes"
+    },
+    {
+     "name": "send_envelope",
+     "description": "Send a template for signature",
+     "access": "write",
+     "group": "envelopes",
+     "input": [
+      {
+       "name": "templateId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "signerEmail",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "POST",
+     "path": "/envelopes"
+    },
+    {
+     "name": "void_envelope",
+     "description": "Void a sent envelope",
+     "access": "write",
+     "group": "envelopes",
+     "input": [
+      {
+       "name": "envelopeId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "PUT",
+     "path": "/envelopes/{envelopeId}"
+    }
+   ]
+  },
+  "cat_moodys": {
+   "version": "3.0.0",
+   "operations": [
+    {
+     "name": "verify_entity",
+     "description": "Match a business against registries",
+     "access": "read",
+     "group": "entities",
+     "input": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "country",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "POST",
+     "path": "/entities/verify"
+    },
+    {
+     "name": "adverse_media",
+     "description": "Adverse media for a person or business",
+     "access": "read",
+     "group": "screening",
+     "input": [
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "POST",
+     "path": "/screening/media"
+    },
+    {
+     "name": "ownership_tree",
+     "description": "Beneficial owners above a threshold",
+     "access": "read",
+     "group": "entities",
+     "input": [
+      {
+       "name": "entityId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "thresholdPct",
+       "type": "number",
+       "required": false
+      }
+     ],
+     "method": "GET",
+     "path": "/entities/{entityId}/owners"
+    }
+   ]
+  },
+  "mcp": {
+   "version": "1.0.0",
+   "operations": [
+    {
+     "name": "list_records",
+     "description": "List records",
+     "access": "read",
+     "group": "records",
+     "input": [
+      {
+       "name": "query",
+       "type": "string",
+       "required": false
+      }
+     ]
+    },
+    {
+     "name": "get_record",
+     "description": "Read one record",
+     "access": "read",
+     "group": "records",
+     "input": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "create_record",
+     "description": "Create a record",
+     "access": "write",
+     "group": "records",
+     "input": [
+      {
+       "name": "fields",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "update_record",
+     "description": "Update a record",
+     "access": "write",
+     "group": "records",
+     "input": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "fields",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "name": "delete_record",
+     "description": "Delete a record",
+     "access": "write",
+     "group": "records",
+     "input": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      }
+     ]
+    }
+   ],
+   "warnings": [
+    "delete_record removes data. It is left unselected; expose it only if a workflow needs it."
+   ]
+  },
+  "openapi": {
+   "version": "1.0.0",
+   "operations": [
+    {
+     "name": "get_account",
+     "description": "Read an account",
+     "access": "read",
+     "group": "accounts",
+     "input": [
+      {
+       "name": "accountId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "GET",
+     "path": "/accounts/{accountId}"
+    },
+    {
+     "name": "list_accounts",
+     "description": "Accounts for a customer",
+     "access": "read",
+     "group": "accounts",
+     "input": [
+      {
+       "name": "customerId",
+       "type": "string",
+       "required": true
+      }
+     ],
+     "method": "GET",
+     "path": "/customers/{customerId}/accounts"
+    },
+    {
+     "name": "update_account_alerts",
+     "description": "Change alert preferences",
+     "access": "write",
+     "group": "accounts",
+     "input": [
+      {
+       "name": "accountId",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "alerts",
+       "type": "object",
+       "required": true
+      }
+     ],
+     "method": "PATCH",
+     "path": "/accounts/{accountId}/alerts"
+    },
+    {
+     "name": "create_payment",
+     "description": "Create a payment",
+     "access": "write",
+     "group": "payments",
+     "input": [
+      {
+       "name": "fromAccount",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payee",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "number",
+       "required": true
+      }
+     ],
+     "method": "POST",
+     "path": "/payments",
+     "approvers": 2
+    }
+   ],
+   "warnings": [
+    "create_payment moves money: every call needs a person’s approval and a four-eyes check."
+   ]
+  }
+ },
+ "workflows": [
+  {
+   "id": "wf_wire",
+   "name": "Outbound wire review",
+   "owner": "Fraud Strategy",
+   "teamId": "team_fraud"
+  },
+  {
+   "id": "wf_mortgage",
+   "name": "Mortgage pre-approval",
+   "owner": "Lending Ops",
+   "teamId": "team_lending"
+  },
+  {
+   "id": "wf_dispute",
+   "name": "Card dispute resolution",
+   "owner": "Card Services",
+   "teamId": "team_cards"
+  },
+  {
+   "id": "wf_kyb",
+   "name": "Business account onboarding",
+   "owner": "Onboarding",
+   "teamId": "team_onboarding"
+  },
+  {
+   "id": "wf_branch_chat",
+   "name": "Branch chat",
+   "owner": "Retail Banking",
+   "teamId": "team_retail"
+  },
+  {
+   "id": "wf_card_inbox",
+   "name": "Card services inbox",
+   "owner": "Card Services",
+   "teamId": "team_cards"
+  },
+  {
+   "id": "wf_lending_inbox",
+   "name": "Lending servicing inbox",
+   "owner": "Lending Ops",
+   "teamId": "team_lending"
+  },
+  {
+   "id": "wf_advisor",
+   "name": "Quarterly portfolio review",
+   "owner": "Wealth",
+   "teamId": "team_wealth"
+  }
+ ]
+}

@@ -1,0 +1,178 @@
+[
+  {
+    "id": "restraining_notice",
+    "version": 1,
+    "name": "Restraining notice",
+    "description": "A court's restraining notice on a debtor's accounts.",
+    "fields": [
+      {
+        "key": "debtor",
+        "label": "Debtor",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "caseNo",
+        "label": "Case number",
+        "type": "text"
+      },
+      {
+        "key": "court",
+        "label": "Court",
+        "type": "text"
+      },
+      {
+        "key": "creditor",
+        "label": "Creditor",
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "money"
+      },
+      {
+        "key": "respondBy",
+        "label": "Respond by",
+        "type": "date"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "text"
+      },
+      {
+        "key": "documentFileId",
+        "label": "Notice file",
+        "type": "file"
+      }
+    ]
+  },
+  {
+    "id": "tax_levy",
+    "version": 1,
+    "name": "Tax levy",
+    "description": "A tax authority's levy on a taxpayer's accounts.",
+    "fields": [
+      {
+        "key": "taxpayer",
+        "label": "Taxpayer",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "caseNo",
+        "label": "Case number",
+        "type": "text"
+      },
+      {
+        "key": "authority",
+        "label": "Authority",
+        "type": "text"
+      },
+      {
+        "key": "amountDue",
+        "label": "Amount due",
+        "type": "money"
+      },
+      {
+        "key": "levyDate",
+        "label": "Levy date",
+        "type": "date"
+      },
+      {
+        "key": "respondBy",
+        "label": "Respond by",
+        "type": "date"
+      },
+      {
+        "key": "daysToRespond",
+        "label": "Days to respond",
+        "type": "number"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "text"
+      },
+      {
+        "key": "documentFileId",
+        "label": "Levy file",
+        "type": "file"
+      }
+    ]
+  },
+  {
+    "id": "account_hold",
+    "version": 1,
+    "name": "Account hold",
+    "description": "A hold placed on a customer's account.",
+    "fields": [
+      {
+        "key": "account",
+        "label": "Account",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "requested",
+        "label": "Requested",
+        "type": "money"
+      },
+      {
+        "key": "held",
+        "label": "Held",
+        "type": "money"
+      },
+      {
+        "key": "notHeld",
+        "label": "Not held",
+        "type": "money"
+      },
+      {
+        "key": "reason",
+        "label": "Reason",
+        "type": "text"
+      },
+      {
+        "key": "holdId",
+        "label": "Hold id",
+        "type": "text"
+      },
+      {
+        "key": "approvedBy",
+        "label": "Approved by",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "id": "complaint",
+    "version": 1,
+    "name": "Complaint",
+    "description": "A customer's complaint and how it was triaged.",
+    "fields": [
+      {
+        "key": "complaint",
+        "label": "Complaint",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "category",
+        "label": "Category",
+        "type": "text"
+      },
+      {
+        "key": "urgency",
+        "label": "Urgency",
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "money"
+      }
+    ]
+  }
+]

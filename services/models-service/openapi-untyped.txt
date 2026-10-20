@@ -1,0 +1,1 @@
+# 0 untyped operations. This number may only go down: type a route and remove its line; check_openapi.py fails if it grows.

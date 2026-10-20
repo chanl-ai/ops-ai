@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ops-settings
+data:
+  OPS_ENVIRONMENT: production
+  OPS_AUTH_MODE: platform
+  OPS_BIND_HOST: 0.0.0.0
+  OPS_PLATFORM_URL: http://platform:8710
+  OPS_PLATFORM_INTERNAL_URL: http://platform:8711
+  OPS_AGENTS_URL: http://agents:8700
+  OPS_GATEWAY_URL: http://tools:8720
+  OPS_TOOLS_URL: http://tools:8720
+  OPS_MODELS_URL: http://models:8730
+  OPS_KB_URL: http://kb:8740
+  OPS_FILES_URL: http://files:8750
+  OPS_DOCUMENTS_URL: http://documents:8760
+  OPS_OPA_URL: http://opa:8181
+  OPS_FILES_DIR: /data/files
+  OPS_KB_FILES_DIR: /data/kb-files
+  OPS_FILES_SCANNING: eicar
+  OPS_MAILBOX_SOURCE: none
+  OPS_MAIL_PROVIDER: none
+  OPS_SMTP_PORT: '587'
+  OPS_BOOTSTRAP_TENANT_ID: local

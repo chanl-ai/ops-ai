@@ -1,0 +1,527 @@
+[
+  {
+    "widgetId": "hold-review",
+    "version": 1,
+    "name": "Hold review",
+    "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+    "tree": {
+      "type": "card",
+      "title": {
+        "$bind": "/payee"
+      },
+      "children": [
+        {
+          "type": "row",
+          "gap": "md",
+          "children": [
+            {
+              "type": "metric",
+              "label": "Held",
+              "value": {
+                "$bind": "/amount"
+              },
+              "unit": {
+                "$bind": "/currency"
+              }
+            },
+            {
+              "type": "badge",
+              "text": {
+                "$bind": "/status"
+              },
+              "tones": {
+                "held": "warning",
+                "released": "success"
+              }
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Reason",
+              "value": {
+                "$bind": "/reason"
+              }
+            },
+            {
+              "label": "Account",
+              "value": {
+                "$bind": "/account"
+              }
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "rows": {
+            "$bind": "/recent"
+          },
+          "columns": [
+            {
+              "key": "date",
+              "label": "Date",
+              "format": "date"
+            },
+            {
+              "key": "description",
+              "label": "Description"
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "format": "money"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "gap": "sm",
+          "children": [
+            {
+              "type": "button",
+              "label": "Show wire history",
+              "requires": "get_wire_history",
+              "reply": {
+                "text": "Show the recent wire history for this account.",
+                "values": {
+                  "account": {
+                    "$bind": "/account"
+                  }
+                }
+              }
+            },
+            {
+              "type": "button",
+              "label": "Keep it held",
+              "reply": {
+                "text": "Keep this hold in place.",
+                "values": {
+                  "holdId": {
+                    "$bind": "/holdId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "dataSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "holdId",
+        "payee",
+        "amount",
+        "currency",
+        "status",
+        "reason",
+        "account"
+      ],
+      "properties": {
+        "holdId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "payee": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "amount": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "held",
+            "released"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "account": {
+          "type": "string",
+          "maxLength": 34
+        },
+        "recent": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "amount": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sample": {
+      "holdId": "hold_204",
+      "payee": "Acme Supplies Ltd",
+      "amount": 12500,
+      "currency": "USD",
+      "status": "held",
+      "reason": "New payee over the daily limit",
+      "account": "CHQ-2219",
+      "recent": [
+        {
+          "date": "2026-10-15",
+          "description": "Card payment, Fresh Market",
+          "amount": -42.1
+        },
+        {
+          "date": "2026-10-14",
+          "description": "Payroll",
+          "amount": 3150
+        }
+      ]
+    },
+    "status": "published",
+    "updatedBy": "Platform team",
+    "updatedAt": "2026-10-15T09:00:00.000Z"
+  },
+  {
+    "widgetId": "account-snapshot",
+    "version": 1,
+    "name": "Account snapshot",
+    "useWhen": "The person asks about one account: its balance, its status or its recent transactions.",
+    "tree": {
+      "type": "card",
+      "title": {
+        "$bind": "/name"
+      },
+      "children": [
+        {
+          "type": "row",
+          "gap": "lg",
+          "children": [
+            {
+              "type": "metric",
+              "label": "Balance",
+              "value": {
+                "$bind": "/balance"
+              },
+              "unit": {
+                "$bind": "/currency"
+              }
+            },
+            {
+              "type": "metric",
+              "label": "Available",
+              "value": {
+                "$bind": "/available"
+              },
+              "unit": {
+                "$bind": "/currency"
+              }
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Account",
+              "value": {
+                "$bind": "/accountId"
+              }
+            },
+            {
+              "label": "Type",
+              "value": {
+                "$bind": "/type"
+              }
+            },
+            {
+              "label": "Status",
+              "value": {
+                "$bind": "/status"
+              }
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "caption",
+          "text": "Recent transactions"
+        },
+        {
+          "type": "table",
+          "rows": {
+            "$bind": "/transactions"
+          },
+          "columns": [
+            {
+              "key": "date",
+              "label": "Date",
+              "format": "date"
+            },
+            {
+              "key": "description",
+              "label": "Description"
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "format": "money"
+            }
+          ]
+        }
+      ]
+    },
+    "dataSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accountId",
+        "name",
+        "balance",
+        "currency"
+      ],
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "maxLength": 34
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "balance": {
+          "type": "number"
+        },
+        "available": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "transactions": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "amount": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sample": {
+      "accountId": "CHQ-2219",
+      "name": "Maria Lopez, everyday checking",
+      "type": "Checking",
+      "status": "Open",
+      "balance": 4820.55,
+      "available": 4320.55,
+      "currency": "USD",
+      "transactions": [
+        {
+          "date": "2026-10-16",
+          "description": "Transfer to savings",
+          "amount": -500
+        },
+        {
+          "date": "2026-10-15",
+          "description": "Card payment, Fresh Market",
+          "amount": -42.1
+        },
+        {
+          "date": "2026-10-14",
+          "description": "Payroll",
+          "amount": 3150
+        }
+      ]
+    },
+    "status": "published",
+    "updatedBy": "Platform team",
+    "updatedAt": "2026-10-15T09:00:00.000Z"
+  },
+  {
+    "widgetId": "case-summary",
+    "version": 1,
+    "name": "Case summary",
+    "useWhen": "The person asks where a case stands: its status, owner, deadline and next steps.",
+    "tree": {
+      "type": "card",
+      "title": {
+        "$bind": "/title"
+      },
+      "children": [
+        {
+          "type": "row",
+          "gap": "sm",
+          "children": [
+            {
+              "type": "badge",
+              "text": {
+                "$bind": "/status"
+              },
+              "tones": {
+                "open": "info",
+                "waiting": "warning",
+                "overdue": "danger",
+                "closed": "success"
+              }
+            },
+            {
+              "type": "caption",
+              "text": {
+                "$bind": "/caseId"
+              }
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Owner",
+              "value": {
+                "$bind": "/owner"
+              }
+            },
+            {
+              "label": "Priority",
+              "value": {
+                "$bind": "/priority"
+              }
+            },
+            {
+              "label": "Due",
+              "value": {
+                "$bind": "/due"
+              }
+            }
+          ]
+        },
+        {
+          "type": "caption",
+          "text": "Next steps"
+        },
+        {
+          "type": "list",
+          "items": {
+            "$bind": "/nextSteps"
+          }
+        },
+        {
+          "type": "button",
+          "label": "Show the case history",
+          "reply": {
+            "text": "Show the history of this case.",
+            "values": {
+              "caseId": {
+                "$bind": "/caseId"
+              }
+            }
+          },
+          "requires": "get_dispute"
+        }
+      ]
+    },
+    "dataSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId",
+        "title",
+        "status"
+      ],
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "waiting",
+            "overdue",
+            "closed"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "priority": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "due": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "nextSteps": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "sample": {
+      "caseId": "CASE-1042",
+      "title": "Disputed card charge, Fresh Market",
+      "status": "waiting",
+      "owner": "Dispute desk",
+      "priority": "High",
+      "due": "2026-10-20",
+      "nextSteps": [
+        "Ask the merchant for the receipt",
+        "Issue a provisional credit if no answer by Oct 19"
+      ]
+    },
+    "status": "published",
+    "updatedBy": "Platform team",
+    "updatedAt": "2026-10-15T09:00:00.000Z"
+  }
+]

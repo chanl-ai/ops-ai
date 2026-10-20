@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ops AI Install Guide</title>
+<meta name="description" content="How a client team installs Ops AI by Elemente on its own Linux machines with Docker and PostgreSQL, and what its DBA reviews.">
+<style>
+/* Layout: a document column with a contents rail beside it on wide screens; the rail folds above the text on a phone.
+   Tokens follow Ops AI's design system (.codeloop/design-system/tokens.css); this page is the same guide as
+   docs/deploy/install-guide.md, which ships in the release package as INSTALL.md. */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --sunk: #efefec;
+  --text: #1d1d1b;
+  --muted: #6b6b64;
+  --border: #dcdcd6;
+  --accent: #c2512f;
+  --accent-soft: #f6e3dc;
+  --ok: #2f7d4f;
+  --ok-soft: #e0f0e6;
+  --warn: #a86a00;
+  --warn-soft: #f8ecd2;
+  --code-bg: #24241f;
+  --code-fg: #ecece6;
+  --radius: 0.625rem;
+  --radius-sm: 0.375rem;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --step-0: 1rem;
+  --step-1: 1.1875rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --surface: #1f1f1d; --sunk: #2a2a27; --text: #ecece6; --muted: #a3a39a; --border: #36362f;
+    --accent: #e0805f; --accent-soft: #3d241b; --ok: #6cc08d; --ok-soft: #1c3326; --warn: #e0b04f; --warn-soft: #3a2f16;
+    --code-bg: #0f0f0e; --code-fg: #ecece6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --surface: #1f1f1d; --sunk: #2a2a27; --text: #ecece6; --muted: #a3a39a; --border: #36362f;
+  --accent: #e0805f; --accent-soft: #3d241b; --ok: #6cc08d; --ok-soft: #1c3326; --warn: #e0b04f; --warn-soft: #3a2f16;
+  --code-bg: #0f0f0e; --code-fg: #ecece6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--step-0)/1.6 var(--font);
+  padding-inline: 1rem;
+  padding-block: 0 4rem;
+}
+a { color: var(--accent); text-underline-offset: 0.15em; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.masthead {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-block: 2.5rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.75rem;
+}
+.brand { font-size: 0.8125rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.brand b { color: var(--accent); font-weight: 700; }
+h1 { font-size: var(--step-3); line-height: 1.15; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.lede { font-size: var(--step-1); color: var(--muted); max-width: 44rem; margin: 0; }
+.status-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.pill {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8125rem; font-weight: 600; padding: 0.25rem 0.65rem; border-radius: 999px;
+  background: var(--sunk); color: var(--text);
+}
+.pill::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.page {
+  max-width: 72rem;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  padding-top: 2rem;
+}
+@media (min-width: 60rem) {
+  .page { grid-template-columns: 14rem minmax(0, 1fr); gap: 3rem; }
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1.5rem); align-self: start; }
+}
+.toc { font-size: 0.875rem; }
+.toc h2 { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+.toc a { color: var(--text); text-decoration: none; display: block; padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); }
+.toc a:hover { background: var(--sunk); }
+main { min-width: 0; max-width: 46rem; }
+section { padding-block: 0.5rem 1.5rem; scroll-margin-top: 1rem; }
+h2 { font-size: var(--step-2); line-height: 1.25; margin: 1.5rem 0 0.75rem; text-wrap: balance; }
+h3 { font-size: var(--step-1); line-height: 1.3; margin: 1.5rem 0 0.5rem; text-wrap: balance; }
+p { margin: 0 0 1rem; }
+ol.steps { padding-left: 1.4rem; display: grid; gap: 1rem; margin: 0 0 1rem; }
+ol.steps > li { padding-left: 0.25rem; min-width: 0; }
+ol.steps > li::marker { font-weight: 700; color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.875em; background: var(--sunk); padding: 0.1em 0.35em; border-radius: 0.25rem; overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; margin: 0 0 1.25rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--sunk); font-weight: 600; }
+td:first-child { font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; text-align: center; color: var(--accent); width: 3rem; }
+td code { overflow-wrap: anywhere; }
+.cmd { position: relative; margin: 0.5rem 0 1rem; min-width: 0; max-width: 100%; }
+pre {
+  margin: 0; background: var(--code-bg); color: var(--code-fg);
+  font: 0.8125rem/1.6 var(--mono); padding: 0.9rem 1rem; padding-right: 4.5rem;
+  border-radius: var(--radius); overflow-x: auto; white-space: pre;
+}
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; overflow-wrap: normal; }
+.copy {
+  position: absolute; top: 0.5rem; right: 0.5rem;
+  font: 600 0.75rem var(--font); color: var(--code-fg); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--code-fg) 35%, transparent); border-radius: var(--radius-sm);
+  padding: 0.25rem 0.55rem; cursor: pointer;
+}
+.copy:hover { border-color: var(--code-fg); }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 0.75rem 1rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin: 0 0 1rem; }
+.note.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+.note p:last-child { margin: 0; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 40rem) { .split { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 1rem 1.1rem; min-width: 0; }
+.panel h3 { margin-top: 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.panel ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.4rem; }
+footer { max-width: 72rem; margin: 3rem auto 0; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.875rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="brand"><b>Ops AI</b> by Elemente · Install guide</div>
+  <h1>Install Ops AI on your own servers</h1>
+  <p class="lede">Your team wants to run Ops AI inside your own network, on ordinary Linux machines with Docker, against a database your DBA controls, and without our source code. This guide takes you from the downloaded package to a working sign-in, and says which parts your DBA reviews and applies.</p>
+  <div class="status-strip" aria-label="What runs today">
+    <span class="pill ok">Runs today on PostgreSQL 16+</span>
+    <span class="pill ok">Linux x86-64 with Docker</span>
+    <span class="pill warn">Azure SQL: scripts for review only</span>
+  </div>
+</header>
+
+<div class="page">
+  <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#what">What Ops AI is</a></li>
+      <li><a href="#today">What runs today</a></li>
+      <li><a href="#package">What is in the package</a></li>
+      <li><a href="#machines">Machines</a></li>
+      <li><a href="#database">Database</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#check">Check it works</a></li>
+      <li><a href="#upgrade">Upgrade and roll back</a></li>
+      <li><a href="#backup">Back up and restore</a></li>
+      <li><a href="#security">Security notes</a></li>
+      <li><a href="#azure-sql">Azure SQL</a></li>
+      <li><a href="#support">Support</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="what">
+      <h2>What Ops AI is</h2>
+      <p>Ops AI is an operational AI platform: AI agents and workflows that do back-office work, with a person approving every action that changes something outside it. People use one web console to see what the agents did, decide what waits on them, and configure agents, workflows, tools, knowledge and documents. Every write to another system goes through a gateway that checks an approval, and every record is kept per tenant and team.</p>
+    </section>
+
+    <section id="today">
+      <h2>What runs today</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Part</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>Ten container images for Linux on x86-64 (amd64), in one file you load with <code>docker load</code></td><td>Runs today</td></tr>
+          <tr><td>Docker Compose files: every service, the workflow worker, the console, a policy engine and one web entry point</td><td>Runs today</td></tr>
+          <tr><td>PostgreSQL 16 or newer, including Azure Database for PostgreSQL Flexible Server</td><td>Runs today. Your DBA applies the schema from the scripts in <code>db/postgres/</code></td></tr>
+          <tr><td>Azure SQL Database and SQL Server</td><td>Not yet runnable. The scripts in <code>db/azure-sql/</code> are for your DBA to review now (<a href="#azure-sql">Azure SQL</a>)</td></tr>
+          <tr><td>A model</td><td>Any OpenAI-compatible endpoint you choose. The package also holds a test model that answers from fixed rules and calls no provider</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="package">
+      <h2>What is in the package</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td><code>ops-ai-&lt;version&gt;.tar.gz</code></td><td>This package: <code>INSTALL.md</code>, <code>compose/</code>, <code>ops-ai.env.example</code>, <code>db/</code>, <code>images.txt</code>, <code>release.txt</code>, <code>SHA256SUMS</code></td></tr>
+          <tr><td><code>ops-ai-&lt;version&gt;-images.tar.gz</code></td><td>The ten images. <code>images.txt</code> lists each image's name and id</td></tr>
+          <tr><td><code>ops-ai-&lt;version&gt;.SHA256SUMS</code></td><td>Checksums of the two files above</td></tr>
+          <tr><td><code>compose/app.yaml</code></td><td>Every service; only the entry point publishes a port</td></tr>
+          <tr><td><code>compose/dba.yaml</code></td><td>Use it when your DBA applied the schema: no container then holds a login that can change the schema</td></tr>
+          <tr><td><code>compose/try.yaml</code></td><td>For trying it out only: the test model (profile <code>fake-model</code>) and a built-in PostgreSQL (profile <code>postgres</code>)</td></tr>
+          <tr><td><code>ops-ai.env.example</code></td><td>Every setting, each with a comment</td></tr>
+          <tr><td><code>db/postgres/</code></td><td>The PostgreSQL scripts your DBA applies</td></tr>
+          <tr><td><code>db/azure-sql/</code></td><td>The Azure SQL scripts, for review only</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="machines">
+      <h2>Machines</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th>What you need</th></tr></thead>
+        <tbody>
+          <tr><td>Virtual machines</td><td>One Linux VM runs everything. Start with 4 vCPUs, 8 GB of memory and 60 GB of disk; in the proof every container together used about 1.8 GB of memory at rest. A second VM with the same package loaded is a standby you start from a backup</td></tr>
+          <tr><td>Operating system</td><td>Any current 64-bit Linux on x86-64 (amd64) that runs Docker, for example Ubuntu 22.04 or 24.04, or RHEL 9</td></tr>
+          <tr><td>Docker</td><td>Docker Engine 24 or newer with the Compose plugin 2.22 or newer (<code>docker compose version</code>)</td></tr>
+          <tr><td>Inbound ports</td><td>One: the entry point, <code>OPS_PUBLIC_PORT</code> (8890 unless you change it), reached only from your TLS terminator or load balancer</td></tr>
+          <tr><td>Outbound access</td><td>Your PostgreSQL server (5432); your model endpoint (usually 443); your mail server if you send mail. Nothing else: the images are loaded from the file, so the VM needs no registry or internet access</td></tr>
+          <tr><td>TLS and DNS</td><td>A DNS name such as <code>ops.example.com</code> on your load balancer or reverse proxy, which ends TLS and forwards to the VM's entry point port. Set <code>OPS_PUBLIC_ORIGIN=https://ops.example.com</code></td></tr>
+          <tr><td>Your workstation for the DBA steps</td><td><code>psql</code> that can reach the database server</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="database">
+      <h2>Database</h2>
+      <p>Ops AI stores everything in one PostgreSQL database. Your DBA applies the schema in your own change window, and the services connect with logins that can read and write rows but cannot change the schema.</p>
+
+      <h3>Azure Database for PostgreSQL</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Deployment</td><td>Flexible Server</td></tr>
+          <tr><td>PostgreSQL version</td><td>16 or newer. On 15 and older the server admin cannot create the one role that needs BYPASSRLS, and <code>roles.sql</code> stops there</td></tr>
+          <tr><td>Size</td><td>A starting point: General Purpose, 2 vCores, 8 GB memory, 64 GB storage. Measure and resize</td></tr>
+          <tr><td>Network</td><td>Private access from the Ops AI VM's network; no public endpoint needed</td></tr>
+          <tr><td>TLS</td><td>Required (the Azure default). Every connection string below ends in <code>?ssl=require</code> or <code>sslmode=require</code></td></tr>
+          <tr><td>Extensions</td><td>None</td></tr>
+          <tr><td>Backups</td><td>Azure's automated backups with point-in-time restore, at the retention your policy sets</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>The logins</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Login</th><th>Who uses it</th><th>Rights</th></tr></thead>
+        <tbody>
+          <tr><td>Your server admin</td><td>The DBA, for the steps below</td><td>Creates the roles and the database. Not a superuser on Azure</td></tr>
+          <tr><td><code>ops_migrator</code></td><td>The DBA, to apply and upgrade the schema</td><td>Owns every table, index and policy; cannot create roles or databases</td></tr>
+          <tr><td><code>ops_platform_runtime</code>, <code>ops_agents_runtime</code>, <code>ops_tools_runtime</code>, <code>ops_models_runtime</code>, <code>ops_kb_runtime</code>, <code>ops_files_runtime</code>, <code>ops_documents_runtime</code></td><td>One per service</td><td>Read and write rows in that service's own tables. No DDL: <code>CREATE TABLE</code>, <code>DROP TABLE</code> and <code>ALTER TABLE</code> are refused. Row-level security applies</td></tr>
+          <tr><td><code>ops_runtime_tenant</code>, <code>ops_runtime_system</code>, <code>ops_platform_tenant</code>, <code>ops_platform_lookup</code></td><td>The services switch to these inside a transaction</td><td>No login. <code>ops_runtime_system</code> reads across tenants and is used only by the agents service's background loops</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Tenant isolation</h3>
+      <p>Every table that holds customer data carries a <code>tenant_id</code> column and a row-level security policy that admits only rows whose <code>tenant_id</code> equals the tenant the transaction set. The policies are forced, so they apply to the table owner too. The tenant comes from the signed-in person's token, never from a request body.</p>
+
+      <h3>What the DBA runs, in order</h3>
+      <p>In the folder <code>db/postgres/</code> of the unpacked package. <code>&lt;admin&gt;</code> is your server admin; <code>&lt;host&gt;</code> is your server's name.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Step</th><th>Connect as</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>Server admin</td><td><code>psql -v ON_ERROR_STOP=1 "host=&lt;host&gt; port=5432 user=&lt;admin&gt; dbname=postgres sslmode=require" -f roles.sql</code></td></tr>
+          <tr><td class="num">2</td><td>Server admin</td><td><code>psql -v ON_ERROR_STOP=1 "&lt;same as step 1&gt;" -c "ALTER ROLE &lt;login&gt; PASSWORD '&lt;password&gt;'"</code> once for each of the eight logins in the table above</td></tr>
+          <tr><td class="num">3</td><td>Server admin</td><td><code>psql -v ON_ERROR_STOP=1 "&lt;same as step 1&gt;" -c "GRANT ops_migrator TO &lt;admin&gt;"</code></td></tr>
+          <tr><td class="num">4</td><td>Server admin</td><td><code>psql -v ON_ERROR_STOP=1 "&lt;same as step 1&gt;" -c "CREATE DATABASE ops OWNER ops_migrator"</code></td></tr>
+          <tr><td class="num">5</td><td><code>ops_migrator</code></td><td><code>psql -v ON_ERROR_STOP=1 "host=&lt;host&gt; port=5432 user=ops_migrator dbname=ops sslmode=require" -f bundle.sql</code></td></tr>
+          <tr><td class="num">6</td><td><code>ops_migrator</code></td><td><code>psql -v ON_ERROR_STOP=1 "&lt;same as step 5&gt;" -f grants.sql</code></td></tr>
+        </tbody>
+      </table></div>
+      <p><code>01-agents.sql</code> to <code>07-documents.sql</code> are each service's part of <code>bundle.sql</code>, for review. <code>manifest.json</code> names each part's version; <code>sha256sum -c SHA256SUMS</code> checks the files.</p>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <p>On the VM, as a user that may run Docker, in a folder only your operators can read.</p>
+      <ol class="steps">
+        <li>
+          <p>Check and unpack the files you copied to the VM.</p>
+          <div class="cmd"><pre><code>sha256sum -c ops-ai-&lt;version&gt;.SHA256SUMS
+tar -xzf ops-ai-&lt;version&gt;.tar.gz
+cd ops-ai-&lt;version&gt;
+sha256sum -c SHA256SUMS</code></pre></div>
+        </li>
+        <li>
+          <p>Load the images, then compare <code>docker images</code> with <code>images.txt</code>.</p>
+          <div class="cmd"><pre><code>docker load -i ../ops-ai-&lt;version&gt;-images.tar.gz</code></pre></div>
+        </li>
+        <li>
+          <p>Make the settings file from the template.</p>
+          <div class="cmd"><pre><code>cp ops-ai.env.example ops-ai.env
+chmod 600 ops-ai.env
+docker run --rm --entrypoint python &lt;OPS_IMAGE_PREFIX&gt;/platform:&lt;version&gt; /app/deploy/fly/generate_keys.py</code></pre></div>
+          <p>The last command prints the signing keys. Put each printed line in <code>ops-ai.env</code> in place of the empty line with the same name. Then set these:</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+            <tbody>
+              <tr><td><code>OPS_PUBLIC_ORIGIN</code></td><td>The address people open, for example <code>https://ops.example.com</code></td></tr>
+              <tr><td><code>OPS_PUBLIC_PORT</code></td><td>The entry point's port on the VM</td></tr>
+              <tr><td><code>OPS_DATABASE_URL_PLATFORM</code> and the six other <code>OPS_DATABASE_URL_&lt;SERVICE&gt;</code></td><td><code>postgresql+asyncpg://ops_&lt;service&gt;_runtime:&lt;password&gt;@&lt;host&gt;:5432/ops?ssl=require</code></td></tr>
+              <tr><td><code>OPS_DATABASE_URL</code></td><td>Leave empty</td></tr>
+              <tr><td><code>OPS_BOOTSTRAP_TENANT_NAME</code>, <code>OPS_BOOTSTRAP_ADMIN_EMAIL</code>, <code>OPS_BOOTSTRAP_ADMIN_NAME</code>, <code>OPS_BOOTSTRAP_ADMIN_PASSWORD</code></td><td>Your organisation's name and the first admin; the password has at least 12 characters</td></tr>
+            </tbody>
+          </table></div>
+        </li>
+        <li>
+          <p>Start everything except the agents.</p>
+          <div class="cmd"><pre><code>C="docker compose -p ops-ai -f compose/app.yaml -f compose/dba.yaml --env-file ops-ai.env"
+$C up -d --wait --wait-timeout 600 migrate platform tools models kb files opa</code></pre></div>
+          <p>The first job makes the first tenant, its Security team and the admin. Every service checks the database's schema version and refuses to start when it is older than the service.</p>
+        </li>
+        <li>
+          <p>Connect a model. This binds the name <code>default</code> to your OpenAI-compatible endpoint and prints a key once; run it twice, once per key id.</p>
+          <div class="cmd"><pre><code>$C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
+  --base-url &lt;endpoint&gt;/v1 --alias default --model &lt;model id&gt; --input-price &lt;per million tokens&gt; \
+  --output-price &lt;per million tokens&gt; --budget &lt;spending cap&gt; --key-id purpose:agents</code></pre></div>
+          <p>Put the printed <code>OPS_MODELS_KEY</code> value in <code>OPS_MODELS_KEY_AGENTS</code>, run it again with <code>--key-id purpose:documents</code> and put that value in <code>OPS_MODELS_KEY_DOCUMENTS</code>. When your endpoint needs a key, the Security admin stores it in Settings &gt; Secrets and you add <code>--key-ref &lt;its name&gt;</code>; the proof used the test model, which needs none.</p>
+        </li>
+        <li>
+          <p>Start the rest.</p>
+          <div class="cmd"><pre><code>$C up -d --wait --wait-timeout 600</code></pre></div>
+        </li>
+      </ol>
+      <div class="note ok"><p>To try the package before your database and model are ready, add <code>-f compose/try.yaml --profile fake-model</code> to <code>C</code> and connect the model with <code>--base-url http://fake-model:8746/v1 --model fake-chat --input-price 1 --output-price 1 --budget 5</code>. The test model answers from fixed rules and is not for production.</p></div>
+    </section>
+
+    <section id="check">
+      <h2>Check it works</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>Every container healthy</td><td><code>$C ps</code></td><td>Each service <code>Up</code> and <code>(healthy)</code>; the migrate job exited 0</td></tr>
+          <tr><td>The entry point answers</td><td><code>curl -fsS &lt;OPS_PUBLIC_ORIGIN&gt;/api/platform/v1/health</code></td><td>A JSON body with <code>"success":true</code></td></tr>
+          <tr><td>Sign in</td><td>Open <code>OPS_PUBLIC_ORIGIN</code> and sign in as the first admin</td><td>The console opens</td></tr>
+          <tr><td>Every page</td><td>Open each item in the left menu</td><td>Each page loads with no error message</td></tr>
+        </tbody>
+      </table></div>
+      <p>After the first sign-in, the admin changes the password; then remove <code>OPS_BOOTSTRAP_ADMIN_PASSWORD</code> from <code>ops-ai.env</code>.</p>
+    </section>
+
+    <section id="upgrade">
+      <h2>Upgrade and roll back</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Step</th><th>Who</th><th>What</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>DBA</td><td>Back up the database (<a href="#backup">below</a>)</td></tr>
+          <tr><td class="num">2</td><td>Operator</td><td>Load the new release's images with <code>docker load</code></td></tr>
+          <tr><td class="num">3</td><td>DBA</td><td>Run the new release's <code>db/postgres/upgrade-from-&lt;your version&gt;/upgrade.sql</code> as <code>ops_migrator</code>, then its <code>grants.sql</code>. Each step checks the version it starts from and stops before any change when the database is elsewhere</td></tr>
+          <tr><td class="num">4</td><td>Operator</td><td>Set <code>OPS_IMAGE_TAG</code> to the new version and run <code>$C up -d --wait --wait-timeout 600</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>This release is the first, so it holds no upgrade script; each later release ships one from the versions before it. To roll back, restore the backup from step 1 and set <code>OPS_IMAGE_TAG</code> back. A service of the older release refuses to start on the newer schema, so the two cannot be mixed by mistake.</p>
+    </section>
+
+    <section id="backup">
+      <h2>Back up and restore</h2>
+      <p>On Azure, the automated backups and point-in-time restore cover the database. For a copy you hold yourself, back up as the server admin: the tenant policies apply to the schema's owner, so <code>pg_dump</code> as <code>ops_migrator</code> stops with a row-level security error. Use <code>pg_dump</code> of your server's version or newer; the <code>postgres</code> image carries one.</p>
+      <div class="cmd"><pre><code>docker run --rm -e PGPASSWORD=&lt;admin password&gt; -v "$PWD/backup:/backup" postgres:17 \
+  pg_dump -Fc -f /backup/ops.dump "host=&lt;host&gt; port=5432 user=&lt;admin&gt; dbname=ops sslmode=require"
+docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/out" alpine tar czf /out/files-data.tgz -C /data .
+docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/out" alpine tar czf /out/kb-data.tgz -C /data .</code></pre></div>
+      <div class="note"><p>Keep <code>ops-ai.env</code> with the backup: <code>OPS_SECRETS_KEY</code> unlocks the stored credentials, and without it they are lost.</p></div>
+      <p>To restore into a new database:</p>
+      <div class="cmd"><pre><code>$C stop
+psql -v ON_ERROR_STOP=1 "host=&lt;host&gt; port=5432 user=&lt;admin&gt; dbname=postgres sslmode=require" -c "CREATE DATABASE ops_restored OWNER ops_migrator"
+docker run --rm -e PGPASSWORD=&lt;admin password&gt; -v "$PWD/backup:/backup" postgres:17 \
+  pg_restore --exit-on-error -d "host=&lt;host&gt; port=5432 user=&lt;admin&gt; dbname=ops_restored sslmode=require" /backup/ops.dump
+docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/in" alpine sh -c "rm -rf /data/* &amp;&amp; tar xzf /in/files-data.tgz -C /data"
+docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/in" alpine sh -c "rm -rf /data/* &amp;&amp; tar xzf /in/kb-data.tgz -C /data"</code></pre></div>
+      <p>Point the seven <code>OPS_DATABASE_URL_&lt;SERVICE&gt;</code> settings at <code>ops_restored</code>, then <code>$C up -d --wait --wait-timeout 600</code>.</p>
+    </section>
+
+    <section id="security">
+      <h2>Security notes</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Area</th><th>What holds</th></tr></thead>
+        <tbody>
+          <tr><td>Secrets</td><td>All in <code>ops-ai.env</code> (mode 600), or each as a file under <code>/run/secrets</code> named after the setting in lower case, for Docker secrets. No image holds a secret</td></tr>
+          <tr><td>Keys</td><td>One signing key per service, handed only to that service; <code>OPS_PLATFORM_SIGNING_KEY</code> signs sign-in tokens; <code>OPS_REVIEW_KEY</code> signs approvals; <code>OPS_SECRETS_KEY</code> seals stored credentials. Keep them out of tickets and chat</td></tr>
+          <tr><td>Database</td><td>Each service has its own login with row rights on its own tables only; no running container can change the schema; row-level security separates tenants</td></tr>
+          <tr><td>Network</td><td>Only the entry point publishes a port. The services, the policy engine and platform-service's internal port stay on the Compose project's private network. Put TLS in front of the entry point</td></tr>
+          <tr><td>Outbound calls</td><td>Tool calls leave only through the tools service, under its policy engine; model calls only through the models service</td></tr>
+          <tr><td>Containers</td><td>Every image runs as a non-root user (uid 10001)</td></tr>
+          <tr><td>First admin</td><td>Remove <code>OPS_BOOTSTRAP_ADMIN_PASSWORD</code> once the admin has signed in and changed it</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="azure-sql">
+      <h2>Azure SQL</h2>
+      <div class="note"><p>The scripts are generated from the services' models and checked against reviewed copies, but they have never been applied to a server, and Ops AI does not run on SQL Server yet. Install on PostgreSQL today.</p></div>
+      <div class="split">
+        <div class="panel">
+          <h3><span class="pill ok">Ready for review</span> in <code>db/azure-sql/</code></h3>
+          <ul>
+            <li><code>roles.sql</code>: one SQL login per service and <code>ops_migrator</code>; the database with collation <code>Latin1_General_100_BIN2_UTF8</code> and <code>READ_COMMITTED_SNAPSHOT ON</code></li>
+            <li><code>01-agents.sql</code> to <code>07-documents.sql</code> and <code>bundle.sql</code>: every table, index and key, and a security policy per tenant table</li>
+            <li><code>grants.sql</code>: each service's user with SELECT, INSERT, UPDATE and DELETE on its own tables only</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3><span class="pill warn">Still to come</span></h3>
+          <ul>
+            <li>Applying these scripts to an Azure SQL database and comparing the result with the services' models</li>
+            <li>Running the services on Azure SQL and SQL Server</li>
+            <li>Full-text search for knowledge bases, the workflow checkpoint tables and the queue claim under the tenant policy</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="support">
+      <h2>Support</h2>
+      <p>Support contact: <code>&lt;name, email and hours to be added&gt;</code>.</p>
+    </section>
+  </main>
+</div>
+
+<footer>Ops AI by Elemente. Every command on this page was run, in this order, by the release package's proof. The same guide ships inside the package as <code>INSTALL.md</code>.</footer>
+
+<script>
+// A copy button on each command block; when the clipboard is refused, the command is selected for a manual copy.
+document.querySelectorAll('.cmd').forEach((box, i) => {
+  const code = box.querySelector('code');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'copy';
+  button.id = 'copy-' + i;
+  button.textContent = 'Copy';
+  button.setAttribute('aria-label', 'Copy command');
+  button.addEventListener('click', () => {
+    const select = () => { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    const done = (label) => { button.textContent = label; setTimeout(() => { button.textContent = 'Copy'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code.innerText).then(() => done('Copied'), () => { select(); done('Selected'); });
+    } else { select(); done('Selected'); }
+  });
+  box.appendChild(button);
+});
+</script>
+</body>
+</html>

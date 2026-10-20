@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ops AI architecture</title>
+<style>
+:root{
+  --bg:#f4f6f8;--dot:#d3dae2;--card:#ffffff;--fg:#121821;--muted:#5d6876;--line:#dce2e9;--soft:#eef2f6;
+  --green:#12804a;--green-soft:#e2f3ea;--indigo:#4a55d4;--indigo-soft:#eceefd;--violet:#7a44c8;--violet-soft:#f2ebfc;
+  --teal:#0b7a83;--teal-soft:#e0f2f3;--blue:#1d6fd1;--blue-soft:#e4effc;--amber:#a5650b;--amber-soft:#fcf0dc;
+  --rose:#b8324f;--rose-soft:#fbe8ed;--slate:#4c5868;--slate-soft:#edf0f4;
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b0f14;--dot:#1f2833;--card:#121922;--fg:#e4eaf1;--muted:#8f9bab;--line:#253040;--soft:#18212c;
+  --green:#4fcf8c;--green-soft:#11291d;--indigo:#929bff;--indigo-soft:#1b1f3d;--violet:#c19bff;--violet-soft:#251a3a;
+  --teal:#5ccfd8;--teal-soft:#0f2a2d;--blue:#6fb0ff;--blue-soft:#11243b;--amber:#f0b45a;--amber-soft:#2e220f;
+  --rose:#ff8fa8;--rose-soft:#36161f;--slate:#a9b5c5;--slate-soft:#1c232d;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b0f14;--dot:#1f2833;--card:#121922;--fg:#e4eaf1;--muted:#8f9bab;--line:#253040;--soft:#18212c;
+  --green:#4fcf8c;--green-soft:#11291d;--indigo:#929bff;--indigo-soft:#1b1f3d;--violet:#c19bff;--violet-soft:#251a3a;
+  --teal:#5ccfd8;--teal-soft:#0f2a2d;--blue:#6fb0ff;--blue-soft:#11243b;--amber:#f0b45a;--amber-soft:#2e220f;
+  --rose:#ff8fa8;--rose-soft:#36161f;--slate:#a9b5c5;--slate-soft:#1c232d;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:18px 18px;
+  color:var(--fg);font:15px/1.55 var(--font);padding:0 16px 72px}
+.wrap{max-width:1240px;margin:0 auto}
+header{padding:44px 0 18px}
+.eyebrow{font:600 11.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(28px,4vw,40px);line-height:1.1;margin:12px 0 12px;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:22px;margin:52px 0 6px;text-wrap:balance}
+h3{font-size:15px;margin:0 0 6px}
+p{max-width:76ch;margin:8px 0}
+.lede{font-size:17px;color:var(--muted)}
+.keys{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+.keys span{display:inline-flex;align-items:center;gap:6px}
+.pill{font:600 10.5px/1 var(--mono);letter-spacing:.03em;padding:4px 7px;border-radius:999px;white-space:nowrap;text-transform:uppercase}
+.s-wire{background:var(--rose-soft);color:var(--rose)}
+.s-proto{background:var(--blue-soft);color:var(--blue)}
+.s-design{background:var(--slate-soft);color:var(--slate)}
+.s-yours{background:var(--amber-soft);color:var(--amber)}
+figure{margin:18px 0 0;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--card) 88%,transparent);
+  padding:12px;overflow-x:auto;box-shadow:0 1px 0 var(--line),0 18px 40px -28px rgba(0,0,0,.35)}
+figure svg{display:block;width:100%;min-width:980px;height:auto;font-family:var(--font)}
+figcaption{font-size:12.5px;color:var(--muted);margin:8px 4px 2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px;margin-top:16px}
+.w{position:relative;border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--card);min-width:0;
+  scroll-margin-top:16px;transition:border-color .2s,box-shadow .2s}
+.w:target{border-color:var(--accent,var(--indigo));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,var(--indigo)) 22%,transparent)}
+.w .head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.n{flex:none;display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font:700 12px/1 var(--mono);
+  color:#fff;background:var(--accent,var(--indigo));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent,var(--indigo)) 18%,transparent)}
+.w h3{margin:0;flex:1;min-width:0}
+.w p{font-size:13.8px;margin:6px 0 0}
+.w ul{margin:8px 0 0;padding-left:0;list-style:none;font-size:13.5px}
+.w li{position:relative;padding-left:16px;margin:4px 0}
+.w li::before{content:"";position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent,var(--indigo))}
+.w .where{margin-top:10px;font:12px/1.5 var(--mono);color:var(--muted);overflow-wrap:anywhere}
+code{font:500 12.5px var(--mono);background:var(--soft);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+.steps{counter-reset:s;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin-top:16px}
+.step{counter-increment:s;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:14px;min-width:0}
+.step::before{content:counter(s);display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+  background:var(--green);color:#fff;font:700 11px var(--mono);margin-bottom:8px}
+.step b{display:block;font-size:14px}
+.step p{font-size:13px;color:var(--muted);margin:4px 0 0}
+.tablewrap{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:720px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 10.5px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--soft)}
+tr:last-child td{border-bottom:0}
+td:first-child code{white-space:nowrap}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 0}
+nav.toc a{font:600 12px/1 var(--mono);color:var(--fg);text-decoration:none;border:1px solid var(--line);background:var(--card);
+  padding:7px 10px;border-radius:999px}
+nav.toc a:hover{border-color:var(--indigo);color:var(--indigo)}
+h2[id]{scroll-margin-top:16px}
+.sub{color:var(--muted);font-size:14px}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.flow{stroke-dasharray:3 7;animation:flow 1.6s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-20}}
+@media (prefers-reduced-motion:reduce){.flow{animation:none}html{scroll-behavior:auto}}
+svg a{cursor:pointer}
+svg a:focus-visible circle{stroke:var(--fg);stroke-width:2}
+.s-built{background:var(--green-soft);color:var(--green)}
+.s-part{background:var(--blue-soft);color:var(--blue)}
+.why{margin:12px 0 0;padding:10px 12px;border-left:3px solid var(--accent,var(--indigo));background:var(--soft);border-radius:0 8px 8px 0;font-size:13.5px;max-width:92ch}
+.why b{display:block;font:700 10.5px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent,var(--indigo));margin-bottom:3px}
+h2 .n{vertical-align:2px;margin-right:6px}
+h2 .pill{vertical-align:4px;margin-left:6px}
+ul.plain{max-width:92ch;font-size:14px;padding-left:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Open source · architecture, subsystems, operations</div>
+  <h1>Ops AI architecture</h1>
+  <p class="lede">Ops AI is an open-source platform that lets an enterprise's operations teams hand routine work to AI, with a person approving anything that moves money or changes a record. It runs work in two ways: agents, which decide their next step within set limits, and workflows, which run the same typed steps every time. A deployment can run either or both. All work reaches business systems and AI models only through two gateways, and stores its state in a SQL database the enterprise provides.</p>
+  <p class="sub">Ops AI is pre-release. Each part carries a status label for what is in code today.</p>
+  <div class="keys">
+    <span><span class="pill s-built">built</span> in code, end-to-end checks pass</span>
+    <span><span class="pill s-part">partial</span> part of it is in code</span>
+    <span><span class="pill s-design">planned</span> designed, build scheduled</span>
+    <span><span class="pill s-yours">dependency</span> outside the platform: the enterprise runs it, the platform connects to it</span>
+  </div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#arch">Diagram</a><a href="#features">Features</a><a href="#agents">Agents</a><a href="#workflows">Workflows</a>
+    <a href="#chat">Chat and UI</a><a href="#access">Access control</a><a href="#data-gateway">Data gateway</a><a href="#ai-gateway">AI gateway</a>
+    <a href="#shared">Shared services</a><a href="#runs">Runs</a><a href="#services">Service map</a><a href="#database">Database</a><a href="data-model.html">Data model ↗</a>
+    <a href="#build">Build</a><a href="#develop">Develop</a><a href="#deploy">Deploy</a><a href="#ops">Operations</a><a href="#seams">Integration points</a>
+  </nav>
+</header>
+
+<figure>
+  <svg id="arch" viewBox="0 0 1260 990" role="img" aria-label="Ops AI architecture. Three bands across the top for identity, observability and secrets. People and systems on the left reach the experience layer. Inside the platform, agents and workflows sit side by side, linked in both directions, above the shared services. Every tool call leaves through the data gateway and every model call through the AI gateway on the right. Under the platform sit the database and object storage the enterprise runs. The build-to-deploy lane runs along the bottom."></svg>
+  <figcaption>Click a numbered dot to jump to the section that explains that part. Moving dots on a line show the direction a call travels. Every tool call and every model call leaves the platform through the two gateways on the right.</figcaption>
+</figure>
+
+<h2 id="features"><span class="n" style="--accent:var(--indigo)">◆</span> Features</h2>
+<p>Ops AI is one platform. Its features fall into three groups: two ways of running work, agents and workflows; the services every run uses; and the two gateways that every outside call passes through. A deployment can run agents, workflows or both.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Feature</th><th>What it gives an operations team</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><a href="#agents">Agents</a></td><td>An agent reads a request, chooses what to look up and drafts a reply or an action, within the limits it was published with</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><a href="#workflows">Workflows</a></td><td>A graph of typed steps that runs the same way every time and records each step in a journal</td><td><span class="pill s-part">partial</span> engine built</td></tr>
+    <tr><td><a href="#chat">Chat and console</a></td><td>A web console for people, chat with an agent, and channels that start runs from email or an API</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><a href="#reviews">Reviews and cases</a></td><td>One queue where a person approves, rejects or edits what an agent or a workflow proposes</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td><a href="#shared">Triggers and timers</a></td><td>Start work from a request, a schedule or an event, and act when a deadline passes</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><a href="#shared">Knowledge and files</a></td><td>Searchable knowledge bases with cited answers, and document storage with retention and legal hold</td><td><span class="pill s-part">partial</span> knowledge and file storage with its settings page built; retention jobs and large-file upload planned</td></tr>
+    <tr><td><a href="#shared">Work feed</a></td><td>One list of all work in progress, agent and workflow alike</td><td><span class="pill s-design">planned</span></td></tr>
+    <tr><td><a href="#access">Access control</a></td><td>Sign-in, teams, roles, API keys and an audit log</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><a href="#data-gateway">Data gateway</a></td><td>The single, policy-checked path to business systems, over REST or MCP</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td><a href="#ai-gateway">AI gateway</a></td><td>The single path to AI models, with keys, budgets and a call log</td><td><span class="pill s-part">partial</span></td></tr>
+  </tbody>
+</table></div>
+<h3 style="margin-top:22px">Agents and workflows: when to use which</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th></th><th>Agent</th><th>Workflow</th></tr></thead>
+  <tbody>
+    <tr><td>Who decides the steps</td><td>The agent, inside the limits it was published with</td><td>The workflow definition: the same steps every time</td></tr>
+    <tr><td>Core primitive</td><td>The agent run API</td><td>The workflow run on the workflow engine</td></tr>
+    <tr><td>Built on top</td><td>Chat, agent jobs, agents calling agents</td><td>Workflows of typed nodes, triggers, human review steps</td></tr>
+    <tr><td>Shape</td><td>An agent platform: configured agents that people chat with and that run jobs</td><td>A workflow engine: a visual graph of steps with triggers and a journal of every run</td></tr>
+    <tr><td>Suited to</td><td>Work that needs judgement: reading a messy request, choosing what to look up, drafting a reply</td><td>Work that must be repeatable and auditable step by step: a dispute, a levy, a hold on a payment</td></tr>
+  </tbody>
+</table></div>
+<div class="grid">
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Agents inside workflows, workflows as agent tools</h3><span class="pill s-part">partial</span></div>
+    <ul><li>A workflow step that needs judgement starts an agent run and receives its output in a declared schema.</li><li>An agent can call a published workflow as a tool, found by search and available only when granted.</li></ul>
+    <p>Both links work today through adapters inside agents-service. Moving each onto the public run APIs is planned, so that a deployment with only agents, or only workflows, runs on its own.</p></article>
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Services every run uses</h3></div>
+    <p>Identity and teams, reviews and cases, triggers and timers, knowledge, files and the work feed serve agents and workflows alike. Every write passes the data gateway with its approval policy and fails closed.</p></article>
+</div>
+<div class="why"><b>Why agents and workflows run separately</b>Agents and workflows fail in different ways and are reviewed in different ways: an agent is judged on its answers, a workflow on its steps. Separate run APIs let each be tested, approved and deployed on its own, and a fault in one stays inside its own data. The cost is maintaining the two links between them, which is smaller than tying every agent change to the workflow engine.</div>
+
+<h2 id="agents"><span class="n" style="--accent:var(--indigo)">5</span> Agents</h2>
+<p>An agent is an instruction, a model alias and its attachments: tools, knowledge, skills, guardrails and a budget. It is versioned, goes live through a publish review, and decides its own next step inside those limits. Every way of using an agent, from a chat message to a scheduled job, is a run on one agent run API.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Part</th><th>What it does</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Agent builder</td><td>Create an agent, version it, publish it through a review by a second person</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Publish policy</td><td>An administrator chooses which publishes need a second person's review</td><td><span class="pill s-design">planned</span> in development</td></tr>
+    <tr><td>Agent run API</td><td>One run resource with stream, wait and background modes. Chat, jobs, agent tests and the workflow agent step all call it</td><td><span class="pill s-part">partial</span> runs exist inside chat threads; the public run resource is next</td></tr>
+    <tr><td>Kernel</td><td>Runs one turn: builds the prompt, calls the model, runs tools, checks the answer. Capabilities plug in as packs on one contract</td><td><span class="pill s-built">built</span> pack contract planned</td></tr>
+    <tr><td>Tools</td><td>Granted operations through the data gateway; a write waits for approval and, where policy asks, step-up sign-in</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Knowledge</td><td>Searches granted knowledge bases; answers cite page and section</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Skills</td><td>Versioned procedures loaded when a request matches, plus always-on skills, with caps</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Guardrails</td><td>Blocked topics checked on the question and the answer, failing closed. A builder can switch a pinned guardrail off for a version, and the publish review names the change. Required citations, output shape and personal-data redaction follow</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>Budgets</td><td>Model calls, tool calls, cost and deadline counted, with the stop reason shown. Built: per turn, where an empty tool-call cap means no cap and an empty model-call cap means 50, and per chat conversation, where an empty cap means 200 model calls and a cost of 5.00. Per job and per team are planned</td><td><span class="pill s-part">partial</span> per turn and per conversation today</td></tr>
+    <tr><td>Agent jobs</td><td>A trigger or schedule plus a goal: the agent works over many turns, pauses for people and ends with a report. Live only after a publish review; default budget 10 turns, 20 tool calls, US$0.50 and 24 hours</td><td><span class="pill s-design">planned</span></td></tr>
+    <tr><td>Evals</td><td>Scenario suites and a release gate on their results before a version is published</td><td><span class="pill s-design">planned</span> designed in the console on mock data</td></tr>
+    <tr><td>Agents calling agents, memory</td><td>Sub-tasks handed to another agent through the run API; memory read and written under policy</td><td><span class="pill s-design">planned</span></td></tr>
+  </tbody>
+</table></div>
+<div class="grid">
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>What a caller may change per run</h3><span class="pill s-part">partial</span></div>
+    <p>The published agent sets defaults and limits. A caller or the chat UI may:</p>
+    <ul><li>choose a model from the agent's allowed list, and a temperature within its range;</li><li>add to the instructions;</li><li>narrow the tools, and choose or narrow the knowledge;</li><li>lower the budget.</li></ul>
+    <p>A request outside those limits is refused with an error that names the limit, so a run always uses exactly the settings it asked for. Guardrails and approvals stay exactly as published. Each run records the settings it used. Chat applies this today through a settings panel on each thread; the run API that gives other callers the same controls is planned.</p>
+    <div class="why"><b>Why tools only narrow</b>The tool list is what the publish review approved. Letting a caller add a tool would let anyone with run access widen what the agent can do to business systems without a review. Narrowing is always safe, so it needs no approval.</div></article>
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>One run API for every caller</h3></div>
+    <p>Chat sends one run per message on a thread. A job is a background run with a goal. An agent test and the workflow agent step are runs with a fixed input and an output schema.</p>
+    <div class="why"><b>Why one run API</b>A fix to budgets, approvals or audit lands once and applies to chat, jobs, tests and workflows alike. Separate paths into the kernel drift apart and each needs its own review.</div></article>
+</div>
+
+<h2 id="workflows"><span class="n" style="--accent:var(--blue)">6</span> Workflows</h2>
+<p>A workflow is a graph of typed nodes that runs the same steps every time. Each step is recorded in a journal: after a crash the run resumes from the journal, and every write is reconciled by its key, so a payment is sent once. Workflow definitions are data, so authors compose them in the editor and write no engine code.</p>
+<div class="grid">
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>Engine core</h3><span class="pill s-built">built</span></div>
+    <p>Flow control, human review steps, the step journal, the work queue, workers, leases with generation fencing, and reconcile-by-key for writes. LangGraph is the runner underneath.</p></article>
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>Node types and the Node SDK</h3><span class="pill s-part">partial</span></div>
+    <p>A node type owns every fact about a step: ports, parameters, effects class, retry and executor. The editor, the validator and the runner all read the same registry entry. Seven types ship today (request trigger, set data, if, tool action, agent, human review, end) from a catalogue of 24 (22 steps and 2 attachments). Schedule, email, chat, webhook and poll start runs as triggers. The SDK for writing new ones is planned.</p>
+    <div class="why"><b>Why one registry</b>When the form, the validator and the runner each keep their own copy of a step's rules, they drift and a workflow that saves cleanly fails at run time. One entry read by all three keeps them in agreement.</div></article>
+  <article class="w" style="--accent:var(--violet)"><div class="head"><h3>Node packs</h3><span class="pill s-design">planned</span></div>
+    <p>Node types ship in packs: ai, tools, files, agents and channels. Packs are installed at deploy time from an allowlist pinned by hash, and each journal row records the hash of the code that ran it.</p>
+    <div class="why"><b>Why packs install only at deploy time</b>A pack is code that runs inside the platform. Installing it only from a reviewed allowlist at deploy time means every step in the journal can be traced to the exact code that ran it, and the only code that reaches production is code that passed review.</div></article>
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Triggers</h3><span class="pill s-part">partial</span></div>
+    <p>Triggers are adapters on one start API, each with a dedupe key and window. Request triggers are built; email, chat, schedule, event and poll triggers follow.</p>
+    <div class="why"><b>Why one start API</b>Every trigger then gets the same duplicate protection and the same audit record, and one trigger can start either a workflow or an agent job.</div></article>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Capability</th><th>What it does</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Editor and run detail</td><td>Draw a workflow from the server's node types; see each step's input, output, attempts and errors, and the result of the End step</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Human steps</td><td>A review step whose options are output ports; ask the customer; hand off</td><td><span class="pill s-part">partial</span> review built</td></tr>
+    <tr><td>Data mapping</td><td>Values move between steps by path lookups; transforms run in a dedicated JMESPath node</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>Forms</td><td>Every node setting is a form generated from the type's schema, with an optional custom form per type</td><td><span class="pill s-part">partial</span> generated forms built for the seven shipped types; custom forms planned</td></tr>
+    <tr><td>Lifecycle</td><td>A saved version is a draft. Publishing opens a review; approval makes it live and retires the previous live version. A workflow can be paused and resumed, and a run can be cancelled: the step in progress finishes and is recorded first. A run keeps the version it started on; migrating paused runs is planned</td><td><span class="pill s-part">partial</span> publish, pause and cancel built</td></tr>
+    <tr><td>Error handling</td><td>Error ports on every type that can fail, an error path per workflow, a stop with a reason</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>Test and repair, sub-workflows, templates</td><td>Test runs, pinned steps, retry from a node; start another workflow; a library of common processes</td><td><span class="pill s-design">planned</span></td></tr>
+  </tbody>
+</table></div>
+<div class="why"><b>Why mappings use path lookups</b>A field that evaluated code would let every workflow author run code on the server. Path lookups cover most mappings, and the few that need a transform use a node built for it, which is reviewed like any other step.</div>
+
+<h2 id="chat"><span class="n" style="--accent:var(--green)">4</span> Chat and UI</h2>
+<p>People reach Ops AI through the console, and systems and customers reach it through channels. Every surface starts runs through the same public APIs that the SDK uses.</p>
+<div class="grid">
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>Console</h3><span class="pill s-part">partial</span></div>
+    <p>A Next.js app with sections for agents, workflows, chat, cases, reviews, knowledge, tools, access and audit. Every screen reads through one API contract, so the same build runs on an in-memory mock or on the services. The console calls each service directly at its own URL, signed in through platform-service. On services today: chat, agents, skills, guardrails and widgets, workflows, reviews, tools, secrets, the egress allow list, the tool call log, knowledge and storage settings, the Files page (which lists, searches, filters, downloads, deletes in bulk and places holds on files-service when its address is set, and hides setting retention and exporting evidence until the service offers them) and, with real sign-in, members, access and the audit log. On mock data: assurance and evals, model risk, prompt blocks, integrations, deployments and Cases; a page that still shows sample data carries a Preview mark while real services answer beside it.</p>
+    <div class="why"><b>Why one contract</b>Screens can be designed, reviewed and demonstrated before their service exists, and switching an area to the real service is a setting. The contract also stops a screen from joining data itself: counts and joined views come from the API.</div></article>
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>Chat</h3><span class="pill s-built">built</span></div>
+    <p>A thread of runs on one agent, one run per message. Answers stream with citations, tables and charts, and a drafted action appears as an approval card in the thread. A banker can attach a file to a message (PDF, text, Markdown, CSV or Word, up to 10 MB) and, within the agent's limits, choose the model, temperature, tools and knowledge for a thread. An agent can show a table, chart or form from a widget template that a builder published through a review. When a conversation uses up its budget, the chat shows a card instead of an error: the person who started it can continue, and an admin of its team can raise the cap.</p></article>
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>Channels</h3><span class="pill s-part">partial</span></div>
+    <p>A channel is a trigger: it turns what arrives into a run on a published version. The REST API and the shared mailbox start runs today; the mailbox runs on a test mail source, and a real mail tenant is next. An agent's chat can be embedded on an intranet page: a team creates a widget deployment that pins one published version of the agent and lists the exact page origins allowed to use it, and the page loads one script tag. An MCP endpoint that offers agents to AI clients is planned.</p>
+    <p>The page never holds a long-lived key. It gets a session that lasts 15 minutes and works only for that deployment, that origin and that person. The session comes from the bank's single sign-on token, or from the bank's own server with a team API key. Messages are limited to 60 a minute per deployment and 10 per person; today the count is kept inside one process.</p>
+    <div class="why"><b>Why the page gets a session</b>A key placed in a page can be copied by anyone who opens it. A session that expires in 15 minutes and works for one deployment, one origin and one person limits what a copy is worth.</div></article>
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>One work list</h3><span class="pill s-design">planned</span></div>
+    <p>Agents and workflows publish the same work-item contract, so Cases, Reviews and Overview list agent jobs and workflow runs together, already joined by the API.</p></article>
+</div>
+
+<h2 id="access"><span class="n" style="--accent:var(--indigo)">1</span> Access control</h2>
+<p>Every request passes the same checks in order. Access is granted per team, and a person can hold a different role in each team they belong to. <code>platform-service</code> is the only issuer of identity tokens; every other service verifies them locally against a published key set.</p>
+<div class="steps">
+  <div class="step"><b>Authentication</b><p>A short-lived token from <code>platform-service</code>, or a team API key. Federation with an enterprise IdP (Entra ID, Okta, Keycloak) over OIDC is planned.</p></div>
+  <div class="step"><b>Tenant isolation</b><p>Each tenant sees only its own records; a request for another tenant's record returns 404, which keeps its existence private. Row-level security protects run, checkpoint, workflow and identity tables; the data gateway and knowledge filter by tenant in each query.</p></div>
+  <div class="step"><b>Team scoping</b><p>The token lists the caller's teams. A record in another team of the same tenant answers 403 and names the owning team.</p></div>
+  <div class="step"><b>Authorization (RBAC)</b><p>One role per team, from the table below. API keys are <code>read</code> or <code>write</code>; a read key is limited to reads.</p></div>
+  <div class="step"><b>Policy and approval</b><p>A write to a system of record also needs an approval token for that exact input, checked by OPA at the data gateway.</p></div>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Role</th><th>May</th><th>Enforced today</th></tr></thead>
+  <tbody>
+    <tr><td><code>admin</code></td><td>Manage members, invites, API keys and access for the team; read the audit log. An admin of the Security team also manages tool secrets, the egress allow list and storage settings</td><td><span class="pill s-built">yes</span> in platform-service, kb-service and for the Security team's settings</td></tr>
+    <tr><td><code>builder</code></td><td>Edit agents, workflows, skills, guardrails, widgets, knowledge and tool modules; create, pause and poll channel deployments; request a publish</td><td><span class="pill s-built">yes</span> every write to these in agents, knowledge and tools needs a builder or admin of the owning team; a channel deployment belongs to a team, and a builder of another team is refused</td></tr>
+    <tr><td><code>approver</code> (shown as reviewer in the console)</td><td>Decide reviews and drafted actions. Approval always comes from someone other than the requester</td><td><span class="pill s-part">partly</span> approvals come from a second person; a tool module review needs the security team's approver or admin</td></tr>
+    <tr><td><code>viewer</code></td><td>Read everything in the team</td><td><span class="pill s-part">partly</span> refused on every definition write; starting runs, chatting and deciding reviews do not check the role yet</td></tr>
+    <tr><td>API key</td><td>Act for one team with <code>read</code> or <code>write</code> scope</td><td><span class="pill s-built">yes</span> in every service, from the HTTP method</td></tr>
+  </tbody>
+</table></div>
+<p>A refused write answers 403 with the code <code>role_required</code> and names the role it needs; a builder acting in another team's records gets 403 <code>team_forbidden</code> naming the owning team. Mapping IdP groups to these roles, and platform roles such as model risk and security held through IdP groups, are planned.</p>
+<div class="why"><b>Why services verify tokens themselves</b>Each call is authorized in the service that receives it, locally. Identity can restart or slow down without stopping work in progress, and token minting stays with <code>platform-service</code>, the only holder of the signing key.</div>
+
+<h2 id="data-gateway"><span class="n" style="--accent:var(--teal)">8</span> Data gateway <span class="pill s-built">built</span></h2>
+<p><code>tools-service</code> is the only way an agent or a workflow reads from or writes to a business system. Each system is a tool module: imported from an OpenAPI description or an MCP server, reviewed by the security team, then published.</p>
+<div class="grid">
+  <article class="w" style="--accent:var(--teal)"><div class="head"><h3>Connections</h3></div>
+    <ul><li>REST APIs, from an OpenAPI description.</li><li>MCP servers, through the gateway's MCP client over streamable HTTP: tools are discovered with <code>tools/list</code> and called with <code>tools/call</code>. MCP servers are reached over HTTP only.</li><li>Credentials are stored encrypted and stay in the gateway; agents and workflows receive results, with masked fields redacted.</li><li>Agents and workflow tool steps call the gateway over HTTP with a service token.</li><li>An MCP server that offers platform tools to outside clients is planned.</li></ul></article>
+  <article class="w" style="--accent:var(--teal)"><div class="head"><h3>Controls on every call</h3></div>
+    <ul><li>An approval policy per operation, with step-up sign-in where the policy asks for it.</li><li>Rate and amount limits held in the database, so they apply across every gateway process.</li><li>The security team's approver or admin reviews each module before it is published.</li><li>A write carries an approval token bound to its input hash and the run's lease generation; OPA accepts it once, for that input, from the current run.</li><li>Calls reach only allow-listed hosts at checked addresses.</li><li>Every call is logged with its verified caller and reconciled by key.</li><li>Each secret lists the operations that read it, can be limited to chosen teams, and cannot be deleted while an operation uses it. A call from a team the secret does not allow is refused before anything is sent.</li></ul></article>
+  <article class="w" style="--accent:var(--teal)"><div class="head"><h3>Tool workbench</h3><span class="pill s-built">built</span></div>
+    <p>A builder opens one operation on its own page, edits the call and its input, and runs it against the mock or the test environment. A draft mock response and a draft response transform are tried without being saved, so agents keep calling the published version until the change goes through review. A secret can be typed for a single run; it is not stored, logged or returned, and the request shown has it masked. The page lists the gateway's steps in order.</p>
+    <div class="why"><b>Why drafts run unsaved</b>A builder can see what a change does before it is staged for review, and a test cannot alter what a live agent receives.</div></article>
+</div>
+<div class="why"><b>Why two egress gateways</b>A tool call acts on a system of record and needs an approval per call; a model call spends budget and needs a key per identity. Giving each its own gateway keeps business-system credentials and model-provider keys in separate processes, so a risk review can examine each path alone, and agent workers hold neither.</div>
+
+<h2 id="ai-gateway"><span class="n" style="--accent:var(--violet)">9</span> AI gateway <span class="pill s-part">partial</span></h2>
+<p><code>models-service</code> is the way agents and workflows reach an AI model. Workers hold a gateway key; provider credentials stay in the gateway. Today agents use it once <code>OPS_MODELS_URL</code> is set, and it is started with <code>make -C services/models-service run</code>; making it the default path for every agent call is next.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Part</th><th>What it does</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Aliases and connections</td><td>Versioned aliases such as <code>gpt-5.5</code> map to provider connections. Pointing an alias at Azure OpenAI, Anthropic, Bedrock or a self-hosted model is a connection setting</td><td><span class="pill s-built">built</span> OpenAI-compatible</td></tr>
+    <tr><td>Keys, budgets and admission</td><td>Gateway keys with rotation and a budget per key, checked before a run starts</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Completions</td><td>An OpenAI-compatible completions endpoint</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Call log</td><td>Metadata for every call: alias, key, tokens, cost, latency</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Default path</td><td>Every agent and workflow model call routed through the gateway</td><td><span class="pill s-part">partial</span> opt-in today</td></tr>
+    <tr><td>Data plane and failover</td><td>Portkey OSS behind the gateway, with a second provider per alias</td><td><span class="pill s-design">planned</span></td></tr>
+  </tbody>
+</table></div>
+<div class="why"><b>Why model access goes through a gateway</b>Changing provider, adding a self-hosted model or capping a team's spend is then a setting in one place, and every model call is metered and logged the same way whichever agent or workflow made it.</div>
+
+<h2 id="shared"><span class="n" style="--accent:var(--amber)">7</span> Shared services</h2>
+<p>Services that agents and workflows both use. Each is a package with its own API, so a deployment with only agents, or only workflows, keeps every one of them.</p>
+<div class="grid">
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Identity and teams</h3><span class="pill s-part">partial</span></div>
+    <p><code>platform-service</code>: sign-in, sessions, tenants, teams, roles, invites, API keys and the audit log. A new person accepts an invitation through its link and is signed in. A person who already has an account accepts only while signed in as themselves, and the check runs inside the same database transaction as the acceptance, so an account created a moment earlier is still found. Team ownership on every entity is being completed.</p>
+    <div class="why"><b>Why an existing account signs in to accept</b>An invitation link can be forwarded or read by anyone with access to the mailbox. If the link signed in the account it names, whoever held it would act as that person in every team they belong to.</div></article>
+  <article class="w" style="--accent:var(--rose)"><div class="head"><h3 id="reviews">Reviews and cases</h3><span class="pill s-built">built</span></div>
+    <p>One review contract any producer opens and resumes by key, and one queue for people. A decision mints an approval token for the exact input and resumes the waiting run once. Served by agents-service today; moving into its own package, <code>ops_hitl</code>.</p></article>
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Triggers and timers</h3><span class="pill s-part">partial</span></div>
+    <p>One registry that starts an agent job or a workflow run, plus SLA timers that fire each outcome once. Moving into its own package, <code>ops_triggers</code>.</p></article>
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Knowledge</h3><span class="pill s-built">built</span></div>
+    <p><code>kb-service</code>: knowledge bases, their sources and passages cited by page and section. Deleting a base leaves a record, so an agent that cited it keeps its other bases.</p></article>
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Files</h3><span class="pill s-part">partial</span></div>
+    <p><code>files-service</code> (port 8750) stores file bytes. An admin on the Security team chooses where each kind of file goes (a local folder, S3 or Azure Blob), under which credential and limits. Every new or changed target is tested with a small write, read and delete before the setting is saved, and credentials are sealed and never shown again. The service checks size, type and digest, keeps one stored copy per team for identical content, keeps versions, blocks deletion while a file is in use, and applies legal holds. A retried upload returns the first file. The file list answers search, an upload-date range, filters on purpose, scan result and sensitivity, and a count for each view (quarantined, under legal hold, unused for 30 days, expiring within 30 days) from the database query. A file that is used, held or still retained says why it cannot be deleted, and a bulk delete skips each such file and names the reason. The S3 target is tested against a mock S3 service and the Azure Blob adapter against an Azure emulator when one is running; no real cloud account has been used yet. Retention jobs, resumable large uploads, the console upload component and virus scanning (off for now) are planned. The knowledge service stores its uploads through it.</p></article>
+  <article class="w" style="--accent:var(--slate)"><div class="head"><h3>Work feed and audit</h3><span class="pill s-design">planned</span></div>
+    <p>One work-item contract that agents and workflows both publish, and one view of who did what across tool calls, model calls and decisions.</p></article>
+</div>
+
+<h2 id="runs">Runs</h2>
+<p>A run is one piece of work by an agent or a workflow, with a status, a budget and an event stream. Workflow runs use these states today; agent runs adopt them with the run API (planned).</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>queued</code></td><td>Accepted and waiting for a worker</td></tr>
+    <tr><td><code>running</code></td><td>A process holds the run's lease and is executing it</td></tr>
+    <tr><td><code>waiting</code></td><td>Paused for a person, a timer or another run; the reason says which</td></tr>
+    <tr><td><code>succeeded</code>, <code>failed</code>, <code>cancelled</code></td><td>Finished, with a reason recorded for each failure or cancellation</td></tr>
+  </tbody>
+</table></div>
+<div class="grid">
+  <article class="w" style="--accent:var(--rose)"><div class="head"><h3>A pause waits in place</h3></div>
+    <p>A run that needs a person moves to <code>waiting</code>, releases its lease and keeps its checkpoint. The decision resumes the same run. Waiting runs are kept for up to seven days.</p>
+    <div class="why"><b>Why wait in place</b>One run keeps one budget, one audit trail and one event stream across every approval, so a reviewer and an auditor see a single record. Releasing the lease while waiting keeps every worker free during a pause of hours or days.</div></article>
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>Durable by default</h3></div>
+    <p>Each step is checkpointed. A running run holds a lease; if its process stops, a sweeper in another process takes the expired lease, raises the generation and continues from the last checkpoint. In testing, recovery started about 5.5 seconds after a process was killed.</p></article>
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Versions are pinned</h3></div>
+    <p>Definitions are immutable and identified by version and digest. A run keeps the version it started on through every later publish, and an operator can migrate a waiting run deliberately.</p></article>
+</div>
+
+<h2 id="services">Service map</h2>
+<p>A service is a package with API routes, background loops and its own database migrations. Each is named after the console section it serves. Today each service runs as its own process; a single host program, <code>ops-host</code>, that starts any set of them in one process is the first part of version 1.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Service</th><th>Serves</th><th>Owns</th><th>Port</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><code>platform-service</code></td><td>Access, Audit log, Settings</td><td>Sign-in, sessions, tenants, teams, roles, invites, API keys, audit; sole issuer of identity tokens</td><td>8710</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><code>agents-service</code></td><td>Agents, Chat, Skills, Assurance</td><td>Agent definitions, versions, evals, publish review, runs, threads, budgets, channels, widget deployments</td><td>8700</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>workflows (<code>ops_engine</code>)</td><td>Workflows</td><td>Node registry, definitions, runner, journal, work queue. Routes are served by agents-service today</td><td>8700</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td><code>tools-service</code></td><td>Tools, Connections</td><td>Data gateway: tool modules, credentials, OPA policy, approval tokens, limits, call log</td><td>8720</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td><code>models-service</code></td><td>AI gateway</td><td>Aliases, provider connections, keys, budgets, call log</td><td>8730</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><code>kb-service</code></td><td>Knowledge bases</td><td>Sources, ingestion, retrieval, citations</td><td>8740</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td><code>files-service</code></td><td>Files</td><td>File metadata, bytes, versions, references, legal hold, storage settings and credentials</td><td>8750</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td><code>documents-service</code></td><td>Document types; file Preview and Extract</td><td>Page layout, classify and split, extractions with cited positions, document types, templates, corrections and accuracy; reads bytes through files-service and never stores them</td><td>planned</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>reviews (<code>ops_hitl</code>)</td><td>Cases, Reviews</td><td>Reviews, cases, queues, decisions, approval tokens</td><td>in agents</td><td><span class="pill s-part">partial</span> package planned</td></tr>
+    <tr><td>triggers (<code>ops_triggers</code>)</td><td>Deployments</td><td>Trigger registry, dedupe, schedules, SLA timers</td><td>in agents</td><td><span class="pill s-part">partial</span> package planned</td></tr>
+  </tbody>
+</table></div>
+<div class="grid">
+  <article class="w" style="--accent:var(--amber)"><div class="head"><h3>Each service owns its data</h3></div>
+    <p>Every service has its own tables and migration chain and reads only its own. Services exchange data through their APIs, and each call between services is signed with the caller's own key.</p>
+    <div class="why"><b>Why</b>A service can then change its tables, move to its own database or be removed without breaking another service. It also gives a clear answer to "which component can read this data", which a risk review asks for every table.</div></article>
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Imports run one way</h3></div>
+    <p>Shared packages come first, then the workflow engine, then each service's activities, graphs, stores and API. The commit gate checks that order on every commit and keeps the workflow engine independent of the agent runtime. Services are moving to a domain, use case, adapter and API layout.</p>
+    <div class="why"><b>Why</b>Business rules stay testable on their own, and replacing an adapter, such as the database dialect or an identity provider, touches only that adapter.</div></article>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Package</th><th>What it does</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td><code>ops_identity</code></td><td>Verifies identity and service tokens locally and enforces API key scope</td><td>every service</td></tr>
+    <tr><td><code>ops_service_kit</code></td><td>Settings (the one place configuration is read), errors, ids, logging</td><td>every service</td></tr>
+    <tr><td><code>ops_agent_kernel</code></td><td>One agent turn with tools, knowledge, skills, guardrails and token usage</td><td>agents</td></tr>
+    <tr><td><code>ops_engine</code></td><td>Workflow node registry, validation, compiler to LangGraph, step journal, work queue, workers</td><td>workflows</td></tr>
+    <tr><td><code>ops_checkpointer</code></td><td>Run checkpoints with tenant isolation</td><td>agents, workflows</td></tr>
+    <tr><td><code>ops_store</code></td><td>The store seam: each repository declares the guarantees it needs from the database, with a conformance suite per backend</td><td>agents</td></tr>
+    <tr><td><code>ops_policy</code></td><td>Canonical input hash, approval and step-up token signing and verification</td><td>agents, tools</td></tr>
+    <tr><td><code>ops_metering</code></td><td>Usage, prices, cost and budget checks</td><td>agents, models</td></tr>
+    <tr><td><code>ops_storage</code>, <code>ops_ingest</code></td><td>Object storage on disk, S3 or Azure Blob; parsing, splitting and dedupe for knowledge</td><td>files, knowledge</td></tr>
+    <tr><td><code>ops_files_client</code></td><td>A typed client for files-service, so no service imports its code</td><td>knowledge</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="database"><span class="n" style="--accent:var(--amber)">10</span> Database <span class="pill s-yours">dependency</span></h2>
+<p>The platform connects to a SQL database the enterprise runs, usually a managed instance owned by its data team. Each service may have its own database or share a server. Development uses a local PostgreSQL 17 container, and unit tests use SQLite. Every table, its owning service, keys and status are on the <a href="data-model.html">data model page</a>.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Database</th><th>Status</th><th>Tenant isolation</th></tr></thead>
+  <tbody>
+    <tr><td>PostgreSQL (Azure Database for PostgreSQL, Amazon RDS or Aurora, Cloud SQL, self-run)</td><td><span class="pill s-built">runs today</span></td><td>Today: row-level security on run, checkpoint, workflow, chat attachment, chat search, widget deployment and identity tables, and a tenant filter in each query elsewhere. Planned: the store layer on every table, with row-level security as a backstop</td></tr>
+    <tr><td>Azure SQL (SQL Server dialect)</td><td><span class="pill s-design">planned</span></td><td>Store layer, plus a security policy as a backstop, on from the first release</td></tr>
+    <tr><td>MySQL 8</td><td><span class="pill s-design">planned</span></td><td>Store layer</td></tr>
+  </tbody>
+</table></div>
+<ul class="plain">
+  <li>All three run through SQLAlchemy, with a CI job per database once each lands.</li>
+  <li>Planned: every tenant query goes through scoped repositories that add the tenant filter, with a test that checks the filter is present.</li>
+  <li>Backups, high availability, encryption at rest and network rules follow the enterprise's existing database practice.</li>
+  <li>Services connect as a least-privilege login role. One platform migration needs a superuser or membership of <code>ops_platform_lookup</code>, so a managed PostgreSQL needs that grant before the first migrate.</li>
+</ul>
+<div class="why"><b>Why three databases</b>Banks standardise on one of a small set of database engines, and adding a new engine to a bank's estate takes months of approval. Supporting PostgreSQL, Azure SQL and MySQL means Ops AI runs on the engine already approved. Putting tenant isolation in the store layer is what makes that possible, because row-level security exists on only some of them.</div>
+
+<h2 id="build"><span class="n" style="--accent:var(--green)">11</span> Build</h2>
+<p>One repository holds the console, every service and every shared library, with one toolchain per language and one gate that every commit passes. Each part is laid out so it can later move to its own repository with its names intact.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Path</th><th>Holds</th><th>Stack</th></tr></thead>
+  <tbody>
+    <tr><td><code>apps/console</code></td><td>The operations console. Reads every screen through one API contract</td><td>Next.js, TypeScript, shadcn/ui</td></tr>
+    <tr><td><code>services/&lt;x&gt;-service</code></td><td>One deployable per console section, each with its own <code>Makefile</code>, migrations, OpenAPI file and tests</td><td>Python 3.12, FastAPI, Alembic</td></tr>
+    <tr><td><code>packages/ops_*</code></td><td>Libraries used by two or more services, including the workflow engine and the agent kernel</td><td>Python 3.12, SQLAlchemy</td></tr>
+    <tr><td><code>packages/usecase-runner</code></td><td>Runs the end-to-end use cases and reports a verdict per check</td><td>Node, Playwright</td></tr>
+    <tr><td><code>deploy/</code></td><td>Deployment targets: Compose today; VM and Kubernetes scheduled</td><td>Compose, systemd, Kustomize</td></tr>
+    <tr><td><code>docs/</code></td><td>Architecture, decision records, one spec per topic, use cases, service docs</td><td>Markdown, checked on commit</td></tr>
+  </tbody>
+</table></div>
+<div class="why"><b>Why one repository</b>A change that crosses the console, a service and a library lands as one reviewed commit, checked by one gate. Contracts between parts stay in step.</div>
+<h3 style="margin-top:22px">How a feature is built</h3>
+<p class="sub">A feature moves from the inside out, and each step has a fixed home. The console contract is the source of truth for the API.</p>
+<div class="steps">
+  <div class="step"><b>Spec and use case</b><p>The behaviour, its failure modes and the end-to-end check that proves it.</p></div>
+  <div class="step"><b>Type and contract</b><p>The data type and the method on the area's API contract in the console.</p></div>
+  <div class="step"><b>Mock and hook</b><p>The mock implements the contract with fixtures; a hook gives screens the data. The screen works before the service exists.</p></div>
+  <div class="step"><b>Service</b><p>Domain rules, then the use case and its ports, then adapters, then the API route, with a migration if a table changes.</p></div>
+  <div class="step"><b>HTTP client</b><p>The console's HTTP client calls the new route, and the area moves from the mock to the service with a setting.</p></div>
+  <div class="step"><b>Prove it</b><p>The commit gate passes and the use case passes end to end on the scripted model.</p></div>
+</div>
+<h3 style="margin-top:22px">The commit gate</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Check</th><th>What it covers</th></tr></thead>
+  <tbody>
+    <tr><td>Console</td><td>TypeScript type check, the standards check (layer order, fixtures only in the mock), and every changed screen rendered in loading, error and empty states</td></tr>
+    <tr><td>Python</td><td>ruff and strict pyright across every package and service</td></tr>
+    <tr><td>Tests</td><td>Each service's pytest suite, on SQLite or PostgreSQL, with a scripted model in place of a paid one</td></tr>
+    <tr><td>Standards</td><td>Imports run in one direction, configuration is read in one place, fixtures live only under tests, every route is authenticated, and the workflow engine stays independent of the agent runtime</td></tr>
+    <tr><td>Docs</td><td>Every doc has a status line, sits in the folder that matches the code, and is listed in the docs index</td></tr>
+    <tr><td>Scope</td><td>The gates run on the content being committed, not on the whole working copy, so one person's unfinished file never blocks another person's commit</td></tr>
+  </tbody>
+</table></div>
+<div class="why"><b>Why a scripted model in tests</b>Tests give the same answer on every run and are free to run, so they run on every commit. Real model calls run only when approved, with a cap per experiment.</div>
+
+<h2 id="develop">Develop</h2>
+<p>Everything runs from the root <code>Makefile</code>. Prerequisites: Python 3.12, <a href="https://docs.astral.sh/uv/">uv</a>, Node 20 or later with pnpm 10, and Docker for the development PostgreSQL and OPA. A model key (<code>OPENAI_API_KEY</code>, or <code>ANTHROPIC_API_KEY</code> for a <code>claude-*</code> alias) is needed only for real chat; every service starts without one and reports it on <code>/health</code>.</p>
+<div class="why"><b>Why a Makefile</b>One entry point for install, verify, run and deploy, the same on a laptop and in CI. A new engineer runs the same three commands as the build server, and each service answers the same set of verbs.</div>
+<div class="grid">
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>Console only</h3></div>
+    <p>Runs on in-memory data alone. Suited to screen work and demos.</p>
+    <ul><li><code>pnpm install</code> then <code>make dev</code>, at <code>localhost:3016</code>.</li><li>State lives in memory and resets on reload.</li><li><code>?mock=slow</code>, <code>?mock=error</code> and <code>?mock=empty</code> show each loading, error and empty state.</li></ul></article>
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>Full stack</h3></div>
+    <p>The console on the real services, with the model key supplied by the environment or a gitignored <code>.env</code>.</p>
+    <ul><li><code>make install</code> once per clone: pnpm packages and one uv workspace for every Python service.</li><li><code>make up</code> starts PostgreSQL :5477, OPA :8181, platform :8710, agents :8700, tools :8720, kb :8740, files :8750 and the console :3016, applying each service's migrations to the existing database first, never dropping it (the files service starts before the knowledge service, which stores its uploads through it). If the database holds a migration this checkout does not have, <code>make up</code> stops and names the service.</li><li><code>OPS_STACK_WORKER=1</code> also starts the workflow worker, which runs workflows of typed nodes; <code>make -C services/models-service run</code> starts the AI gateway on :8730.</li><li><code>make up AUTH=platform</code> uses real sign-in through platform-service with seeded people.</li></ul></article>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Daily task</th><th>Command</th></tr></thead>
+  <tbody>
+    <tr><td>See what is running, on which port, started by whom</td><td><code>make health</code></td></tr>
+    <tr><td>Follow one service's log</td><td><code>make logs SVC=agents</code></td></tr>
+    <tr><td>Restart after a change (migrates first)</td><td><code>make restart SVC=tools</code></td></tr>
+    <tr><td>Open the database</td><td><code>make db-shell</code></td></tr>
+    <tr><td>Wipe the database and rebuild it empty (asks first on a shared stack)</td><td><code>make reset-db</code></td></tr>
+    <tr><td>Run a second, separate stack beside the first</td><td><code>make up ISOLATED=1</code> (every port +1000, own database)</td></tr>
+    <tr><td>Stop</td><td><code>make down</code> (<code>KEEP_DB=1</code> leaves the database running)</td></tr>
+  </tbody>
+</table></div>
+<h3 style="margin-top:22px">Testing</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Level</th><th>What it proves</th><th>Command</th></tr></thead>
+  <tbody>
+    <tr><td>Unit and service tests</td><td>Domain rules and routes, mostly on SQLite with a scripted model</td><td><code>make -C services/agents-service verify</code></td></tr>
+    <tr><td>Integration tests</td><td>Checkpoints, leases, timers and the data gateway on real PostgreSQL</td><td><code>make db-up</code>, <code>make migrate</code>, then the service's tests</td></tr>
+    <tr><td>Use cases</td><td>One user-visible behaviour end to end through the API or the console, on a database and ports the run owns</td><td><code>make usecase-test UC=uc-010</code></td></tr>
+    <tr><td>Real model calls</td><td>Behaviour against a live provider, approved per run</td><td><code>APPROVED_REAL_CALLS=&lt;n&gt;</code>, capped at ten per experiment</td></tr>
+  </tbody>
+</table></div>
+<p>A use case passes only when its script exits 0, prints only <code>PASS</code> lines, at least one. Each names the check that fails when the behaviour breaks.</p>
+
+<h2 id="deploy">Deploy</h2>
+<p>The same packages run in three layouts; only the host's flags change. Every release runs on one virtual machine with plain systemd, and Compose and Kubernetes are optional.</p>
+<div class="grid">
+  <article class="w" style="--accent:var(--green)"><div class="head"><h3>One process</h3><span class="pill s-part">partial</span></div>
+    <p>Every service in one process. For evaluation, development and tests. Today <code>make up</code> runs each service as its own local process; the single-process host, <code>ops-host</code>, is the first part of version 1.</p></article>
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>One virtual machine</h3><span class="pill s-design">planned</span></div>
+    <p>systemd units for a web process (all routes), a loops process (workers, sweepers, schedules, SLA timers) and separate <code>tools</code> and <code>models</code> processes, with PostgreSQL managed or on the VM, the OPA binary, and local disk or an object store.</p></article>
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Split services</h3><span class="pill s-design">planned</span></div>
+    <p>A Kustomize base per service and an overlay per environment, each service scaled on its own. Compose today covers the development PostgreSQL and OPA.</p></article>
+</div>
+<div class="why"><b>Why three layouts</b>One process is the fastest way to evaluate and develop. A single VM fits a small production deployment and bank estates that run plain virtual machines. Split services fit when load or a security boundary needs a component on its own. Because the code is identical in all three, a use case that passes in one passes in the others.</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Release step</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>Migrate</td><td>Run migrations once per release, before any new process starts; each service applies its own chain</td></tr>
+    <tr><td>Start beside the old</td><td>New processes start next to the old ones; workers claim only work stamped with their build</td></tr>
+    <tr><td>Drain and stop</td><td>Old processes stop once idle; runs in flight keep their pinned version, and waiting runs resume on the new build</td></tr>
+    <tr><td>Contract changes</td><td>Columns and tables are dropped one release later, so the previous build keeps working during the switch</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="ops">Operations</h2>
+<p>Configuration comes from the process environment through one settings class per process. Every variable uses the <code>OPS_</code> prefix, plus the provider key names.</p>
+<div class="grid">
+  <article class="w" id="secrets" style="--accent:var(--teal)"><div class="head"><span class="n">3</span><h3>Secrets</h3><span class="pill s-yours">dependency</span></div>
+    <p>The enterprise secrets manager (Vault, Azure Key Vault, AWS Secrets Manager) places values in the process environment. Tool credentials are read only by the data gateway, provider keys only by the AI gateway and storage credentials only by the files service. In test and production a service starts once its review key and secrets key are set.</p>
+    <div class="why"><b>Why environment only</b>Every secrets manager can populate the environment, so the platform needs no integration per vendor, and rotation is a change in the secrets manager followed by a restart.</div></article>
+  <article class="w" id="observability" style="--accent:var(--violet)"><div class="head"><span class="n">2</span><h3>Observability</h3><span class="pill s-part">partial</span></div>
+    <p>Services write structured events today (<code>model_call</code>, <code>unhandled_error</code>, timer events), and every run keeps a journal of its steps, owners and recoveries. Export through an OpenTelemetry collector to the enterprise APM, LangSmith or Langfuse is planned.</p></article>
+</div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Environment</th><th><code>OPS_ENVIRONMENT</code></th><th>What starts</th></tr></thead>
+  <tbody>
+    <tr><td>Development</td><td><code>dev</code></td><td>Dev sign-in and default keys are available for local work</td></tr>
+    <tr><td>Test, production</td><td><code>test</code>, <code>production</code></td><td>Real sign-in only; a service starts once its review key and secrets key are set</td></tr>
+  </tbody>
+</table></div>
+<div class="tablewrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><code>OPS_DATABASE_URL</code></td><td>dev container</td><td>The database a service connects to; its dialect selects the store renderers</td></tr>
+    <tr><td><code>OPS_GATEWAY_URL</code></td><td>unset</td><td>Set: write tools go through the data gateway. Production sets it</td></tr>
+    <tr><td><code>OPS_MODELS_URL</code></td><td>unset</td><td>Set: model calls and key budgets go through the AI gateway</td></tr>
+    <tr><td><code>OPS_LEASE_TTL_SECONDS</code></td><td>15</td><td>Time before another process takes over a stopped run</td></tr>
+    <tr><td><code>OPS_SWEEP_INTERVAL_SECONDS</code></td><td>3</td><td>How often each process checks for expired leases</td></tr>
+    <tr><td><code>OPS_REVIEW_TOKEN_TTL_SECONDS</code></td><td>900</td><td>Approval token lifetime</td></tr>
+    <tr><td><code>OPS_TURN_DEADLINE_SECONDS</code></td><td>120</td><td>Upper bound on one chat turn</td></tr>
+    <tr><td><code>OPS_PRICES</code></td><td>empty</td><td>Model prices per million tokens by alias, used for cost and budgets</td></tr>
+  </tbody>
+</table></div>
+<h3 style="margin-top:22px">Health and what to watch</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Signal</th><th>Why it matters</th><th>Healthy</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /health</code> per service</td><td>Process up; agents-service also reports database reachability and model key configuration</td><td>200 from each</td></tr>
+    <tr><td>Expired leases taken over</td><td>The sweeper recovers stopped runs</td><td>Each within TTL plus one sweep interval</td></tr>
+    <tr><td>Crashed runs</td><td>A process stopped mid-step; recovery re-runs that step</td><td>Rare, each followed by a recovery run</td></tr>
+    <tr><td>Timers fired on time</td><td>SLA outcomes depend on them</td><td>Within one poll interval of due</td></tr>
+    <tr><td>Gateway calls settled</td><td>Every write reaches a final state</td><td>All rows complete</td></tr>
+    <tr><td>Checkpoint write p95</td><td>Grows with state size and concurrency</td><td>Under 50 ms</td></tr>
+    <tr><td>Clock agreement</td><td>Leases and timers use the database clock</td><td>Skew well under the lease TTL</td></tr>
+  </tbody>
+</table></div>
+<h3 style="margin-top:22px">Runbooks</h3>
+<div class="grid">
+  <article class="w" style="--accent:var(--blue)"><div class="head"><h3>Stuck run</h3></div>
+    <ul><li>The run's state shows its status, next step, pending approval and SLA timers.</li><li>Its journal shows each attempt's owner and generation.</li><li>Running after its owner stops: the sweeper continues it after TTL plus one sweep. Waiting: it is with a person. Failed: fix the cause and resume from the last good checkpoint, or route it to people with a reason.</li></ul></article>
+  <article class="w" style="--accent:var(--indigo)"><div class="head"><h3>Bad version published</h3></div>
+    <ul><li>Publish the previous definition again so new runs take it.</li><li>Waiting runs can be migrated to a version where their waiting step exists.</li><li>Running runs on the bad version can be routed to people in one call.</li></ul></article>
+  <article class="w" style="--accent:var(--teal)"><div class="head"><h3>Key rotation</h3></div>
+    <ul><li>Review key: set the new value on agents and tools, restart both, re-approve open reviews.</li><li>Service keys: add the new public key beside the old one on every callee, restart, then retire the old key.</li><li>Model keys and the database credential: change them in the secrets manager and restart.</li></ul></article>
+</div>
+
+<h2 id="seams">Integration points</h2>
+<p>Each row is a seam. Changing the choice changes a setting or an adapter, and the rest of the platform stays as it is.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Seam</th><th>Default in the repository</th><th>Enterprise options</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Database</td><td>PostgreSQL in a local container</td><td>Managed or self-run PostgreSQL today; Azure SQL and MySQL 8 planned</td><td><span class="pill s-yours">dependency</span></td></tr>
+    <tr><td>Identity provider</td><td>platform-service with seeded people</td><td>Entra ID, Okta, Keycloak, any OIDC IdP</td><td><span class="pill s-design">planned</span></td></tr>
+    <tr><td>Secrets</td><td>Gitignored <code>.env</code> locally</td><td>Vault, Azure Key Vault, AWS Secrets Manager, injected as environment</td><td><span class="pill s-yours">dependency</span></td></tr>
+    <tr><td>Model providers</td><td>Scripted model; OpenAI or Anthropic</td><td>Azure OpenAI, Anthropic, Bedrock, self-hosted, each behind an alias</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>Business systems</td><td>Seeded tool catalogue</td><td>Core banking, CRM, ticketing, event streams, imported from OpenAPI or MCP</td><td><span class="pill s-built">built</span></td></tr>
+    <tr><td>Object storage</td><td>Local filesystem</td><td>S3, Azure Blob, chosen per kind of file on the storage settings page (not yet tried on a real cloud account)</td><td><span class="pill s-part">partial</span></td></tr>
+    <tr><td>Telemetry</td><td>Structured logs and the run journal</td><td>OpenTelemetry to an APM, LangSmith or Langfuse, a data lake</td><td><span class="pill s-design">planned</span></td></tr>
+  </tbody>
+</table></div>
+
+<footer>
+  Status: current, 2026-10-17. Ops AI is pre-release; status labels describe the code at this date. Licence: Apache-2.0.
+</footer>
+</div>
+
+<script>
+// Bands and groups first, then nodes, edges and numbered dots on top. Coordinates are viewBox units. Each numbered
+// dot links to the section of this page that explains that part.
+const v = (c) => `var(--${c})`;
+const s = (c) => `var(--${c}-soft)`;
+
+const BANDS = [
+  { y:24, c:'indigo', n:1, to:'#access', t:'IDENTITY', d:'Enterprise IdP (Entra ID · Okta · Keycloak) → platform-service issues tokens → every service verifies them locally' },
+  { y:60, c:'violet', n:2, to:'#observability', t:'OBSERVABILITY', d:'Structured events and run journals → OpenTelemetry collector → APM and trace store' },
+  { y:96, c:'teal',   n:3, to:'#secrets', t:'SECRETS', d:'Vault · Key Vault · Secrets Manager → OPS_* environment → one settings class per process' },
+];
+
+const GROUPS = [
+  { x:40,  y:150, w:160, h:516, c:'slate', t:'PEOPLE AND SYSTEMS' },
+  { x:220, y:150, w:700, h:516, c:'slate', t:'OPS AI PLATFORM', outer:true },
+  { x:236, y:186, w:190, h:306, c:'green', t:'CHAT AND UI', n:4, to:'#chat' },
+  { x:442, y:186, w:200, h:300, c:'indigo', t:'AGENTS', n:5, to:'#agents' },
+  { x:658, y:186, w:246, h:300, c:'blue', t:'WORKFLOWS', n:6, to:'#workflows' },
+  { x:236, y:502, w:668, h:148, c:'amber', t:'SHARED SERVICES · USED BY AGENTS AND WORKFLOWS', n:7, to:'#shared' },
+  { x:1096,y:150, w:124, h:236, c:'slate', t:'DEP · SYSTEMS' },
+  { x:1096,y:404, w:124, h:156, c:'slate', t:'DEP · MODELS' },
+  { x:220, y:686, w:700, h:96, c:'amber', t:'DEPENDENCIES · DATA THE PLATFORM CONNECTS TO', n:10, to:'#database' },
+  { x:40,  y:820, w:1180,h:150, c:'green', t:'BUILD → DEVELOP → DEPLOY', n:11, to:'#build' },
+];
+
+// s: status chip (built | part | design | dep); n and to: numbered dot and the section it links to; hidden: an
+// anchor point on the platform's edge with no box drawn.
+const NODES = [
+  { k:'ops',  x:52,  y:186, w:136, h:50, t:'Operators', d:'cases, chat', c:'slate' },
+  { k:'rev',  x:52,  y:248, w:136, h:50, t:'Reviewers', d:'approve, decide', c:'slate' },
+  { k:'bld',  x:52,  y:310, w:136, h:50, t:'Builders', d:'agents, workflows', c:'slate' },
+  { k:'cus',  x:52,  y:372, w:136, h:50, t:'Customers', d:'email, web chat', c:'slate' },
+  { k:'dev',  x:52,  y:434, w:136, h:50, t:'Developers', d:'API, MCP', c:'slate' },
+  { k:'adm',  x:52,  y:496, w:136, h:50, t:'Administrators', d:'access, audit', c:'slate' },
+
+  { k:'con',  x:251, y:222, w:160, h:52, t:'Console', d:'Next.js · one API contract', c:'green', s:'part' },
+  { k:'cht',  x:251, y:282, w:160, h:52, t:'Chat', d:'one run per message', c:'green', s:'built' },
+  { k:'api',  x:251, y:344, w:160, h:30, t:'REST API', c:'green', s:'built' },
+  { k:'wid',  x:251, y:380, w:160, h:30, t:'Mailbox', c:'green', s:'part' },
+  { k:'wdg',  x:251, y:416, w:160, h:30, t:'Widget', c:'green', s:'built' },
+  { k:'mcpe', x:251, y:452, w:160, h:30, t:'MCP endpoint', c:'green', s:'design' },
+
+  { k:'agt',  x:457, y:222, w:170, h:52, t:'Agents', d:'instruction · model · tools', c:'indigo', s:'built' },
+  { k:'run',  x:457, y:284, w:170, h:52, t:'Agent run API', d:'stream · wait · background', c:'indigo', s:'part' },
+  { k:'job',  x:457, y:346, w:170, h:52, t:'Agent jobs', d:'trigger · goal · report', c:'indigo', s:'design' },
+  { k:'krn',  x:457, y:408, w:170, h:66, t:'Kernel and packs', d:'tools · knowledge\nskills · guardrails', c:'indigo', s:'built' },
+
+  { k:'wfs',  x:673, y:222, w:216, h:52, t:'Workflows', d:'typed nodes · version · digest', c:'blue', s:'built' },
+  { k:'core', x:673, y:284, w:216, h:52, t:'Engine core', d:'flow · human review · journal', c:'blue', s:'built' },
+  { k:'sdk',  x:673, y:346, w:216, h:52, t:'Node SDK and packs', d:'ai · tools · files · agents · channels', c:'blue', s:'design' },
+  { k:'rnr',  x:673, y:408, w:216, h:66, t:'Runner on LangGraph', d:'queue · leases · fencing\nreconcile writes by key', c:'blue', s:'built' },
+
+  { k:'idt',  x:251, y:538, w:100, h:100, t:'Identity', d:'teams · roles\nkeys · audit', c:'indigo', s:'part' },
+  { k:'rvw',  x:359, y:538, w:100, h:100, t:'Reviews', d:'cases · queues\ndecisions\napproval tokens', c:'rose', s:'built' },
+  { k:'trg',  x:467, y:538, w:100, h:100, t:'Triggers', d:'schedules\nSLA timers\ndedupe', c:'amber', s:'part' },
+  { k:'kb',   x:575, y:538, w:100, h:100, t:'Knowledge', d:'sources\ncited passages', c:'amber', s:'built' },
+  { k:'fil',  x:683, y:538, w:100, h:100, t:'Files', d:'retention\nlegal hold', c:'amber', s:'part' },
+  { k:'wrk',  x:791, y:538, w:100, h:100, t:'Work feed', d:'one list of\nall work', c:'slate', s:'design' },
+
+  { k:'db',   x:457, y:718, w:236, h:52, t:'SQL database', d:'PostgreSQL today · Azure SQL, MySQL', c:'amber', s:'dep' },
+  { k:'obj',  x:705, y:718, w:200, h:52, t:'Object storage', d:'S3 · Azure Blob · local disk', c:'amber', s:'dep' },
+
+  { k:'brg',  x:560, y:171, w:340, h:0, t:'⇄ pink lines: agents inside workflows, workflows as tools', c:'rose', ghost:true },
+  { k:'eg1',  x:920, y:239, w:0, h:0, hidden:true },
+  { k:'eg2',  x:920, y:470, w:0, h:0, hidden:true },
+  { k:'eg3',  x:920, y:611, w:0, h:0, hidden:true },
+  { k:'tg',   x:944, y:164, w:136, h:150, t:'Data gateway', d:'tools-service\nOPA policy\napproval tokens\nOpenAPI · MCP\ncall log', c:'teal', s:'built', n:8, to:'#data-gateway' },
+  { k:'mg',   x:944, y:404, w:136, h:132, t:'AI gateway', d:'models-service\naliases · keys\nbudgets\ncall log', c:'violet', s:'part', n:9, to:'#ai-gateway' },
+  { k:'otel', x:944, y:572, w:276, h:78, t:'OpenTelemetry collector', d:'→ APM · LangSmith or Langfuse · data lake', c:'violet', s:'design' },
+
+  { k:'core2',x:1106,y:186, w:104, h:38, t:'Core banking', c:'slate' },
+  { k:'crm',  x:1106,y:232, w:104, h:38, t:'CRM', c:'slate' },
+  { k:'tix',  x:1106,y:278, w:104, h:38, t:'Ticketing', c:'slate' },
+  { k:'mcp',  x:1106,y:324, w:104, h:38, t:'MCP servers', c:'slate' },
+  { k:'oai',  x:1106,y:440, w:104, h:32, t:'Azure OpenAI', c:'slate' },
+  { k:'ant',  x:1106,y:478, w:104, h:32, t:'Anthropic', c:'slate' },
+  { k:'self', x:1106,y:516, w:104, h:32, t:'Self-hosted', c:'slate' },
+
+  { k:'b1', x:58,  y:862, w:170, h:84, t:'Clone', d:'make install\none uv workspace', c:'green' },
+  { k:'b2', x:254, y:862, w:170, h:84, t:'Develop', d:'make up · make dev\nmock or real services', c:'green' },
+  { k:'b3', x:450, y:862, w:170, h:84, t:'Verify', d:'make verify\nlint · types · tests · layers', c:'green' },
+  { k:'b4', x:646, y:862, w:170, h:84, t:'Prove', d:'make usecase-test\nscripted model, end to end', c:'green' },
+  { k:'b5', x:842, y:862, w:170, h:84, t:'Release', d:'migrate once\nnew beside old', c:'green', s:'design' },
+  { k:'b6', x:1038,y:862, w:170, h:84, t:'Deploy', d:'one process · one VM\nsplit services', c:'green', s:'design' },
+];
+
+// [from, side, to, side, colour, label, label position along the curve]
+const EDGES = [
+  ['ops','r','con','l','slate'], ['rev','r','con','l','slate'], ['bld','r','con','l','slate'], ['adm','r','con','l','slate'],
+  ['cus','r','wid','l','slate'], ['cus','r','wdg','l','slate'], ['dev','r','api','l','slate'], ['dev','r','mcpe','l','slate'],
+  ['con','r','agt','l','indigo'], ['cht','r','run','l','indigo'],
+  ['core','l','run','r','rose'], ['krn','r','rnr','l','rose'],
+  ['mcpe','b','trg','t','amber','start',.12],
+  ['eg1','r','tg','l','teal'], ['eg2','r','mg','l','violet'], ['eg3','r','otel','l','violet','traces'],
+  ['tg','r','core2','l','teal'], ['tg','r','crm','l','teal'], ['tg','r','tix','l','teal'], ['tg','r','mcp','l','teal'],
+  ['mg','r','oai','l','violet'], ['mg','r','ant','l','violet'], ['mg','r','self','l','violet'],
+  ['kb','b','db','t','amber','SQLAlchemy',.45], ['fil','b','obj','t','amber'],
+  ['b1','r','b2','l','green'], ['b2','r','b3','l','green'], ['b3','r','b4','l','green'], ['b4','r','b5','l','green'], ['b5','r','b6','l','green'],
+];
+
+const NS = 'http://www.w3.org/2000/svg';
+const MONO = 'ui-monospace,SFMono-Regular,Menlo,monospace';
+const svg = document.getElementById('arch');
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [a, val] of Object.entries(attrs)) e.setAttribute(a, val);
+  parent.appendChild(e);
+  return e;
+};
+const text = (x, y, str, attrs, parent) => { const t = el('text', { x, y, ...attrs }, parent); t.textContent = str; return t; };
+const byKey = Object.fromEntries(NODES.map((n) => [n.k, n]));
+const port = (n, side) => ({ l:[n.x, n.y + n.h/2], r:[n.x + n.w, n.y + n.h/2], t:[n.x + n.w/2, n.y], b:[n.x + n.w/2, n.y + n.h] }[side]);
+const STATUS = { built:['built','green'], part:['partial','blue'], design:['planned','slate'], dep:['dependency','amber'] };
+const layer = Object.fromEntries(['bands','groups','nodes','edges','dots'].map((k) => [k, el('g', {}, svg)]));
+
+function badge(nr, href, x, y, c) {
+  const a = el('a', { href, 'aria-label':`Part ${nr}` }, layer.dots);
+  el('circle', { cx:x, cy:y, r:15, fill:v(c), opacity:.18 }, a);
+  el('circle', { cx:x, cy:y, r:11, fill:v(c) }, a);
+  text(x, y + 4, String(nr), { 'text-anchor':'middle', 'font-size':11, 'font-weight':700, fill:'#fff', 'font-family':MONO }, a);
+}
+
+for (const b of BANDS) {
+  el('rect', { x:40, y:b.y, width:1180, height:28, rx:14, fill:s(b.c), stroke:v(b.c), 'stroke-opacity':.35 }, layer.bands);
+  text(74, b.y + 18, b.t, { 'font-size':10.5, 'font-weight':700, 'letter-spacing':'.08em', fill:v(b.c), 'font-family':MONO }, layer.bands);
+  text(196, b.y + 18, b.d, { 'font-size':12, fill:'var(--fg)', opacity:.85 }, layer.bands);
+  badge(b.n, b.to, 54, b.y + 14, b.c);
+}
+
+for (const g of GROUPS) {
+  el('rect', { x:g.x, y:g.y, width:g.w, height:g.h, rx:16, fill:g.outer ? 'none' : s(g.c), 'fill-opacity':.55,
+    stroke:v(g.c), 'stroke-opacity':g.outer ? .5 : .35, 'stroke-dasharray':g.outer ? '5 5' : 'none' }, layer.groups);
+  text(g.x + (g.n ? 36 : 14), g.y + 21, g.t, { 'font-size':10.5, 'font-weight':700, 'letter-spacing':'.08em', fill:v(g.c), 'font-family':MONO }, layer.groups);
+  if (g.n) badge(g.n, g.to, g.x + 18, g.y + 17, g.c);
+}
+
+for (const n of NODES) {
+  if (n.hidden) continue;
+  const g = el('g', {}, layer.nodes);
+  if (n.ghost) {
+    text(n.x + n.w/2, n.y + n.h/2 + 4, n.t, { 'text-anchor':'middle', 'font-size':11, fill:v(n.c), 'font-style':'italic' }, g);
+    continue;
+  }
+  el('rect', { x:n.x, y:n.y, width:n.w, height:n.h, rx:10, fill:'var(--card)', stroke:v(n.c), 'stroke-opacity':.5 }, g);
+  el('rect', { x:n.x, y:n.y + 8, width:3, height:n.h - 16, rx:1.5, fill:v(n.c) }, g);
+  const lines = n.d ? n.d.split('\n') : [];
+  const top = lines.length ? n.y + 20 : n.y + n.h/2 + 4;
+  text(n.x + 12, top, n.t, { 'font-size':12.5, 'font-weight':650, fill:'var(--fg)' }, g);
+  lines.forEach((ln, i) => text(n.x + 12, top + 16 + i * 14, ln, { 'font-size':10.5, fill:'var(--muted)' }, g));
+  if (n.s) {
+    const [label, c] = STATUS[n.s];
+    const bw = label.length * 6.2 + 12;
+    const bx = n.x + n.w - bw - 6, by = lines.length > 3 || n.h > 60 ? n.y + n.h - 21 : n.y + 6;
+    el('rect', { x:bx, y:by, width:bw, height:15, rx:7.5, fill:s(c) }, g);
+    text(bx + bw/2, by + 10.5, label.toUpperCase(), { 'text-anchor':'middle', 'font-size':8.5, 'font-weight':700, 'letter-spacing':'.04em', fill:v(c), 'font-family':MONO }, g);
+  }
+  if (n.n) badge(n.n, n.to, n.x, n.y, n.c);
+}
+
+for (const [a, sa, b, sb, c, label, at = .5] of EDGES) {
+  const [x1, y1] = port(byKey[a], sa), [x2, y2] = port(byKey[b], sb);
+  const vertical = sa === 'b' || sa === 't';
+  const dir = vertical ? Math.sign(y2 - y1) || 1 : Math.sign(x2 - x1) || 1;
+  const k = vertical ? Math.max(24, Math.abs(y2 - y1) / 2) : Math.max(18, Math.abs(x2 - x1) / 2);
+  const c1 = vertical ? [x1, y1 + k * dir] : [x1 + k * dir, y1];
+  const c2 = vertical ? [x2, y2 - k * dir] : [x2 - k * dir, y2];
+  const d = `M${x1} ${y1}C${c1[0]} ${c1[1]},${c2[0]} ${c2[1]},${x2} ${y2}`;
+  el('path', { d, fill:'none', stroke:v(c), 'stroke-opacity':.22, 'stroke-width':4 }, layer.edges);
+  el('path', { d, fill:'none', stroke:v(c), 'stroke-width':1.6, class:'flow' }, layer.edges);
+  for (const [x, y] of [[x1, y1], [x2, y2]]) {
+    el('circle', { cx:x, cy:y, r:4.5, fill:'var(--card)', stroke:v(c), 'stroke-width':1.6 }, layer.edges);
+    el('circle', { cx:x, cy:y, r:1.8, fill:v(c) }, layer.edges);
+  }
+  if (label) {
+    // Label sits on the curve at fraction `at`, so a crowded midpoint can move toward one end.
+    const u = 1 - at, pts = [[x1, y1], c1, c2, [x2, y2]];
+    const wts = [u*u*u, 3*u*u*at, 3*u*at*at, at*at*at];
+    const mx = wts.reduce((m, w, i) => m + w * pts[i][0], 0), my = wts.reduce((m, w, i) => m + w * pts[i][1], 0);
+    const w = label.length * 5.8 + 12;
+    el('rect', { x:mx - w/2, y:my - 8, width:w, height:16, rx:8, fill:'var(--card)', stroke:v(c), 'stroke-opacity':.4 }, layer.edges);
+    text(mx, my + 3.5, label, { 'text-anchor':'middle', 'font-size':9.5, fill:v(c), 'font-family':MONO }, layer.edges);
+  }
+}
+</script>
+</body>
+</html>

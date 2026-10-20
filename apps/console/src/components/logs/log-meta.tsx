@@ -1,0 +1,169 @@
+import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, Repeat, ShieldCheck, User, XCircle } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import { money } from '@/lib/format';
+import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOperation, CallStatus, GatewayKind, ToolCallRow } from '@/lib/types/governance';
+import { cn } from '@/lib/utils';
+
+export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
+export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', completion: 'Model call' };
+export const APPROVAL_LABEL: Record<ApprovalKind, string> = { person: 'Person', policy: 'Policy', none: 'None' };
+export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay' };
+
+export const options = <K extends string>(labels: Record<K, string>) => (Object.entries(labels) as [K, string][]).map(([value, label]) => ({ value, label }));
+
+/** Model cost in CAD; model calls cost fractions of a cent, so small amounts keep four decimals. */
+export const cad = (n: number) => money(n, 'CAD', n < 1 ? 4 : 2);
+
+export function GatewayIcon({ gateway, className }: { gateway: GatewayKind; className?: string }) {
+  const Icon = gateway === 'ai' ? Cpu : Database;
+  return <Icon className={cn('size-3.5 shrink-0 text-muted-foreground', className)} aria-label={GATEWAY_LABEL[gateway]} />;
+}
+
+export function OperationBadge({ operation }: { operation: CallOperation }) {
+  const tone = operation === 'write' ? 'border-warning/40 bg-warning/10 text-warning-text' : '';
+  return (
+    <Badge variant="outline" className={cn('font-normal', tone)}>
+      {OPERATION_LABEL[operation]}
+    </Badge>
+  );
+}
+
+export function ApprovalCell({ approval }: { approval: CallApproval }) {
+  if (approval.kind === 'none') return <span className="text-xs text-muted-foreground">None · read</span>;
+  if (approval.kind === 'policy')
+    return (
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+        <ShieldCheck className="size-3.5 text-muted-foreground" /> {approval.policyName} · v{approval.policyVersion}
+      </span>
+    );
+  if (!approval.tokenId)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-warning-text">
+        <Clock className="size-3.5" /> Waiting · {approval.reviewId}
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+      <User className="size-3.5 text-muted-foreground" /> {approval.by}
+    </span>
+  );
+}
+
+const STATUS: Record<CallStatus, { icon: typeof CheckCircle2; cls: string }> = {
+  ok: { icon: CheckCircle2, cls: 'text-success-text' },
+  error: { icon: XCircle, cls: 'text-destructive' },
+  denied: { icon: Ban, cls: 'text-destructive' },
+  awaiting_approval: { icon: Clock, cls: 'text-warning-text' },
+  replayed: { icon: Repeat, cls: 'text-muted-foreground' },
+};
+
+/** A replay names the call it repeated, so a row is never read as a second call that ran. */
+export function CallStatusText({ status, replayOf }: { status: CallStatus; replayOf?: string }) {
+  const s = STATUS[status];
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap', s.cls)}>
+      <s.icon className="size-3.5" /> {status === 'replayed' && replayOf ? `Replay of ${replayOf}` : CALL_STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+export const ACTION_LABEL: Record<AuditAction, string> = {
+  created: 'Created',
+  edited: 'Edited',
+  published: 'Published',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  restored: 'Restored',
+  deleted: 'Deleted',
+  granted: 'Granted',
+  revoked: 'Revoked',
+  connected: 'Connected',
+  login: 'Signed in',
+  uploaded: 'Uploaded',
+  downloaded: 'Downloaded',
+  legal_hold: 'Legal hold',
+  invited: 'Invited',
+  joined: 'Joined',
+  role_changed: 'Role changed',
+  checked: 'Checked access',
+};
+
+export const TARGET_LABEL: Record<AuditTargetType, string> = {
+  workflow: 'Workflow',
+  agent: 'Agent',
+  tool: 'Tool',
+  knowledge_base: 'Knowledge base',
+  source: 'Source',
+  deployment: 'Deployment',
+  gate: 'Gate',
+  review: 'Review',
+  access_grant: 'Access grant',
+  role: 'Role',
+  member: 'Member',
+  team: 'Team',
+  api_key: 'API key',
+  webhook: 'Webhook',
+  mailbox: 'Mailbox',
+  integration: 'Integration',
+  notifications: 'Notifications',
+  session: 'Session',
+  model: 'Model',
+  file: 'File',
+  storage: 'Storage',
+  skill: 'Skill',
+  template: 'Template',
+  sign_in_policy: 'Sign-in policy',
+};
+
+export function ActionBadge({ action }: { action: AuditAction }) {
+  const tone =
+    action === 'deleted' || action === 'revoked' || action === 'rejected'
+      ? 'border-destructive/40 bg-destructive/10 text-destructive '
+      : action === 'published' || action === 'approved' || action === 'granted'
+        ? 'border-success/40 bg-success/10 text-success-text '
+        : '';
+  return (
+    <Badge variant="outline" className={cn('font-normal', tone)}>
+      {ACTION_LABEL[action]}
+    </Badge>
+  );
+}
+
+export function ActorCell({ kind, name, detail }: { kind: 'person' | 'workflow'; name: string; detail: string }) {
+  const Icon = kind === 'workflow' ? Bot : User;
+  return (
+    <div className="flex max-w-48 min-w-40 items-start gap-2">
+      <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-label={kind === 'workflow' ? 'Workflow identity' : 'Person'} />
+      <div className="min-w-0">
+        <div className="truncate text-sm" title={name}>
+          {name}
+        </div>
+        <div className="truncate font-mono text-[11px] text-muted-foreground" title={detail}>
+          {detail}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Who made a call: the identity it runs as and, when someone acts for them, "via" that actor. Rows from a log that
+ * does not carry identity yet show the workflow and its agent, which is the same pair in workflow steps.
+ */
+export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'actor' | 'workflowName' | 'agentName'> }) {
+  const who = call.subject?.name ?? call.workflowName;
+  const via = call.subject ? call.actor?.name : call.agentName;
+  return (
+    <div className="max-w-56 min-w-36" data-testid="caller-cell">
+      <div className="truncate text-sm" title={who}>
+        {who}
+      </div>
+      {via && (
+        <div className="truncate text-xs text-muted-foreground" title={via}>
+          via {via}
+        </div>
+      )}
+    </div>
+  );
+}

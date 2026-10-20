@@ -1,0 +1,7 @@
+[
+  {"id": "kb_people", "name": "Fraud & payments"},
+  {"id": "kb_eng", "name": "Compliance"},
+  {"id": "kb_support", "name": "Retail banking"},
+  {"id": "kb_lending", "name": "Lending policy"},
+  {"id": "kb_legal", "name": "Cards & disputes"}
+]

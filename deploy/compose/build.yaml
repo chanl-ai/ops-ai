@@ -1,0 +1,19 @@
+# Builds app.yaml's images from this checkout (deploy/fly/Dockerfile, one target each), for development and the proofs.
+# A release package ships prebuilt images instead and has no copy of this file.
+#   docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/build.yaml --env-file <env file> up -d --build
+x-image: &image
+  context: ../..
+  dockerfile: deploy/fly/Dockerfile
+
+services:
+  migrate: { build: { <<: *image, target: platform } }
+  platform: { build: { <<: *image, target: platform } }
+  agents: { build: { <<: *image, target: agents } }
+  tools: { build: { <<: *image, target: tools } }
+  models: { build: { <<: *image, target: models } }
+  kb: { build: { <<: *image, target: kb } }
+  files: { build: { <<: *image, target: files } }
+  documents: { build: { <<: *image, target: documents } }
+  opa: { build: { <<: *image, target: opa } }
+  console: { build: { <<: *image, target: console } }
+  proxy: { build: { <<: *image, target: proxy } }

@@ -1,0 +1,417 @@
+{
+  "metric": [
+    { "industry": "Banking", "data": { "label": "Open disputes", "value": 128, "unit": "cases", "delta": -6, "deltaLabel": "this week", "goodWhen": "down", "trend": [140, 137, 134, 131, 134, 128] } },
+    { "industry": "Retail", "data": { "label": "Online orders today", "value": 3412, "delta": 266, "unit": "orders", "deltaLabel": "vs last Friday", "goodWhen": "up", "trend": [2810, 2950, 3020, 3180, 3290, 3412] } }
+  ],
+  "table": [
+    {
+      "industry": "Banking",
+      "data": {
+        "rows": [
+          { "date": "2026-10-14", "merchant": "Harbour Roofing", "amount": 1500 },
+          { "date": "2026-10-12", "merchant": "Metro Grocers", "amount": 86.4 },
+          { "date": "2026-10-11", "merchant": "City Parking", "amount": 18 }
+        ],
+        "columns": [{ "key": "date", "label": "Date", "format": "date" }, { "key": "merchant", "label": "Merchant" }, { "key": "amount", "label": "Amount", "format": "money" }]
+      }
+    },
+    {
+      "industry": "Logistics",
+      "data": {
+        "rows": [
+          { "shipment": "SHP-20931", "route": "Toronto to Montreal", "eta": "Oct 19", "status": "In transit" },
+          { "shipment": "SHP-20944", "route": "Calgary to Vancouver", "eta": "Oct 20", "status": "Delayed" },
+          { "shipment": "SHP-20951", "route": "Halifax to Ottawa", "eta": "Oct 18", "status": "Delivered" }
+        ],
+        "columns": [{ "key": "shipment", "label": "Shipment" }, { "key": "route", "label": "Route" }, { "key": "eta", "label": "ETA" }, { "key": "status", "label": "Status" }]
+      }
+    }
+  ],
+  "chart": [
+    {
+      "industry": "Healthcare",
+      "data": {
+        "rows": [
+          { "week": "W37", "booked": 412, "attended": 380 },
+          { "week": "W38", "booked": 436, "attended": 401 },
+          { "week": "W39", "booked": 455, "attended": 431 },
+          { "week": "W40", "booked": 470, "attended": 446 }
+        ],
+        "x": "week",
+        "y": ["booked", "attended"],
+        "kind": "area"
+      }
+    },
+    {
+      "industry": "Insurance",
+      "data": {
+        "rows": [
+          { "line": "Auto", "claims": 182 },
+          { "line": "Home", "claims": 96 },
+          { "line": "Travel", "claims": 41 }
+        ],
+        "x": "line",
+        "y": ["claims"],
+        "kind": "bar"
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "industry": "Insurance",
+      "data": {
+        "title": "Claim CLM-55821",
+        "events": [
+          { "at": "Oct 12, 09:14", "title": "Claim filed online", "detail": "Rear-end collision, photos attached" },
+          { "at": "Oct 13, 11:02", "title": "Adjuster assigned", "detail": "Priya Natarajan" },
+          { "at": "Oct 15, 16:40", "title": "Repair estimate received", "detail": "$3,240 from Lakeshore Auto Body", "tone": "info" },
+          { "at": "Oct 17, 10:05", "title": "Payment approved", "tone": "success" }
+        ]
+      }
+    },
+    {
+      "industry": "Retail",
+      "data": {
+        "title": "Customer activity, Dana Okafor",
+        "events": [
+          { "at": "Oct 2", "title": "Ordered a standing desk", "detail": "Order 88213, $649" },
+          { "at": "Oct 9", "title": "Asked about delivery", "detail": "Chat, resolved" },
+          { "at": "Oct 16", "title": "Return started", "detail": "Damaged on arrival", "tone": "warning" }
+        ]
+      }
+    }
+  ],
+  "tracker": [
+    {
+      "industry": "Logistics",
+      "data": {
+        "title": "Shipment SHP-20931",
+        "reference": "Toronto to Montreal",
+        "steps": [
+          { "label": "Picked up", "state": "done", "at": "Oct 17, 08:10" },
+          { "label": "At sorting facility", "state": "done", "at": "Oct 17, 14:32" },
+          { "label": "Out for delivery", "state": "active", "detail": "Driver ETA 11:00 to 13:00" },
+          { "label": "Delivered", "state": "pending" }
+        ]
+      }
+    },
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Mortgage application MA-7710",
+        "steps": [
+          { "label": "Application received", "state": "done" },
+          { "label": "Income verified", "state": "done" },
+          { "label": "Property appraisal", "state": "active", "detail": "Booked for Oct 21" },
+          { "label": "Underwriting decision", "state": "pending" },
+          { "label": "Funds released", "state": "pending" }
+        ]
+      }
+    }
+  ],
+  "entity": [
+    {
+      "industry": "Healthcare",
+      "data": {
+        "title": "Amelia Grant",
+        "subtitle": "Patient since 2019",
+        "category": "Patient",
+        "status": { "text": "Follow-up due", "tone": "warning" },
+        "fields": [
+          { "label": "Date of birth", "value": "1984-03-11" },
+          { "label": "Primary physician", "value": "Dr. Lee" },
+          { "label": "Last visit", "value": "2026-09-02" },
+          { "label": "Allergies", "value": "Penicillin" }
+        ],
+        "actions": [{ "label": "Book follow-up", "reply": "Book a follow-up for Amelia Grant" }]
+      }
+    },
+    {
+      "industry": "Retail",
+      "data": {
+        "title": "Aeron Chair, size B",
+        "subtitle": "SKU CH-AER-B-GRAPHITE",
+        "category": "Product",
+        "status": { "text": "Low stock", "tone": "warning" },
+        "fields": [
+          { "label": "Price", "value": "$1,795.00" },
+          { "label": "In stock", "value": 4 },
+          { "label": "Warehouse", "value": "Mississauga" }
+        ],
+        "actions": [{ "label": "Reorder 20", "reply": "Reorder 20 of CH-AER-B-GRAPHITE" }]
+      }
+    }
+  ],
+  "comparison": [
+    {
+      "industry": "Insurance",
+      "data": {
+        "title": "Home insurance plans",
+        "attributes": ["Monthly premium", "Deductible", "Water damage", "Replacement cost"],
+        "options": [
+          { "name": "Essential", "values": { "Monthly premium": "$42", "Deductible": "$1,000", "Water damage": "No", "Replacement cost": "No" }, "action": { "label": "Choose Essential", "reply": "Quote me the Essential plan" } },
+          { "name": "Plus", "badge": "Most chosen", "recommended": true, "values": { "Monthly premium": "$58", "Deductible": "$500", "Water damage": "Yes", "Replacement cost": "No" }, "action": { "label": "Choose Plus", "reply": "Quote me the Plus plan" } },
+          { "name": "Premier", "values": { "Monthly premium": "$79", "Deductible": "$250", "Water damage": "Yes", "Replacement cost": "Yes" }, "action": { "label": "Choose Premier", "reply": "Quote me the Premier plan" } }
+        ]
+      }
+    },
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Savings accounts",
+        "attributes": ["Interest", "Monthly fee", "Withdrawals"],
+        "options": [
+          { "name": "Everyday Savings", "values": { "Interest": "1.10%", "Monthly fee": "$0", "Withdrawals": "Unlimited" } },
+          { "name": "High Interest", "recommended": true, "badge": "Best rate", "values": { "Interest": "3.25%", "Monthly fee": "$0", "Withdrawals": "2 free a month" } }
+        ]
+      }
+    }
+  ],
+  "checklist": [
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Business account opening",
+        "items": [
+          { "label": "Articles of incorporation", "done": true },
+          { "label": "Photo ID for each signer", "done": true },
+          { "label": "Proof of business address", "done": false, "detail": "A utility bill from the last 90 days" },
+          { "label": "Beneficial ownership form", "done": false }
+        ]
+      }
+    },
+    {
+      "industry": "Healthcare",
+      "data": {
+        "title": "Before your procedure",
+        "items": [
+          { "label": "Stop eating 8 hours before", "done": false },
+          { "label": "Bring your health card", "done": false },
+          { "label": "Arrange a ride home", "done": true }
+        ]
+      }
+    }
+  ],
+  "form": [
+    {
+      "industry": "Insurance",
+      "data": {
+        "title": "Report a claim",
+        "fields": [
+          { "name": "policy", "label": "Policy number", "type": "text", "required": true, "placeholder": "e.g. HO-448812" },
+          { "name": "date", "label": "Date of loss", "type": "date", "required": true },
+          { "name": "kind", "label": "What happened", "type": "select", "options": ["Water damage", "Fire", "Theft", "Other"] },
+          { "name": "details", "label": "Details", "type": "textarea" }
+        ],
+        "submit": { "label": "Submit claim", "reply": "File this claim" }
+      }
+    },
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Request a callback",
+        "fields": [
+          { "name": "phone", "label": "Phone", "type": "text", "required": true },
+          { "name": "slot", "label": "Best time", "type": "select", "options": ["Morning", "Afternoon", "Evening"] },
+          { "name": "urgent", "label": "Urgent", "type": "boolean" }
+        ],
+        "submit": { "label": "Book callback", "reply": "Book a callback" }
+      }
+    }
+  ],
+  "confirm": [
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Place a $1,500 hold on CHQ-2219?",
+        "summary": "The customer disputes a charge from Harbour Roofing.",
+        "tone": "warning",
+        "details": [{ "label": "Account", "value": "CHQ-2219" }, { "label": "Amount", "value": "$1,500.00" }, { "label": "Expires", "value": "In 72 hours" }],
+        "confirm": { "label": "Place hold", "reply": "Yes, place the hold" },
+        "cancel": { "label": "Not now", "reply": "Do not place the hold" }
+      }
+    },
+    {
+      "industry": "Logistics",
+      "data": {
+        "title": "Reroute SHP-20944 through Kamloops?",
+        "summary": "The Coquihalla is closed; the reroute adds about 3 hours.",
+        "details": [{ "label": "New ETA", "value": "Oct 20, 18:00" }, { "label": "Extra cost", "value": "$140" }],
+        "confirm": { "label": "Reroute", "reply": "Reroute SHP-20944 through Kamloops" },
+        "cancel": { "label": "Keep route", "reply": "Keep the current route" }
+      }
+    }
+  ],
+  "document": [
+    {
+      "industry": "Banking",
+      "data": {
+        "name": "Cardholder agreement 2026.pdf",
+        "page": 14,
+        "pages": 32,
+        "before": "If you notice a transaction you did not authorise, contact us as soon as you can. ",
+        "passage": "You may dispute a card transaction within 120 days of the statement date on which it first appears.",
+        "after": " We may ask for documents that support your claim.",
+        "fileId": "fl_cardholder_agreement"
+      }
+    },
+    {
+      "industry": "Healthcare",
+      "data": {
+        "name": "Discharge instructions.pdf",
+        "page": 2,
+        "pages": 4,
+        "before": "Keep the dressing dry for 48 hours. ",
+        "passage": "Call the clinic if you have a fever above 38.5 °C or the wound becomes red and swollen.",
+        "fileId": "fl_discharge_ag"
+      }
+    }
+  ],
+  "quote": [
+    {
+      "industry": "Insurance",
+      "data": { "passage": "Sudden and accidental water damage from plumbing is covered; gradual seepage is not.", "source": "Home policy wording, section 4.2", "page": 9, "confidence": 0.88, "fileId": "fl_home_wording" }
+    },
+    {
+      "industry": "Retail",
+      "data": { "passage": "Items may be returned within 30 days of delivery in their original packaging.", "source": "Returns policy", "confidence": 0.95 }
+    }
+  ],
+  "plan": [
+    {
+      "industry": "Insurance",
+      "data": {
+        "title": "Settle claim CLM-55821",
+        "description": "Four steps; the payment waits for a reviewer.",
+        "steps": [
+          { "label": "Confirm coverage", "state": "done" },
+          { "label": "Check the repair estimate against the guide", "state": "done" },
+          { "label": "Draft the payment of $3,240", "state": "active" },
+          { "label": "Send the settlement letter", "state": "pending" }
+        ],
+        "action": { "label": "Open the claim", "reply": "Show claim CLM-55821" }
+      }
+    },
+    {
+      "industry": "Logistics",
+      "data": {
+        "title": "Recover the delayed shipment",
+        "steps": [
+          { "label": "Find the nearest open route", "state": "done" },
+          { "label": "Ask the customer about the new ETA", "state": "active" },
+          { "label": "Book the reroute", "state": "pending" }
+        ]
+      }
+    }
+  ],
+  "reasoning": [
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "How the agent worked this out",
+        "steps": [
+          { "label": "Read the question", "detail": "A disputed $1,500 card charge from 18 days ago.", "state": "done" },
+          { "label": "Searched the disputes knowledge base", "detail": "Three passages matched.", "state": "done", "results": ["Cardholder agreement", "Disputes playbook", "Reason codes"] },
+          { "label": "Drafting the hold for approval", "state": "active" }
+        ]
+      }
+    },
+    {
+      "industry": "Healthcare",
+      "data": {
+        "steps": [
+          { "label": "Checked the referral", "detail": "Cardiology, routine.", "state": "done" },
+          { "label": "Searched open appointments", "state": "done", "results": ["Dr. Patel, Oct 22", "Dr. Moreau, Oct 24"] },
+          { "label": "Offering the two earliest", "state": "active" }
+        ]
+      }
+    }
+  ],
+  "slots": [
+    {
+      "industry": "Healthcare",
+      "data": {
+        "title": "Book a follow-up with Dr. Lee",
+        "timezone": "Eastern time",
+        "reply": "Book",
+        "days": [
+          { "day": "Tue Oct 21", "slots": [{ "label": "09:00", "available": true }, { "label": "10:30", "available": false }, { "label": "14:00", "available": true }] },
+          { "day": "Wed Oct 22", "slots": [{ "label": "08:30", "available": true }, { "label": "11:00", "available": true }] }
+        ]
+      }
+    },
+    {
+      "industry": "Banking",
+      "data": {
+        "title": "Meet a mortgage specialist",
+        "reply": "Book the branch meeting",
+        "days": [
+          { "day": "Mon Oct 20", "slots": [{ "label": "10:00", "available": true }, { "label": "15:30", "available": true }] },
+          { "day": "Thu Oct 23", "slots": [{ "label": "12:00", "available": false }, { "label": "16:00", "available": true }] }
+        ]
+      }
+    }
+  ],
+  "receipt": [
+    {
+      "industry": "Retail",
+      "data": {
+        "title": "Order 88213",
+        "number": "INV-2026-88213",
+        "date": "Oct 2, 2026",
+        "party": "Dana Okafor",
+        "currency": "CAD",
+        "lines": [
+          { "label": "Standing desk, oak", "quantity": 1, "unitPrice": 599, "amount": 599 },
+          { "label": "Cable tray", "quantity": 2, "unitPrice": 25, "amount": 50 }
+        ],
+        "subtotal": 649,
+        "tax": 84.37,
+        "total": 733.37,
+        "status": { "text": "Paid", "tone": "success" }
+      }
+    },
+    {
+      "industry": "Logistics",
+      "data": {
+        "title": "Freight invoice",
+        "number": "FR-55120",
+        "date": "Oct 17, 2026",
+        "party": "Lakeview Furniture Ltd.",
+        "currency": "CAD",
+        "lines": [
+          { "label": "Linehaul, Toronto to Montreal", "amount": 1240 },
+          { "label": "Fuel surcharge", "amount": 186 },
+          { "label": "Liftgate delivery", "amount": 75 }
+        ],
+        "total": 1501,
+        "status": { "text": "Due Nov 16", "tone": "warning" }
+      }
+    }
+  ],
+  "contact": [
+    {
+      "industry": "Insurance",
+      "data": {
+        "name": "Priya Natarajan",
+        "role": "Claims adjuster",
+        "organisation": "Northfield Insurance",
+        "phone": "416 555 0142",
+        "email": "p.natarajan@northfield.example",
+        "hours": "Mon to Fri, 8:30 to 17:00",
+        "actions": [{ "label": "Ask Priya to call", "reply": "Ask Priya Natarajan to call me" }]
+      }
+    },
+    {
+      "industry": "Logistics",
+      "data": {
+        "name": "Montreal depot",
+        "role": "Receiving",
+        "organisation": "Lakeview Freight",
+        "phone": "514 555 0199",
+        "address": "4100 Rue Hochelaga, Montreal QC",
+        "hours": "Daily, 6:00 to 22:00"
+      }
+    }
+  ]
+}

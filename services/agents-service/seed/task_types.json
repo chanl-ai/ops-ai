@@ -1,0 +1,182 @@
+[
+  {
+    "id": "generic_decision",
+    "version": 1,
+    "name": "Decision",
+    "description": "A yes-or-no question with the facts it rests on.",
+    "params": {
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "title": {"type": "string", "fallback": "{typeName}"},
+        "why": {"type": "string"},
+        "source": {"type": "string"},
+        "facts": {"type": "array"},
+        "history": {"type": "array"},
+        "onApprove": {"type": "string", "fallback": "The workflow continues."},
+        "onReject": {"type": "string", "fallback": "The workflow stops here."}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "why_source", "bind": {"why": "{why}", "source": "{source}"}},
+      {"region": "facts", "bind": {"facts": "{facts}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "approve", "label": "Approve", "consequence": "{onApprove}", "reason": "optional", "tone": "primary", "port": "approve"},
+      {"name": "reject", "label": "Reject", "consequence": "{onReject}", "reason": "required", "tone": "destructive", "port": "reject"}
+    ]
+  },
+  {
+    "id": "document_check",
+    "version": 3,
+    "name": "Document check",
+    "description": "Check the values read from a document before they are used.",
+    "params": {
+      "type": "object",
+      "required": ["title", "document", "fields"],
+      "properties": {
+        "title": {"type": "string", "fallback": "Check the values read from this document"},
+        "why": {"type": "string"},
+        "source": {"type": "string"},
+        "document": {"type": "string"},
+        "fields": {"type": "array"},
+        "history": {"type": "array"},
+        "onApprove": {"type": "string", "fallback": "The workflow continues with these values."},
+        "onReject": {"type": "string", "fallback": "Nothing is used. The team queue decides what the document is."}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "why_source", "bind": {"why": "{why}", "source": "{source}"}},
+      {"region": "document", "bind": {"file": "{document}", "boxes": "{fields}"}},
+      {"region": "form", "bind": {"fields": "{fields}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "approve", "label": "Approve", "consequence": "{onApprove}", "reason": "none", "tone": "primary", "port": "approve", "requires": "key_fields_confirmed"},
+      {"name": "reject", "label": "Reject", "consequence": "{onReject}", "reason": "required", "tone": "destructive", "port": "reject", "inputs": [{"name": "assignee", "label": "Send to", "type": "string", "format": "person", "required": false}]}
+    ]
+  },
+  {
+    "id": "write_approval",
+    "version": 1,
+    "name": "Write approval",
+    "description": "Approve a change before it is made in another system.",
+    "params": {
+      "type": "object",
+      "required": ["title", "call"],
+      "properties": {
+        "title": {"type": "string", "fallback": "Approve this change"},
+        "why": {"type": "string"},
+        "source": {"type": "string"},
+        "facts": {"type": "array"},
+        "call": {"type": "object"},
+        "history": {"type": "array"},
+        "onApprove": {"type": "string", "fallback": "The change is made now."},
+        "onReject": {"type": "string", "fallback": "Nothing changes."}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "why_source", "bind": {"why": "{why}", "source": "{source}"}},
+      {"region": "facts", "bind": {"facts": "{facts}"}},
+      {"region": "write_preview", "bind": {"call": "{call}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "approve", "label": "Make the change", "consequence": "{onApprove}", "reason": "optional", "tone": "primary", "port": "approve"},
+      {"name": "reject", "label": "Decline", "consequence": "{onReject}", "reason": "required", "tone": "destructive", "port": "reject"}
+    ]
+  },
+  {
+    "id": "acknowledgement",
+    "version": 2,
+    "name": "Reply check",
+    "description": "Read a reply before it is sent.",
+    "params": {
+      "type": "object",
+      "required": ["title", "reply"],
+      "properties": {
+        "title": {"type": "string", "fallback": "Send this reply?"},
+        "received": {"type": "object"},
+        "reply": {"type": "string"},
+        "facts": {"type": "array"},
+        "cases": {"type": "array"},
+        "history": {"type": "array"},
+        "onApprove": {"type": "string", "fallback": "The reply is sent."},
+        "onReject": {"type": "string", "fallback": "Nothing is sent."}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "document", "bind": {"received": "{received}"}},
+      {"region": "message", "bind": {"text": "{reply}"}},
+      {"region": "cases", "bind": {"cases": "{cases}"}},
+      {"region": "facts", "bind": {"facts": "{facts}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "approve", "label": "Send", "consequence": "{onApprove}", "reason": "none", "tone": "primary", "port": "approve"},
+      {"name": "reject", "label": "Do not send", "consequence": "{onReject}", "reason": "required", "tone": "destructive", "port": "reject"}
+    ]
+  },
+  {
+    "id": "data_entry",
+    "version": 1,
+    "name": "Data entry",
+    "description": "Enter the details a workflow needs to go on.",
+    "params": {
+      "type": "object",
+      "required": ["title", "fields"],
+      "properties": {
+        "title": {"type": "string", "fallback": "Enter the details"},
+        "why": {"type": "string"},
+        "fields": {"type": "array"},
+        "history": {"type": "array"},
+        "onSubmit": {"type": "string", "fallback": "The workflow continues with what you entered."},
+        "onCancel": {"type": "string", "fallback": "Nothing is created."}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "why_source", "bind": {"why": "{why}"}},
+      {"region": "form", "bind": {"fields": "{fields}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "submit", "label": "Submit", "consequence": "{onSubmit}", "reason": "none", "tone": "primary", "port": "approve"},
+      {"name": "cancel", "label": "Cancel", "consequence": "{onCancel}", "reason": "optional", "tone": "neutral", "port": "reject"}
+    ]
+  },
+  {
+    "id": "tool_access_request",
+    "version": 2,
+    "name": "Tool access request",
+    "description": "Let a workflow or agent use a tool module. A copy of Write approval with the agent's reason first.",
+    "params": {
+      "type": "object",
+      "required": ["title", "facts"],
+      "properties": {
+        "title": {"type": "string", "fallback": "{typeName}"},
+        "reason": {"type": "string", "fallback": "No reason given."},
+        "source": {"type": "string"},
+        "facts": {"type": "array"},
+        "until": {"type": "string"},
+        "history": {"type": "array"}
+      }
+    },
+    "regions": [
+      {"region": "header", "bind": {"title": "{title}"}},
+      {"region": "message", "bind": {"text": "{reason}"}},
+      {"region": "why_source", "bind": {"source": "{source}"}},
+      {"region": "facts", "bind": {"facts": "{facts}"}},
+      {"region": "history", "bind": {"events": "{history}"}, "collapsed": true}
+    ],
+    "actions": [
+      {"name": "approve", "label": "Grant", "consequence": "The tools can be used until {until}.", "reason": "none", "tone": "primary", "port": "approve"},
+      {"name": "reject", "label": "Refuse", "consequence": "Nothing changes, and your reason is kept with the request.", "reason": "required", "tone": "destructive", "port": "reject"}
+    ]
+  }
+]

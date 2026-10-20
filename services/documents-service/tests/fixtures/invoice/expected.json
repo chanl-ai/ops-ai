@@ -1,0 +1,144 @@
+{
+  "INVA01.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30117",
+      "vendor": "Harbour Supplies Ltd",
+      "bill_to": "Northfield Bank Facilities",
+      "invoice_date": "10/02/2026",
+      "due_date": "11/01/2026",
+      "tax": "$162.50",
+      "total": "$1,412.50"
+    }
+  },
+  "INVA02.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30142",
+      "vendor": "Northern Paper Co",
+      "bill_to": "Northfield Bank Branch 12",
+      "invoice_date": "10/05/2026",
+      "due_date": "11/04/2026",
+      "tax": "$41.39",
+      "total": "$359.79"
+    }
+  },
+  "INVA03.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30188",
+      "vendor": "Bluewater Logistics",
+      "bill_to": "Northfield Bank Operations",
+      "invoice_date": "10/07/2026",
+      "due_date": "11/06/2026",
+      "tax": "$910.54",
+      "total": "$7,914.69"
+    }
+  },
+  "INVA04.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30203",
+      "vendor": "Kestrel Office Goods",
+      "bill_to": "Northfield Bank Legal",
+      "invoice_date": "10/09/2026",
+      "due_date": "11/08/2026",
+      "tax": "$13.00",
+      "total": "$112.99"
+    }
+  },
+  "INVA05.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30251",
+      "vendor": "Pinecrest Catering",
+      "bill_to": "Northfield Bank Events",
+      "invoice_date": "10/12/2026",
+      "due_date": "11/11/2026",
+      "tax": "$313.30",
+      "total": "$2,723.30"
+    }
+  },
+  "INVA06.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30290",
+      "vendor": "Ridgeway Print Shop",
+      "bill_to": "Northfield Bank Marketing",
+      "invoice_date": "10/14/2026",
+      "due_date": "11/13/2026",
+      "tax": "$7.31",
+      "total": "$63.51"
+    }
+  },
+  "INVB01.pdf": {
+    "layout": "B",
+    "expected": {
+      "invoice_no": "TX-8812",
+      "vendor": "Cedar Lane Furniture",
+      "bill_to": "Northfield Bank Branch 4",
+      "invoice_date": "10/03/2026",
+      "due_date": "10/31/2026",
+      "tax": "$228.00",
+      "total": "$2,128.00"
+    },
+    "edge": "another form: the layout A template misses it"
+  },
+  "INVB02.pdf": {
+    "layout": "B",
+    "expected": {
+      "invoice_no": "TX-8840",
+      "vendor": "Atlas Courier Group",
+      "bill_to": "Northfield Bank Mailroom",
+      "invoice_date": "10/11/2026",
+      "due_date": "11/10/2026",
+      "tax": "$18.20",
+      "total": "$158.20"
+    },
+    "edge": "another form: the layout A template misses it"
+  },
+  "INVA07_scan.pdf": {
+    "layout": "A",
+    "imageOnly": true,
+    "expected": {
+      "invoice_no": "INV-30311",
+      "vendor": "Summit Cleaning Services",
+      "bill_to": "Northfield Bank Facilities",
+      "invoice_date": "10/16/2026",
+      "due_date": "11/15/2026",
+      "tax": "$97.50",
+      "total": "$847.50"
+    },
+    "edge": "a scan shifted a few millimetres: the template reads it"
+  },
+  "INVA08_scan.pdf": {
+    "layout": "A",
+    "imageOnly": true,
+    "expected": {
+      "invoice_no": "INV-30344",
+      "vendor": "Granite IT Partners",
+      "bill_to": "Northfield Bank Technology",
+      "invoice_date": "10/19/2026",
+      "due_date": "11/18/2026",
+      "tax": "$650.00",
+      "total": "$5,650.00"
+    },
+    "edge": "a scan skewed two degrees: still within the template's tolerance; a value OCR misreads goes to review"
+  },
+  "INVA09_misprint.pdf": {
+    "layout": "A",
+    "expected": {
+      "invoice_no": "INV-30399",
+      "vendor": "Westfield Hardware",
+      "bill_to": "Northfield Bank Facilities",
+      "invoice_date": "10/21/2026",
+      "due_date": null,
+      "tax": "$26.00",
+      "total": "$226.00"
+    },
+    "printedInvalid": {
+      "due_date": "13/45/2026"
+    },
+    "edge": "due_date printed as 13/45/2026: read, rejected as a date, sent to review with no value"
+  }
+}

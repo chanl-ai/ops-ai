@@ -1,0 +1,18 @@
+[project]
+name = "ops-identity"
+version = "0.1.0"
+description = "Who is calling: resolves a platform token, an API key or a service token to a Principal, with the team chosen and key scopes enforced from the HTTP method"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-policy", "ops-service-kit", "fastapi>=0.115", "httpx>=0.27", "pydantic>=2.7"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_identity"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

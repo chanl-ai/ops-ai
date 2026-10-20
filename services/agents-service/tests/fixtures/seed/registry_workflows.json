@@ -1,0 +1,23 @@
+[
+  {
+    "id": "wire_hold_review",
+    "name": "Wire hold review",
+    "description": "Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold.",
+    "trigger": "Hold requested",
+    "graph": {
+      "nodes": [
+        {"id": "t", "type": "trigger", "position": {"x": 0, "y": 200}, "data": {"label": "Hold requested", "description": "Email to fraud ops", "icon": "globe", "category": "trigger"}},
+        {"id": "assess", "type": "step", "position": {"x": 270, "y": 200}, "data": {"label": "Assess the wire", "description": "Wire Fraud Sentinel", "icon": "brain", "category": "ai", "agentSlug": "wire-fraud-sentinel"}},
+        {"id": "review", "type": "review", "position": {"x": 540, "y": 200}, "data": {"label": "Fraud analyst review", "description": "", "icon": "user", "category": "human", "reviewers": "Fraud Operations"}},
+        {"id": "held", "type": "end", "position": {"x": 810, "y": 100}, "data": {"label": "Held", "description": "", "icon": "check", "category": "control"}},
+        {"id": "released", "type": "end", "position": {"x": 810, "y": 300}, "data": {"label": "Released", "description": "", "icon": "x", "category": "control"}}
+      ],
+      "edges": [
+        {"id": "t-out-assess", "source": "t", "target": "assess"},
+        {"id": "assess-out-review", "source": "assess", "target": "review"},
+        {"id": "review-approved-held", "source": "review", "target": "held", "sourceHandle": "approved", "label": "Approved"},
+        {"id": "review-rejected-released", "source": "review", "target": "released", "sourceHandle": "rejected", "label": "Rejected"}
+      ]
+    }
+  }
+]

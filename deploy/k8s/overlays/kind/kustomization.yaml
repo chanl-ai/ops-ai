@@ -1,0 +1,53 @@
+# The local proof's overlay (deploy/k8s/proof.sh): images loaded into kind, the proxy on a NodePort the kind node maps
+# to localhost:18891, the fake model, and the outside database at the address proof.sh writes to postgres-endpoint.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ops-ai
+resources:
+  - ../../base
+  - postgres-endpoint.yaml
+  - fake-model.yaml
+images:
+  - {name: ops-ai/platform, newTag: dev}
+  - {name: ops-ai/agents, newTag: dev}
+  - {name: ops-ai/tools, newTag: dev}
+  - {name: ops-ai/models, newTag: dev}
+  - {name: ops-ai/kb, newTag: dev}
+  - {name: ops-ai/files, newTag: dev}
+  - {name: ops-ai/documents, newTag: dev}
+  - {name: ops-ai/opa, newTag: dev}
+  - {name: ops-ai/console, newTag: dev}
+  - {name: ops-ai/proxy, newTag: dev}
+patches:
+  - target: {kind: Service, name: proxy}
+    patch: |-
+      - {op: add, path: /spec/type, value: NodePort}
+      - {op: add, path: /spec/ports/0/nodePort, value: 30890}
+configMapGenerator:
+  - name: ops-origin
+    literals:
+      - OPS_CORS_ORIGINS=["http://localhost:18891"]
+      - OPS_CONSOLE_URL=http://localhost:18891
+      - OPS_PLATFORM_PUBLIC_URL=http://localhost:18891/api/platform
+      - OPS_FILES_PUBLIC_URL=http://localhost:18891/api/files
+  - name: ops-console
+    literals:
+      - NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:18891/api/platform
+      - NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:18891/api/agents
+      - NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:18891/api/agents
+      - NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:18891/api/agents
+      - NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:18891/api/tools
+      - NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:18891/api/kb
+      - NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:18891/api/files
+      - NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:18891/api/documents
+# One Secret per service from the git-ignored env files beside this file (deploy/k8s/write_secrets.py); the hash suffix
+# rolls the pods that read a Secret whenever its values change.
+secretGenerator:
+  - {name: ops-platform, envs: [platform.env]}
+  - {name: ops-agents, envs: [agents.env]}
+  - {name: ops-tools, envs: [tools.env]}
+  - {name: ops-models, envs: [models.env]}
+  - {name: ops-kb, envs: [kb.env]}
+  - {name: ops-files, envs: [files.env]}
+  - {name: ops-documents, envs: [documents.env]}
+  - {name: ops-migrate, envs: [migrate.env]}

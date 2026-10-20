@@ -1,0 +1,14 @@
+[project]
+name = "ops-storage"
+version = "0.1.0"
+description = "Object storage behind one protocol (ADR-0010): S3, Azure Blob and a local filesystem backend"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["boto3>=1.35", "azure-storage-blob>=12.23", "obstore>=0.12"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_storage"]

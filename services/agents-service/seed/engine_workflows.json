@@ -1,0 +1,4478 @@
+[
+  {
+    "schemaVersion": 2,
+    "id": "customer_summary",
+    "name": "Customer summary",
+    "description": "Summarise a customer for a banker: the bank finds the customer by name and reads their record, and the advisor agent summarises that record with the customer id.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Request",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "customer": {
+                "type": "string",
+                "description": "The customer's name"
+              }
+            },
+            "required": [
+              "customer"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "find",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Find the customer",
+        "parameters": {
+          "operation": "search_customers",
+          "input": {
+            "query": "$.input.customer"
+          }
+        },
+        "position": {
+          "x": 200,
+          "y": 0
+        }
+      },
+      {
+        "id": "found",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "Found?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.nodes.find.out.0.id",
+              "op": "exists"
+            }
+          ]
+        },
+        "position": {
+          "x": 400,
+          "y": 0
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Read the record",
+        "parameters": {
+          "operation": "get_customer",
+          "input": {
+            "customer_id": "$.nodes.find.out.0.id"
+          }
+        },
+        "position": {
+          "x": 600,
+          "y": 0
+        }
+      },
+      {
+        "id": "summarise",
+        "type": "ops.ai.agent",
+        "typeVersion": 1,
+        "name": "Summarise the customer",
+        "parameters": {
+          "agent": "ag_advisor",
+          "prompt": "Summarise this customer for a banker from the record given; read nothing else unless the record is missing a field you need.",
+          "input": {
+            "customer": "$.input.customer",
+            "record": "$.nodes.read.out"
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "customerId": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "customerId",
+              "summary"
+            ]
+          },
+          "maxToolCalls": 3
+        },
+        "position": {
+          "x": 800,
+          "y": 0
+        }
+      },
+      {
+        "id": "done",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Summarised",
+        "parameters": {
+          "outcome": "summarised",
+          "output": "$.nodes.summarise.out"
+        },
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "No summary",
+        "parameters": {
+          "outcome": "no_summary",
+          "result": "failed"
+        },
+        "position": {
+          "x": 1040,
+          "y": 120
+        }
+      },
+      {
+        "id": "not_found",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not found",
+        "parameters": {
+          "outcome": "not_found"
+        },
+        "position": {
+          "x": 600,
+          "y": 160
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "find",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "find",
+          "port": "ok"
+        },
+        "to": {
+          "node": "found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "find",
+          "port": "refused"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "find",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "found",
+          "port": "true"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "found",
+          "port": "false"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "summarise",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "refused"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "summarise",
+          "port": "ok"
+        },
+        "to": {
+          "node": "done",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "summarise",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "levy_case",
+    "name": "Levy case",
+    "description": "One debtor of a garnishment notice: find the customer by name and address or the last four, then a reviewer holds funds or flags the customer.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Debtor",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "record"
+            ],
+            "properties": {
+              "record": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "search",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Search customers",
+        "parameters": {
+          "operation": "search_customers",
+          "input": {
+            "query": "$.input.record.name"
+          }
+        },
+        "position": {
+          "x": 240,
+          "y": 0
+        }
+      },
+      {
+        "id": "match",
+        "type": "ops.data.match",
+        "typeVersion": 1,
+        "name": "Match the debtor",
+        "parameters": {
+          "item": "$.input.record",
+          "candidates": "$.nodes.search.out",
+          "all": [
+            {
+              "left": "name",
+              "op": "equals",
+              "right": "name"
+            }
+          ],
+          "any": [
+            {
+              "left": "ssn_last4",
+              "op": "equals",
+              "right": "ssnLast4"
+            },
+            {
+              "left": "address",
+              "op": "overlaps",
+              "right": "address",
+              "minLength": 6
+            }
+          ]
+        },
+        "position": {
+          "x": 480,
+          "y": 0
+        }
+      },
+      {
+        "id": "case",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open the levy case",
+        "parameters": {
+          "subject": "Levy notice: {$.input.record.name} ({$.input.record.case_no})",
+          "priority": "high",
+          "customerId": "$.nodes.match.out.match.id",
+          "customerName": "$.nodes.match.out.match.name"
+        },
+        "position": {
+          "x": 720,
+          "y": 0
+        }
+      },
+      {
+        "id": "case_unmatched",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open a case for the unmatched debtor",
+        "parameters": {
+          "subject": "Levy notice: {$.input.record.name} ({$.input.record.case_no})",
+          "priority": "high",
+          "customerName": "$.input.record.name"
+        },
+        "position": {
+          "x": 720,
+          "y": 160
+        }
+      },
+      {
+        "id": "accounts",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "List accounts",
+        "parameters": {
+          "operation": "list_accounts",
+          "input": {
+            "customer_id": "$.nodes.match.out.match.id"
+          }
+        },
+        "position": {
+          "x": 960,
+          "y": 0
+        }
+      },
+      {
+        "id": "review",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Hold or flag",
+        "parameters": {
+          "title": "Levy notice",
+          "summary": {
+            "record": "$.input.record",
+            "customer": "$.nodes.match.out.match",
+            "accounts": "$.nodes.accounts.out",
+            "lastError": "$.nodes.hold.out",
+            "caseId": "$.nodes.case.out.caseId"
+          },
+          "options": [
+            {
+              "name": "hold",
+              "label": "Hold",
+              "call": {
+                "node": "hold"
+              },
+              "inputs": [
+                {
+                  "name": "amount",
+                  "type": "number"
+                }
+              ]
+            },
+            {
+              "name": "flag",
+              "label": "Flag",
+              "call": {
+                "node": "flag"
+              }
+            }
+          ]
+        },
+        "position": {
+          "x": 1200,
+          "y": 0
+        }
+      },
+      {
+        "id": "hold",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Place the hold",
+        "parameters": {
+          "operation": "place_hold",
+          "approvedBy": "review",
+          "input": {
+            "account_id": "$.nodes.accounts.out.0.id",
+            "amount": "$.input.record.amount",
+            "reason": "$.input.record.case_no"
+          }
+        },
+        "position": {
+          "x": 1440,
+          "y": 0
+        }
+      },
+      {
+        "id": "flag",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Note the customer",
+        "parameters": {
+          "operation": "add_customer_note",
+          "approvedBy": "review",
+          "input": {
+            "customer_id": "$.nodes.match.out.match.id",
+            "text": "Levy notice received: flagged, no hold placed."
+          }
+        },
+        "position": {
+          "x": 1440,
+          "y": 160
+        }
+      },
+      {
+        "id": "held",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Held",
+        "parameters": {
+          "outcome": "held",
+          "output": "$.nodes.hold.out"
+        },
+        "position": {
+          "x": 1680,
+          "y": 0
+        }
+      },
+      {
+        "id": "flagged",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Flagged",
+        "parameters": {
+          "outcome": "flagged",
+          "output": "$.nodes.flag.out"
+        },
+        "position": {
+          "x": 1680,
+          "y": 160
+        }
+      },
+      {
+        "id": "not_matched",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not matched",
+        "parameters": {
+          "outcome": "not_matched",
+          "output": "$.nodes.match.out"
+        },
+        "position": {
+          "x": 960,
+          "y": 160
+        }
+      },
+      {
+        "id": "lookup_failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Lookup failed",
+        "parameters": {
+          "outcome": "lookup_failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 960,
+          "y": 320
+        }
+      },
+      {
+        "id": "case_failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Case not opened",
+        "parameters": {
+          "outcome": "case_not_opened",
+          "output": "$.nodes.case.out",
+          "result": "failed"
+        },
+        "position": {
+          "x": 960,
+          "y": 480
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "search",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "ok"
+        },
+        "to": {
+          "node": "match",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "refused"
+        },
+        "to": {
+          "node": "lookup_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "error"
+        },
+        "to": {
+          "node": "lookup_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "match",
+          "port": "matched"
+        },
+        "to": {
+          "node": "case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "match",
+          "port": "none"
+        },
+        "to": {
+          "node": "case_unmatched",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "ok"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "refused"
+        },
+        "to": {
+          "node": "lookup_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "error"
+        },
+        "to": {
+          "node": "lookup_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "hold"
+        },
+        "to": {
+          "node": "hold",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "flag"
+        },
+        "to": {
+          "node": "flag",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "ok"
+        },
+        "to": {
+          "node": "held",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "refused"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "error"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "flag",
+          "port": "ok"
+        },
+        "to": {
+          "node": "flagged",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "flag",
+          "port": "refused"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "flag",
+          "port": "error"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case",
+          "port": "opened"
+        },
+        "to": {
+          "node": "accounts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case",
+          "port": "error"
+        },
+        "to": {
+          "node": "case_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case_unmatched",
+          "port": "opened"
+        },
+        "to": {
+          "node": "not_matched",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case_unmatched",
+          "port": "error"
+        },
+        "to": {
+          "node": "case_failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "levy_intake",
+    "name": "Levy intake",
+    "description": "A garnishment notice in the levy mailbox: read each debtor from its PDF and open a levy case per debtor.",
+    "nodes": [
+      {
+        "id": "mail",
+        "type": "ops.trigger.email",
+        "typeVersion": 1,
+        "name": "Notice received",
+        "parameters": {
+          "mailbox": "levy@northfield.example",
+          "folder": "inbox",
+          "hasAttachment": true
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Read the debtors",
+        "parameters": {
+          "file": "$.input.attachments.0.fileId",
+          "documentType": {
+            "id": "levy_notice",
+            "version": 1
+          }
+        },
+        "position": {
+          "x": 240,
+          "y": 0
+        }
+      },
+      {
+        "id": "any",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "Any debtors",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.nodes.read.out.count",
+              "op": "gt",
+              "right": 0
+            }
+          ]
+        },
+        "position": {
+          "x": 480,
+          "y": 0
+        }
+      },
+      {
+        "id": "open",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Open a case per debtor",
+        "parameters": {
+          "workflow": "levy_case",
+          "forEach": "$.nodes.read.out.records",
+          "input": {
+            "record": "$.item.values",
+            "notice": "$.input.subject",
+            "fileId": "$.nodes.read.out.fileId"
+          }
+        },
+        "position": {
+          "x": 720,
+          "y": 0
+        }
+      },
+      {
+        "id": "opened",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Cases opened",
+        "parameters": {
+          "outcome": "cases_opened",
+          "output": "$.nodes.open.out"
+        },
+        "position": {
+          "x": 960,
+          "y": 0
+        }
+      },
+      {
+        "id": "manual",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Needs a manual read",
+        "parameters": {
+          "outcome": "needs_manual_read"
+        },
+        "position": {
+          "x": 720,
+          "y": 160
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not opened",
+        "parameters": {
+          "outcome": "not_opened",
+          "output": "$.nodes.open.out",
+          "result": "failed"
+        },
+        "position": {
+          "x": 960,
+          "y": 160
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.attachments.0.fileId",
+          "read": "$.nodes.read.out",
+          "checked": false
+        },
+        "position": {
+          "x": 360,
+          "y": -80
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "mail",
+          "port": "payload"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "review"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "any",
+          "port": "true"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "any",
+          "port": "false"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "started"
+        },
+        "to": {
+          "node": "opened",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "any",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "any",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "mail_document",
+    "name": "Mailed document",
+    "description": "One emailed document: read every debtor it names, a person checks a read below the floor, a levy case opens per debtor, and the sender gets an acknowledgement from the mailbox once a reviewer approves it.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Document",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "required": [
+              "fileId",
+              "from",
+              "mailbox"
+            ],
+            "properties": {
+              "fileId": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "mailbox": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Read the debtors",
+        "parameters": {
+          "file": "$.input.fileId",
+          "ocr": true,
+          "documentType": {
+            "id": "levy_notice",
+            "version": 1
+          }
+        },
+        "position": {
+          "x": 240,
+          "y": 0
+        }
+      },
+      {
+        "id": "check",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Check the read",
+        "parameters": {
+          "title": "Check the debtors read from the document",
+          "summary": {
+            "document": "$.input.name",
+            "read": "$.nodes.read.out"
+          },
+          "editable": "$.nodes.read.out.records"
+        },
+        "position": {
+          "x": 480,
+          "y": 160
+        }
+      },
+      {
+        "id": "open",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Open a case per debtor",
+        "parameters": {
+          "workflow": "levy_case",
+          "forEach": "$.nodes.check.out.edited ?? $.nodes.read.out.records",
+          "input": {
+            "record": "$.item.values",
+            "notice": "$.input.subject",
+            "fileId": "$.input.fileId"
+          }
+        },
+        "position": {
+          "x": 720,
+          "y": 0
+        }
+      },
+      {
+        "id": "ack",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Send the acknowledgement",
+        "parameters": {
+          "title": "Acknowledge the document",
+          "summary": {
+            "document": "$.input.name",
+            "to": "$.input.from",
+            "cases": "$.nodes.open.out"
+          },
+          "approves": "reply",
+          "taskType": {
+            "id": "acknowledgement"
+          },
+          "params": {
+            "title": "Send the acknowledgement to {$.input.from}?",
+            "received": {
+              "subject": "$.input.subject",
+              "from": "$.input.from",
+              "summary": "$.input.name"
+            },
+            "reply": "We received your document and opened a case for each person it names. Our team will contact you if anything else is needed.",
+            "onApprove": "The reply goes to {$.input.from} now.",
+            "onReject": "Nothing is sent.",
+            "facts": [
+              {
+                "label": "To",
+                "value": "$.input.from"
+              },
+              {
+                "label": "From",
+                "value": "$.input.mailbox"
+              }
+            ]
+          }
+        },
+        "position": {
+          "x": 960,
+          "y": 0
+        }
+      },
+      {
+        "id": "reply",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Reply from the mailbox",
+        "parameters": {
+          "operation": "send_reply",
+          "approvedBy": "ack",
+          "input": {
+            "to": "$.input.from",
+            "subject": "$.input.subject",
+            "body": "We received your document and opened a case for each person it names. Our team will contact you if anything else is needed.",
+            "mailbox": "$.input.mailbox"
+          }
+        },
+        "position": {
+          "x": 1200,
+          "y": 0
+        }
+      },
+      {
+        "id": "replied",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Replied",
+        "parameters": {
+          "outcome": "replied",
+          "output": "$.nodes.reply.out"
+        },
+        "position": {
+          "x": 1440,
+          "y": 0
+        }
+      },
+      {
+        "id": "no_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "No reply",
+        "parameters": {
+          "outcome": "cases_opened"
+        },
+        "position": {
+          "x": 1200,
+          "y": 160
+        }
+      },
+      {
+        "id": "reply_failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Reply not sent",
+        "parameters": {
+          "outcome": "reply_failed",
+          "output": "$.nodes.reply.out",
+          "result": "failed"
+        },
+        "position": {
+          "x": 1440,
+          "y": 160
+        }
+      },
+      {
+        "id": "manual",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Needs a manual read",
+        "parameters": {
+          "outcome": "needs_manual_read"
+        },
+        "position": {
+          "x": 720,
+          "y": 320
+        }
+      },
+      {
+        "id": "not_opened",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Cases not opened",
+        "parameters": {
+          "outcome": "not_opened",
+          "output": "$.nodes.open.out",
+          "result": "failed"
+        },
+        "position": {
+          "x": 960,
+          "y": 320
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "checked": false
+        },
+        "position": {
+          "x": 480,
+          "y": -80
+        }
+      },
+      {
+        "id": "save_for_check",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "checked": false
+        },
+        "position": {
+          "x": 360,
+          "y": 160
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "review"
+        },
+        "to": {
+          "node": "save_for_check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "approve"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "reject"
+        },
+        "to": {
+          "node": "manual",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "started"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_opened",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "approve"
+        },
+        "to": {
+          "node": "reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "reject"
+        },
+        "to": {
+          "node": "no_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "ok"
+        },
+        "to": {
+          "node": "replied",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "refused"
+        },
+        "to": {
+          "node": "reply_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "error"
+        },
+        "to": {
+          "node": "reply_failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_for_check",
+          "port": "ok"
+        },
+        "to": {
+          "node": "check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_for_check",
+          "port": "error"
+        },
+        "to": {
+          "node": "check",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "mail_intake",
+    "name": "Mailed documents",
+    "description": "Documents emailed to the intake mailbox: each attachment is read in its own run; files-service's limits decide what is stored, and the run lists what was skipped.",
+    "nodes": [
+      {
+        "id": "mail",
+        "type": "ops.trigger.email",
+        "typeVersion": 1,
+        "name": "Document received",
+        "parameters": {
+          "mailbox": "intake@northfield.test",
+          "folder": "inbox",
+          "hasAttachment": true
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "each",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Read each attachment",
+        "parameters": {
+          "workflow": "mail_document",
+          "forEach": "$.input.attachments",
+          "input": {
+            "fileId": "$.item.fileId",
+            "name": "$.item.name",
+            "from": "$.input.from",
+            "subject": "$.input.subject",
+            "mailbox": "$.input.mailbox"
+          }
+        },
+        "position": {
+          "x": 240,
+          "y": 0
+        }
+      },
+      {
+        "id": "done",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Documents read",
+        "parameters": {
+          "outcome": "documents_read",
+          "output": {
+            "documents": "$.nodes.each.out",
+            "skipped": "$.input.skipped"
+          }
+        },
+        "position": {
+          "x": 480,
+          "y": 0
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not read",
+        "parameters": {
+          "outcome": "not_read",
+          "output": "$.nodes.each.out",
+          "result": "failed"
+        },
+        "position": {
+          "x": 480,
+          "y": 160
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "mail",
+          "port": "payload"
+        },
+        "to": {
+          "node": "each",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "started"
+        },
+        "to": {
+          "node": "done",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "levy_read_one",
+    "name": "Read one levy document",
+    "description": "One document of a levy email: its kind is detected, a doubtful read goes to a person, each kind is worked out and opens a case (a levy notice, one per person it names), and the outside system is told by webhook. Unknown kinds go to a person.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Document to read",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "fileId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fileId"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 150
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Detect the kind and read it",
+        "parameters": {
+          "file": "$.input.fileId",
+          "detect": true,
+          "ocr": true
+        },
+        "position": {
+          "x": 280,
+          "y": 150
+        }
+      },
+      {
+        "id": "check",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Check the read",
+        "parameters": {
+          "title": "Check what was read from {$.input.name}",
+          "summary": {
+            "document": "$.input.name",
+            "kind": "$.nodes.read.out.documentType.id",
+            "why": "$.nodes.read.out.classification.reason"
+          },
+          "editable": "$.nodes.read.out.fields"
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "facts",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "The fields to use",
+        "parameters": {
+          "values": {
+            "fields": "$.nodes.check.out.edited ?? $.nodes.read.out.fields",
+            "kind": "$.nodes.read.out.documentType.id"
+          }
+        },
+        "position": {
+          "x": 840,
+          "y": 150
+        }
+      },
+      {
+        "id": "kind",
+        "type": "ops.flow.switch",
+        "typeVersion": 1,
+        "name": "By kind",
+        "parameters": {
+          "cases": [
+            {
+              "name": "restraining_notice",
+              "conditions": [
+                {
+                  "left": "$.nodes.facts.out.kind",
+                  "op": "eq",
+                  "right": "restraining_notice"
+                }
+              ]
+            },
+            {
+              "name": "tax_levy",
+              "conditions": [
+                {
+                  "left": "$.nodes.facts.out.kind",
+                  "op": "eq",
+                  "right": "tax_levy"
+                }
+              ]
+            },
+            {
+              "name": "levy_notice",
+              "conditions": [
+                {
+                  "left": "$.nodes.facts.out.kind",
+                  "op": "eq",
+                  "right": "levy_notice"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 1120,
+          "y": 150
+        }
+      },
+      {
+        "id": "person",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "A person decides",
+        "parameters": {
+          "title": "Decide what {$.input.name} is and handle it",
+          "summary": {
+            "document": "$.input.name",
+            "classification": "$.nodes.read.out.classification",
+            "read": "$.nodes.read.out.fields"
+          }
+        },
+        "position": {
+          "x": 1400,
+          "y": 450
+        }
+      },
+      {
+        "id": "notice_terms",
+        "type": "ops.data.compute",
+        "typeVersion": 1,
+        "name": "Work out the response date",
+        "parameters": {
+          "values": {
+            "notice": "$.nodes.facts.out.fields"
+          },
+          "expressions": {
+            "amount": "notice.amount.value",
+            "respond_by": "business_days(notice.date_served.value, 20) if notice.date_served.value else notice.response_deadline.value"
+          }
+        },
+        "position": {
+          "x": 1400,
+          "y": 0
+        }
+      },
+      {
+        "id": "levy_terms",
+        "type": "ops.data.compute",
+        "typeVersion": 1,
+        "name": "Work out the levy",
+        "parameters": {
+          "values": {
+            "levy": "$.nodes.facts.out.fields"
+          },
+          "expressions": {
+            "amount": "round(levy.amount_due.value, 2)",
+            "days_to_respond": "days_between(levy.levy_date.value, levy.response_deadline.value)"
+          }
+        },
+        "position": {
+          "x": 1400,
+          "y": 300
+        }
+      },
+      {
+        "id": "notice_case",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open a restraining notice case",
+        "parameters": {
+          "subject": "Restraining notice: {$.nodes.facts.out.fields.debtor_name.value} ({$.nodes.facts.out.fields.case_no.value})",
+          "priority": "high",
+          "customerName": "$.nodes.facts.out.fields.debtor_name.value",
+          "fields": {
+            "debtor": "$.nodes.facts.out.fields.debtor_name.value",
+            "caseNo": "$.nodes.facts.out.fields.case_no.value",
+            "court": "$.nodes.facts.out.fields.court.value",
+            "creditor": "$.nodes.facts.out.fields.creditor.value",
+            "amount": "$.nodes.notice_terms.out.amount",
+            "respondBy": "$.nodes.notice_terms.out.respond_by",
+            "document": "$.input.name",
+            "documentFileId": "$.input.fileId"
+          },
+          "caseType": "restraining_notice"
+        },
+        "position": {
+          "x": 1680,
+          "y": 0
+        }
+      },
+      {
+        "id": "levy_case",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open a tax levy case",
+        "parameters": {
+          "subject": "Tax levy: {$.nodes.facts.out.fields.taxpayer_name.value} ({$.nodes.facts.out.fields.case_no.value})",
+          "priority": "high",
+          "customerName": "$.nodes.facts.out.fields.taxpayer_name.value",
+          "fields": {
+            "taxpayer": "$.nodes.facts.out.fields.taxpayer_name.value",
+            "caseNo": "$.nodes.facts.out.fields.case_no.value",
+            "authority": "$.nodes.facts.out.fields.authority.value",
+            "amountDue": "$.nodes.levy_terms.out.amount",
+            "levyDate": "$.nodes.facts.out.fields.levy_date.value",
+            "respondBy": "$.nodes.facts.out.fields.response_deadline.value",
+            "daysToRespond": "$.nodes.levy_terms.out.days_to_respond",
+            "document": "$.input.name",
+            "documentFileId": "$.input.fileId"
+          },
+          "caseType": "tax_levy"
+        },
+        "position": {
+          "x": 1680,
+          "y": 300
+        }
+      },
+      {
+        "id": "notify_notice",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Notify the outside system",
+        "parameters": {
+          "operation": "notify_webhook",
+          "input": {
+            "hook": "levy",
+            "event": "levy.processed",
+            "payload": {
+              "kind": "restraining_notice",
+              "document": "$.input.name",
+              "caseId": "$.nodes.notice_case.out.caseId",
+              "debtor": "$.nodes.facts.out.fields.debtor_name.value",
+              "caseNo": "$.nodes.facts.out.fields.case_no.value",
+              "amount": "$.nodes.notice_terms.out.amount",
+              "respondBy": "$.nodes.notice_terms.out.respond_by"
+            }
+          }
+        },
+        "position": {
+          "x": 1960,
+          "y": 0
+        }
+      },
+      {
+        "id": "notify_levy",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Notify the outside system",
+        "parameters": {
+          "operation": "notify_webhook",
+          "input": {
+            "hook": "levy",
+            "event": "levy.processed",
+            "payload": {
+              "kind": "tax_levy",
+              "document": "$.input.name",
+              "caseId": "$.nodes.levy_case.out.caseId",
+              "taxpayer": "$.nodes.facts.out.fields.taxpayer_name.value",
+              "caseNo": "$.nodes.facts.out.fields.case_no.value",
+              "amount": "$.nodes.levy_terms.out.amount",
+              "daysToRespond": "$.nodes.levy_terms.out.days_to_respond"
+            }
+          }
+        },
+        "position": {
+          "x": 1960,
+          "y": 300
+        }
+      },
+      {
+        "id": "notice_done",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Restraining notice handled",
+        "parameters": {
+          "outcome": "restraining_notice",
+          "output": "$.nodes.notice_case.out"
+        },
+        "position": {
+          "x": 2240,
+          "y": 0
+        }
+      },
+      {
+        "id": "levy_done",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Tax levy handled",
+        "parameters": {
+          "outcome": "tax_levy",
+          "output": "$.nodes.levy_case.out"
+        },
+        "position": {
+          "x": 2240,
+          "y": 300
+        }
+      },
+      {
+        "id": "notices",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "A case per person named",
+        "parameters": {
+          "workflow": "levy_case",
+          "forEach": "$.nodes.check.out.edited ?? $.nodes.read.out.records",
+          "input": {
+            "record": "$.item.values",
+            "notice": "$.input.name",
+            "fileId": "$.input.fileId"
+          }
+        },
+        "position": {
+          "x": 1400,
+          "y": 150
+        }
+      },
+      {
+        "id": "notices_done",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Levy notice handled",
+        "parameters": {
+          "outcome": "levy_notice"
+        },
+        "position": {
+          "x": 1680,
+          "y": 150
+        }
+      },
+      {
+        "id": "for_a_person",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Handled by a person",
+        "parameters": {
+          "outcome": "handled_by_a_person"
+        },
+        "position": {
+          "x": 1680,
+          "y": 450
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not finish",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 2240,
+          "y": 600
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "checked": false
+        },
+        "position": {
+          "x": 560,
+          "y": 70
+        }
+      },
+      {
+        "id": "save_for_check",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "checked": false
+        },
+        "position": {
+          "x": 420,
+          "y": 155
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "review"
+        },
+        "to": {
+          "node": "save_for_check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "person",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "approve"
+        },
+        "to": {
+          "node": "facts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "reject"
+        },
+        "to": {
+          "node": "person",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "facts",
+          "port": "out"
+        },
+        "to": {
+          "node": "kind",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "kind",
+          "port": "restraining_notice"
+        },
+        "to": {
+          "node": "notice_terms",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "kind",
+          "port": "tax_levy"
+        },
+        "to": {
+          "node": "levy_terms",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "kind",
+          "port": "levy_notice"
+        },
+        "to": {
+          "node": "notices",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notices",
+          "port": "started"
+        },
+        "to": {
+          "node": "notices_done",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notices",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "kind",
+          "port": "otherwise"
+        },
+        "to": {
+          "node": "person",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "person",
+          "port": "approve"
+        },
+        "to": {
+          "node": "for_a_person",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "person",
+          "port": "reject"
+        },
+        "to": {
+          "node": "for_a_person",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notice_terms",
+          "port": "out"
+        },
+        "to": {
+          "node": "notice_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notice_terms",
+          "port": "error"
+        },
+        "to": {
+          "node": "notice_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "levy_terms",
+          "port": "out"
+        },
+        "to": {
+          "node": "levy_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "levy_terms",
+          "port": "error"
+        },
+        "to": {
+          "node": "levy_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notice_case",
+          "port": "opened"
+        },
+        "to": {
+          "node": "notify_notice",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notice_case",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "levy_case",
+          "port": "opened"
+        },
+        "to": {
+          "node": "notify_levy",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "levy_case",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_notice",
+          "port": "ok"
+        },
+        "to": {
+          "node": "notice_done",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_notice",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_notice",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_levy",
+          "port": "ok"
+        },
+        "to": {
+          "node": "levy_done",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_levy",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify_levy",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "facts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "facts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_for_check",
+          "port": "ok"
+        },
+        "to": {
+          "node": "check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_for_check",
+          "port": "error"
+        },
+        "to": {
+          "node": "check",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "levy_mail",
+    "name": "Levy mail, mixed kinds",
+    "description": "An email carrying levy documents of different kinds: each attachment is read in its own run, in parallel, and the sender gets a reply once a person acknowledges it.",
+    "nodes": [
+      {
+        "id": "mail",
+        "type": "ops.trigger.email",
+        "typeVersion": 1,
+        "name": "Levy email received",
+        "parameters": {
+          "mailbox": "levies@northfield.test",
+          "folder": "inbox"
+        },
+        "position": {
+          "x": 0,
+          "y": 150
+        }
+      },
+      {
+        "id": "what",
+        "type": "ops.flow.switch",
+        "typeVersion": 1,
+        "name": "What came in",
+        "parameters": {
+          "cases": [
+            {
+              "name": "attachments",
+              "conditions": [
+                {
+                  "left": "$.input.attachments",
+                  "op": "ne",
+                  "right": []
+                }
+              ]
+            },
+            {
+              "name": "body_only",
+              "conditions": [
+                {
+                  "left": "$.input.bodyFile",
+                  "op": "exists"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 280,
+          "y": 150
+        }
+      },
+      {
+        "id": "each",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Read each document",
+        "parameters": {
+          "workflow": "levy_read_one",
+          "forEach": "$.input.attachments",
+          "input": {
+            "fileId": "$.item.fileId",
+            "name": "$.item.name",
+            "from": "$.input.from"
+          }
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "body",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Read the email text",
+        "parameters": {
+          "workflow": "levy_read_one",
+          "input": {
+            "fileId": "$.input.bodyFile.fileId",
+            "name": "the email text",
+            "from": "$.input.from"
+          }
+        },
+        "position": {
+          "x": 560,
+          "y": 150
+        }
+      },
+      {
+        "id": "ack",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Acknowledge the email",
+        "parameters": {
+          "title": "Reply to {$.input.from}",
+          "summary": {
+            "from": "$.input.from",
+            "subject": "$.input.subject",
+            "documents": "$.input.attachments"
+          },
+          "approves": "reply",
+          "taskType": {
+            "id": "acknowledgement"
+          },
+          "params": {
+            "title": "Send the acknowledgement to {$.input.from}?",
+            "received": {
+              "subject": "$.input.subject",
+              "from": "$.input.from",
+              "summary": "$.input.attachments"
+            },
+            "reply": "We received your levy documents. Each one is being handled, and our team will contact you if anything else is needed.",
+            "onApprove": "The reply goes to {$.input.from} now.",
+            "onReject": "Nothing is sent.",
+            "facts": [
+              {
+                "label": "To",
+                "value": "$.input.from"
+              },
+              {
+                "label": "From",
+                "value": "$.input.mailbox"
+              }
+            ]
+          }
+        },
+        "position": {
+          "x": 840,
+          "y": 150
+        }
+      },
+      {
+        "id": "reply",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Reply to the sender",
+        "parameters": {
+          "operation": "send_reply",
+          "approvedBy": "ack",
+          "input": {
+            "to": "$.input.from",
+            "subject": "$.input.subject",
+            "mailbox": "$.input.mailbox",
+            "body": "We received your levy documents. Each one is being handled, and our team will contact you if anything else is needed."
+          }
+        },
+        "position": {
+          "x": 1120,
+          "y": 150
+        }
+      },
+      {
+        "id": "replied",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Replied",
+        "parameters": {
+          "outcome": "replied"
+        },
+        "position": {
+          "x": 1400,
+          "y": 0
+        }
+      },
+      {
+        "id": "no_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not replied",
+        "parameters": {
+          "outcome": "no_reply"
+        },
+        "position": {
+          "x": 1400,
+          "y": 300
+        }
+      },
+      {
+        "id": "unreadable",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to read",
+        "parameters": {
+          "outcome": "nothing_readable"
+        },
+        "position": {
+          "x": 560,
+          "y": 450
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not finish",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 1400,
+          "y": 450
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "mail",
+          "port": "payload"
+        },
+        "to": {
+          "node": "what",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "attachments"
+        },
+        "to": {
+          "node": "each",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "body_only"
+        },
+        "to": {
+          "node": "body",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "otherwise"
+        },
+        "to": {
+          "node": "unreadable",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "started"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "body",
+          "port": "started"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "body",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "approve"
+        },
+        "to": {
+          "node": "reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "reject"
+        },
+        "to": {
+          "node": "no_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "ok"
+        },
+        "to": {
+          "node": "replied",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "levy_files",
+    "name": "Levy documents, run with files",
+    "description": "The same per-document handling as Levy mail, started from files uploaded in the console.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Files to read",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fileId"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "files"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 150
+        }
+      },
+      {
+        "id": "each",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Read each document",
+        "parameters": {
+          "workflow": "levy_read_one",
+          "forEach": "$.input.files",
+          "input": {
+            "fileId": "$.item.fileId",
+            "name": "$.item.name"
+          }
+        },
+        "position": {
+          "x": 280,
+          "y": 150
+        }
+      },
+      {
+        "id": "started",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Each document started",
+        "parameters": {
+          "outcome": "started",
+          "output": "$.nodes.each.out"
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not start",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 560,
+          "y": 300
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "each",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "started"
+        },
+        "to": {
+          "node": "started",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "customer_hold",
+    "name": "Hold on a customer's account",
+    "description": "Finds the customer, works out how much can be held, and holds it once a person approves within four hours, or a supervisor after that; the hold opens a case and tells the outside system.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Hold requested",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "customerName": {
+                "type": "string"
+              },
+              "ssnLast4": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "amount": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "customerName",
+              "amount",
+              "reason"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 300
+        }
+      },
+      {
+        "id": "search",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Look up the customer",
+        "parameters": {
+          "operation": "search_customers",
+          "input": {
+            "query": "$.input.customerName"
+          }
+        },
+        "position": {
+          "x": 280,
+          "y": 300
+        }
+      },
+      {
+        "id": "match",
+        "type": "ops.data.match",
+        "typeVersion": 1,
+        "name": "Is it them?",
+        "parameters": {
+          "item": {
+            "name": "$.input.customerName",
+            "ssn_last4": "$.input.ssnLast4",
+            "email": "$.input.email"
+          },
+          "candidates": "$.nodes.search.out",
+          "all": [
+            {
+              "left": "name",
+              "op": "equals",
+              "right": "name"
+            }
+          ],
+          "any": [
+            {
+              "left": "ssn_last4",
+              "op": "equals",
+              "right": "ssnLast4"
+            },
+            {
+              "left": "email",
+              "op": "equals",
+              "right": "email"
+            }
+          ]
+        },
+        "position": {
+          "x": 560,
+          "y": 300
+        }
+      },
+      {
+        "id": "accounts",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Their accounts",
+        "parameters": {
+          "operation": "list_accounts",
+          "input": {
+            "customer_id": "$.nodes.match.out.match.id"
+          }
+        },
+        "position": {
+          "x": 840,
+          "y": 300
+        }
+      },
+      {
+        "id": "facts",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "The account to hold",
+        "parameters": {
+          "values": {
+            "customer": "$.nodes.match.out.match",
+            "account": "$.nodes.accounts.out.0"
+          }
+        },
+        "position": {
+          "x": 1120,
+          "y": 300
+        }
+      },
+      {
+        "id": "calc",
+        "type": "ops.data.compute",
+        "typeVersion": 1,
+        "name": "Work out the hold",
+        "parameters": {
+          "values": {
+            "amount": "$.input.amount",
+            "balance": "$.nodes.facts.out.account.balance"
+          },
+          "expressions": {
+            "asked": "amount | string | replace(',', '') | float",
+            "hold": "min(amount | string | replace(',', '') | float, balance)",
+            "short": "amount | string | replace(',', '') | float - min(amount | string | replace(',', '') | float, balance)"
+          }
+        },
+        "position": {
+          "x": 1400,
+          "y": 300
+        }
+      },
+      {
+        "id": "enough",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "Anything to hold?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.nodes.calc.out.hold",
+              "op": "gt",
+              "right": 0
+            }
+          ]
+        },
+        "position": {
+          "x": 1680,
+          "y": 300
+        }
+      },
+      {
+        "id": "review",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Approve the hold",
+        "parameters": {
+          "title": "Hold {$.nodes.calc.out.hold} on {$.input.customerName}",
+          "summary": {
+            "customer": "$.nodes.facts.out.customer",
+            "account": "$.nodes.facts.out.account",
+            "hold": "$.nodes.calc.out",
+            "reason": "$.input.reason"
+          },
+          "approves": "hold",
+          "slaHours": 4,
+          "onTimeout": "expire"
+        },
+        "position": {
+          "x": 1960,
+          "y": 150
+        }
+      },
+      {
+        "id": "supervisor",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "A supervisor decides",
+        "parameters": {
+          "title": "Overdue: hold on {$.input.customerName}",
+          "summary": {
+            "customer": "$.nodes.facts.out.customer",
+            "account": "$.nodes.facts.out.account",
+            "hold": "$.nodes.calc.out",
+            "reason": "$.input.reason"
+          },
+          "approves": "hold_by_supervisor"
+        },
+        "position": {
+          "x": 2240,
+          "y": 450
+        }
+      },
+      {
+        "id": "hold",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Place the hold",
+        "parameters": {
+          "operation": "place_hold",
+          "approvedBy": "review",
+          "input": {
+            "account_id": "$.nodes.facts.out.account.id",
+            "amount": "$.nodes.calc.out.hold",
+            "reason": "$.input.reason"
+          }
+        },
+        "position": {
+          "x": 2240,
+          "y": 150
+        }
+      },
+      {
+        "id": "hold_by_supervisor",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Place the hold",
+        "parameters": {
+          "operation": "place_hold",
+          "approvedBy": "supervisor",
+          "input": {
+            "account_id": "$.nodes.facts.out.account.id",
+            "amount": "$.nodes.calc.out.hold",
+            "reason": "$.input.reason"
+          }
+        },
+        "position": {
+          "x": 2520,
+          "y": 450
+        }
+      },
+      {
+        "id": "case",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open a case",
+        "parameters": {
+          "subject": "Hold on {$.input.customerName}'s account ({$.nodes.facts.out.account.id})",
+          "priority": "high",
+          "customerId": "$.nodes.match.out.match.id",
+          "customerName": "$.nodes.match.out.match.name",
+          "fields": {
+            "account": "$.nodes.facts.out.account.id",
+            "held": "$.nodes.calc.out.hold",
+            "requested": "$.nodes.calc.out.asked",
+            "notHeld": "$.nodes.calc.out.short",
+            "reason": "$.input.reason"
+          },
+          "caseType": "account_hold"
+        },
+        "position": {
+          "x": 2800,
+          "y": 300
+        }
+      },
+      {
+        "id": "note",
+        "type": "ops.action.addToCase",
+        "typeVersion": 1,
+        "name": "Note the hold on the case",
+        "parameters": {
+          "caseId": "$.nodes.case.out.caseId",
+          "note": "Held {$.nodes.calc.out.hold} on {$.nodes.facts.out.account.id}",
+          "fields": {
+            "holdId": "$.nodes.hold.out.id ?? $.nodes.hold_by_supervisor.out.id",
+            "approvedBy": "$.nodes.review.out.by ?? $.nodes.supervisor.out.by"
+          }
+        },
+        "position": {
+          "x": 3080,
+          "y": 300
+        }
+      },
+      {
+        "id": "notify",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Tell the outside system",
+        "parameters": {
+          "operation": "notify_webhook",
+          "input": {
+            "hook": "holds",
+            "event": "hold.placed",
+            "payload": {
+              "caseId": "$.nodes.case.out.caseId",
+              "customerId": "$.nodes.match.out.match.id",
+              "account": "$.nodes.facts.out.account.id",
+              "amount": "$.nodes.calc.out.hold",
+              "reason": "$.input.reason"
+            }
+          }
+        },
+        "position": {
+          "x": 3360,
+          "y": 300
+        }
+      },
+      {
+        "id": "held",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Held",
+        "parameters": {
+          "outcome": "held",
+          "output": "$.nodes.case.out"
+        },
+        "position": {
+          "x": 3640,
+          "y": 300
+        }
+      },
+      {
+        "id": "not_found",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "No such customer",
+        "parameters": {
+          "outcome": "customer_not_found"
+        },
+        "position": {
+          "x": 840,
+          "y": 600
+        }
+      },
+      {
+        "id": "no_funds",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to hold",
+        "parameters": {
+          "outcome": "nothing_to_hold",
+          "output": "$.nodes.calc.out"
+        },
+        "position": {
+          "x": 1960,
+          "y": 600
+        }
+      },
+      {
+        "id": "declined",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Declined",
+        "parameters": {
+          "outcome": "declined"
+        },
+        "position": {
+          "x": 2520,
+          "y": 0
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not finish",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 3640,
+          "y": 600
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "search",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "ok"
+        },
+        "to": {
+          "node": "match",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "search",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "match",
+          "port": "matched"
+        },
+        "to": {
+          "node": "accounts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "match",
+          "port": "none"
+        },
+        "to": {
+          "node": "not_found",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "ok"
+        },
+        "to": {
+          "node": "facts",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "accounts",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "facts",
+          "port": "out"
+        },
+        "to": {
+          "node": "calc",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "calc",
+          "port": "out"
+        },
+        "to": {
+          "node": "enough",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "calc",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "enough",
+          "port": "true"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "enough",
+          "port": "false"
+        },
+        "to": {
+          "node": "no_funds",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "approve"
+        },
+        "to": {
+          "node": "hold",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "reject"
+        },
+        "to": {
+          "node": "declined",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "timeout"
+        },
+        "to": {
+          "node": "supervisor",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "supervisor",
+          "port": "approve"
+        },
+        "to": {
+          "node": "hold_by_supervisor",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "supervisor",
+          "port": "reject"
+        },
+        "to": {
+          "node": "declined",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "ok"
+        },
+        "to": {
+          "node": "case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold_by_supervisor",
+          "port": "ok"
+        },
+        "to": {
+          "node": "case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold_by_supervisor",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold_by_supervisor",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case",
+          "port": "opened"
+        },
+        "to": {
+          "node": "note",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "case",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "note",
+          "port": "added"
+        },
+        "to": {
+          "node": "notify",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "note",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify",
+          "port": "ok"
+        },
+        "to": {
+          "node": "held",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notify",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "attachment_record",
+    "name": "Record what an attachment is",
+    "description": "Recognises a file as one of the team's document types, reads it, and keeps the read on the file.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "File to record",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "fileId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fileId"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 150
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Recognise and read it",
+        "parameters": {
+          "file": "$.input.fileId",
+          "detect": true,
+          "ocr": true
+        },
+        "position": {
+          "x": 280,
+          "y": 150
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Keep the read on the file",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out"
+        },
+        "position": {
+          "x": 560,
+          "y": 150
+        }
+      },
+      {
+        "id": "recorded",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Recorded",
+        "parameters": {
+          "outcome": "recorded",
+          "output": {
+            "documentType": "$.nodes.read.out.documentType",
+            "classification": "$.nodes.read.out.classification"
+          }
+        },
+        "position": {
+          "x": 840,
+          "y": 150
+        }
+      },
+      {
+        "id": "unreadable",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not readable",
+        "parameters": {
+          "outcome": "unreadable"
+        },
+        "position": {
+          "x": 560,
+          "y": 450
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not finish",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 840,
+          "y": 450
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "review"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "unreadable",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "recorded",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "teamId": "team_ops",
+    "schemaVersion": 2,
+    "id": "complaint_triage",
+    "name": "Complaint email triage",
+    "description": "A customer's complaint by email: each attachment is recognised and its read kept on the file, the complaint is read and triaged by an agent, it joins the customer's case or opens one, a hold starts when they ask for one, and they get a reply once a person approves it.",
+    "nodes": [
+      {
+        "id": "mail",
+        "type": "ops.trigger.email",
+        "typeVersion": 1,
+        "name": "Complaint received",
+        "parameters": {
+          "mailbox": "complaints@northfield.test",
+          "folder": "inbox"
+        },
+        "position": {
+          "x": 0,
+          "y": 300
+        }
+      },
+      {
+        "id": "what",
+        "type": "ops.flow.switch",
+        "typeVersion": 1,
+        "name": "What came in",
+        "parameters": {
+          "cases": [
+            {
+              "name": "attachments",
+              "conditions": [
+                {
+                  "left": "$.input.attachments",
+                  "op": "ne",
+                  "right": []
+                }
+              ]
+            },
+            {
+              "name": "body_only",
+              "conditions": [
+                {
+                  "left": "$.input.bodyFile",
+                  "op": "exists"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 280,
+          "y": 300
+        }
+      },
+      {
+        "id": "each",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Record each attachment",
+        "parameters": {
+          "workflow": "attachment_record",
+          "forEach": "$.input.attachments",
+          "input": {
+            "fileId": "$.item.fileId",
+            "name": "$.item.name"
+          }
+        },
+        "position": {
+          "x": 560,
+          "y": 0
+        }
+      },
+      {
+        "id": "read_body",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Read the complaint",
+        "parameters": {
+          "file": "$.input.bodyFile.fileId",
+          "fields": [
+            {
+              "key": "customer_name",
+              "label": "Customer",
+              "type": "text",
+              "required": true
+            },
+            {
+              "key": "case_ref",
+              "label": "Case reference",
+              "type": "text"
+            },
+            {
+              "key": "complaint",
+              "label": "Complaint",
+              "type": "text",
+              "required": true
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "type": "money"
+            }
+          ]
+        },
+        "position": {
+          "x": 1400,
+          "y": 300
+        }
+      },
+      {
+        "id": "combine",
+        "type": "ops.data.combine",
+        "typeVersion": 1,
+        "name": "Put the facts together",
+        "parameters": {
+          "sources": [
+            {
+              "name": "complaint",
+              "values": "$.nodes.read_body.out.fields"
+            },
+            {
+              "name": "message",
+              "values": {
+                "from": "$.input.from",
+                "subject": "$.input.subject"
+              }
+            }
+          ]
+        },
+        "position": {
+          "x": 1680,
+          "y": 300
+        }
+      },
+      {
+        "id": "triage",
+        "type": "ops.ai.agent",
+        "typeVersion": 1,
+        "name": "Triage the complaint",
+        "parameters": {
+          "agent": "ag_dispute",
+          "prompt": "Read this customer complaint. Decide its urgency (high, normal or low), its category in two or three words, and whether the customer asks the bank to hold money on their account. Answer with the schema.",
+          "input": {
+            "complaint": "$.nodes.read_body.out.fields.complaint.value",
+            "facts": "$.nodes.combine.out.values"
+          },
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "urgency",
+              "category",
+              "wantsHold"
+            ],
+            "properties": {
+              "urgency": {
+                "enum": [
+                  "high",
+                  "normal",
+                  "low"
+                ]
+              },
+              "category": {
+                "type": "string"
+              },
+              "wantsHold": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "position": {
+          "x": 1960,
+          "y": 300
+        }
+      },
+      {
+        "id": "urgency",
+        "type": "ops.flow.switch",
+        "typeVersion": 1,
+        "name": "By urgency",
+        "parameters": {
+          "cases": [
+            {
+              "name": "high",
+              "conditions": [
+                {
+                  "left": "$.nodes.triage.out.urgency",
+                  "op": "eq",
+                  "right": "high"
+                }
+              ]
+            },
+            {
+              "name": "normal",
+              "conditions": [
+                {
+                  "left": "$.nodes.triage.out.urgency",
+                  "op": "eq",
+                  "right": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 2240,
+          "y": 300
+        }
+      },
+      {
+        "id": "urgent",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "Urgent",
+        "parameters": {
+          "values": {
+            "priority": "urgent"
+          }
+        },
+        "position": {
+          "x": 2520,
+          "y": 150
+        }
+      },
+      {
+        "id": "normal",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "Normal",
+        "parameters": {
+          "values": {
+            "priority": "normal"
+          }
+        },
+        "position": {
+          "x": 2520,
+          "y": 300
+        }
+      },
+      {
+        "id": "low",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "Low",
+        "parameters": {
+          "values": {
+            "priority": "low"
+          }
+        },
+        "position": {
+          "x": 2520,
+          "y": 450
+        }
+      },
+      {
+        "id": "has_case",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "Did they quote a case?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.nodes.read_body.out.fields.case_ref.value",
+              "op": "exists"
+            }
+          ]
+        },
+        "position": {
+          "x": 2800,
+          "y": 300
+        }
+      },
+      {
+        "id": "add",
+        "type": "ops.action.addToCase",
+        "typeVersion": 1,
+        "name": "Add to their case",
+        "parameters": {
+          "caseId": "$.nodes.read_body.out.fields.case_ref.value",
+          "note": "Complaint: {$.nodes.triage.out.category}",
+          "fields": {
+            "complaint": "$.nodes.read_body.out.fields.complaint.value",
+            "urgency": "$.nodes.triage.out.urgency",
+            "category": "$.nodes.triage.out.category"
+          }
+        },
+        "position": {
+          "x": 3080,
+          "y": 150
+        }
+      },
+      {
+        "id": "open",
+        "type": "ops.action.openCase",
+        "typeVersion": 1,
+        "name": "Open a case",
+        "parameters": {
+          "subject": "Complaint: {$.nodes.read_body.out.fields.customer_name.value} ({$.nodes.triage.out.category})",
+          "priority": "$.nodes.urgent.out.priority ?? $.nodes.normal.out.priority ?? $.nodes.low.out.priority",
+          "customerName": "$.nodes.read_body.out.fields.customer_name.value",
+          "fields": {
+            "complaint": "$.nodes.read_body.out.fields.complaint.value",
+            "urgency": "$.nodes.triage.out.urgency",
+            "category": "$.nodes.triage.out.category",
+            "amount": "$.nodes.read_body.out.fields.amount.value"
+          },
+          "caseType": "complaint"
+        },
+        "position": {
+          "x": 3080,
+          "y": 450
+        }
+      },
+      {
+        "id": "wants_hold",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "Do they ask for a hold?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.nodes.triage.out.wantsHold",
+              "op": "eq",
+              "right": true
+            }
+          ]
+        },
+        "position": {
+          "x": 3360,
+          "y": 300
+        }
+      },
+      {
+        "id": "hold_once",
+        "type": "ops.action.workflow",
+        "typeVersion": 1,
+        "name": "Start a hold",
+        "parameters": {
+          "workflow": "customer_hold",
+          "input": {
+            "customerName": "$.nodes.read_body.out.fields.customer_name.value",
+            "email": "$.input.from",
+            "amount": "$.nodes.read_body.out.fields.amount.value",
+            "reason": "Complaint: {$.nodes.triage.out.category}"
+          }
+        },
+        "position": {
+          "x": 3640,
+          "y": 150
+        }
+      },
+      {
+        "id": "ack",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Approve the reply",
+        "parameters": {
+          "title": "Reply to {$.input.from}",
+          "summary": {
+            "from": "$.input.from",
+            "subject": "$.input.subject",
+            "triage": "$.nodes.triage.out",
+            "case": "$.nodes.open.out ?? $.nodes.add.out"
+          },
+          "approves": "reply",
+          "taskType": {
+            "id": "acknowledgement"
+          },
+          "params": {
+            "title": "Send this reply to {$.input.from}?",
+            "received": {
+              "subject": "$.input.subject",
+              "from": "$.input.from"
+            },
+            "reply": "Thank you for telling us. Your complaint is with our team, and we will contact you about it.",
+            "onApprove": "The reply goes to {$.input.from} now.",
+            "onReject": "Nothing is sent.",
+            "facts": [
+              {
+                "label": "To",
+                "value": "$.input.from"
+              },
+              {
+                "label": "From",
+                "value": "$.input.mailbox"
+              }
+            ]
+          }
+        },
+        "position": {
+          "x": 3920,
+          "y": 300
+        }
+      },
+      {
+        "id": "reply",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Reply to the customer",
+        "parameters": {
+          "operation": "send_reply",
+          "approvedBy": "ack",
+          "input": {
+            "to": "$.input.from",
+            "subject": "$.input.subject",
+            "mailbox": "$.input.mailbox",
+            "body": "Thank you for telling us. Your complaint is with our team, and we will contact you about it."
+          }
+        },
+        "position": {
+          "x": 4200,
+          "y": 300
+        }
+      },
+      {
+        "id": "replied",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Replied",
+        "parameters": {
+          "outcome": "replied"
+        },
+        "position": {
+          "x": 4480,
+          "y": 150
+        }
+      },
+      {
+        "id": "no_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not replied",
+        "parameters": {
+          "outcome": "no_reply"
+        },
+        "position": {
+          "x": 4480,
+          "y": 450
+        }
+      },
+      {
+        "id": "unreadable",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to read",
+        "parameters": {
+          "outcome": "nothing_readable"
+        },
+        "position": {
+          "x": 560,
+          "y": 600
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Could not finish",
+        "parameters": {
+          "outcome": "failed",
+          "result": "failed"
+        },
+        "position": {
+          "x": 4480,
+          "y": 600
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "mail",
+          "port": "payload"
+        },
+        "to": {
+          "node": "what",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "attachments"
+        },
+        "to": {
+          "node": "each",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "body_only"
+        },
+        "to": {
+          "node": "read_body",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "what",
+          "port": "otherwise"
+        },
+        "to": {
+          "node": "unreadable",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "started"
+        },
+        "to": {
+          "node": "read_body",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "each",
+          "port": "error"
+        },
+        "to": {
+          "node": "read_body",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read_body",
+          "port": "ok"
+        },
+        "to": {
+          "node": "combine",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read_body",
+          "port": "review"
+        },
+        "to": {
+          "node": "combine",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read_body",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read_body",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "combine",
+          "port": "out"
+        },
+        "to": {
+          "node": "triage",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "triage",
+          "port": "ok"
+        },
+        "to": {
+          "node": "urgency",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "triage",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "urgency",
+          "port": "high"
+        },
+        "to": {
+          "node": "urgent",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "urgency",
+          "port": "normal"
+        },
+        "to": {
+          "node": "normal",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "urgency",
+          "port": "otherwise"
+        },
+        "to": {
+          "node": "low",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "urgent",
+          "port": "out"
+        },
+        "to": {
+          "node": "has_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "normal",
+          "port": "out"
+        },
+        "to": {
+          "node": "has_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "low",
+          "port": "out"
+        },
+        "to": {
+          "node": "has_case",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "has_case",
+          "port": "true"
+        },
+        "to": {
+          "node": "add",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "has_case",
+          "port": "false"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "add",
+          "port": "added"
+        },
+        "to": {
+          "node": "wants_hold",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "add",
+          "port": "error"
+        },
+        "to": {
+          "node": "open",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "opened"
+        },
+        "to": {
+          "node": "wants_hold",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "open",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "wants_hold",
+          "port": "true"
+        },
+        "to": {
+          "node": "hold_once",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "wants_hold",
+          "port": "false"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold_once",
+          "port": "started"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "hold_once",
+          "port": "error"
+        },
+        "to": {
+          "node": "ack",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "approve"
+        },
+        "to": {
+          "node": "reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "ack",
+          "port": "reject"
+        },
+        "to": {
+          "node": "no_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "ok"
+        },
+        "to": {
+          "node": "replied",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  }
+]

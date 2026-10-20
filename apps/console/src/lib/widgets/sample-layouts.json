@@ -1,0 +1,323 @@
+[
+  {
+    "type": "widget",
+    "id": "wl_hold-review",
+    "template": {
+      "id": "hold-review",
+      "version": 1,
+      "name": "Hold review"
+    },
+    "layout": {
+      "type": "card",
+      "title": "Acme Supplies Ltd",
+      "children": [
+        {
+          "type": "row",
+          "gap": "md",
+          "children": [
+            {
+              "type": "metric",
+              "label": "Held",
+              "value": 12500,
+              "unit": "USD"
+            },
+            {
+              "type": "badge",
+              "text": "held",
+              "tone": "warning"
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Reason",
+              "value": "New payee over the daily limit"
+            },
+            {
+              "label": "Account",
+              "value": "CHQ-2219"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "rows": [
+            {
+              "date": "2026-10-15",
+              "description": "Card payment, Fresh Market",
+              "amount": -42.1
+            },
+            {
+              "date": "2026-10-14",
+              "description": "Payroll",
+              "amount": 3150
+            }
+          ],
+          "columns": [
+            {
+              "key": "date",
+              "label": "Date",
+              "format": "date"
+            },
+            {
+              "key": "description",
+              "label": "Description"
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "format": "money"
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "gap": "sm",
+          "children": [
+            {
+              "type": "button",
+              "label": "Show wire history",
+              "reply": {
+                "text": "Show the recent wire history for this account.",
+                "values": {
+                  "account": "CHQ-2219"
+                }
+              },
+              "requires": "get_wire_history"
+            },
+            {
+              "type": "button",
+              "label": "Keep it held",
+              "reply": {
+                "text": "Keep this hold in place.",
+                "values": {
+                  "holdId": "hold_204"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "widget",
+    "id": "wl_account-snapshot",
+    "template": {
+      "id": "account-snapshot",
+      "version": 1,
+      "name": "Account snapshot"
+    },
+    "layout": {
+      "type": "card",
+      "title": "Maria Lopez, everyday checking",
+      "children": [
+        {
+          "type": "row",
+          "gap": "lg",
+          "children": [
+            {
+              "type": "metric",
+              "label": "Balance",
+              "value": 4820.55,
+              "unit": "USD"
+            },
+            {
+              "type": "metric",
+              "label": "Available",
+              "value": 4320.55,
+              "unit": "USD"
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Account",
+              "value": "CHQ-2219"
+            },
+            {
+              "label": "Type",
+              "value": "Checking"
+            },
+            {
+              "label": "Status",
+              "value": "Open"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "caption",
+          "text": "Recent transactions"
+        },
+        {
+          "type": "table",
+          "rows": [
+            {
+              "date": "2026-10-16",
+              "description": "Transfer to savings",
+              "amount": -500
+            },
+            {
+              "date": "2026-10-15",
+              "description": "Card payment, Fresh Market",
+              "amount": -42.1
+            },
+            {
+              "date": "2026-10-14",
+              "description": "Payroll",
+              "amount": 3150
+            }
+          ],
+          "columns": [
+            {
+              "key": "date",
+              "label": "Date",
+              "format": "date"
+            },
+            {
+              "key": "description",
+              "label": "Description"
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "format": "money"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "widget",
+    "id": "wl_case-summary",
+    "template": {
+      "id": "case-summary",
+      "version": 1,
+      "name": "Case summary"
+    },
+    "layout": {
+      "type": "card",
+      "title": "Disputed card charge, Fresh Market",
+      "children": [
+        {
+          "type": "row",
+          "gap": "sm",
+          "children": [
+            {
+              "type": "badge",
+              "text": "waiting",
+              "tone": "warning"
+            },
+            {
+              "type": "caption",
+              "text": "CASE-1042"
+            }
+          ]
+        },
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Owner",
+              "value": "Dispute desk"
+            },
+            {
+              "label": "Priority",
+              "value": "High"
+            },
+            {
+              "label": "Due",
+              "value": "2026-10-20"
+            }
+          ]
+        },
+        {
+          "type": "caption",
+          "text": "Next steps"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Ask the merchant for the receipt",
+            "Issue a provisional credit if no answer by Oct 19"
+          ]
+        },
+        {
+          "type": "button",
+          "label": "Show the case history",
+          "reply": {
+            "text": "Show the history of this case.",
+            "values": {
+              "caseId": "CASE-1042"
+            }
+          },
+          "requires": "get_dispute"
+        }
+      ]
+    }
+  },
+  {
+    "type": "widget",
+    "id": "wl_composed",
+    "layout": {
+      "type": "card",
+      "title": "Two holds are open",
+      "children": [
+        {
+          "type": "keyValue",
+          "items": [
+            {
+              "label": "Oldest",
+              "value": "hold_198, 2 days"
+            },
+            {
+              "label": "Total held",
+              "value": "USD 18,250.00"
+            }
+          ]
+        },
+        {
+          "type": "chart",
+          "rows": [
+            {
+              "day": "Oct 13",
+              "holds": 1
+            },
+            {
+              "day": "Oct 14",
+              "holds": 3
+            },
+            {
+              "day": "Oct 15",
+              "holds": 2
+            },
+            {
+              "day": "Oct 16",
+              "holds": 2
+            }
+          ],
+          "x": "day",
+          "y": [
+            "holds"
+          ],
+          "kind": "bar"
+        },
+        {
+          "type": "button",
+          "label": "Show both holds",
+          "reply": {
+            "text": "Show me both open holds."
+          }
+        }
+      ]
+    }
+  }
+]

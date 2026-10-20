@@ -1,0 +1,40 @@
+# The basic nodes of c-061 slice 1: request trigger, set fields, if, a read on the core bank, human review, end.
+schemaVersion: 2
+id: refund_check
+name: Refund check
+nodes:
+  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request}
+  - id: fields
+    type: ops.data.set
+    typeVersion: 1
+    name: Set fields
+    parameters: {values: {customer: "$.input.customerId", amount: "$.input.amount"}}
+  - id: big
+    type: ops.flow.if
+    typeVersion: 1
+    name: Over 100
+    parameters: {conditions: [{left: "$.nodes.fields.out.amount", op: gt, right: 100}]}
+  - id: lookup
+    type: ops.action.tool
+    typeVersion: 1
+    name: Look up the customer
+    parameters: {operation: get_customer, input: {customer_id: "$.nodes.fields.out.customer"}}
+  - id: review
+    type: ops.flow.humanReview
+    typeVersion: 1
+    name: Review the refund
+    parameters: {title: Refund over 100, summary: "$.nodes.lookup.out"}
+  - {id: approved, type: ops.flow.end, typeVersion: 1, name: Approved, parameters: {outcome: approved}}
+  - {id: rejected, type: ops.flow.end, typeVersion: 1, name: Rejected, parameters: {outcome: rejected}}
+  - {id: small, type: ops.flow.end, typeVersion: 1, name: Small, parameters: {outcome: small}}
+  - {id: failed, type: ops.flow.end, typeVersion: 1, name: Failed, parameters: {outcome: tool_failed}}
+connections:
+  - {from: {node: start, port: payload}, to: {node: fields, port: in}}
+  - {from: {node: fields, port: out}, to: {node: big, port: in}}
+  - {from: {node: big, port: "true"}, to: {node: lookup, port: in}}
+  - {from: {node: big, port: "false"}, to: {node: small, port: in}}
+  - {from: {node: lookup, port: ok}, to: {node: review, port: in}}
+  - {from: {node: lookup, port: refused}, to: {node: failed, port: in}}
+  - {from: {node: lookup, port: error}, to: {node: failed, port: in}}
+  - {from: {node: review, port: approve}, to: {node: approved, port: in}}
+  - {from: {node: review, port: reject}, to: {node: rejected, port: in}}

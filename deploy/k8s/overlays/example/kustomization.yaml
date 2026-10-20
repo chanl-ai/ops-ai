@@ -1,0 +1,50 @@
+# A bank's overlay, as a template: images from its registry, the origin people open, and its database. Copy it,
+# set the values marked <...>, write the secret env files beside it with deploy/k8s/write_secrets.py, then
+#   kubectl apply -k deploy/k8s/overlays/<yours>
+# Runbook: docs/deploy/kubernetes.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ops-ai
+resources:
+  - ../../base
+  - postgres-endpoint.yaml
+images:
+  - {name: ops-ai/platform, newName: <registry>/ops-ai/platform, newTag: <release>}
+  - {name: ops-ai/agents, newName: <registry>/ops-ai/agents, newTag: <release>}
+  - {name: ops-ai/tools, newName: <registry>/ops-ai/tools, newTag: <release>}
+  - {name: ops-ai/models, newName: <registry>/ops-ai/models, newTag: <release>}
+  - {name: ops-ai/kb, newName: <registry>/ops-ai/kb, newTag: <release>}
+  - {name: ops-ai/files, newName: <registry>/ops-ai/files, newTag: <release>}
+  - {name: ops-ai/documents, newName: <registry>/ops-ai/documents, newTag: <release>}
+  - {name: ops-ai/opa, newName: <registry>/ops-ai/opa, newTag: <release>}
+  - {name: ops-ai/console, newName: <registry>/ops-ai/console, newTag: <release>}
+  - {name: ops-ai/proxy, newName: <registry>/ops-ai/proxy, newTag: <release>}
+configMapGenerator:
+  # The origin people open (through the bank's ingress or load balancer in front of the proxy Service).
+  - name: ops-origin
+    literals:
+      - OPS_CORS_ORIGINS=["https://<ops host>"]
+      - OPS_CONSOLE_URL=https://<ops host>
+      - OPS_PLATFORM_PUBLIC_URL=https://<ops host>/api/platform
+      - OPS_FILES_PUBLIC_URL=https://<ops host>/api/files
+  - name: ops-console
+    literals:
+      - NEXT_PUBLIC_OPS_PLATFORM_API_URL=https://<ops host>/api/platform
+      - NEXT_PUBLIC_OPS_CHAT_API_URL=https://<ops host>/api/agents
+      - NEXT_PUBLIC_OPS_CASES_API_URL=https://<ops host>/api/agents
+      - NEXT_PUBLIC_OPS_REGISTRY_API_URL=https://<ops host>/api/agents
+      - NEXT_PUBLIC_OPS_TOOLS_API_URL=https://<ops host>/api/tools
+      - NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=https://<ops host>/api/kb
+      - NEXT_PUBLIC_OPS_FILES_API_URL=https://<ops host>/api/files
+      - NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=https://<ops host>/api/documents
+# One Secret per service from the git-ignored env files beside this file (deploy/k8s/write_secrets.py); the hash suffix
+# rolls the pods that read a Secret whenever its values change.
+secretGenerator:
+  - {name: ops-platform, envs: [platform.env]}
+  - {name: ops-agents, envs: [agents.env]}
+  - {name: ops-tools, envs: [tools.env]}
+  - {name: ops-models, envs: [models.env]}
+  - {name: ops-kb, envs: [kb.env]}
+  - {name: ops-files, envs: [files.env]}
+  - {name: ops-documents, envs: [documents.env]}
+  - {name: ops-migrate, envs: [migrate.env]}

@@ -1,0 +1,28 @@
+node_modules
+.next
+# Every console build folder: a second dev server's (OPS_CONSOLE_DIST_DIR) output scanned by Tailwind broke the shared console's CSS.
+.next-*
+next-env.d.ts
+*.tsbuildinfo
+.env*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# make up: service logs and pids
+.logs/
+.run/
+.data/
+
+# codeloop store lives in .codeloop/ and is tracked; only its runtime state is ignored
+.codeloop/state/
+/.codeloop/cards.json
+/.codeloop/state
+/.codeloop/skills.index.yaml
+
+# Generated DBA scripts (make db-ddl, db-upgrade-sql, db-release); a release attaches them.
+/dist/

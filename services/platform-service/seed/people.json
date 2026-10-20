@@ -1,0 +1,20 @@
+{
+  "tenant": { "id": "local", "name": "Local tenant", "allowedDomains": [] },
+  "teams": [
+    { "id": "team_ops", "name": "Operations", "ownerGroups": ["operations"], "scope": "all" },
+    { "id": "team_security", "name": "Security", "ownerGroups": ["security"], "scope": "all" },
+    { "id": "team_fraud", "name": "Fraud Operations", "ownerGroups": ["fraud"], "scope": "all" },
+    { "id": "team_platform", "name": "Platform", "ownerGroups": ["platform"], "scope": "all" }
+  ],
+  "people": [
+    { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@northfieldbank.com", "teams": { "team_ops": "admin" } },
+    { "id": "usr_builder", "name": "James Richardson", "email": "j.richardson@northfieldbank.com", "teams": { "team_ops": "builder" } },
+    { "id": "usr_approver", "name": "Maya Okafor", "email": "m.okafor@northfieldbank.com", "teams": { "team_ops": "approver" } },
+    { "id": "usr_viewer", "name": "Ravi Menon", "email": "r.menon@northfieldbank.com", "teams": { "team_ops": "viewer" } },
+    { "id": "usr_security", "name": "Nadia Petrov", "email": "n.petrov@northfieldbank.com", "teams": { "team_security": "approver" } },
+    { "id": "usr_security_admin", "name": "Sam Adeyemi", "email": "s.adeyemi@northfieldbank.com", "teams": { "team_security": "admin" } },
+    { "id": "usr_fraud_approver", "name": "Omar Haddad", "email": "o.haddad@northfieldbank.com", "teams": { "team_fraud": "approver" } },
+    { "id": "usr_fraud_approver_2", "name": "Lena Fischer", "email": "l.fischer@northfieldbank.com", "teams": { "team_fraud": "approver" } },
+    { "id": "usr_workspace_admin", "name": "Wanjiru Kamau", "email": "w.kamau@northfieldbank.com", "teams": { "team_platform": "admin" }, "everyTeam": ["admin", "security_admin"] }
+  ]
+}

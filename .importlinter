@@ -1,0 +1,196 @@
+# Import contracts (c-346): database code lives only in each service's store package. Run `uv run lint-imports`;
+# make python-verify and the commit gate (scripts/verify-staged.sh) run it. Lines under ignore_imports are today's
+# crossings: a line whose import is gone fails the run (unmatched_ignore_imports_alerting = error), so the list only
+# shrinks. Forbidding a parent package (`ops_agents`) does not catch a store importing its own service; `ops_agents.*`
+# with the store's own imports ignored does.
+[importlinter]
+root_packages =
+    ops_access
+    ops_agent_kernel
+    ops_agents
+    ops_checkpointer
+    ops_contracts
+    ops_documents
+    ops_documents_client
+    ops_email
+    ops_engine
+    ops_extract
+    ops_files
+    ops_files_client
+    ops_identity
+    ops_ingest
+    ops_kb
+    ops_metering
+    ops_models
+    ops_platform
+    ops_policy
+    ops_service_kit
+    ops_signin
+    ops_storage
+    ops_store
+    ops_tools
+include_external_packages = True
+
+[importlinter:contract:drivers-only-in-stores]
+name = Database drivers, SQLAlchemy and Alembic only in store packages
+type = forbidden
+source_modules =
+    ops_access
+    ops_agent_kernel
+    ops_agents
+    ops_checkpointer
+    ops_contracts
+    ops_documents
+    ops_documents_client
+    ops_email
+    ops_engine
+    ops_extract
+    ops_files
+    ops_files_client
+    ops_identity
+    ops_ingest
+    ops_kb
+    ops_metering
+    ops_models
+    ops_platform
+    ops_policy
+    ops_service_kit
+    ops_signin
+    ops_storage
+    ops_tools
+forbidden_modules =
+    alembic
+    asyncpg
+    sqlalchemy
+allow_indirect_imports = True
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    # Each service's store, the workflow engine's store and the checkpointer: where database code belongs.
+    ops_agents.store.** -> sqlalchemy
+    ops_documents.store.** -> sqlalchemy
+    ops_engine.store.** -> sqlalchemy
+    ops_files.store.** -> sqlalchemy
+    ops_kb.store.** -> sqlalchemy
+    ops_models.store.** -> sqlalchemy
+    ops_platform.store.** -> sqlalchemy
+    ops_tools.store.** -> sqlalchemy
+    ops_checkpointer.saver -> asyncpg
+
+[importlinter:contract:agents-store-is-bottom]
+name = ops_agents.store imports nothing else in ops_agents
+type = forbidden
+source_modules = ops_agents.store
+forbidden_modules = ops_agents.*
+ignore_imports =
+    ops_agents.store.** -> ops_agents.store.**
+    # A store reaching above itself; only removed, never added.
+    ops_agents.store.usage -> ops_agents.graphs.metering
+
+[importlinter:contract:documents-store-is-bottom]
+name = ops_documents.store imports nothing else in ops_documents
+type = forbidden
+source_modules = ops_documents.store
+forbidden_modules = ops_documents.*
+ignore_imports =
+    ops_documents.store.** -> ops_documents.store.**
+
+[importlinter:contract:files-store-is-bottom]
+name = ops_files.store imports nothing else in ops_files
+type = forbidden
+source_modules = ops_files.store
+forbidden_modules = ops_files.*
+ignore_imports =
+    ops_files.store.** -> ops_files.store.**
+
+[importlinter:contract:kb-store-is-bottom]
+name = ops_kb.store imports nothing else in ops_kb
+type = forbidden
+source_modules = ops_kb.store
+forbidden_modules = ops_kb.*
+ignore_imports =
+    ops_kb.store.fulltext -> ops_kb.retrieval
+
+[importlinter:contract:models-store-is-bottom]
+name = ops_models.store imports nothing else in ops_models
+type = forbidden
+source_modules = ops_models.store
+forbidden_modules = ops_models.*
+ignore_imports =
+    ops_models.store.** -> ops_models.store.**
+
+[importlinter:contract:platform-store-is-bottom]
+name = ops_platform.store imports nothing else in ops_platform
+type = forbidden
+source_modules = ops_platform.store
+forbidden_modules = ops_platform.*
+ignore_imports =
+    ops_platform.store.** -> ops_platform.store.**
+
+[importlinter:contract:tools-store-is-bottom]
+name = ops_tools.store imports nothing else in ops_tools
+type = forbidden
+source_modules = ops_tools.store
+forbidden_modules = ops_tools.*
+ignore_imports =
+    ops_tools.store.** -> ops_tools.store.**
+
+[importlinter:contract:engine-store-is-bottom]
+name = ops_engine.store imports nothing else in ops_engine
+type = forbidden
+source_modules = ops_engine.store
+forbidden_modules = ops_engine.*
+ignore_imports =
+    ops_engine.store.** -> ops_engine.store.**
+    ops_engine.store.steps -> ops_engine.journal
+
+[importlinter:contract:services-independent]
+name = No service imports another
+type = independence
+modules =
+    ops_agents
+    ops_documents
+    ops_files
+    ops_kb
+    ops_models
+    ops_platform
+    ops_tools
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    # tools-service runs agents-service's tool activities (known departure, service-boundaries.md).
+    ops_tools.__main__ -> ops_agents.activities.catalog
+    ops_tools.registry -> ops_agents.activities.catalog
+    ops_tools.tools -> ops_agents.activities.catalog
+    ops_tools.tools -> ops_agents.activities.tools
+
+[importlinter:contract:libraries-below-services]
+name = Libraries never import a service
+type = forbidden
+source_modules =
+    ops_access
+    ops_agent_kernel
+    ops_checkpointer
+    ops_contracts
+    ops_documents_client
+    ops_email
+    ops_engine
+    ops_extract
+    ops_files_client
+    ops_identity
+    ops_ingest
+    ops_metering
+    ops_policy
+    ops_service_kit
+    ops_signin
+    ops_storage
+    ops_store
+forbidden_modules =
+    ops_agents
+    ops_documents
+    ops_files
+    ops_kb
+    ops_models
+    ops_platform
+    ops_tools
+unmatched_ignore_imports_alerting = error
+
+

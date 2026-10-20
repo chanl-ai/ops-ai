@@ -1,0 +1,9 @@
+# The migration chains in the order they run: each service's own Alembic chain, recorded in its own version table.
+# deploy/images/migrate.sh and deploy/database/schema.py read this file; make migrate keeps the same order.
+agents
+tools
+models
+kb
+platform
+files
+documents

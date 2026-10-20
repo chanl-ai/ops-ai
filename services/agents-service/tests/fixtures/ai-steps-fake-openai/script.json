@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {"when": "UC258-FRAUD", "tool": "final_result", "arguments": {"category": "fraud", "confidence": 0.93, "reason": "The customer says they did not make the payment."}},
+    {"when": "UC258-UNSURE", "tool": "final_result", "arguments": {"category": "billing", "confidence": 0.35, "reason": "It might be about a fee."}},
+    {"when": "^classify .*UC262-MAIL", "tool": "final_result", "arguments": {"category": "fraud", "confidence": 0.9, "reason": "An unrecognised card payment."}},
+    {"when": "UC259-BROKEN", "tool": "final_result", "arguments": {"wrong": true}},
+    {"when": "UC259-NOTE", "tool": "final_result", "arguments": {"summary": "Priya Natarajan asks to close her savings account 4471 by 30 November 2026."}},
+    {"when": "^summary .*UC262-MAIL", "tool": "final_result", "arguments": {"summary": "Ann Lee reports a 900.00 card payment to Acme she did not make on 14 October 2026."}},
+    {"when": "UC260-LEVY", "tool": "final_result", "arguments": {"amount": 3250.0, "case_no": "NS-2026-GN-01187", "court": null}},
+    {"when": "^fields .*UC262-MAIL", "tool": "final_result", "arguments": {"amount": 900.0, "merchant": "Acme", "date": "2026-10-14"}},
+    {"when": "UC261-REPLY", "tool": "final_result", "arguments": {"subject": "Your account closure", "body": "Dear Priya, we have your request to close account 4471 and will confirm by 30 November."}},
+    {"when": "^draft .*UC262-MAIL", "tool": "final_result", "arguments": {"subject": "Your dispute", "body": "Dear Ann, we have opened a dispute for the 900.00 payment to Acme."}},
+    {"when": "UC263-ASSIST", "tool": "final_result", "arguments": {"question": "Should the Acme vendor's bank account change?", "summary": "Acme asked by email to move payments to a new account ending 4410.", "doubtful": ["New account"], "suggestion": {"action": "reject", "reason": "The request came by email only; call the vendor first."}}},
+    {"when": "UC263-ODD", "tool": "final_result", "arguments": {"question": "Open it?", "summary": "A short note.", "doubtful": [], "suggestion": {"action": "escalate", "reason": "Not sure."}}},
+    {"when": "UC265-PII", "text": "Ann Lee, SSN ending 6789, email ann.lee@example.com, phone (902) 555-0147, account 4401235567."},
+    {"when": "UC265-STEP", "tool": "final_result", "arguments": {"summary": "Priya Natarajan, SSN ending 6789, phone 902-555-0147."}},
+    {"when": "Outgoing open_case[\\s\\S]*Refund promised", "tool": "final_result", "arguments": {"ok": false, "reason": "It promises a refund, which the policy forbids."}},
+    {"when": "Outgoing open_case[\\s\\S]*Card stopped", "tool": "final_result", "arguments": {"ok": true, "reason": ""}}
+  ]
+}

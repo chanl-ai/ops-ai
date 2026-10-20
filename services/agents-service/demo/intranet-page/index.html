@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northfield intranet</title>
+    <style>
+      body { margin: 0; font-family: Georgia, serif; background: #f7f5f0; color: #1f2937; }
+      header { background: #1e3a5f; color: #fff; padding: 16px 24px; font-size: 18px; }
+      main { max-width: 720px; margin: 32px auto; padding: 0 16px; line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <header>Northfield intranet</header>
+    <main>
+      <h1>Branch operations</h1>
+      <p>Policies, rotas and forms for branch staff. Ask the operations assistant in the corner for help with a case.</p>
+    </main>
+    <script>
+      // The intranet's own SSO: this page asks its server for the signed-in person's token. A real intranet returns
+      // the token its identity provider issued. The chat's getSession trades it for a 15-minute session bound to this
+      // page's origin, and the loader hands only that session to the chat frame.
+      window.getSsoToken = async () => (await (await fetch('/sso-token')).json()).token;
+      window.opsSessionFrom = (agents, deployment) => async () => {
+        const r = await fetch(`${agents}/v1/widget/${encodeURIComponent(deployment)}/session`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${await window.getSsoToken()}` },
+        });
+        return r.ok ? (await r.json()).data : null;
+      };
+    </script>
+    <!-- OPS_WIDGET_SNIPPET -->
+  </body>
+</html>

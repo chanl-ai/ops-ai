@@ -1,0 +1,15 @@
+[
+  {
+    "id": "sk_hardship_triage",
+    "name": "Hardship request triage",
+    "ownerTeam": "Retail",
+    "loading": "always",
+    "useWhen": "The customer cannot make a payment because of job loss, illness, a death in the family or another hardship.",
+    "instructions": "Steps: 1. Say you are sorry to hear it. 2. Record the reason the customer gives, in their words. 3. Offer the hardship request form; the hardship team replies within two business days. Rules: do not quote a new payment amount, and do not promise a deferral; the hardship team decides.",
+    "toolIds": [],
+    "knowledgeBases": [],
+    "guardrails": ["Promising a payment deferral before the hardship team approves it"],
+    "refusal": "I can't promise a payment deferral; only the hardship team can approve one. I can start a hardship request for your client now, and the team replies within two business days.",
+    "pinnedBy": ["ag_advisor"]
+  }
+]

@@ -1,0 +1,13 @@
+# Where the outside database is: the base's selector-less Service `postgres` gets this address. For a host name
+# instead, patch the Service to `type: ExternalName` with `externalName: <db host>` and drop this file.
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: postgres-1
+  labels:
+    kubernetes.io/service-name: postgres
+addressType: IPv4
+ports:
+  - {name: postgres, port: 5432, protocol: TCP}
+endpoints:
+  - addresses: ["<db IPv4 address>"]

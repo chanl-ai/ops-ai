@@ -1,0 +1,94 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agents
+  labels:
+    app.kubernetes.io/name: agents
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agents
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agents
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: agents
+        image: ops-ai/agents
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OPS_SERVICE_SIGNING_KID
+          value: svc-agents-1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 512Mi
+          limits:
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        envFrom:
+        - configMapRef:
+            name: ops-settings
+        - configMapRef:
+            name: ops-origin
+        - secretRef:
+            name: ops-agents
+        ports:
+        - containerPort: 8700
+          name: http
+        startupProbe:
+          tcpSocket:
+            port: 8700
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8700
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 8700
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agents
+  labels:
+    app.kubernetes.io/name: agents
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: agents
+  ports:
+  - name: http
+    port: 8700
+    targetPort: 8700

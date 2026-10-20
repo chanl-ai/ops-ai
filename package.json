@@ -1,0 +1,18 @@
+{
+  "name": "ops-ai",
+  "private": true,
+  "packageManager": "pnpm@10",
+  "scripts": {
+    "dev": "pnpm --filter @ops-ai/console dev",
+    "dev:runtime": "pnpm --filter @ops-ai/console dev:runtime",
+    "build": "pnpm --filter @ops-ai/console build",
+    "typecheck": "pnpm --filter @ops-ai/console typecheck",
+    "verify": "pnpm --filter @ops-ai/console verify && node scripts/check-docs.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "prepare": "cp .githooks/pre-commit .git/hooks/pre-commit 2>/dev/null && chmod +x .git/hooks/pre-commit || true"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@ops-ai/usecase-runner": "workspace:*"
+  }
+}

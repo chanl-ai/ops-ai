@@ -1,0 +1,14 @@
+[
+  {
+    "id": "gr_no_investment_advice",
+    "name": "No investment advice",
+    "kind": "blocked_topics",
+    "owner": "Compliance",
+    "topics": ["investment advice"],
+    "scopes": {
+      "investment advice": "Whether to buy, sell or hold a security, or how to invest or allocate money in markets. Not: describing or comparing the bank's own deposit accounts, savings products, rates, fees or eligibility."
+    },
+    "message": "I can't give investment advice or say whether to buy or sell a security. Refer your client to a licensed financial adviser; I can help with account, product and fee questions.",
+    "pinnedBy": ["ag_advisor"]
+  }
+]

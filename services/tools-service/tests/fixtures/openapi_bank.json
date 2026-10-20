@@ -1,0 +1,43 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Statements API", "version": "2.3.0"},
+  "servers": [{"url": "https://bank.test/v1"}],
+  "components": {
+    "securitySchemes": {"statementsKey": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}},
+    "schemas": {
+      "Hold": {
+        "type": "object",
+        "required": ["accountId", "hours"],
+        "properties": {
+          "accountId": {"type": "string", "description": "Account to hold"},
+          "hours": {"type": "integer"},
+          "reason": {"type": ["string", "null"], "enum": ["fraud", "dispute"]}
+        }
+      }
+    }
+  },
+  "security": [{"statementsKey": []}],
+  "paths": {
+    "/accounts/{accountId}": {
+      "parameters": [{"name": "accountId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "get": {"operationId": "getAccount", "summary": "Balance and holder for an account"}
+    },
+    "/holds": {
+      "post": {
+        "operationId": "placeHold",
+        "summary": "Hold an account",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Hold"}}}},
+        "responses": {"201": {"description": "Hold placed", "content": {"application/json": {"example": {"holdId": "HLD-900", "status": "placed"}}}}}
+      }
+    },
+    "/statements": {
+      "get": {
+        "summary": "Statements in a month",
+        "parameters": [{"name": "month", "in": "query", "required": true, "schema": {"type": "string", "format": "date"}}]
+      }
+    },
+    "/uploads": {
+      "post": {"operationId": "uploadFile", "requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object"}}}}}
+    }
+  }
+}

@@ -1,0 +1,109 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+  labels:
+    app.kubernetes.io/name: proxy
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: proxy
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: proxy
+        image: ops-ai/proxy
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OPS_UPSTREAM_PLATFORM
+          value: platform:8710
+        - name: OPS_UPSTREAM_AGENTS
+          value: agents:8700
+        - name: OPS_UPSTREAM_TOOLS
+          value: tools:8720
+        - name: OPS_UPSTREAM_KB
+          value: kb:8740
+        - name: OPS_UPSTREAM_FILES
+          value: files:8750
+        - name: OPS_UPSTREAM_DOCUMENTS
+          value: documents:8760
+        - name: OPS_UPSTREAM_CONSOLE
+          value: console:3016
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 8080
+          name: http
+        startupProbe:
+          httpGet:
+            path: /api/platform/v1/health
+            port: 8080
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /api/platform/v1/health
+            port: 8080
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/platform/v1/health
+            port: 8080
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: scratch-config
+          mountPath: /config
+        - name: scratch-data
+          mountPath: /data
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: scratch-config
+        emptyDir: {}
+      - name: scratch-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy
+  labels:
+    app.kubernetes.io/name: proxy
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: proxy
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

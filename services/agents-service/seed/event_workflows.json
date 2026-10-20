@@ -1,0 +1,701 @@
+[
+  {
+    "schemaVersion": 2,
+    "id": "tool_access_request",
+    "name": "Tool access request",
+    "description": "A workflow asks to use a tool module's operations; the module's reviewers grant or refuse it.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "Access requested",
+        "parameters": {
+          "event": "tool_access.requested"
+        }
+      },
+      {
+        "id": "review",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Grant or refuse",
+        "parameters": {
+          "title": "Tool access request",
+          "summary": "$.input",
+          "options": [
+            {
+              "name": "approve",
+              "label": "Approve",
+              "call": {
+                "node": "grant"
+              }
+            },
+            {
+              "name": "reject",
+              "label": "Reject",
+              "call": {
+                "node": "refuse"
+              },
+              "inputs": [
+                {
+                  "name": "reason",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "taskType": {
+            "id": "tool_access_request"
+          },
+          "params": {
+            "title": "Let {$.input.workflowName} use {$.input.moduleName}?",
+            "reason": "$.input.justification",
+            "until": "$.input.expiresAt",
+            "facts": [
+              {
+                "label": "Used by",
+                "value": "$.input.workflowName"
+              },
+              {
+                "label": "Tools",
+                "value": "$.input.operations"
+              },
+              {
+                "label": "Environment",
+                "value": "$.input.environment"
+              },
+              {
+                "label": "Until",
+                "value": "$.input.expiresAt"
+              }
+            ]
+          },
+          "requestedBy": [
+            "$.input.requestedByEmail"
+          ]
+        }
+      },
+      {
+        "id": "grant",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Grant the access",
+        "parameters": {
+          "operation": "apply_tool_access",
+          "approvedBy": "review",
+          "input": {
+            "moduleId": "$.input.moduleId",
+            "approvalId": "$.input.approvalId",
+            "decision": "approved"
+          }
+        }
+      },
+      {
+        "id": "refuse",
+        "type": "ops.action.tool",
+        "typeVersion": 1,
+        "name": "Refuse the access",
+        "parameters": {
+          "operation": "apply_tool_access",
+          "approvedBy": "review",
+          "input": {
+            "moduleId": "$.input.moduleId",
+            "approvalId": "$.input.approvalId",
+            "decision": "rejected"
+          }
+        }
+      },
+      {
+        "id": "granted",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Granted",
+        "parameters": {
+          "outcome": "granted",
+          "output": "$.nodes.grant.out"
+        }
+      },
+      {
+        "id": "refused",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Refused",
+        "parameters": {
+          "outcome": "refused",
+          "output": "$.nodes.refuse.out"
+        }
+      },
+      {
+        "id": "failed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not applied",
+        "parameters": {
+          "outcome": "not_applied",
+          "result": "failed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "approve"
+        },
+        "to": {
+          "node": "grant",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "reject"
+        },
+        "to": {
+          "node": "refuse",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "grant",
+          "port": "ok"
+        },
+        "to": {
+          "node": "granted",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "refuse",
+          "port": "ok"
+        },
+        "to": {
+          "node": "refused",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "grant",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "grant",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "refuse",
+          "port": "refused"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "refuse",
+          "port": "error"
+        },
+        "to": {
+          "node": "failed",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "system_extract",
+    "name": "Extract a file",
+    "description": "Reads a file with a document type, sends fields under the floor to a person, and saves what was read on the file.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "Read requested",
+        "parameters": {
+          "event": "file.read_requested"
+        }
+      },
+      {
+        "id": "read",
+        "type": "ops.ai.extract",
+        "typeVersion": 1,
+        "name": "Read the file",
+        "parameters": {
+          "file": "$.input.fileId",
+          "ocr": true,
+          "detect": true,
+          "documentType": {
+            "id": "$.input.documentTypeId",
+            "version": "$.input.version"
+          }
+        }
+      },
+      {
+        "id": "check",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Check the fields",
+        "parameters": {
+          "title": "Check the fields read from the file",
+          "summary": {
+            "file": "$.input.fileName",
+            "read": "$.nodes.read.out"
+          }
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "typeName": "$.input.typeName",
+          "checked": false
+        }
+      },
+      {
+        "id": "save_checked",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save the checked read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.nodes.read.out",
+          "typeName": "$.input.typeName",
+          "checked": true
+        }
+      },
+      {
+        "id": "saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Saved",
+        "parameters": {
+          "outcome": "saved",
+          "output": "$.nodes.save.out"
+        }
+      },
+      {
+        "id": "saved_checked",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Saved after a check",
+        "parameters": {
+          "outcome": "saved",
+          "output": "$.nodes.save_checked.out"
+        }
+      },
+      {
+        "id": "unreadable",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Unreadable",
+        "parameters": {
+          "outcome": "unreadable"
+        }
+      },
+      {
+        "id": "rejected",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Rejected by a person",
+        "parameters": {
+          "outcome": "needs_manual_read"
+        }
+      },
+      {
+        "id": "not_saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not saved",
+        "parameters": {
+          "outcome": "not_saved",
+          "result": "failed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "read",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "ok"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "review"
+        },
+        "to": {
+          "node": "check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "unreadable"
+        },
+        "to": {
+          "node": "unreadable",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "read",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "approve"
+        },
+        "to": {
+          "node": "save_checked",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "check",
+          "port": "reject"
+        },
+        "to": {
+          "node": "rejected",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "saved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_checked",
+          "port": "ok"
+        },
+        "to": {
+          "node": "saved_checked",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_checked",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "file_deleted_purge",
+    "name": "Purge what was read from a deleted file",
+    "description": "When a file is deleted, removes the extractions and document type samples read from it.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "File deleted",
+        "parameters": {
+          "event": "file.deleted"
+        }
+      },
+      {
+        "id": "purge",
+        "type": "ops.documents.purge",
+        "typeVersion": 1,
+        "name": "Purge what was read",
+        "parameters": {
+          "file": "$.input.fileId"
+        }
+      },
+      {
+        "id": "purged",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Purged",
+        "parameters": {
+          "outcome": "purged",
+          "output": "$.nodes.purge.out"
+        }
+      },
+      {
+        "id": "not_purged",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not purged",
+        "parameters": {
+          "outcome": "not_purged",
+          "result": "failed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "purge",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "purge",
+          "port": "ok"
+        },
+        "to": {
+          "node": "purged",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "purge",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_purged",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "extraction_corrected_save",
+    "name": "Save a corrected read on its file",
+    "description": "When a person corrects a field, saves the corrected read on the file, so the files list's Read as and to-check count follow it.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "Field corrected",
+        "parameters": {
+          "event": "extraction.corrected"
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save the corrected read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.input",
+          "typeName": "$.input.typeName",
+          "checked": false
+        }
+      },
+      {
+        "id": "saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Saved",
+        "parameters": {
+          "outcome": "saved",
+          "output": "$.nodes.save.out"
+        }
+      },
+      {
+        "id": "not_saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not saved",
+        "parameters": {
+          "outcome": "not_saved",
+          "result": "failed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "saved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "api_task",
+    "name": "Task from the API",
+    "description": "A task an API caller posted with a task type and its values; a person decides it in Human Tasks and the caller reads the decision.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "Task requested",
+        "parameters": {
+          "event": "task.requested"
+        }
+      },
+      {
+        "id": "task",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Decide the task",
+        "parameters": {
+          "title": "$.input.params.title ?? $.input.taskType.id",
+          "taskType": "$.input.taskType",
+          "params": "$.input.params"
+        }
+      },
+      {
+        "id": "approved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Approved",
+        "parameters": {
+          "outcome": "approved",
+          "output": "$.nodes.task.out"
+        }
+      },
+      {
+        "id": "rejected",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Rejected",
+        "parameters": {
+          "outcome": "rejected",
+          "output": "$.nodes.task.out"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "task",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "task",
+          "port": "approve"
+        },
+        "to": {
+          "node": "approved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "task",
+          "port": "reject"
+        },
+        "to": {
+          "node": "rejected",
+          "port": "in"
+        }
+      }
+    ]
+  }
+]

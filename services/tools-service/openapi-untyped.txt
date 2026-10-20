@@ -1,0 +1,4 @@
+# 3 untyped operations. This number may only go down: type a route and remove its line; check_openapi.py fails if it grows.
+health_health_get
+raise_fence_v1_fences_post
+tool_access_v1_tools__name__get

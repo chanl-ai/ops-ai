@@ -1,0 +1,328 @@
+[
+  {
+    "type": "widget",
+    "id": "rows-monthly",
+    "shape": "rows",
+    "hint": {
+      "title": "Cases opened and closed"
+    },
+    "data": [
+      {
+        "month": "Jul",
+        "opened": 41,
+        "closed": 37
+      },
+      {
+        "month": "Aug",
+        "opened": 48,
+        "closed": 44
+      },
+      {
+        "month": "Sep",
+        "opened": 39,
+        "closed": 45
+      }
+    ]
+  },
+  {
+    "type": "widget",
+    "id": "rows-prefer-bar",
+    "shape": "rows",
+    "hint": {
+      "title": "Disputes by branch",
+      "prefer": "bar"
+    },
+    "data": [
+      {
+        "branch": "King St",
+        "disputes": 12
+      },
+      {
+        "branch": "Queen St",
+        "disputes": 7
+      },
+      {
+        "branch": "Bay St",
+        "disputes": 15
+      }
+    ]
+  },
+  {
+    "type": "widget",
+    "id": "rows-people",
+    "shape": "rows",
+    "hint": {
+      "title": "Account holders"
+    },
+    "data": [
+      {
+        "name": "Ada Chen",
+        "role": "Primary"
+      },
+      {
+        "name": "Sam Ortiz",
+        "role": "Joint"
+      }
+    ]
+  },
+  {
+    "type": "widget",
+    "id": "rows-transactions",
+    "shape": "rows",
+    "hint": {
+      "title": "Card transactions, October"
+    },
+    "data": [
+      {
+        "date": "2026-10-01",
+        "merchant": "Transit",
+        "amount": 15.75
+      },
+      {
+        "date": "2026-10-02",
+        "merchant": "Cafe Nord",
+        "amount": 19.0
+      },
+      {
+        "date": "2026-10-03",
+        "merchant": "Pharmacy",
+        "amount": 22.25
+      },
+      {
+        "date": "2026-10-04",
+        "merchant": "Metro Grocers",
+        "amount": 25.5
+      },
+      {
+        "date": "2026-10-05",
+        "merchant": "Transit",
+        "amount": 28.75
+      },
+      {
+        "date": "2026-10-06",
+        "merchant": "Cafe Nord",
+        "amount": 32.0
+      },
+      {
+        "date": "2026-10-07",
+        "merchant": "Pharmacy",
+        "amount": 35.25
+      },
+      {
+        "date": "2026-10-08",
+        "merchant": "Metro Grocers",
+        "amount": 38.5
+      },
+      {
+        "date": "2026-10-09",
+        "merchant": "Transit",
+        "amount": 41.75
+      },
+      {
+        "date": "2026-10-10",
+        "merchant": "Cafe Nord",
+        "amount": 45.0
+      },
+      {
+        "date": "2026-10-11",
+        "merchant": "Pharmacy",
+        "amount": 48.25
+      },
+      {
+        "date": "2026-10-12",
+        "merchant": "Metro Grocers",
+        "amount": 51.5
+      },
+      {
+        "date": "2026-10-13",
+        "merchant": "Transit",
+        "amount": 54.75
+      },
+      {
+        "date": "2026-10-14",
+        "merchant": "Cafe Nord",
+        "amount": 58.0
+      },
+      {
+        "date": "2026-10-15",
+        "merchant": "Pharmacy",
+        "amount": 61.25
+      },
+      {
+        "date": "2026-10-16",
+        "merchant": "Metro Grocers",
+        "amount": 64.5
+      },
+      {
+        "date": "2026-10-17",
+        "merchant": "Transit",
+        "amount": 67.75
+      },
+      {
+        "date": "2026-10-18",
+        "merchant": "Cafe Nord",
+        "amount": 71.0
+      },
+      {
+        "date": "2026-10-19",
+        "merchant": "Pharmacy",
+        "amount": 74.25
+      },
+      {
+        "date": "2026-10-20",
+        "merchant": "Metro Grocers",
+        "amount": 77.5
+      },
+      {
+        "date": "2026-10-21",
+        "merchant": "Transit",
+        "amount": 80.75
+      },
+      {
+        "date": "2026-10-22",
+        "merchant": "Cafe Nord",
+        "amount": 84.0
+      },
+      {
+        "date": "2026-10-23",
+        "merchant": "Pharmacy",
+        "amount": 87.25
+      }
+    ]
+  },
+  {
+    "type": "widget",
+    "id": "series-balance",
+    "shape": "series",
+    "hint": {
+      "title": "Balance, last four weeks",
+      "x": "week"
+    },
+    "data": {
+      "x": [
+        "W1",
+        "W2",
+        "W3",
+        "W4"
+      ],
+      "series": [
+        {
+          "name": "Chequing",
+          "y": [
+            1200,
+            980,
+            1430,
+            1310
+          ]
+        },
+        {
+          "name": "Savings",
+          "y": [
+            5000,
+            5050,
+            5100,
+            5150
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "widget",
+    "id": "record-account",
+    "shape": "record",
+    "hint": {
+      "title": "Account CHQ-2219"
+    },
+    "data": {
+      "Account": "CHQ-2219",
+      "Holder": "Ada Chen",
+      "Balance": 1310.5,
+      "Frozen": false
+    }
+  },
+  {
+    "type": "widget",
+    "id": "metric-open-cases",
+    "shape": "metric",
+    "data": {
+      "value": 128,
+      "unit": "cases",
+      "delta": -6,
+      "label": "Open cases"
+    }
+  },
+  {
+    "type": "widget",
+    "id": "form-callback",
+    "shape": "form",
+    "hint": {
+      "title": "Book a callback"
+    },
+    "data": {
+      "schema": {
+        "type": "object",
+        "required": [
+          "phone"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "slot": {
+            "type": "string",
+            "title": "Time",
+            "enum": [
+              "Morning",
+              "Afternoon"
+            ]
+          },
+          "urgent": {
+            "type": "boolean",
+            "title": "Urgent"
+          }
+        }
+      },
+      "defaults": {
+        "slot": "Morning"
+      }
+    }
+  },
+  {
+    "type": "widget",
+    "id": "decision-hold",
+    "shape": "decision",
+    "data": {
+      "summary": "Place a 24 hour hold on CHQ-2219",
+      "action": "place_hold",
+      "args": {
+        "accountId": "CHQ-2219",
+        "hours": 24
+      },
+      "holdId": "hold_demo_1"
+    }
+  },
+  {
+    "type": "widget",
+    "id": "steps-dispute",
+    "shape": "steps",
+    "hint": {
+      "title": "Dispute plan"
+    },
+    "data": [
+      {
+        "title": "Read the transaction",
+        "state": "done"
+      },
+      {
+        "title": "Check the merchant",
+        "state": "running"
+      },
+      {
+        "title": "Draft the letter",
+        "state": "pending"
+      }
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+[project]
+name = "ops-email"
+version = "0.1.0"
+description = "Email in and out behind two protocols, with Microsoft Graph, SMTP, Resend and dev fake providers picked by settings"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-service-kit", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_email"]
+
+[tool.uv.sources]
+ops-service-kit = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

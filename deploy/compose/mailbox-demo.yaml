@@ -1,0 +1,63 @@
+# The mailbox demo's outside world, for proving it against the release images on this machine, never for production
+# (deploy/compose/mailbox_proof.sh): GreenMail as the team's mailbox (IMAP over TLS, any address and password), Mailpit as
+# its reply sender (STARTTLS) and the bank stand-in on https as api.bank.test, all on one throwaway certificate. Added to app.yaml and try.yaml.
+#   OPS_DEMO_BANK_DIR=<folder with bank.crt and bank.key> FAKE_BANK_KEY=... FAKE_BANK_WEBHOOK_SECRET=... \
+#     docker compose -p ops-compose -f app.yaml -f try.yaml -f mailbox-demo.yaml --env-file <env> up -d
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.3
+    # IMAP over TLS only, as Gmail and Microsoft 365 serve it: production refuses plain IMAP. SMTP stays plain on
+    # 3025 for the outside sender this machine plays.
+    environment:
+      GREENMAIL_OPTS: "-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imaps -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.tls.keystore.file=/tls/demo.p12 -Dgreenmail.tls.keystore.password=demo"
+    volumes:
+      - ${OPS_DEMO_BANK_DIR:?}:/tls:ro
+    ports:
+      - "127.0.0.1:${OPS_DEMO_SMTP_PORT:-13025}:3025"
+    # Egress lists host names, so the mailbox is reached by one.
+    networks:
+      default:
+        aliases: [mail.demo.test]
+
+  # The mailbox's reply sender, with STARTTLS as Gmail's port 587 and Microsoft 365's smtp.office365.com serve it.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_TLS_CERT: /tls/bank.crt
+      MP_SMTP_TLS_KEY: /tls/bank.key
+    volumes:
+      - ${OPS_DEMO_BANK_DIR:?}:/tls:ro
+    ports:
+      - "127.0.0.1:${OPS_DEMO_MAILPIT_PORT:-18025}:8025"
+    networks:
+      default:
+        aliases: [smtp.demo.test]
+
+  bank:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/tools:${OPS_IMAGE_TAG:-dev}
+    working_dir: /app/services/tools-service/scripts
+    command: ["python", "-m", "uvicorn", "fake_bank.app:app", "--host", "0.0.0.0", "--port", "443",
+              "--ssl-certfile", "/bank/bank.crt", "--ssl-keyfile", "/bank/bank.key"]
+    environment:
+      FAKE_BANK_KEY: ${FAKE_BANK_KEY:?}
+      FAKE_BANK_WEBHOOK_SECRET: ${FAKE_BANK_WEBHOOK_SECRET:?}
+    volumes:
+      - ${OPS_DEMO_BANK_DIR:?}:/bank:ro
+    # The tools image's own check asks tools-service's port; the stand-in answers its OpenAPI document instead.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://127.0.0.1/openapi.json', context=ssl._create_unverified_context(), timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      default:
+        aliases: [api.bank.test]
+
+  tools:
+    environment:
+      OPS_EGRESS_CA_FILE: /bank/bank.crt
+      # Mail over TLS verifies against the system's trust store; here that is the throwaway certificate.
+      SSL_CERT_FILE: /bank/bank.crt
+    volumes:
+      - ${OPS_DEMO_BANK_DIR:?}:/bank:ro

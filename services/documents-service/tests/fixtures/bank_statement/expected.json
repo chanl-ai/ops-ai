@@ -1,0 +1,133 @@
+{
+  "STMTA01.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Morgan Example",
+      "account_last4": "4417",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$3,210.44",
+      "closing_balance": "$2,987.10"
+    }
+  },
+  "STMTA02.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Quinn Caption",
+      "account_last4": "8820",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$12,004.00",
+      "closing_balance": "$13,450.75"
+    }
+  },
+  "STMTA03.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Blair Sidebar",
+      "account_last4": "0391",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$88.12",
+      "closing_balance": "$412.60"
+    }
+  },
+  "STMTA04.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Cameron Fixture",
+      "account_last4": "5562",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$54,300.00",
+      "closing_balance": "$51,875.25"
+    }
+  },
+  "STMTA05.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Leslie Sample",
+      "account_last4": "7708",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$1,000.00",
+      "closing_balance": "$1,642.33"
+    }
+  },
+  "STMTA06.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Avery Specimen",
+      "account_last4": "2245",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$7,415.90",
+      "closing_balance": "$6,999.99"
+    }
+  },
+  "STMTB01.pdf": {
+    "layout": "B",
+    "expected": {
+      "account_holder": "Casey Draft",
+      "account_last4": "3371",
+      "period_start": "08/16/2026",
+      "period_end": "09/15/2026",
+      "opening_balance": "$9,120.00",
+      "closing_balance": "$8,804.12"
+    },
+    "edge": "another form: the layout A template misses it"
+  },
+  "STMTB02.pdf": {
+    "layout": "B",
+    "expected": {
+      "account_holder": "Drew Placeholder",
+      "account_last4": "1158",
+      "period_start": "08/16/2026",
+      "period_end": "09/15/2026",
+      "opening_balance": "$310.40",
+      "closing_balance": "$1,295.40"
+    },
+    "edge": "another form: the layout A template misses it"
+  },
+  "STMTA07_scan.pdf": {
+    "layout": "A",
+    "imageOnly": true,
+    "expected": {
+      "account_holder": "Jordan Mockup",
+      "account_last4": "9134",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$2,500.00",
+      "closing_balance": "$2,731.48"
+    },
+    "edge": "a scan shifted a few millimetres: the template reads it"
+  },
+  "STMTA08_scan.pdf": {
+    "layout": "A",
+    "imageOnly": true,
+    "expected": {
+      "account_holder": "Riley Template",
+      "account_last4": "6083",
+      "period_start": "09/01/2026",
+      "period_end": "09/30/2026",
+      "opening_balance": "$640.25",
+      "closing_balance": "$505.00"
+    },
+    "edge": "a scan skewed two degrees: still within the template's tolerance; a value OCR misreads goes to review"
+  },
+  "STMTA09_misprint.pdf": {
+    "layout": "A",
+    "expected": {
+      "account_holder": "Sam Misprint",
+      "account_last4": "4602",
+      "period_start": "09/01/2026",
+      "period_end": null,
+      "opening_balance": "$410.00",
+      "closing_balance": "$388.15"
+    },
+    "printedInvalid": {
+      "period_end": "13/45/2026"
+    },
+    "edge": "period_end printed as 13/45/2026: read, rejected as a date, sent to review with no value"
+  }
+}

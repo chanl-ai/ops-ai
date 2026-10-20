@@ -1,0 +1,431 @@
+#!/usr/bin/env bash
+# Local stack process manager: platform service, agents service, tools service, kb service, files service and the
+# console with chat on the agents service.
+# Each runs in the background with its log in $OPS_LOG_DIR/<svc>.log and its pid in $OPS_RUN_DIR/<svc>.pid. Ports and
+# directories come from make/env.mk (ISOLATED=1 shifts them); run through make, under your secrets manager.
+# Usage: scripts/stack.sh up|down|restart|health|start <svc>|stop <svc>|logs <svc>|stop-stale|check-fresh|stop-for-reset
+set -euo pipefail
+# Job control puts each background service in its own process group, so `down` stops its children (uv, node) too.
+set -m
+cd "$(dirname "$0")/.."
+
+STACK=${OPS_STACK:-shared}
+# files before kb: kb-service stores uploads in files-service and its dev seed uploads on start.
+SERVICES=(platform agents tools files documents kb console embed)
+# The workflow runner's worker serves no port; v2 runs (POST /v1/runs) and every mailbox trigger wait until it runs.
+WORKERS=(worker)
+# What the demos need beside the services (c-212, c-223, the mailbox demo): models-service with the fake OpenAI behind
+# it (the committed demo rules, so no turn reaches a real provider) and the fake bank the levy cases look customers up
+# in. Ahead of the services: tools-service trusts the fake bank's certificate, which the bank writes on its first start.
+FAKES=(fakeai models fakebank)
+# The shared stack starts all of it, so `make up` after a reboot is enough for `make demo-mailbox` and `make seed-walk`.
+# An isolated stack (use cases) brings its own fakes; it starts the worker only with OPS_STACK_WORKER=1.
+if [[ "$STACK" == shared ]]; then
+  UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
+elif [[ "${OPS_STACK_WORKER:-0}" == 1 ]]; then
+  UP_SERVICES=("${SERVICES[@]}" worker)
+else
+  UP_SERVICES=("${SERVICES[@]}")
+fi
+# The Python services do not reload code; the console does (next dev), so only these can run code older than HEAD.
+PY_SERVICES=(platform agents tools files documents kb models worker)
+LOG_DIR=${OPS_LOG_DIR:-.logs}
+RUN_DIR=${OPS_RUN_DIR:-.run}
+AGENTS_PORT=${OPS_AGENTS_PORT:-8700}
+TOOLS_PORT=${OPS_TOOLS_PORT:-8720}
+KB_PORT=${OPS_KB_PORT:-8740}
+FILES_PORT=${OPS_FILES_PORT:-8750}
+DOCUMENTS_PORT=${OPS_DOCUMENTS_PORT:-8760}
+PLATFORM_PORT=${OPS_PLATFORM_PORT:-8710}
+CONSOLE_PORT=${OPS_CONSOLE_PORT:-3016}
+EMBED_PORT=${OPS_EMBED_PORT:-3020}
+# A long-lived next dev grew to 7.5 GB; the heap cap makes it restart on its own limit instead of starving the machine.
+OPA_PORT=${OPS_OPA_PORT:-8181}
+PG_PORT=${OPS_PG_PORT:-5477}
+MODELS_PORT=${OPS_MODELS_PORT:-8730}
+FAKE_OPENAI_PORT=${OPS_FAKE_OPENAI_PORT:-8746}
+# Fixed in services/tools-service/scripts/fake_bank, which serves on this machine's private address, not loopback.
+FAKE_BANK_PORT=8745
+# A restart must start a service the way the stack is already running: the dev .env (model and provider settings) is
+# loaded, and the sign-in mode defaults to the one recorded for the shared stack, not to dev.
+if [ -f ".env" ]; then set -a; . ".env" >/dev/null 2>&1 || true; set +a; fi
+AUTH=${OPS_STACK_AUTH:-$(cat ".run/stack.auth" 2>/dev/null || echo dev)}
+# Dev-only exception until Govern > Models takes provider keys (c-177, owner 2026-10-18): models-service reads a
+# connection's key from Secrets first and falls back to these settings in dev; outside dev it refuses them.
+# `openai` is the credential name make demo-model binds openai-local to.
+if [[ -n "${OPENAI_API_KEY:-}" && -z "${OPS_MODEL_PROVIDER_KEYS:-}" ]]; then
+  OPS_MODEL_PROVIDER_KEYS=$(python3 -c 'import json,os; print(json.dumps({"openai": os.environ["OPENAI_API_KEY"]}))')
+  export OPS_MODEL_PROVIDER_KEYS
+fi
+PLATFORM_INTERNAL_PORT=${OPS_PLATFORM_INTERNAL_PORT:-8711}
+mkdir -p "$LOG_DIR" "$RUN_DIR"
+RUN_ABS=$(cd "$RUN_DIR" && pwd)
+
+port_of() { case "$1" in platform) echo "$PLATFORM_PORT" ;; agents) echo "$AGENTS_PORT" ;; tools) echo "$TOOLS_PORT" ;; kb) echo "$KB_PORT" ;; files) echo "$FILES_PORT" ;; documents) echo "$DOCUMENTS_PORT" ;; console) echo "$CONSOLE_PORT" ;; embed) echo "$EMBED_PORT" ;; models) echo "$MODELS_PORT" ;; fakeai) echo "$FAKE_OPENAI_PORT" ;; fakebank) echo "$FAKE_BANK_PORT" ;; esac; }
+
+url_of() {
+  case "$1" in
+    platform) echo "http://127.0.0.1:$PLATFORM_PORT/v1/health" ;;
+    agents) echo "http://127.0.0.1:$AGENTS_PORT/health" ;;
+    tools) echo "http://127.0.0.1:$TOOLS_PORT/health" ;;
+    kb) echo "http://127.0.0.1:$KB_PORT/health" ;;
+    files) echo "http://127.0.0.1:$FILES_PORT/health" ;;
+    documents) echo "http://127.0.0.1:$DOCUMENTS_PORT/health" ;;
+    console) echo "http://127.0.0.1:$CONSOLE_PORT/" ;;
+    # The loader, which the embed app passes through to agents-service: up only when both are.
+    embed) echo "http://127.0.0.1:$EMBED_PORT/embed/v1.js" ;;
+    models) echo "http://127.0.0.1:$MODELS_PORT/health" ;;
+    fakeai) echo "http://127.0.0.1:$FAKE_OPENAI_PORT/health" ;;
+    # The fake bank answers https on the private address under its own certificate; health checks that it runs.
+    worker | fakebank) echo "" ;;
+  esac
+}
+
+# AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
+auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
+console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
+
+# Dev mail (c-187, c-192, c-199, c-229). Team mailboxes are records connected on Channels > Email; the dev stack seeds
+# two (services/agents-service/seed/mailboxes.json), levy@northfield.example and intake@northfield.test, both on
+# GreenMail over IMAP and read by tools-service with the DEV_IMAP_PASSWORD secret. tools-service reaches GreenMail as any outside host: mail.northfield.test is answered with this machine's
+# private address (OPS_EGRESS_RESOLVE, dev only, merged into any mapping .env sets), and the host and that address are
+# listed on the Egress page by whoever uses it (uc-192 does). Sent mail goes to Mailpit, and a mailbox's own reply
+# sender at smtp.northfield.test reaches Mailpit's SMTP the same way (uc-200).
+GREENMAIL_IMAP=${OPS_GREENMAIL_IMAP_PORT:-3143}
+MAILPIT_SMTP=${OPS_MAILPIT_SMTP_PORT:-1025}
+MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
+# The services agents-service and its workflow worker both call, in one list: a worker missing one the API process has
+# fails every workflow step that needs it (OPS_FILES_URL, then OPS_KB_URL, each went missing from the worker once).
+# scripts/tests/test_stack_service_urls.py fails when the two commands' URLs differ.
+# The embed app's origin is configuration (c-158): without it agents-service refuses every widget send from the console's
+# Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
+AGENTS_URLS="OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
+dev_egress_resolve() {
+  IP=$(private_address) python3 -c 'import json,os
+ip=os.environ["IP"]
+m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.northfield.test"]=ip+":"+os.environ["GM"]; m["smtp.northfield.test"]=ip+":"+os.environ["MP"]
+m["api.bank.test"]=ip+":"+os.environ["FB"]
+print(json.dumps(m,separators=(",",":")))' 2>/dev/null
+}
+MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@northfield.example OPS_SMTP_HOST=127.0.0.1 OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
+
+
+cmd_of() {
+  case "$1" in
+    # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start. Sign-in
+    # (c-188): identity providers send people back to platform-service's public URL and on to the console; reset links
+    # go out through Mailpit like every other mail the stack sends (read them at http://localhost:$OPS_MAILPIT_HTTP_PORT).
+    platform) echo "env OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
+    # Agents call tools through tools-service's gateway and are seeded with agents granted its operations (c-048).
+    # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail (c-229).
+    agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
+    # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
+    # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt} OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) uv run --directory services/tools-service python -m ops_tools" ;;
+    # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
+    worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
+    # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
+    models) echo "env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
+    fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
+    fakebank) echo "uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
+    # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
+    kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT uv run --directory services/kb-service python -m ops_kb" ;;
+    # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
+    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service (c-250).
+    files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
+    # documents-service extracts on its own models-service key (c-235, c-256), whatever key the root .env hands agents.
+    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
+    # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
+    console)
+      local dist=.next
+      [[ "$STACK" == isolated ]] && dist=.next-isolated
+      echo "env $(console_auth)NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      ;;
+    # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
+    embed)
+      local dist=.next
+      [[ "$STACK" == isolated ]] && dist=.next-isolated
+      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_DIST_DIR=$dist pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
+      ;;
+  esac
+}
+
+known() { [[ " ${SERVICES[*]} ${WORKERS[*]} ${FAKES[*]} " == *" ${1:-} "* ]] || { echo "unknown service '${1:-}'; one of: ${SERVICES[*]} ${WORKERS[*]} ${FAKES[*]}" >&2; exit 2; }; }
+pidfile() { echo "$RUN_DIR/$1.pid"; }
+# Running, and the process this script started: a pid file outlives its process when that dies without `stop` (a
+# crash, a killed session), and the system reuses the pid. A process that started after the file was written is
+# someone else's, so it is never taken for the service and never signalled (stop kills the pid's whole group).
+alive() {
+  local file pid age
+  file=$(pidfile "$1")
+  [[ -f "$file" ]] || return 1
+  pid=$(cat "$file")
+  kill -0 "$pid" 2>/dev/null || return 1
+  age=$(age_of "$pid") || return 1
+  (($(date +%s) - age <= $(mtime_of "$file") + 5))
+}
+mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+# The auth mode a running service was started with. A file missing from before modes were recorded means dev.
+authfile() { echo "$RUN_DIR/$1.auth"; }
+started_auth() { cat "$(authfile "$1")" 2>/dev/null || echo dev; }
+listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1; }
+
+# The service folder whose migrations a service needs before it starts; the worker runs agents-service's code.
+migrations_of() { case "$1" in platform | agents | tools | kb | files | documents | models) echo "services/$1-service" ;; worker) echo services/agents-service ;; esac; }
+
+# New code started on an older schema fails at its first query (a 500 on sign-in once 0024 was committed but never
+# applied), so each start applies the service's own migrations first and starts nothing when they fail.
+migrate() {
+  local dir out
+  dir=$(migrations_of "$1")
+  [[ -n "$dir" && -f "$dir/alembic.ini" ]] || return 0
+  if ! out=$(uv run --directory "$dir" alembic upgrade head 2>&1); then
+    echo "$1: migrations failed, not starting it:" >&2
+    echo "$out" | tail -5 >&2
+    return 1
+  fi
+}
+
+start() {
+  local svc=$1 port pid
+  port=$(port_of "$svc")
+  # A service started under the other auth mode would keep serving it while the target names this one, so a walk
+  # that means to exercise platform tokens could run against dev headers.
+  if alive "$svc" && [[ "$(started_auth "$svc")" != "$AUTH" ]]; then
+    echo "$svc: running with auth $(started_auth "$svc"), asked for $AUTH; restarting"
+    stop "$svc"
+  fi
+  if alive "$svc"; then echo "$svc: already running (pid $(cat "$(pidfile "$svc")"), auth $AUTH)"; return; fi
+  # A port held by a process this script did not start belongs to someone else; it is reported, never killed.
+  if [[ -n "$port" ]] && pid=$(listener "$port") && [[ -n "$pid" ]]; then echo "$port already served by pid $pid, skipping $svc"; return; fi
+  migrate "$svc" || return 1
+  nohup $(cmd_of "$svc") >"$LOG_DIR/$svc.log" 2>&1 &
+  echo $! >"$(pidfile "$svc")"
+  echo "$AUTH" >"$(authfile "$svc")"
+  # The address tools-service dials for the dev mail and bank hosts is fixed when it starts (OPS_EGRESS_RESOLVE);
+  # health compares it with the address now, since a network change leaves it dialling one that no longer answers.
+  [[ "$svc" == tools ]] && private_address >"$RUN_DIR/tools.pinned"
+  echo "$svc: started${port:+ on :$port} (pid $!, log ${LOG_DIR#"$PWD"/}/$svc.log)"
+}
+
+stop() {
+  local svc=$1 pid
+  if alive "$svc"; then
+    pid=$(cat "$(pidfile "$svc")")
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    echo "$svc: stopped (pid $pid)"
+  fi
+  rm -f "$(pidfile "$svc")" "$(authfile "$svc")"
+}
+
+# The pid serving a service: the one this script started, else whoever listens on its port.
+serving_pid() {
+  if alive "$1"; then cat "$(pidfile "$1")"; else listener "$(port_of "$1")"; fi
+}
+
+# Seconds since a process started, from ps's etime ([[dd-]hh:]mm:ss), which macOS and Linux both print.
+age_of() {
+  local et days=0 h=0 m s
+  et=$(ps -o etime= -p "$1" 2>/dev/null | tr -d ' ') || return 1
+  [[ -n "$et" ]] || return 1
+  if [[ "$et" == *-* ]]; then days=${et%%-*}; et=${et#*-}; fi
+  IFS=: read -r -a parts <<<"$et"
+  if ((${#parts[@]} == 3)); then h=${parts[0]}; m=${parts[1]}; s=${parts[2]}; else m=${parts[0]}; s=${parts[1]}; fi
+  echo $((10#$days * 86400 + 10#$h * 3600 + 10#$m * 60 + 10#$s))
+}
+
+# The last commit that changed what a Python service runs: its own directory (code and migrations) or packages/.
+code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents) echo services/agents-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; esac; }
+# shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
+code_commit() { git log -1 --format="$2" -- $(code_dirs "$1"); }
+
+# A service is stale when its process started before the last commit to its code: it runs older code, and that
+# commit's migrations can change the tables under it (forced RLS on the run tables broke chat this way).
+stale() {
+  local pid age
+  pid=$(serving_pid "$1") || return 1
+  [[ -n "$pid" ]] || return 1
+  age=$(age_of "$pid") || return 1
+  (($(date +%s) - age < $(code_commit "$1" %ct)))
+}
+
+# The dev mail and bank fakes are reached at this machine's private address, which changes with the network (a
+# hotspot, another office). tools-service maps their names to the address it started with and the fake bank listens
+# on it, so after a move both are stopped here and `up` starts them on the new one. The address in use is recorded.
+private_address() {
+  python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(("10.255.255.255",1)); print(s.getsockname()[0])' 2>/dev/null
+}
+
+stop_moved() {
+  local now was
+  now=$(private_address) || return 0
+  was=$(cat "$RUN_DIR/dev-address" 2>/dev/null || true)
+  if [[ -n "$was" && "$was" != "$now" ]]; then
+    echo "this machine moved from $was to $now; restarting what reaches the dev fakes there"
+    for svc in fakebank tools; do stop "$svc"; done
+  fi
+  echo "$now" >"$RUN_DIR/dev-address"
+}
+
+stop_stale() {
+  [[ "$STACK" == shared ]] && stop_moved
+  for svc in "${PY_SERVICES[@]}"; do
+    stale "$svc" || continue
+    if alive "$svc"; then
+      echo "$svc: started before $(code_commit "$svc" %h) changed its code; restarting"
+      stop "$svc"
+    else
+      echo "$svc: :$(port_of "$svc") is served by pid $(serving_pid "$svc"), older than $(code_commit "$svc" %h) and not started by make up; stop it" >&2
+    fi
+  done
+}
+
+check_fresh() {
+  local failed=0
+  for svc in "${PY_SERVICES[@]}"; do
+    if stale "$svc"; then
+      echo "$svc (pid $(serving_pid "$svc"), :$(port_of "$svc")) runs code older than $(code_commit "$svc" %h)" >&2
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
+# Before the database is rebuilt: every Python service of this stack stops, so none keeps a connection or runs
+# against a schema it did not create. A listener this script did not start is reported and the rebuild refused.
+stop_for_reset() {
+  local failed=0 pid
+  for svc in "${PY_SERVICES[@]}"; do stop "$svc"; done
+  for svc in "${PY_SERVICES[@]}"; do
+    if pid=$(listener "$(port_of "$svc")") && [[ -n "$pid" ]]; then
+      echo "$svc: :$(port_of "$svc") is served by pid $pid, not started by make up; stop it before the schema is rebuilt" >&2
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
+# Waits until every service this script started answers, so `make up` ends on a health table that means something.
+wait_ready() {
+  local deadline=$((SECONDS + ${OPS_READY_TIMEOUT:-90}))
+  for svc in "${SERVICES[@]}"; do
+    alive "$svc" || continue
+    [[ -n "$(url_of "$svc")" ]] || continue
+    until curl -s -o /dev/null --max-time 3 "$(url_of "$svc")"; do
+      if ! alive "$svc"; then echo "$svc: exited during start; see ${LOG_DIR#"$PWD"/}/$svc.log" >&2; break; fi
+      if ((SECONDS > deadline)); then echo "$svc: not answering after ${OPS_READY_TIMEOUT:-90}s" >&2; break; fi
+      sleep 1
+    done
+  done
+}
+
+row() {
+  local name=$1 port=$2 url=$3 state=$4 owner=$5
+  printf '  %-8s %-6s %-34s %-12s %s\n' "$name" "$port" "$url" "$state" "$owner"
+}
+
+owner_of() {
+  local svc=$1 port=$2 pid
+  if alive "$svc"; then echo "make up (pid $(cat "$(pidfile "$svc")"), auth $(started_auth "$svc"))"; return; fi
+  pid=$(listener "$port") || true
+  if [[ -n "$pid" ]]; then echo "other process (pid $pid)"; else echo "-"; fi
+}
+
+# The Docker VM's disk, seen from a container of an image the stack already has: when it fills, PostgreSQL goes into
+# recovery and every service with it (2026-10-19). A warning only; OPS_DOCKER_DISK_WARN sets the percentage (80).
+docker_disk() {
+  local used image=${OPS_DOCKER_DISK_IMAGE:-postgres:17-alpine}
+  used=$(docker run --rm --entrypoint df "$image" -P / 2>/dev/null | awk 'NR==2 {gsub("%", "", $5); print $5}')
+  [[ -n "$used" ]] || return 0
+  if (( used >= ${OPS_DOCKER_DISK_WARN:-80} )); then
+    echo "  WARNING: the Docker disk is ${used}% full (warns from ${OPS_DOCKER_DISK_WARN:-80}%). make db-sweep drops finished runs' databases; docker system df shows the rest" >&2
+  else
+    echo "  docker disk: ${used}% used"
+  fi
+}
+
+health() {
+  local failed=0 only=${1:-} code state pid
+  echo "  stack: $STACK"
+  printf '  %-8s %-6s %-34s %-12s %s\n' SERVICE PORT URL STATE OWNER
+  for svc in "${SERVICES[@]}"; do
+    [[ -n "$only" && "$only" != "$svc" ]] && continue
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$(url_of "$svc")" || true)
+    if [[ "$code" == 2* ]]; then
+      row "$svc" "$(port_of "$svc")" "$(url_of "$svc")" "ok ($code)" "$(owner_of "$svc" "$(port_of "$svc")")"
+    else
+      row "$svc" "$(port_of "$svc")" "$(url_of "$svc")" "DOWN" "$(owner_of "$svc" "$(port_of "$svc")")"
+      failed=1
+    fi
+  done
+  if alive worker; then row worker - - "running" "$(owner_of worker "")"; elif [[ "$STACK" == shared && -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
+  if [[ "$STACK" == shared && -z "$only" ]]; then
+    for svc in "${FAKES[@]}"; do
+      if [[ -n "$(url_of "$svc")" ]]; then
+        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$(url_of "$svc")" || true)
+        if [[ "$code" == 2* ]]; then state="ok ($code)"; else state=DOWN; failed=1; fi
+        row "$svc" "$(port_of "$svc")" "$(url_of "$svc")" "$state" "$(owner_of "$svc" "$(port_of "$svc")")"
+      elif nc -z -G 3 "$(private_address)" "$(port_of "$svc")" 2>/dev/null; then
+        row "$svc" "$(port_of "$svc")" "https (private address)" "ok (tcp)" "$(owner_of "$svc" "$(port_of "$svc")")"
+      elif pid=$(listener "$(port_of "$svc")") && [[ -n "$pid" ]]; then
+        # Listening, but not at this machine's address now: started before the network changed.
+        row "$svc" "$(port_of "$svc")" "https (private address)" "STALE" "pid $pid listens on an old address"
+        failed=1
+      else
+        row "$svc" "$(port_of "$svc")" "https (private address)" DOWN -; failed=1
+      fi
+    done
+  fi
+  if [[ "$STACK" == shared && ( -z "$only" || "$only" == tools ) ]] && alive tools && [[ -f "$RUN_DIR/tools.pinned" ]]; then
+    local pinned now
+    pinned=$(cat "$RUN_DIR/tools.pinned") now=$(private_address)
+    if [[ "$pinned" == "$now" ]]; then
+      row mailpin - "dev mail and bank at $now" ok -
+    else
+      row mailpin - "dev mail and bank at $pinned" STALE "this machine is now $now: make restart SVC=tools"
+      failed=1
+    fi
+  fi
+  if [[ -z "$only" ]]; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$OPA_PORT/health" || true)
+    if [[ "$code" == 2* ]]; then row opa "$OPA_PORT" "http://127.0.0.1:$OPA_PORT/health" "ok ($code)" compose; else row opa "$OPA_PORT" "http://127.0.0.1:$OPA_PORT/health" DOWN compose; failed=1; fi
+    if nc -z 127.0.0.1 "$PG_PORT" 2>/dev/null; then row postgres "$PG_PORT" "tcp://127.0.0.1:$PG_PORT" "ok (tcp)" compose; else row postgres "$PG_PORT" "tcp://127.0.0.1:$PG_PORT" DOWN compose; failed=1; fi
+  fi
+  [[ -z "$only" ]] && docker_disk
+  return "$failed"
+}
+
+logs() {
+  known "${1:-}"
+  [[ -f "$LOG_DIR/$1.log" ]] || { echo "no log yet: ${LOG_DIR#"$PWD"/}/$1.log (start it with make up)" >&2; exit 1; }
+  if [[ "${OPS_LOGS_FOLLOW:-1}" == 1 ]]; then tail -n 50 -f "$LOG_DIR/$1.log"; else tail -n "${OPS_LOGS_LINES:-50}" "$LOG_DIR/$1.log"; fi
+}
+
+case "${1:-}" in
+  up)
+    for svc in "${UP_SERVICES[@]}"; do
+      start "$svc"
+      # tools-service loads the fake bank's certificate when it starts, and the bank writes it on its first start.
+      if [[ "$svc" == fakebank ]]; then
+        for _ in $(seq 1 60); do [[ -s "$RUN_ABS/fake-bank/bank.crt" ]] && listener "$FAKE_BANK_PORT" >/dev/null && break; sleep 0.5; done
+      fi
+    done
+    wait_ready
+    ;;
+  down) for svc in "${SERVICES[@]}" "${WORKERS[@]}" "${FAKES[@]}"; do stop "$svc"; done ;;
+  restart)
+    if [[ -n "${2:-}" ]]; then known "$2"; stop "$2"; start "$2"; else for svc in "${SERVICES[@]}"; do stop "$svc"; done; for svc in "${SERVICES[@]}"; do start "$svc"; done; fi
+    wait_ready
+    ;;
+  start) known "${2:-}"; start "$2"; wait_ready ;;
+  stop) known "${2:-}"; stop "$2" ;;
+  health) [[ -n "${2:-}" ]] && known "$2"; health "${2:-}" ;;
+  logs) logs "${2:-}" ;;
+  # The command a service starts with, for checks such as scripts/tests/test_stack_service_urls.py.
+  cmd) known "${2:-}"; cmd_of "$2" ;;
+  stop-stale) stop_stale ;;
+  check-fresh) check_fresh ;;
+  stop-for-reset) stop_for_reset ;;
+  *) echo "usage: scripts/stack.sh up|down|restart [svc]|health [svc]|start <svc>|stop <svc>|logs <svc>" >&2; exit 2 ;;
+esac
