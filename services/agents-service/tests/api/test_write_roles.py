@@ -79,9 +79,9 @@ SKILL: dict[str, Any] = {
 }
 
 # One write: its method, what it does, its path and body from what the walk has made so far, the status the owning
-# builder gets, and what a builder of another team gets: 403 `team_forbidden` naming team_ops (T), 404 for a v2
-# definition, which is read inside the acting team already, as c-064 will make every record (N), or nothing sent for a
-# create, which acts in the caller's own team (-).
+# builder gets, and what a builder of another team gets: 404, since a team's records are read inside the acting team
+# only (N, c-407), or nothing sent for a create, which acts in the caller's own team (-). T, 403 `team_forbidden` naming
+# team_ops, is kept for a record read across teams; none is left.
 Step = tuple[str, str, Callable[[dict[str, Any]], tuple[str, Any]], int, str]
 T, N, OWN = "team_forbidden", "not_found", "-"
 # Deleting a shared skill or guardrail keeps its creator-or-admin rule (agent_registry.require_owner_or_admin), with
@@ -130,44 +130,44 @@ STEPS: list[Step] = [
         "save a skill draft",
         lambda k: (f"/v1/skills/{k['skill']}/draft", {"note": "x", "baseVersion": 1}),
         200,
-        T,
+        N,
     ),
-    ("POST", "ask to publish a skill", lambda k: (f"/v1/skills/{k['skill']}/publish-requests", {"note": "go"}), 201, T),
+    ("POST", "ask to publish a skill", lambda k: (f"/v1/skills/{k['skill']}/publish-requests", {"note": "go"}), 201, N),
     ("POST", "create an agent", lambda k: ("/v1/agents", {"name": "Payee checker", "role": "Checks payees"}), 201, OWN),
-    ("PATCH", "edit an agent", lambda k: (f"/v1/agents/{k['agent']}", {"role": "Checks new payees"}), 200, T),
-    ("POST", "test an agent", lambda k: (f"/v1/agents/{k['agent']}/test", {"message": "hello"}), 200, T),
-    ("POST", "restore an agent version", lambda k: (f"/v1/agents/{k['agent']}/versions/1/restore", None), 200, T),
-    ("PUT", "pin a skill", lambda k: (f"/v1/agents/{k['agent']}/skills/{k['skill']}", {"version": 1}), 200, T),
-    ("DELETE", "unpin a skill", lambda k: (f"/v1/agents/{k['agent']}/skills/{k['skill']}", None), 200, T),
+    ("PATCH", "edit an agent", lambda k: (f"/v1/agents/{k['agent']}", {"role": "Checks new payees"}), 200, N),
+    ("POST", "test an agent", lambda k: (f"/v1/agents/{k['agent']}/test", {"message": "hello"}), 200, N),
+    ("POST", "restore an agent version", lambda k: (f"/v1/agents/{k['agent']}/versions/1/restore", None), 200, N),
+    ("PUT", "pin a skill", lambda k: (f"/v1/agents/{k['agent']}/skills/{k['skill']}", {"version": 1}), 200, N),
+    ("DELETE", "unpin a skill", lambda k: (f"/v1/agents/{k['agent']}/skills/{k['skill']}", None), 200, N),
     (
         "POST",
         "ask to publish an agent",
         # The edits above rewrite the one draft (c-172), so it is still v1.
         lambda k: (f"/v1/agents/{k['agent']}/publish-requests", {"version": 1}),
         201,
-        T,
+        N,
     ),
-    ("POST", "pause an agent", lambda k: (f"/v1/agents/{k['agent']}/paused", {"paused": True}), 200, T),
-    ("POST", "deprecate a skill", lambda k: (f"/v1/skills/{k['skill']}/deprecate", {"reason": "Replaced"}), 200, T),
-    ("DELETE", "delete a skill", lambda k: (f"/v1/skills/{k['skill']}", None), 204, T),
-    ("DELETE", "delete an agent", lambda k: (f"/v1/agents/{k['agent']}", None), 204, T),
+    ("POST", "pause an agent", lambda k: (f"/v1/agents/{k['agent']}/paused", {"paused": True}), 200, N),
+    ("POST", "deprecate a skill", lambda k: (f"/v1/skills/{k['skill']}/deprecate", {"reason": "Replaced"}), 200, N),
+    ("DELETE", "delete a skill", lambda k: (f"/v1/skills/{k['skill']}", None), 204, N),
+    ("DELETE", "delete an agent", lambda k: (f"/v1/agents/{k['agent']}", None), 204, N),
     ("POST", "create a guardrail", lambda k: ("/v1/guardrails", RULE), 201, OWN),
-    ("PATCH", "edit a guardrail", lambda k: (f"/v1/guardrails/{k['guardrail']}", {"topics": ["tax"]}), 200, T),
+    ("PATCH", "edit a guardrail", lambda k: (f"/v1/guardrails/{k['guardrail']}", {"topics": ["tax"]}), 200, N),
     (
         "POST",
         "ask to publish a guardrail",
         lambda k: (f"/v1/guardrails/{k['guardrail']}/publish-requests", {"version": 2}),
         201,
-        T,
+        N,
     ),
     (
         "POST",
         "deprecate a guardrail",
         lambda k: (f"/v1/guardrails/{k['guardrail']}/status", {"status": "deprecated"}),
         200,
-        T,
+        N,
     ),
-    ("DELETE", "delete a guardrail", lambda k: (f"/v1/guardrails/{k['guardrail']}", None), 204, T),
+    ("DELETE", "delete a guardrail", lambda k: (f"/v1/guardrails/{k['guardrail']}", None), 204, N),
     (
         "POST",
         "create a workflow",
@@ -180,42 +180,42 @@ STEPS: list[Step] = [
         "edit a workflow",
         lambda k: (f"/v1/workflows/{k['workflow']}", {"description": "Checks payees"}),
         200,
-        T,
+        N,
     ),
-    ("PUT", "save a workflow draft", lambda k: (f"/v1/workflows/{k['workflow']}/draft", {"graph": k["graph"]}), 200, T),
+    ("PUT", "save a workflow draft", lambda k: (f"/v1/workflows/{k['workflow']}/draft", {"graph": k["graph"]}), 200, N),
     (
         "POST",
         "validate a workflow",
         lambda k: (f"/v1/workflows/{k['workflow']}/validate", {"graph": k["graph"]}),
         200,
-        T,
+        N,
     ),
-    ("POST", "test a workflow", lambda k: (f"/v1/workflows/{k['workflow']}/test", {"email": EMAIL}), 200, T),
+    ("POST", "test a workflow", lambda k: (f"/v1/workflows/{k['workflow']}/test", {"email": EMAIL}), 200, N),
     (
         "POST",
         "publish a workflow",
         lambda k: (f"/v1/workflows/{k['workflow']}/publish-requests", {"graph": k["graph"]}),
         201,
-        T,
+        N,
     ),
     (
         "POST",
         "publish a graph version of a workflow",
         lambda k: (f"/v1/graphs/{k['workflow']}/versions", {"definition": GRAPH}),
         201,
-        T,
+        N,
     ),
-    ("POST", "pause a workflow", lambda k: (f"/v1/workflows/{k['workflow']}/status", {"status": "paused"}), 200, T),
-    ("POST", "roll a workflow back", lambda k: (f"/v1/workflows/{k['workflow']}/pointer", {"version": 1}), 200, T),
+    ("POST", "pause a workflow", lambda k: (f"/v1/workflows/{k['workflow']}/status", {"status": "paused"}), 200, N),
+    ("POST", "roll a workflow back", lambda k: (f"/v1/workflows/{k['workflow']}/pointer", {"version": 1}), 200, N),
     (
         "POST",
         "restore a workflow version",
         lambda k: (f"/v1/workflows/{k['workflow']}/versions/1/restore", None),
         200,
-        T,
+        N,
     ),
-    ("DELETE", "discard a workflow draft", lambda k: (f"/v1/workflows/{k['workflow']}/draft", None), 200, T),
-    ("DELETE", "delete a workflow", lambda k: (f"/v1/workflows/{k['workflow']}", None), 204, T),
+    ("DELETE", "discard a workflow draft", lambda k: (f"/v1/workflows/{k['workflow']}/draft", None), 200, N),
+    ("DELETE", "delete a workflow", lambda k: (f"/v1/workflows/{k['workflow']}", None), 204, N),
     (
         "POST",
         "save a workflow definition",

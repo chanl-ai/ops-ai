@@ -1,6 +1,6 @@
 # ADR-0012 Assurance: governance and testing as one system
 
-Status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
@@ -94,7 +94,7 @@ Notes on the scores:
 | Eval primitive | A dataset of cases; a run of an asset version against it, paired with the live version, on the production runtime in test mode; graders on the outcome and on the trace (tools called, order, arguments, step count, cost); a judge for criteria that need reading; multi-turn persona simulation scored by a scorecard (`04` 4.1–4.3, 4.12) |
 | Judge | A versioned asset with a calibration set of human-labelled cases. Agreement per criterion is measured on every judge publish and shown beside every verdict; an uncalibrated verdict is advisory at every tier (`04` 4.11, 5.13) |
 | Evidence | One bundle shape per version of any asset kind, sealed at approval, immutable, with later facts appended. Model Risk, Audit and the change board read it; the model inventory (`08`) is a view over it and stores no quality numbers of its own (`04` 4.6, 5.16) |
-| Loop | A rejection or edit in Reviews creates a proposed case in the producing asset's dataset. Online scoring of live runs and synthetic generation from documents add proposed cases later. Pairwise candidate-against-live comparison with a human verdict feeds judge calibration. Only the owner activates a case (`04` 5.15) |
+| Loop | A rejection or edit in Reviews creates a proposed case in the producing asset's dataset. Online scoring of live runs and synthetic generation from documents add proposed cases later. Pairwise candidate-against-live comparison with a human verdict feeds judge calibration. Only the maintainers activates a case (`04` 5.15) |
 | Gate | The tier table of `04` 5.5 stands, extended to every pinned asset (S14–S16), with evidence export at seal for `high` and above (S17) and judge results advisory until calibrated (S18) |
 | Console | One Assurance page (suites, runs, gates, evidence, judges, model inventory) and an Evals tab on agents, skills and workflows; `/model-risk` stays as an alias |
 | External products | None as the system of record. Offline generation, judge model calls and tracing may use adopted tools at the edges (ADR-0007) |

@@ -1,10 +1,12 @@
 # Service map
 
-Status: current, 2026-10-18. Approved by the owner; where a row says designed or planned, it is the target and is not
-built yet. The owner's target design is `.codeloop/wiki/concepts/system-overview.md`; specs 14 and 17 defer to this page
+Status: current, 2026-10-18. Approved by the maintainers; where a row says designed or planned, it is the target and is not
+built yet. The maintainers' target design is `.codeloop/wiki/concepts/system-overview.md`; specs 14 and 17 defer to this page
 where they differ.
 
 ## Services
+
+![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](../diagrams/component-map.svg)
 
 Ops AI is one platform. Agents and workflows are two ways of running work; both use the shared services (Reviews,
 Cases and work items, triggers, identity, knowledge, files) and the two gateways (data and AI). Each service is named

@@ -22,10 +22,11 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog, thread_events
 from ops_agents.store.graphs import GraphStore, graph_threads
 from ops_agents.store.service_events import listeners
-from ops_agents.store.tenancy import set_team, tenant_scope, tenant_tx
+from ops_agents.store.tenancy import current_tenant, tenant_scope, tenant_tx
 from ops_checkpointer.saver import AsyncpgSaver, asyncpg_dsn
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from ops_engine.store.tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_work
+from ops_store import isolation
 from tests.engine.test_runs_list_indexes import plans
 from tests.engine.test_worker import engine  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
@@ -163,13 +164,10 @@ async def test_a_teams_thread_list_and_event_poll_lead_with_the_tenant_and_team(
             await c.execute(thread_events.insert(), events)
         await analyse(engine, "graph_threads")
         await analyse(engine, "thread_events")
-        set_team("team_1")
-        try:
+        with isolation.scope(current_tenant(), "team_1"):
             recorded.clear()
             await GraphStore(engine).threads(None)
             await EventLog(engine).team_events("team_1", 0)
-        finally:
-            set_team(None)
         [listed] = await plans(EngineTransactions(engine), about(recorded, "graph_threads"))
         [polled] = await plans(EngineTransactions(engine), about(recorded, "thread_events"))
     assert seeks("ix_graph_threads_team_updated", "tenant_id", "team_id")(listed), listed

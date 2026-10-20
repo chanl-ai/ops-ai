@@ -1,6 +1,6 @@
 # ADR-0007 Build vs adopt
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal; the adopted engine is LangGraph, wrapped by `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-7.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal; the adopted engine is LangGraph, wrapped by `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-7.
 
 ## Context
 
@@ -42,14 +42,14 @@ measured in hours (`03` 5.6.3). Either way, Graph access to shared mailboxes use
 permissions; the `.Shared` delegated scopes do not support notifications ([Graph][graph-notif]).
 Granting an application access to specific mailboxes only is an Exchange administration task, which
 is the one step in adding a mailbox that depends on another team (see
-[Throughput](../overview.md#throughput-the-marginal-cost-of-workflow-n)). The same constraint applies
+[evaluation criteria](../overview.md#evaluation-criteria)). The same constraint applies
 to SharePoint change notifications for knowledge sources, so phase 1 SharePoint sources also poll
 delta (`02` 5.5).
 
 ### Why cases are built thin
 
 The problem statement's reference flow makes cases, queues and SLA timers platform primitives, and
-the [end-to-end sequence](../overview.md#end-to-end-the-email-to-workflow-reference-flow) shows why: the SLA timer, the wait for approval and the approval token all have
+the [reference flow](../../background/problem-statement.md#reference-flow-email-to-workflow) shows why: the SLA timer, the wait for approval and the approval token all have
 to be in the same transactional boundary as the run. If the case lived only in an external product,
 every decision would cross an integration that can fail between "approved" and "executed". The case
 model stays small (case, queue, assignee, SLA, drafted actions, decisions) and syncs outward when the

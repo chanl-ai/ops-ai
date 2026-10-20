@@ -355,7 +355,7 @@ class KnowledgeService:
                 "Name the knowledge base's owner: the person who answers for what it serves.",
                 code="collection_without_owner",
             )
-        existing = await self.store.bases(who.tenant_id)
+        existing = await self.store.taken(who.tenant_id, name=name, kb_id=i.get("id") or None)
         if any(b["name"].lower() == name.lower() for b in existing):
             raise Conflict("A knowledge base with this name already exists.")
         if i.get("id") and any(b["id"] == i["id"] for b in existing):
@@ -428,9 +428,7 @@ class KnowledgeService:
             name = str(patch["name"]).strip()
             if not name:
                 raise ValidationFailed("Give the knowledge base a name.")
-            taken = any(
-                x["id"] != kb_id and x["name"].lower() == name.lower() for x in await self.store.bases(who.tenant_id)
-            )
+            taken = any(x["id"] != kb_id for x in await self.store.taken(who.tenant_id, name=name))
             if taken:
                 raise Conflict("A knowledge base with this name already exists.")
             values |= {"name": name, "slug": _slug(name)}

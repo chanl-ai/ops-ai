@@ -1,6 +1,6 @@
 # ADR-0005 Identity and entitlement
 
-Status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-5.
+Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-5.
 
 ## Context
 
@@ -36,7 +36,7 @@ attributable to A" acting for B, carried in the `act` claim ([RFC 8693][rfc8693]
 | Policy approval token | A gate policy in the workflow version may name write classes (operations with `write` access, for example `mail.send_reply` or a CRM note) and a limit below which drafted actions of that class are approved by the policy. The case service then signs the same token shape, bound to the same input hash, with `approvedBy = policy` plus the policy id and version, which were approved through the publish four-eyes. Allowed only in workflows at effective tier `low` or `medium`; refused at publish for any `money_movement` operation; never issued on an SLA timeout. The case record and audit log show the action as approved by policy |
 | Expiry | Checked on every call rather than once at publish. Owners are warned before expiry. An expired approval makes calls fail with a policy error, the run falls into its human step, and the module owner and workflow owner are alerted |
 
-This keeps trust facts out of model-visible text, which [design lessons](../../../.codeloop/wiki/concepts/design-lessons.md) ranks among the top lessons (scope
+This keeps trust facts out of model-visible text, which design lessons ranks among the top lessons (scope
 decided by something the model could influence).
 
 ## Consequences

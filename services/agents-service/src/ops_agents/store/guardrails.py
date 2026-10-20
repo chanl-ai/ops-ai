@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
+from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
@@ -38,6 +40,7 @@ registry_guardrails = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    info=TEAM_OWNED,
 )
 
 registry_guardrail_versions = sa.Table(
@@ -55,6 +58,7 @@ registry_guardrail_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
+    info=team_owned_via("registry_guardrails", "guardrail_id"),
 )
 
 
@@ -72,7 +76,11 @@ class GuardrailRegistry:
 
     async def rows(self) -> list[dict[str, Any]]:
         async with self.engine.connect() as c:
-            q = sa.select(registry_guardrails).order_by(registry_guardrails.c.name)
+            q = (
+                sa.select(registry_guardrails)
+                .where(team_visible(registry_guardrails))
+                .order_by(registry_guardrails.c.name)
+            )
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def pinnable(
@@ -82,10 +90,13 @@ class GuardrailRegistry:
         query; `ids` returns exactly those, whatever their state, so a pin already held keeps its label."""
         t = registry_guardrails.c
         if ids is not None:
-            q = sa.select(registry_guardrails).where(t.id.in_(ids))
+            q = sa.select(registry_guardrails).where(t.id.in_(ids), team_visible(registry_guardrails))
         else:
             q = sa.select(registry_guardrails).where(
-                t.status == "live", t.published_version.is_not(None), self._matches(search)
+                t.status == "live",
+                t.published_version.is_not(None),
+                self._matches(search),
+                team_visible(registry_guardrails),
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
         async with self.engine.connect() as c:
@@ -96,14 +107,18 @@ class GuardrailRegistry:
         query, so a page reads only its own rows."""
         q = (
             sa.select(registry_guardrails)
-            .where(self._matches(search))
+            .where(self._matches(search), team_visible(registry_guardrails))
             .order_by(sa.func.lower(registry_guardrails.c.name), registry_guardrails.c.id)
         )
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
 
     async def count(self, search: str) -> int:
-        q = sa.select(sa.func.count()).select_from(registry_guardrails).where(self._matches(search))
+        q = (
+            sa.select(sa.func.count())
+            .select_from(registry_guardrails)
+            .where(self._matches(search), team_visible(registry_guardrails))
+        )
         async with self.engine.connect() as c:
             return int((await c.execute(q)).scalar_one())
 
@@ -112,8 +127,21 @@ class GuardrailRegistry:
         t = registry_guardrails.c
         return sa.or_(contains(t.name, search), contains(t.owner, search))
 
+    async def owner_team(self, guardrail_id: str) -> str | None:
+        """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
+        owning team, never for showing the record."""
+        q = sa.select(registry_guardrails.c.team_id).where(
+            registry_guardrails.c.id == guardrail_id,
+            any_team(registry_guardrails, "the owning team a refusal is decided on"),
+        )
+        async with self.engine.connect() as c:
+            team = (await c.execute(q)).scalar()
+        return str(team) if team else None
+
     async def find(self, guardrail_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_guardrails).where(registry_guardrails.c.id == guardrail_id)
+        q = sa.select(registry_guardrails).where(
+            registry_guardrails.c.id == guardrail_id, team_visible(registry_guardrails)
+        )
         if c is None:
             async with self.engine.connect() as conn:
                 r = (await conn.execute(q)).mappings().first()
@@ -130,7 +158,9 @@ class GuardrailRegistry:
     async def versions(self, guardrail_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_guardrail_versions)
-            .where(registry_guardrail_versions.c.guardrail_id == guardrail_id)
+            .where(
+                registry_guardrail_versions.c.guardrail_id == guardrail_id, team_visible(registry_guardrail_versions)
+            )
             .order_by(registry_guardrail_versions.c.version.desc())
         )
         async with self.engine.connect() as c:
@@ -138,7 +168,9 @@ class GuardrailRegistry:
 
     async def version(self, guardrail_id: str, version: int) -> dict[str, Any] | None:
         q = sa.select(registry_guardrail_versions).where(
-            registry_guardrail_versions.c.guardrail_id == guardrail_id, registry_guardrail_versions.c.version == version
+            registry_guardrail_versions.c.guardrail_id == guardrail_id,
+            registry_guardrail_versions.c.version == version,
+            team_visible(registry_guardrail_versions),
         )
         async with self.engine.connect() as c:
             r = (await c.execute(q)).mappings().first()
@@ -165,7 +197,10 @@ class GuardrailRegistry:
                 str(s)
                 for s in (
                     await c.execute(
-                        sa.select(registry_guardrails.c.slug).where(registry_guardrails.c.slug.like(f"{base}%"))
+                        sa.select(registry_guardrails.c.slug).where(
+                            registry_guardrails.c.slug.like(f"{base}%"),
+                            any_team(registry_guardrails, "a slug is unique across every team"),
+                        )
                     )
                 ).scalars()
             }

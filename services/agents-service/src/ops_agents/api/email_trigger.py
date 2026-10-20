@@ -26,12 +26,13 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.leases import LeaseHeldError, Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
 from ..store.poll_cursors import PollCursor, PollCursors
-from ..store.tenancy import tenant_scope
+from ..store.tenancy import MAIL_LISTENER
 from ..store.trigger_events import Outcome, TriggerEvent, TriggerEvents
 from .auth import Principal, caller_of
 from .engine_runs import start_run
@@ -200,7 +201,7 @@ class EmailTriggers:
     async def poll_all(self) -> list[PollResult]:
         out: list[PollResult] = []
         for b in await self.bindings():
-            with tenant_scope(b.tenant):
+            with isolation.tenant_wide(MAIL_LISTENER, tenant_id=b.tenant):
                 # One failing mailbox must not stop the others; its cursor stayed, so its next pass retries.
                 try:
                     out.append(await self.poll(b))
@@ -238,7 +239,7 @@ class EmailTriggers:
         if not is_idle(source):
             return
         here = (b.binding.mailbox.lower(), b.binding.folder.lower())
-        with tenant_scope(b.tenant):
+        with isolation.tenant_wide(MAIL_LISTENER, tenant_id=b.tenant):
             while not stop.is_set():
                 at = await self.cursors.get(f"email:{b.workflow}")
                 if at is None or (at.source.lower(), at.folder.lower()) != here:

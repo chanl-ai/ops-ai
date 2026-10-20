@@ -21,7 +21,6 @@ from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unpro
 from ops_service_kit.http import Envelope, ListResult
 from ops_service_kit.ids import new_id, now_iso
 
-from ...store.tenancy import set_tenant
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
 from ..auth import Principal, principal, require_builder
@@ -448,7 +447,6 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
     """Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on
     their behalf (c-168), the team's for a person with workflows.view (c-222). The registry is not yet partitioned by
     tenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it."""
-    set_tenant(caller.tenant_id)
     team = None if caller.kind == "service" else caller.team_id
     can(caller, "workflows", "view", team=team, what="the workflow list")
     rows = [r for r in await registry(rt).rows() if team is None or r["team_id"] == team]

@@ -38,6 +38,7 @@ class EngineTransactions:
     async def check_fence(self, conn: AsyncConnection, thread_id: str, generation: int | None) -> None:
         await check_fence(conn, thread_id, generation)
 
-    def system_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
-        # The worker's claim of engine_work, before it knows the row's tenant; the migration grants nothing else.
-        return system_tx(self.engine)
+    def system_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        # The worker's claim of engine_work and the listener's live workflows, before the row's tenant is known; the
+        # migrations grant nothing else. The reason is ops_engine's.
+        return system_tx(self.engine, reason)

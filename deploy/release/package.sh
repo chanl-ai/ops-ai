@@ -6,7 +6,7 @@
 #   OUT/ops-ai-<version>-images.tar.gz   every image for linux/amd64, as `docker save` writes them, for docker load
 #   OUT/ops-ai-<version>.SHA256SUMS      the two tarballs' checksums
 # Everything comes from `git archive REF`, so uncommitted files never reach a package. The version is REF when it is a
-# tag, else its short sha. Images are named <IMAGE_PREFIX>/<service>:<version> and pushed nowhere.
+# tag, else its short sha. Images are named <IMAGE_PREFIX>/<service>:<version>, built by images.sh and pushed nowhere.
 #   sh deploy/release/package.sh <ref>    IMAGE_PREFIX (default ghcr.io/chanl-ai/ops-ai), OUT (default dist),
 #                                         SERVER=<throwaway PostgreSQL admin URL> (else one is started and removed),
 #                                         BUILD=0 reuses images already built from the same commit
@@ -15,7 +15,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 REF=${1:?usage: package.sh <ref>}
 PREFIX=${IMAGE_PREFIX:-ghcr.io/chanl-ai/ops-ai}
 OUT=$(mkdir -p "${OUT:-$ROOT/dist}" && cd "${OUT:-$ROOT/dist}" && pwd)
-TARGETS="platform agents tools models kb files documents opa proxy console"
+TARGETS="platform agents tools models kb files documents opa proxy console db-scripts"
 PLATFORM=linux/amd64
 SHA=$(git -C "$ROOT" rev-parse --verify "$REF^{commit}")
 if git -C "$ROOT" show-ref --verify --quiet "refs/tags/$REF"; then VERSION=$REF; else VERSION=$(git -C "$ROOT" rev-parse --short=8 "$SHA"); fi
@@ -34,15 +34,11 @@ mkdir "$WORK/src"
 git -C "$ROOT" archive "$SHA" | tar -x -C "$WORK/src"
 test -f "$WORK/src/docs/deploy/install-guide.md" || { echo "package: $REF has no docs/deploy/install-guide.md"; exit 1; }
 
+if [ "${BUILD:-1}" = 1 ]; then
+  TARGETS="$TARGETS" IMAGE_PREFIX="$PREFIX" sh "$ROOT/deploy/release/images.sh" "$SHA" "$VERSION" --platforms $PLATFORM
+fi
 for t in $TARGETS; do
   image=$PREFIX/$t:$VERSION
-  if [ "${BUILD:-1}" = 1 ]; then
-    echo "package: building $image ($PLATFORM)"
-    docker buildx build -q --platform $PLATFORM --load -f "$WORK/src/deploy/fly/Dockerfile" --target "$t" \
-      --label org.opencontainers.image.title="Ops AI $t" --label org.opencontainers.image.vendor=Elemente \
-      --label org.opencontainers.image.version="$VERSION" --label org.opencontainers.image.revision="$SHA" \
-      -t "$image" "$WORK/src" >/dev/null
-  fi
   built=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{.Os}}/{{.Architecture}}' "$image")
   [ "$built" = "$SHA $PLATFORM" ] || { echo "package: $image is '$built', want '$SHA $PLATFORM'"; exit 1; }
 done
@@ -118,7 +114,7 @@ echo "package: images.txt"
   done
 } >"$PKG/images.txt"
 cat >"$PKG/release.txt" <<EOF
-product: Ops AI by Elemente
+product: Ops AI by Chanl AI (https://chanl.ai)
 version: $VERSION
 commit: $SHA
 platform: $PLATFORM

@@ -19,13 +19,14 @@ runner options are in [workflow nodes](workflow-nodes.md).
 
 ## Summary
 
+<!-- site: cards -->
 | Part | What it is | Reference products |
 |---|---|---|
 | Agents | A configured model with tools, knowledge, skills and guardrails that decides its own next step. People reach it through chat; it also runs jobs started by a schedule, an email or a webhook. One run API serves all of them | Relevance AI |
 | Workflows | A graph of typed nodes that runs the same steps every time and records each step in a journal. It survives crashes by replaying the journal and never repeats a payment | n8n, LangGraph |
 | Shared services and gateways | Owned by neither: the data gateway (tools) with approvals, the AI gateway (models), Reviews and Cases, triggers and timers, identity and teams, knowledge, files and a work-item feed | |
 
-![Agents and workflows each stand alone on the shared services; the two dashed arrows are the only places they meet, both through public APIs](images/big-picture.png)
+![Agents and workflows each stand alone on the shared services; the two dashed arrows are the only places they meet, both through public APIs](../../diagrams/platform-map.svg)
 
 Agents and workflows meet in two places only, both through public APIs: a workflow step can start an agent run, and an
 agent can call a published workflow as a tool through the data gateway.

@@ -10,15 +10,20 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 
 from .base import metadata
 from .typed_records import SEED, TEAM, RecordNotFound, VersionedRecords, head_columns, version_columns
 
 __all__ = ["SEED", "TEAM", "TaskTypeNotFound", "TaskTypeStore", "record_of", "task_type_versions", "task_types"]
 
-task_types = sa.Table("task_types", metadata, *head_columns(), info=TENANT_SCOPED)
-task_type_versions = sa.Table("task_type_versions", metadata, *version_columns(), info=TENANT_SCOPED)
+task_types = sa.Table("task_types", metadata, *head_columns(), info={**TENANT_SCOPED, **TEAM_OWNED})
+task_type_versions = sa.Table(
+    "task_type_versions",
+    metadata,
+    *version_columns(),
+    info={**TENANT_SCOPED, **team_owned_via("task_types", "type_id")},
+)
 
 _RECORD_KEYS = ("name", "description", "params", "regions", "actions", "defaults")
 

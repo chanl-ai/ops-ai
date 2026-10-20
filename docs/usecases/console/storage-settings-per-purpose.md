@@ -6,7 +6,7 @@ An admin on the Security team opens Settings, Storage and points each upload pur
 service's own disk, S3 or Azure Blob, with a bucket or container, region, endpoint, credential by name and upload path.
 A credential's values go to files-service once, are kept encrypted and are never shown or returned again. A save is a
 new version, made with the Save button only, and every new or changed target is tested first. Design:
-[files-service design](../../../.codeloop/wiki/concepts/files-service-design.md); interview: c-100 Q1-Q5.
+[files-service design](../../services/files-service/overview.md); interview: c-100 Q1-Q5.
 
 ## Preconditions
 

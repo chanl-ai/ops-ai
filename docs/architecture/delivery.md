@@ -1,6 +1,6 @@
 # Delivery
 
-Status: current, updated 2026-10-16. The owner's decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
 
 ## What is proven
 
@@ -36,7 +36,7 @@ scripted model.
 |---|---|
 | One use case per user-facing operation | `docs/usecases/<service>/<topic>.md` plus one script per layer, run by `make usecase-test` |
 | Name the non-vacuous check | Each use case and experiment names the check that fails when the behaviour breaks; it is watched to fail once with its guard removed |
-| Scripted model for volume | Real model calls only for a baseline the owner approved, ten per experiment at most |
+| Scripted model for volume | Real model calls only for a baseline the maintainers approved, ten per experiment at most |
 | Experiments write facts | One file per experiment under `docs/services/agents-service/experiments/`: what was built, measurements, failure modes, gotchas, verdict |
 | Code from an experiment stays only if `make verify` is green and a test was watched to fail | Otherwise it is removed |
 
@@ -70,7 +70,7 @@ Ordered by how much the answer could change the design.
 | Prototype trust shortcuts | [identity-and-tenancy.md](identity-and-tenancy.md#prototype-shortcuts-still-in-the-code) |
 | No retention job; checkpoint pruning is not scheduled | [data.md](data.md) |
 
-## Open decisions for the owner
+## Open decisions for the maintainers
 
 | Decision | Options | Default until decided |
 |---|---|---|
@@ -79,6 +79,6 @@ Ordered by how much the answer could change the design.
 | A generated SDK for TypeScript and Python over the one API | Build it now, so the console and CLI speak through it; or later | Not started; the console calls the API directly |
 | Deploy an agent's wrapper from the console | Now, pointing the console's Deploy flow at `/v1/deployments`; or after the first workflow ships | Not started |
 
-The owner settled the engine on 2026-10-16: `ops_engine` with LangGraph as the runner on PostgreSQL, with no Temporal
+The maintainers settled the engine on 2026-10-16: `ops_engine` with LangGraph as the runner on PostgreSQL, with no Temporal
 adapter. The decision records list further questions with defaults: the timer poll interval, the fence store in the
 gateway and external schedulers ([ADR-0016](decisions/fencing-and-timers.md)).

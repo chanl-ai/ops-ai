@@ -13,6 +13,8 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ops-ai/usecase-runner": "workspace:*"
+    "@ops-ai/usecase-runner": "workspace:*",
+    "marked": "18.1.1",
+    "mermaid": "12.2.0"
   }
 }

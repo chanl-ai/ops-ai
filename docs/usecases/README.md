@@ -24,7 +24,7 @@ removes them.
 
 | Rule | Detail |
 |---|---|
-| Scripted model only | A script starts its own agents service on the scripted model (`services/agents-service/scripts/scripted_server.py`) on ports and a database the run owns: free ports picked at start and a database `ops_usecase_r<pid>_<hex>` dropped when the run ends, so two sessions' runs never meet (`OPS_USECASE_*` set explicitly wins). The runner removes `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the script's environment unless `APPROVED_REAL_CALLS=<n>` is set, with n the number of real calls the owner approved |
+| Scripted model only | A script starts its own agents service on the scripted model (`services/agents-service/scripts/scripted_server.py`) on ports and a database the run owns: free ports picked at start and a database `ops_usecase_r<pid>_<hex>` dropped when the run ends, so two sessions' runs never meet (`OPS_USECASE_*` set explicitly wins). The runner removes `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the script's environment unless `APPROVED_REAL_CALLS=<n>` is set, with n the number of real calls the maintainers approved |
 | A pass needs evidence | A script prints one `PASS <name>` or `FAIL <name>: <detail>` line per check. The runner passes a use case only when the script exits 0, printed no FAIL line and printed at least one PASS line |
 | Every use case names its non-vacuous check | The check that fails when the behaviour breaks, often a refusal paired with the success it guards. Each doc says which check that is |
 | The status column is not evidence | It records the last state someone saw; only `make usecase-test` decides |

@@ -72,7 +72,7 @@ def worker(engine: AsyncEngine, tools: CountingTools, saver: InMemorySaver, *, t
         leases=ThreadLeases(Leases(engine, owner=owner, ttl=ttl)),
         events=RunEvents(EventLog(engine)),
         checkpointer=saver,
-        tenant_scope=tenant_scope,
+        run_scope=tenant_scope,
         owner=owner,
     )
     return Worker(host)

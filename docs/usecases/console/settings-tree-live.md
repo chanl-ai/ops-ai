@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-152`. Service: `console`. Layers: ui.
 
-Card c-178 (build): the owner approved the settings mock (`settings-tree-mock.md`, uc-126). The real pages move to its
+Card c-178 (build): the maintainers approved the settings mock (`settings-tree-mock.md`, uc-126). The real pages move to its
 tree a page at a time. Inside settings the app sidebar is replaced by the settings sidebar (back arrow, Find, Workspace,
 Team and Govern groups, My account at the foot); a moved page answers at its new route and its old route redirects.
 Policies stay on their current page until `GET` and `PUT /v1/policies` exist (c-186).

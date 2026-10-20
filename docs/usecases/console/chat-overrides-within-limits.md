@@ -5,8 +5,8 @@ Status: current. Id: `uc-091`. Service: `console`. Layers: ui. Card: c-071.
 A banker opens a chat's settings and sees only what the agent's owner allows: a temperature range, added instructions
 and the tools that may be switched off. Switching a tool off means the model is not offered it; every turn records the
 settings it ran on; a value outside the limits is refused naming the field. A PDF attached to a message is parsed once
-and the answer cites it by page. Design: [chat](../../../.codeloop/wiki/concepts/chat.md), decision:
-[override model](../../../.codeloop/wiki/decisions/the-agent-sets-limits-callers-override-w.md).
+and the answer cites it by page. Design: [chat](../../console/chat.md), decision:
+[override model](../agents-service/agent-limits-published.md).
 
 ## Preconditions
 

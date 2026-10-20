@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-165`. Service: `console`. Layers: ui.
 
-The owner asked for a mock of a workspace Channels app and of how a workflow's Email received trigger reaches a
+The maintainers asked for a mock of a workspace Channels app and of how a workflow's Email received trigger reaches a
 connected mailbox. `/preview/channels` (development server only) draws it on sample data: a gallery of channel kinds,
 every connection with its status, per-kind pages, the connect-a-mailbox form as a page and as a dialog, the mailbox's
 settings drawer and page, and a mock of the trigger sheet at `/preview/channels/trigger`. Nothing is stored. The

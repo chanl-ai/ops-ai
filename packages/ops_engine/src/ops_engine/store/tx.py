@@ -26,6 +26,12 @@ class Transactions(Protocol):
         `generation`; None checks nothing."""
         ...
 
-    def system_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
-        """A transaction past row-level security, for claiming work before its tenant is known. Nothing else."""
+    def system_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        """A transaction past row-level security, for claiming work before its tenant is known; `reason` is one of the
+        constants below, logged by the host. Nothing else."""
         ...
+
+
+# Why the engine reads past the tenant (`Transactions.system_tx`).
+CLAIM_WORK = "engine_claim_work"  # the worker claims the next due engine_work row of any tenant
+LIVE_WORKFLOWS = "engine_live_workflows"  # the mailbox listener lists every tenant's live workflows

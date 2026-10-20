@@ -1,10 +1,10 @@
 # Identity, trust and tenancy
 
-Status: current, updated 2026-10-16. The owner's decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
 
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
-[sign-in-and-sessions](../../.codeloop/wiki/concepts/sign-in-and-sessions.md) (human sign-in, step-up).
+[sign-in library](../packages/ops_signin/overview.md) (human sign-in, step-up).
 
 ## Decisions
 
@@ -39,7 +39,8 @@ reasons are tested ([gateway-approval-token](../services/agents-service/experime
 |---|---|
 | Tables | `graph_threads`, `graph_runs`, `thread_events`, `review_decisions`, `review_approvals` (migration 0021) and `ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences` (0004, 0008) carry `tenant_id`; existing rows are the dev tenant `local` |
 | Policy | Each `ENABLE` and `FORCE ROW LEVEL SECURITY` with `tenant_id = current_setting('app.tenant_id', true)` for reads and writes; an unset tenant matches nothing |
-| Tenant source | `auth.principal` sets the request's tenant from the verified token or key (ops_identity), or `local` in dev, in a context variable (`ops_agents/store/tenancy.py`). Stores and the checkpointer read it per transaction; no repository takes a tenant argument, and none is read from a body, header, path or run config |
+| Tenant source | `ops_identity` enters each request's isolation context (`ops_store.isolation`: tenant, one team, scope) from the verified token or key, after the principal resolves; no service sets its own, and none is read from a body, header or path. Stores and the checkpointer read it per transaction; no repository takes a tenant argument. A path wider than one team names a reason (`isolation.tenant_wide`, `isolation.system_tx`), logged as `isolation.widen` and listed in `packages/ops_store/tests/test_isolation_sites.py` (c-409) |
+| One tenant or many | `tenancy_mode` (`single`, the default, or `multi`) is the only difference: single refuses creating any tenant but the install's (`bootstrap_tenant_id`, else `local`), 409 `single_tenant` (`ops_platform/tenants.py`, `tests/test_tenancy_mode.py`). Still one tenant per deployment until c-272 closes them: `model_keys_tenant` (models-service's provider keys), `graph_tenant_id` (Microsoft Graph mail), and the 21 agents and 3 models tables with no `tenant_id` (c-334, c-413, c-416) |
 | No tenant | A store call with no tenant raises `NoTenantError`; below the store, the tenant role with no `app.tenant_id` sees no row |
 | Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
 | Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |

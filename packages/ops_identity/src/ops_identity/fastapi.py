@@ -12,8 +12,10 @@ With OPS_AUTH_MODE=platform, tokens are verified against platform-service's key 
 API keys are introspected on its internal port with this service's Ed25519 service token. With `dev` (Settings
 refuses it outside dev) every request is the fixed dev user in tenant `local`; `X-Dev-User` names a second person and
 `X-Team-Id` picks the team, defaulting to Operations (`team_ops`), as platform-service's dev seed names it.
-`on_principal` runs after each resolution, for a service that keeps per-request state (agents-service sets its tenant
-scope there). The mode comes from `settings.auth_mode` alone, never from whether OPS_PLATFORM_URL is set.
+After each resolution the request's isolation context is entered from the principal (`ops_store.isolation.
+enter_caller`): its tenant, its team and scope `team`, or tenant-wide with a named reason for the dev header caller (dev
+mode only) and a service token with no team. No service sets its own. `on_principal` then runs, for a service that keeps
+other per-request state. The mode comes from `settings.auth_mode` alone, never from whether OPS_PLATFORM_URL is set.
 
 The service token minted for introspection names the service by its audience, so in production each service's own
 key must be bound to that name in platform-service's OPS_SERVICE_PUBLIC_KEYS; a key shared between services is
@@ -32,6 +34,7 @@ from fastapi import Depends, FastAPI, Header, Request
 
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 
 from .http import http_introspect, http_jwks
 from .principal import Principal
@@ -144,6 +147,8 @@ async def current_caller(
     checks a service's scopes, depend on this."""
     auth = _auth(request)
     p = await auth.identity.principal(request, authorization, x_api_key, x_team_id, x_dev_user)
+    # Only an Identity built for dev has a dev user, so only there is a person with no roles the dev header caller.
+    isolation.enter_caller(p, dev=auth.identity.dev_user is not None)
     if auth.on_principal is not None:
         auth.on_principal(p)
     return p
@@ -170,6 +175,7 @@ async def current_principal(
 async def current_service(request: Request, authorization: Annotated[str | None, Header()] = None) -> Principal:
     auth = _auth(request)
     p = await auth.services.principal(authorization)
+    isolation.enter_caller(p, dev=False)
     if auth.on_principal is not None:
         auth.on_principal(p)
     return p

@@ -16,9 +16,10 @@ from ops_engine.definition import parse, validate
 from ops_engine.store import DefinitionStore
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.engine import DatabaseError, EngineTransactions
-from ..store.tenancy import LOCAL_TENANT, tenant_scope
+from ..store.tenancy import LOCAL_TENANT, SEED
 from .deps import Runtime
 
 log = get_logger("ops_agents.api.engine_seed")
@@ -38,7 +39,7 @@ async def load_seed(rt: Runtime, path: Path) -> None:
         d = parse({k: v for k, v in item.items() if k != "teamId"})
         if checks := validate(d, default_registry()):
             raise ValueError(f"Seed workflow {d.id} does not pass its checks: {checks}")
-        with tenant_scope(LOCAL_TENANT):
+        with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
             try:
                 version, created = await store.publish(
                     d.id,

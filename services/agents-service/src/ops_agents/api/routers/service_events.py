@@ -17,7 +17,6 @@ from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden, Unprocessable
 from ops_service_kit.http import Envelope
 
-from ...store.tenancy import set_tenant
 from .. import service_events
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -72,7 +71,6 @@ async def emit_event(rt: Rt, caller: CurrentService, body: EventIn) -> JSONRespo
     # The team is the one the reporting service minted its token for, about its own record; the body only repeats it.
     if caller.team_id != body.team_id:
         raise Forbidden("A service event's team is the one its token names.", code="team_mismatch")
-    set_tenant(caller.tenant_id)
     event = await service_events.emit(
         rt,
         name=body.name,

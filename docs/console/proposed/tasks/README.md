@@ -1,6 +1,6 @@
 # Human Task page (c-289)
 
-Status: proposed, reworked after the owner's review, waiting for the design checker. Design: the
+Status: proposed, reworked after the maintainers' review, waiting for the design checker. Design: the
 [Human Task page design](../../../design/human-tasks/task-page.md). Proof: `make usecase-test UC=uc-234 LAYER=ui` and
 `make usecase-test UC=uc-224 LAYER=ui`.
 

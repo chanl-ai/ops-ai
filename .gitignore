@@ -26,3 +26,8 @@ __pycache__/
 
 # Generated DBA scripts (make db-ddl, db-upgrade-sql, db-release); a release attaches them.
 /dist/
+
+# install.sh: the settings file with the install keys, the DBA scripts and backups
+/ops-ai.env
+/dba/
+/backups/

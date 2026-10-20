@@ -1,0 +1,65 @@
+# The platform map: agents and workflows, each standing alone on the shared services and gateways.
+# Drawn by the docs site (apps/docs) and exported to platform-map.svg with `pnpm --filter docs diagrams`.
+title: "Ops AI: agents, workflows, the shared services and the service host"
+width: 980
+bands:
+  - groups:
+      - id: agents
+        label: Agents (agents-service)
+        note: "like Relevance AI: the agent decides its steps"
+        rows:
+          - boxes:
+              - { label: Chat, style: port }
+              - { label: Jobs, style: port }
+              - { label: Test, style: port }
+              - { id: agent-as-tool, label: Agent as a tool, style: port }
+          - boxes:
+              - { id: agent-run-api, label: "Agent run API, run queue, run worker", style: new, bold: true }
+          - boxes:
+              - { id: agent-kernel, label: "Agent kernel core: turn loop, budget, approval, guardrails", bold: true, href: architecture/runtime.md }
+          - chips:
+              label: "capability packs:"
+              items: [tools, knowledge, skills, guardrail kinds]
+      - id: workflows
+        label: Workflows (workflows service)
+        note: "like n8n and LangGraph: the same steps every time"
+        rows:
+          - boxes:
+              - { label: Editor and forms, style: port }
+              - { label: Runs and journal, style: port }
+              - { id: start-run-api, label: Start-run API, style: port }
+          - boxes:
+              - { label: "Node SDK: one contract per node type", style: new, bold: true, href: design/workflows/workflow-nodes.md }
+          - boxes:
+              - { id: engine, label: "Core engine: journal, queue, workers, leases, flow nodes", bold: true, href: architecture/workflow-runner.md }
+          - chips:
+              label: "node packs:"
+              items: [ai, tools, files, { id: agents-pack, label: agents }, channels]
+  - gap: 20
+    groups:
+      - id: shared
+        label: "Shared services and gateways: owned by neither, used by both"
+        style: new
+        columns: 4
+        rows:
+          - boxes:
+              - { label: tools-service, note: "gateway, approvals, step-up", href: services/tools-service/overview.md }
+              - { label: ops_hitl, note: "Reviews, Cases, work items", href: architecture/human-in-the-loop.md }
+              - { label: ops_triggers, note: "schedule, webhook, email, poll" }
+              - { label: platform-service, note: "identity, teams, audit", href: services/platform-service/overview.md }
+              - { label: models-service, note: "model aliases, keys, cost", href: services/models-service/overview.md }
+              - { label: kb-service, note: knowledge bases, href: services/kb-service/overview.md }
+              - { label: files-service, note: "uploads, parsed pages", href: services/files-service/overview.md }
+              - { label: documents-service, note: "document types, extraction", href: services/documents-service/overview.md }
+  - groups:
+      - id: host
+        label: "ops-host --services …   one program, any set of services per process"
+        style: host
+        rows:
+          - text: "Dev and tests: everything in one process. Production: one process, or split by service. Services call each other"
+          - text: "through generated clients: in-process when they share a process, HTTP with the service token when they do not."
+links:
+  - { from: agents-pack, to: agent-run-api, style: dashed, label: "agents pack: a workflow step starts an agent run (public API)", toX: 0.72 }
+  - { from: agent-kernel, to: start-run-api, style: dashed, label: "an agent calls a published workflow as a tool, through the data gateway", fromX: 0.9 }
+  - { from: agents, to: shared, label: uses, fromX: 0.5, straight: true }
+  - { from: workflows, to: shared, label: uses, fromX: 0.93, straight: true }

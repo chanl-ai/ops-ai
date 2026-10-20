@@ -40,7 +40,7 @@ console 253, every other service under 110.
 |---|---|
 | No Postgres cluster existed in any org | `<your-app>-db` was created; `fly postgres attach --database-name ops_ai --database-user ops_ai --superuser` made the one database. Only the migrate app holds that superuser; each service logs in as `ops_<service>_runtime` with DML on its own tables, no DDL, and row-level security applied (`docs/deploy/database.md`) |
 | Fly's health checks reach a machine over IPv4; the private network is IPv6; asyncio opens `::` as IPv6 only | `OPS_BIND_HOST=*` listens on every address |
-| The only model connection is the fake | No provider key is set anywhere; the owner binds a real model later (below) |
+| The only model connection is the fake | No provider key is set anywhere; the maintainers binds a real model later (below) |
 | Fly mounts a volume owned by the image's user (uid 10001 here) | files-service keeps uploaded bytes on volume `files_data` (1 GB, `/data`), so they survive a redeploy: proven by `deploy/fly/staging/bytes_survive.mjs` (upload, redeploy, the same sha256 read back; `.codeloop/evidence/203/bytes-survive-redeploy.txt`). Knowledge-base bytes still sit on the kb machine's disk until a Security admin points storage at a bucket (Settings > Storage) |
 | The working tree holds other builders' uncommitted code | Deploy from an export of a commit (`git archive <sha> \| tar -x -C <dir>`, then `fly deploy <dir> -c <dir>/deploy/fly/staging/<app>.toml`). A models image built from the tree expected a column no committed migration makes and answered 500 |
 | Fly machines are amd64; `next build` under emulation on an arm64 laptop segfaults | The console's build stages run on the build machine's platform (`deploy/fly/Dockerfile`) |
@@ -95,7 +95,7 @@ fly ssh console -a <your-app>-agents -C "python /app/deploy/fly/connect_model.py
 
 It runs on the agents app because it signs with agents-service's own key. Again with `--key-id purpose:documents`, also from the agents app. Each prints its key once; put them in a private file as
 `OPS_MODELS_KEY_AGENTS=` and `OPS_MODELS_KEY_DOCUMENTS=` lines, run `apps.py secrets ... --models <file>`, then deploy
-agents, worker and documents. For a real model the owner stores the provider key in Settings > Secrets as the Security
+agents, worker and documents. For a real model the maintainers stores the provider key in Settings > Secrets as the Security
 admin and runs the same script with `--base-url <provider>/v1 --key-ref <secret name> --model <id>` and a budget.
 
 ## Check, logs, roll back

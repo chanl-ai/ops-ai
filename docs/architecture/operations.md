@@ -1,6 +1,6 @@
 # Operations
 
-Status: current, updated 2026-10-11 against HEAD; every decision is an option until the owner confirms it.
+Status: current, updated 2026-10-11 against HEAD; every decision is an option until the maintainers confirms it.
 
 Make layout, every port, every environment name and the daily commands are in [make.md](make.md). Deployment targets
 (one VM with systemd, Compose, Kubernetes with Kustomize) are in [service-map.md](service-map.md). Nothing deploys from
@@ -60,7 +60,7 @@ starts its own agents-service on the scripted model, on its own ports and databa
 owner approved a number of real calls (`APPROVED_REAL_CALLS=<n>`), and passes a use case only on exit 0, no `FAIL`
 line and at least one `PASS`. A registry status is a record of the last run, never evidence. Rules and layers:
 [usecases/README](../usecases/README.md). Experiments are
-capped at ten real model calls unless the owner approves more.
+capped at ten real model calls unless the maintainers approves more.
 
 ## What to watch
 

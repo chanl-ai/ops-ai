@@ -5,7 +5,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
-const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'plan', 'artifacts', 'usecases'];
+// media holds the README's screenshots and clips (docs/usecases/lib/capture_demo.mjs writes them); diagrams holds the
+// architecture diagrams' data files and their exported SVGs (apps/docs draws them).
+const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'guide', 'plan', 'artifacts', 'usecases', 'media', 'diagrams'];
 // Use case scripts and their shared harness live beside the use case docs; only the docs follow the naming rules.
 const USECASE_CODE = /^docs\/usecases\/(lib|[a-z0-9-]+\/scripts)\/[^/]+\.(py|mjs)$/;
 // Mapped folders: docs/services/<x> needs services/<x>, docs/packages/<x> needs packages/<x>.
@@ -18,7 +20,7 @@ const BRIEF_MAX_LINES = 40;
 
 const DATED = /(^|\/)\d{4}-\d{2}-\d{2}[-_.]/;
 // Topic names only: a number or sequence prefix (01-, ADR-0001-, E2-) fails; ids live in the title.
-const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*\.(md|html|pdf|png|svg)$/;
+const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*\.(md|html|pdf|png|svg|gif|yaml)$/;
 
 const files = execFileSync('git', ['ls-files', '--cached'], { encoding: 'utf8' })
   .split('\n')

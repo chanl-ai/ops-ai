@@ -1,6 +1,6 @@
 # ADR-0004 Deployment, tenancy and promotion
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4.
 
 ## Context
 
@@ -65,10 +65,10 @@ approval covers every minor and patch release within the approved major version,
 re-runs the suite and needs no new approval. A major version is one that adds an operation,
 widens an operation's access, widens a subject-binding input, or changes egress hosts (`03` 4.1); it
 needs a new approval for every workflow that moves to it. For emergencies
-the owner can **revoke** a module version: the data gateway then refuses calls to it, and affected
+the maintainers can **revoke** a module version: the data gateway then refuses calls to it, and affected
 runs fall into their human step (see failure modes). This gives the problem statement's "independent module
 rollback" without silently changing what a running workflow calls, a failure seen in an earlier
-internal product that attached tools at runtime ([design lessons](../../../.codeloop/wiki/concepts/design-lessons.md), "Tools, MCP and scoping").
+internal product that attached tools at runtime (design lessons, "Tools, MCP and scoping").
 
 ### Advisory tests at the lowest tier
 

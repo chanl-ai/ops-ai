@@ -68,8 +68,8 @@ from ..schemas import (
 )
 from ..timers import sla_view
 from ..usage import budget_view, totals_view
+from ..workflow_registry import held as registry_held
 from ..workflow_registry import move_pointer, thread_pin
-from ..workflow_registry import registry as workflow_registry
 
 router = APIRouter(prefix="/v1/threads", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -480,7 +480,7 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
     the team's publish policy (c-086) this route refuses one with 409 `review_required`."""
-    held = await workflow_registry(rt).find(name)
+    held = await registry_held(rt, name)
     if held is None:
         require_builder(me, area="workflows", team_id=me.team_id, action="publish", what=f"graph {name}")
     else:

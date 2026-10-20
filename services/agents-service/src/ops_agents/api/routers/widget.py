@@ -40,8 +40,8 @@ from ops_service_kit.errors import (
     ValidationFailed,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_store import isolation
 
-from ...store.tenancy import set_team, set_tenant
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
 from ..agent_registry import pinned_definition, registry
@@ -227,6 +227,8 @@ class MintKeyInput(WireModel):
 
 
 WHAT = "this widget deployment"
+# The isolation context of a widget request: its tenant and team come from the deployment its key or session names.
+WIDGET = "widget"
 
 
 def _key_store(rt: Runtime) -> WidgetKeys:
@@ -329,7 +331,8 @@ async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[s
     if len(parts) != 4 or parts[0] != "wk":
         raise _key_refused()
     _, tenant, key_id, secret = parts
-    set_tenant(tenant)
+    # The key is looked up in the tenant its text names; until it is checked the context names no team.
+    isolation.enter(tenant, None, kind=WIDGET)
     key = await _key_store(rt).get(key_id)
     digest = hashlib.sha256(secret.encode()).hexdigest()
     if key is None or key["revoked_at"] is not None or not hmac.compare_digest(digest, str(key["secret_hash"])):
@@ -341,7 +344,7 @@ async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[s
     row = await _store(rt).get(deployment_id)
     if row is None:
         raise NotFound("Widget deployment")
-    set_team(str(row["team_id"]))
+    isolation.enter(tenant, str(row["team_id"]), kind=WIDGET)
     return MintKey(key_id, row)
 
 
@@ -408,7 +411,7 @@ def _listed(
     origin = _page_origin(request, session_token, embed_origins or [])
     previewing = bool(session_token and console_origin and origin and normal_origin(origin) == console_origin)
     request.state.widget_origin = console_origin if previewing else allowed(row, origin)
-    set_team(str(row["team_id"]))
+    isolation.enter(isolation.tenant(), str(row["team_id"]), kind=WIDGET)
     _refuse_stopped(row)
     return row
 
@@ -432,7 +435,7 @@ async def listed_deployment(
     tenant = claimed_tenant(session_token)
     if tenant is None:
         raise Unauthorized("This widget has no session; it starts one when it loads.")
-    set_tenant(tenant)
+    isolation.enter(tenant, None, kind=WIDGET)
     console = normal_origin(rt.settings.console_url) if rt.settings.console_url else None
     return _listed(request, await _store(rt).get(deployment_id), session_token, rt.settings.embed_origins, console)
 
@@ -562,7 +565,7 @@ async def public_config(
     request whose Origin the deployment lists (the embed app forwards the framing page's), the console's own origin
     (its preview), or a server holding this deployment's mint key; anything else is 403. It names no team or tenant,
     and an unknown deployment, or one in another tenant, is 404."""
-    set_tenant(tenant)
+    isolation.enter(tenant, None, kind=WIDGET)
     row = await _store(rt).get(deployment_id)
     if row is None:
         raise NotFound("Widget")

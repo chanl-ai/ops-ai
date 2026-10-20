@@ -17,7 +17,7 @@ from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
 from .leases import check_fence
-from .tenancy import current_team, current_tenant, system_tx, tenant_tx
+from .tenancy import CLAIM_THREAD, current_team, current_tenant, system_tx, tenant_tx
 
 graph_threads = sa.Table(
     "graph_threads",
@@ -121,7 +121,7 @@ class GraphStore:
     async def tenant_of(self, thread_id: str) -> str | None:
         """Which tenant a thread belongs to, read past row-level security. For the sweeper and the timer poller only,
         which claim work before they know its tenant (tests/store/test_tenancy.py holds the list of callers)."""
-        async with system_tx(self.engine) as c:
+        async with system_tx(self.engine, CLAIM_THREAD) as c:
             q = sa.select(graph_threads.c.tenant_id).where(graph_threads.c.id == thread_id)
             return (await c.execute(q)).scalar_one_or_none()
 

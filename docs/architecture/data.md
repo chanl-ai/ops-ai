@@ -1,6 +1,6 @@
 # Data
 
-Status: current, updated 2026-10-19. The owner's decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-19. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
 
 Store choices are in [ADR-0006](decisions/data-stores-and-evidence.md) (PostgreSQL as system of record, WORM object
 storage for evidence, pgvector for knowledge) and [ADR-0010](decisions/object-storage.md). A service never reads
@@ -104,7 +104,7 @@ All tables are in one PostgreSQL database (`ops_runtime` on port 5477 locally) a
 (`alembic_version_platform`), models-service (`alembic_version_models`), kb-service (`alembic_version_kb`),
 files-service (`alembic_version_files`) and documents-service (`alembic_version_documents`) keep their own migration
 chains. Each chain's store metadata is its whole schema, held equal to what the chain builds by
-`deploy/database/tests/test_model_parity.py` ([rule](../../.codeloop/wiki/rulebook/data-and-portability.md#the-models-are-the-schema)).
+`deploy/database/tests/test_model_parity.py` ([rule](../design/data/database-packages.md)).
 The columns those chains added that change a guarantee:
 
 | Table | Owner | Holds | Migration |

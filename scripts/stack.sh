@@ -96,10 +96,12 @@ MAILPIT_SMTP=${OPS_MAILPIT_SMTP_PORT:-1025}
 MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # The services agents-service and its workflow worker both call, in one list: a worker missing one the API process has
 # fails every workflow step that needs it (OPS_FILES_URL, then OPS_KB_URL, each went missing from the worker once).
+# models-service is the default alias's only server; a clean clone has no .env naming it, so the dev runtime key it
+# seeds is the default here.
 # scripts/tests/test_stack_service_urls.py fails when the two commands' URLs differ.
 # The embed app's origin is configuration (c-158): without it agents-service refuses every widget send from the console's
 # Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
-AGENTS_URLS="OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
+AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS_MODELS_KEY=${OPS_MODELS_KEY:-mk_dev_agents} OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
 dev_egress_resolve() {
   IP=$(private_address) python3 -c 'import json,os
 ip=os.environ["IP"]

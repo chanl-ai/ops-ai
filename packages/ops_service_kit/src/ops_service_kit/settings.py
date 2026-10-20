@@ -243,6 +243,10 @@ class Settings(BaseSettings):
     # step; the password is the admin's first one, changed after sign-in.
     bootstrap_tenant_id: str | None = None
     bootstrap_tenant_name: str | None = None
+    # One tenant per install (`single`, the default: a bank runs its own deployment, its tenant bootstrap_tenant_id or
+    # the dev seed's `local`) or many on one deployment (`multi`, created by the provisioner, c-272). Every code path
+    # and isolation rule is the same in both; single only refuses creating any other tenant, 409 single_tenant (c-418).
+    tenancy_mode: Literal["single", "multi"] = "single"
     bootstrap_team_name: str | None = None
     bootstrap_admin_email: str | None = None
     bootstrap_admin_name: str | None = None

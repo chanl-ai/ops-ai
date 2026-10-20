@@ -1,6 +1,6 @@
 # ADR-0009 Chat experience inside the platform
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal; a chat session runs on agents-service's own agent run API (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/chat.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-9.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal; a chat session runs on agents-service's own agent run API (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/chat.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-9.
 
 ## Context
 
@@ -10,7 +10,7 @@ The mock already treats a chat agent as the workflow "Chat message → Agent →
 widget as a deployment channel. Every user is bank staff: the widget deploys only to intranet portals
 behind staff SSO, and public, customer-facing deployment is out of scope. The question is which
 chat front end to use, how sessions run, and how interactive tool UIs are governed. This record fixes the architectural choices; the full chat
-design is in [`07`](../../../.codeloop/wiki/concepts/agent-chat.md).
+design is in [chat in the console](../../console/chat.md).
 
 **MCP Apps** is the relevant standard. It is the first official MCP extension, stable at spec
 version 2026-01-26, co-developed from the community MCP-UI project and OpenAI's Apps SDK ([spec][mcp-apps-spec],

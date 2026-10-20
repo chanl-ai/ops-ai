@@ -12,8 +12,8 @@ to what the database enforces: a marked table the database does not isolate, or 
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Sequence
-from typing import Any
+from collections.abc import Callable, Collection, Iterable, Sequence
+from typing import Any, Literal
 
 import sqlalchemy as sa
 from alembic.autogenerate import compare_metadata
@@ -21,6 +21,25 @@ from alembic.migration import MigrationContext
 
 TENANT_KEY = "tenant_scoped"
 TENANT_SCOPED: dict[str, Any] = {TENANT_KEY: True}
+# A team's work or asset: every read names the caller's team through `ops_store.team_scope.team_visible` (c-407), and
+# `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. A null team is a workspace-level
+# platform resource every team reads, never a way to share one team's data.
+TEAM_KEY = "team_owned"
+# A table whose rows belong to a team-owned parent (an agent's versions): read through the parent's team.
+TEAM_VIA_KEY = "team_owned_via"
+
+
+def team_owned(column: str = "team_id") -> dict[str, Any]:
+    """The marker for a team-owned table whose team is in `column` (`team` in files and documents)."""
+    return {TEAM_KEY: column}
+
+
+TEAM_OWNED: dict[str, Any] = team_owned()
+
+
+def team_owned_via(parent: str, column: str) -> dict[str, Any]:
+    """The marker for a table read through the team of its parent table `parent`, joined on `column` = parent.id."""
+    return {TEAM_VIA_KEY: (parent, column)}
 
 
 def tenant_scoped(table: sa.Table) -> bool:
@@ -31,25 +50,39 @@ def tables(metadatas: Iterable[sa.MetaData], exclude: Collection[str] = ()) -> d
     return {name: t for m in metadatas for name, t in m.tables.items() if name not in exclude}
 
 
-def isolated_tables(conn: sa.Connection) -> set[str]:
-    """The tables the database isolates by tenant on its own, read from the database rather than from migrations."""
+def isolated_tables(conn: sa.Connection) -> dict[str, str]:
+    """The tables the database isolates on its own and how, `team` or `tenant`, read from the database rather than
+    from migrations: a table with the generated `{t}_isolation` policy is isolated by team, any other by tenant."""
     if conn.dialect.name == "postgresql":
         # Forced, so the owner the services connect as is filtered too; enabled alone exempts the owner.
         rows = conn.execute(
             sa.text(
-                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                "SELECT c.relname, bool_or(p.polname = c.relname || '_isolation')"
+                " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                " LEFT JOIN pg_policy p ON p.polrelid = c.oid"
                 " WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')"
-                " AND c.relrowsecurity AND c.relforcerowsecurity"
+                " AND c.relrowsecurity AND c.relforcerowsecurity GROUP BY c.relname"
             )
         )
-        return {r[0] for r in rows}
+        return {str(r[0]): "team" if r[1] else "tenant" for r in rows}
+    if conn.dialect.name == "mssql":
+        rows = conn.execute(
+            sa.text(
+                "SELECT o.name, MAX(CASE WHEN p.name = o.name + N'_isolation' THEN 1 ELSE 0 END)"
+                " FROM sys.security_predicates sp JOIN sys.security_policies p ON p.object_id = sp.object_id"
+                " JOIN sys.objects o ON o.object_id = sp.target_object_id"
+                " WHERE p.is_enabled = 1 AND SCHEMA_NAME(o.schema_id) = SCHEMA_NAME() GROUP BY o.name"
+            )
+        )
+        return {str(r[0]): "team" if r[1] else "tenant" for r in rows}
     raise NotImplementedError(f"isolated_tables: no reader for {conn.dialect.name}")
 
 
 def differences(conn: sa.Connection, metadatas: Sequence[sa.MetaData], exclude: Collection[str] = ()) -> list[str]:
     """Every way the database on `conn` differs from `metadatas` for the tables they define (less `exclude`), one line
     each: Alembic's comparison (tables, columns, types, nullability, indexes, unique keys, foreign keys), plus server
-    defaults by presence, CHECK constraints and computed columns by name, and the tenant marker against isolation."""
+    defaults by presence, CHECK constraints and computed columns by name, and each table's isolation kind (team or
+    tenant, from its markings) against what the database enforces."""
     ours = tables(metadatas, exclude)
 
     def include(name: str | None, type_: str, _parent: dict[str, str | None]) -> bool:
@@ -86,10 +119,170 @@ def differences(conn: sa.Connection, metadatas: Sequence[sa.MetaData], exclude: 
             if has != (column.server_default is not None):
                 where = "the database" if has else "metadata"
                 out.append(f"default {name}.{column.name} only in {where}")
-    isolated = isolated_tables(conn) & set(ours)
-    marked = {name for name, t in ours.items() if tenant_scoped(t)}
-    out += [f"tenant {t} is isolated in the database, not marked TENANT_SCOPED" for t in sorted(isolated - marked)]
-    out += [f"tenant {t} is marked TENANT_SCOPED, not isolated in the database" for t in sorted(marked - isolated)]
+    enforced = {t: k for t, k in isolated_tables(conn).items() if t in ours}
+    expected = {name: k for name, t in ours.items() if (k := isolation_kind(t)) in ("team", "tenant")}
+    out += [
+        f"tenant {t} is isolated in the database, not marked TENANT_SCOPED"
+        for t in sorted(set(enforced) - set(expected))
+    ]
+    out += [
+        f"tenant {t} is marked TENANT_SCOPED, not isolated in the database"
+        for t in sorted(set(expected) - set(enforced))
+    ]
+    out += [
+        f"isolation {t} is marked {expected[t]}-isolated, the database isolates it by {enforced[t]}"
+        for t in sorted(set(expected) & set(enforced))
+        if expected[t] != enforced[t]
+    ]
+    return out
+
+
+# Isolation DDL, generated from the markings (c-410; design: c-408 spec section 2) ---------------------------------
+
+SYSTEM_KEY = "system_reason"
+IsolationKind = Literal["team", "tenant", "system"]
+# The schema SQL Server's predicate functions and policies live in.
+MSSQL_SECURITY = "ops_security"
+
+
+def system(reason: str) -> dict[str, Any]:
+    """The marker for a table with no tenant column, reached only through `ops_store.isolation.system_tx` (leases,
+    timers, inbox, fences): no policy and no grant to the request role. `reason` says why it holds no tenant."""
+    if not reason.strip():
+        raise ValueError("system() needs a reason")
+    return {SYSTEM_KEY: reason}
+
+
+def isolation_kind(table: sa.Table) -> IsolationKind | None:
+    """How the database isolates `table`, from its markings: `team` for a tenant-scoped table that is also team-owned
+    with its own team column, `tenant` for any other tenant-scoped table, `system`, or None for a table not yet marked.
+    A team-owned table that is not tenant-scoped (no tenant column yet) is held by the query filter alone."""
+    if tenant_scoped(table):
+        return "team" if isinstance(table.info.get(TEAM_KEY), str) else "tenant"
+    if table.info.get(SYSTEM_KEY):
+        return "system"
+    return None
+
+
+def tenant_column(table: sa.Table) -> sa.Column[Any]:
+    """The column a tenant-scoped table is isolated by: tenant_id, or a tenant table's own single-column key."""
+    if "tenant_id" in table.c:
+        return table.c.tenant_id
+    key = list(table.primary_key.columns)
+    if table.name == "tenants" and len(key) == 1:
+        return key[0]
+    raise ValueError(f"{table.name} is TENANT_SCOPED but has no tenant_id column")
+
+
+def team_column(table: sa.Table) -> sa.Column[Any]:
+    name = table.info.get(TEAM_KEY)
+    if not isinstance(name, str) or name not in table.c:
+        raise ValueError(f"{table.name} is not team-owned with a team column")
+    return table.c[name]
+
+
+def _pg_predicates(table: sa.Table, kind: IsolationKind) -> tuple[str, str]:
+    """The read (USING) and write (WITH CHECK) conditions of the table's one policy. Each setting is read in a scalar
+    subquery, which PostgreSQL evaluates once per statement (an InitPlan) instead of once per row."""
+
+    def setting(name: str) -> str:
+        return f"(SELECT current_setting('{name}', true))"
+
+    tenant = f"{tenant_column(table).name} = {setting('app.tenant_id')}"
+    if kind == "tenant":
+        return tenant, tenant
+    team = team_column(table).name
+    wide = f"{setting('app.scope')} = 'tenant'"
+    own = f"{team} = {setting('app.team_id')}"
+    return f"{tenant} AND ({wide} OR {team} IS NULL OR {own})", f"{tenant} AND ({wide} OR {own})"
+
+
+def isolation_ddl(table: sa.Table, dialect: str, *, kind: IsolationKind | None = None, chain: str = "") -> list[str]:
+    """The statements that make the database isolate `table` as its markings say (or as `kind` says, for a migration's
+    downgrade), each runnable on its own and safe to repeat. PostgreSQL: forced row-level security and one policy,
+    `{t}_isolation` (team) or `{t}_tenant`, replacing the other, since permissive policies OR together. SQL Server: one
+    security policy over the chain's predicate functions (`security_ddl` creates them). A system or unmarked table
+    gets none."""
+    kind = kind or isolation_kind(table)
+    if kind not in ("team", "tenant"):
+        return []
+    t = table.name
+    name, other = (f"{t}_isolation", f"{t}_tenant") if kind == "team" else (f"{t}_tenant", f"{t}_isolation")
+    if dialect == "postgresql":
+        read, write = _pg_predicates(table, kind)
+        return [
+            f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY",
+            f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY",
+            f"DROP POLICY IF EXISTS {other} ON {t}",
+            f"DROP POLICY IF EXISTS {name} ON {t}",
+            f"CREATE POLICY {name} ON {t} USING ({read}) WITH CHECK ({write})",
+        ]
+    if dialect == "mssql":
+        if not chain:
+            raise ValueError("SQL Server predicates are per chain; name it")
+        args = tenant_column(table).name + (f", {team_column(table).name}" if kind == "team" else "")
+        fn = f"{MSSQL_SECURITY}.{chain}_{kind}"
+        drop = "IF OBJECT_ID(N'{0}', N'SP') IS NOT NULL DROP SECURITY POLICY {0}"
+        return [
+            drop.format(f"{MSSQL_SECURITY}.{other}"),
+            drop.format(f"{MSSQL_SECURITY}.{name}"),
+            f"CREATE SECURITY POLICY {MSSQL_SECURITY}.{name}\n"
+            f"    ADD FILTER PREDICATE {fn}_read({args}) ON dbo.{t},\n"
+            f"    ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{t} AFTER INSERT,\n"
+            f"    ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{t} AFTER UPDATE\n"
+            "    WITH (STATE = ON, SCHEMABINDING = ON)",
+        ]
+    raise NotImplementedError(f"isolation_ddl: no policies for {dialect}")
+
+
+def security_ddl(
+    chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
+) -> list[str]:
+    """SQL Server: the chain's schema-bound predicate functions for each kind its tables use, then each table's policy.
+    Reads see the context's tenant (and, for a team table, the context's team, the null team, or every team in a
+    tenant-wide scope); writes must be the context's tenant (and team, unless tenant-wide). `system_user` (the agents
+    chain's) passes both: its grants limit what it reads and which columns it updates. Nothing a login can set opens
+    another tenant's rows; a missing tenant matches no row."""
+    marked = [t for t in tables if isolation_kind(t) in ("team", "tenant")]
+    if not marked:
+        return []
+    out = [f"IF SCHEMA_ID(N'{MSSQL_SECURITY}') IS NULL EXEC (N'CREATE SCHEMA {MSSQL_SECURITY} AUTHORIZATION dbo')"]
+    system = f" OR USER_NAME() = N'{system_user}'" if system_user else ""
+    kinds = sorted({k for t in marked if (k := isolation_kind(t))}, reverse=True)
+    for kind in kinds:
+        of_kind = [t for t in marked if isolation_kind(t) == kind]
+        tenants = {column_type(tenant_column(t)) for t in of_kind}
+        if len(tenants) != 1:
+            raise ValueError(
+                f"{chain}: tenant columns of different types {sorted(tenants)}; one predicate cannot take them"
+            )
+        (tenant_type,) = tenants
+        ctx_tenant = f"CAST(SESSION_CONTEXT(N'tenant_id') AS {tenant_type})"
+        fn = f"{MSSQL_SECURITY}.{chain}_{kind}"
+        if kind == "tenant":
+            params, read, write = (
+                f"@tenant_id {tenant_type}",
+                f"@tenant_id = {ctx_tenant}",
+                f"@tenant_id = {ctx_tenant}",
+            )
+        else:
+            teams = {column_type(team_column(t)) for t in of_kind}
+            if len(teams) != 1:
+                raise ValueError(f"{chain}: team columns of different types {sorted(teams)}")
+            (team_type,) = teams
+            ctx_team = f"CAST(SESSION_CONTEXT(N'team_id') AS {team_type})"
+            wide = "CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant'"
+            params = f"@tenant_id {tenant_type}, @team_id {team_type}"
+            read = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id IS NULL OR @team_id = {ctx_team})"
+            write = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id = {ctx_team})"
+        out += [
+            f"CREATE FUNCTION {fn}_read ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
+            f"SELECT 1 AS visible WHERE {read}{system}",
+            f"CREATE FUNCTION {fn}_write ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
+            f"SELECT 1 AS allowed WHERE {write}{system}",
+        ]
+    for t in marked:
+        out.append(isolation_ddl(t, "mssql", chain=chain)[-1])
     return out
 
 

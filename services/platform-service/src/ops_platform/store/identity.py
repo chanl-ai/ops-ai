@@ -20,7 +20,7 @@ from ops_store import Guarantee
 from .audit import record
 from .roles import RoleStore, version_in
 from .tables import api_keys, members, sessions, teams, tenants, users
-from .tenancy import TenantDb
+from .tenancy import KEY_LOOKUP, SESSION_LOOKUP, SIGNIN_LOOKUP, TenantDb
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,7 @@ class IdentityStore:
 
     async def users_by_email(self, email: str) -> list[User]:
         q = sa.text("SELECT tenant_id, id, email, name FROM platform_users_by_email(:e)")
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
             return [User(*row) for row in (await c.execute(q, {"e": email})).all()]
 
     async def user(self, tenant_id: str, user_id: str) -> User | None:
@@ -166,7 +166,7 @@ class IdentityStore:
 
     async def session(self, session_id: str) -> SessionRef | None:
         q = sa.text("SELECT tenant_id, user_id, id FROM platform_session(:s)")
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SESSION_LOOKUP) as c:
             row = (await c.execute(q, {"s": session_id})).first()
         return SessionRef(*row) if row else None
 
@@ -255,7 +255,7 @@ class IdentityStore:
         q = sa.text(
             "SELECT id, tenant_id, team_id, secret_hash, scopes, created_by, usable FROM platform_key(:k, :now)"
         )
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(KEY_LOOKUP) as c:
             row = (await c.execute(q, {"k": key_id, "now": now_iso()})).first()
         return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6])) if row else None
 

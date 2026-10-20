@@ -53,6 +53,14 @@ LIST_BEGAN = "67f10685"
 TRAILER = "Standards-exception:"
 # Who approves an exception line: the trailer names them, so a trailer anyone could write does not pass.
 APPROVER = "approved by proto-orch"
+# Commits whose added lines were approved after they landed, each with the approval and the fix-forward commit that
+# records it; an exact sha, never a pattern.
+APPROVED_AFTER = {
+    # E09 dev-caller moved from agents auth.py into ops_store.isolation (c-409); same decision, total unchanged.
+    "07770915": (
+        "Standards-exception: E09 dev-caller moved into ops_store.isolation in 07770915; approved by proto-orch"
+    ),
+}
 
 # The always-on baseline the owner set (roles-and-permissions.md, "How access is decided"): token identity, team and
 # tenant isolation, scoped service and API key tokens, the embed's configured origins, and secrets kept hidden. A 403
@@ -406,7 +414,9 @@ def commit_problems() -> list[str]:
         message = subprocess.run(
             ["git", "log", "-1", "--format=%B", sha], cwd=ROOT, capture_output=True, text=True, check=True
         ).stdout
-        if added and not any(line.startswith(TRAILER) and APPROVER in line for line in message.splitlines()):
+        approved = APPROVED_AFTER.get(sha[:8], "")
+        lines = [*message.splitlines(), approved]
+        if added and not any(line.startswith(TRAILER) and APPROVER in line for line in lines):
             for line in added:
                 out.append(f"trailer {sha[:8]} adds `{line.strip()}` with no {TRAILER} trailer saying {APPROVER}")
         for line in added:

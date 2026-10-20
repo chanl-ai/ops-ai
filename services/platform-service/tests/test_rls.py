@@ -29,8 +29,9 @@ from ops_platform.store.tables import (
     tenants,
     users,
 )
-from ops_platform.store.tenancy import TenantDb
+from ops_platform.store.tenancy import ROLE, TenantDb
 from ops_service_kit.ids import new_id, now_iso
+from ops_store.isolation import NoTenantError
 
 
 async def seed(engine: AsyncEngine) -> tuple[str, str]:
@@ -188,7 +189,12 @@ async def test_a_tenant_sees_only_its_own_rows(engine: AsyncEngine) -> None:
 
 async def test_no_tenant_set_sees_nothing(engine: AsyncEngine) -> None:
     a, b = await seed(engine)
-    async with TenantDb(engine).tenant_tx(None) as c:
+    with pytest.raises(NoTenantError):
+        async with TenantDb(engine).tenant_tx(None):
+            pytest.fail("a transaction opened with no tenant")
+    # Below the store: the tenant role with app.tenant_id unset sees no row at all.
+    async with engine.begin() as c:
+        await c.execute(sa.text(f"SET LOCAL ROLE {ROLE}"))
         for table in TENANT_TABLES:
             q = sa.select(sa.func.count()).select_from(table).where(table.c.tenant_id.in_([a, b]))
             assert int((await c.execute(q)).scalar_one()) == 0, f"{table.name}: unset tenant sees nothing"

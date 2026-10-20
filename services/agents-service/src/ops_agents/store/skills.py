@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
+from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
@@ -43,6 +45,7 @@ registry_skills = sa.Table(
     # The published version's loading (on_match or always), kept on the row so the agent page's picker filters it in
     # the query; null until a first publish.
     sa.Column("published_loading", sa.String(16)),
+    info=TEAM_OWNED,
 )
 
 registry_skill_versions = sa.Table(
@@ -60,6 +63,7 @@ registry_skill_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
+    info=team_owned_via("registry_skills", "skill_id"),
 )
 
 
@@ -100,7 +104,7 @@ class SkillRegistry:
 
     async def rows(self) -> list[dict[str, Any]]:
         async with self.engine.connect() as c:
-            q = sa.select(registry_skills).order_by(registry_skills.c.slug)
+            q = sa.select(registry_skills).where(team_visible(registry_skills)).order_by(registry_skills.c.slug)
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def attachable(
@@ -117,9 +121,10 @@ class SkillRegistry:
         into), searched and limited in the query; `ids` returns exactly those."""
         t = registry_skills.c
         if ids is not None:
-            q = sa.select(registry_skills).where(t.id.in_(ids))
+            q = sa.select(registry_skills).where(t.id.in_(ids), team_visible(registry_skills))
         else:
             q = sa.select(registry_skills).where(
+                team_visible(registry_skills),
                 t.published_version.is_not(None),
                 t.deprecated_reason.is_(None),
                 t.id.not_in(held) if held else sa.true(),
@@ -130,8 +135,18 @@ class SkillRegistry:
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def owner_team(self, skill_id: str) -> str | None:
+        """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
+        owning team, never for showing the record."""
+        q = sa.select(registry_skills.c.team_id).where(
+            registry_skills.c.id == skill_id, any_team(registry_skills, "the owning team a refusal is decided on")
+        )
+        async with self.engine.connect() as c:
+            team = (await c.execute(q)).scalar()
+        return str(team) if team else None
+
     async def find(self, skill_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_skills).where(registry_skills.c.id == skill_id)
+        q = sa.select(registry_skills).where(registry_skills.c.id == skill_id, team_visible(registry_skills))
         if c is None:
             async with self.engine.connect() as conn:
                 r = (await conn.execute(q)).mappings().first()
@@ -148,7 +163,7 @@ class SkillRegistry:
     async def versions(self, skill_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_skill_versions)
-            .where(registry_skill_versions.c.skill_id == skill_id)
+            .where(registry_skill_versions.c.skill_id == skill_id, team_visible(registry_skill_versions))
             .order_by(registry_skill_versions.c.version.desc())
         )
         async with self.engine.connect() as c:
@@ -156,7 +171,9 @@ class SkillRegistry:
 
     async def version(self, skill_id: str, version: int) -> dict[str, Any] | None:
         q = sa.select(registry_skill_versions).where(
-            registry_skill_versions.c.skill_id == skill_id, registry_skill_versions.c.version == version
+            registry_skill_versions.c.skill_id == skill_id,
+            registry_skill_versions.c.version == version,
+            team_visible(registry_skill_versions),
         )
         async with self.engine.connect() as c:
             r = (await c.execute(q)).mappings().first()
@@ -177,7 +194,12 @@ class SkillRegistry:
         at = now_iso()
         async with self.engine.begin() as c:
             taken = (
-                await c.execute(sa.select(registry_skills.c.id).where(registry_skills.c.slug == content["slug"]))
+                await c.execute(
+                    sa.select(registry_skills.c.id).where(
+                        registry_skills.c.slug == content["slug"],
+                        any_team(registry_skills, "a slug is unique across every team"),
+                    )
+                )
             ).first()
             if taken is not None:
                 raise Conflict(f"The slug {content['slug']} is taken; rename the skill.", code="slug_taken")
@@ -224,7 +246,9 @@ class SkillRegistry:
                 (
                     await c.execute(
                         sa.select(registry_skill_versions).where(
-                            registry_skill_versions.c.skill_id == skill_id, registry_skill_versions.c.version == n
+                            registry_skill_versions.c.skill_id == skill_id,
+                            registry_skill_versions.c.version == n,
+                            team_visible(registry_skill_versions),
                         )
                     )
                 )
@@ -273,7 +297,9 @@ class SkillRegistry:
             content = (
                 await c.execute(
                     sa.select(registry_skill_versions.c.content).where(
-                        registry_skill_versions.c.skill_id == skill_id, registry_skill_versions.c.version == version
+                        registry_skill_versions.c.skill_id == skill_id,
+                        registry_skill_versions.c.version == version,
+                        team_visible(registry_skill_versions),
                     )
                 )
             ).scalar_one()

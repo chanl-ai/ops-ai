@@ -1,9 +1,9 @@
-# The live console follows the owner's layout rules
+# The live console follows the maintainers' layout rules
 
 Status: current. Id: `uc-127`. Service: `console`. Layers: ui.
 
-Card c-181: the owner's walk of the console found five layout defects, now rules in
-`.codeloop/wiki/rulebook/ui-and-console.md` ("Layout details the owner checks"). This use case checks all five rules on
+Card c-181: the maintainers' walk of the console found five layout defects, now rules in
+`.codeloop/wiki/rulebook/ui-and-console.md` ("Layout details the maintainers checks"). This use case checks all five rules on
 live pages, one check per rule (rule 2 on two further pages).
 
 ## Preconditions

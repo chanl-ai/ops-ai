@@ -1,6 +1,6 @@
 # ADR-0014 Agent loop library
 
-Status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
@@ -8,19 +8,19 @@ The agent loop is the code that runs one agent step inside one workflow node, an
 builds the context (agent version instructions, pinned skills, memory, knowledge citations), calls
 the model through the AI gateway ([ADR-0008](ai-gateway.md)), executes tool calls through
 the data gateway with approval tokens, stops on a condition, streams AI SDK UI message parts
-([ADR-0009](chat-experience.md), [`07`](../../../.codeloop/wiki/concepts/agent-chat.md) CD-11, CD-12), pauses
+([ADR-0009](chat-experience.md), [chat in the console](../../console/chat.md) CD-11, CD-12), pauses
 for an in-turn human approval and resumes, and records a trace.
 
 Fixed by earlier decisions:
 
 | Constraint | Source |
 |---|---|
-| The loop runs in the agent-block host or the chat turn worker, as a Temporal activity; workers hold no model keys, no credentials and no user token | [`14`](../../../.codeloop/wiki/concepts/runtime-service.md) 3.1, 3.2 |
+| The loop runs in the agent-block host or the chat turn worker, as a Temporal activity; workers hold no model keys, no credentials and no user token | [inside the runtime](../runtime.md) 3.1, 3.2 |
 | Model calls go to the key-and-budget service as `POST /v1/chat/completions` with `model` = alias; stable instructions first for prompt caching | `14` 5.4, ADR-0008 |
 | The transcript in PostgreSQL schema `chat` is the record; Temporal history holds references only. So the library must own no persistence | `07` CD-1, CD-2 |
-| Approval binds to a hash of the complete tool payload; only a host-native button decides; the requester cannot approve | `07` CD-3, CD-6, CD-7; [design lessons](../../../.codeloop/wiki/concepts/design-lessons.md) rank 7 |
+| Approval binds to a hash of the complete tool payload; only a host-native button decides; the requester cannot approve | `07` CD-3, CD-6, CD-7; design lessons rank 7 |
 | Trust facts come from the run context, never from model-visible text; the gateway binds the subject of a call | Design lessons ranks 1 and 2 |
-| Configured agents (`AgentVersion`) run on this loop; packaged agents (`AgentPackage`, for example an existing LangGraph agent) run their own code on the same host | [`01`](../../../.codeloop/wiki/concepts/agent-builder.md) 4.5, [ADR-0003](workflow-definition-format.md) |
+| Configured agents (`AgentVersion`) run on this loop; packaged agents (`AgentPackage`, for example an existing LangGraph agent) run their own code on the same host | [agents and workflows](../../console/agents-and-workflows.md) 4.5, [ADR-0003](workflow-definition-format.md) |
 | Language: Python per [ADR-0002](implementation-language.md), under reconsideration in favour of TypeScript | ADR-0002 |
 
 An activity cannot wait days for a person, so "pause and resume" means: the loop ends the activity
@@ -145,7 +145,7 @@ approval binding, context builder and trace are ours.
 |---|---|
 | Pydantic AI plain runs in the agent-block host and the agent Test sheet turn (CD-12); deferred-tool approvals with hash binding; `VercelAIAdapter` stream; OpenTelemetry spans to the bank's collector; tool-call suite per alias | Chat sessions with in-turn approvals (`07` phase 2); evaluate `TemporalDurability` for long agent runs; `agent-kernel` extraction for an existing TypeScript service if it needs in-turn approval or the language flips |
 
-## Open questions for the owner
+## Open questions for the maintainers
 
 1. Is ADR-0002 final at Python? Default: yes, and this ADR's Python pick applies.
 2. Which AI SDK major does the console's `useChat` target? Default: v6, the version `VercelAIAdapter`

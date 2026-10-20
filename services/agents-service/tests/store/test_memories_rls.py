@@ -50,5 +50,5 @@ async def test_the_bypass_role_reads_no_memory_values(engine: AsyncEngine) -> No
     if engine.dialect.name != "postgresql":
         pytest.skip("row-level security and roles are PostgreSQL's")
     with pytest.raises(ProgrammingError, match="permission denied"):
-        async with system_tx(engine) as c:
+        async with system_tx(engine, "test") as c:
             await c.execute(sa.select(agent_memories.c.value).limit(1))

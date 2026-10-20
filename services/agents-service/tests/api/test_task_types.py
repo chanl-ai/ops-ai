@@ -79,7 +79,7 @@ async def test_only_the_owning_team_builder_changes_a_type(c: AsyncClient) -> No
     made = await _copy(c)
     record = made["versions"][0]["record"]
     other = await c.put("/v1/task-types/vendor_bank_change/draft", json=record, headers=OTHER_TEAM)
-    assert other.status_code == 403, other.text
+    assert other.status_code == 404, "another team's type is not read at all (c-407): " + other.text
 
 
 async def test_a_type_the_screen_cannot_draw_is_refused(c: AsyncClient) -> None:

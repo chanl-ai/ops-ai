@@ -1,204 +1,198 @@
-# Install Ops AI by Elemente on your own servers
+# Install and operate Ops AI
 
-Status: current for the release package this file ships in (INSTALL.md). Every command below was run, in this order,
-by the package's proof (`deploy/release/proof.sh`, c-385); values in angle brackets are yours to fill in. A shareable
-page with the same content: `client-install-guide.html`.
-
-Your team wants to run Ops AI inside your own network, on ordinary Linux machines with Docker, against a database your
-DBA controls, and without our source code. This guide takes you from the downloaded package to a working sign-in,
-and says which parts your DBA reviews and applies.
-
-## What Ops AI is
-
-Ops AI is an operational AI platform: AI agents and workflows that do back-office work, with a person approving every
-action that changes something outside it. People use one web console to see what the agents did, decide what waits
-on them, and configure agents, workflows, tools, knowledge and documents. Every write to another system goes through a
-gateway that checks an approval, and every record is kept per tenant and team.
-
-## What runs today
-
-| Part | State |
-|---|---|
-| Ten container images for Linux on x86-64 (amd64), in one file you load with `docker load` | Runs today |
-| Docker Compose files: every service, the workflow worker, the console, a policy engine and one web entry point | Runs today |
-| PostgreSQL 16 or newer, including Azure Database for PostgreSQL Flexible Server | Runs today. Your DBA applies the schema from the scripts in `db/postgres/` |
-| Azure SQL Database and SQL Server | Not yet runnable. The scripts in `db/azure-sql/` are for your DBA to review now (see "Azure SQL") |
-| A model | Any OpenAI-compatible endpoint you choose. The package also holds a test model that answers from fixed rules and calls no provider |
-
-## What is in the package
-
-| File | What it is |
-|---|---|
-| `ops-ai-<version>.tar.gz` | This package: `INSTALL.md`, `compose/`, `ops-ai.env.example`, `db/`, `images.txt`, `release.txt`, `SHA256SUMS` |
-| `ops-ai-<version>-images.tar.gz` | The ten images. `images.txt` lists each image's name and id |
-| `ops-ai-<version>.SHA256SUMS` | Checksums of the two files above |
-| `compose/app.yaml` | Every service; only the entry point publishes a port |
-| `compose/dba.yaml` | Use it when your DBA applied the schema: no container then holds a login that can change the schema |
-| `compose/try.yaml` | For trying it out only: the test model (profile `fake-model`) and a built-in PostgreSQL (profile `postgres`) |
-| `ops-ai.env.example` | Every setting, each with a comment |
-| `db/postgres/` | The PostgreSQL scripts your DBA applies |
-| `db/azure-sql/` | The Azure SQL scripts, for review only |
-
-## Machines
-
-| Item | What you need |
-|---|---|
-| Virtual machines | One Linux VM runs everything. Start with 4 vCPUs, 8 GB of memory and 60 GB of disk; in the proof every container together used about 1.8 GB of memory at rest. A second VM with the same package loaded is a standby you start from a backup |
-| Operating system | Any current 64-bit Linux on x86-64 (amd64) that runs Docker, for example Ubuntu 22.04 or 24.04, or RHEL 9 |
-| Docker | Docker Engine 24 or newer with the Compose plugin 2.22 or newer (`docker compose version`) |
-| Inbound ports | One: the entry point, `OPS_PUBLIC_PORT` (8890 unless you change it), reached only from your TLS terminator or load balancer |
-| Outbound access | Your PostgreSQL server (5432); your model endpoint (usually 443); your mail server if you send mail. Nothing else: the images are loaded from the file, so the VM needs no registry or internet access |
-| TLS and DNS | A DNS name such as `ops.example.com` on your load balancer or reverse proxy, which ends TLS and forwards to the VM's entry point port. Set `OPS_PUBLIC_ORIGIN=https://ops.example.com` |
-| Your workstation for the DBA steps | `psql` that can reach the database server |
-
-## Database
-
-Ops AI stores everything in one PostgreSQL database. Your DBA applies the schema in your own change window, and the
-services connect with logins that can read and write rows but cannot change the schema.
-
-### Azure Database for PostgreSQL
-
-| Setting | Value |
-|---|---|
-| Deployment | Flexible Server |
-| PostgreSQL version | 16 or newer. On 15 and older the server admin cannot create the one role that needs BYPASSRLS, and `roles.sql` stops there |
-| Size | A starting point: General Purpose, 2 vCores, 8 GB memory, 64 GB storage. Measure and resize |
-| Network | Private access from the Ops AI VM's network; no public endpoint needed |
-| TLS | Required (the Azure default). Every connection string below ends in `?ssl=require` or `sslmode=require` |
-| Extensions | None |
-| Backups | Azure's automated backups with point-in-time restore, at the retention your policy sets |
-
-### The logins
-
-| Login | Who uses it | Rights |
-|---|---|---|
-| Your server admin | The DBA, for the steps below | Creates the roles and the database. Not a superuser on Azure |
-| `ops_migrator` | The DBA, to apply and upgrade the schema | Owns every table, index and policy; cannot create roles or databases |
-| `ops_platform_runtime`, `ops_agents_runtime`, `ops_tools_runtime`, `ops_models_runtime`, `ops_kb_runtime`, `ops_files_runtime`, `ops_documents_runtime` | One per service | Read and write rows in that service's own tables. No DDL: `CREATE TABLE`, `DROP TABLE` and `ALTER TABLE` are refused. Row-level security applies |
-| `ops_runtime_tenant`, `ops_runtime_system`, `ops_platform_tenant`, `ops_platform_lookup` | The services switch to these inside a transaction | No login. `ops_runtime_system` reads across tenants and is used only by the agents service's background loops |
-
-### Tenant isolation
-
-Every table that holds customer data carries a `tenant_id` column and a row-level security policy that admits only
-rows whose `tenant_id` equals the tenant the transaction set. The policies are forced, so they apply to the table
-owner too. The tenant comes from the signed-in person's token, never from a request body.
-
-### What the DBA runs, in order
-
-In the folder `db/postgres/` of the unpacked package. `<admin>` is your server admin; `<host>` is your server's name.
-
-| Step | Connect as | Command |
-|---|---|---|
-| 1 | Server admin | `psql -v ON_ERROR_STOP=1 "host=<host> port=5432 user=<admin> dbname=postgres sslmode=require" -f roles.sql` |
-| 2 | Server admin | `psql -v ON_ERROR_STOP=1 "<same as step 1>" -c "ALTER ROLE <login> PASSWORD '<password>'"` once for each of the eight logins in the table above |
-| 3 | Server admin | `psql -v ON_ERROR_STOP=1 "<same as step 1>" -c "GRANT ops_migrator TO <admin>"` |
-| 4 | Server admin | `psql -v ON_ERROR_STOP=1 "<same as step 1>" -c "CREATE DATABASE ops OWNER ops_migrator"` |
-| 5 | `ops_migrator` | `psql -v ON_ERROR_STOP=1 "host=<host> port=5432 user=ops_migrator dbname=ops sslmode=require" -f bundle.sql` |
-| 6 | `ops_migrator` | `psql -v ON_ERROR_STOP=1 "<same as step 5>" -f grants.sql` |
-
-`01-agents.sql` to `07-documents.sql` are each service's part of `bundle.sql`, for review. `manifest.json` names each
-part's version; `sha256sum -c SHA256SUMS` checks the files.
+Status: generated from `docs/guide/install.md` and `docs/guide/operate.md` by `scripts/docs/build_guide.mjs`; edit those, then run the build. The full guide, with the architecture, data, security and deployment options, is `docs/deploy/client-install-guide.html`.
 
 ## Install
 
-On the VM, as a user that may run Docker, in a folder only your operators can read.
+One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
+result, and later upgrades, backs up, restores and reports on the same install ([Operate](#operate)). Images are
+pulled from `ghcr.io/chanl-ai/ops-ai` by default; a release's offline image file, or a build from source, serve a
+machine with no registry access.
 
-1. Check and unpack the files you copied to the VM.
+### Before you start
 
-   ```
-   sha256sum -c ops-ai-<version>.SHA256SUMS
-   tar -xzf ops-ai-<version>.tar.gz
-   cd ops-ai-<version>
-   sha256sum -c SHA256SUMS
-   ```
-
-2. Load the images, then compare `docker images` with `images.txt`.
-
-   ```
-   docker load -i ../ops-ai-<version>-images.tar.gz
-   ```
-
-3. Make the settings file from the template.
-
-   ```
-   cp ops-ai.env.example ops-ai.env
-   chmod 600 ops-ai.env
-   docker run --rm --entrypoint python <OPS_IMAGE_PREFIX>/platform:<version> /app/deploy/fly/generate_keys.py
-   ```
-
-   The last command prints the signing keys. Put each printed line in `ops-ai.env` in place of the empty line with the
-   same name. Then set these:
-
-   | Setting | Value |
-   |---|---|
-   | `OPS_PUBLIC_ORIGIN` | The address people open, for example `https://ops.example.com` |
-   | `OPS_PUBLIC_PORT` | The entry point's port on the VM |
-   | `OPS_DATABASE_URL_PLATFORM` and the six other `OPS_DATABASE_URL_<SERVICE>` | `postgresql+asyncpg://ops_<service>_runtime:<password>@<host>:5432/ops?ssl=require` |
-   | `OPS_DATABASE_URL` | Leave empty |
-   | `OPS_BOOTSTRAP_TENANT_NAME`, `OPS_BOOTSTRAP_ADMIN_EMAIL`, `OPS_BOOTSTRAP_ADMIN_NAME`, `OPS_BOOTSTRAP_ADMIN_PASSWORD` | Your organisation's name and the first admin; the password has at least 12 characters |
-
-4. Start everything except the agents.
-
-   ```
-   C="docker compose -p ops-ai -f compose/app.yaml -f compose/dba.yaml --env-file ops-ai.env"
-   $C up -d --wait --wait-timeout 600 migrate platform tools models kb files opa
-   ```
-
-   The first job makes the first tenant, its Security team and the admin. Every service checks the database's schema
-   version and refuses to start when it is older than the service.
-
-5. Connect a model. This binds the name `default` to your OpenAI-compatible endpoint and prints a key once; run it
-   twice, once per key id.
-
-   ```
-   $C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
-     --base-url <endpoint>/v1 --alias default --model <model id> --input-price <per million tokens> \
-     --output-price <per million tokens> --budget <spending cap> --key-id purpose:agents
-   ```
-
-   Put the printed `OPS_MODELS_KEY` value in `OPS_MODELS_KEY_AGENTS`, run it again with `--key-id purpose:documents`
-   and put that value in `OPS_MODELS_KEY_DOCUMENTS`. When your endpoint needs a key, the Security admin stores it in
-   Settings > Secrets and you add `--key-ref <its name>`; the proof used the test model, which needs none.
-
-6. Start the rest.
-
-   ```
-   $C up -d --wait --wait-timeout 600
-   ```
-
-To try the package before your database and model are ready, add `-f compose/try.yaml --profile fake-model` to `C`
-and connect the model with `--base-url http://fake-model:8746/v1 --model fake-chat --input-price 1 --output-price 1
---budget 5`. The test model answers from fixed rules and is not for production.
-
-## Check it works
-
-| Check | Command or action | Expected |
+| Item | What you need | Details |
 |---|---|---|
-| Every container healthy | `$C ps` | Each service `Up` and `(healthy)`; the migrate job exited 0 |
-| The entry point answers | `curl -fsS <OPS_PUBLIC_ORIGIN>/api/platform/v1/health` | A JSON body with `"success":true` |
-| Sign in | Open `OPS_PUBLIC_ORIGIN` and sign in as the first admin | The console opens |
-| Every page | Open each item in the left menu | Each page loads with no error message |
+| A host | One Linux machine with Docker Engine 24 or newer, Docker Compose 2.22 or newer, curl and tar, 4 GB of memory for the containers and 15 GB of free disk | [Sizing](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/deployment-options.md#sizing) |
+| A DNS name and TLS | A name such as `ops.example.com` on your load balancer or reverse proxy, forwarding to the port the script asks for | [The network](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/deployment-options.md#the-network) |
+| PostgreSQL | For a trial, the script's built-in database. For real use, your own PostgreSQL 15 or newer: either a login that may change the schema, or DBA mode, where your DBA applies the scripts the install writes | [Data and database](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/data-and-database.md) |
+| A model endpoint | Any OpenAI-compatible endpoint and its key; the built-in test model will do for a first look | [Models](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/models.md) |
+| The first admin | A name and email address for the person who signs in first and invites everyone else | |
+| Sign-in and outbound hosts | Your identity provider's OIDC or SAML details, and the hosts Ops AI will call, for the Security admin to set after the install | [Security and governance](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/security-and-governance.md) |
 
-After the first sign-in, the admin changes the password; then remove `OPS_BOOTSTRAP_ADMIN_PASSWORD` from `ops-ai.env`.
+### Install
 
-## Upgrade and roll back
+```bash
+git clone https://github.com/chanl-ai/ops-ai.git
+cd ops-ai
+./install.sh
+```
+
+The host needs Docker 24 or newer, Docker Compose 2.22 or newer, curl, tar, 4 GB of memory for containers and 15 GB
+of free disk. Python is not needed: the steps that use it run inside the images. The preflight names anything missing
+and stops.
+
+It asks these questions. Each has a default, a flag, and a key for an answers file (`--answers <file>`, one
+`KEY=value` per line), so CI can run it unattended with `--yes`.
+
+| Question | Default | Flag | Answers key |
+|---|---|---|---|
+| Port on this machine | 8890 | `--port` | `PORT` |
+| Public URL | `http://localhost:<port>` | `--public-url` | `PUBLIC_URL` |
+| Compose project name | `ops-ai` | `--project` | `PROJECT` |
+| Organisation name | My organisation | `--org` | `ORG_NAME` |
+| First admin's email and name | `admin@example.com`, First Admin | `--admin-email`, `--admin-name` | `ADMIN_EMAIL`, `ADMIN_NAME` |
+| First admin's password (12+ characters) | generated, kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
+| Database | `builtin`: a PostgreSQL 17 container, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
+| Database mode (own PostgreSQL only) | `auto`: the migrate job applies the schema with the given login | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
+| Model | `test`: the built-in test model | `--model test` or `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
+| Image version | the checkout's version tag, else `deploy/release/version` | `--version` | `VERSION` |
+
+What it does, in order:
+
+1. Pulls `ghcr.io/chanl-ai/ops-ai/<image>:<version>` (linux/amd64 and linux/arm64). `--build` builds them from the
+   checkout's HEAD instead; `--offline <images.tar.gz>` loads a release package's image file.
+2. Writes `ops-ai.env` (mode 600) from `deploy/compose/app.env.example` and generates every key with the platform
+   image's `generate_keys.py`. No secret is printed.
+3. In `dba` mode, copies the release's PostgreSQL scripts to `./dba/postgres` (from the `db-scripts` image), writes
+   `./dba/1-server.sql` with each service login's password, prints three `psql` commands for the DBA, waits, and checks
+   each service's schema version before going on. The DBA runs them as the server admin; the schema is owned by
+   `ops_migrator`, and no container gets a login that may change it.
+4. Starts the database, migrations and services, connects the model, then starts the agents, worker, console and proxy,
+   waiting for every health check. A provider key is stored in Secrets through the API as `MODEL_PROVIDER_KEY`,
+   never in `ops-ai.env`; models-service reads it by that name.
+5. Runs the check: health through the published port, the console's sign-in page, a sign-in as the first admin, one
+   read from every service through the proxy, and agents' health (a model is connected). Then it prints the URL and
+   how to sign in.
+
+Running `./install.sh` again on a working install checks it, says "nothing changed" and changes nothing. On an install
+that is not running, it reuses `ops-ai.env` and its keys and starts it. It never makes new keys over existing ones:
+`OPS_SECRETS_KEY` unlocks the stored credentials.
+
+### The other commands
+
+| Command | What it does |
+|---|---|
+| `./install.sh status` | Version, image source, database and model; each container's state; the check |
+| `./install.sh logs [service]` | The last 200 lines, followed on a terminal |
+| `./install.sh backup [--out DIR]` | One `.tar.gz` in `./backups/` (mode 600): a `pg_dump` of the database, the files and knowledge volumes, and `ops-ai.env` |
+| `./install.sh restore <file>` | Stops the services, recreates the database from the dump, puts the volumes back, starts and checks. Refuses a backup made with another `OPS_SECRETS_KEY` |
+| `./install.sh upgrade [--version V]` | At the same version: checks and changes nothing. Otherwise: backs up, gets the new images, applies the schema (auto) or writes `./dba/upgrade-<from>-to-<to>/` for the DBA and waits, restarts, checks, and on a failed check restores the backup on the old version |
+| `./install.sh uninstall` | Asks, then removes the containers; asks again before deleting the volumes. Keeps `ops-ai.env` |
+
+In `dba` mode, `backup`, `restore` and `upgrade` need an admin login that may dump the database, given as a file:
+`--admin-url-file <file holding postgresql://admin:password@host:5432/db>`. A runtime login cannot dump it (row-level
+security); without the file the script stops and says to ask the DBA.
+
+### What is proven and what is not
+
+| Claim | Evidence |
+|---|---|
+| Clone to signed in, images pulled anonymously from GHCR | `install_proof.sh` steps 1 to 3 |
+| Every console page loads | `docs/usecases/lib/stg_click_walk.mjs`, steps 4 and 7 |
+| A rerun and a same-version upgrade change nothing | steps 5 and 6: `ops-ai.env` checksum and container ids unchanged |
+| Backup and restore | step 7: a table and a file made after the backup are gone after the restore |
+| A failed upgrade rolls back | step 8b: a release whose console exits; exit 1, back on the old version, status passes |
+| DBA mode, provider key through Secrets | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
+| An upgrade across two releases that changes the schema | **unverified**: 0.1.0 is the first release. The auto path is the migrate job `compose.md` already proves; the DBA path renders Alembic's offline SQL from the recorded revisions (`deploy/install/install_api.py`) |
+| A Linux server | **unverified**: the proof ran on Docker Desktop for macOS |
+
+Images and the version: `deploy/release/version` names the version a checkout installs. A version tag `v<version>`
+runs `.github/workflows/release-images.yml`, which builds every image for both platforms with
+`deploy/release/images.sh` and pushes `<version>` and `latest`. The same script builds the release package's images
+(`release-package.md`) and `--build`.
+
+### By hand
+
+Every step the script runs can also be run by hand: the Compose files and settings in
+[Ops AI on Docker Compose](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md), the DBA's scripts in
+[The database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md), and a Kubernetes install in [Ops AI on Kubernetes](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md).
+
+## Operate
+
+Run the script's commands from the clone the install ran in; they read its settings from `ops-ai.env` there. In the
+manual commands, `$C` is the Compose command for your install, for example
+`docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/dba.yaml --env-file ops-ai.env`, and `ops-ai`
+is the Kubernetes namespace.
+
+### Status and health
+
+| Check | With the script | By hand: Compose | By hand: Kubernetes | Healthy |
+|---|---|---|---|---|
+| Everything at once | `./install.sh status`: version, image source, database and model, each container's state, then the install's check | | | The check passes |
+| Every container | | `$C ps` | `kubectl -n ops-ai get pods` | Each service `Up (healthy)` or `Running` and ready; the migrate job exited 0 |
+| The entry point | | `curl -fsS https://<your host>/api/platform/v1/health` | Same | `{"status":"ok"}` |
+| Sign-in | Open your address and sign in | | | The console opens |
+
+| Service | Health route | What it proves |
+|---|---|---|
+| platform | `/v1/health` | Process up |
+| agents | `/health` | Process up, database reachable, and a model connected: it answers 503 until one is |
+| worker | a database query | Process up and database reachable |
+| tools | `/health` | Process up, and the policy engine serves the gateway's own policy: it answers 503 `policy_drift` otherwise |
+| models, kb, files, documents | `/health` | Process up |
+| console | `/login` | The console serves |
+| proxy | `/api/platform/v1/health` | The proxy reaches platform |
+
+### Logs
+
+| Task | With the script | By hand: Compose | By hand: Kubernetes |
+|---|---|---|---|
+| One service | `./install.sh logs agents`: the last 200 lines, followed on a terminal | `$C logs -f agents` | `kubectl -n ops-ai logs deploy/agents -f` |
+| Every service | `./install.sh logs` | `$C logs --since 1h` | `kubectl -n ops-ai logs deploy/<service> --since 1h` |
+| The schema job | `./install.sh logs migrate` | `$C logs migrate` | `kubectl -n ops-ai logs job/migrate` |
+
+Every service writes plain text lines to standard output, one event per line with `key=value` fields, for your log
+collector to pick up. Structured JSON output is planned.
+
+### Upgrade and roll back
+
+```
+./install.sh upgrade --version <new version>
+```
+
+At the same version it checks and changes nothing. Otherwise it backs up, gets the new images, applies the schema
+(or, in DBA mode, writes the upgrade scripts to `./dba/` and waits for your DBA), restarts, checks, and on a failed
+check restores the backup on the old version. In DBA mode it needs an admin login that may dump the database, as a
+file: `--admin-url-file <file>`.
+
+By hand, and on Kubernetes:
 
 | Step | Who | What |
 |---|---|---|
-| 1 | DBA | Back up the database (below) |
-| 2 | Operator | Load the new release's images with `docker load` |
-| 3 | DBA | Run the new release's `db/postgres/upgrade-from-<your version>/upgrade.sql` as `ops_migrator`, then its `grants.sql`. Each step checks the version it starts from and stops before any change when the database is elsewhere |
-| 4 | Operator | Set `OPS_IMAGE_TAG` to the new version and run `$C up -d --wait --wait-timeout 600` |
+| 1 | DBA | Back up the database ([below](#back-up-and-restore)) |
+| 2 | Operator | Get the new release's images |
+| 3 | DBA | Apply the new release's database upgrade script as the schema owner, then its grants script. Each step checks the version it starts from and stops before any change when the database is somewhere else |
+| 4 | Operator | Start the new images. Every service checks the database's schema version and refuses to start on one older than itself |
 
-This release is the first, so it holds no upgrade script; each later release ships one from the versions before it.
-To roll back, restore the backup from step 1 and set `OPS_IMAGE_TAG` back. A service of the older release refuses to
-start on the newer schema, so the two cannot be mixed by mistake.
+| Fact | Consequence |
+|---|---|
+| A service refuses a schema it does not know | An older release cannot start on a newer schema, so two releases cannot be mixed by mistake |
+| Migrations do not roll back on their own | To go back, restore the backup from before the upgrade, or run the release's downgrade script where every step has one, and start the previous images |
+| An index added to a very large table holds writes while it builds | The upgrade script names such indexes; on a table over about a million rows, build the index by hand first with `CREATE INDEX CONCURRENTLY` and the upgrade then finds it |
+| A drift check compares a live database with what its release expects | It lists every missing, extra or changed object |
+| Runs in flight keep their version | A waiting run resumes on the new release with the workflow or agent version it started on |
+| The script has not yet upgraded across two releases that change the schema | The first release has no earlier one to upgrade from |
 
-## Back up and restore
+### Back up and restore
 
-On Azure, the automated backups and point-in-time restore cover the database. For a copy you hold yourself, back up
-as the server admin: the tenant policies apply to the schema's owner, so `pg_dump` as `ops_migrator` stops with a
-row-level security error. Use `pg_dump` of your server's version or newer; the `postgres` image carries one.
+```
+./install.sh backup
+./install.sh restore backups/<file>.tar.gz
+```
+
+A backup is one `.tar.gz` in `./backups/`, readable only by its owner: a dump of the database, the files and
+knowledge volumes, and `ops-ai.env`. A restore stops the services, recreates the database from the dump, puts the
+volumes back, starts and checks; it refuses a backup made with another `OPS_SECRETS_KEY`. In DBA mode both need
+`--admin-url-file <file>`, since a service's login cannot dump the database under its tenant policies.
+
+> [!IMPORTANT]
+> A backup holds `ops-ai.env` and its keys. Keep it as safe as the database: `OPS_SECRETS_KEY` unlocks every stored
+> credential, and without it a restored installation cannot call your systems.
+
+By hand, back up the database with your usual PostgreSQL tools, or on Azure with the automated backups and
+point-in-time restore. Back up as the server admin: the tenant policies apply to the schema's owner too, so `pg_dump`
+as the schema owner stops with a row-level security error.
 
 ```
 docker run --rm -e PGPASSWORD=<admin password> -v "$PWD/backup:/backup" postgres:17 \
@@ -207,9 +201,7 @@ docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/out" alpine tar czf 
 docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/out" alpine tar czf /out/kb-data.tgz -C /data .
 ```
 
-Keep `ops-ai.env` with the backup: `OPS_SECRETS_KEY` unlocks the stored credentials, and without it they are lost.
-
-To restore into a new database:
+To restore by hand into a new database:
 
 ```
 $C stop
@@ -220,31 +212,44 @@ docker run --rm -v ops-ai_files-data:/data -v "$PWD/backup:/in" alpine sh -c "rm
 docker run --rm -v ops-ai_kb-data:/data -v "$PWD/backup:/in" alpine sh -c "rm -rf /data/* && tar xzf /in/kb-data.tgz -C /data"
 ```
 
-Point the seven `OPS_DATABASE_URL_<SERVICE>` settings at `ops_restored`, then `$C up -d --wait --wait-timeout 600`.
+Then point each service's database setting at `ops_restored` and start everything again. On Kubernetes, back up the
+files and kb volumes with your cluster's volume snapshots. When files are stored in S3 or Azure Blob, use that store's
+own versioning or replication.
 
-## Security notes
+### Remove
 
-| Area | What holds |
+`./install.sh uninstall` asks, then removes the containers, and asks again before deleting the volumes. It keeps
+`ops-ai.env`.
+
+### Scaling
+
+| Part | How it scales | Status |
+|---|---|---|
+| Workflow runs | Add worker processes; each claims runs from the shared queue and runs 4 at once. A run waiting for a person holds no worker | Built |
+| The APIs | Each service is stateless apart from files and kb, so more replicas can run behind the proxy or a Kubernetes Service | Built for every service except files and kb |
+| files and kb | Their bytes are on a volume one replica can write, so they run one replica each | Partial |
+| Crash recovery | A run's lease expires 15 seconds after its worker stops, and another worker continues it from its last saved step | Built |
+| One tenant's load starving another's | Per-tenant caps on running runs | Planned |
+
+### What to watch
+
+| Signal | Why it matters | Healthy |
+|---|---|---|
+| The work queue | Rows waiting to be claimed mean the workers are busy or down | Claimed within a second or two |
+| Crashed and recovered runs | Each crash re-runs a step and its model calls | Rare, each followed by a recovery |
+| Tool calls left running | The gateway stopped mid-write, so the effect on your system is unknown | None; each one needs a person to check the system it called |
+| Overdue tasks | People are not keeping up with the queue | Within the deadlines your workflows set |
+| Model spend against budgets | A spent key stops new work | Below each key's cap |
+| Database size and write load | Saved run state grows with open work | Steady; prune and vacuum on a schedule |
+| Clock | Leases and timers use the database's clock; hosts must agree with it | Skew well under 15 seconds |
+
+### Rotating keys
+
+| Key | Steps |
 |---|---|
-| Secrets | All in `ops-ai.env` (mode 600), or each as a file under `/run/secrets` named after the setting in lower case, for Docker secrets. No image holds a secret |
-| Keys | One signing key per service, handed only to that service; `OPS_PLATFORM_SIGNING_KEY` signs sign-in tokens; `OPS_REVIEW_KEY` signs approvals; `OPS_SECRETS_KEY` seals stored credentials. Keep them out of tickets and chat |
-| Database | Each service has its own login with row rights on its own tables only; no running container can change the schema; row-level security separates tenants |
-| Network | Only the entry point publishes a port. The services, the policy engine and platform-service's internal port stay on the Compose project's private network. Put TLS in front of the entry point |
-| Outbound calls | Tool calls leave only through the tools service, under its policy engine; model calls only through the models service |
-| Containers | Every image runs as a non-root user (uid 10001) |
-| First admin | Remove `OPS_BOOTSTRAP_ADMIN_PASSWORD` once the admin has signed in and changed it |
-
-## Azure SQL
-
-| Ready for your DBA's review now, in `db/azure-sql/` | Still to come |
-|---|---|
-| `roles.sql`: one SQL login per service and `ops_migrator`; the database with collation `Latin1_General_100_BIN2_UTF8` and `READ_COMMITTED_SNAPSHOT ON` | Applying these scripts to an Azure SQL database and comparing the result with the services' models |
-| `01-agents.sql` to `07-documents.sql` and `bundle.sql`: every table, index and key, and a security policy per tenant table | Running the services on Azure SQL and SQL Server |
-| `grants.sql`: each service's user with SELECT, INSERT, UPDATE and DELETE on its own tables only | Full-text search for knowledge bases, the workflow checkpoint tables and the queue claim under the tenant policy |
-
-The scripts are generated from the services' models and checked against reviewed copies, but they have never been
-applied to a server, and Ops AI does not run on SQL Server yet. Install on PostgreSQL today.
-
-## Support
-
-Support contact: `<name, email and hours to be added>`.
+| Approval key (`OPS_REVIEW_KEY`) | Set the new value for agents and tools and restart both. Approvals in flight must be given again |
+| A service's signing key | Give the service a new key and key id, add its public key to every other service's trusted list beside the old one, restart the others, then the service; then remove the old key id and restart the others again |
+| Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service; people may need to sign in again |
+| Secrets key (`OPS_SECRETS_KEY`) | Changing it makes every stored credential unreadable, so each must be entered again. A rotation that re-encrypts them is planned |
+| A provider's model key | The Security admin replaces it in the credential store; no restart |
+| Database passwords | Change each login's password, update its setting, restart that service |

@@ -1,9 +1,9 @@
 """Typed records kept as versions (task types, c-288; case types, c-291), per tenant.
 
-A type is seeded (shipped in a seed file, owned by no team: a system record an admin may change, and a team copies one
-to make its own) or a team's own. Every member of the tenant reads every type; only the owning team edits or publishes
-it. A save edits the newest version while it is a draft, or opens the next one on top of a published version; a
-published version never changes, so whatever pinned it (a task, a case) keeps reading what it was made with.
+A type is seeded (shipped in a seed file, owned by no team: a system record every team reads and an admin may change,
+and a team copies one to make its own) or a team's own, which only that team reads, edits or publishes (c-407). A save
+edits the newest version while it is a draft, or opens the next one on top of a published version; a published version
+never changes, so whatever pinned it (a task, a case) keeps reading what it was made with.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .tenancy import current_tenant, tenant_tx
 
@@ -133,11 +134,11 @@ class VersionedRecords:
 
     async def rows(self) -> list[dict[str, Any]]:
         async with tenant_tx(self.engine) as c:
-            q = sa.select(self.head).order_by(self.head.c.origin, self.head.c.name)
+            q = sa.select(self.head).where(team_visible(self.head)).order_by(self.head.c.origin, self.head.c.name)
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def _row(self, c: AsyncConnection, type_id: str, *, lock: bool = False) -> dict[str, Any]:
-        q = sa.select(self.head).where(self.head.c.id == type_id)
+        q = sa.select(self.head).where(self.head.c.id == type_id, team_visible(self.head))
         r = (await c.execute(q.with_for_update() if lock else q)).mappings().first()
         if r is None:
             raise self.not_found(type_id)
@@ -149,7 +150,7 @@ class VersionedRecords:
             row = await self._row(c, type_id)
             q = (
                 sa.select(self.versions)
-                .where(self.versions.c.type_id == type_id)
+                .where(self.versions.c.type_id == type_id, team_visible(self.versions))
                 .order_by(self.versions.c.version.desc())
             )
             row["versions"] = [dict(r) for r in (await c.execute(q)).mappings()]
@@ -166,6 +167,7 @@ class VersionedRecords:
                 self.versions.c.type_id == type_id,
                 self.versions.c.version == n,
                 self.versions.c.published_at.is_not(None),
+                team_visible(self.versions),
             )
             v = (await c.execute(q)).mappings().first()
         if v is None:

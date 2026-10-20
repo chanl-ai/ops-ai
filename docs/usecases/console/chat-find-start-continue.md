@@ -4,7 +4,7 @@ Status: current. Id: `uc-087`. Service: `console`. Layers: ui. Card: c-069.
 
 James chats with an agent the way he uses ChatGPT: he starts from a suggested prompt, regenerates an answer, stops a
 slow reply, retries a refused send, pages his chat list and finds an old chat by what he asked. The list's search and
-paging run on the server (`GET /chat/threads` with `search` and `cursor`). Design: [chat](../../../.codeloop/wiki/concepts/chat.md).
+paging run on the server (`GET /chat/threads` with `search` and `cursor`). Design: [chat](../../console/chat.md).
 
 ## Preconditions
 

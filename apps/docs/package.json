@@ -1,0 +1,42 @@
+{
+  "name": "docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Ops AI docs site: renders ../../docs and services/*/openapi.json at build time",
+  "scripts": {
+    "dev": "next dev -p 3040",
+    "build": "node scripts/check-links.mjs && node scripts/export-diagrams.mjs --check && next build",
+    "start": "next start -p 3040",
+    "check:links": "node scripts/check-links.mjs",
+    "diagrams": "node scripts/export-diagrams.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "beautiful-mermaid": "^1.1.3",
+    "fumadocs-core": "^16.17.7",
+    "fumadocs-mdx": "^14.2.10",
+    "fumadocs-openapi": "^12.5.4",
+    "fumadocs-ui": "^16.17.7",
+    "github-slugger": "^2.0.0",
+    "js-yaml": "^4.1.0",
+    "lucide-react": "^0.474.0",
+    "mdast-util-to-string": "^4.0.0",
+    "next": "^16.2.10",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.1",
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.2",
+    "@types/js-yaml": "^4.0.9",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4.0.2",
+    "typescript": "^5.7.3"
+  }
+}

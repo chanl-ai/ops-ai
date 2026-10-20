@@ -1,6 +1,6 @@
 """ops_store.dialect (c-343), by failure mode: a helper that renders the wrong form for a database (compiled for
 PostgreSQL and SQL Server, no server needed), a row lock or claim that does not hold a second writer, an upsert that
-inserts twice, a clock read from the host, and a tenant setting that outlives its transaction. The live cases run on
+inserts twice, and a clock read from the host (the tenant setting is test_isolation_context's). The live cases run on
 the PostgreSQL conformance database; SQL Server runs them in c-345."""
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from ops_store.dialect import (
     insert_ignore,
     lock_key,
     locked,
-    tenant_tx,
     upsert,
 )
 from ops_store.search import contains
@@ -198,14 +197,6 @@ async def test_the_clock_reads_the_database(engine: AsyncEngine) -> None:
     async with engine.connect() as c:
         now, epoch, later = (await c.execute(sa.select(db_now(), db_epoch(), db_after(sa.literal(60.0))))).one()
     assert abs(now.timestamp() - epoch) < 1 and 59 < (later - now).total_seconds() < 61
-
-
-async def test_the_tenant_lasts_for_its_transaction_only(engine: AsyncEngine) -> None:
-    read = sa.select(sa.func.current_setting("app.tenant_id", True))
-    async with tenant_tx(engine, "tenant-a") as c:
-        assert (await c.execute(read)).scalar_one() == "tenant-a"
-    async with engine.connect() as c:
-        assert (await c.execute(read)).scalar_one() in (None, "")
 
 
 async def test_a_search_for_brackets_matches_the_brackets_only(engine: AsyncEngine) -> None:

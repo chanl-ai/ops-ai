@@ -1,5 +1,5 @@
 """SQL Server DDL compiled from the store models (c-344), checked with no server: the reviewed golden files under
-deploy/database/golden/mssql/ equal what the models compile to now, tenant isolation follows TENANT_SCOPED exactly,
+deploy/database/golden/mssql/ equal what the models compile to now, isolation follows the table markings exactly,
 a unique key over a nullable column admits the rows PostgreSQL admits, and an upgrade never replays PostgreSQL history.
 Applying the DDL to a SQL Server is c-345.
 
@@ -24,7 +24,7 @@ import mssql
 from models import chain_metadata, chains
 from schema import Checkout
 
-from ops_store.schema import tenant_scoped
+from ops_store.schema import isolation_kind, team_column, tenant_column
 
 HERE = mssql.here()
 READY = chains()
@@ -67,31 +67,43 @@ def test_a_model_change_shows_in_the_chain_s_ddl(compiled: mssql.Compiled) -> No
 
 # --- US2: isolation follows the marker ------------------------------------------------------------------------------
 
-_POLICY = re.compile(r"CREATE SECURITY POLICY ops_security\.(\w+)_tenant\n(.*?);", re.S)
+_POLICY = re.compile(r"CREATE SECURITY POLICY ops_security\.(\w+?)_(tenant|isolation)\n(.*?);", re.S)
 
 
 @pytest.mark.parametrize("chain", READY)
-def test_every_marked_table_and_no_other_has_a_security_policy(compiled: mssql.Compiled, chain: str) -> None:
+def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
+    compiled: mssql.Compiled, chain: str
+) -> None:
     text = compiled.files[f"{chains().index(chain) + 1:02d}-{chain}.sql"]
-    policies = dict(_POLICY.findall(text))
-    marked = {t.name for m in chain_metadata(chain) for t in m.tables.values() if tenant_scoped(t)}
-    assert set(policies) == marked
-    for table, body in policies.items():
-        column = "id" if table == "tenants" else "tenant_id"
-        assert f"ADD FILTER PREDICATE ops_security.{chain}_tenant_read({column}) ON dbo.{table}," in body
-        assert f"ADD BLOCK PREDICATE ops_security.{chain}_tenant_write({column}) ON dbo.{table} AFTER INSERT" in body
-        assert f"ADD BLOCK PREDICATE ops_security.{chain}_tenant_write({column}) ON dbo.{table} AFTER UPDATE" in body
-    if marked:
-        # Writes only for the transaction's tenant; the system flag reads and never writes.
-        write = re.search(rf"FUNCTION ops_security\.{chain}_tenant_write .*?;", text, re.S)
-        assert write is not None and "SESSION_CONTEXT(N'tenant_id')" in write.group(0)
-        assert "ops_system" not in write.group(0)
-        # Any login can call sp_set_session_context, so no session flag opens other tenants' rows: only the system
-        # principal does, and only in the chain that has one on PostgreSQL.
-        read = re.search(rf"FUNCTION ops_security\.{chain}_tenant_read .*?;", text, re.S)
-        assert read is not None and "SESSION_CONTEXT(N'ops_system')" not in read.group(0)
-        system = "USER_NAME() = N'ops_runtime_system'"
-        assert (system in read.group(0)) == (chain == "agents")
+    policies = {table: (kind, body) for table, kind, body in _POLICY.findall(text)}
+    marked = {
+        t.name: t for m in chain_metadata(chain) for t in m.tables.values() if isolation_kind(t) in ("team", "tenant")
+    }
+    assert {t: k for t, (k, _) in policies.items()} == {
+        n: "isolation" if isolation_kind(t) == "team" else "tenant" for n, t in marked.items()
+    }
+    for table, (kind, body) in policies.items():
+        t = marked[table]
+        fn = f"ops_security.{chain}_{'team' if kind == 'isolation' else 'tenant'}"
+        args = tenant_column(t).name + (f", {team_column(t).name}" if kind == "isolation" else "")
+        assert f"ADD FILTER PREDICATE {fn}_read({args}) ON dbo.{table}," in body
+        assert f"ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{table} AFTER INSERT" in body
+        assert f"ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{table} AFTER UPDATE" in body
+    system = "USER_NAME() = N'ops_runtime_system'"
+    for kind in {isolation_kind(t) for t in marked.values()}:
+        read = re.search(rf"FUNCTION ops_security\.{chain}_{kind}_read .*?;", text, re.S)
+        write = re.search(rf"FUNCTION ops_security\.{chain}_{kind}_write .*?;", text, re.S)
+        assert read is not None and write is not None
+        # Any login can call sp_set_session_context, so no session value opens another tenant's rows: only the system
+        # principal does, and only in the chain that has one on PostgreSQL, where its grants say what it reads and
+        # which columns it updates (the engine_work claim).
+        for fn in (read.group(0), write.group(0)):
+            assert "SESSION_CONTEXT(N'tenant_id')" in fn and "ops_system" not in fn
+            assert (system in fn) == (chain == "agents")
+        if kind == "team":
+            # Every team reads the null team; no team transaction writes it.
+            assert "@team_id IS NULL" in read.group(0) and "@team_id IS NULL" not in write.group(0)
+            assert "SESSION_CONTEXT(N'team_id')" in write.group(0)
 
 
 def test_the_system_principal_has_postgresql_s_grants_and_only_agents_enters_it(compiled: mssql.Compiled) -> None:

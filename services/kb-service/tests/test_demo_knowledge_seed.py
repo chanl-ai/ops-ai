@@ -126,8 +126,11 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     assert named == {"ag_advisor": ["kb_retail_products"], "ag_policy": ["kb_branch_operations"]}
     async with kb_client(engine, tenant, email="j.richardson@northfieldbank.com", files=KnowledgeFiles(tmp_path)) as c:
         answer = (
+            # The base is team_security's; a person reads it acting in that team (c-407).
             await c.post(
-                "/v1/knowledge-bases/kb_branch_operations/query", json={"question": "fee for an outgoing wire transfer"}
+                "/v1/knowledge-bases/kb_branch_operations/query",
+                json={"question": "fee for an outgoing wire transfer"},
+                headers={"X-Team-Id": "team_security"},
             )
         ).json()["data"]
     assert answer["citations"] and answer["citations"][0]["page"], answer

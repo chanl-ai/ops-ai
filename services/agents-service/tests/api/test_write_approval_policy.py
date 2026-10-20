@@ -201,8 +201,10 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_for_their_
     maya = person("usr_maya", ["team_ops"], auth_method="dev")
     outside = await dev_platform.post(url, json={"type": "approve"}, headers=maya)
     assert outside.status_code == 403 and "team_fraud" in outside.json()["error"]["message"], outside.text
-    omar = person("usr_omar", ["team_fraud"], auth_method="dev")
-    assert (await dev_platform.post(url, json={"type": "approve"}, headers=omar)).status_code == 200
+    # The conversation is team_ops's, so the Fraud approver opens it from team_ops, as with a session token (c-407).
+    omar = person("usr_omar", ["team_ops", "team_fraud"], auth_method="dev")
+    r = await dev_platform.post(url, json={"type": "approve"}, headers=omar)
+    assert r.status_code == 200, r.text
 
 
 async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> None:

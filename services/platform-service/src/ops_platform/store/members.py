@@ -23,7 +23,7 @@ from ops_store import Guarantee
 from .audit import record
 from .roles import mirror_membership
 from .tables import api_keys, audit_entries, members, sessions, teams, users
-from .tenancy import TenantDb
+from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
 
 ADMIN = "admin"
@@ -320,7 +320,7 @@ class TeamStore:
             "SELECT member_id, tenant_id, team_id, team, email, role, status, invited_at, expires_at, allowed_domains"
             " FROM platform_invite(:h)"
         )
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(INVITE_LOOKUP) as c:
             r = (await c.execute(q, {"h": token_hash})).first()
         if r is None:
             return None

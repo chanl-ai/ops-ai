@@ -8,7 +8,8 @@ from __future__ import annotations
 from typing import Any
 
 from ops_agents.graphs.definition import WorkflowDefinition
-from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, ValidationFailed
+from ops_store import isolation
 
 from . import deployment_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
 from .agent_registry import go_live, registry, review_view
@@ -109,28 +110,25 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
     """The team that owns what a publish request would ship, which is the team that reviews it; None when no team owns
     it (a seeded record every team sees)."""
     kind, subject = req["kind"], str(req["subject_id"])
-    try:
-        if kind == "agent":
-            row = await registry(rt).row(subject)
-        elif kind == "guardrail":
-            row = await guardrails(rt).row(subject)
-        elif kind == "skill":
-            row = await skills(rt).row(subject)
-        elif kind == "widget":
-            row = await widgets(rt).row(subject)
-        elif kind == deployment_reviews.KIND:
-            return await deployment_reviews.team(rt, req)
-        elif kind == tool_module_reviews.KIND:
-            return tool_module_reviews.team(rt, req)
-        elif kind == tool_access_reviews.KIND:
-            return tool_access_reviews.team(req)
-        elif kind == engine_lifecycle.KIND:
-            row = await engine_lifecycle.definitions(rt).current(subject) or {}
-        else:
-            row = await workflow_registry(rt).row(subject)
-    except NotFound:
-        return None
-    return str(row.get("team_id") or "") or None
+    # Read whoever is acting: the owning team decides who may review, so it must be found even from another team.
+    if kind == "agent":
+        return await registry(rt).owner_team(subject)
+    if kind == "guardrail":
+        return await guardrails(rt).owner_team(subject)
+    if kind == "skill":
+        return await skills(rt).owner_team(subject)
+    if kind == "widget":
+        return await widgets(rt).owner_team(subject)
+    if kind == deployment_reviews.KIND:
+        return await deployment_reviews.team(rt, req)
+    if kind == tool_module_reviews.KIND:
+        return tool_module_reviews.team(rt, req)
+    if kind == tool_access_reviews.KIND:
+        return tool_access_reviews.team(req)
+    if kind == engine_lifecycle.KIND:
+        row = await engine_lifecycle.definitions(rt).current(subject) or {}
+        return str(row.get("team_id") or "") or None
+    return await workflow_registry(rt).owner_team(subject)
 
 
 async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_teams: list[str] | None) -> None:
@@ -188,12 +186,16 @@ async def decide(
         raise ValidationFailed("A reason is required to reject or return.", code="reason_required")
     if not await reg.decide_request(request_id, decision, approver.email, reason):
         raise Conflict(f"{request_id} was decided by someone else first.", code="already_decided")
-    if req["kind"] == tool_module_reviews.KIND:
-        # tools-service applies every decision, not only an approval: a no withdraws the version or returns it to draft.
-        await tool_module_reviews.apply(rt, req)
-    elif decision == "approved":
-        await _publish(rt, req, approver.email)
-    return await view(rt, await reg.request(request_id))
+    # The reviewer holds reviews.decide in the owning team, which need not be the team they act in: the publish reads
+    # and writes the record as that team (c-407), as the record's own page would.
+    with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
+        if req["kind"] == tool_module_reviews.KIND:
+            # tools-service applies every decision, not only an approval: a no withdraws the version or returns it to
+            # draft.
+            await tool_module_reviews.apply(rt, req)
+        elif decision == "approved":
+            await _publish(rt, req, approver.email)
+        return await view(rt, await reg.request(request_id))
 
 
 async def _publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
