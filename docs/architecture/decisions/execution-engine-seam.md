@@ -1,14 +1,14 @@
 # ADR-0015 Execution engine seam
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal, so no Temporal adapter will sit behind the seam; the engine is `ops_engine` on LangGraph and PostgreSQL (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal, so no Temporal adapter will sit behind the seam; the engine is `ops_engine` on LangGraph and PostgreSQL (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
 [ADR-0001](durable-execution-runtime.md) made self-hosted Temporal the only execution engine.
-the owner ruled on 2026-10-10 that Temporal must be optional, because some banks will not approve a new
+the maintainers ruled on 2026-10-10 that Temporal must be optional, because some banks will not approve a new
 stateful server, and asked whether LangGraph or the OpenAI Agents SDK can take the engine role. Specs
-[`14`](../../../.codeloop/wiki/concepts/runtime-service.md), [`15`](../../../.codeloop/wiki/concepts/agent-kernel.md) and
-[`16`](../../../.codeloop/wiki/concepts/interpreter-and-nodes.md) are written in Temporal terms; what `16` needs from
+[inside the runtime](../runtime.md), [inside the runtime](../runtime.md) and
+[workflow nodes](../../design/workflows/workflow-nodes.md) are written in Temporal terms; what `16` needs from
 any engine is the first column of the gap table below.
 
 ## Options
@@ -144,7 +144,7 @@ supported engine behind the same seam, chosen per deployment."
 LGPL: importing psycopg unmodified is permitted in a proprietary product; obligations apply if we
 ship a modified copy (legal to confirm). Default-deny egress (ADR-0004) catches telemetry we missed.
 
-## Open questions for the owner
+## Open questions for the maintainers
 
 1. Which engine does the first bank get? Default: LangGraph on PostgreSQL until it approves Temporal.
 2. Spike DBOS against the conformance suite before the LangGraph adapter grows past slice 1? Default: yes, time-boxed to one week, because it scores higher and ships timers and recovery we would otherwise write.

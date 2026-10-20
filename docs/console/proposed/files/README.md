@@ -1,6 +1,6 @@
 # File page and Extract, proposed
 
-Status: proposed, waiting for the owner. Built by c-262 from `docs/services/documents-service/design.html` screens 1
+Status: proposed, waiting for the maintainers. Built by c-262 from `docs/services/documents-service/design.html` screens 1
 to 3, on the stack's real fixtures (TEST012.pdf, a synthetic restraining notice) and the demo's fake model. uc-227
 takes these screenshots; once approved they move to `docs/console/approved/files`.
 

@@ -10,6 +10,8 @@ container runtime (`architecture/service-map.md`, "Deployment targets").
 
 ## What runs
 
+![One origin in front of the services on one machine, against your PostgreSQL, your model endpoint and your bank systems](../diagrams/deployment.svg)
+
 | Service | Image (`deploy/fly/Dockerfile` target) | Port inside | Reached as | Health check |
 |---|---|---|---|---|
 | migrate | platform, command `migrate` | none | one-shot: every chain, then the first admin | exit 0 |

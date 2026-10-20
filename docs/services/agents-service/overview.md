@@ -61,7 +61,7 @@ service. Without a model key the service starts, `/health` reports the missing k
 | Three graphs through the four calls, plus a kill-and-resume | `uv run python scripts/prove-graphs.py` (needs a model key) |
 | Regenerate `docs/architecture/dependencies.md` | `make sbom` |
 
-Real model calls are capped at 10 per experiment unless the owner approves more; everything else runs on the
+Real model calls are capped at 10 per experiment unless the maintainers approves more; everything else runs on the
 scripted model in `tests/conftest.py`.
 
 ## Cases and Reviews facade

@@ -13,7 +13,7 @@ from ops_store import Guarantee
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import current_tenant, system_tx, tenant_tx
+from .tenancy import RETENTION_TENANTS, current_tenant, system_tx, tenant_tx
 
 agent_memories = sa.Table(
     "agent_memories",
@@ -217,7 +217,7 @@ class Memories:
     async def tenants(self) -> list[str]:
         """Every tenant holding a memory, read past row-level security: the retention loop starts before it knows a
         tenant and then works each one under its own (tests/store/test_tenancy.py holds the list of callers)."""
-        async with system_tx(self.engine) as c:
+        async with system_tx(self.engine, RETENTION_TENANTS) as c:
             return list((await c.execute(sa.select(agent_memories.c.tenant_id).distinct())).scalars())
 
     async def audit(self, person: str, action: str, *, actor: str, agent_id: str, memory_id: str | None = None) -> None:

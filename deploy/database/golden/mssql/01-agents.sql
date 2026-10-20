@@ -858,7 +858,15 @@ SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VAR
 GO
 CREATE FUNCTION ops_security.agents_tenant_write (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_runtime_system';
+GO
+CREATE FUNCTION ops_security.agents_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_runtime_system';
+GO
+CREATE FUNCTION ops_security.agents_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_runtime_system';
 GO
 CREATE SECURITY POLICY ops_security.engine_definitions_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.engine_definitions,
@@ -950,10 +958,10 @@ CREATE SECURITY POLICY ops_security.widget_deployments_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_deployments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.case_types_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.case_types,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.case_types AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.case_types AFTER UPDATE
+CREATE SECURITY POLICY ops_security.case_types_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.case_types,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.case_types AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.case_types AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.case_type_versions_tenant
@@ -1004,10 +1012,10 @@ CREATE SECURITY POLICY ops_security.task_assists_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_assists AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.task_types_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.task_types,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_types AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_types AFTER UPDATE
+CREATE SECURITY POLICY ops_security.task_types_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.task_types,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.task_types AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.task_types AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.task_type_versions_tenant

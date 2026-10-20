@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from ops_store import Guarantee
 
 from .tables import engine_definitions, engine_runs
-from .tx import Transactions
+from .tx import LIVE_WORKFLOWS, Transactions
 
 
 class WorkflowOwnedError(PermissionError):
@@ -115,7 +115,7 @@ class DefinitionStore:
         """Every live version in every tenant, for a loop that serves live workflows from outside any request (the
         mailbox listener). Paused versions are left out: they start no runs."""
         t = engine_definitions
-        async with self.tx.system_tx() as c:
+        async with self.tx.system_tx(LIVE_WORKFLOWS) as c:
             live = sa.and_(t.c.stage == "live", t.c.archived_at.is_(None))
             rows = await c.execute(t.select().where(live).order_by(t.c.tenant_id, t.c.workflow_id))
             return [dict(r) for r in rows.mappings()]

@@ -1,6 +1,6 @@
 # ADR-0001 Durable execution and workflow runtime
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal; the engine is `ops_engine` on LangGraph and PostgreSQL (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-1. Superseded in part by [ADR-0015](execution-engine-seam.md): Temporal is the preferred engine, no longer the only one; LangGraph on PostgreSQL is a second supported engine behind the same seam, chosen per deployment.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal; the engine is `ops_engine` on LangGraph and PostgreSQL (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-1. Superseded in part by [ADR-0015](execution-engine-seam.md): Temporal is the preferred engine, no longer the only one; LangGraph on PostgreSQL is a second supported engine behind the same seam, chosen per deployment.
 
 ## Context
 
@@ -34,7 +34,7 @@ writing an adapter).
 | **Azure Durable Functions / Durable Task Scheduler** | Managed durable orchestration | Scheduler is an Azure resource; the local emulator "isn't suitable for production use"; 1 MB payload limits ([DTS][azure-dts]). |
 | **LangGraph with a checkpointer** | Agent graph library with persisted state per thread | Postgres and SQLite checkpointers; interrupts for human input; docs warn checkpoints accumulate ([persistence][lg-persist]). Temporal ships a LangGraph plugin in public preview that runs nodes as activities and maps `interrupt()` to signals ([plugin][temporal-lg]). |
 | **Microsoft Agent Framework workflows** | Successor to Semantic Kernel and AutoGen; graph workflows with checkpoints | 1.0 on 2026-04-03, MIT, .NET and Python, workflows with checkpointing and human approval ([MAF 1.0][maf-10]). Resume needs an explicit checkpoint id and nothing restarts a crashed workflow automatically (argument by Diagrid, a Dapr vendor, so weigh accordingly: [Diagrid][maf-diagrid]). |
-| **Build our own on Postgres and a queue** | A job queue such as BullMQ on Redis with our own state tables | An earlier internal product built this way lost jobs to stale workers on a shared Redis ([design lessons](../../../.codeloop/wiki/concepts/design-lessons.md), "Queues, jobs and durable execution"). |
+| **Build our own on Postgres and a queue** | A job queue such as BullMQ on Redis with our own state tables | An earlier internal product built this way lost jobs to stale workers on a shared Redis (design lessons, "Queues, jobs and durable execution"). |
 
 ### Scored comparison
 

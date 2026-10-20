@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.errors import NotFound
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED, team_owned_via
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 
@@ -32,6 +34,7 @@ registry_workflows = sa.Table(
     sa.Column("draft_saved_by", sa.String(200)),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    info=TEAM_OWNED,
 )
 
 registry_workflow_versions = sa.Table(
@@ -48,6 +51,7 @@ registry_workflow_versions = sa.Table(
     sa.Column("published_at", sa.String(32), nullable=False),
     sa.Column("published_by", sa.String(200), nullable=False),
     sa.Column("review_id", sa.String(64)),
+    info=team_owned_via("registry_workflows", "workflow_id"),
 )
 
 registry_validations = sa.Table(
@@ -70,18 +74,36 @@ class WorkflowRegistry:
         self.engine = engine
 
     async def ids(self) -> set[str]:
-        """Every row's id, deleted ones included."""
+        """Every row's id, deleted ones included, in every team: a new workflow's id is unique across the workspace."""
+        q = sa.select(registry_workflows.c.id).where(
+            any_team(registry_workflows, "a workflow id is unique across every team")
+        )
         async with self.engine.connect() as c:
-            return {str(i) for i in (await c.execute(sa.select(registry_workflows.c.id))).scalars()}
+            return {str(i) for i in (await c.execute(q)).scalars()}
 
     async def rows(self) -> list[dict[str, Any]]:
-        q = sa.select(registry_workflows).where(registry_workflows.c.status != "deleted")
+        q = sa.select(registry_workflows).where(
+            registry_workflows.c.status != "deleted", team_visible(registry_workflows)
+        )
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def owner_team(self, workflow_id: str) -> str | None:
+        """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
+        owning team, never for showing the record."""
+        q = sa.select(registry_workflows.c.team_id).where(
+            registry_workflows.c.id == workflow_id,
+            any_team(registry_workflows, "the owning team a refusal is decided on"),
+        )
+        async with self.engine.connect() as c:
+            team = (await c.execute(q)).scalar()
+        return str(team) if team else None
+
     async def find(self, workflow_id: str) -> dict[str, Any] | None:
         """The row, deleted or not."""
-        q = sa.select(registry_workflows).where(registry_workflows.c.id == workflow_id)
+        q = sa.select(registry_workflows).where(
+            registry_workflows.c.id == workflow_id, team_visible(registry_workflows)
+        )
         async with self.engine.connect() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r else None
@@ -95,7 +117,7 @@ class WorkflowRegistry:
     async def versions(self, workflow_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_workflow_versions)
-            .where(registry_workflow_versions.c.workflow_id == workflow_id)
+            .where(registry_workflow_versions.c.workflow_id == workflow_id, team_visible(registry_workflow_versions))
             .order_by(registry_workflow_versions.c.version.desc())
         )
         async with self.engine.connect() as c:
@@ -120,6 +142,7 @@ class WorkflowRegistry:
                     sa.select(registry_workflow_versions.c.version).where(
                         registry_workflow_versions.c.workflow_id == row["workflow_id"],
                         registry_workflow_versions.c.version == row["version"],
+                        any_team(registry_workflow_versions, "a version number is unique per workflow"),
                     )
                 )
             ).first()

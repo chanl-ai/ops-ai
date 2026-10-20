@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-126`. Service: `console`. Layers: ui.
 
-Card c-178: the owner adopted the settings standard and wants a mock before any real page moves. `/preview/settings`
+Card c-178: the maintainers adopted the settings standard and wants a mock before any real page moves. `/preview/settings`
 (development server only) draws the tree on sample data: My account, Team, Workspace, and Govern › Access, Policies,
 Security and Models, each page built from one set of cards (`components/shared/setting/`). The live Settings pages and
 their routes do not change. `docs/console/settings-tree.md` holds the S01 to S43 mapping and the dialog table.

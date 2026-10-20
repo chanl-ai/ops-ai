@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .agent_registry import registry_agent_versions, registry_agents
 from .graphs import graph_threads
@@ -83,7 +84,7 @@ class ChannelList:
         not a tenant table, so it is read on its own connection."""
         a = registry_agents
         async with self.engine.connect() as c:
-            row = (await c.execute(sa.select(a.c.published_version).where(a.c.id == agent_id))).first()
+            row = (await c.execute(sa.select(a.c.published_version).where(a.c.id == agent_id, team_visible(a)))).first()
         return NOT_FOUND if row is None else row[0]
 
     async def api_rows(self, keys: list[dict[str, Any]], *, now: datetime | None = None) -> list[dict[str, Any]]:

@@ -1,0 +1,299 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+
+@source '../../node_modules/fumadocs-ui/dist/**/*.js';
+@source '../../node_modules/fumadocs-openapi/dist/**/*.js';
+
+/*
+ * The look of the Ops AI spec pages: system type at 15px, a left contents rail, a content column up to 1180px,
+ * bordered tables with a soft header row, status pills, summary cards and framed figures. The palette is the spec
+ * pages' own, in both themes, set on Fumadocs' variables so its components follow it.
+ */
+:root {
+  --ops-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ops-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ops-bg: #fbfbfa;
+  --ops-fg: #1d1f22;
+  --ops-muted: #5d636b;
+  --ops-line: #d9dcdf;
+  --ops-card: #ffffff;
+  --ops-soft: #f1f2f3;
+  --ops-code: #f3f4f6;
+  --ops-accent: #2f5bd3;
+  --ops-accent-soft: #e6ecfb;
+  --ops-new: #0f7a55;
+  --ops-new-soft: #e3f4ec;
+  --ops-warn: #9a5b00;
+  --ops-warn-soft: #fbf0dc;
+  --ops-drop: #9b2c2c;
+  --ops-drop-soft: #f8e5e5;
+  --ops-pack: #5b3fd1;
+  --ops-pack-soft: #efeafc;
+  --ops-host: #1a5fb4;
+  --ops-host-soft: #e4edf9;
+}
+.dark {
+  --ops-bg: #15171a;
+  --ops-fg: #e6e8eb;
+  --ops-muted: #a0a6ae;
+  --ops-line: #33373d;
+  --ops-card: #1c1f23;
+  --ops-soft: #22262b;
+  --ops-code: #23272c;
+  --ops-accent: #8fb0ff;
+  --ops-accent-soft: #1f2a44;
+  --ops-new: #5fd3a5;
+  --ops-new-soft: #17332a;
+  --ops-warn: #f0b960;
+  --ops-warn-soft: #3a2d15;
+  --ops-drop: #f19a9a;
+  --ops-drop-soft: #3b1f1f;
+  --ops-pack: #b7a6ff;
+  --ops-pack-soft: #2a2347;
+  --ops-host: #8ab6f2;
+  --ops-host-soft: #1c2a40;
+}
+:root,
+.dark {
+  --color-fd-background: var(--ops-bg);
+  --color-fd-foreground: var(--ops-fg);
+  --color-fd-muted: var(--ops-soft);
+  --color-fd-muted-foreground: var(--ops-muted);
+  --color-fd-card: var(--ops-card);
+  --color-fd-card-foreground: var(--ops-fg);
+  --color-fd-popover: var(--ops-card);
+  --color-fd-popover-foreground: var(--ops-fg);
+  --color-fd-secondary: var(--ops-soft);
+  --color-fd-secondary-foreground: var(--ops-fg);
+  --color-fd-accent: var(--ops-soft);
+  --color-fd-accent-foreground: var(--ops-fg);
+  --color-fd-border: var(--ops-line);
+  --color-fd-primary: var(--ops-accent);
+  --color-fd-primary-foreground: #fff;
+  --color-fd-ring: var(--ops-accent);
+  --ops-mm-bg: var(--ops-card);
+  --ops-mm-fg: var(--ops-fg);
+  --ops-mm-line: var(--ops-muted);
+  --ops-mm-accent: var(--ops-accent);
+  --ops-mm-muted: var(--ops-muted);
+  --ops-mm-surface: var(--ops-soft);
+  --ops-mm-border: var(--ops-line);
+  /* box diagrams (src/lib/box-diagram.mjs) */
+  --d-fg: var(--ops-fg);
+  --d-muted: var(--ops-muted);
+  --d-card: var(--ops-card);
+  --d-soft: var(--ops-soft);
+  --d-accent: var(--ops-accent);
+  --d-new: var(--ops-new);
+  --d-new-soft: var(--ops-new-soft);
+  --d-pack: var(--ops-pack);
+  --d-pack-soft: var(--ops-pack-soft);
+  --d-host: var(--ops-host);
+  --d-host-soft: var(--ops-host-soft);
+}
+
+body {
+  font-family: var(--ops-font);
+  background: var(--ops-bg);
+  color: var(--ops-fg);
+}
+
+/* Width: one content column up to the spec pages' 1180px, beside the rail. */
+#nd-page.ops-page,
+.ops-page {
+  max-width: 1180px;
+}
+
+/* Type */
+.ops-page h1 {
+  font-size: 1.7rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ops-prose {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ops-fg);
+}
+.ops-prose :where(p, li) {
+  max-width: 75ch;
+}
+.ops-prose :where(td p, td li, .ops-card p) {
+  max-width: none;
+}
+.ops-prose :where(h2) {
+  font-size: 1.3rem;
+  margin: 40px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ops-line);
+}
+.ops-prose :where(h3) {
+  font-size: 1.05rem;
+  margin: 24px 0 8px;
+}
+.ops-prose :where(a:not(.ops-card)) {
+  color: var(--ops-accent);
+  text-decoration: none;
+}
+.ops-prose :where(a:not(.ops-card)):hover {
+  text-decoration: underline;
+}
+.ops-prose :where(code):not(pre code) {
+  font-family: var(--ops-mono);
+  font-size: 0.85em;
+  background: var(--ops-code);
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+.ops-prose :where(a) > code:only-child {
+  color: var(--ops-accent);
+}
+
+/* Tables: bordered, soft header row, compact type. */
+.ops-prose :where(table) {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+  background: var(--ops-card);
+  overflow: hidden;
+}
+.ops-prose :where(th) {
+  background: var(--ops-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ops-prose :where(th, td) {
+  text-align: left;
+  vertical-align: top;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ops-line);
+}
+.ops-prose :where(tr:last-child td) {
+  border-bottom: 0;
+}
+
+/* Status: pills and the opening status line. */
+.ops-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.ops-badge-built { background: var(--ops-new-soft); color: var(--ops-new); }
+.ops-badge-partial { background: var(--ops-warn-soft); color: var(--ops-warn); }
+.ops-badge-planned { background: var(--ops-accent-soft); color: var(--ops-accent); }
+.ops-badge-drop { background: var(--ops-drop-soft); color: var(--ops-drop); }
+.ops-badge-muted { background: var(--ops-soft); color: var(--ops-muted); box-shadow: inset 0 0 0 1px var(--ops-line); }
+.ops-doc-status {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ops-line);
+  color: var(--ops-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.ops-doc-status .ops-badge { flex: none; }
+.ops-doc-status-text p { margin: 0; max-width: 90ch; }
+.ops-doc-status-text a { color: var(--ops-accent); }
+.ops-doc-status-text code { font-family: var(--ops-mono); font-size: 0.85em; background: var(--ops-code); padding: 1px 4px; border-radius: 4px; }
+
+/* Summary cards */
+.ops-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+.ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--ops-line);
+  border-radius: 10px;
+  background: var(--ops-card);
+  color: var(--ops-fg);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.ops-card-link { text-decoration: none; transition: border-color 120ms; }
+.ops-card-link:hover { border-color: var(--ops-accent); }
+.ops-card-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.ops-card-body p { margin: 0 0 6px; }
+.ops-card-body p:last-child { margin-bottom: 0; }
+.ops-card-body code { font-family: var(--ops-mono); font-size: 0.82em; background: var(--ops-code); padding: 1px 4px; border-radius: 4px; }
+
+/* Figures: wireframes, Mermaid and box diagrams. */
+.ops-figure {
+  margin: 16px 0;
+  padding: 10px;
+  border: 1px solid var(--ops-line);
+  border-radius: 10px;
+  background: var(--ops-card);
+}
+.ops-figure-media { display: flex; justify-content: safe center; overflow-x: auto; }
+.ops-figure-media p { margin: 0; }
+.ops-figure-media img { border-radius: 6px; margin: 0; max-width: 100%; height: auto; }
+/* Diagrams keep their drawn size and scroll sideways rather than shrink below legible text. */
+.ops-mermaid svg { flex: none; max-width: none; height: auto; display: block; }
+/* Architecture diagrams fit the column down to 720px wide, then scroll, so their 13px labels stay readable. */
+.ops-diagram svg { flex: none; width: 100%; min-width: 720px; max-width: 980px; height: auto; display: block; }
+.ops-figure figcaption {
+  margin-top: 6px;
+  color: var(--ops-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-width: 90ch;
+}
+
+/* Brand */
+.ops-brand { display: inline-flex; align-items: center; gap: 10px; }
+.ops-brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.ops-brand-name { font-weight: 650; font-size: 0.95rem; color: var(--ops-fg); }
+.ops-brand-by { font-size: 0.72rem; color: var(--ops-muted); }
+.ops-logo-dark { display: none; }
+.dark .ops-logo-light { display: none; }
+.dark .ops-logo-dark { display: block; }
+
+/* The rail: the open page's sections at the top, numbered like the spec pages' contents, then the pages. */
+.ops-rail-contents {
+  margin: 4px 0 6px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--ops-line);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.ops-rail-heading { margin: 0 0 6px; font-size: 0.88rem; font-weight: 600; color: var(--ops-fg); }
+.ops-rail-toc {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.ops-rail-toc li { margin: 3px 0; display: flex; gap: 6px; }
+.ops-rail-num { flex: none; min-width: 1.4em; text-align: right; color: var(--ops-fg); }
+.ops-rail-toc li[data-depth='1'] { margin-left: calc(1.4em + 16px); font-size: 0.82rem; }
+.ops-rail-toc li[data-depth='2'] { margin-left: calc(1.4em + 28px); font-size: 0.82rem; }
+.ops-rail-toc a { color: var(--ops-fg); text-decoration: none; }
+.ops-rail-toc li[data-depth='1'] a,
+.ops-rail-toc li[data-depth='2'] a { color: var(--ops-muted); }
+.ops-rail-toc a:hover,
+.ops-rail-toc a[data-active='true'] { color: var(--ops-accent); }
+.ops-prose :where(h1, h2, h3, h4) a { color: inherit; }

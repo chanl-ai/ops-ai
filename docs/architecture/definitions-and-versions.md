@@ -1,10 +1,10 @@
 # Definitions and versions
 
-Status: current, written 2026-10-10 from the experiment ledger, links updated 2026-10-16; every decision is an option until the owner confirms it.
+Status: current, written 2026-10-10 from the experiment ledger, links updated 2026-10-16; every decision is an option until the maintainers confirms it.
 
 The definition format and portability are in [ADR-0003](decisions/workflow-definition-format.md); the node catalogue
-in [interpreter-and-nodes](../../.codeloop/wiki/concepts/interpreter-and-nodes.md) §3; edit classes, registry and release in
-[agent-builder](../../.codeloop/wiki/concepts/agent-builder.md) and [assurance-evals-and-release](../../.codeloop/wiki/concepts/assurance-evals-and-release.md).
+in [workflow nodes](../design/workflows/workflow-nodes.md) §3; edit classes, registry and release in
+[agents and workflows](../console/agents-and-workflows.md) and [aDR-0012 Assurance: governance and testing as one system](decisions/assurance.md).
 
 ## Lifecycle
 

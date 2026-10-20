@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from ..store.tenancy import tenant_scope
+from ops_store import isolation
+
+from ..store.tenancy import THREAD_WORK
 from .deps import Runtime
 from .runs import graph_store
 
@@ -22,7 +24,7 @@ async def as_thread_tenant[T](rt: Runtime, thread_id: str, work: Callable[[], Aw
         return None
 
     async def scoped() -> T | _Raised:
-        with tenant_scope(tenant):
+        with isolation.tenant_wide(THREAD_WORK, tenant_id=tenant):
             try:
                 return await work()
             except BaseException as e:

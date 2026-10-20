@@ -10,9 +10,10 @@ from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.memories import Memories
-from ..store.tenancy import tenant_scope
+from ..store.tenancy import MEMORY_RETENTION
 from .deps import Runtime
 from .runs import graph_store
 
@@ -56,7 +57,7 @@ async def expire_memories(rt: Runtime, policy: RetentionPolicy, now: datetime | 
 
     async def one(tenant: str) -> int:
         # Its own task, so the tenant set here never leaks into the loop's context or another tenant's pass.
-        with tenant_scope(tenant):
+        with isolation.tenant_wide(MEMORY_RETENTION, tenant_id=tenant):
             days = await policy.days()
             if days is None:
                 return 0

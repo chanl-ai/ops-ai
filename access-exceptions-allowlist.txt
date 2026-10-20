@@ -11,7 +11,8 @@ apps/console/src/lib/auth/providers/platform.ts role-name admin 1 E22
 apps/console/src/lib/auth/providers/platform.ts role-name viewer 1 E22
 packages/ops_access/src/ops_access/check.py lock dev-caller 1 E09
 packages/ops_access/src/ops_access/check.py lock protection-system 1 E05
-services/agents-service/src/ops_agents/api/auth.py lock dev-caller 2 E09
+packages/ops_store/src/ops_store/isolation.py lock dev-caller 1 E09
+services/agents-service/src/ops_agents/api/auth.py lock dev-caller 1 E09
 services/agents-service/src/ops_agents/api/auth.py refusal role_required 1 E13
 services/agents-service/src/ops_agents/api/chat_budget.py refusal admin_only 1 E14
 services/agents-service/src/ops_agents/api/chat_budget.py refusal not_owner 3 E14

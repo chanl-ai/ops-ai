@@ -16,7 +16,7 @@ from langgraph.config import get_config
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
-from ops_service_kit.errors import Forbidden, NotFound
+from ops_service_kit.errors import Forbidden
 from ops_service_kit.ids import new_id, now_iso
 
 from ..graphs.common import AGENT_TOOL_PREFIX
@@ -37,10 +37,7 @@ QUESTION_SCHEMA: dict[str, Any] = {
 
 async def agent_team(rt: Runtime, agent_id: str) -> str | None:
     """The team that owns an agent; None for an agent with no registry row or no team, which every team may use."""
-    try:
-        return str((await registry(rt).row(agent_id)).get("team_id") or "") or None
-    except NotFound:
-        return None
+    return await registry(rt).owner_team(agent_id)
 
 
 class AgentCalls:

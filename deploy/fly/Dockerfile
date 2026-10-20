@@ -165,6 +165,37 @@ RUN apt-get update \
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
 COPY deploy deploy
 
+# The DBA's PostgreSQL scripts for this commit (deploy/database/schema.py ddl: roles.sql, bundle.sql, grants.sql,
+# manifest.json), so an install from a clone or registry needs no uv, pg_dump or scratch server of its own (install.sh
+# --db-mode dba copies /db/postgres out). The chains migrate a throwaway PostgreSQL 17 inside the build, on the build
+# machine's own platform: the SQL is the same for every platform, and migrating under emulation only costs time.
+# uv for the build machine's platform: a plain COPY --from an image takes the target's, which runs under emulation and
+# fetches that platform's Python.
+FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.8.4 AS uv-build
+
+FROM --platform=$BUILDPLATFORM postgres:17-bookworm AS db-scripts-build
+COPY --from=uv-build /uv /usr/local/bin/uv
+WORKDIR /app
+ENV UV_LINK_MODE=copy UV_PYTHON_INSTALL_DIR=/opt/uv-python
+COPY pyproject.toml uv.lock ./
+COPY packages packages
+COPY services services
+RUN --mount=type=cache,target=/root/.cache/uv uv python install 3.12 && uv sync --frozen --no-dev --python 3.12 \
+ && chmod -R a+rX /opt/uv-python
+COPY deploy deploy
+RUN mkdir -p /out/postgres && chown -R postgres /out
+USER postgres
+ARG OPS_COMMIT=unversioned
+ENV PYTHONDONTWRITEBYTECODE=1 OPS_COMMIT=$OPS_COMMIT
+RUN initdb -D /tmp/pg -A trust -U postgres >/dev/null \
+ && pg_ctl -D /tmp/pg -o "-c listen_addresses=127.0.0.1 -k /tmp" -w start >/dev/null \
+ && /app/.venv/bin/python deploy/database/schema.py ddl --server postgresql://postgres@127.0.0.1:5432/postgres \
+      --ref . --out /out/postgres >/dev/null \
+ && pg_ctl -D /tmp/pg -m fast -w stop >/dev/null
+
+FROM scratch AS db-scripts
+COPY --from=db-scripts-build /out /db
+
 FROM python-base AS runtime
 # libstdc++ for node.
 RUN apt-get update \

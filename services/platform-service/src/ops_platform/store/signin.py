@@ -44,7 +44,7 @@ from .tables import (
     teams,
     users,
 )
-from .tenancy import TenantDb
+from .tenancy import RESET_LOOKUP, SIGNIN_LOCKOUT, SIGNIN_LOOKUP, TenantDb
 from .workspace import default_team_in, security_team_in
 
 PASSWORD = "password"
@@ -137,7 +137,7 @@ class SignInStore:
         q = sa.text(
             "SELECT tenant_id, provider_id, kind, label, enabled, password_enabled FROM platform_signin_domain(:d)"
         )
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(q, {"d": domain.strip().lower()})).first()
         return (
             DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5])) if row else None
@@ -341,7 +341,7 @@ class SignInStore:
     async def email_locked_until(self, email_hash: str, *, now: str) -> str | None:
         """When sign-in for this address stops refusing, while it is locked; None when it is not."""
         t = signin_email_failures
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
             until = (await c.execute(sa.select(t.c.locked_until).where(t.c.email_hash == email_hash))).scalar()
         return str(until) if until and str(until) > now else None
 
@@ -352,7 +352,7 @@ class SignInStore:
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
         stale = t.c.first_failed_at < window_start
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
             failures = (
                 await c.execute(
                     insert(t)
@@ -377,7 +377,7 @@ class SignInStore:
         return True
 
     async def clear_email_failures(self, email_hash: str) -> None:
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
             await c.execute(signin_email_failures.delete().where(signin_email_failures.c.email_hash == email_hash))
 
     async def clear_failures(self, tenant_id: str, user_id: str) -> None:
@@ -408,7 +408,7 @@ class SignInStore:
     async def use_reset(self, token_hash: str, encoded: str, *, at: str, request_id: str) -> tuple[str, str] | None:
         """Spends the reset token, sets the new password and ends every session of the person, in one transaction.
         Returns (tenant, user), or None when the token is unknown, used or expired."""
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(RESET_LOOKUP) as c:
             row = (
                 await c.execute(sa.text("SELECT id, tenant_id FROM platform_password_reset(:h)"), {"h": token_hash})
             ).first()
@@ -505,7 +505,7 @@ class SignInStore:
         return await self._flow("platform_signin_handoff", handoff_hash)
 
     async def _flow(self, function: str, value: str) -> Flow | None:
-        async with self.db.system_tx() as c:
+        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()
         if row is None:
             return None

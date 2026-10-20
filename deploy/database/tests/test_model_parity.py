@@ -1,7 +1,8 @@
 """Each chain's store metadata equals the schema its migrations build (c-342): one case per chain, on a scratch
 PostgreSQL database that every chain migrates in order, dropped at exit. A migration that adds a table, column, index,
 CHECK or default without the same in metadata fails here, naming the object, because SQL Server's DDL is compiled from
-metadata and would lack it. The tenant marker is held equal to forced row-level security.
+metadata and would lack it. Each table's isolation kind (team or tenant, from its markings) is held equal to what the
+database enforces.
 
 Runs on the server of OPS_TEST_DATABASE_URL (make python-verify sets it); skipped without a PostgreSQL URL."""
 
@@ -32,6 +33,12 @@ LAGGING: dict[str, set[str]] = {
     # tools migration 0026 gave the outbox's attempts a database default that files' and documents' outboxes lack, and
     # ops_store.outbox_table is one shape for all three; a migration makes them one.
     "tools": {"default service_outbox.attempts only in the database"},
+    # Team-owned and tenant-scoped since c-407, still under their hand-written tenant policy; c-412's migration replaces
+    # it with the generated team policy (c-410).
+    "agents": {
+        "isolation case_types is marked team-isolated, the database isolates it by tenant",
+        "isolation task_types is marked team-isolated, the database isolates it by tenant",
+    },
 }
 
 

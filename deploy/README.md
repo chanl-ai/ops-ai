@@ -7,6 +7,7 @@ and Kubernetes are optional. Design: `docs/architecture/service-map.md` ("Deploy
 |---|---|
 | `compose/` | `app.yaml`: every service, the worker, the console, OPA and a proxy as containers against an outside PostgreSQL, from prebuilt images; `build.yaml` builds them from a checkout; `dba.yaml` for a schema the DBA applied (runbook `docs/deploy/compose.md`); `compose.yaml`: local dev dependencies (PostgreSQL, OPA) |
 | `database/` | The schema as reviewed scripts for a DBA: baseline, upgrades, drift, least-privilege roles (runbook `docs/deploy/database.md`) |
+| `../install.sh`, `install/` | The one-command install from a clone: questions, keys, images from GHCR, start, check, upgrade, backup, restore (guide `docs/deploy/install.md`); `install/install_api.py` holds its Python steps, run inside the images |
 | `release/` | The package a client team installs from: images for linux/amd64 as one bundle, compose files, env template, PostgreSQL and Azure SQL scripts, install guide (runbook `docs/deploy/release-package.md`) |
 | `images/` | What every image runs at start: the entrypoint, the migration script compose and Fly share, the health check and the console's start (stages in `fly/Dockerfile`) |
 | `host/` | The process host: starts the processes `OPS_ENABLED_SERVICES` names from a config file, restarts one that exits, stops them together |

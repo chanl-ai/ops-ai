@@ -7,6 +7,7 @@ These documents design an operational AI platform for banks and describe the con
 
 ## Map
 
+<!-- site: cards -->
 | Area | Start at | What it holds |
 |---|---|---|
 | Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
@@ -15,6 +16,7 @@ These documents design an operational AI platform for banks and describe the con
 | Console | `console/page-plan.md` | Console pages, the UI standard, user guides, and screens approved (`console/approved/`) or waiting for approval (`console/proposed/`) |
 | Services and packages | `services/<name>/overview.md`, `packages/<name>/overview.md` | One page per service and library: what it does, its routes and tables, its tests |
 | Deploy | `deploy/install-guide.md` | Installing and running Ops AI: Compose, Kubernetes, the database, the release package |
+| Client guide | `guide/README.md` | One architecture and installation guide for a client team, the source of `deploy/client-install-guide.html` |
 | Use cases | `usecases/README.md` | The end-to-end checks that prove each feature, and how to run them |
 
 ## Design
@@ -38,12 +40,34 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/research/forge-workflow-study.md` | A study of an open-source workflow engine on LangGraph, concern by concern |
 | `design/research/workflow-node-improvements.md` | Ten workflow node improvements compared across workflow products, with what is built since |
 
+## How the docs site shows a page
+
+The docs site (`apps/docs`, served under `/docs`) renders these files as they are; there is no second copy. Write
+plain markdown that reads well on GitHub; the site maps a few conventions onto its components. This table is the
+shared list: the shareable guide built from `guide/*.md` is meant to present the same markdown the same way.
+
+| Write | The site shows |
+|---|---|
+| `# Title` as the first line | The page title (and its sidebar name) |
+| `Status: proposed design. ...` as the first paragraph | A status line with a badge for the opening words |
+| A table cell starting with `built`, `partial`, `planned` or `not built` | That word as a green, amber, blue or grey badge |
+| `<!-- site: cards -->` directly above a table or a list | Summary cards: a table row or list item each; the first cell, or the item's opening **bold** or link, is the title |
+| `<!-- site: steps -->` directly above a numbered list | Numbered steps |
+| `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
+| A ```` ```mermaid ```` block (flowchart, sequence, state, ER) | The diagram in the site's theme |
+| `![caption](../diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
+| Any other image alone in a paragraph | A framed figure with the alt text as its caption |
+| A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
+
+A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
+its data file. Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter docs diagrams` to export its SVG.
+
 ## Reading order
 
 | Reader | Read in this order |
 |---|---|
 | Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `.codeloop/wiki/concepts/design-lessons.md` → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until the owner confirms it) → `.codeloop/wiki/concepts/data-and-ai-gateways.md` → `architecture/service-map.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until the maintainers confirms it) → `.codeloop/wiki/concepts/data-and-ai-gateways.md` → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → `.codeloop/wiki/concepts/assurance-evals-and-release.md` → `.codeloop/wiki/concepts/model-risk.md` → `.codeloop/wiki/concepts/governance-and-admin.md` → ADR-0005 |
 
 ## Requirements
@@ -123,16 +147,31 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
 | `deploy/compose.md` | Ops AI on Docker Compose against the bank's PostgreSQL: the images, what runs, the facts that shape it, running from a clean clone, connecting a model, secrets as files, upgrade, back up and logs |
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
+| `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
-| `deploy/install-guide.md` | The client install guide shipped as INSTALL.md: what runs today, machines, the DBA's database steps, install, checks, upgrade, backup, security and Azure SQL status |
-| `deploy/client-install-guide.html` | The same install guide as one shareable page |
+| `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
+| `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
+| `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |
+| `guide/README.md` | The client guide's index: the twelve sections in order and what each holds |
+| `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
+| `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
+| `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a levy notice emailed to a team mailbox |
+| `guide/data-and-database.md` | The entities, each service's tables, tenant and team isolation, files and knowledge, retention and the audit trail |
+| `guide/security-and-governance.md` | Sign-in and SSO, roles, approvals, the tool gateway and allow-list, secrets, masking, hardening |
+| `guide/models.md` | The AI gateway: aliases, keys, budgets, data sensitivity and the test model |
+| `guide/deployment-options.md` | Compose, Kubernetes, single- and multi-tenant, the network and sizing |
+| `guide/install.md` | What to arrange before an install, then the install script's steps, included from `deploy/install.md` |
+| `guide/operate.md` | Health, logs, upgrade and roll back, back up and restore, scaling, what to watch, key rotation |
+| `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
+| `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
+| `guide/support.md` | The support contact (placeholder) |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
-| `console/approved/channels/README.md` | The Channels screens the owner approved, at 1280 and 400 px, which the real pages are built to |
-| `console/proposed/files/README.md` | The file page and Extract screens built by c-262, at 1280 and 400 px, waiting for the owner's approval |
+| `console/approved/channels/README.md` | The Channels screens the maintainers approved, at 1280 and 400 px, which the real pages are built to |
+| `console/proposed/files/README.md` | The file page and Extract screens built by c-262, at 1280 and 400 px, waiting for the maintainers' approval |
 | `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after c-266, side by side |
-| `console/proposed/tasks/README.md` | The Human Task page built by c-289 beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the owner's approval |
+| `console/proposed/tasks/README.md` | The Human Task page built by c-289 beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the maintainers' approval |
 | `console/proposed/table-columns/README.md` | The shared data table's columns sized by kind, before beside after for Workflows, Runs, Files and Members at 1280 and 400 px |
 | `console/proposed/run-status/README.md` | Run status from where a run ended and from the runs it started: failed and waiting runs before beside after, and the End step's Counts as, at 1280 and 400 px |
 | `console/settings-tree.md` | The settings tree design mock at /preview/settings: the pages, the patterns, the dialogs with their mother pages, and the field kit |
@@ -239,7 +278,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/widget-mint-and-approve.md` | uc-117: the bank's server mints with the deployment's key, the chat's hold is decided through Reviews, team and revoked keys refused |
 | `usecases/console/widgets-by-shape.md` | uc-073: every chat widget shape draws with its default renderer on /dev/widgets, switches between chart and table, and records approve and submit |
 | `usecases/console/write-approval-policy.md` | uc-059: a builder sets a write's approvers, approving team and self-approval in the operation sheet, and the operation shows them |
-| `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the owner keeps the message box |
+| `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the maintainers keeps the message box |
 | `usecases/console/chat-holds-in-reviews.md` | uc-057: a write held in a chat appears in Reviews marked From chat and is approved there |
 | `usecases/console/levy-cases-decided.md` | uc-077, retired (c-212): the v1 levy run's cases decided from the console |
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
@@ -323,6 +362,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/wait-and-reminders.md` | uc-403: A workflow waits for a time or date and reminds a person |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
+| `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
 | `architecture/make.md` | How make is organised: root orchestration, fragments by concern, the service verb set, env names, ports, `ISOLATED=1`, the daily commands |
 | `architecture/embedded-chat.md` | Embedded chat for customers: the design, the identity options and the recommendation |
 | `services/agents-service/overview.md` | Agents service: modules, graphs on four calls, settings, proofs, where it differs from the specs |

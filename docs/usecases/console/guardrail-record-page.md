@@ -5,7 +5,7 @@ Status: current. Id: `uc-104`. Service: `console`. Layers: ui. Card: c-110.
 A guardrail opens on its own page, like an agent: its rule is edited there and saved as a new draft version, published
 from the header, and every version is listed with its state and note. An agent pins any published version from its
 Guardrails section, and the pin links back to the guardrail's page. Design:
-[agent builder](../../../.codeloop/wiki/concepts/agent-builder.md).
+[agent builder](../../console/agents-and-workflows.md).
 
 ## Preconditions
 

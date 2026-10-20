@@ -71,4 +71,4 @@ for each step. It needs the stack up on the current code (`make up`) and a workf
 The exit status is the number of failed checks. A run that stays queued means no worker is running.
 
 More: how runs are executed, [architecture/workflow-runner.md](../architecture/workflow-runner.md); the step types,
-[workflow-nodes.md](../../.codeloop/wiki/concepts/workflow-nodes.md); tools and approvals, [architecture/tool-lifecycle.md](../architecture/tool-lifecycle.md).
+[workflow nodes](../design/workflows/workflow-nodes.md); tools and approvals, [architecture/tool-lifecycle.md](../architecture/tool-lifecycle.md).

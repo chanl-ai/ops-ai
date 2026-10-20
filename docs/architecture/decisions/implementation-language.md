@@ -1,6 +1,6 @@
 # ADR-0002 Implementation language: Python, TypeScript, or both
 
-Status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-2.
+Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-2.
 
 ## Context
 
@@ -58,7 +58,7 @@ harness and the control-plane API. TypeScript for the console and its BFF only.
 
 Pydantic models are the source; JSON Schema and OpenAPI are generated from them in CI, and a CI
 check fails if the generated TypeScript types differ from the committed ones. This is the
-"one fact, one home" rule from [design lessons](../../../.codeloop/wiki/concepts/design-lessons.md).
+"one fact, one home" rule from design lessons.
 
 ## Consequences
 
@@ -67,7 +67,7 @@ check fails if the generated TypeScript types differ from the committed ones. Th
 **"The delivery team builds in TypeScript and has written a Temporal flow runner in NestJS before.
 Option C ships faster."** It would, by a few weeks. The cost is two implementations of the
 definition validator and compiler: one in TS for the control plane and one wherever the Python-side
-checks run, and such pairs drift ([design lessons](../../../.codeloop/wiki/concepts/design-lessons.md), "one fact in
+checks run, and such pairs drift (design lessons, "one fact in
 several places"). The bank also owns the platform after handover, and its agent teams write Python.
 We reuse that runner's design (a thin `defineFlow` wrapper so flow files never import Temporal) and
 not its code.

@@ -1,8 +1,8 @@
 """Who is calling, for agents-service's routes. Resolution is ops_identity's shared FastAPI layer (installed in
-api/app.py); this module only adapts its principal and sets the request's tenant and team for the stores
-(store/tenancy.py). Every router depends on `principal`, which `scripts/check_standards.py` rule 5 checks. Every role
-rule below is one call to `ops_access.can`, the check every service shares (c-148); the helpers keep the routes'
-wording and the record's team and owner."""
+api/app.py), which also enters the request's isolation context (tenant, team, scope) from the verified caller; this
+module only adapts its principal. Every router depends on `principal`, which `scripts/check_standards.py` rule 5
+checks. Every role rule below is one call to `ops_access.can`, the check every service shares (c-148); the helpers keep
+the routes' wording and the record's team and owner."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from ops_policy import STEP_UP_TTL_S, HmacSigner, TokenError, header_of, verify,
 from ops_policy.step_up import STEP_UP_TYPE
 from ops_service_kit.errors import Forbidden, StepUpRequired
 
-from ..store.tenancy import current_tenant, set_team, set_tenant
+from ..store.tenancy import current_tenant
 from .deps import Runtime
 
 
@@ -68,10 +68,6 @@ def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:
 
 
 def _principal(p: Caller) -> Principal:
-    set_tenant(p.tenant_id)
-    # Team access is held for platform callers only. Dev acts across teams, as it always has: the console sends its
-    # selected team while scripts and seeds create threads in other teams.
-    set_team(None if p.auth_method == "dev" else p.team_id)
     return Principal(
         name=p.name or p.email,
         email=p.email,
@@ -118,7 +114,6 @@ class Service:
 async def service_principal(p: CurrentService) -> Service:
     """Internal routes (the timer fire) are for schedulers, not people: an Ed25519 service token for audience
     "agents" that names the tenant it acts for (I13)."""
-    set_tenant(p.tenant_id)
     return Service(name=p.sub)
 
 

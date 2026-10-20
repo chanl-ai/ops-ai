@@ -38,13 +38,14 @@ from ops_metering import PriceTable
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.database import Database, open_database
 
 from ..store.channels import ChannelStore, Deployment
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
-from ..store.tenancy import LOCAL_TENANT, current_team, current_tenant, tenant_scope
+from ..store.tenancy import LOCAL_TENANT, SEED, current_team, current_tenant
 from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .agent_calls import AgentCalls
@@ -153,7 +154,7 @@ async def seed_mailboxes(db: Database, path: Path | None) -> None:
         return
     rows: list[dict[str, Any]] = json.loads(path.read_text())
     now = now_iso()
-    with tenant_scope(LOCAL_TENANT):
+    with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
         await MailboxStore(db).drop_seeded_except([str(r["id"]) for r in rows])
         for r in rows:
             await MailboxStore(db).put_seed(
@@ -381,7 +382,7 @@ def create_app(
             seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
             # A seed update opens a publish request, and requests are per tenant (c-333 phase A) while the registries
             # are not yet: the seed's requests are the dev seed's tenant's, as engine_seed's records are.
-            with tenant_scope(LOCAL_TENANT):
+            with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
                 await agent_registry.load(rt, load_catalog(seed_dir, settings.agents_seed_file))
                 if seed_dir:
                     await guardrails.load_seed(rt, guardrails.seed_path(seed_dir, settings.agents_seed_file))

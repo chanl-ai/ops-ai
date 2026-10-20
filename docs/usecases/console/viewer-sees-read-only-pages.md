@@ -6,7 +6,7 @@ A viewer reads the team's agents, workflows, skills, guardrails, widgets, tools 
 console reads what `can()` grants each person on the team from platform-service (`GET /v1/me/permissions`, c-186) and
 shows create, edit, publish, pause and delete only to someone it lets edit the team's records; a viewer sees the same pages with record forms disabled and a "View only"
 notice. agents-service and kb-service refuse the same writes from a viewer or reviewer with 403 `role_required`
-(c-115), so an API caller meets the rule the console shows. Design: [roles and permissions](../../../.codeloop/wiki/concepts/roles-and-permissions.md).
+(c-115), so an API caller meets the rule the console shows. Design: [roles and permissions](../platform-service/roles-and-permissions.md).
 
 ## Preconditions
 

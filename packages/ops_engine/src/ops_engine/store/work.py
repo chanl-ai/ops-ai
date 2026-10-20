@@ -15,7 +15,7 @@ from ops_store import Guarantee
 
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_work
-from .tx import Transactions
+from .tx import CLAIM_WORK, Transactions
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class WorkQueue:
 
     async def claim(self) -> Work | None:
         w = engine_work
-        async with self.tx.system_tx() as c:
+        async with self.tx.system_tx(CLAIM_WORK) as c:
             now = db_now(c)
             due = sa.or_(
                 sa.and_(w.c.status == "queued", w.c.available_at <= now),

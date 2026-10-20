@@ -1,6 +1,6 @@
 # Mailbox demo
 
-Status: current, 2026-10-19. The shared-stack runbook below is walked by `make demo-mailbox` (green 2026-10-18). The
+Status: current, 2026-10-20. The shared-stack runbook below is walked by `make demo-mailbox` (green 2026-10-18). The
 walk from your own inbox at the end has not been walked yet: it needs a real mailbox connected on the shared stack.
 
 An emailed levy notice becomes levy cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
@@ -70,64 +70,112 @@ If a step fails, the Activity page filtered to the mailbox shows the email and w
 
 ## On Fly staging
 
-Status: walked end to end on 2026-10-20 with an Ethereal mailbox. The notice came in through Ethereal and started
-the intake run, then the document run: the PDF in Files, a read of 3 debtors, 3 cases, the Human Tasks, the
-acknowledgement, and the reply from the Ethereal address to the made-up court address, found in the Ethereal
-mailbox over IMAP. `mailbox_demo.py walk` does the authenticated send and the IMAP check (`--send-user`,
-`--read-imap`), and the command below passed every step as written on 2026-10-20. A Gmail or Microsoft 365
-mailbox follows steps 2 to 9 below, done by a person.
-
-The walk against Ethereal, with the account's password in an environment variable and never on the command line
-(the owner creates the account; the password is never written to a file in the repo):
-
-```
-export DEMO_MAILBOX_PASSWORD=...   # the Ethereal account's password
-uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>-web.fly.dev \
-  --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
-  --mailbox <account>@ethereal.email --imap imap.ethereal.email:993 --smtp smtp.ethereal.email:587 \
-  --send-smtp smtp.ethereal.email:587 --send-user <account>@ethereal.email --read-imap imap.ethereal.email:993
-```
-
-It prints PASS or FAIL per step and exits with the number of failures. Ethereal keeps every message its SMTP accepts
-in the account's mailbox, so the reply to the made-up court address is found there.
-
-Staging is <https://<your-app>-web.fly.dev>. `deploy/fly/staging/mailbox_demo.py seed` ran on 2026-10-20 and
-printed this state:
+Status: current, 2026-10-20 (c-406). Staging is the one-machine app <https://<your-app>-one.fly.dev>
+(`docs/deploy/fly-staging.md`); it sleeps when idle and the first request takes about 35 s. Every step after the
+inbound email is walked on it with the real model: the notice read, a case per debtor, the hold approved and placed at
+the bank stand-in, the unmatched debtor's own case, the acknowledgement and the reply sent from the connected test
+mailbox. The worker reads that mailbox: it picked up the reply the platform sent from it within seconds. An email
+with the notice attached, sent from outside, has not been walked on this app yet: sending to the test mailbox and
+reading its reply need its password, which is held only in Secrets.
 
 | What | State |
 |---|---|
-| Mail poller | The worker app (`<your-app>-worker`, started with `gateway=True`) reads every mailbox connected on Channels > Email |
-| Egress | `imap.gmail.com`, `smtp.gmail.com`, `outlook.office365.com`, `smtp.office365.com`, `graph.microsoft.com`, `login.microsoftonline.com` and the bank stand-in are allowed |
-| Ethereal | Staging's test mailbox (<https://ethereal.email>). `imap.ethereal.email` (IMAP 993) and `smtp.ethereal.email` (SMTP 587, STARTTLS) allowed on 2026-10-20 by `mailbox_demo.py egress`, read back from the allow-list. The owner creates the account and enters its address and password on Channels > Email; nobody else creates it or handles the password. The levy notice is sent to it through `smtp.ethereal.email`, and replies are read in Ethereal's web inbox. Not walked yet |
-| Platform tools | A production install has no dev seed, so no module held `send_reply` and the reply step failed with "tool send_reply is not registered with the gateway". tools-service now writes a tenant's Platform tools module (`mod_platform_tools`: `send_reply` and `open_case`, run in process, owned by the install's Security team) the first time a call or a grant list needs a platform tool no module holds (`ops_tools.modules.seed.ensure_platform_tools`). Staging's copy, written by hand on 2026-10-20 with the same id, is kept as it is |
-| Bank stand-in | `<your-app>-bank`, synthetic customers only, imported as tool module `mod_3a1fdc1ba8a4` (12 operations, version 2.0.0 published); holds wait for a person. `/openapi.json` answers 200 and `/customers` without the key answers 401 |
-| Document types | levy notice, restraining notice, tax levy, supplier invoice, bank statement |
-| Workflows | `levy_case`, `mail_document`, `levy_read_one` live; `mail_intake` (Mailed documents) and `levy_mail` saved as drafts until a mailbox is picked |
-| Model | Not checked. `deploy/fly/staging/apps.py` makes the fake model (`<your-app>-fake`) staging's only model connection; whether `default` and `extract` were rebound to OpenAI through the secret name `OPENAI_API_KEY` could not be read, since reading the aliases needs `deploy/fly/connect_model.py` on the agents machine and SSH into the staging Fly org is refused. On the fake model the reads answer from its committed rules and step 2 below is not needed |
-| Team | Everything is in the first team (Security): tools-service only knows the install's own team ids, so a team made on the Teams page cannot own the bank module yet |
-| People | The admin, and `approver@<your-app>.example` (an approver in Security, for the two-person publish reviews) |
-| Mailboxes | None connected. Channels > Email is empty, so the worker's listener has nothing to read |
+| Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed c-421), so the test account stays in Security |
+| Workflows | Security: `mail_intake` (Mailed documents) v2 live on the test mailbox, starting `mail_document` per attachment, which starts `levy_case` per debtor |
+| Demo team | Northfield Operations (`team_a0877a1d8907`): the garnishment notice type and the levy workflows `levy_document_a0877a1d` (Levy notice: read the document) and `levy_debtor_a0877a1d` (Levy notice: one debtor), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
+| Model | The read uses alias `extract`, or `default` when there is none. Staging has no `extract`, so `default` serves it: gpt-4.1-mini on OpenAI, key `OPENAI_API_KEY` in Secrets, through models-service key `purpose:documents` (cap 5 USD). One real model call per notice |
+| Bank stand-in | `<your-app>-bank`, its public URL; holds wait for a person. Its holds live in memory, so they last until the machine restarts: Marcus Bell's chequing account holds 2,140.55, so after one hold on it a second one fails. Restart it before a demo with `fly machine restart 185d5e7bd3d548 -a <your-app>-bank` (restarted after the last walk on 2026-10-20). The walk flags an account with nothing free |
+| Files | The PDFs uploaded before the move to one machine were copied from the stopped files app's volume on 2026-10-20, so the notice opens on the task page |
+| Egress | Gmail, Microsoft 365 (IMAP, SMTP, Graph and its sign-in), Ethereal and the bank stand-in are allowed |
 
-Before you start: a Gmail address with 2-step verification and an app password
-(<https://myaccount.google.com/apppasswords>), or a Microsoft 365 mailbox with IMAP and SMTP AUTH allowed; an OpenAI
-API key if the aliases point at OpenAI (see Model above); `services/agents-service/tests/fixtures/mailbox/levy_notice.pdf`. The admin's sign-in is in
-`~/.config/ops-ai/staging-admin.env`, the second person's (an approver) in `~/.config/ops-ai/staging-demo-people.env`.
+### Set a team up
 
-| # | Where | What you do | What you see |
-|---|---|---|---|
-| 1 | Sign in as the admin | | Overview |
-| 2 | Settings > Secrets | Only if the aliases point at OpenAI: add `OPENAI_API_KEY` (all teams) with your OpenAI key | The secret listed, value hidden |
-| 3 | Settings > Secrets | Add `DEMO_MAILBOX_PASSWORD` for Security with the app password | The secret listed |
-| 4 | Channels > Email > Connect mailbox | Gmail: your address and `DEMO_MAILBOX_PASSWORD`; replies by SMTP `smtp.gmail.com` port 587 with STARTTLS and the same secret (Microsoft 365: `outlook.office365.com` 993, `smtp.office365.com` 587). Test connection | Every test step passes, with your newest message's sender and subject |
-| 5 | Workflows > Mailed documents | Pick your mailbox in the Email received trigger, save, request publish | A publish review waits |
-| 6 | The second person, Human Tasks | Approve the publish review (a private window) | Mailed documents is live on your mailbox |
-| 7 | Your own mail app | Email `levy_notice.pdf` to your address | Within a minute: a run in Workflows > Runs, the PDF in Files |
-| 8 | Cases and Human Tasks | One case per debtor; a matched debtor waits on a "Levy notice" task (hold or flag) | The cases and tasks |
-| 9 | Human Tasks | Approve "Acknowledge the document" | The reply arrives in your inbox from your own address |
+`mailbox_demo.py levy` puts the levy story in a team: egress for the mail providers and the bank stand-in, the
+garnishment notice document type, and the levy workflows from `scripts/demo/team.json`, each published through the
+second person (who joins the team as an approver). With `--mailbox`, a mailbox already connected in the team, it also
+makes the email intake on that mailbox. Re-runnable: what exists is reported FOUND.
 
-Steps 5 and 6 can be done in one go instead:
-`uv run python deploy/fly/staging/mailbox_demo.py seed --origin https://<your-app>-web.fly.dev --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env --bank https://<your-app>-bank.fly.dev --bank-env ~/.config/ops-ai/staging-bank.env --mailbox <your address>`.
+```
+uv run python deploy/fly/staging/mailbox_demo.py levy --origin https://<your-app>-one.fly.dev \
+  --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
+  --team team_a0877a1d8907 [--mailbox <address connected in the team>]
+```
 
-If nothing arrives: `fly logs -a <your-app>-worker` names a mailbox the worker could not read, and the Activity
-page filtered to the mailbox shows the email and why it was skipped. Use one mailbox per Email received workflow: a
-mailbox bound to both Mailed documents and `levy_mail` starts both on every email.
+Walked in Northfield Operations on 2026-10-20 after a bank restart, every step PASS (`--upload`, no mailbox, so the
+acknowledgement is declined and the run ends `cases_opened`): document run `wfrun_8555bc8848e2`; `case_a38950954252`
+Marcus Bell, hold `HLD-7c4ac0` of 2,140.55 on `CHQ-2219`; `case_e3171dca2ac6` Priya Natarajan, hold `HLD-30152d` of
+12,400.00 on `BUS-7781`, both found at the bank; `case_e9f19b9569b7` Jordan Whitfield, no bank customer. Command:
+the upload walk below with `--team team_a0877a1d8907 --document-workflow levy_document_a0877a1d` and no `--mailbox`.
+
+### The walk
+
+`deploy/fly/staging/mailbox_demo.py walk` sets the mailbox up in a team as a person would (the secret usable by the
+team, the hosts on the egress list, Connect mailbox and Test connection, the team's Email received workflow pointed at
+it and published by a second person), sends the notice, and checks every step through the API, printing PASS or FAIL
+and exiting with the number of failures. It is re-runnable, and `--team` with `--intake-workflow` (and
+`--document-workflow` when the intake is new to the team) run it in any team. Without the mailbox password,
+`--upload` starts the document run from the uploaded notice instead of an email:
+
+```
+uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>-one.fly.dev \
+  --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
+  --mailbox <account>@ethereal.email --imap imap.ethereal.email:993 --smtp smtp.ethereal.email:587 \
+  --bank-env ~/.config/ops-ai/staging-bank.env --upload
+```
+
+With the password, the same command emails the notice through Ethereal and finds the reply over IMAP. The password is
+read from the environment, never from the command line or a file in the repo:
+
+```
+export DEMO_MAILBOX_PASSWORD=...   # the Ethereal account's password
+uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>-one.fly.dev \
+  --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
+  --mailbox <account>@ethereal.email --imap imap.ethereal.email:993 --smtp smtp.ethereal.email:587 \
+  --bank-env ~/.config/ops-ai/staging-bank.env \
+  --send-smtp smtp.ethereal.email:587 --send-user <account>@ethereal.email --read-imap imap.ethereal.email:993
+```
+
+Screenshots of the case, the task and the run, headless: `STG_ORIGIN=... STG_EMAIL=... STG_PASSWORD=... OUT=<dir>
+node deploy/fly/staging/mailbox_demo_shots.mjs cases/<case id> reviews/<run id>:review:1 workflows/runs/<run id>`.
+
+Walked with `--upload` on 2026-10-20, every step PASS: document run `wfrun_ae2d63cb7d1b`; cases `case_49a13613a105`
+(Marcus Bell, flagged: his chequing account was already held by the walk before), `case_747e1514a0d8` (Priya
+Natarajan, hold `HLD-307645` of 12,400.00 on `BUS-7781`, found at the bank) and `case_0206efee86de` (Jordan Whitfield,
+no bank customer); the reply sent from the test mailbox. Evidence: `.codeloop/evidence/406/`.
+
+### Connect your own mailbox
+
+Your mailbox goes straight into the demo team, Northfield Operations (`team_a0877a1d8907`); a mailbox stays in the
+team that connects it (c-421). Sign in to <https://<your-app>-one.fly.dev> as the admin
+(`~/.config/ops-ai/staging-admin.env`) and pick Northfield Operations in the team switcher, except where a step says
+Security. Keep `services/agents-service/tests/fixtures/mailbox/levy_notice.pdf` to hand. Before a demo, restart the
+bank stand-in (Bank stand-in above) so each matched debtor can be held.
+
+Gmail (IMAP and SMTP with an app password):
+
+| # | Where | What you do |
+|---|---|---|
+| 1 | <https://myaccount.google.com/apppasswords> | With 2-Step Verification on, create an app password named "Ops AI" and copy the 16 letters |
+| 2 | Security team, Settings > Secrets > Add secret | Name `OWNER_MAILBOX_PASSWORD`, the app password as its value, team Northfield Operations |
+| 3 | Northfield Operations, Channels > Email > Connect a mailbox | Gmail; a name; your address; App password `OWNER_MAILBOX_PASSWORD`; Send replies with SMTP, from your address, SMTP password `OWNER_MAILBOX_PASSWORD`. Test connection shows your newest subject; then Connect mailbox |
+| 4 | A terminal in the ops-ai repo | `mailbox_demo.py levy` as in "Set a team up", with `--mailbox <your address>`: it makes "Levy notices by email" (`levy_mail_intake_a0877a1d`) on your mailbox and publishes it through the second person |
+| 5 | Another mail account | Email `levy_notice.pdf` to your address. Within a minute: a run in Workflows > Runs and the PDF in Files |
+| 6 | Human Tasks | Each matched debtor's "Hold or flag": Hold, with the amount (up to what the account has free). Then "Send the acknowledgement": Approve. The reply reaches the account you sent from |
+
+Microsoft 365 (Microsoft Graph with an app registration; Exchange Online refuses basic sign-in over IMAP and SMTP, so an
+app password does not work there). The Graph mailbox is tested against a stand-in only and has not run against a real
+tenant (**unverified**):
+
+| # | Where | What you do |
+|---|---|---|
+| 1 | Microsoft Entra admin center > App registrations > New registration | Name it "Ops AI staging"; copy the Directory (tenant) id and the Application (client) id |
+| 2 | The registration > API permissions | Microsoft Graph, Application permissions: `Mail.Read` and `Mail.Send`; Grant admin consent. These reach every mailbox in the tenant unless an Exchange application access policy limits them to yours |
+| 3 | The registration > Certificates & secrets | New client secret; copy its value |
+| 4 | Security team, Settings > Secrets > Add secret | Name `OWNER_GRAPH_SECRET`, the client secret as its value, team Northfield Operations |
+| 5 | Northfield Operations, Channels > Email > Connect a mailbox | Microsoft 365; a name; your address; Microsoft tenant id; Client id; Client secret `OWNER_GRAPH_SECRET`; Send replies with Microsoft 365. Test connection, then Connect mailbox |
+| 6 | As for Gmail, steps 4 to 6 | Make the email intake on the mailbox, email the notice, decide the Human Tasks |
+
+If nothing arrives: the Activity page filtered to the mailbox lists each email and why one was skipped (an email
+with no attachment is skipped by Mailed documents), and `fly logs -a <your-app>-one` lines starting `[worker]` name
+a mailbox the worker could not read. One Email received workflow per mailbox: a mailbox bound to both Mailed
+documents and `levy_mail` starts both on every email.

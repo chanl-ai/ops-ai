@@ -1,6 +1,6 @@
 # Architecture overview
 
-Status: current, updated 2026-10-16. The owner's decided design is [system-overview](../../.codeloop/wiki/concepts/system-overview.md); ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The maintainers' decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); ADRs that it does not settle remain options.
 
 ## The rule
 
@@ -19,9 +19,9 @@ email-to-case workflow use the same five steps:
 
 The graph never knows which channel woke it; a channel adapter turns what arrives into steps 1 and 2.
 
-That is how the code runs today. In the owner's design, Ops AI is one platform in which agents and workflows are two
+That is how the code runs today. In the maintainers' design, Ops AI is one platform in which agents and workflows are two
 ways of running work: agents on their own run API, workflows on the `ops_engine` runner, both using the same shared
-services and the data and AI gateways ([system-overview](../../.codeloop/wiki/concepts/system-overview.md)).
+services and the data and AI gateways ([workflows and agents](../design/workflows/workflows-and-agents.md)).
 
 ## The system
 
@@ -87,7 +87,7 @@ The graphs behind each kind are listed in [runtime.md](runtime.md#graphs).
 | Simple workflow | Any channel input | None | Yes |
 | Complex workflow | A mailbox message, API call or schedule | Hours to days | Yes, mailbox on a fake source |
 
-Spec 14 describes the same three kinds on one interpreter ([runtime-service](../../.codeloop/wiki/concepts/runtime-service.md) §2). The
+Spec 14 describes the same three kinds on one interpreter ([inside the runtime](runtime.md) §2). The
 code runs them on LangGraph on PostgreSQL; workflows move to the `ops_engine` runner ([workflow-runner.md](workflow-runner.md)).
 
 ## What runs today and what is planned
@@ -107,11 +107,11 @@ code runs them on LangGraph on PostgreSQL; workflows move to the `ops_engine` ru
 
 | Topic | Spec or decision |
 |---|---|
-| Runtime service and its dependencies | [runtime-service](../../.codeloop/wiki/concepts/runtime-service.md) (written for Temporal, which the owner removed; the call shapes still apply) |
-| One agent turn | [agent-kernel](../../.codeloop/wiki/concepts/agent-kernel.md) |
-| Node catalogue and human steps | [interpreter-and-nodes](../../.codeloop/wiki/concepts/interpreter-and-nodes.md) |
-| Python layout, libraries, verify gate | [python-service-skeleton](../../.codeloop/wiki/concepts/python-service-skeleton.md) |
-| Sign-in and step-up | [sign-in-and-sessions](../../.codeloop/wiki/concepts/sign-in-and-sessions.md) |
+| Runtime service and its dependencies | [inside the runtime](runtime.md) (written for Temporal, which the maintainers removed; the call shapes still apply) |
+| One agent turn | [inside the runtime](runtime.md) |
+| Node catalogue and human steps | [workflow nodes](../design/workflows/workflow-nodes.md) |
+| Python layout, libraries, verify gate | [service map](service-map.md) |
+| Sign-in and step-up | [sign-in library](../packages/ops_signin/overview.md) |
 | Engine | [workflow-runner.md](workflow-runner.md); [ADR-0015](decisions/execution-engine-seam.md) and [ADR-0001](decisions/durable-execution-runtime.md), both superseded in part |
 | Fencing and timers | [ADR-0016](decisions/fencing-and-timers.md) |
 | Agent loop library | [ADR-0014](decisions/agent-loop-library.md) |

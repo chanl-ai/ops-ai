@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-096`. Service: `console`. Layers: ui.
 
-c-094, the owner's request: a person stands up knowledge without engineering help, every step in the console on the
+c-094, the maintainers' request: a person stands up knowledge without engineering help, every step in the console on the
 real stack. James creates a base, adds files and a page, watches them index, tests a question and retires the base.
 
 ## Preconditions

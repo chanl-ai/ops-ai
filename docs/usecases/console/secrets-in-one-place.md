@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-107`. Service: `console`. Layers: ui.
 
-c-093, the owner's feedback (Tools-5): secrets management and connectivity with tools. Settings > Secrets shows each
+c-093, the maintainers' feedback (Tools-5): secrets management and connectivity with tools. Settings > Secrets shows each
 tool secret with the operations that read it, rotates it for all of them at once, refuses a delete while one reads it,
 limits it to teams the gateway enforces, and lists the storage credentials files-service keeps beside them.
 

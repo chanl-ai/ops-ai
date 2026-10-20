@@ -59,8 +59,9 @@ class WorkerHost:
     leases: LeasePort
     events: EventPort
     checkpointer: Any
-    # Runs a block under a tenant (the host's context variable), as its loops do for a claimed thread.
-    tenant_scope: Callable[[str], AbstractContextManager[None]]
+    # Runs a claimed run's pass under the tenant its row names: the host's isolation context, entered with a named
+    # reason, as its loops do for a claimed thread.
+    run_scope: Callable[[str], AbstractContextManager[object]]
     owner: str
     concurrency: int = 4
     # Called with the run before its pass, inside the pass's own task: the host records the run's team, so what the
@@ -147,7 +148,7 @@ class Worker:
         """Each pass runs in its own task under the row's tenant, so two runs of different tenants never share one."""
 
         async def scoped() -> None:
-            with self.host.tenant_scope(work.tenant_id):
+            with self.host.run_scope(work.tenant_id):
                 await self._process(work)
 
         await asyncio.create_task(scoped())

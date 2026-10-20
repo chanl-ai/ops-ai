@@ -8,13 +8,18 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 
 from .base import metadata
 from .typed_records import RecordNotFound, VersionedRecords, head_columns, version_columns
 
-case_types = sa.Table("case_types", metadata, *head_columns(), info=TENANT_SCOPED)
-case_type_versions = sa.Table("case_type_versions", metadata, *version_columns(), info=TENANT_SCOPED)
+case_types = sa.Table("case_types", metadata, *head_columns(), info={**TENANT_SCOPED, **TEAM_OWNED})
+case_type_versions = sa.Table(
+    "case_type_versions",
+    metadata,
+    *version_columns(),
+    info={**TENANT_SCOPED, **team_owned_via("case_types", "type_id")},
+)
 
 
 class CaseTypeNotFound(RecordNotFound):

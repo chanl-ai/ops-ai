@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-101`. Service: `console`. Layers: ui.
 
-c-088, the owner's feedback (Tools-1): the tool side panel was too small, and its fields, secrets, mocks and transform
+c-088, the maintainers' feedback (Tools-1): the tool side panel was too small, and its fields, secrets, mocks and transform
 did not work well. An operation now opens on its own page, its definition on the left and a run on the right, and a run
 tries the draft mock and transform and a secret value typed for that run before anything is staged.
 

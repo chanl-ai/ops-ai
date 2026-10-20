@@ -29,10 +29,11 @@ ORDER = [
     "ops_pii",
     "ops_policy",
     "ops_service_kit",
+    # Below ops_identity, which enters each request's isolation context (ops_store.isolation, c-409).
+    "ops_store",
     "ops_identity",
     "ops_access",
     "ops_metering",
-    "ops_store",
     "ops_storage",
     "ops_ingest",
     "ops_extract",

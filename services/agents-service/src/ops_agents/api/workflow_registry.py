@@ -329,10 +329,19 @@ async def agent_pins(rt: Runtime) -> dict[str, PinnedAgent | None]:
     return out
 
 
+async def held(rt: Runtime, name: str) -> dict[str, Any] | None:
+    """The registry workflow `name` when the acting team holds it; None when no team does. Another team's answers 404,
+    never None: None means "a graph the registry does not hold", which the callers treat as open to the acting team."""
+    row = await registry(rt).find(name)
+    if row is None and await registry(rt).owner_team(name) is not None:
+        raise NotFound(f"Workflow {name}")
+    return row
+
+
 async def thread_pin(rt: Runtime, graph: str) -> int | None:
     """The version a new thread on `graph` starts on when the caller names none: the registry pointer. Refuses a
     paused or never-published workflow; None for a graph the registry does not hold."""
-    row = await registry(rt).find(graph)
+    row = await held(rt, graph)
     if row is None:
         return None
     if row["status"] == "deleted":

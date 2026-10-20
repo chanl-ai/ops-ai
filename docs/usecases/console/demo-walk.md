@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-140`. Service: `console` and every service behind it. Layers: ui.
 
-The owner demos the console on the shared stack. Each part of the demo used to be proven separately, so a page could be
+The maintainers demos the console on the shared stack. Each part of the demo used to be proven separately, so a page could be
 empty or broken on screen while its API test passed. This use case walks the whole demo in a browser on :3016, as a
 person would, and reports each part on its own.
 

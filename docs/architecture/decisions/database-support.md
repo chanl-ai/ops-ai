@@ -1,11 +1,11 @@
 # ADR-0017 Database support
 
-Status: decided by the owner, 2026-10-19 (epic c-337). Unlike ADR-0001 to ADR-0016, this one is not an option.
+Status: decided by the maintainers, 2026-10-19 (epic c-337). Unlike ADR-0001 to ADR-0016, this one is not an option.
 
 ## Context
 
 A bank installs Ops AI on the database it already licenses and runs. Until now only PostgreSQL ran, with MySQL 8 and
-Azure SQL named as planned. The owner chose SQL Server as Ops AI's own database beside PostgreSQL, so a bank that
+Azure SQL named as planned. The maintainers chose SQL Server as Ops AI's own database beside PostgreSQL, so a bank that
 standardises on SQL Server needs no PostgreSQL at all. The design and inventory are in
 [design/data/sql-server.md](../../design/data/sql-server.md).
 

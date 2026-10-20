@@ -8,7 +8,6 @@ for postgresql, mssql and sqlite (the unit tests' database); any other dialect i
   await conn.execute(insert_ignore(conn, t, row, keys=["id"]))    # insert unless a row with the same key exists
   await lock_key(conn, f"thread:{thread_id}")                     # one writer per key until the transaction ends
   t.c.due_at <= db_now(); db_epoch(); db_after(seconds)           # the database's clock, never the host's
-  async with tenant_tx(engine, tenant, role=...) as conn: ...     # the tenant the database isolates rows by
 
 `with_for_update()` alone renders nothing on SQL Server, so a lock taken that way vanishes there with no error; the
 portability check refuses it outside this package.
@@ -226,56 +225,16 @@ def _seconds(e: db_after) -> ColumnElement[Any]:
     return seconds  # pyright: ignore[reportReturnType]
 
 
-# Tenant transactions ----------------------------------------------------------------------------------------------
-
-TENANT_SETTING = "app.tenant_id"
-TENANT_CONTEXT = "tenant_id"
-
-
-async def enter_tenant(conn: AsyncConnection, tenant_id: str | None, *, role: str | None = None) -> None:
-    """Tells the database which tenant this transaction acts for, so its row-level security (PostgreSQL) or security
-    policy (SQL Server) shows that tenant's rows only; None shows none. PostgreSQL scopes both to the transaction;
-    SQL Server's session context outlives it, so `tenant_tx` clears it before the connection goes back to the pool."""
-    match dialect_of(conn):
-        case "postgresql":
-            if role:
-                await conn.execute(sa.text(f"SET LOCAL ROLE {_pg_role(role)}"))
-            await conn.execute(sa.select(sa.func.set_config(TENANT_SETTING, tenant_id or "", True)))
-        case "mssql":
-            await conn.execute(
-                sa.text("EXEC sp_set_session_context @key = :k, @value = :v"), {"k": TENANT_CONTEXT, "v": tenant_id}
-            )
-        case _:
-            return
-
-
-async def leave_tenant(conn: AsyncConnection) -> None:
-    if dialect_of(conn) == "mssql":
-        await conn.execute(sa.text("EXEC sp_set_session_context @key = :k, @value = NULL"), {"k": TENANT_CONTEXT})
-
-
-@asynccontextmanager
-async def tenant_tx(
-    engine: AsyncEngine, tenant_id: str | None, *, role: str | None = None
-) -> AsyncGenerator[AsyncConnection]:
-    """One transaction acting for `tenant_id`, with the tenant cleared when it ends however it ends."""
-    async with engine.connect() as conn:
-        try:
-            async with conn.begin():
-                await enter_tenant(conn, tenant_id, role=role)
-                yield conn
-        finally:
-            await leave_tenant(conn)
-            if conn.in_transaction():
-                await conn.commit()
+# Past the tenant ----------------------------------------------------------------------------------------------
 
 
 @asynccontextmanager
 async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGenerator[AsyncConnection]:
     """One transaction as `role`, which reads other tenants' rows of what it is granted, for work claimed before its
-    tenant is known. PostgreSQL switches to it (a BYPASSRLS role); SQL Server impersonates the database user of that
-    name (EXECUTE AS USER), which the read predicates pass and its grants limit, table by table and column by column
-    (deploy/database/mssql.py). The impersonation outlives the transaction, so it is reverted however it ends."""
+    tenant is known; callers go through `ops_store.isolation.system_tx`, which names and logs the reason. PostgreSQL
+    switches to it (a BYPASSRLS role); SQL Server impersonates the database user of that name (EXECUTE AS USER), which
+    the read predicates pass and its grants limit, table by table and column by column (deploy/database/mssql.py). The
+    impersonation outlives the transaction, so it is reverted however it ends."""
     async with engine.connect() as conn:
         impersonating = False
         try:
@@ -346,13 +305,10 @@ __all__ = [
     "db_epoch",
     "db_now",
     "dialect_of",
-    "enter_tenant",
     "full_text",
     "insert_ignore",
-    "leave_tenant",
     "lock_key",
     "locked",
     "system_tx",
-    "tenant_tx",
     "upsert",
 ]

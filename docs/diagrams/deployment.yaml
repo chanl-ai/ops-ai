@@ -1,0 +1,47 @@
+# The deployment view: one machine with Docker Compose behind one origin, against the bank's database and model.
+# Drawn by the docs site (apps/docs) and exported to deployment.svg with `pnpm --filter docs diagrams`.
+title: "Ops AI on one machine: Docker Compose behind one origin"
+width: 980
+bands:
+  - gap: 40
+    groups:
+      - id: people
+        label: "People and callers reach one origin: https://<OPS_PUBLIC_ORIGIN>"
+        style: muted
+        rows:
+          - boxes:
+              - { label: Browsers, note: console and embedded chat }
+              - { label: API and MCP clients, note: "keys or tokens, per team" }
+              - { label: Mailboxes, note: "Gmail, Microsoft 365, IMAP" }
+  - groups:
+      - id: vm
+        label: "The VM: Docker Compose, every image runs as uid 10001"
+        style: host
+        columns: 5
+        rows:
+          - boxes:
+              - { id: proxy, label: proxy, note: "Caddy :8080, the one origin" }
+              - { label: console, note: ":3016, /" }
+              - { label: platform, note: ":8710, /api/platform/" }
+              - { label: agents, note: ":8700, /api/agents/" }
+              - { label: worker, note: "workflow steps, no port" }
+              - { label: tools, note: ":8720, /api/tools/" }
+              - { id: models, label: models, note: ":8730, not routed" }
+              - { label: kb, note: ":8740, /api/kb/" }
+              - { label: files, note: ":8750, /api/files/" }
+              - { label: documents, note: ":8760, /api/documents/" }
+          - boxes:
+              - { label: opa, note: ":8181, tools only" }
+              - { label: migrate, note: "one-shot, before the rest" }
+  - groups:
+      - id: network
+        label: Your network
+        columns: 3
+        rows:
+          - boxes:
+              - { id: db, label: PostgreSQL 16+, note: "one login per service; Azure SQL planned", href: deploy/database.md }
+              - { id: model, label: Model endpoint, note: "any OpenAI-compatible URL" }
+              - { label: Bank systems, note: "reached by tools-service only" }
+links:
+  - { from: people, to: vm, label: HTTPS, fromX: 0.1, straight: true }
+  - { from: vm, to: network, label: "each service its own database login", fromX: 0.5, straight: true }

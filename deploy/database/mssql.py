@@ -7,8 +7,9 @@
 No server is needed. The baseline is compiled from each chain's store metadata (models.chain_metadata) with SQLAlchemy's
 mssql dialect, because 53 of the 150 PostgreSQL migrations hold SQL that cannot run on SQL Server; c-342 holds the
 metadata equal to what the migrations build. Each chain's baseline is stamped at its head, and only revisions after
-BASELINE render for SQL Server. Tenant isolation is a security policy per TENANT_SCOPED table, the SQL Server form of
-the forced row-level security those tables carry on PostgreSQL. Every file is a sqlcmd script (`sqlcmd -b -i`): GO
+BASELINE render for SQL Server. Isolation is a security policy per tenant-scoped table, generated from its markings by
+ops_store.schema.security_ddl (by tenant, or by tenant and team for a team-owned one), the SQL Server form of the
+forced row-level security those tables carry on PostgreSQL. Every file is a sqlcmd script (`sqlcmd -b -i`): GO
 ends each batch, since CREATE FUNCTION must open one.
 """
 
@@ -36,12 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
-from ops_store.schema import tenant_scoped
+from ops_store.schema import MSSQL_SECURITY, security_ddl
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "mssql"
 OFFLINE_URL = "mssql+aioodbc://offline:offline@localhost:1/offline"
 COLLATION = "Latin1_General_100_BIN2_UTF8"
-SECURITY = "ops_security"
+SECURITY = MSSQL_SECURITY
 # PostgreSQL's ops_runtime_system, the BYPASSRLS role agents-service's loops switch to before they know a thread's
 # tenant, as a database user without a login: ops_agents_runtime alone may impersonate it (EXECUTE AS USER in
 # ops_store.dialect.system_tx), and the agents read predicate passes every tenant for it. A row predicate cannot limit
@@ -192,50 +193,8 @@ def _sql(element: Any) -> str:
     return str(element.compile(dialect=dialect())).strip()
 
 
-def tenant_column(table: sa.Table) -> sa.Column[Any]:
-    """The column a TENANT_SCOPED table is isolated by: tenant_id, or a tenant table's own single-column key."""
-    if "tenant_id" in table.c:
-        return table.c.tenant_id
-    key = list(table.primary_key.columns)
-    if table.name == "tenants" and len(key) == 1:
-        return key[0]
-    raise Refused(f"{table.name} is TENANT_SCOPED but has no tenant_id column")
-
-
-def security(chain: str, tables: list[sa.Table]) -> list[str]:
-    """Two schema-bound predicate functions for the chain, and one security policy per TENANT_SCOPED table.
-
-    Reads see the tenant the transaction acts for (`ops_store.dialect.tenant_tx` sets SESSION_CONTEXT tenant_id); in
-    the agents chain they also pass every tenant for SYSTEM_USER, whose grants limit what it reads. Writes must be the
-    transaction's tenant. Nothing a login can set for itself opens other tenants' rows. A NULL or missing tenant
-    matches no row, so a connection used with no tenant sees nothing."""
-    marked = [t for t in tables if tenant_scoped(t)]
-    if not marked:
-        return []
-    kinds = {tenant_column(t).type.compile(dialect=dialect()) for t in marked}
-    if len(kinds) != 1:
-        raise Refused(f"{chain}: tenant columns of different types {sorted(kinds)}; one predicate cannot take them")
-    (kind,) = kinds
-    tenant = f"CAST(SESSION_CONTEXT(N'tenant_id') AS {kind})"
-    read, write = f"{SECURITY}.{chain}_tenant_read", f"{SECURITY}.{chain}_tenant_write"
-    out = [
-        f"IF SCHEMA_ID(N'{SECURITY}') IS NULL EXEC (N'CREATE SCHEMA {SECURITY} AUTHORIZATION dbo');",
-        f"CREATE FUNCTION {read} (@tenant_id {kind})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
-        f"SELECT 1 AS visible WHERE @tenant_id = {tenant}"
-        + (f" OR USER_NAME() = N'{SYSTEM_USER}';" if chain == SYSTEM_CHAIN else ";"),
-        f"CREATE FUNCTION {write} (@tenant_id {kind})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
-        f"SELECT 1 AS allowed WHERE @tenant_id = {tenant};",
-    ]
-    for t in marked:
-        col = tenant_column(t).name
-        out.append(
-            f"CREATE SECURITY POLICY {SECURITY}.{t.name}_tenant\n"
-            f"    ADD FILTER PREDICATE {read}({col}) ON dbo.{t.name},\n"
-            f"    ADD BLOCK PREDICATE {write}({col}) ON dbo.{t.name} AFTER INSERT,\n"
-            f"    ADD BLOCK PREDICATE {write}({col}) ON dbo.{t.name} AFTER UPDATE\n"
-            "    WITH (STATE = ON, SCHEMABINDING = ON);"
-        )
-    return out
+def _column_type(column: sa.Column[Any]) -> str:
+    return column.type.compile(dialect=dialect())
 
 
 # --- version tables -------------------------------------------------------------------------------------------------
@@ -316,7 +275,8 @@ def compile_all(
         for t in c.tables:
             statements.append(_sql(CreateTable(t)) + ";")
             statements += [_sql(CreateIndex(ix)) + ";" for ix in sorted(t.indexes, key=lambda x: str(x.name))]
-        statements += security(chain, c.tables)
+        system = SYSTEM_USER if chain == SYSTEM_CHAIN else None
+        statements += [f"{s};" for s in security_ddl(chain, c.tables, column_type=_column_type, system_user=system)]
         statements += stamped
         omitted = "".join(f"-- not on SQL Server yet: {o}\n" for o in c.omitted)
         body = f"-- {chain}-service, stamped at {head}\n" + omitted + batches(statements)

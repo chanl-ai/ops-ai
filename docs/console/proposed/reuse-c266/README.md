@@ -1,6 +1,6 @@
 # Start run, run and case pages: before and after c-266
 
-Status: proposed, waiting for the owner. Each image puts the screen before c-266 (left) beside it after (right), from
+Status: proposed, waiting for the maintainers. Each image puts the screen before c-266 (left) beside it after (right), from
 uc-228 on the same stack shape.
 
 | Screen | Changed pixels | Side by side |

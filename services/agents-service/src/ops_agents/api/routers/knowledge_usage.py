@@ -17,8 +17,9 @@ from fastapi.responses import JSONResponse
 from ops_access import can
 from ops_identity import CurrentTenantCaller
 from ops_service_kit.http import Envelope, Out
+from ops_store import isolation
 
-from ...store.tenancy import set_tenant
+from ...store.tenancy import USAGE_COUNTS
 from ..agent_registry import registry
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -41,22 +42,23 @@ class KnowledgeUsage(Out):
 
 @router.get("", response_model=Envelope[list[KnowledgeUsage]])
 async def knowledge_usage(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
-    set_tenant(caller.tenant_id)
     team = None if caller.kind == "service" else caller.team_id
     can(caller, "agents", "view", team=team, what="which agents cite a knowledge base")
     team_id = caller.team_id
     reg = registry(rt)
     named: dict[str, list[dict[str, Any]]] = {}
     elsewhere: dict[str, int] = {}
-    for row in await reg.rows():
-        version = row["published_version"] or row["version"]
-        spec: dict[str, Any] = (await reg.version(row["id"], version))["spec"]
-        collections: list[Any] = spec.get("collections") or []
-        for kb in dict.fromkeys(str(k) for k in collections):
-            # No team named: nobody is named, every agent is counted.
-            if team_id is not None and row["team_id"] == team_id:
-                named.setdefault(kb, []).append({"id": row["id"], "name": spec.get("name") or row["slug"]})
-            else:
-                elsewhere[kb] = elsewhere.get(kb, 0) + 1
+    # Every team's agents are read to count them; only the caller's team's are named below.
+    with isolation.tenant_wide(USAGE_COUNTS):
+        for row in await reg.rows():
+            version = row["published_version"] or row["version"]
+            spec: dict[str, Any] = (await reg.version(row["id"], version))["spec"]
+            collections: list[Any] = spec.get("collections") or []
+            for kb in dict.fromkeys(str(k) for k in collections):
+                # No team named: nobody is named, every agent is counted.
+                if team_id is not None and row["team_id"] == team_id:
+                    named.setdefault(kb, []).append({"id": row["id"], "name": spec.get("name") or row["slug"]})
+                else:
+                    elsewhere[kb] = elsewhere.get(kb, 0) + 1
     kbs = sorted({*named, *elsewhere})
     return ok([{"kbId": kb, "agents": named.get(kb, []), "elsewhere": elsewhere.get(kb, 0)} for kb in kbs])

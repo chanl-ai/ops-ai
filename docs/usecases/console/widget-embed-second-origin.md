@@ -7,7 +7,7 @@ origins. The console shows the page code for the embed loader (`/embed/v1.js`) w
 The intranet page loads it, its `getSession` trades the person's SSO token for a 15-minute session bound to that page's
 origin, and the person chats in the embed app's frame. A page on an origin the deployment does not list cannot start
 the chat. The first widget script, `/widget/v1.js`, answers 410 Gone since c-224.
-Design: [chat](../../../.codeloop/wiki/concepts/chat.md); server routes in c-117; interview: c-076 Q1-Q6.
+Design: [chat](../../console/chat.md); server routes in c-117; interview: c-076 Q1-Q6.
 
 ## Preconditions
 

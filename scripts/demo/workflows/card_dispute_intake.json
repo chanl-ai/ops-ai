@@ -1,0 +1,456 @@
+{
+ "schemaVersion": 2,
+ "id": "card_dispute_intake",
+ "name": "Card dispute intake",
+ "description": "A cardholder's dispute: find them, Dispute Desk checks it against the handbook, a case opens, and a person approves the provisional credit, which is noted on the case.",
+ "nodes": [
+  {
+   "id": "start",
+   "type": "ops.trigger.request",
+   "typeVersion": 1,
+   "name": "Dispute received",
+   "parameters": {
+    "inputSchema": {
+     "type": "object",
+     "required": [
+      "cardholder",
+      "ssnLast4",
+      "merchant",
+      "amount",
+      "reason"
+     ],
+     "properties": {
+      "cardholder": {
+       "type": "string"
+      },
+      "ssnLast4": {
+       "type": "string"
+      },
+      "merchant": {
+       "type": "string"
+      },
+      "amount": {
+       "type": "string"
+      },
+      "postedOn": {
+       "type": "string"
+      },
+      "cardType": {
+       "type": "string"
+      },
+      "reason": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "position": {
+    "x": 0,
+    "y": 200
+   }
+  },
+  {
+   "id": "search",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Find the cardholder",
+   "parameters": {
+    "operation": "search_customers",
+    "input": {
+     "query": "$.input.cardholder"
+    }
+   },
+   "position": {
+    "x": 260,
+    "y": 200
+   }
+  },
+  {
+   "id": "match",
+   "type": "ops.data.match",
+   "typeVersion": 1,
+   "name": "Is it them?",
+   "parameters": {
+    "item": {
+     "name": "$.input.cardholder",
+     "ssn_last4": "$.input.ssnLast4"
+    },
+    "candidates": "$.nodes.search.out",
+    "all": [
+     {
+      "left": "name",
+      "op": "equals",
+      "right": "name"
+     },
+     {
+      "left": "ssn_last4",
+      "op": "equals",
+      "right": "ssnLast4"
+     }
+    ]
+   },
+   "position": {
+    "x": 520,
+    "y": 200
+   }
+  },
+  {
+   "id": "accounts",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Their accounts",
+   "parameters": {
+    "operation": "list_accounts",
+    "input": {
+     "customer_id": "$.nodes.match.out.match.id"
+    }
+   },
+   "position": {
+    "x": 780,
+    "y": 200
+   }
+  },
+  {
+   "id": "assess",
+   "type": "ops.ai.agent",
+   "typeVersion": 1,
+   "name": "Check the dispute",
+   "parameters": {
+    "agent": "{agent:dispute}",
+    "prompt": "Assess this card dispute against the Card dispute handbook. Give the reason category, whether provisional credit is due, whether a team lead must approve it, and a two-sentence summary for the analyst. Answer with the schema.",
+    "input": {
+     "dispute": "$.input",
+     "accounts": "$.nodes.accounts.out"
+    },
+    "outputSchema": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "category",
+      "creditDue",
+      "leadApproval",
+      "summary"
+     ],
+     "properties": {
+      "category": {
+       "type": "string"
+      },
+      "creditDue": {
+       "type": "boolean"
+      },
+      "leadApproval": {
+       "type": "boolean"
+      },
+      "summary": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "position": {
+    "x": 1040,
+    "y": 200
+   }
+  },
+  {
+   "id": "case",
+   "type": "ops.action.openCase",
+   "typeVersion": 1,
+   "name": "Open the dispute case",
+   "parameters": {
+    "subject": "Card dispute: {$.input.merchant}, {$.input.amount} CAD",
+    "priority": "normal",
+    "customerId": "$.nodes.match.out.match.id",
+    "customerName": "$.nodes.match.out.match.name",
+    "fields": {
+     "merchant": "$.input.merchant",
+     "amount": "$.input.amount",
+     "reason": "$.input.reason",
+     "category": "$.nodes.assess.out.category",
+     "summary": "$.nodes.assess.out.summary"
+    }
+   },
+   "position": {
+    "x": 1300,
+    "y": 200
+   }
+  },
+  {
+   "id": "review",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Approve the provisional credit",
+   "parameters": {
+    "title": "Provisional credit of {$.input.amount} CAD for {$.input.cardholder}",
+    "summary": {
+     "dispute": "$.input",
+     "assessment": "$.nodes.assess.out",
+     "accounts": "$.nodes.accounts.out",
+     "caseId": "$.nodes.case.out.caseId"
+    },
+    "slaHours": 24
+   },
+   "position": {
+    "x": 1560,
+    "y": 200
+   }
+  },
+  {
+   "id": "note",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Note it on the case",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId",
+    "note": "Provisional credit of {$.input.amount} CAD approved by {$.nodes.review.out.by}."
+   },
+   "position": {
+    "x": 1820,
+    "y": 120
+   }
+  },
+  {
+   "id": "credited",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Credited",
+   "parameters": {
+    "outcome": "credited",
+    "output": "$.nodes.case.out"
+   },
+   "position": {
+    "x": 2080,
+    "y": 120
+   }
+  },
+  {
+   "id": "declined",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Declined",
+   "parameters": {
+    "outcome": "declined",
+    "output": "$.nodes.review.out"
+   },
+   "position": {
+    "x": 1820,
+    "y": 320
+   }
+  },
+  {
+   "id": "not_found",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Cardholder not found",
+   "parameters": {
+    "outcome": "cardholder_not_found",
+    "output": "$.nodes.match.out",
+    "result": "failed"
+   },
+   "position": {
+    "x": 780,
+    "y": 420
+   }
+  },
+  {
+   "id": "lookup_failed",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Lookup failed",
+   "parameters": {
+    "outcome": "lookup_failed",
+    "result": "failed"
+   },
+   "position": {
+    "x": 520,
+    "y": 420
+   }
+  },
+  {
+   "id": "failed",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Could not finish",
+   "parameters": {
+    "outcome": "failed",
+    "result": "failed"
+   },
+   "position": {
+    "x": 1300,
+    "y": 420
+   }
+  }
+ ],
+ "connections": [
+  {
+   "from": {
+    "node": "start",
+    "port": "payload"
+   },
+   "to": {
+    "node": "search",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "ok"
+   },
+   "to": {
+    "node": "match",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "refused"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "error"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "match",
+    "port": "matched"
+   },
+   "to": {
+    "node": "accounts",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "match",
+    "port": "none"
+   },
+   "to": {
+    "node": "not_found",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "ok"
+   },
+   "to": {
+    "node": "assess",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "refused"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "error"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "assess",
+    "port": "ok"
+   },
+   "to": {
+    "node": "case",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case",
+    "port": "opened"
+   },
+   "to": {
+    "node": "review",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "review",
+    "port": "reject"
+   },
+   "to": {
+    "node": "declined",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "note",
+    "port": "added"
+   },
+   "to": {
+    "node": "credited",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "assess",
+    "port": "error"
+   },
+   "to": {
+    "node": "failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case",
+    "port": "error"
+   },
+   "to": {
+    "node": "failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "note",
+    "port": "error"
+   },
+   "to": {
+    "node": "failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "review",
+    "port": "approve"
+   },
+   "to": {
+    "node": "note",
+    "port": "in"
+   }
+  }
+ ]
+}

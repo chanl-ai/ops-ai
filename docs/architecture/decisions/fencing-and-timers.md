@@ -1,14 +1,14 @@
 # ADR-0016 Fencing and timers
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal, so the Temporal adapter and the Temporal oracle in the recommendation no longer apply; fencing by lease generation carries into `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal, so the Temporal adapter and the Temporal oracle in the recommendation no longer apply; fencing by lease generation carries into `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
-[ADR-0015](execution-engine-seam.md) builds the LangGraph-on-PostgreSQL engine first: our own checkpointer (E0), per-thread leases with a heartbeat and a sweeper (E2), and a tool gateway that dedupes writes against an approval token (E3). Two problems remain, and the owner asked for them to be rethought against how others solve them.
+[ADR-0015](execution-engine-seam.md) builds the LangGraph-on-PostgreSQL engine first: our own checkpointer (E0), per-thread leases with a heartbeat and a sweeper (E2), and a tool gateway that dedupes writes against an approval token (E3). Two problems remain, and the maintainers asked for them to be rethought against how others solve them.
 
-**Fencing (E2b).** A worker that stalls (GC pause, network partition, SIGSTOP) loses its lease; the sweeper on another worker takes the thread over. The stalled worker then wakes and can still write a checkpoint, call the gateway, or write journal rows (E2 gotcha 3). Dedup in the gateway stops a second identical call; it does not stop a stale worker sending a different one (E3, row "Fencing"). the owner's question: do we fence a worker or a workflow?
+**Fencing (E2b).** A worker that stalls (GC pause, network partition, SIGSTOP) loses its lease; the sweeper on another worker takes the thread over. The stalled worker then wakes and can still write a checkpoint, call the gateway, or write journal rows (E2 gotcha 3). Dedup in the gateway stops a second identical call; it does not stop a stale worker sending a different one (E3, row "Fencing"). the maintainers' question: do we fence a worker or a workflow?
 
-**Timers (E5).** LangGraph has no durable timers. E5 built a `timers` table and an in-process poller, and it works (9 tests, median latency 0.46 s at a 1 s poll). the owner's idea: reduce a timer to an external call to our own fire endpoint, so the poller is one scheduler among several.
+**Timers (E5).** LangGraph has no durable timers. E5 built a `timers` table and an in-process poller, and it works (9 tests, median latency 0.46 s at a 1 s poll). the maintainers' idea: reduce a timer to an external call to our own fire endpoint, so the poller is one scheduler among several.
 
 **Oracle.** Should we bring Temporal in now to expose gaps in our LangGraph durability, given that the Temporal adapter of ADR-0015 is not built?
 
@@ -173,7 +173,7 @@ Days are estimates for one engineer.
 | | Cap retries of a breach resume that keeps failing (E5 gotcha), then journal it for manual handling |
 | | Test: a duplicate and an early external `fire` both do nothing |
 
-## Open questions for the owner
+## Open questions for the maintainers
 
 1. Fence check in the gateway: read the shared lease table, or keep its own highest-seen generation? Default: its own, so the gateway stays deployable apart.
 2. May a deployment use an external scheduler (Cloud Tasks, EventBridge) at all? Default: not until one asks; the poller is the only scheduler shipped.

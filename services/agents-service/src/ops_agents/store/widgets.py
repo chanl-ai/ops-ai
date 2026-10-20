@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED, team_owned_via
 from ops_store.search import contains
+from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
@@ -38,6 +40,7 @@ registry_widgets = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
+    info=TEAM_OWNED,
 )
 
 registry_widget_versions = sa.Table(
@@ -53,6 +56,7 @@ registry_widget_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
+    info=team_owned_via("registry_widgets", "widget_id"),
 )
 
 LABELS = {"name": "name", "useWhen": "use-when line", "tree": "layout", "dataSchema": "data schema", "sample": "sample"}
@@ -74,7 +78,13 @@ class WidgetRegistry:
         async with self.engine.connect() as c:
             return [
                 dict(r)
-                for r in (await c.execute(sa.select(registry_widgets).order_by(registry_widgets.c.id))).mappings()
+                for r in (
+                    await c.execute(
+                        sa.select(registry_widgets)
+                        .where(team_visible(registry_widgets))
+                        .order_by(registry_widgets.c.id)
+                    )
+                ).mappings()
             ]
 
     async def page(self, teams: list[str] | None, search: str, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -82,7 +92,7 @@ class WidgetRegistry:
         OFFSET run in the query."""
         q = (
             sa.select(registry_widgets)
-            .where(self._matches(teams, search))
+            .where(self._matches(teams, search), team_visible(registry_widgets))
             .order_by(sa.func.lower(registry_widgets.c.name), registry_widgets.c.id)
         )
         async with self.engine.connect() as c:
@@ -96,17 +106,24 @@ class WidgetRegistry:
         t = registry_widgets.c
         scope = sa.true() if teams is None else t.team_id.in_(teams)
         if ids is not None:
-            q = sa.select(registry_widgets).where(scope, t.id.in_(ids))
+            q = sa.select(registry_widgets).where(scope, t.id.in_(ids), team_visible(registry_widgets))
         else:
             q = sa.select(registry_widgets).where(
-                self._matches(teams, search), t.published_version.is_not(None), t.retired_reason.is_(None)
+                self._matches(teams, search),
+                t.published_version.is_not(None),
+                t.retired_reason.is_(None),
+                team_visible(registry_widgets),
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def count(self, teams: list[str] | None, search: str) -> int:
-        q = sa.select(sa.func.count()).select_from(registry_widgets).where(self._matches(teams, search))
+        q = (
+            sa.select(sa.func.count())
+            .select_from(registry_widgets)
+            .where(self._matches(teams, search), team_visible(registry_widgets))
+        )
         async with self.engine.connect() as c:
             return int((await c.execute(q)).scalar_one())
 
@@ -115,8 +132,18 @@ class WidgetRegistry:
         named = contains(registry_widgets.c.name, search)
         return named if teams is None else sa.and_(named, registry_widgets.c.team_id.in_(teams))
 
+    async def owner_team(self, widget_id: str) -> str | None:
+        """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
+        owning team, never for showing the record."""
+        q = sa.select(registry_widgets.c.team_id).where(
+            registry_widgets.c.id == widget_id, any_team(registry_widgets, "the owning team a refusal is decided on")
+        )
+        async with self.engine.connect() as c:
+            team = (await c.execute(q)).scalar()
+        return str(team) if team else None
+
     async def find(self, widget_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_widgets).where(registry_widgets.c.id == widget_id)
+        q = sa.select(registry_widgets).where(registry_widgets.c.id == widget_id, team_visible(registry_widgets))
         if c is not None:
             r = (await c.execute(q)).mappings().first()
         else:
@@ -133,7 +160,9 @@ class WidgetRegistry:
     async def version(self, widget_id: str, version: int) -> dict[str, Any] | None:
         async with self.engine.connect() as c:
             q = sa.select(registry_widget_versions).where(
-                registry_widget_versions.c.widget_id == widget_id, registry_widget_versions.c.version == version
+                registry_widget_versions.c.widget_id == widget_id,
+                registry_widget_versions.c.version == version,
+                team_visible(registry_widget_versions),
             )
             r = (await c.execute(q)).mappings().first()
             return dict(r) if r else None
@@ -142,7 +171,7 @@ class WidgetRegistry:
         async with self.engine.connect() as c:
             q = (
                 sa.select(registry_widget_versions)
-                .where(registry_widget_versions.c.widget_id == widget_id)
+                .where(registry_widget_versions.c.widget_id == widget_id, team_visible(registry_widget_versions))
                 .order_by(registry_widget_versions.c.version.desc())
             )
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -150,7 +179,11 @@ class WidgetRegistry:
     async def create(self, widget_id: str, content: dict[str, Any], *, team_id: str, by: str) -> None:
         at = now_iso()
         async with self.engine.begin() as c:
-            if await self.find(widget_id, c) is not None:
+            taken = sa.select(registry_widgets.c.id).where(
+                registry_widgets.c.id == widget_id,
+                any_team(registry_widgets, "a widget id is unique across every team"),
+            )
+            if (await c.execute(taken)).first() is not None:
                 raise Conflict(f"A widget with id {widget_id} exists; rename it.", code="widget_taken")
             await c.execute(
                 registry_widgets.insert().values(
@@ -182,7 +215,9 @@ class WidgetRegistry:
         async with self.engine.begin() as c:
             n = int((await self.row(widget_id, c))["version"])
             q = sa.select(registry_widget_versions).where(
-                registry_widget_versions.c.widget_id == widget_id, registry_widget_versions.c.version == n
+                registry_widget_versions.c.widget_id == widget_id,
+                registry_widget_versions.c.version == n,
+                team_visible(registry_widget_versions),
             )
             newest = (await c.execute(q)).mappings().one()
             values = {"content": content, "digest": digest_of(content), "saved_at": at, "saved_by": by}

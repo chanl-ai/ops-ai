@@ -155,20 +155,23 @@ walk
 echo "proof: 8. least privilege"
 probe() {
   out=$(PGPASSWORD="$(pw "$1")" psql "$(db "$1" "${PROBE_DB:-ops}")" -q -c "$2" 2>&1) && fail "$1 ran: $2"
+  echo "$out" | grep -qE 'permission denied|must be owner' || fail "$1 failed for another reason: $2 -> $out"
   echo "proof: $1 refused in ${PROBE_DB:-ops}: $2 -> $(echo "$out" | head -1)"
 }
 probe ops_agents_runtime "CREATE TABLE ddl_probe (id int)"
 probe ops_agents_runtime "DROP TABLE graph_threads"
-probe ops_platform_runtime "ALTER TABLE platform_users ADD COLUMN ddl_probe int"
-probe ops_models_runtime "SELECT count(*) FROM platform_users"
+probe ops_platform_runtime "ALTER TABLE api_keys ADD COLUMN ddl_probe int"
+probe ops_models_runtime "SELECT count(*) FROM api_keys"
 docker exec $PG psql -q -U postgres -d ops -At -c "SELECT DISTINCT usename || ' superuser=' || usesuper FROM pg_stat_activity JOIN pg_user USING (usename) WHERE datname = 'ops' AND pid <> pg_backend_pid() ORDER BY 1" | sed 's/^/proof: connected: /'
 PGPASSWORD="$ADMIN_PW" psql -v ON_ERROR_STOP=1 "$ADMIN" -q -c "CREATE DATABASE ops_empty OWNER ops_migrator"
 out=$($C run --rm -T --no-deps -e OPS_DATABASE_URL="$(dsn ops_models_runtime ops_empty)" models 2>&1) && fail "models-service started on a database without its schema"
 echo "proof: models-service refused a database without its schema: $(echo "$out" | grep -i 'schema' | tail -1 | cut -c1-200)"
 
-echo "proof: 9. db/azure-sql against the golden files at $COMMIT"
+# The schema tool adds one line naming the commit ("-- At <sha> (<short>)."), which the golden files leave out.
+echo "proof: 9. db/azure-sql against the golden files at $COMMIT, without the line naming the commit"
 for f in 01-agents.sql 02-tools.sql 03-models.sql 04-kb.sql 05-platform.sql 06-files.sql 07-documents.sql roles.sql grants.sql; do
-  ours=$(shasum -a 256 <"db/azure-sql/$f" | cut -c1-64)
+  grep -q "^-- At $COMMIT (" "db/azure-sql/$f" || fail "db/azure-sql/$f does not name $COMMIT"
+  ours=$(grep -v "^-- At $COMMIT (" "db/azure-sql/$f" | shasum -a 256 | cut -c1-64)
   golden=$(git -C "$ROOT" show "$COMMIT:deploy/database/golden/mssql/$f" | shasum -a 256 | cut -c1-64)
   [ "$ours" = "$golden" ] || fail "db/azure-sql/$f differs from the golden file"
   echo "proof: db/azure-sql/$f = golden $golden"

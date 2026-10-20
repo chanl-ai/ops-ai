@@ -1,0 +1,65 @@
+# The component map: who calls Ops AI, the services, and what they reach outside.
+# Drawn by the docs site (apps/docs) and exported to component-map.svg with `pnpm --filter docs diagrams`.
+title: "Ops AI components: callers, services and what they reach"
+width: 980
+bands:
+  - gap: 40
+    groups:
+      - id: callers
+        label: Callers
+        note: every call carries a person's token, an API key or a service token, and a team
+        style: muted
+        rows:
+          - boxes:
+              - { label: Console, note: "people: build, run, decide", href: console/page-plan.md }
+              - { label: Embedded chat, note: on a bank's intranet page, href: console/embedding-the-chat.md }
+              - { label: Mailbox, note: "email in, replies out", href: architecture/channels-and-deployments.md }
+              - { label: API and MCP clients, note: "scripts, assistants", href: architecture/api.md }
+  - groups:
+      - id: agents
+        label: agents-service
+        note: runs every agent turn and every workflow step
+        span: 2
+        rows:
+          - boxes:
+              - { label: Agents and chat, note: "kernel, threads, runs, budgets", href: architecture/runtime.md }
+              - { label: Workflow runner, note: "ops_engine: journal, queue, workers", href: architecture/workflow-runner.md }
+          - boxes:
+              - { label: Channels, note: "mailbox, widget, MCP, API", href: architecture/channels-and-deployments.md }
+              - { label: Reviews and Cases, note: "decisions; ops_hitl planned", href: architecture/human-in-the-loop.md }
+      - id: platform
+        label: platform-service
+        note: the only issuer of identity tokens
+        rows:
+          - boxes:
+              - { label: Identity, note: "sign-in, teams, roles, audit", href: services/platform-service/overview.md }
+          - boxes:
+              - { label: API keys, note: "and the public keys (JWKS)", href: architecture/identity-and-tenancy.md }
+  - groups:
+      - id: shared
+        label: "Shared services: one database chain each, called through typed clients"
+        style: new
+        columns: 5
+        rows:
+          - boxes:
+              - { id: tools, label: tools-service, note: data gateway, href: services/tools-service/overview.md }
+              - { id: models, label: models-service, note: AI gateway, href: services/models-service/overview.md }
+              - { label: kb-service, note: knowledge, href: services/kb-service/overview.md }
+              - { label: files-service, note: file bytes, href: services/files-service/overview.md }
+              - { label: documents-service, note: what a file says, href: services/documents-service/overview.md }
+  - groups:
+      - id: outside
+        label: Outside the platform
+        style: host
+        columns: 4
+        rows:
+          - boxes:
+              - { label: Bank systems, note: "OpenAPI and MCP, test and live" }
+              - { label: Model providers, note: "OpenAI-compatible, by alias" }
+              - { label: PostgreSQL or SQL Server, note: "row security per tenant", href: deploy/database.md }
+              - { label: OPA, note: "tool policy, beside tools-service" }
+links:
+  - { from: callers, to: agents, label: "runs, chats, decisions", fromX: 0.33, straight: true }
+  - { from: agents, to: shared, label: "every tool and model call", fromX: 0.5, straight: true }
+  - { from: tools, to: outside, label: "approval token per write", fromX: 0.5, straight: true }
+  - { from: models, to: outside, label: "key and budget per caller", fromX: 0.5, straight: true }

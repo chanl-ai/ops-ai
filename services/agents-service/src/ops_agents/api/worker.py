@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from contextlib import AsyncExitStack
+from contextlib import AbstractContextManager, AsyncExitStack
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,8 @@ from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings, require_keys
+from ops_store import isolation
+from ops_store.isolation import Isolation
 from ops_store.schema_version import require_current_schema
 
 from ..store.cases import CaseStore
@@ -35,7 +37,7 @@ from ..store.events import EventLog
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
-from ..store.tenancy import set_team, tenant_scope
+from ..store.tenancy import ENGINE_PASS
 from .ai_steps_gate import RunTeamRules
 from .app import instance_owner, required_client, service_client
 from .email_trigger import EmailTriggers
@@ -146,7 +148,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             leases=ThreadLeases(leases),
             events=RunEvents(EventLog(db)),
             checkpointer=saver,
-            tenant_scope=tenant_scope,
+            run_scope=engine_pass,
             owner=owner,
             concurrency=settings.engine_concurrency,
             enter_run=enter_run,
@@ -168,10 +170,16 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
     log.info("engine_worker_stopped", owner=owner)
 
 
+def engine_pass(tenant_id: str) -> AbstractContextManager[Isolation]:
+    """A claimed run's pass, in the tenant its row names, for every team until `enter_run` names the run's."""
+    return isolation.tenant_wide(ENGINE_PASS, tenant_id=tenant_id)
+
+
 def enter_run(run: dict[str, Any]) -> None:
     """The run's team for its pass, so a tool call's service token names it as a person's request would. Each pass is
-    its own task, so the team set here is that run's alone."""
-    set_team(run.get("team_id") or None)
+    its own task, so the team set here is that run's alone; a run with no team stays tenant-wide."""
+    if team := run.get("team_id"):
+        isolation.enter(isolation.tenant(), str(team), kind="worker")
 
 
 def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: AsyncExitStack) -> EmailTriggers | None:

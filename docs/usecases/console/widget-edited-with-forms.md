@@ -5,7 +5,7 @@ Status: current. Id: `uc-103`. Service: `console`. Layers: ui. Card: c-110.
 A widget's data fields, sample data and layout are edited with forms: a fields table, one input per field for the
 sample, and the layout as nested blocks whose values are fixed or taken from a data field. JSON stays as the advanced
 view. Limits written in JSON, such as a maximum length, survive a form edit. Design:
-[chat widgets](../../../.codeloop/wiki/concepts/chat-widgets.md).
+[chat widgets](../../console/chat.md).
 
 ## Preconditions
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "pnpm build",
+  "outputDirectory": "out",
+  "cleanUrls": true,
+  "redirects": [{ "source": "/", "destination": "/docs", "permanent": false }],
+  "rewrites": [
+    { "source": "/docs", "destination": "/index.html" },
+    { "source": "/docs/:path*", "destination": "/:path*" }
+  ]
+}

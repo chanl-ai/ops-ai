@@ -23,6 +23,7 @@ from ops_service_kit.http import (
     ok,
 )
 from ops_service_kit.settings import Settings
+from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
 from .files import FileIntake, file_intake
@@ -73,6 +74,9 @@ async def who(p: CurrentCaller) -> Who:
     with a token scoped to one team (c-180); like any service it needs `knowledge:view` even to read."""
     if p.kind == "service":
         can(p, "knowledge", "view", what="knowledge")
+    # A person, key or dev caller reads as the team it acts in (c-407); a service reads the tenant's, as
+    # knowledge_reader says.
+    set_acting_team(acting_team_of(p, services=False))
     return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p)
 
 
@@ -87,6 +91,7 @@ async def knowledge_reader(p: CurrentTenantCaller) -> Who:
         can(p, "knowledge", "view", what="knowledge")
     else:
         can(p, "knowledge", "view", team=p.team_id, what="knowledge")
+    set_acting_team(acting_team_of(p, services=False))
     return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p)
 
 

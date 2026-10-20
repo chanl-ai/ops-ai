@@ -24,7 +24,7 @@ Every step happens in the console as a named person. No step needs a direct API 
 | Create, edit, delete | Builder | Built (c-027: call shape, transform, timeout; staged until publish) | Unchanged |
 | Access classes | Builder | Read, Write and "Moves money" | **Read and Write only.** How many approvers a write needs is set on the operation (see "Write approval"), not implied by a class |
 | Security review | Owner requests, Security decides | Built (c-040) | Unchanged |
-| Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The owner tries any operation of their own module without a workflow approval. Reads run for real. Writes answer from the stub |
+| Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval. Reads run for real. Writes answer from the stub |
 | Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team except the requester decides |
 | Grant to an agent | Builder | Built (c-048 G1): the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |
@@ -64,7 +64,7 @@ The chat widget and the Reviews row decide the same review through the same deci
 | Access is Read or Write; approval needs are a per-operation policy | Most workflows here are back office, so a money class assumed customer-facing flows. How strict a write is belongs to the operation, not a fixed class |
 | Access is pre-set from the HTTP method and confirmed by the builder | Every operation as Write made a builder untick every read. Confirmation keeps the old safeguard that a name proves nothing |
 | No separate connection record | The module already holds the endpoint and secret headers. A second record was a mock with no service behind it |
-| The owner can try a module without a workflow approval | Testing your own module is not a workflow's call, and writes stay on the stub |
+| The maintainers can try a module without a workflow approval | Testing your own module is not a workflow's call, and writes stay on the stub |
 | Chat approvals appear in Reviews | A second approver should not need the requester to send them a chat link |
 | Adding a `{{SECRET}}` header is a major change and goes to Security | A new secret widens what the module can reach; only Security reviews that |
 | Self-approval is off outside dev | One person placing and approving a hold is no review. Dev keeps it on so a single builder can walk the path |

@@ -1,6 +1,6 @@
 # A mixed levy email is read by kind
 
-Status: passing (2026-10-19). Id: `uc-246`. Service: `agents-service`. Layers: ui. The levy demo (owner's plan, 2026-10-18).
+Status: passing (2026-10-19). Id: `uc-246`. Service: `agents-service`. Layers: ui. The levy demo (2026-10-18).
 
 One email carries levy documents of different kinds. `levy_mail` reads each attachment in its own run of
 `levy_read_one`, in parallel: the kind is detected (Extract with Detect), a doubtful read waits for a person, each kind

@@ -129,7 +129,7 @@ async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[ht
         leases=ThreadLeases(Leases(engine, owner=owner, ttl=6.0)),
         events=RunEvents(EventLog(engine)),
         checkpointer=InMemorySaver(),
-        tenant_scope=tenant_scope,
+        run_scope=tenant_scope,
         owner=owner,
         enter_run=enter_run,
     )

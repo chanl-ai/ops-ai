@@ -126,7 +126,7 @@ with `--base-url http://<your-app>-fake.internal:8746/v1`.
 
 | Item | State |
 |---|---|
-| Files uploaded before the move | Their bytes sit on `<your-app>-files`' volume; their rows show, and a download fails until the bytes are copied |
+| Files uploaded before the move | Copied on 2026-10-20 (c-406): `<your-app>-files` started, `/data/files/objects` tarred out over `fly ssh`, unpacked into the machine's `/data/files` without overwriting, the old machine stopped again. Before the copy their downloads answered 502 |
 | One process for the Python services | Research: `.codeloop/specs/387-staging-runs-from-one-image-on-one-fly-m/research-process-layout.md` |
 | Outgoing mail | `OPS_MAIL_PROVIDER=none` |
 | The embed app | Not in the image |

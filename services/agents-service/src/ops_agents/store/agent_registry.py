@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import canonical_json, new_id, now_iso
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
@@ -36,6 +37,7 @@ registry_agents = sa.Table(
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
     sa.Column("template_id", sa.String(120), index=True),
     sa.Column("protection", sa.String(16)),
+    info=TEAM_OWNED,
 )
 
 registry_agent_versions = sa.Table(
@@ -52,6 +54,7 @@ registry_agent_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
+    info=team_owned_via("registry_agents", "agent_id"),
 )
 
 publish_requests = sa.Table(
@@ -165,11 +168,24 @@ class AgentRegistry:
                 await c.execute(registry_agents.update().where(registry_agents.c.id == agent_id).values(**values))
 
     async def rows(self) -> list[dict[str, Any]]:
+        """The acting team's agents (every agent with no acting team: a loop or the dev header caller)."""
+        q = sa.select(registry_agents).where(team_visible(registry_agents))
         async with self.engine.connect() as c:
-            return [dict(r) for r in (await c.execute(sa.select(registry_agents))).mappings()]
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def owner_team(self, agent_id: str) -> str | None:
+        """The team that owns an agent, whoever is acting; None when there is no such agent. Only for deciding a
+        refusal by the owning team, never for showing the agent."""
+        q = sa.select(registry_agents.c.team_id).where(
+            registry_agents.c.id == agent_id, any_team(registry_agents, "the owning team a refusal is decided on")
+        )
+        async with self.engine.connect() as c:
+            team = (await c.execute(q)).scalar()
+        return str(team) if team else None
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
-        q = sa.select(registry_agents).where(registry_agents.c.id == agent_id)
+        """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
+        q = sa.select(registry_agents).where(registry_agents.c.id == agent_id, team_visible(registry_agents))
         if lock:
             q = q.with_for_update()
         if c is None:
@@ -184,7 +200,7 @@ class AgentRegistry:
     async def versions(self, agent_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_agent_versions)
-            .where(registry_agent_versions.c.agent_id == agent_id)
+            .where(registry_agent_versions.c.agent_id == agent_id, team_visible(registry_agent_versions))
             .order_by(registry_agent_versions.c.version.desc())
         )
         async with self.engine.connect() as c:
@@ -192,7 +208,9 @@ class AgentRegistry:
 
     async def version(self, agent_id: str, version: int) -> dict[str, Any]:
         q = sa.select(registry_agent_versions).where(
-            registry_agent_versions.c.agent_id == agent_id, registry_agent_versions.c.version == version
+            registry_agent_versions.c.agent_id == agent_id,
+            registry_agent_versions.c.version == version,
+            team_visible(registry_agent_versions),
         )
         async with self.engine.connect() as c:
             r = (await c.execute(q)).mappings().first()
@@ -204,7 +222,9 @@ class AgentRegistry:
         """A version's spec when it was published at some point, so a deployment pinned to it keeps serving it after a
         newer version goes live (c-117); None for a draft or an unknown version. Chat and widgets read pins here."""
         q = sa.select(registry_agent_versions.c.spec, registry_agent_versions.c.published_at).where(
-            registry_agent_versions.c.agent_id == agent_id, registry_agent_versions.c.version == version
+            registry_agent_versions.c.agent_id == agent_id,
+            registry_agent_versions.c.version == version,
+            team_visible(registry_agent_versions),
         )
         async with self.engine.connect() as c:
             r = (await c.execute(q)).first()
@@ -224,7 +244,12 @@ class AgentRegistry:
         taken = {
             str(s)
             for s in (
-                await c.execute(sa.select(registry_agents.c.slug).where(registry_agents.c.slug.like(f"{base}%")))
+                await c.execute(
+                    sa.select(registry_agents.c.slug).where(
+                        registry_agents.c.slug.like(f"{base}%"),
+                        any_team(registry_agents, "a slug is unique across every team"),
+                    )
+                )
             ).scalars()
         }
         n, slug = 2, base
@@ -292,7 +317,11 @@ class AgentRegistry:
             # same newest version, both open the next one, and the second fails on the version key.
             row = await self.row(agent_id, c, lock=True)
             n = int(row["version"])
-            newest = (await c.execute(sa.select(v).where(v.c.agent_id == agent_id, v.c.version == n))).mappings().one()
+            newest = (
+                (await c.execute(sa.select(v).where(v.c.agent_id == agent_id, v.c.version == n, team_visible(v))))
+                .mappings()
+                .one()
+            )
             asked = (
                 await c.execute(
                     sa.select(publish_requests.c.id).where(

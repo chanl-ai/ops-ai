@@ -12,12 +12,12 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.schema import TENANT_SCOPED
 from ops_store.search import contains
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_scope, tenant_tx
+from .tenancy import MAIL_LISTENER, current_tenant, tenant_tx
 
 Provider = Literal["gmail", "imap", "graph"]
 Sender = Literal["none", "smtp", "resend", "graph"]
@@ -137,7 +137,7 @@ class MailboxStore:
         listener, which acts outside a request, sees no other tenant's mailbox."""
         t = mailboxes
         q = t.select().where(t.c.tenant_id == tenant_id, sa.func.lower(t.c.address) == address.lower())
-        with tenant_scope(tenant_id):
+        with isolation.tenant_wide(MAIL_LISTENER, tenant_id=tenant_id):
             async with tenant_tx(self.engine) as c:
                 r = (await c.execute(q)).mappings().first()
         return _row(r) if r else None

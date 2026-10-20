@@ -83,6 +83,10 @@ def main() -> int:
         base_url, key_ref, model_id = (FAKE, None, alias) if to_fake else (OPENAI, KEY_REF, model)
         found = m.get(f"/v1/models/aliases/{alias}/versions")
         created = found.status_code == 404 and not to_fake
+        if found.status_code == 404 and to_fake:
+            # A fresh database has only the seeded aliases; one that does not exist serves nothing to move.
+            print(f"alias {alias}: none on this stack, nothing to point at the fake")
+            return 0
         if created:
             # A new alias (guardrail-check, for the guardrail checks) starts on the runtime alias's clearance; `default`
             # is the one every dev seed has.

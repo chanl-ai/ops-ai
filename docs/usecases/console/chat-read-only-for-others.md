@@ -18,7 +18,7 @@ Status: current. Id: `uc-058`. Service: `console`. Layers: ui.
 | 2 | Maya, a teammate, reads `/chat/threads/<thread>` and opens `/chat/<thread>` | 404 from agents-service; the page shows none of James's messages |
 | 3 | James opens the same thread | he reads it and the message box is there |
 
-Chat reads are owner only: the owner decided it on 2026-10-17 (c7ebccb), replacing the read-only view for teammates
+Chat reads are owner only: the maintainers decided it on 2026-10-17 (c7ebccb), replacing the read-only view for teammates
 this use case first proved (c-048 T021). A review decided from a chat keeps the team rule (c-122).
 
 ## Acceptance layers

@@ -14,9 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.api.auth import Principal
 from ops_agents.api.routers.engine import visible_run
 from ops_agents.store.engine import EngineTransactions
-from ops_agents.store.tenancy import set_team, tenant_scope
+from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_engine.store import DefinitionStore, RunStore, WorkflowOwnedError
 from ops_service_kit.errors import NotFound
+from ops_store import isolation
 
 # The dev header caller, which decides for any team.
 B = Principal(name="b@x", email="b@x", team_id="team_ops", tenant_id="local")
@@ -44,14 +45,10 @@ async def test_another_teams_workflow_and_run_are_not_found(engine: AsyncEngine)
         assert await store.delete_draft(wf, team="team_lending") == "missing"
         assert await store.get(wf, team="team_cards") is not None
         rt: Any = SimpleNamespace(db=engine)
-        set_team("team_lending")
-        try:
-            with pytest.raises(NotFound):
-                await visible_run(rt, rid)
-            set_team("team_cards")
+        with isolation.scope(current_tenant(), "team_lending"), pytest.raises(NotFound):
+            await visible_run(rt, rid)
+        with isolation.scope(current_tenant(), "team_cards"):
             assert (await visible_run(rt, rid))["id"] == rid
-        finally:
-            set_team(None)
 
 
 async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngine) -> None:
@@ -68,15 +65,12 @@ async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngin
         waiting = {"node": "review", "iteration": 1, "interruptId": "i", "payload": payload}
         await RunStore(tx).update(rid, status="waiting", waiting=waiting)
         rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
-        set_team("team_lending")
-        try:
+        with isolation.scope(current_tenant(), "team_lending"):
             with pytest.raises(NotFound):
                 await engine_reviews.get(rt, rid)
             with pytest.raises(NotFound):
                 await engine_reviews.decide(rt, B, rid, decision="rejected", reason=None)
             assert [r for r in await engine_reviews.all_views(rt) if r["id"].startswith(rid)] == []
-        finally:
-            set_team(None)
         assert (await RunStore(tx).get(rid) or {})["status"] == "waiting", "the other team's decision changed nothing"
 
 

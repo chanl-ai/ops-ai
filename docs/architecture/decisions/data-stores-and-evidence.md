@@ -1,6 +1,6 @@
 # ADR-0006 Data stores and evidence
 
-Status: superseded in part on 2026-10-16: the owner removed Temporal and the separate human-in-the-loop service, so timers and run history live in PostgreSQL through `ops_engine` and `ops_hitl`; PostgreSQL runs today, and MySQL 8 and Azure SQL are planned (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/data-model.md`). Earlier status: option, not decided. No ADR has been confirmed by the owner as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-6.
+Status: superseded in part on 2026-10-16: the maintainers removed Temporal and the separate human-in-the-loop service, so timers and run history live in PostgreSQL through `ops_engine` and `ops_hitl`; PostgreSQL runs today, and MySQL 8 and Azure SQL are planned (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/data-model.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-6.
 
 ## Context
 
@@ -23,7 +23,7 @@ immutable with retention and legal hold. Knowledge needs vector search scoped by
 
 | Data | Store | Notes |
 |---|---|---|
-| Registry, versions, pointers, approvals, gate policies | PostgreSQL schema `registry` | Published rows immutable; edits create rows (the configuration-overwrite lesson in [design lessons](../../../.codeloop/wiki/concepts/design-lessons.md)) |
+| Registry, versions, pointers, approvals, gate policies | PostgreSQL schema `registry` | Published rows immutable; edits create rows (the configuration-overwrite lesson in design lessons) |
 | Cases, queues, SLAs, drafted actions, decisions | PostgreSQL schema `cases` | SLA deadlines stored here and enforced by Temporal timers; the case row is what people see, the timer is what fires |
 | Evidence index | PostgreSQL schema `evidence` | Points to bundles by digest |
 | Evidence bundles (definition, test results vs baseline, approvals, reviewer notes) | WORM object storage | One bundle per version; immutable once written |

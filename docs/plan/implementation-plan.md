@@ -87,7 +87,7 @@ starts its suite while workflow 1 is in pilot.
 
 **Pilot shape.** Weeks 20 to 24 run workflow 1 in production with every write approved by a person
 (policy approval tokens off), the manual-handling queue staffed, and a daily review of rejected and
-edited actions, each of which the rejection-to-case loop has already turned into a proposed case for the owner to activate (`04` 5.15). The workflow owner may turn policy approval on
+edited actions, each of which the rejection-to-case loop has already turned into a proposed case for the maintainers to activate (`04` 5.15). The workflow owner may turn policy approval on
 for named write classes only after Security confirms (overview open question 19) and through a publish.
 
 ### Phase 2: Workflows 2 and 3 (weeks 20–32)

@@ -59,7 +59,7 @@ async def test_the_bypass_role_cannot_read_mailboxes(engine: AsyncEngine) -> Non
         pytest.skip("row-level security and roles are PostgreSQL's")
     await connect(engine, f"a-{uuid4().hex[:8]}")
     with pytest.raises(ProgrammingError, match="permission denied"):
-        async with system_tx(engine) as c:
+        async with system_tx(engine, "test") as c:
             await c.execute(sa.text("select count(*) from mailboxes"))
 
 

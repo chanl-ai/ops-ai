@@ -1,6 +1,6 @@
-"""The owning team's name on agent, workflow and widget details (c-224), by failure mode: a person outside the team
-sees only its id; platform-service being down fails the detail instead of falling back to the id; a list of many
-records asks platform-service once per record."""
+"""The owning team's name on agent, workflow and widget details (c-224), by failure mode: a member sees only its id;
+platform-service being down fails the detail instead of falling back to the id; a list of many records asks
+platform-service once per record. A person outside the team reads none of it (c-407)."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, ServiceClient, dev_service_signer, service_verifiers
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
-from tests.engine.test_lifecycle_rights import BUILDER, introspect, jwks, person
+from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, introspect, jwks, person
 
 OUTSIDER = person("nadia", "team_security", "viewer")
 
@@ -77,14 +77,16 @@ def _data(r: httpx.Response, status: int = 200) -> Any:
     return r.json()["data"]
 
 
-async def test_an_outsider_sees_the_owning_teams_name_and_platform_is_read_once(c: AsyncClient) -> None:
+async def test_a_member_sees_the_owning_teams_name_and_platform_is_read_once(c: AsyncClient) -> None:
     agent = _data(
         await c.post("/v1/agents", json={"name": "Payee checker", "role": "Checks payees"}, headers=BUILDER), 201
     )
-    seen = _data(await c.get(f"/v1/agents/{agent['id']}", headers=OUTSIDER))
+    seen = _data(await c.get(f"/v1/agents/{agent['id']}", headers=VIEWER))
     assert (seen["teamId"], seen["teamName"], seen["canEdit"]) == ("team_ops", "Operations", False), seen
     _data(await c.get(f"/v1/agents/{agent['id']}", headers=BUILDER))
     assert Platform.reads == 1, "names are cached for the tenant"
+    # A person outside the team does not read it at all (c-407).
+    assert (await c.get(f"/v1/agents/{agent['id']}", headers=OUTSIDER)).status_code == 404
 
 
 async def test_platform_down_still_answers_with_the_id(c: AsyncClient) -> None:

@@ -1,7 +1,7 @@
 # Channels, as approved
 
-Status: current. The owner approved these screens on 2026-10-18 ("looks perfect, build it"). The real Channels pages
-are built to match them; a difference is a defect unless the owner approves a new version here.
+Status: current. The maintainers approved these screens on 2026-10-18 ("looks perfect, build it"). The real Channels pages
+are built to match them; a difference is a defect unless the maintainers approves a new version here.
 
 Approved build: console at `2214c5a1`, routes under `/preview/channels` on sample data
 (`apps/console/src/app/preview/channels`). Card c-242; architecture in `.codeloop/specs/242-*/plan.md`. The walk that
@@ -28,7 +28,7 @@ What the real pages must keep:
 | Connections list | The shared data table with select and id columns, search and filters |
 | Activity | A count and View activity on a channel, agent or workflow page; the rows live only on the Activity page |
 
-Known differences the owner accepted, and the card that removes each:
+Known differences the maintainers accepted, and the card that removes each:
 
 | Difference from the screens | Why | Removed by |
 |---|---|---|
