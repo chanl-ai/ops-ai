@@ -11,7 +11,7 @@ from ops_tools.modules.executions import call_row
 def _row(**over: Any) -> dict[str, Any]:
     return {
         "id": "gwc_1", "created_at": "2026-10-17T10:00:00Z", "tool": "place_hold", "access": "write",
-        "outcome": "ok", "latency_ms": 12, "sub": "user:j.richardson@northfieldbank.com", "act": "agent:ag_branch",
+        "outcome": "ok", "latency_ms": 12, "sub": "user:j.richardson@harborpine.example", "act": "agent:ag_branch",
         "thread_id": "th_abc", "step": "s1", "approvers": [], "approval_token_id": None, "decision": "allow",
         "reasons": [], "effect": True, **over,
     }  # fmt: skip

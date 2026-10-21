@@ -162,10 +162,10 @@ async def test_groups_add_each_mapped_membership_once_and_never_an_admin(signin:
 
 
 async def test_a_workspace_admin_names_the_workspace_and_me_shows_it_with_the_change_audited(signin: SignInRig) -> None:
-    r = await signin.public.patch("/v1/settings/workspace", json={"name": "Northfield Bank"}, headers=signin.admin)
-    assert r.status_code == 200 and r.json()["data"]["name"] == "Northfield Bank", r.text
+    r = await signin.public.patch("/v1/settings/workspace", json={"name": "Harbor & Pine Bank"}, headers=signin.admin)
+    assert r.status_code == 200 and r.json()["data"]["name"] == "Harbor & Pine Bank", r.text
     me = await signin.public.get("/v1/me", headers={"Authorization": signin.admin["Authorization"]})
-    assert me.json()["data"]["tenantName"] == "Northfield Bank"
+    assert me.json()["data"]["tenantName"] == "Harbor & Pine Bank"
     async with signin.engine.connect() as c:
         done = (
             await c.execute(
@@ -174,7 +174,7 @@ async def test_a_workspace_admin_names_the_workspace_and_me_shows_it_with_the_ch
                 )
             )
         ).all()
-    assert [d.detail["to"] for d in done] == ["Northfield Bank"]
+    assert [d.detail["to"] for d in done] == ["Harbor & Pine Bank"]
 
 
 async def test_only_a_workspace_admin_names_the_workspace(signin: SignInRig) -> None:

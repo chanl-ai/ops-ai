@@ -24,7 +24,7 @@ The scenarios of `docs/console/demo-script.md`, in its order. `UC140_FROM=c` res
 |---|---|---|
 | a | James asks Advisor's Helper to compare Savings Plus and Money Market for a client who lost her job | The hardship skill loads; the answer cites Retail Product Sheet |
 | b | He asks the Savings Plus rate against Money Market | 3.10 against 3.65 or 3.90, cited |
-| b | He asks whether his client should buy Northfield shares | Refused, naming the No investment advice guardrail |
+| b | He asks whether his client should buy Harbor & Pine shares | Refused, naming the No investment advice guardrail |
 | c | He asks what Priya Natarajan has with the bank | search_customers, then get_customer or list_accounts, her account (BUS-7781), no failed call |
 | d | He asks Wire Fraud Sentinel to hold wire W-88213; Maya then Omar approve in Human Tasks | Both decisions answer 2xx (step-up when asked) and the chat says the hold is placed |
 | e | He filters Workflows › Runs to Customer lookup (seed walk) and opens the newest | Its run page says succeeded with its steps |

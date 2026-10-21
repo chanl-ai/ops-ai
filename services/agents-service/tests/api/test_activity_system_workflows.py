@@ -65,7 +65,7 @@ async def test_a_team_that_kept_its_own_version_is_told_an_update_waits(stack: S
     store = DefinitionStore(EngineTransactions(rt.db))
     with tenant_scope(TENANT):
         version, _ = await store.publish(
-            wid, name="Ours", definition=mine.wire(), digest=mine.digest(), now=now_iso(), by="ana@northfield.example"
+            wid, name="Ours", definition=mine.wire(), digest=mine.digest(), now=now_iso(), by="ana@harborpine.example"
         )
         await store.go_live(wid, version)
     await provision(rt.db, TENANT, renamed("purged_v2", wid), review={"": {"workflows": "never"}})

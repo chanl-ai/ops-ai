@@ -31,7 +31,7 @@ KEY = os.environ.get("FAKE_BANK_KEY", "dev-bank-key")
 # The address the OpenAPI document gives, which an import makes the module's endpoint: api.bank.test on a dev stack,
 # the stand-in's public https address where it runs as a staging app (deploy/fly/staging/bank.toml).
 PUBLIC_URL = os.environ.get("FAKE_BANK_PUBLIC_URL", "https://api.bank.test")
-app = FastAPI(title="Northfield Core Banking", version="1.0.0", servers=[{"url": PUBLIC_URL}])
+app = FastAPI(title="Harbor & Pine Core Banking", version="1.0.0", servers=[{"url": PUBLIC_URL}])
 # The bank's sign-in and the routes protected each way a connection signs in (c-330); kept out of the OpenAPI document.
 app.include_router(auth_router)  # pyright: ignore[reportUnknownArgumentType]
 

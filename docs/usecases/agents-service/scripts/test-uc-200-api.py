@@ -25,9 +25,9 @@ AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"
 TOOLS = f"http://127.0.0.1:{os.environ.get('OPS_TOOLS_PORT', '8720')}"
 MAILPIT = f"http://127.0.0.1:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
 REVIEW_KEY = "dev-review-key-not-secret"
-SMTP_HOST, IMAP_HOST, SECRET = "smtp.northfield.test", "mail.northfield.test", "DEV_IMAP_PASSWORD"
+SMTP_HOST, IMAP_HOST, SECRET = "smtp.harborpine.test", "mail.harborpine.test", "DEV_IMAP_PASSWORD"
 RUN = uuid.uuid4().hex[:8]
-ADDRESS, FROM = f"desk-{RUN}@northfield.test", f"replies-{RUN}@northfield.test"
+ADDRESS, FROM = f"desk-{RUN}@harborpine.test", f"replies-{RUN}@harborpine.test"
 SUBJECT = f"Your levy notice {RUN}"
 THREAD = f"uc200_{RUN}"
 
@@ -49,7 +49,7 @@ def private_address() -> str:
 def reply(team: str, step: str) -> httpx.Response:
     doc = {"to": "ana@example.com", "subject": SUBJECT, "body": "We have placed the hold.", "mailbox": ADDRESS}
     token = mint(
-        Binding(THREAD, step, "send_reply", input_hash(doc), ["m.okafor@northfieldbank.com"]), REVIEW_KEY, ttl_s=300
+        Binding(THREAD, step, "send_reply", input_hash(doc), ["m.okafor@harborpine.example"]), REVIEW_KEY, ttl_s=300
     )
     return httpx.post(
         f"{TOOLS}/v1/calls",
@@ -71,8 +71,8 @@ def delivered() -> list[dict]:
     return r.json().get("messages") or []
 
 
-sam = headers("s.adeyemi@northfieldbank.com", "team_security")
-james = headers("j.richardson@northfieldbank.com", "team_ops")
+sam = headers("s.adeyemi@harborpine.example", "team_security")
+james = headers("j.richardson@harborpine.example", "team_ops")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, timeout=60)
 

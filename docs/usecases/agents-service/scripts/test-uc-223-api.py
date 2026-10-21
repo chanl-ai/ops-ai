@@ -56,10 +56,10 @@ GREENMAIL_IMAP = int(os.environ.get("OPS_GREENMAIL_IMAP_PORT", "3143"))
 MAILPIT_SMTP = int(os.environ.get("OPS_MAILPIT_SMTP_PORT", "1025"))
 MAILPIT = f"http://127.0.0.1:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
 RUN = uuid.uuid4().hex[:8]
-ADDRESS = f"intake-{RUN}@northfield.test"
-IMAP_HOST, SMTP_HOST, SECRET = "mail.northfield.test", "smtp.northfield.test", "DEV_IMAP_PASSWORD"
+ADDRESS = f"intake-{RUN}@harborpine.test"
+IMAP_HOST, SMTP_HOST, SECRET = "mail.harborpine.test", "smtp.harborpine.test", "DEV_IMAP_PASSWORD"
 OPS = {"X-Team-Id": "team_ops"}
-MAYA = {**OPS, "X-Dev-User": "m.okafor@northfieldbank.com"}
+MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
 SECURITY = {"X-Dev-User": "Nadia Petrov"}
 SETTLED = ("succeeded", "failed", "cancelled")
 CSV = (
@@ -150,7 +150,7 @@ def bank_module(gw: httpx.Client) -> None:
     ]
     body = {
         "name": "northfield-core-banking",
-        "displayName": "Northfield Core Banking",
+        "displayName": "Harbor & Pine Core Banking",
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],

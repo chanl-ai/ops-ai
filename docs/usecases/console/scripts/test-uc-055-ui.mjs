@@ -7,11 +7,11 @@ import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chrom
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const AGENT = 'ag_branch';
-const JAMES = 'j.richardson@northfieldbank.com';
-const NADIA = 'n.petrov@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const NADIA = 'n.petrov@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 // Egress is changed only by an admin of the Security team (c-079).
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;

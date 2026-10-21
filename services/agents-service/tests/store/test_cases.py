@@ -16,7 +16,7 @@ from ops_agents.store.cases import CaseNotFound, CaseStore
 from ops_agents.store.tenancy import tenant_scope
 
 T0 = datetime(2026, 10, 18, 9, 0, tzinfo=UTC)
-ANA = "ana@northfieldbank.com"
+ANA = "ana@harborpine.example"
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ async def test_waiting_on_the_customer_pauses_both_deadlines_and_any_other_statu
 async def test_each_field_change_is_on_the_timeline_and_a_link_is_recorded_once(store: CaseStore) -> None:
     a = (await store.open(team_id="team_ops", subject="a", priority="low", by=ANA)).case
     b = (await store.open(team_id="team_ops", subject="b", priority="low", by=ANA)).case
-    await store.change(a["id"], {"assignee": "sam@northfieldbank.com", "priority": "urgent"}, by=ANA)
+    await store.change(a["id"], {"assignee": "sam@harborpine.example", "priority": "urgent"}, by=ANA)
     await store.change(a["id"], {"priority": "urgent"}, by=ANA)
     await store.link(a["id"], b["id"], by=ANA)
     await store.link(b["id"], a["id"], by=ANA)

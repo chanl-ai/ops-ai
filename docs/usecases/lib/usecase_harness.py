@@ -446,7 +446,7 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     # send_reply sends through the provider settings pick and fails with none (c-187): the dev fake writes each mail
     # to a folder of this run's.
     env.setdefault("OPS_MAIL_PROVIDER", "fake")
-    env.setdefault("OPS_MAIL_FROM", "ops@northfield.example")
+    env.setdefault("OPS_MAIL_FROM", "ops@harborpine.example")
     env.setdefault("OPS_MAIL_FAKE_OUT_DIR", tempfile.mkdtemp(prefix="usecase-mail-out-"))
     # `settings` adds OPS_* values a use case needs, e.g. a CA file and dev name overrides for a local fake upstream.
     env.update(settings or {})
@@ -526,7 +526,7 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
         "OPS_SAML_SP_CERTIFICATE": SAML_SP_CERT,
         "OPS_MAIL_PROVIDER": "fake",
-        "OPS_MAIL_FROM": "ops@northfieldbank.com",
+        "OPS_MAIL_FROM": "ops@harborpine.example",
         "OPS_MAIL_FAKE_OUT_DIR": str(mail),
     }
     with fake_idp() as idp_base, platform(env=env) as (api, _), httpx.Client(base_url=idp_base, timeout=30) as idp:
@@ -595,7 +595,7 @@ def people_stack(*, agents_env: dict[str, str] | None = None) -> Generator[tuple
 def security_admin_on_ops(api: httpx.Client) -> dict[str, str]:
     """Sam Adeyemi, the dev seed's Security admin, made an admin of team_ops too (Priya invites him, he accepts as
     himself), so a sign-in provider he sets may send new people there. Returns his headers acting in team_security."""
-    sam_email, priya_email = "s.adeyemi@northfieldbank.com", "p.shah@northfieldbank.com"
+    sam_email, priya_email = "s.adeyemi@harborpine.example", "p.shah@harborpine.example"
     priya = signed_in(api, priya_email)
     sam = signed_in(api, sam_email)
     r = api.post(
@@ -695,9 +695,9 @@ def nodes(events: list[dict[str, Any]]) -> list[str]:
 # ── The banker demo's stack (c-058), as withUiStack's `demo` option builds it, under dev auth ──
 
 DEMO_JAMES, DEMO_NADIA, DEMO_MAYA = (
-    "j.richardson@northfieldbank.com",
-    "n.petrov@northfieldbank.com",
-    "m.okafor@northfieldbank.com",
+    "j.richardson@harborpine.example",
+    "n.petrov@harborpine.example",
+    "m.okafor@harborpine.example",
 )
 
 
@@ -740,7 +740,7 @@ def publish_bank_module(gw: httpx.Client, host: str) -> str:
             "/v1/tool-modules",
             json={
                 "name": "northfield-core-banking",
-                "displayName": "Northfield Core Banking",
+                "displayName": "Harbor & Pine Core Banking",
                 "system": found["system"],
                 "type": "openapi",
                 "endpoint": found["endpoint"],

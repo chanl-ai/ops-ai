@@ -38,7 +38,7 @@ HARDSHIP = Skill(
     40,
 )
 DISCLOSURE = Skill(
-    "sk_2", 3, "Bank disclosure", "bank-disclosure", "", "always", "End with: Northfield Bank, member CDIC."
+    "sk_2", 3, "Bank disclosure", "bank-disclosure", "", "always", "End with: Harbor & Pine Bank, member CDIC."
 )
 
 
@@ -276,7 +276,7 @@ async def test_an_always_on_skills_guardrail_refuses_the_question() -> None:
     settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", skills=[policy])
     model = Script([("say", "Buy them.")], lambda m: "investment advice" if "shares" in m else "none")
     result, _ = await _run(
-        TurnRequest("t1", "th1", settings, [], user_turn="Should she buy Northfield shares?"), model, Recording()
+        TurnRequest("t1", "th1", settings, [], user_turn="Should she buy Harbor & Pine shares?"), model, Recording()
     )
     assert (result.stop_reason, model.answered) == ("guardrail", 0), result
     assert result.guardrail is not None and result.guardrail["when"] == "before"

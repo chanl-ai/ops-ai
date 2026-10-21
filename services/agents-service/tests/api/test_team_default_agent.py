@@ -70,7 +70,7 @@ async def move(rt: Runtime, agent_id: str, team: str) -> None:
 def viewer() -> Principal:
     return Principal(
         name="vera",
-        email="vera@northfield.example",
+        email="vera@harborpine.example",
         team_id="team_ops",
         tenant_id=TENANT,
         team_ids=("team_ops",),
@@ -134,7 +134,7 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
         if cast(dict[str, Any], t["meta"] or {}).get("calledBy")
     ]
     assert [(t["meta"]["agentId"], t["meta"]["calledBy"], t["meta"]["startedFor"]) for t in children] == [
-        ("ag_dispute", "ag_branch", "vera@northfield.example")
+        ("ag_dispute", "ag_branch", "vera@harborpine.example")
     ], "the specialist ran its own turn, for the person"
     calls_ = AgentCalls(rt)
     with tenant_scope(TENANT):

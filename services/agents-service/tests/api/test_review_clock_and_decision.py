@@ -61,7 +61,7 @@ async def test_a_decided_review_says_who_decided_it_when_and_why(
     decided = await c.post(f"/v1/publish-requests/{rid}/decision", json=body, headers=REVIEWER)
     assert decided.status_code == 200, decided.text
     review = await _review(c, rid)
-    assert review["decidedBy"] == "maya@northfield.example", review
+    assert review["decidedBy"] == "maya@harborpine.example", review
     assert review["decidedAt"] and review["decisionReason"] == body["reason"]
     assert review["slaMinutes"] is None, "a decided review has no time left to count"
 
@@ -89,7 +89,7 @@ async def test_the_workspace_review_deadline_moves_the_clock() -> None:
         "kind": "agent",
         "version": 2,
         "subject_id": "ag_x",
-        "requested_by": "james@northfield.example",
+        "requested_by": "james@harborpine.example",
         "note": "",
         "body": {},
         "status": "pending",

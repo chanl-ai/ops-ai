@@ -2,11 +2,11 @@
 // signed in, an agent page says View only and offers no Save, and Access offers no Invite.
 import { INVITED_PASSWORD, check, chromium, consoleSignIn, finish, invitePerson, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const EMAIL = `viewer.${Math.random().toString(36).slice(2, 7)}@northfieldbank.com`;
+const EMAIL = `viewer.${Math.random().toString(36).slice(2, 7)}@harborpine.example`;
 
 await withUiStack(
   async (consoleUrl) => {
-    await invitePerson('p.shah@northfieldbank.com', EMAIL, 'viewer');
+    await invitePerson('p.shah@harborpine.example', EMAIL, 'viewer');
     const browser = await chromium.launch();
     const errors = [];
     try {

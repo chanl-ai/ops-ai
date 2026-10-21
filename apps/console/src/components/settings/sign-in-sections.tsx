@@ -61,7 +61,7 @@ export function SignInSecuritySection({ policy, saving, onSave }: { policy: Sign
             </Select>
           </FormField>
           <FormField id="s-domains" label="Allowed email domains" hint="Invites to other domains are refused. Empty allows any.">
-            <TagInput id="s-domains" value={domains} onChange={setDomains} placeholder="e.g. northfieldbank.com" />
+            <TagInput id="s-domains" value={domains} onChange={setDomains} placeholder="e.g. harborpine.example" />
           </FormField>
         </div>
         <LoadingButton size="sm" className="self-start" isLoading={saving} disabled={!dirty} onClick={() => onSave({ section: 'security', mfaRequired: mfa, sessionHours: hours, allowedDomains: domains })} data-testid="save-security">

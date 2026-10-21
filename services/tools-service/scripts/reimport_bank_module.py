@@ -6,8 +6,8 @@ policy is major) is approved in agents-service's Reviews through `--decide-as` (
 operations.
 
     uv run python scripts/reimport_bank_module.py                      # dev auth: the fixed dev user
-    uv run python scripts/reimport_bank_module.py --as j.richardson@northfieldbank.com \
-        --decide-as n.petrov@northfieldbank.com --secrets-as s.adeyemi@northfieldbank.com
+    uv run python scripts/reimport_bank_module.py --as j.richardson@harborpine.example \
+        --decide-as n.petrov@harborpine.example --secrets-as s.adeyemi@harborpine.example
 
 The fake bank must serve the new document (restart `python -m fake_bank` after changing it) and tools-service must
 reach it (its OPS_EGRESS_* settings, docs/usecases/tools-service/import-tools.md).
@@ -158,7 +158,7 @@ async def ensure_module(api: httpx.AsyncClient, host: str = HOST) -> tuple[str, 
     found = data(await api.post("/v1/tool-modules/discover", json=source))
     body = {
         "name": "northfield-core-banking",
-        "displayName": "Northfield Core Banking",
+        "displayName": "Harbor & Pine Core Banking",
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],
@@ -203,7 +203,7 @@ async def main() -> None:
     ap.add_argument("--decide-as", help="sign in as this Security approver and approve the review")
     ap.add_argument(
         "--secrets-as",
-        default="s.adeyemi@northfieldbank.com",
+        default="s.adeyemi@harborpine.example",
         help="sign in as this Security admin to create BANK_API_KEY (platform auth; only a Security admin may)",
     )
     ap.add_argument("--bank-key", default="dev-bank-key", help="BANK_API_KEY's value, set when the tenant lacks it")

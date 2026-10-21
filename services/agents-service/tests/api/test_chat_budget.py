@@ -28,7 +28,7 @@ LOOKUP = "Look up CHQ-2219"
 def who(sub: str, role: str) -> dict[str, str]:
     claims = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],
@@ -102,7 +102,7 @@ async def test_only_the_owner_continues_and_continue_finishes_the_turn(dev_platf
     assert done.status_code == 200, done.text
     messages = done.json()["data"]["messages"]
     card = next(m for m in messages if m.get("budget"))
-    assert card["budget"]["state"] == "continued" and card["budget"]["answeredBy"] == "usr_owner@northfield.example"
+    assert card["budget"]["state"] == "continued" and card["budget"]["answeredBy"] == "usr_owner@harborpine.example"
     assert any(
         m["role"] == "assistant" and m["content"] and not m.get("budget") for m in messages[messages.index(card) :]
     ), "the paused turn answered after Continue"
@@ -241,7 +241,7 @@ async def test_a_caller_cannot_forge_a_threads_allotment_or_owner(dev_platform: 
         row = await rt.graph_store.thread(tid)
         assert row is not None
         meta = cast(dict[str, Any], row["meta"])
-        assert meta["ownerEmail"] == "usr_owner@northfield.example", meta
+        assert meta["ownerEmail"] == "usr_owner@harborpine.example", meta
         assert meta["budgetAllotment"]["maxCalls"] == PLATFORM_CONVERSATION_CALLS, meta
     assert caps == [PLATFORM_CONVERSATION_CALLS, PLATFORM_CONVERSATION_CALLS]
 

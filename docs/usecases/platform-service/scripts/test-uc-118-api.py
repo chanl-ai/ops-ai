@@ -32,7 +32,7 @@ def names(p: dict[str, Any] | None) -> list[str]:
 
 
 with platform() as (api, _internal):
-    priya = sign_in(api, "p.shah@northfieldbank.com")
+    priya = sign_in(api, "p.shah@harborpine.example")
     r = api.get("/v1/roles", headers=priya)
     listed = [x["id"] for x in data(r)] if r.status_code == 200 else []
     check(
@@ -58,7 +58,7 @@ with platform() as (api, _internal):
     )
     check("Priya does not change egress", "secrets_egress.manage" not in mine, sorted(mine)[:5])
 
-    sam = sign_in(api, "s.adeyemi@northfieldbank.com")
+    sam = sign_in(api, "s.adeyemi@harborpine.example")
     sec = held(data(api.get("/v1/me/permissions", headers=sam)), "team_security")
     check(
         "Sam changes egress as Security admin, in the Security team",
@@ -80,12 +80,12 @@ with platform() as (api, _internal):
     check("a person who shares no team with Priya is not found", r.status_code == 404, r.status_code)
 
     # Non-vacuous: James creates agents before the change, so its absence after is the change's doing.
-    before = sign_in(api, "j.richardson@northfieldbank.com")
+    before = sign_in(api, "j.richardson@harborpine.example")
     rows = data(api.get("/v1/settings/members", headers=priya))["data"]
-    member = next(m["id"] for m in rows if m["email"] == "j.richardson@northfieldbank.com")
+    member = next(m["id"] for m in rows if m["email"] == "j.richardson@harborpine.example")
     r = api.post("/v1/settings/members/role", headers=priya, json={"ids": [member], "role": "viewer"})
     check("Priya makes James a viewer", r.status_code == 200 and data(r)["updated"] == [member], r.text[:200])
-    after = sign_in(api, "j.richardson@northfieldbank.com")
+    after = sign_in(api, "j.richardson@harborpine.example")
     now = held(data(api.get("/v1/me/permissions", headers=after)), "team_ops")
     check(
         "James's next token carries a newer permission version",

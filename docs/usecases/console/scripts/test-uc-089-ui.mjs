@@ -20,7 +20,7 @@ const NOT_A_SHAPE = { shape: 'html', data: { body: '<button>Approve</button>' } 
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Limits desk ${TAG}`, role: 'Explains account limits' }) }));
     // A chat runs only on a live version; publishing goes through a request, which the dev review settles at once.
     const v = agent.version ?? 1;
@@ -33,7 +33,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

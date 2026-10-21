@@ -9,12 +9,12 @@ cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
 1. `make up` starts the database, mail (GreenMail, Mailpit), every service, the workflow worker, models-service and
    the fakes, signs people in through platform-service, binds the `default` model alias to real OpenAI gpt-5-mini (the
    key from .env; `DEMO_MODEL=` picks another, `DEMO_MODEL=fake` keeps the fake) and prints a health table.
-2. `make demo-mailbox` emails a notice with a PDF attached to intake@northfield.test and prints PASS or FAIL for each
+2. `make demo-mailbox` emails a notice with a PDF attached to intake@harborpine.test and prints PASS or FAIL for each
    step: run started, attachment in Files, fields read, court order cases, case opened, the acknowledge Human Task, the
    reply in Mailpit.
    Each run sends a new message, so it can be repeated. `make demo-mailbox LOW=1` sends a scan of the notice instead:
    it is read by OCR, every field falls below the floor, and a "Check the debtors read" Human Task comes before any case.
-3. Show the result. Sign in at <http://localhost:3016> as m.okafor@northfieldbank.com (password `northfield-demo`):
+3. Show the result. Sign in at <http://localhost:3016> as m.okafor@harborpine.example (password `northfield-demo`):
    Cases (one high-priority case per debtor, `Levy notice: <name> (<court case>)`), Workflows > Runs (the run URL is
    printed last), Human Tasks (one `Levy notice` task per matched debtor), Files (the PDF)
    and the reply at <http://localhost:8025>.
@@ -26,10 +26,10 @@ The court order demo (2026-10-18 plan): one email carrying two restraining notic
 attachment is read in its own run of the court order read workflow (`levy_read_one`), in parallel; the kind is
 detected, a doubtful read goes to a person, each kind is worked out with a Calculate step, a case opens, and the outside
 system is told by webhook. Seeded workflows: the court order mail workflow (`levy_mail`, Email received on
-`levies@northfield.test`), `levy_read_one`, and `levy_files` (the same handling from uploaded files).
+`levies@harborpine.test`), `levy_read_one`, and `levy_files` (the same handling from uploaded files).
 
 1. Send the email: from `services/agents-service`,
-   `uv run python scripts/send_levy_email.py --fixture ../documents-service/tests/fixtures/mail/mixed_levies.json --mailbox levies@northfield.test --key-suffix run-2`.
+   `uv run python scripts/send_levy_email.py --fixture ../documents-service/tests/fixtures/mail/mixed_levies.json --mailbox levies@harborpine.test --key-suffix run-2`.
    Change `run-2` for each send: the trigger keys a run on the message's ID and content, so the same email sent again
    is recorded as a duplicate and starts nothing.
 2. Within a minute, Workflows > Runs shows one `levy_mail` run waiting at "Reply to service@process.example" and three
@@ -84,7 +84,7 @@ reading its reply need its password, which is held only in Secrets.
 |---|---|
 | Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed c-421), so the test account stays in Security |
 | Workflows | Security: `mail_intake` (Mailed documents) v2 live on the test mailbox, starting `mail_document` per attachment, which starts `levy_case` per debtor |
-| Demo team | Northfield Operations (`team_a0877a1d8907`): the garnishment notice type and the court order workflows `levy_document_a0877a1d` (`Levy notice: read the document`) and `levy_debtor_a0877a1d` (`Levy notice: one debtor`), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
+| Demo team | Harbor & Pine Operations (`team_a0877a1d8907`): the garnishment notice type and the court order workflows `levy_document_a0877a1d` (`Levy notice: read the document`) and `levy_debtor_a0877a1d` (`Levy notice: one debtor`), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
 | Model | The read uses alias `extract`, or `default` when there is none. Staging has no `extract`, so `default` serves it: gpt-4.1-mini on OpenAI, key `OPENAI_API_KEY` in Secrets, through models-service key `purpose:documents` (cap 5 USD). One real model call per notice |
 | Bank stand-in | `<your-app>-bank`, its public URL; holds wait for a person. Its holds live in memory, so they last until the machine restarts: Marcus Bell's chequing account holds 2,140.55, so after one hold on it a second one fails. Restart it before a demo with `fly machine restart 185d5e7bd3d548 -a <your-app>-bank` (restarted after the last walk on 2026-10-20). The walk flags an account with nothing free |
 | Files | The PDFs uploaded before the move to one machine were copied from the stopped files app's volume on 2026-10-20, so the notice opens on the task page |
@@ -103,7 +103,7 @@ uv run python deploy/fly/staging/mailbox_demo.py levy --origin https://<your-app
   --team team_a0877a1d8907 [--mailbox <address connected in the team>]
 ```
 
-Walked in Northfield Operations on 2026-10-20 after a bank restart, every step PASS (`--upload`, no mailbox, so the
+Walked in Harbor & Pine Operations on 2026-10-20 after a bank restart, every step PASS (`--upload`, no mailbox, so the
 acknowledgement is declined and the run ends `cases_opened`): document run `wfrun_8555bc8848e2`; `case_a38950954252`
 Marcus Bell, hold `HLD-7c4ac0` of 2,140.55 on `CHQ-2219`; `case_e3171dca2ac6` Priya Natarajan, hold `HLD-30152d` of
 12,400.00 on `BUS-7781`, both found at the bank; `case_e9f19b9569b7` Jordan Whitfield, no bank customer. Command:
@@ -147,9 +147,9 @@ no bank customer); the reply sent from the test mailbox.
 
 ### Connect your own mailbox
 
-Your mailbox goes straight into the demo team, Northfield Operations (`team_a0877a1d8907`); a mailbox stays in the
+Your mailbox goes straight into the demo team, Harbor & Pine Operations (`team_a0877a1d8907`); a mailbox stays in the
 team that connects it (c-421). Sign in to <https://<your-app>-one.fly.dev> as the admin
-(`~/.config/ops-ai/staging-admin.env`) and pick Northfield Operations in the team switcher, except where a step says
+(`~/.config/ops-ai/staging-admin.env`) and pick Harbor & Pine Operations in the team switcher, except where a step says
 Security. Keep `services/agents-service/tests/fixtures/mailbox/levy_notice.pdf` to hand. Before a demo, restart the
 bank stand-in (Bank stand-in above) so each matched debtor can be held.
 
@@ -158,8 +158,8 @@ Gmail (IMAP and SMTP with an app password):
 | # | Where | What you do |
 |---|---|---|
 | 1 | <https://myaccount.google.com/apppasswords> | With 2-Step Verification on, create an app password named "Ops AI" and copy the 16 letters |
-| 2 | Security team, Settings > Secrets > Add secret | Name `OWNER_MAILBOX_PASSWORD`, the app password as its value, team Northfield Operations |
-| 3 | Northfield Operations, Channels > Email > Connect a mailbox | Gmail; a name; your address; App password `OWNER_MAILBOX_PASSWORD`; Send replies with SMTP, from your address, SMTP password `OWNER_MAILBOX_PASSWORD`. Test connection shows your newest subject; then Connect mailbox |
+| 2 | Security team, Settings > Secrets > Add secret | Name `OWNER_MAILBOX_PASSWORD`, the app password as its value, team Harbor & Pine Operations |
+| 3 | Harbor & Pine Operations, Channels > Email > Connect a mailbox | Gmail; a name; your address; App password `OWNER_MAILBOX_PASSWORD`; Send replies with SMTP, from your address, SMTP password `OWNER_MAILBOX_PASSWORD`. Test connection shows your newest subject; then Connect mailbox |
 | 4 | A terminal in the ops-ai repo | `mailbox_demo.py levy` as in "Set a team up", with `--mailbox <your address>`: it makes `Levy notices by email` (`levy_mail_intake_a0877a1d`) on your mailbox and publishes it through the second person |
 | 5 | Another mail account | Email `levy_notice.pdf` to your address. Within a minute: a run in Workflows > Runs and the PDF in Files |
 | 6 | Human Tasks | Each matched debtor's "Hold or flag": Hold, with the amount (up to what the account has free). Then "Send the acknowledgement": Approve. The reply reaches the account you sent from |
@@ -173,8 +173,8 @@ tenant (**unverified**):
 | 1 | Microsoft Entra admin center > App registrations > New registration | Name it "Ops AI staging"; copy the Directory (tenant) id and the Application (client) id |
 | 2 | The registration > API permissions | Microsoft Graph, Application permissions: `Mail.Read` and `Mail.Send`; Grant admin consent. These reach every mailbox in the tenant unless an Exchange application access policy limits them to yours |
 | 3 | The registration > Certificates & secrets | New client secret; copy its value |
-| 4 | Security team, Settings > Secrets > Add secret | Name `OWNER_GRAPH_SECRET`, the client secret as its value, team Northfield Operations |
-| 5 | Northfield Operations, Channels > Email > Connect a mailbox | Microsoft 365; a name; your address; Microsoft tenant id; Client id; Client secret `OWNER_GRAPH_SECRET`; Send replies with Microsoft 365. Test connection, then Connect mailbox |
+| 4 | Security team, Settings > Secrets > Add secret | Name `OWNER_GRAPH_SECRET`, the client secret as its value, team Harbor & Pine Operations |
+| 5 | Harbor & Pine Operations, Channels > Email > Connect a mailbox | Microsoft 365; a name; your address; Microsoft tenant id; Client id; Client secret `OWNER_GRAPH_SECRET`; Send replies with Microsoft 365. Test connection, then Connect mailbox |
 | 6 | As for Gmail, steps 4 to 6 | Make the email intake on the mailbox, email the notice, decide the Human Tasks |
 
 If nothing arrives: the Activity page filtered to the mailbox lists each email and why one was skipped (an email

@@ -1,7 +1,7 @@
 """The mailbox demo on the shared stack, end to end, through the public API (`make demo-mailbox`).
 
 A real email with a levy notice attached goes through local SMTP (GreenMail) to the team mailbox
-intake@northfield.test. The worker reads it over IMAP through tools-service and the mail_intake workflow takes it: the
+intake@harborpine.test. The worker reads it over IMAP through tools-service and the mail_intake workflow takes it: the
 attachment is stored in Files, mail_document reads the debtors from it and starts a levy_case run per debtor (a matched
 debtor waits on a 'Levy notice' Human Task), then waits for a person to acknowledge the document. The demo approves
 that acknowledgement as Maya (an approver) and finds the reply in Mailpit. Each step prints PASS or FAIL with its
@@ -40,10 +40,10 @@ MODELS = f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
 FAKE_OPENAI = f"http://127.0.0.1:{os.environ.get('OPS_FAKE_OPENAI_PORT', '8746')}"
 SMTP_PORT = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
 MAILPIT = f"http://127.0.0.1:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
-MAILBOX = "intake@northfield.test"
+MAILBOX = "intake@harborpine.test"
 TEAM = "team_ops"
 PASSWORD = "northfield-demo"
-JAMES, MAYA = "j.richardson@northfieldbank.com", "m.okafor@northfieldbank.com"
+JAMES, MAYA = "j.richardson@harborpine.example", "m.okafor@harborpine.example"
 FIXTURES = ROOT / "services" / "agents-service" / "tests" / "fixtures" / "mailbox"
 # LOW=1 sends a scan of the same notice, read through OCR, and raises the workspace review floor (the extractionFloor
 # policy, Govern > Policies) to LOW_FLOOR for the run, putting it back after: OCR reads the clean scan above the default
@@ -52,7 +52,7 @@ LOW = os.environ.get("LOW") == "1"
 NOTICE = FIXTURES / ("levy_notice_scan.pdf" if LOW else "levy_notice.pdf")
 WAIT_S = float(os.environ.get("DEMO_WAIT_SECONDS", "120"))
 LOW_FLOOR = 0.99
-SECURITY_ADMIN = "s.adeyemi@northfieldbank.com"
+SECURITY_ADMIN = "s.adeyemi@harborpine.example"
 
 FAILED: list[str] = []
 

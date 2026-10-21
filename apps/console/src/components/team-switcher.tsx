@@ -51,7 +51,7 @@ export function TeamSwitcher({
   onRetry?: () => void;
   teams: Team[];
   activeTeam: Team | undefined;
-  /** Second line under the team name, e.g. "Northfield Bank · Ops AI". */
+  /** Second line under the team name, e.g. "Harbor & Pine Bank · Ops AI". */
   subtitle: string;
   onSelect: (teamId: string) => void;
   /** Owner groups a new team can take responsibility for. */

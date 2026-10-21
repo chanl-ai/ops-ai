@@ -12,9 +12,9 @@ const AGENTS = `http://127.0.0.1:${process.env.OPS_AGENTS_PORT ?? 8700}`;
 const PLATFORM = `http://127.0.0.1:${process.env.OPS_PLATFORM_PORT ?? 8710}`;
 const MAILPIT = `http://127.0.0.1:${process.env.OPS_MAILPIT_PORT ?? 8025}`;
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const OMAR = 'o.haddad@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const OMAR = 'o.haddad@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 // A turn on a real model takes several model calls of a few seconds each.
 const TURN = 180_000;
 
@@ -86,7 +86,7 @@ try {
   });
 
   await step('b a guardrail refuses an investment question and names itself', async () => {
-    const reply = await ask(james, "Advisor's Helper", 'Should my client buy Northfield shares?');
+    const reply = await ask(james, "Advisor's Helper", 'Should my client buy Harbor & Pine shares?');
     const refusal = reply.getByTestId('guardrail-refusal');
     await refusal.waitFor({ timeout: 60_000 });
     check('b a guardrail refuses an investment question and names itself', /No investment advice/.test(await refusal.innerText()), await refusal.innerText());

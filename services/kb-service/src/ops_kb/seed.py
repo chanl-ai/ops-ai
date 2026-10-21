@@ -22,7 +22,7 @@ from .service import KnowledgeService, Who, source_team
 log = get_logger(__name__)
 PDFS = Path(__file__).resolve().parents[2] / "seed" / "pdfs"
 TENANT = "local"
-JAMES, NADIA = "j.richardson@northfieldbank.com", "n.petrov@northfieldbank.com"
+JAMES, NADIA = "j.richardson@harborpine.example", "n.petrov@harborpine.example"
 
 
 @dataclass(frozen=True)

@@ -122,7 +122,7 @@ async def turn(
 
 async def test_a_blocked_question_gets_the_message_and_no_answering_call() -> None:
     model = Model(topic_when("shares"), ["Buy them."])
-    result, streamed = await turn(model, "Should my client buy Northfield shares?", [NO_ADVICE])
+    result, streamed = await turn(model, "Should my client buy Harbor & Pine shares?", [NO_ADVICE])
     assert (result.status, result.stop_reason, result.text, streamed) == (
         "completed",
         "guardrail",
@@ -181,7 +181,7 @@ async def test_a_check_returning_a_topic_it_was_not_given_fails_closed() -> None
 
 async def test_an_agent_without_guardrails_makes_no_check() -> None:
     model = Model(topic_when("shares"), ["Buy them."])
-    result, streamed = await turn(model, "Should my client buy Northfield shares?")
+    result, streamed = await turn(model, "Should my client buy Harbor & Pine shares?")
     assert (result.stop_reason, result.text, streamed, model.checks) == ("final", "Buy them.", "Buy them.", [])
 
 
@@ -396,7 +396,7 @@ async def test_a_failing_check_alias_fails_closed() -> None:
 async def test_a_guardrail_switched_off_is_never_checked_and_the_turn_says_so() -> None:
     model = Model(topic_when("shares"), ["Buy them."])
     settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", guardrails_off=[NO_ADVICE])
-    req = TurnRequest("t1", "r1", settings, [], user_turn="Should my client buy Northfield shares?")
+    req = TurnRequest("t1", "r1", settings, [], user_turn="Should my client buy Harbor & Pine shares?")
     events = [
         e async for e in run_turn(req, KernelPorts(model=model.build(), tools=NoTools(), knowledge=NoKnowledge()))
     ]

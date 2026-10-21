@@ -42,7 +42,7 @@ function craftedPdf() {
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops' };
     const body = craftedPdf();
     const name = `crafted-${TAG}.pdf`;
     const ticket = await data(await fetch(`${files}/v1/files/uploads`, { method: 'POST', headers: { ...J, 'Content-Type': 'application/json' }, body: JSON.stringify({ name, size: body.length, mime: 'application/pdf', purpose: 'case_attachment' }) }));
@@ -67,7 +67,7 @@ await withUiStack(
         if (/pdf\.worker/.test(r.url())) seen.worker = await r.text().catch(() => '');
       });
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

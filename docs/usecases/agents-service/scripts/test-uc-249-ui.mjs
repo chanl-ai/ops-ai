@@ -13,7 +13,7 @@ const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
 const MAILPIT = `http://127.0.0.1:${process.env.OPS_MAILPIT_HTTP_PORT ?? 8025}`;
 const GREENMAIL_SMTP = process.env.OPS_GREENMAIL_SMTP_PORT ?? '3025';
 const PASSWORD = 'northfield-demo';
-const MAILBOX = 'complaints@northfield.test';
+const MAILBOX = 'complaints@harborpine.test';
 // The seeded bank's customer: the complaint comes from the address the bank holds for them, which is how the hold's
 // Match step knows them without the last four of their SSN.
 const CUSTOMER = 'marcus.bell@example.com';
@@ -85,12 +85,12 @@ with smtplib.SMTP("127.0.0.1", int(sys.argv[2])) as s:
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'));
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
+    const J = as(await tokenFor('j.richardson@harborpine.example'));
     // The reply goes out through send_reply on the Messaging Platform team's mail module, so that team approves it.
-    const W = as(await tokenFor('w.kamau@northfieldbank.com'), 'team_platform');
-    const M = as(await tokenFor('m.okafor@northfieldbank.com'));
-    const P = as(await tokenFor('p.shah@northfieldbank.com'));
+    const W = as(await tokenFor('w.kamau@harborpine.example'), 'team_platform');
+    const M = as(await tokenFor('m.okafor@harborpine.example'));
+    const P = as(await tokenFor('p.shah@harborpine.example'));
     const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50`, J))?.data ?? [];
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const out = (run, node) => (run?.steps ?? []).find((s) => s.nodeId === node)?.output;
@@ -173,7 +173,7 @@ await withUiStack(
       try {
         const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+        await page.getByLabel('Email').fill('j.richardson@harborpine.example');
         await page.getByLabel('Password').fill(PASSWORD);
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -216,7 +216,7 @@ await withUiStack(
         const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
         page.on('pageerror', (e) => errors.push(e.message));
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+        await page.getByLabel('Email').fill('j.richardson@harborpine.example');
         await page.getByLabel('Password').fill(PASSWORD);
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

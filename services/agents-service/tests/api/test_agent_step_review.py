@@ -11,7 +11,7 @@ from httpx import AsyncClient
 from tests.conftest import SEED, step_up
 
 FRAUD: dict[str, Any] = next(a for a in json.loads((SEED / "chat_agents.json").read_text()) if a["id"] == "ag_fraud")
-EMAIL = {"sender": "ops@northfieldbank.com", "subject": "Hold request", "body": "Place a 24-hour hold on wire W-88213"}
+EMAIL = {"sender": "ops@harborpine.example", "subject": "Hold request", "body": "Place a 24-hour hold on wire W-88213"}
 
 
 async def paused_on_agent_review(client: AsyncClient) -> str:

@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const QUESTION = 'UC229 FUND QUESTION: what should my client know about the Northfield fund?';
+const QUESTION = 'UC229 FUND QUESTION: what should my client know about the Harbor & Pine fund?';
 const CORRECTED = "I can't give investment advice. A licensed adviser can talk your client through the fund.";
 // Screenshots are kept with the card's evidence; UC253_SHOTS points them anywhere else.
 const SHOTS = process.env.UC253_SHOTS ?? join(process.cwd(), '.codeloop', 'evidence', '253');
@@ -20,7 +20,7 @@ await withUiStack(
       const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -74,7 +74,7 @@ await withUiStack(
 
       // Compare (c-286): a saved draft and the published version answer the same question side by side, each with its
       // spend. The draft is saved over the API, as the page's autosave would.
-      const signIn = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'j.richardson@northfieldbank.com', password: 'northfield-demo' }) });
+      const signIn = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'j.richardson@harborpine.example', password: 'northfield-demo' }) });
       const J = { Authorization: `Bearer ${(await signIn.json()).data.token}`, 'Content-Type': 'application/json' };
       const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}/v1/agents/ag_advisor`;
       const advisor = (await (await fetch(agentsUrl, { headers: J })).json()).data;
@@ -83,7 +83,7 @@ await withUiStack(
       await page.goto(`${consoleUrl}/agents/ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await panel.waitFor({ timeout: 120_000 });
       await panel.getByTestId('compare-tab').click();
-      await panel.getByLabel('Message').fill('UC253 COMPARE: what does the Northfield fund charge?');
+      await panel.getByLabel('Message').fill('UC253 COMPARE: what does the Harbor & Pine fund charge?');
       await panel.locator('button[aria-label="Send"]').click();
       const sideSpend = panel.getByTestId('compare-spent');
       await sideSpend.nth(1).waitFor({ timeout: 120_000 });

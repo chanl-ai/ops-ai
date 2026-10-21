@@ -2,7 +2,7 @@ import type { EvalCheck } from '@/lib/types/evals';
 import type { SkillCitation, SkillEditClass, SkillLoading, SkillOrigin, SkillVersionState } from '@/lib/types/skills';
 
 /**
- * Eight Northfield Bank skills. Tools are named by operation and resolved to tool ids when the mock starts, so the
+ * Eight Harbor & Pine Bank skills. Tools are named by operation and resolved to tool ids when the mock starts, so the
  * seeds survive tool id changes. Dates are offsets in days from today.
  */
 
@@ -187,7 +187,7 @@ export const SKILL_SEEDS: SkillSeed[] = [
     tools: ['get_loan_account', 'get_customer_profile', 'search_knowledge'],
     knowledgeBases: ['Lending policy'],
     guardrails: ['Never approve or promise a deferral in a reply.', 'Mark the case urgent when the message mentions self-harm.'],
-    templates: [{ name: 'Hardship acknowledgement', body: 'Hi {{firstName}},\n\nThank you for telling us. A hardship specialist will contact you by {{nextBusinessDay}} to talk through the options for your {{product}}.\n\nYour next payment is due {{nextPaymentDate}}. You do not need to do anything before we call.\n\nNorthfield Bank' }],
+    templates: [{ name: 'Hardship acknowledgement', body: 'Hi {{firstName}},\n\nThank you for telling us. A hardship specialist will contact you by {{nextBusinessDay}} to talk through the options for your {{product}}.\n\nYour next payment is due {{nextPaymentDate}}. You do not need to do anything before we call.\n\nHarbor & Pine Bank' }],
     files: [{ name: 'hardship-program-procedure-v7.2.pdf', sizeKb: 412, description: 'Procedure the steps follow' }],
     matchTerms: ['hardship', 'lost my job', 'laid off', 'can’t pay', "can't pay", 'defer', 'deferral', 'skip a payment', 'can’t make', "can't make", 'cannot make', 'reduce my payment', 'pause'],
     versions: [
@@ -216,7 +216,7 @@ export const SKILL_SEEDS: SkillSeed[] = [
     tools: ['get_customer_profile', 'get_payoff_statement', 'send_reply'],
     knowledgeBases: ['Lending policy'],
     guardrails: ['Never quote a payoff figure older than today.'],
-    templates: [{ name: 'Payoff reply', body: 'Hi {{firstName}},\n\nYour payoff amount good through {{goodThrough}} is {{total}}. Interest accrues at {{perDiem}} a day after that date.\n\nThe statement is attached.\n\nNorthfield Bank' }],
+    templates: [{ name: 'Payoff reply', body: 'Hi {{firstName}},\n\nYour payoff amount good through {{goodThrough}} is {{total}}. Interest accrues at {{perDiem}} a day after that date.\n\nThe statement is attached.\n\nHarbor & Pine Bank' }],
     matchTerms: ['payoff', 'pay off', 'payout', 'discharge', 'pay out my'],
     versions: [
       { version: 1, state: 'superseded', editClass: 're_approval', note: 'Generated from the payoff procedure', changes: ['Created'], by: 'Priya Shah', daysAgo: 48, instructions: PAYOFF_V2.replace('\n- Include the per-diem interest and the good-through date.', ''), run: { daysAgo: 48 } },
@@ -415,8 +415,8 @@ export const ALWAYS_ON_SEEDS: SkillSeed[] = [
     description: 'Footer every customer-facing draft must carry.',
     tests: [{ name: 'Reply carries the footer', input: 'Draft a reply confirming we updated the mailing address.', checks: [says('Canada Deposit Insurance Corporation'), says('reviewed by our staff')], source: 'manual' }],
     versions: [
-      { version: 1, body: 'End every customer message with:\n"Northfield Bank is a member of the Canada Deposit Insurance Corporation. Call 1-800-555-0100 with any questions."', note: 'First version', daysAgo: 140 },
-      { version: 2, body: 'End every customer message with:\n"Northfield Bank is a member of the Canada Deposit Insurance Corporation. This message was prepared with the help of an automated assistant and reviewed by our staff. If anything here is unclear, call 1-800-555-0100."', note: 'Adds the reviewed-by-staff sentence', daysAgo: 18 },
+      { version: 1, body: 'End every customer message with:\n"Harbor & Pine Bank is a member of the Canada Deposit Insurance Corporation. Call 1-800-555-0100 with any questions."', note: 'First version', daysAgo: 140 },
+      { version: 2, body: 'End every customer message with:\n"Harbor & Pine Bank is a member of the Canada Deposit Insurance Corporation. This message was prepared with the help of an automated assistant and reviewed by our staff. If anything here is unclear, call 1-800-555-0100."', note: 'Adds the reviewed-by-staff sentence', daysAgo: 18 },
     ],
   }),
   alwaysOn({
@@ -438,9 +438,9 @@ export const ALWAYS_ON_SEEDS: SkillSeed[] = [
     writer: 'Compliance',
     description: 'Required wording for collections outreach under provincial collection rules.',
     versions: [
-      { version: 1, body: 'Include: "This is a communication from Northfield Bank about an overdue amount on your account."', note: 'First version', daysAgo: 200 },
-      { version: 2, body: 'Include, word for word:\n"This is a communication from Northfield Bank about an overdue amount on your account. You may ask us to contact you in writing only."', note: 'Written-contact right', daysAgo: 70 },
-      { version: 3, body: 'Include, word for word:\n"This is a communication from Northfield Bank about an overdue amount on your account. You may ask us to contact you in writing only. Free help is available at 1-800-555-0142."\nNever contact the customer before 7 AM or after 9 PM in their time zone.', note: 'Adds the contact-hours rule', daysAgo: 25 },
+      { version: 1, body: 'Include: "This is a communication from Harbor & Pine Bank about an overdue amount on your account."', note: 'First version', daysAgo: 200 },
+      { version: 2, body: 'Include, word for word:\n"This is a communication from Harbor & Pine Bank about an overdue amount on your account. You may ask us to contact you in writing only."', note: 'Written-contact right', daysAgo: 70 },
+      { version: 3, body: 'Include, word for word:\n"This is a communication from Harbor & Pine Bank about an overdue amount on your account. You may ask us to contact you in writing only. Free help is available at 1-800-555-0142."\nNever contact the customer before 7 AM or after 9 PM in their time zone.', note: 'Adds the contact-hours rule', daysAgo: 25 },
     ],
   }),
   alwaysOn({
@@ -471,7 +471,7 @@ export const ALWAYS_ON_SEEDS: SkillSeed[] = [
     slug: 'email-reply-format',
     writer: 'Retail Banking',
     description: 'Greeting, body and sign-off for drafted replies.',
-    versions: [{ version: 1, body: 'Start with "Hi {customer.first_name},".\nAnswer in the first paragraph. Put the next step in the last paragraph.\nSign off with "{staff.name}, Northfield Bank".', note: 'First version', daysAgo: 33 }],
+    versions: [{ version: 1, body: 'Start with "Hi {customer.first_name},".\nAnswer in the first paragraph. Put the next step in the last paragraph.\nSign off with "{staff.name}, Harbor & Pine Bank".', note: 'First version', daysAgo: 33 }],
   }),
 ];
 

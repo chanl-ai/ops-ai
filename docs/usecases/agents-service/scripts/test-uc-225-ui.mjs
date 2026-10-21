@@ -10,12 +10,12 @@ import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleS
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 const NOTICE = readFileSync(join(ROOT, 'services/agents-service/tests/fixtures/mailbox/levy_notice_smudged.pdf'));
 const SEED = Object.fromEntries(JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).map((w) => [w.id, w]));
 const SENDER = 'registry@court.example';
-const MAILBOX = 'intake@northfield.test';
+const MAILBOX = 'intake@harborpine.test';
 
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token, type = 'application/json') => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': type });

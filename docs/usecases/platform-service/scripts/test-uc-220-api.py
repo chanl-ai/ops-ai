@@ -7,12 +7,12 @@ import secrets
 
 from usecase_harness import bearer, check, finish, invited, people_stack, signed_in
 
-SAM, PRIYA, WANJIRU = "s.adeyemi@northfieldbank.com", "p.shah@northfieldbank.com", "w.kamau@northfieldbank.com"
+SAM, PRIYA, WANJIRU = "s.adeyemi@harborpine.example", "p.shah@harborpine.example", "w.kamau@harborpine.example"
 PASSWORD_PROVIDER = {"kind": "password", "label": "Password"}
 
 with people_stack() as (api, _):
     sam = bearer(signed_in(api, SAM), "team_security")
-    sec = bearer(invited(api, sam, f"sec.{secrets.token_hex(3)}@northfieldbank.com", "admin"), "team_security")
+    sec = bearer(invited(api, sam, f"sec.{secrets.token_hex(3)}@harborpine.example", "admin"), "team_security")
 
     r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=sec)
     check("the Security team admin sets a sign-in provider (200)", r.status_code == 200, r.text[:200])

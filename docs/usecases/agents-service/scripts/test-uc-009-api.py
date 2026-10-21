@@ -10,7 +10,7 @@ os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 from usecase_harness import TEAM, agents, check, data, finish, sse
 
-DANA, LEE = "dana@northfieldbank.com", "lee@northfieldbank.com"
+DANA, LEE = "dana@harborpine.example", "lee@harborpine.example"
 
 
 def as_user(user: str) -> dict[str, str]:

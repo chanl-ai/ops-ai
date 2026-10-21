@@ -179,14 +179,14 @@ async def test_only_a_service_with_the_scope_reports_an_event(stack: Stack) -> N
 async def test_a_request_is_the_askers_run_and_says_which_service_carried_it(stack: Stack) -> None:
     c, rt = stack
     rt.event_workflows = [event_workflow()]
-    [run_id] = (await emit(c, "fil_4", actor="james@northfield.example"))["runIds"]
+    [run_id] = (await emit(c, "fil_4", actor="james@harborpine.example"))["runIds"]
     started = (await run(c, run_id))["startedBy"]
-    assert (started["kind"], started["id"]) == ("person", "james@northfield.example"), started
+    assert (started["kind"], started["id"]) == ("person", "james@harborpine.example"), started
     assert started["via"] == {"kind": "event", "id": "files/file.deleted", "name": "file.deleted from files"}
     # created_by is the asker's own email, so every rule on who started a run (decide, cancel) reads the person.
     async with rt.db.connect() as conn:
         row = (await conn.execute(sa.select(engine_runs).where(engine_runs.c.id == run_id))).mappings().one()
-    assert (row["created_by"], row["started_via"]) == ("james@northfield.example", "event:files/file.deleted"), row
+    assert (row["created_by"], row["started_via"]) == ("james@harborpine.example", "event:files/file.deleted"), row
 
 
 async def test_an_id_a_team_already_holds_is_skipped_not_failed_on_every_event(stack: Stack) -> None:
@@ -212,7 +212,7 @@ async def test_a_service_reports_its_own_events_for_the_team_its_token_names(sta
     no_team = await c.post("/v1/events", json=body, headers=service(team=None))
     for r in (other_team, no_team):
         assert (r.status_code, r.json()["error"]["code"]) == (403, "team_mismatch"), r.text
-    asked = {**body, "name": "tool_access.requested", "actor": "james@northfield.example"}
+    asked = {**body, "name": "tool_access.requested", "actor": "james@harborpine.example"}
     files = await c.post("/v1/events", json=asked, headers=service())
     assert (files.status_code, files.json()["error"]["code"]) == (403, "event_not_owned"), files.text
     assert (await c.post("/v1/events", json=body, headers=service())).status_code == 202
@@ -240,7 +240,7 @@ def runner() -> dict[str, str]:
     """A custom role whose grid has workflows.view and run but not edit, as platform-service would serve it."""
     claims = {
         "sub": "rae",
-        "email": "rae@northfield.example",
+        "email": "rae@harborpine.example",
         "name": "rae",
         "kind": "person",
         "aud": ["agents"],

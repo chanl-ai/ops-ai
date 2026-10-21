@@ -85,7 +85,7 @@ def seeded() -> dict[str, tuple[dict[str, Any], Path]]:
 def client(base: str) -> httpx.Client:
     password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD", "northfield-demo")
     r = httpx.post(
-        "http://127.0.0.1:8710/v1/auth/sign-in", json={"email": "j.richardson@northfieldbank.com", "password": password}
+        "http://127.0.0.1:8710/v1/auth/sign-in", json={"email": "j.richardson@harborpine.example", "password": password}
     )
     token = r.json()["data"]["token"]
     return httpx.Client(

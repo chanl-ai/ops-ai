@@ -9,7 +9,7 @@ import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, wit
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
 const NAME = `Teller procedures ${TAG}`;
 const PDFS = join(ROOT, 'services/kb-service/seed/pdfs');

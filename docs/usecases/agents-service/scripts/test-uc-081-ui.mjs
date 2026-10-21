@@ -6,7 +6,7 @@ import { PLATFORM_PORT, TOOLS_PORT, AGENTS_PORT, check, chromium, finish, withUi
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const ID = 'uc081ui_refund_check';
 const DEFINITION = `

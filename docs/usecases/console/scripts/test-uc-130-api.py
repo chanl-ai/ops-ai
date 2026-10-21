@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from usecase_harness import agents, check, data, finish
 
-TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@northfieldbank.com"}
+TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
 INTRANET = "https://intranet.bank.example"
 
 with agents() as api:
@@ -18,7 +18,7 @@ with agents() as api:
     secret = data(api.post(f"/v1/widget-deployments/{one}/keys", json={"name": "intranet server"}, headers=TEAM))[
         "secret"
     ]
-    person = {"email": "m.okafor@northfieldbank.com", "name": "Maya Okafor", "origin": INTRANET}
+    person = {"email": "m.okafor@harborpine.example", "name": "Maya Okafor", "origin": INTRANET}
     minted = api.post(
         f"/v1/widget-deployments/{one}/sessions", json=person, headers={"Authorization": f"Bearer {secret}"}
     )

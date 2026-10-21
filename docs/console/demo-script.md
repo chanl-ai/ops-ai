@@ -15,8 +15,8 @@ Status: current for the shared stack, 2026-10-18. Every scenario below passed `m
 4. Do not run `make up RESET=1` or `make reset-db` before a demo. A wiped database loses the fake bank's module and the
    advisor's bank tools, which `make up` does not bring back.
 
-Sign in at <http://localhost:3016>, password `northfield-demo`: James Richardson (j.richardson@northfieldbank.com)
-asks the questions, Maya Okafor (m.okafor@northfieldbank.com) approves.
+Sign in at <http://localhost:3016>, password `northfield-demo`: James Richardson (j.richardson@harborpine.example)
+asks the questions, Maya Okafor (m.okafor@harborpine.example) approves.
 
 ## The scenarios
 
@@ -24,9 +24,9 @@ asks the questions, Maya Okafor (m.okafor@northfieldbank.com) approves.
 |---|---|---|---|
 | a | Chat, Advisor's Helper | "My client lost her job. Compare Savings Plus and Money Market for her." | The hardship skill loads, then a comparison citing Retail Product Sheet p.4 |
 | b | Chat, Advisor's Helper | "What is the interest rate on Savings Plus, and how does it compare with Money Market?" | "3.10% a year" against Money Market's 3.65% and 3.90%, each with a citation |
-| b | Chat, Advisor's Helper | "Should my client buy Northfield shares?" | Refused at once by the No investment advice guardrail |
+| b | Chat, Advisor's Helper | "Should my client buy Harbor & Pine shares?" | Refused at once by the No investment advice guardrail |
 | c | Chat, Advisor's Helper | "What does Priya Natarajan have with us?" | Tool cards for search_customers, get_customer and list_accounts, then her accounts and balances |
-| d | Chat, Wire Fraud Sentinel | "Wire W-88213 for $48,500 went to a payee added today. Put a 24 hour hold on it." | An approval card for the hold. Maya approves (password again for the step-up), then Omar Haddad (o.haddad@northfieldbank.com) from Fraud; the reply says the hold is in place |
+| d | Chat, Wire Fraud Sentinel | "Wire W-88213 for $48,500 went to a payee added today. Put a 24 hour hold on it." | An approval card for the hold. Maya approves (password again for the step-up), then Omar Haddad (o.haddad@harborpine.example) from Fraud; the reply says the hold is in place |
 | e | Workflows > Runs | Open the latest "Customer lookup (seed walk)" run | Each step with its input and output, ending succeeded |
 | f | Chat, Advisor's Helper | "Run the customer summary workflow for Priya Natarajan." | A workflow tool card, then a summary of Priya; the run opens from the card |
 | g | Terminal, then the console | `make demo-mailbox`, then open Cases, Human Tasks and <http://localhost:8025> | Three high-priority court order cases, a `Levy notice` Human Task per matched debtor (customer, amount, CAD), the reply in Mailpit |

@@ -131,8 +131,8 @@ function emailGraph(mailbox: string, agent: string, config: EmailWorkflowConfig)
 
 export const SEED_GRAPHS = {
   ...GRAPHS,
-  wf_card_inbox: emailGraph('cardservices@northfieldbank.com', 'dispute-resolver', EMAIL_CONFIGS.wf_card_inbox),
-  wf_lending_inbox: emailGraph('lendingservicing@northfieldbank.com', 'mortgage-intake', EMAIL_CONFIGS.wf_lending_inbox),
+  wf_card_inbox: emailGraph('cardservices@harborpine.example', 'dispute-resolver', EMAIL_CONFIGS.wf_card_inbox),
+  wf_lending_inbox: emailGraph('lendingservicing@harborpine.example', 'mortgage-intake', EMAIL_CONFIGS.wf_lending_inbox),
   wf_branch_chat: templateGraph('chat', 'Chat message', { slug: 'branch-concierge', name: 'Branch Concierge', version: 12 }),
 };
 

@@ -331,7 +331,7 @@ async def wire_waiting(a: Adapter) -> str:
     return tid
 
 
-SECOND = "lee@northfieldbank.com"
+SECOND = "lee@harborpine.example"
 
 
 async def first_approval(a: Adapter, tid: str) -> None:

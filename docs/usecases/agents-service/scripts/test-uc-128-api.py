@@ -12,7 +12,7 @@ from typing import Any
 from usecase_harness import agents, check, data, finish, sse
 
 ROOT = Path(__file__).resolve().parents[4]
-TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@northfieldbank.com"}
+TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
 
 
 def say(api: Any, thread: str, text: str) -> list[dict[str, Any]]:
@@ -85,6 +85,7 @@ hits = subprocess.run(
     ],
     capture_output=True,
     text=True,
+    check=False,
 ).stdout
 check("6 no agent id is named in the default path", hits == "", hits[:300])
 finish()

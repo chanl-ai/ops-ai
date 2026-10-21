@@ -8,7 +8,7 @@ from httpx import AsyncClient
 
 from tests.api.test_chat import new_thread, send
 
-DEV = "j.richardson@northfieldbank.com"
+DEV = "j.richardson@harborpine.example"
 
 
 def code_for(email: str) -> str:
@@ -28,7 +28,7 @@ async def test_sso_callback_for_the_caller_mints_a_step_up_money_decisions_accep
 
 
 async def test_sso_callback_for_another_account_is_refused(client: AsyncClient) -> None:
-    res = await client.post("/v1/auth/step-up/sso", json={"code": code_for("someone.else@northfieldbank.com")})
+    res = await client.post("/v1/auth/step-up/sso", json={"code": code_for("someone.else@harborpine.example")})
     assert res.status_code == 401
     garbled = await client.post("/v1/auth/step-up/sso", json={"code": "%%%not-base64"})
     assert garbled.status_code == 401

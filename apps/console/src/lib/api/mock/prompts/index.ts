@@ -33,8 +33,8 @@ const para = (...xs: (string | false | undefined)[]) => xs.filter((x): x is stri
 /** "a fraud analyst's assistant" reads as a noun; "Drafts replies …" as a job, so it becomes "an agent that drafts replies …". */
 const roleLine = (role: string) => {
   const r = role.trim().replace(/\.$/, '');
-  if (!r) return 'You are an agent at Northfield Bank.';
-  return /^(a|an|the)\b/i.test(r) ? `You are ${r} at Northfield Bank.` : `You are an agent at Northfield Bank that ${r.replace(/^./, (c) => c.toLowerCase())}.`;
+  if (!r) return 'You are an agent at Harbor & Pine Bank.';
+  return /^(a|an|the)\b/i.test(r) ? `You are ${r} at Harbor & Pine Bank.` : `You are an agent at Harbor & Pine Bank that ${r.replace(/^./, (c) => c.toLowerCase())}.`;
 };
 
 /** The deterministic stand-in for the gateway model: the same spec always yields the same sections. */

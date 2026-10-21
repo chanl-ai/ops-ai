@@ -17,11 +17,11 @@ const json = async (r) => {
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const P = as(await tokenFor('p.shah@northfieldbank.com'), 'team_ops');
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
-    const N = as(await tokenFor('n.petrov@northfieldbank.com'), 'team_security');
+    const P = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+    const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
     // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-057' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-057' }) });
     // A published module with one write, granted to a new agent.
@@ -42,7 +42,7 @@ await withUiStack(
     const held = /"kind":\s*"approval"/.test(await sent.text());
     check('the chat write is held for approval', held);
 
-    const listed = (await json(await fetch(`${agentsUrl}/reviews?page=1&pageSize=50&view=open`, { headers: as(await tokenFor('m.okafor@northfieldbank.com'), 'team_ops') }))).data.find((r) => r.origin?.kind === 'chat' && r.origin.threadId === thread);
+    const listed = (await json(await fetch(`${agentsUrl}/reviews?page=1&pageSize=50&view=open`, { headers: as(await tokenFor('m.okafor@harborpine.example'), 'team_ops') }))).data.find((r) => r.origin?.kind === 'chat' && r.origin.threadId === thread);
     check('the reviews API lists it as a chat hold with its thread', !!listed && listed.title.includes(WRITE), listed ?? null);
 
     const browser = await chromium.launch();
@@ -51,7 +51,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('m.okafor@northfieldbank.com');
+      await page.getByLabel('Email').fill('m.okafor@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

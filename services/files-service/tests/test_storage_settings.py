@@ -63,11 +63,11 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
 
     def make(*, admin: bool = True) -> httpx.AsyncClient:
         files = TenantFiles(default, FilesStore(engine), CONFIG, scanning="off", settings=storage)  # pyright: ignore[reportArgumentType]
-        auth = Auth.for_dev(Settings(), audience="files", name="sam", email="sam@northfieldbank.com", tenant_id=tenant)
+        auth = Auth.for_dev(Settings(), audience="files", name="sam", email="sam@harborpine.example", tenant_id=tenant)
         app = create_files_app(files, engine=engine, auth=auth, settings=storage)
         if not admin:
             # A builder of team_ops: no Security admin, so `can()` refuses storage settings (c-149).
-            sign_in(app, tenant, "builder", "sam@northfieldbank.com")
+            sign_in(app, tenant, "builder", "sam@harborpine.example")
         if admin:
             # What a platform token with admin on team_security resolves to; dev sign-in carries no roles.
             async def as_admin(p: CurrentPrincipal) -> Who:

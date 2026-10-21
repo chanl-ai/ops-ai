@@ -263,14 +263,14 @@ def page_images(
     version = {"fields": definition["fields"], "pageImages": True}
     turned = documents.post(f"/v1/document-types/{type_id}/versions", json=version)
     reads["team off"] = scan_read()
-    refused_admin = team("p.shah@northfieldbank.com", True)
-    allowed_admin = team("w.kamau@northfieldbank.com", True)
+    refused_admin = team("p.shah@harborpine.example", True)
+    allowed_admin = team("w.kamau@harborpine.example", True)
     reads["alias off"] = scan_read()
     alias = {"name": "extract", "providerId": "openai-local", "modelId": "default"}
     alias["clearedSensitivity"] = "confidential"
     cleared = model_admin.post("/v1/models/aliases", json={**alias, "images": True}, headers=MODELS_ADMIN).status_code
     reads["all on"] = scan_read()
-    team("w.kamau@northfieldbank.com", False)
+    team("w.kamau@harborpine.example", False)
     reads["team off again"] = scan_read()
     shown = reads["all on"].get("imageCalls") or []
     logged = data(model_admin.get("/v1/models/calls", params={"alias": "extract"}, headers=MODELS_ADMIN))["items"]

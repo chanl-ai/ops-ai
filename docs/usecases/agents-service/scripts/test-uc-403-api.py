@@ -15,7 +15,7 @@ import httpx
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, data, engine_worker, finish, tools, until
 
 OPS = {"X-Team-Id": "team_ops"}
-MAYA = {**OPS, "X-Dev-User": "m.okafor@northfieldbank.com"}
+MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
 
 PAUSE = """
 schemaVersion: 2

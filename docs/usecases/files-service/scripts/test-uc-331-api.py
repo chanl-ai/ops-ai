@@ -46,7 +46,7 @@ DOCS = ROOT / "services" / "documents-service"
 RULES = DOCS / "tests" / "fixtures" / "fake-model"
 INVOICES = DOCS / "tests" / "fixtures" / "invoice"
 OPS = {"X-Team-Id": "team_ops"}
-MAYA = {**OPS, "X-Dev-User": "m.okafor@northfieldbank.com"}
+MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
 SETTLED = {"succeeded", "failed", "cancelled"}
 
 

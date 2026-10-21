@@ -27,7 +27,7 @@ screens 1 to 3.
 | 6 | At 400 px he opens the file's page | Nothing scrolls sideways |
 | 7 | He goes back to Preview | Beside the PDF each field is one line with its quote under it (in full on hover); the garnishee is marked Check and the issuing agency reads Not on the page, with no confidence |
 | 8 | He clicks the case number's box on the page, then the Court row | The case number's row is selected, then the Court box; the garnishee, not on the page, has no box |
-| 9 | On Fields he presses Edit fields, types Northfield Bank Test Intake for the garnishee and saves | The read keeps his value, marked corrected, with "read as Northfield Bank" beside it, and it no longer waits for a check |
+| 9 | On Fields he presses Edit fields, types Harbor & Pine Bank Test Intake for the garnishee and saves | The read keeps his value, marked corrected, with "read as Harbor & Pine Bank" beside it, and it no longer waits for a check |
 
 ## Acceptance layers
 

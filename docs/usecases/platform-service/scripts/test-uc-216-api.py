@@ -7,11 +7,11 @@ import secrets
 
 from usecase_harness import bearer, check, data, finish, invited, people_stack, signed_in
 
-PRIYA = "p.shah@northfieldbank.com"
+PRIYA = "p.shah@harborpine.example"
 
 with people_stack() as (api, agents):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
-    email = f"viewer.{secrets.token_hex(3)}@northfieldbank.com"
+    email = f"viewer.{secrets.token_hex(3)}@harborpine.example"
     me = invited(api, priya, email, "viewer")
     h = bearer(me, "team_ops")
     check(
@@ -32,7 +32,7 @@ with people_stack() as (api, agents):
     check("the viewer cannot ask to publish an agent (403)", r.status_code == 403, r.text[:200])
     r = agents.delete(f"/v1/agents/{agent['id']}", headers=h)
     check("the viewer cannot delete an agent (403)", r.status_code == 403, r.text[:200])
-    r = api.post("/v1/settings/members/invite", json={"emails": ["x@northfieldbank.com"], "role": "viewer"}, headers=h)
+    r = api.post("/v1/settings/members/invite", json={"emails": ["x@harborpine.example"], "role": "viewer"}, headers=h)
     check("the viewer cannot invite anyone (403)", r.status_code == 403, r.text[:200])
     r = agents.get("/v1/agents?page=1&pageSize=5", headers=bearer(me, "team_fraud"))
     check(

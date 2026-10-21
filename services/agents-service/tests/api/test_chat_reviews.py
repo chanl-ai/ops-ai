@@ -10,7 +10,7 @@ from httpx import AsyncClient
 
 from tests.conftest import sse_events
 
-ASKER, APPROVER = {"X-Dev-User": "dana@northfieldbank.com"}, {"X-Dev-User": "lee@northfieldbank.com"}
+ASKER, APPROVER = {"X-Dev-User": "dana@harborpine.example"}, {"X-Dev-User": "lee@harborpine.example"}
 WRITE = 'call request_document {"customerId": "C-1042", "document": "proof of address", "reason": "Moved"}'
 
 

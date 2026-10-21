@@ -88,8 +88,8 @@ demo-reset: ## Clear every run, chat, Human Task, case and received-email record
 		printf 'Clear every run, chat and Human Task on the shared stack for every session? Type yes: '; read answer; \
 		[ "$$answer" = yes ] || { echo "demo-reset: nothing was changed"; exit 1; }; fi
 	@OPS_DATABASE_URL="$(OPS_DATABASE_URL)" uv run --quiet python scripts/demo_reset.py
-	@cd services/tools-service && uv run --quiet python scripts/reimport_bank_module.py --as j.richardson@northfieldbank.com \
-		--decide-as n.petrov@northfieldbank.com --secrets-as s.adeyemi@northfieldbank.com
+	@cd services/tools-service && uv run --quiet python scripts/reimport_bank_module.py --as j.richardson@harborpine.example \
+		--decide-as n.petrov@harborpine.example --secrets-as s.adeyemi@harborpine.example
 	@cd services/kb-service && uv run --quiet python scripts/seed_demo_knowledge.py --agents http://127.0.0.1:$(OPS_AGENTS_PORT) \
 		> $(ROOT)/.run/demo-knowledge.log || { tail -20 $(ROOT)/.run/demo-knowledge.log; exit 1; }
 	@tail -2 $(ROOT)/.run/demo-knowledge.log

@@ -17,7 +17,7 @@ from .common import GraphDeps, kernel_turn
 
 LABELS = ["product_question", "account_specific", "other"]
 ANSWER = PromptFragment(
-    "You answer Northfield Bank customers' product questions for the support team. Answer from the knowledge"
+    "You answer Harbor & Pine Bank customers' product questions for the support team. Answer from the knowledge"
     " provided and cite it; if it does not cover the question, say so. Two to four sentences."
 )
 

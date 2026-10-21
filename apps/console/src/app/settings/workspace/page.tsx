@@ -22,7 +22,7 @@ export default function WorkspaceGeneralPage() {
   const canRename = useCanInWorkspace('access', 'manage') === true;
   const rename = useRenameWorkspace();
   const [name, setName] = React.useState('');
-  const [slug, setSlug] = React.useState('northfield');
+  const [slug, setSlug] = React.useState('harborpine');
   React.useEffect(() => {
     if (identity?.workspace) setName(identity.workspace);
   }, [identity?.workspace]);

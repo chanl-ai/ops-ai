@@ -25,10 +25,10 @@ await withUiStack(
     // The request's system workflow runs on a worker that calls the tools gateway (c-257).
     await stack.startWorker();
     // James's published module with one read, and his request for a workflow's access to it.
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
-    const N = as(await tokenFor('n.petrov@northfieldbank.com'), 'team_security');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+    const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
     // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-053' }) });
     const id = (await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc053-${TAG}`, type: 'http' }) })).json()).data.id;
     const op = `get_statement_${TAG}`;
@@ -49,7 +49,7 @@ await withUiStack(
       // c-257: the request runs as the tool_access_request system workflow; the module's Access tab links to the run's
       // review by its run key and decides nothing itself.
       check('1 the request names its workflow run', approval.reviewId === `tool_access.requested:${approval.id}`, approval);
-      const P = as(await tokenFor('p.shah@northfieldbank.com'), 'team_ops');
+      const P = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
       const byKey = `http://127.0.0.1:${AGENTS_PORT}/reviews/by-run-key/${encodeURIComponent(approval.reviewId)}`;
       let waiting = null;
       for (let i = 0; i < 120 && !waiting; i++) {
@@ -58,14 +58,14 @@ await withUiStack(
         else await new Promise((done) => setTimeout(done, 500));
       }
       check('1 its run waits in Human Tasks for the module team', waiting?.status === 'pending' && waiting?.policy?.reviewers === 'team_ops', waiting && { status: waiting.status, policy: waiting.policy });
-      const jp = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const jp = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       jp.on('pageerror', (e) => errors.push(e.message));
       await jp.goto(`${consoleUrl}/tools/${id}?tab=access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await row(jp).waitFor({ timeout: 120_000 });
       const link = row(jp).getByRole('link', { name: 'Decide in Human Tasks' });
       check('2 the Access tab links the request to Human Tasks and offers no Approve', (await link.getAttribute('href')) === `/reviews?runKey=${encodeURIComponent(approval.reviewId)}` && (await row(jp).getByRole('button', { name: 'Approve' }).count()) === 0);
 
-      const pp = await signIn(browser, consoleUrl, 'p.shah@northfieldbank.com');
+      const pp = await signIn(browser, consoleUrl, 'p.shah@harborpine.example');
       pp.on('pageerror', (e) => errors.push(e.message));
       await pp.goto(`${consoleUrl}/tools/${id}?tab=access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await row(pp).getByRole('link', { name: 'Decide in Human Tasks' }).click();

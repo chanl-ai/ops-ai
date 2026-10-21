@@ -21,11 +21,11 @@ def entry(entries: list[dict], action: str, target: str) -> dict:  # type: ignor
 
 
 with platform() as (api, _):
-    priya = sign_in(api, "p.shah@northfieldbank.com")
+    priya = sign_in(api, "p.shah@harborpine.example")
     r = api.post(
         "/v1/settings/members/invite",
         headers=priya,
-        json={"emails": [f"v.okoro.{RUN}@northfieldbank.com"], "role": "viewer"},
+        json={"emails": [f"v.okoro.{RUN}@harborpine.example"], "role": "viewer"},
     )
     invite = data(r)["invites"][0]
     api.post(f"/v1/invites/{invite['token']}/accept", json={"name": "Vic Okoro"})
@@ -57,10 +57,10 @@ with platform() as (api, _):
     maya_id = next(
         m["id"]
         for m in data(api.get("/v1/settings/members", headers=priya))["data"]
-        if m["email"] == "m.okafor@northfieldbank.com"
+        if m["email"] == "m.okafor@harborpine.example"
     )
     api.post("/v1/settings/members/role", headers=priya, json={"ids": [maya_id], "role": "viewer"})
-    r = api.get("/v1/audit", headers=sign_in(api, "m.okafor@northfieldbank.com"))
+    r = api.get("/v1/audit", headers=sign_in(api, "m.okafor@harborpine.example"))
     check("a viewer reading the audit is 403", r.status_code == 403, r.status_code)
 
 finish()

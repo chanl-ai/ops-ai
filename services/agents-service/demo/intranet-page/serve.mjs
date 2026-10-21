@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 const port = Number(process.argv[2] ?? 4610);
 const snippet = process.env.OPS_WIDGET_SNIPPET ?? '';
 const platform = process.env.PLATFORM_URL ?? 'http://127.0.0.1:8810';
-const email = process.env.DEMO_EMAIL ?? 'm.okafor@northfieldbank.com';
+const email = process.env.DEMO_EMAIL ?? 'm.okafor@harborpine.example';
 const password = process.env.DEMO_PASSWORD ?? 'northfield-demo';
 const page = readFileSync(new URL('./index.html', import.meta.url), 'utf8').replace('<!-- OPS_WIDGET_SNIPPET -->', snippet);
 

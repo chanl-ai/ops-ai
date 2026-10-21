@@ -77,7 +77,7 @@ def sign_in(app: FastAPI, tenant: str, role: str) -> None:
         p = Principal(
             kind="person",
             sub="usr_dev",
-            email="j.richardson@northfieldbank.com",
+            email="j.richardson@harborpine.example",
             name="j.richardson",
             tenant_id=tenant,
             team_id=team,

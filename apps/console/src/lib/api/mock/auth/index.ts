@@ -285,7 +285,7 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
         const s = current();
         if (!s) throw new AuthError('Sign in before setting up two-step verification.', 'no_session');
         const secret = 'JBSWY3DPEHPK3PXP';
-        return { secret, otpauthUrl: `otpauth://totp/Northfield%20Ops%20AI:${encodeURIComponent(s.user.email)}?secret=${secret}&issuer=Northfield%20Ops%20AI`, recoveryCodes: ['4F7K-2M9Q', '8XWD-6HRT', 'C3PN-9VZL', 'J5QB-1EYU', 'M8TG-4KAD', 'R2HX-7WNC', 'V6LS-3PJF', 'Z9EM-5BQR'] };
+        return { secret, otpauthUrl: `otpauth://totp/Harbor%20%26%20Pine%20Ops%20AI:${encodeURIComponent(s.user.email)}?secret=${secret}&issuer=Harbor%20%26%20Pine%20Ops%20AI`, recoveryCodes: ['4F7K-2M9Q', '8XWD-6HRT', 'C3PN-9VZL', 'J5QB-1EYU', 'M8TG-4KAD', 'R2HX-7WNC', 'V6LS-3PJF', 'Z9EM-5BQR'] };
       },
       enrol: async (code) => {
         const s = read();

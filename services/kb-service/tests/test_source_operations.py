@@ -17,7 +17,7 @@ from .test_sync import file_source, upload
 
 async def synced(client: httpx.AsyncClient) -> tuple[dict[str, Any], dict[str, Any]]:
     src = await file_source(client)
-    body = {"name": "Lending", "owner": "james@northfieldbank.com", "sourceIds": [src["id"]]}
+    body = {"name": "Lending", "owner": "james@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
     await upload(client, src["id"], "scan.pdf", scanned_pdf())
@@ -67,7 +67,7 @@ async def test_a_teammate_edits_detaches_and_verifies(
     decision, 2026-10-17); a viewer or reviewer may not (test_write_roles)."""
     src, kb = await synced(client)
     item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
-    async with kb_client(engine, tenant, "maya@northfieldbank.com") as maya:
+    async with kb_client(engine, tenant, "maya@harborpine.example") as maya:
         data(await maya.post(f"/v1/knowledge-bases/{kb['id']}/refresh"))
     renamed = data(
         await client.patch(f"/v1/sources/{src['id']}", json={"name": "Lending PDFs 2026", "tags": ["policy"]})
@@ -75,8 +75,8 @@ async def test_a_teammate_edits_detaches_and_verifies(
     assert (renamed["name"], renamed["tags"]) == ("Lending PDFs 2026", ["policy"])
     verified = data(await client.post(f"/v1/items/{item['id']}/verify", json={"verified": True}))
     assert verified["verified"] is True
-    moved = data(await client.put(f"/v1/items/{item['id']}/owner", json={"owner": "lee@northfieldbank.com"}))
-    assert moved["owner"] == "lee@northfieldbank.com"
+    moved = data(await client.put(f"/v1/items/{item['id']}/owner", json={"owner": "lee@harborpine.example"}))
+    assert moved["owner"] == "lee@harborpine.example"
     detached = data(await client.delete(f"/v1/knowledge-bases/{kb['id']}/sources/{src['id']}"))
     assert detached["sources"] == []
 
@@ -91,4 +91,4 @@ async def test_refresh_syncs_the_sources_and_lookups_list_what_exists(client: ht
     triggers = [r["trigger"] for r in data(await client.get(f"/v1/sources/{src['id']}/runs"))["data"]]
     assert triggers[:2] == ["retry", "manual"], triggers
     looked = data(await client.get("/v1/knowledge/lookups"))
-    assert "james@northfieldbank.com" in looked["owners"] and "Lending" in looked["collections"], looked
+    assert "james@harborpine.example" in looked["owners"] and "Lending" in looked["collections"], looked

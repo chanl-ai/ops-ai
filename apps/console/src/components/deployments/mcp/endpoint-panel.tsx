@@ -23,7 +23,7 @@ export function EndpointPanel({ url, authLabel, exposedCount, live, onCopied }: 
     <Card className="gap-4" data-testid="connect-endpoint">
       <CardHeader>
         <CardTitle>How assistants connect</CardTitle>
-        <CardDescription>Each person signs in with their own Northfield account, so an assistant can run only what that person may run.</CardDescription>
+        <CardDescription>Each person signs in with their own Harbor & Pine account, so an assistant can run only what that person may run.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2 pl-3">
@@ -63,7 +63,7 @@ export function EndpointPanel({ url, authLabel, exposedCount, live, onCopied }: 
         onOpenChange={(o) => !o && setClient(null)}
         size="md"
         title={client ? `Connect ${client.name}` : ''}
-        description="Signs in with your Northfield account. No key to paste."
+        description="Signs in with your Harbor & Pine account. No key to paste."
         footer={
           <div className="flex w-full items-center justify-between gap-2">
             <Link href="/deployments" className="text-xs text-muted-foreground underline underline-offset-2">

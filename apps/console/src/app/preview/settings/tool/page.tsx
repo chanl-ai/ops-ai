@@ -14,7 +14,7 @@ import { DIALOGS } from '@/lib/settings-preview';
 import { usePreviewStore, useViewerRole } from '@/lib/settings-preview-store';
 import Link from 'next/link';
 
-const OPERATION_HOST = 'regional.statements.northfield.example';
+const OPERATION_HOST = 'regional.statements.harborpine.example';
 const NEEDED_SECRET = 'REGION_ROUTING_KEY';
 
 /**

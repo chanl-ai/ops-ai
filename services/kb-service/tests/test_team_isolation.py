@@ -19,7 +19,7 @@ def outsider(tenant: str) -> dict[str, str]:
     """An admin of team_lending only, in the same tenant as team_ops."""
     claims = {
         "sub": "usr_omar",
-        "email": "omar@northfieldbank.com",
+        "email": "omar@harborpine.example",
         "name": "omar",
         "kind": "person",
         "aud": ["kb"],

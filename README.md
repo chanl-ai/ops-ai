@@ -154,7 +154,7 @@ runs, chats, emails received, decisions, tool calls and case changes.
 A bank system's API becomes a tool module with an operation per call; each operation has its access (read or write),
 its credentials from Secrets and its approval policy. Every call goes through the gateway and lands in its call log.
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/tools-dark.png"><img src="docs/media/tools-light.png" alt="The Tools page on staging: two modules, Platform tools and Northfield Core Banking with 12 read and write operations, 77 calls through the data gateway in the last day" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/tools-dark.png"><img src="docs/media/tools-light.png" alt="The Tools page on staging: two modules, Platform tools and Harbor & Pine Core Banking with 12 read and write operations, 77 calls through the data gateway in the last day" width="850"></picture></p>
 
 ### And more
 
@@ -240,7 +240,7 @@ make up DEMO_MODEL=fake AUTH=platform    # PostgreSQL, OPA, every service and th
 make health                              # each service, its port and whether it answers
 ```
 
-Open http://localhost:3016 and sign in as the workspace admin `w.kamau@northfieldbank.com` with the development
+Open http://localhost:3016 and sign in as the workspace admin `w.kamau@harborpine.example` with the development
 password `northfield-demo`. The development seed adds a few teams, agents and tools of its own; `make down KEEP_DB=1`
 stops the stack and keeps the data. Every service's API reference is on one page at http://localhost:8799 (a
 service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-10-20: every service answered

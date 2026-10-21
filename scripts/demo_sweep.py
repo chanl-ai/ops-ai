@@ -26,9 +26,9 @@ import demo_mailbox
 import seed_walk
 
 ADVISOR, FRAUD = "ag_advisor", "ag_fraud"
-MAYA = "m.okafor@northfieldbank.com"
+MAYA = "m.okafor@harborpine.example"
 # Two approvers: Operations' approver, then Fraud's admin (the hold's reviewers are Fraud Operations).
-APPROVERS = (MAYA, "o.haddad@northfieldbank.com")
+APPROVERS = (MAYA, "o.haddad@harborpine.example")
 
 
 _seed_result = seed_walk.result

@@ -11,7 +11,7 @@ Status: demo scripts; steps marked "pending" wait on the task named. Fake bank, 
 |---|---|---|
 | 1 | `make up AUTH=platform` from the repo root; models-service and the fake OpenAI per `docs/services/models-service/overview.md`; the fake bank from `services/tools-service/scripts` | every row of `make health` ok, including kb :8740 |
 | 2 | `.env`: `OPS_EGRESS_RESOLVE` names the laptop's current private address for `api.bank.test`; `POST /v1/egress/ranges` holds that `/32` | the bank module's test call succeeds on the Tools page |
-| 3 | `uv run python scripts/reimport_bank_module.py --as j.richardson@northfieldbank.com --decide-as n.petrov@northfieldbank.com` in `services/tools-service` | prints the operations it added and the hold's approval |
+| 3 | `uv run python scripts/reimport_bank_module.py --as j.richardson@harborpine.example --decide-as n.petrov@harborpine.example` in `services/tools-service` | prints the operations it added and the hold's approval |
 | 4 | Keep the laptop on one network from here on | the address in step 2 stays valid |
 
 ### On stage
@@ -42,7 +42,7 @@ Status: demo scripts; steps marked "pending" wait on the task named. Fake bank, 
 
 | Step | Command or check | Expect |
 |---|---|---|
-| 1 | `uv run python scripts/seed_demo_knowledge.py --as j.richardson@northfieldbank.com --agents http://127.0.0.1:8700` in `services/kb-service` | Retail products (owner James) and Branch operations (owner Nadia) indexed; ag_advisor and ag_policy wired |
+| 1 | `uv run python scripts/seed_demo_knowledge.py --as j.richardson@harborpine.example --agents http://127.0.0.1:8700` in `services/kb-service` | Retail products (owner James) and Branch operations (owner Nadia) indexed; ag_advisor and ag_policy wired |
 | 2 | Knowledge bases page as James | both bases listed with their documents and page counts |
 | 3 | Model: the connection `openai-local` points at the real provider for the day (`PUT /v1/models/providers/openai-local`), from a network that reaches it | a test question in chat answers in prose, not "heard:" |
 

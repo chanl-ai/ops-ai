@@ -35,7 +35,7 @@ function intranetOn(port, snippet) {
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'));
+    const J = as(await tokenFor('j.richardson@harborpine.example'));
     const made = await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: NAME, role: 'Answers branch questions' }) })).json();
     if (!made.data) throw new Error(`setup: create agent: ${JSON.stringify(made).slice(0, 300)}`);
     const pub = await fetch(`${agents}/v1/agents/${made.data.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: made.data.version, note: 'first' }) });
@@ -50,7 +50,7 @@ await withUiStack(
       const james = await ctx.newPage();
       james.on('pageerror', (e) => errors.push(`console: ${e.message}`));
       await james.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await james.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await james.getByLabel('Email').fill('j.richardson@harborpine.example');
       await james.getByLabel('Password').fill('northfield-demo');
       await james.getByRole('button', { name: /^Sign in/ }).first().click();
       await james.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -60,7 +60,7 @@ await withUiStack(
       // button must sit inside a 400 px viewport instead of at the end of a table wider than the screen.
       const phone = await (await browser.newContext({ viewport: { width: 400, height: 900 } })).newPage();
       await phone.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await phone.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await phone.getByLabel('Email').fill('j.richardson@harborpine.example');
       await phone.getByLabel('Password').fill('northfield-demo');
       await phone.getByRole('button', { name: /^Sign in/ }).first().click();
       await phone.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -126,7 +126,7 @@ await withUiStack(
 
       // Maya on the intranet, a second origin, chats with her SSO: the page loads /embed/v1.js and its getSession trades
       // the intranet's token for a session bound to that page (c-224 retired the first script, /widget/v1.js).
-      const M = await tokenFor('m.okafor@northfieldbank.com');
+      const M = await tokenFor('m.okafor@harborpine.example');
       const tenant = JSON.parse(Buffer.from(M.split('.')[1], 'base64url').toString()).tenant_id;
       const embedTag = `<script src="${stack.embedUrl}/embed/v1.js" async></script>
 <script>

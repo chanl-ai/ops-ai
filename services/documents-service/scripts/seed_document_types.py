@@ -28,7 +28,7 @@ RESTRAINING = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "rest
 TAX_LEVIES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "tax_levy"
 INVOICES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "invoice"
 STATEMENTS = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "bank_statement"
-BUILDER = "j.richardson@northfieldbank.com"
+BUILDER = "j.richardson@harborpine.example"
 TEAM = "team_ops"
 
 # Active ISO 4217 codes: a currency is read only when the notice prints one of these, never guessed from a place.

@@ -37,7 +37,7 @@ def person(
     """`auth_method="dev"` is a person platform-service signed in with the dev password, as on a dev stack."""
     claims = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],
@@ -208,7 +208,7 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_for_their_
 
 
 async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> None:
-    dana = {"X-Dev-User": "dana@northfieldbank.com"}
+    dana = {"X-Dev-User": "dana@harborpine.example"}
     async for c in _client(Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED), platform=False):
         # The operation asks for no step-up and the policy is open: approving needs none.
         assert (await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)).status_code == 200
@@ -217,6 +217,6 @@ async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> 
         url = await drafted(c, dana)
         bare = await c.post(url, json={"type": "approve"}, headers=dana)
         assert (bare.status_code, bare.json()["error"]["code"]) == (422, "step_up_required"), bare.text
-        token = await step_up(c, "dana@northfieldbank.com")
+        token = await step_up(c, "dana@harborpine.example")
         stepped = await c.post(url, json={"type": "approve", "stepUpToken": token}, headers=dana)
         assert stepped.status_code == 200, stepped.text

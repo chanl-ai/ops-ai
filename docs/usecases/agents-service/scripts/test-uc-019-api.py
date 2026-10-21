@@ -72,7 +72,7 @@ with agents() as api:
         test,
     )
 
-    lee = {**TEAM, "X-Dev-User": "lee@northfieldbank.com"}
+    lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
 
     def request_publish(note: str) -> dict[str, object]:
         res = api.post(f"/v1/workflows/{wid}/publish-requests", json={"graph": graph, "note": note}, headers=TEAM)

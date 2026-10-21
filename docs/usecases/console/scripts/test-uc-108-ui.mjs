@@ -32,9 +32,9 @@ async function send(page, text) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'));
-    const P = as(await tokenFor('p.shah@northfieldbank.com'));
-    const M = as(await tokenFor('m.okafor@northfieldbank.com'));
+    const J = as(await tokenFor('j.richardson@harborpine.example'));
+    const P = as(await tokenFor('p.shah@harborpine.example'));
+    const M = as(await tokenFor('m.okafor@harborpine.example'));
     // An agent whose conversations may make one model call, published (dev auto-approve).
     const made = await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: NAME, role: 'Answers account questions' }) })).json();
     if (!made.data) throw new Error(`setup: create agent: ${JSON.stringify(made).slice(0, 300)}`);
@@ -51,7 +51,7 @@ await withUiStack(
     const errors = [];
     try {
       // James: the first answer spends the one call; the next message pauses on the budget card.
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com', errors);
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
       await james.goto(`${consoleUrl}/chat/${jt}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByRole('textbox', { name: 'Message' }).waitFor({ timeout: 120_000 });
       await send(james, 'What are your opening hours?');
@@ -78,7 +78,7 @@ await withUiStack(
       check('Continue resumes the turn: it answers, the card says it was continued, and the box takes messages again', continued === 200 && done && replied && (await james.getByText('paused on its budget').count()) === 0, { continued, done, replied });
 
       // Priya, a team admin, raises the budget on her own chat.
-      const priya = await signIn(browser, consoleUrl, 'p.shah@northfieldbank.com', errors);
+      const priya = await signIn(browser, consoleUrl, 'p.shah@harborpine.example', errors);
       await priya.goto(`${consoleUrl}/chat/${pt}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await priya.getByRole('textbox', { name: 'Message' }).waitFor({ timeout: 120_000 });
       await send(priya, 'What are your opening hours?');

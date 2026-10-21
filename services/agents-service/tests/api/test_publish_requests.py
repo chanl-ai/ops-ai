@@ -11,8 +11,8 @@ from httpx import AsyncClient
 
 from .test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 
-LEE = {"X-Dev-User": "lee@northfieldbank.com"}
-KIM = {"X-Dev-User": "kim@northfieldbank.com"}
+LEE = {"X-Dev-User": "lee@harborpine.example"}
+KIM = {"X-Dev-User": "kim@harborpine.example"}
 
 
 def _ok(r: Any, status: int = 200) -> Any:
@@ -42,7 +42,7 @@ async def test_an_agent_publish_waits_for_a_second_person(tmp_path: Path) -> Non
         assert agent["id"] not in {a["id"] for a in _ok(await c.get("/chat/agents"))}
 
         decided = _ok(await _decide(c, review["id"], "approved", **KIM))
-        assert decided["status"] == "approved" and decided["approvals"] == ["kim@northfieldbank.com"]
+        assert decided["status"] == "approved" and decided["approvals"] == ["kim@harborpine.example"]
         assert agent["id"] in {a["id"] for a in _ok(await c.get("/chat/agents"))}
         assert f"agent:{agent['id']}" in {g["name"] for g in _ok(await c.get("/v1/graphs"))}
         again = await _decide(c, review["id"], "rejected", "late")

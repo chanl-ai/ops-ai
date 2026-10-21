@@ -9,7 +9,7 @@ import { FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, with
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
 const NAME = `Branch documents ${TAG}`;
 const PDFS = join(ROOT, 'services/kb-service/seed/pdfs');

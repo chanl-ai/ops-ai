@@ -2,7 +2,7 @@
  {
   "name": "lookup_account",
   "server": "Core Banking",
-  "description": "Look up a Northfield deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+  "description": "Look up a Harbor & Pine deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
   "access": "read",
   "input_schema": {
    "type": "object",
@@ -100,7 +100,7 @@
  {
   "name": "lookup_customer",
   "server": "Customer Hub",
-  "description": "Look up a Northfield customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
+  "description": "Look up a Harbor & Pine customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
   "access": "read",
   "input_schema": {
    "type": "object",
@@ -197,7 +197,7 @@
  },
  {
   "name": "search_customers",
-  "server": "Northfield Core Banking",
+  "server": "Harbor & Pine Core Banking",
   "description": "Find customers by name, email, address or the last four digits of their SSN.",
   "access": "read",
   "input_schema": {
@@ -236,7 +236,7 @@
  },
  {
   "name": "get_customer",
-  "server": "Northfield Core Banking",
+  "server": "Harbor & Pine Core Banking",
   "description": "One customer and their account ids.",
   "access": "read",
   "input_schema": {
@@ -273,7 +273,7 @@
  },
  {
   "name": "get_account",
-  "server": "Northfield Core Banking",
+  "server": "Harbor & Pine Core Banking",
   "description": "Balance, status and holds of one account.",
   "access": "read",
   "input_schema": {
@@ -314,7 +314,7 @@
  },
  {
   "name": "place_hold",
-  "server": "Northfield Core Banking",
+  "server": "Harbor & Pine Core Banking",
   "description": "Place a hold on funds in an account. Moves money: a reviewer approves every call.",
   "access": "write",
   "requires_approval": true,
@@ -368,7 +368,7 @@
  },
  {
   "name": "add_customer_note",
-  "server": "Northfield Core Banking",
+  "server": "Harbor & Pine Core Banking",
   "description": "Write a note on a customer's record.",
   "access": "write",
   "requires_approval": true,

@@ -17,9 +17,9 @@ the log line named under "If nothing happens" says why.
 | # | Do | Where |
 |---|---|---|
 | 1 | Create the app password and copy it. | Google account |
-| 2 | Sign in as Sam Adeyemi (`s.adeyemi@northfieldbank.com`, password `northfield-demo`), add a secret named `GMAIL_APP_PASSWORD` with the app password as its value, scoped to team `team_ops`. | Console, Settings > Secrets |
+| 2 | Sign in as Sam Adeyemi (`s.adeyemi@harborpine.example`, password `northfield-demo`), add a secret named `GMAIL_APP_PASSWORD` with the app password as its value, scoped to team `team_ops`. | Console, Settings > Secrets |
 | 3 | Still as Sam, add `imap.gmail.com` to the allowed hosts. | Settings > Egress |
-| 4 | Sign in as James Richardson (`j.richardson@northfieldbank.com`). Open Channels, press **Connect a mailbox**, pick **Gmail**, then give it a name, the Gmail address and `GMAIL_APP_PASSWORD` as the app password. | Console, Channels > Email (`http://localhost:3016/channels/email`) |
+| 4 | Sign in as James Richardson (`j.richardson@harborpine.example`). Open Channels, press **Connect a mailbox**, pick **Gmail**, then give it a name, the Gmail address and `GMAIL_APP_PASSWORD` as the app password. | Console, Channels > Email (`http://localhost:3016/channels/email`) |
 | 5 | Press **Test connection**. It should say Connected and show the newest subject in the inbox. Then press **Connect mailbox**. | The connect form |
 | 6 | Create a runner workflow, open its trigger, pick **Email received** and choose the Gmail mailbox (the picker says Gmail; **Connect a mailbox** there opens the same form). Set filters if you want them, save the version and publish it; approve the publish request in Reviews if your team requires one. | Console, Workflows |
 | 7 | Wait a few seconds after publishing: the first pass takes the inbox as it is, so mail already there starts nothing. | |

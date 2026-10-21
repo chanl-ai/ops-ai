@@ -49,12 +49,12 @@ export default function SecurityPage() {
         <SettingCard id="sso" title="SSO connection" description="The identity provider and its metadata." help="Test the connection after saving." onSave={() => mockSave('SSO connection')} {...common}>
           <div className="flex w-full flex-col gap-3">
             <Combobox options={PROVIDERS} value={provider} onChange={setProvider} noun="providers" />
-            <PrefixedInput prefix="https://" defaultValue="login.northfield.example/metadata" aria-label="Metadata address" />
+            <PrefixedInput prefix="https://" defaultValue="login.harborpine.example/metadata" aria-label="Metadata address" />
           </div>
         </SettingCard>
         <section id="sso-domains" className="flex flex-col gap-2">
-          <EntityRow name="northfieldbank.com" icon={<ShieldCheck className="size-4" />} meta="Sends people to Entra ID" trailing={<StatusDot status="ok" label="Verified" at={new Date(Date.now() - 86_400_000 * 3).toISOString()} />} actions={locked ? undefined : [{ label: 'Remove', onClick: () => mockSave('Remove'), destructive: true }]} />
-          <EntityRow name="northfield-contractors.com" icon={<ShieldCheck className="size-4" />} meta="Publish the TXT record, then verify" trailing={<StatusDot status="warn" label="Not verified" detail="The TXT record was not found." />} actions={locked ? undefined : [{ label: 'Verify', onClick: () => mockSave('Verify') }]} />
+          <EntityRow name="harborpine.example" icon={<ShieldCheck className="size-4" />} meta="Sends people to Entra ID" trailing={<StatusDot status="ok" label="Verified" at={new Date(Date.now() - 86_400_000 * 3).toISOString()} />} actions={locked ? undefined : [{ label: 'Remove', onClick: () => mockSave('Remove'), destructive: true }]} />
+          <EntityRow name="harborpine-contractors.com" icon={<ShieldCheck className="size-4" />} meta="Publish the TXT record, then verify" trailing={<StatusDot status="warn" label="Not verified" detail="The TXT record was not found." />} actions={locked ? undefined : [{ label: 'Verify', onClick: () => mockSave('Verify') }]} />
         </section>
         <SettingCard id="sign-in-security" title="Sessions and two-step" description="How long a session lasts and whether a second step is required." help="Applies at the next sign-in." onSave={() => mockSave('Sign-in security')} {...common}>
           <div className="divide-y">

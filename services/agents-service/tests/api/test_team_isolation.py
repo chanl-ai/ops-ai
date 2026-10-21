@@ -142,7 +142,7 @@ async def test_an_outsider_cannot_chat_with_another_teams_agent(
 def _two_teams(sub: str, acting: str, roles: dict[str, str]) -> dict[str, str]:
     claims = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],

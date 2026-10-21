@@ -23,7 +23,7 @@ adds the console signed in through platform-service. No model is called.
 | 3 | A SAML provider with a certificate that is not one (ui) | Refused; the server's reason shows under the certificate field |
 | 4 | The sign-in page asks how an email on the pending domain signs in | No SSO; an SSO start is refused (400) |
 | 5 | Verify with nothing published, then with a wrong value | 422 `domain_unverified`, naming the values DNS held |
-| 6 | Publish the record at the fake DNS and verify | Verified; the email now signs in through Northfield SSO |
+| 6 | Publish the record at the fake DNS and verify | Verified; the email now signs in through Harbor & Pine SSO |
 | 7 | Save the provider again; list the same domain on a second provider | Still verified; 409 `domain_taken` |
 | 8 | Reload the page; narrow it to 400 px; James opens it (ui) | Provider and verified domain still there; no page scroll; James is told the Security team sets sign-in |
 

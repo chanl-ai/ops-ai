@@ -66,7 +66,7 @@ async def kb(engine: AsyncEngine, tenant: str) -> AsyncIterator[httpx.AsyncClien
     app = create_kb_app(
         engine, auth=auth, files=KnowledgeFiles(Path(mkdtemp(prefix="kb-files-"))), agents=StaticAgents()
     )
-    james = person(tenant, "james@northfieldbank.com", "builder")
+    james = person(tenant, "james@harborpine.example", "builder")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://kb", headers=james) as c:
         yield c
 
@@ -79,7 +79,7 @@ def _data(r: Any, status: int = 200) -> Any:
 async def _provisioned(c: httpx.AsyncClient, tenant: str, protection: str) -> dict[str, Any]:
     body = {
         "name": f"Policies {protection}",
-        "owner": "james@northfieldbank.com",
+        "owner": "james@harborpine.example",
         "templateId": "banking/policies",
         "protection": protection,
     }
@@ -88,7 +88,7 @@ async def _provisioned(c: httpx.AsyncClient, tenant: str, protection: str) -> di
 
 async def test_a_provisioned_base_is_found_again_by_its_template_id(kb: httpx.AsyncClient, tenant: str) -> None:
     made = await _provisioned(kb, tenant, "managed")
-    _data(await kb.post("/v1/knowledge-bases", json={"name": "Team notes", "owner": "james@northfieldbank.com"}), 201)
+    _data(await kb.post("/v1/knowledge-bases", json={"name": "Team notes", "owner": "james@harborpine.example"}), 201)
     found = _data(await kb.get("/v1/knowledge-bases", params={"templateId": "banking/policies"}))
     assert [b["id"] for b in found["data"]] == [made["id"]]
     assert (made["templateId"], made["protection"]) == ("banking/policies", "managed")
@@ -115,7 +115,7 @@ async def test_a_system_base_is_changed_by_an_admin_or_the_provisioner_not_a_bui
     _data(
         await kb.patch(f"/v1/knowledge-bases/{made['id']}", json={"description": "Synced"}, headers=provisioner(tenant))
     )
-    priya = person(tenant, "priya@northfieldbank.com", "admin")
+    priya = person(tenant, "priya@harborpine.example", "admin")
     _data(await kb.patch(f"/v1/knowledge-bases/{made['id']}", json={"description": "Admin's"}, headers=priya))
 
 
@@ -126,5 +126,5 @@ async def test_a_managed_base_is_edited_and_keeps_its_template(kb: httpx.AsyncCl
 
 
 async def test_a_base_made_without_a_template_reads_as_neither(kb: httpx.AsyncClient) -> None:
-    own = _data(await kb.post("/v1/knowledge-bases", json={"name": "Plain", "owner": "james@northfieldbank.com"}), 201)
+    own = _data(await kb.post("/v1/knowledge-bases", json={"name": "Plain", "owner": "james@harborpine.example"}), 201)
     assert (own["templateId"], own["protection"]) == (None, None)

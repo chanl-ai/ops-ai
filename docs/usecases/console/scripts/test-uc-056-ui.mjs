@@ -19,9 +19,9 @@ const json = async (r) => {
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
-    const N = as(await tokenFor('n.petrov@northfieldbank.com'), 'team_security');
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+    const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     // Two published modules with one read each, both granted to a new agent; one module will go away.
     // Egress writes are Security-admin only, so the host is added as Sam.
     await json(await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-056' }) }));
@@ -59,7 +59,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

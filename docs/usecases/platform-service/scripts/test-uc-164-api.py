@@ -6,10 +6,10 @@ from __future__ import annotations
 from usecase_harness import bearer, check, data, finish, platform, signed_in
 
 WANJIRU, SAM, PRIYA, RAVI = (
-    "w.kamau@northfieldbank.com",
-    "s.adeyemi@northfieldbank.com",
-    "p.shah@northfieldbank.com",
-    "r.menon@northfieldbank.com",
+    "w.kamau@harborpine.example",
+    "s.adeyemi@harborpine.example",
+    "p.shah@harborpine.example",
+    "r.menon@harborpine.example",
 )
 
 with platform() as (api, _):
@@ -56,7 +56,7 @@ with platform() as (api, _):
     check("Ravi's next token no longer carries it", team_id not in after.get("principal", {}).get("teamIds", []))
     r = api.post(
         "/v1/settings/members/invite",
-        json={"emails": ["new@northfieldbank.com"], "role": "viewer"},
+        json={"emails": ["new@harborpine.example"], "role": "viewer"},
         headers=bearer(ravi, team_id),
     )
     check("an invitation into the archived team is refused", r.status_code in (403, 409), r.status_code)

@@ -21,7 +21,7 @@ and the person is identified by a short session the bank's server mints for them
 
 In the console, open the agent's **Channels** tab and choose **Embed on a page** (or Deployments > New deployment > Chat
 widget, which asks for the agent), and list every page origin that will embed it, for example
-`https://intranet.northfield.example`. The snippet it then shows is steps 2 and 3 below with the deployment and tenant
+`https://intranet.harborpine.example`. The snippet it then shows is steps 2 and 3 below with the deployment and tenant
 filled in (c-224). Only an exact origin is accepted (scheme, host and port; no wildcards and
 no paths). The API is `POST /v1/widget-deployments` with `{ name, agentId, origins }`; it answers the deployment id
 (`wd_…`).
@@ -42,11 +42,11 @@ In the console: the agent's Channels tab, the embed's row, **Mint keys**. Builde
 revoke keys there; viewers see no key controls.
 
 ```http
-POST https://ops.northfield.example/v1/widget-deployments/wd_123/sessions
+POST https://ops.harborpine.example/v1/widget-deployments/wd_123/sessions
 Authorization: Bearer wk.<tenant>.<key id>.<secret>
 Content-Type: application/json
 
-{ "email": "j.richardson@northfield.example", "name": "James Richardson", "origin": "https://intranet.northfield.example" }
+{ "email": "j.richardson@harborpine.example", "name": "James Richardson", "origin": "https://intranet.harborpine.example" }
 ```
 
 ```json
@@ -78,12 +78,12 @@ app.post('/api/ops-chat/session', requireIntranetLogin, async (req, res) => {
 ## 3. Add the script tag
 
 ```html
-<script src="https://ops.northfield.example/embed/v1.js" async></script>
+<script src="https://ops.harborpine.example/embed/v1.js" async></script>
 <script>
   function startChat() {
     OpsChat.init({
       deployment: 'wd_123',
-      tenant: 'northfield',
+      tenant: 'harborpine',
       // Called on start, before the session ends, and after a 401; returns { session, expiresIn } or null when signed out.
       getSession: async () => {
         const r = await fetch('/api/ops-chat/session', { method: 'POST', credentials: 'include' });

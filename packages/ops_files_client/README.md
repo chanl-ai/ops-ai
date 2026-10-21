@@ -16,7 +16,7 @@ stored = await files.write(
     name="statement.pdf",
     mime="application/pdf",
     purpose="chat_attachment",
-    uploaded_by="james@northfieldbank.com",
+    uploaded_by="james@harborpine.example",
 )
 body = await files.read("local", "team_ops", stored.file.id)
 ```

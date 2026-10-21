@@ -120,7 +120,7 @@ async def test_a_member_closes_only_the_cases_they_opened(c: AsyncClient) -> Non
     case = await opened(c)
     refused = await c.patch(f"/v1/cases/{case['id']}", json={"status": "closed"}, headers=OTHER_VIEWER)
     assert refused.status_code == 403
-    worked = await c.patch(f"/v1/cases/{case['id']}", json={"assignee": "ola@northfield.example"}, headers=OTHER_VIEWER)
+    worked = await c.patch(f"/v1/cases/{case['id']}", json={"assignee": "ola@harborpine.example"}, headers=OTHER_VIEWER)
     assert worked.status_code == 200
     mine = await c.patch(f"/v1/cases/{case['id']}", json={"status": "closed"}, headers=VIEWER)
     assert mine.status_code == 200
@@ -140,7 +140,7 @@ async def test_changes_and_notes_are_timeline_entries(c: AsyncClient) -> None:
     events = r.json()["data"]["events"]
     assert [e["kind"] for e in events] == ["opened", "field", "note"]
     assert events[1]["detail"] == {"field": "status", "before": "open", "after": "waiting_on_customer"}
-    assert events[2]["by"] == "vera@northfield.example"
+    assert events[2]["by"] == "vera@harborpine.example"
     assert r.json()["data"]["pausedSince"] is not None
     assert r.json()["data"]["resolutionLeftS"] is None
 

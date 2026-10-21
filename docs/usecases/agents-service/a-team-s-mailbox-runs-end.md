@@ -16,8 +16,8 @@ reply read back from Mailpit.
 | The run | `make usecase-test UC=uc-245 LAYER=ui ISOLATED=1` |
 
 The stack is the banker demo (`withUiStack({ demo: true, tools: { mail: true } })`): platform sign-in, models on the
-fake OpenAI with the demo's rules, tools-service with the core fake bank, and `mail.northfield.test` /
-`smtp.northfield.test` resolving to GreenMail's IMAP and Mailpit's SMTP. Publish reviews stay pending
+fake OpenAI with the demo's rules, tools-service with the core fake bank, and `mail.harborpine.test` /
+`smtp.harborpine.test` resolving to GreenMail's IMAP and Mailpit's SMTP. Publish reviews stay pending
 (`OPS_REGISTRY_AUTO_APPROVE=false`), so a second person approves every publish.
 
 ## Steps and expected results

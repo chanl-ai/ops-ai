@@ -8,8 +8,8 @@ from typing import Any
 
 from usecase_harness import agents, check, data, finish, sse
 
-MAYA = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@northfieldbank.com"}
-JAMES = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@northfieldbank.com"}
+MAYA = {"X-Team-Id": "team_ops", "X-Dev-User": "m.okafor@harborpine.example"}
+JAMES = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
 
 
 def say(api: Any, who: dict[str, str], text: str) -> list[dict[str, Any]]:

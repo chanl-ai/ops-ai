@@ -14,7 +14,7 @@ await withUiStack(
       const posts = [];
       page.on('request', (r) => r.method() !== 'GET' && r.url().includes(`:${AGENTS_PORT}/`) && posts.push(`${r.method()} ${new URL(r.url()).pathname}`));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

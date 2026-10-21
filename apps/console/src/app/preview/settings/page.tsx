@@ -36,7 +36,7 @@ export default function SettingsHome() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuLabel>j.richardson@northfieldbank.com</DropdownMenuLabel>
+              <DropdownMenuLabel>j.richardson@harborpine.example</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href={`${PREVIEW_ROOT}/account`}>My account</Link>

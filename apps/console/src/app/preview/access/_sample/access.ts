@@ -25,6 +25,6 @@ export const AREA_LABEL: Record<string, string> = { secrets_egress: 'Secrets and
 export const label = (s: string) => AREA_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A person in the mock: Ravi, a viewer of Operations, whose grants are the Viewer role's. */
-export const PERSON = { id: 'usr_viewer', name: 'Ravi Menon', email: 'r.menon@northfieldbank.com', team: 'Operations', roles: ['viewer'] };
+export const PERSON = { id: 'usr_viewer', name: 'Ravi Menon', email: 'r.menon@harborpine.example', team: 'Operations', roles: ['viewer'] };
 export const grantsOf = (roleIds: string[]) =>
   roleIds.flatMap((id) => (roleOf(id)?.permissions ?? []).map((p) => ({ ...p, role: roleOf(id)!.name })));

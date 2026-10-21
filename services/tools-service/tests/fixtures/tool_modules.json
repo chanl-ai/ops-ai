@@ -13,11 +13,11 @@
     "Daniel Brooks",
     "Lena Fischer"
    ],
-   "endpoint": "https://corebanking.api.northfield.internal/v3",
+   "endpoint": "https://corebanking.api.harborpine.internal/v3",
    "auth": "oauth_client_credentials",
    "timeoutMs": 8000,
    "egressHosts": [
-    "corebanking.api.northfield.internal"
+    "corebanking.api.harborpine.internal"
    ],
    "dataClassification": "restricted",
    "catalogId": "cat_core_banking",
@@ -459,11 +459,11 @@
    "ownerContacts": [
     "Grace Liu"
    ],
-   "endpoint": "https://cards.api.northfield.internal/v2",
+   "endpoint": "https://cards.api.harborpine.internal/v2",
    "auth": "mtls",
    "timeoutMs": 6000,
    "egressHosts": [
-    "cards.api.northfield.internal"
+    "cards.api.harborpine.internal"
    ],
    "dataClassification": "restricted",
    "rotate": {
@@ -854,11 +854,11 @@
    "ownerContacts": [
     "Rafael Costa"
    ],
-   "endpoint": "https://northfield.my.salesforce.com/services/mcp/v1",
+   "endpoint": "https://harborpine.my.salesforce.com/services/mcp/v1",
    "auth": "oauth_client_credentials",
    "timeoutMs": 8000,
    "egressHosts": [
-    "northfield.my.salesforce.com"
+    "harborpine.my.salesforce.com"
    ],
    "dataClassification": "confidential",
    "catalogId": "cat_salesforce",
@@ -1031,11 +1031,11 @@
    "ownerContacts": [
     "Anika Singh"
    ],
-   "endpoint": "https://casemgmt.northfield.internal/mcp",
+   "endpoint": "https://casemgmt.harborpine.internal/mcp",
    "auth": "mtls",
    "timeoutMs": 12000,
    "egressHosts": [
-    "casemgmt.northfield.internal"
+    "casemgmt.harborpine.internal"
    ],
    "dataClassification": "restricted",
    "catalogId": "cat_case_mgmt",
@@ -1156,11 +1156,11 @@
    "ownerContacts": [
     "Tom Haddad"
    ],
-   "endpoint": "https://northfield.sharepoint.com/_api/mcp",
+   "endpoint": "https://harborpine.sharepoint.com/_api/mcp",
    "auth": "oauth_client_credentials",
    "timeoutMs": 8000,
    "egressHosts": [
-    "northfield.sharepoint.com"
+    "harborpine.sharepoint.com"
    ],
    "dataClassification": "internal",
    "catalogId": "cat_sharepoint",
@@ -1191,7 +1191,7 @@
       "results": [
        {
         "title": "Hardship program procedure",
-        "url": "https://northfield.sharepoint.com/sites/policies/hardship"
+        "url": "https://harborpine.sharepoint.com/sites/policies/hardship"
        }
       ]
      }
@@ -1263,12 +1263,12 @@
    "ownerContacts": [
     "Maya Okafor"
    ],
-   "endpoint": "https://payments.northfield.internal/api",
+   "endpoint": "https://payments.harborpine.internal/api",
    "auth": "api_key",
    "authHeader": "X-Api-Key",
    "timeoutMs": 5000,
    "egressHosts": [
-    "payments.northfield.internal"
+    "payments.harborpine.internal"
    ],
    "dataClassification": "restricted",
    "rotate": {
@@ -1412,11 +1412,11 @@
    "ownerContacts": [
     "Priya Shah"
    ],
-   "endpoint": "https://fincrime-mcp.northfield.internal/mcp",
+   "endpoint": "https://fincrime-mcp.harborpine.internal/mcp",
    "auth": "mtls",
    "timeoutMs": 10000,
    "egressHosts": [
-    "fincrime-mcp.northfield.internal"
+    "fincrime-mcp.harborpine.internal"
    ],
    "dataClassification": "confidential",
    "rotate": {
@@ -1723,11 +1723,11 @@
    "ownerContacts": [
     "Maya Okafor"
    ],
-   "endpoint": "https://los.northfield.internal/api/v4",
+   "endpoint": "https://los.harborpine.internal/api/v4",
    "auth": "oauth_client_credentials",
    "timeoutMs": 8000,
    "egressHosts": [
-    "los.northfield.internal"
+    "los.harborpine.internal"
    ],
    "dataClassification": "confidential",
    "rotate": {
@@ -1816,12 +1816,12 @@
    "ownerContacts": [
     "Tom Haddad"
    ],
-   "endpoint": "https://scheduler.northfield.internal/api",
+   "endpoint": "https://scheduler.harborpine.internal/api",
    "auth": "api_key",
    "authHeader": "Authorization",
    "timeoutMs": 5000,
    "egressHosts": [
-    "scheduler.northfield.internal"
+    "scheduler.harborpine.internal"
    ],
    "dataClassification": "internal",
    "rotate": {
@@ -1908,7 +1908,7 @@
    "ownerContacts": [
     "James Richardson"
    ],
-   "endpoint": "https://data-gateway.northfield.internal/knowledge/mcp",
+   "endpoint": "https://data-gateway.harborpine.internal/knowledge/mcp",
    "auth": "none",
    "timeoutMs": 4000,
    "egressHosts": [],
@@ -2130,7 +2130,7 @@
   },
   {
    "id": "int_confluence",
-   "name": "Confluence · northfield.atlassian.net",
+   "name": "Confluence · harborpine.atlassian.net",
    "kind": "confluence",
    "base": "revoked",
    "expiresIn": 35,
@@ -2140,7 +2140,7 @@
   },
   {
    "id": "int_github",
-   "name": "GitHub app · northfield-bank",
+   "name": "GitHub app · harborpine-bank",
    "kind": "github",
    "base": "healthy",
    "expiresIn": 300,
@@ -2150,7 +2150,7 @@
   },
   {
    "id": "int_notion",
-   "name": "Notion · Northfield Product",
+   "name": "Notion · Harbor & Pine Product",
    "kind": "notion",
    "base": "healthy",
    "expiresIn": 18,

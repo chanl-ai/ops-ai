@@ -27,7 +27,7 @@ async function step(name, body) {
 
 /** The bank's intranet page: the loader, a server route that mints the session with the mint key, and a frame from another origin. */
 function bankPage(embedUrl, dep, tenant, mintKey) {
-  const html = (signedOut) => `<!doctype html><html><body><h1>Northfield intranet</h1>
+  const html = (signedOut) => `<!doctype html><html><body><h1>Harbor & Pine intranet</h1>
 <script src="${embedUrl}/embed/v1.js" async></script>
 <script>
   window.events = []; window.signIns = 0;
@@ -73,7 +73,7 @@ const listen = (server, port) => new Promise((r) => server.listen(port, '127.0.0
 await withUiStack(
   async (consoleUrl, stack) => {
     const embedUrl = stack.embedUrl;
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const made = await (await fetch(`${agents}/v1/widget-deployments`, { method: 'POST', headers: J, body: JSON.stringify({ name: 'Intranet desk', agentId: 'ag_fraud', origins: [HOST] }) })).json();
     if (!made.data) throw new Error(`setup: deployment: ${JSON.stringify(made).slice(0, 300)}`);
     const dep = made.data.id;
@@ -132,7 +132,7 @@ await withUiStack(
       // 3. An approver decides it in Human Tasks; the widget conversation shows the hold placed.
       await step('3 after Human Tasks approves, the widget conversation carries on', async () => {
         const tid = await chat.evaluate((d) => sessionStorage.getItem(`ops-chat:${d}:thread`), dep);
-        const O = as(await tokenFor('m.okafor@northfieldbank.com'), 'team_ops');
+        const O = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
         const up = await (await fetch(`${agents}/v1/auth/step-up`, { method: 'POST', headers: O, body: JSON.stringify({ password: PASSWORD }) })).json();
         const decided = await fetch(`${agents}/reviews/${tid}/decision`, { method: 'POST', headers: O, body: JSON.stringify({ decision: 'approved', stepUpToken: up.data?.token }) });
         await page.reload({ waitUntil: 'domcontentloaded' });

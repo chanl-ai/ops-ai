@@ -7,12 +7,12 @@ import secrets
 
 from usecase_harness import bearer, check, data, finish, invited, people_stack, signed_in
 
-PRIYA = "p.shah@northfieldbank.com"
+PRIYA = "p.shah@harborpine.example"
 
 # Publish requests wait for a reviewer instead of going live at once.
 with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, agents):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
-    me = invited(api, priya, f"builder.{secrets.token_hex(3)}@northfieldbank.com", "builder")
+    me = invited(api, priya, f"builder.{secrets.token_hex(3)}@harborpine.example", "builder")
     h = bearer(me, "team_ops")
 
     r = agents.post("/v1/agents", json={"name": f"Desk {secrets.token_hex(2)}", "role": "Answers"}, headers=h)
@@ -28,7 +28,7 @@ with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, ag
         f"/v1/publish-requests/{request.get('id', 'pr_x')}/decision", json={"decision": "approved"}, headers=h
     )
     check("the builder cannot decide the review (403)", r.status_code == 403, r.text[:200])
-    r = api.post("/v1/settings/members/invite", json={"emails": ["x@northfieldbank.com"], "role": "viewer"}, headers=h)
+    r = api.post("/v1/settings/members/invite", json={"emails": ["x@harborpine.example"], "role": "viewer"}, headers=h)
     check("the builder cannot invite anyone (403)", r.status_code == 403, r.text[:200])
     r = api.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=h)
     check("the builder cannot change a policy (403)", r.status_code == 403, r.text[:200])

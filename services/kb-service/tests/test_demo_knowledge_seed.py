@@ -130,12 +130,12 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
     assert await seed_demo(service, tenant) == ["kb_retail_products", "kb_branch_operations"]
     assert await seed_demo(service, tenant) == [], "a second start adds nothing"
-    await store.remove_base(tenant, "kb_retail_products", by="j.richardson@northfieldbank.com")
+    await store.remove_base(tenant, "kb_retail_products", by="j.richardson@harborpine.example")
     assert await seed_demo(service, tenant) == [], "a demo base someone retired is not brought back"
     other = f"{tenant}_hand"
     await service.create_base(
-        Who(other, "j.richardson@northfieldbank.com", "team_ops"),
-        {"name": "Retail products", "owner": "j.richardson@northfieldbank.com"},
+        Who(other, "j.richardson@harborpine.example", "team_ops"),
+        {"name": "Retail products", "owner": "j.richardson@harborpine.example"},
     )
     assert await seed_demo(service, other) == ["kb_branch_operations"], (
         "a base of the same name made by hand is left as it is"
@@ -143,7 +143,7 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     agents_seed = json.loads((Path(__file__).parents[2] / "agents-service" / "seed" / "chat_agents.json").read_text())
     named = {a["id"]: a["default_kb_ids"] for a in agents_seed if a["id"] in ("ag_advisor", "ag_policy")}
     assert named == {"ag_advisor": ["kb_retail_products"], "ag_policy": ["kb_branch_operations"]}
-    async with kb_client(engine, tenant, email="j.richardson@northfieldbank.com", files=KnowledgeFiles(tmp_path)) as c:
+    async with kb_client(engine, tenant, email="j.richardson@harborpine.example", files=KnowledgeFiles(tmp_path)) as c:
         answer = (
             # The base is team_security's; a person reads it acting in that team (c-407).
             await c.post(
@@ -163,12 +163,12 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
     store = KnowledgeStore(engine)
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
     mine = await service.create_source(
-        Who(tenant, "m.okafor@northfieldbank.com", "team_ops"),
-        {"type": "file", "name": "Fee schedule", "collection": "Mine", "owner": "m.okafor@northfieldbank.com"},
+        Who(tenant, "m.okafor@harborpine.example", "team_ops"),
+        {"type": "file", "name": "Fee schedule", "collection": "Mine", "owner": "m.okafor@harborpine.example"},
     )
     assert await seed_demo(service, tenant) == ["kb_retail_products"]
     row = next(s for s in await store.sources(tenant) if s["id"] == mine["id"])
-    assert row["file_ids"] == [] and row["owner"] == "m.okafor@northfieldbank.com", row
+    assert row["file_ids"] == [] and row["owner"] == "m.okafor@harborpine.example", row
 
 
 async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(

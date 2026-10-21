@@ -33,12 +33,12 @@ async function signIn(browser, consoleUrl, email, errors) {
 await withUiStack(
   async (consoleUrl) => {
     // James's team workflow, saved through the API.
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ yaml: WORKFLOW }) });
     if (!saved.ok) throw new Error(`setup: save workflow answered ${saved.status}: ${await saved.text()}`);
     const wid = `uc123_${TAG}`;
     // Live, so the old console offered Start run to anyone who could read it.
-    const M = { Authorization: `Bearer ${await tokenFor('m.okafor@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const M = { Authorization: `Bearer ${await tokenFor('m.okafor@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const asked = (await (await fetch(`${agents}/v1/workflows/definitions/${wid}/publish-requests`, { method: 'POST', headers: J, body: '{}' })).json()).data;
     const live = asked?.status === 'approved' ? asked : (await (await fetch(`${agents}/v1/publish-requests/${asked?.id}/decision`, { method: 'POST', headers: M, body: JSON.stringify({ decision: 'approved' }) })).json()).data;
     if (live?.status !== 'approved') throw new Error(`setup: publish ${JSON.stringify(live ?? asked).slice(0, 300)}`);
@@ -53,8 +53,8 @@ await withUiStack(
         await page.waitForTimeout(800);
         return page.getByTestId('definition-start-run').count();
       };
-      const ravi = await runButton('r.menon@northfieldbank.com');
-      const james = await runButton('j.richardson@northfieldbank.com');
+      const ravi = await runButton('r.menon@harborpine.example');
+      const james = await runButton('j.richardson@harborpine.example');
       check('a viewer sees no run button on a workflow; a builder does', ravi === 0 && james === 1, { ravi, james, wid });
 
       // James's live run, queued with no worker: Cancel shows to its starter only.
@@ -66,8 +66,8 @@ await withUiStack(
         await page.waitForTimeout(1500);
         return page.getByTestId('run-cancel').count();
       };
-      const raviCancel = await cancelButton('r.menon@northfieldbank.com');
-      const jamesCancel = await cancelButton('j.richardson@northfieldbank.com');
+      const raviCancel = await cancelButton('r.menon@harborpine.example');
+      const jamesCancel = await cancelButton('j.richardson@harborpine.example');
       check("Cancel shows to the run's starter, not to a viewer", raviCancel === 0 && jamesCancel === 1, { raviCancel, jamesCancel, run: run?.runId });
 
       // James's publish request waits for a reviewer: Ravi, a viewer, sees who decides; Maya gets the form.
@@ -80,8 +80,8 @@ await withUiStack(
         await page.waitForTimeout(1500);
         return { approve: await page.getByRole('dialog').getByRole('button', { name: /^Approve/ }).count(), decidedBy: await page.getByTestId('review-decided-by').count() };
       };
-      const raviDecide = await decideControls('r.menon@northfieldbank.com');
-      const mayaDecide = await decideControls('m.okafor@northfieldbank.com');
+      const raviDecide = await decideControls('r.menon@harborpine.example');
+      const mayaDecide = await decideControls('m.okafor@harborpine.example');
       check('a viewer sees who decides and no Approve; a reviewer gets the decision form', request?.status === 'pending' && raviDecide.approve === 0 && raviDecide.decidedBy === 1 && mayaDecide.approve > 0 && mayaDecide.decidedBy === 0, { status: request?.status, raviDecide, mayaDecide });
       check('no page errors', errors.length === 0, errors);
     } finally {

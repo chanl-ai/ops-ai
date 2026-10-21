@@ -50,7 +50,7 @@ async def introspect(key: str) -> dict[str, Any] | None:
         return None
     found: dict[str, Any] = {
         "sub": "key_ops",
-        "email": "case-system@northfield.example",
+        "email": "case-system@harborpine.example",
         "name": "case system",
         "tenantId": "acme",
         "teamId": "team_ops",

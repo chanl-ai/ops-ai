@@ -21,7 +21,7 @@ from tests.engine.test_lifecycle_rights import PLATFORM, TENANT
 def reader(policies: dict[str, Any] | None) -> dict[str, str]:
     claims: dict[str, Any] = {
         "sub": "rita",
-        "email": "rita@northfield.example",
+        "email": "rita@harborpine.example",
         "name": "rita",
         "kind": "person",
         "aud": ["agents"],

@@ -10,8 +10,8 @@ from typing import Any
 
 from usecase_harness import TEAM, agents, check, data, engine_worker, finish, until
 
-CALLER = {**TEAM, "X-Dev-User": "lee@northfieldbank.com"}
-REVIEWER = {**TEAM, "X-Dev-User": "m.okafor@northfieldbank.com"}
+CALLER = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
+REVIEWER = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
 FACTS = [{"label": "Vendor", "value": "Acme Supplies"}, {"label": "New account", "value": "****4410"}]
 
 with agents() as api, engine_worker("uc254"):
@@ -121,7 +121,7 @@ with agents() as api, engine_worker("uc254"):
     check(
         "the caller reads the action, reason and decider",
         (state.get("action"), state.get("reason"), state.get("decidedBy"))
-        == ("reject", "Call the vendor first", "m.okafor@northfieldbank.com"),
+        == ("reject", "Call the vendor first", "m.okafor@harborpine.example"),
         state,
     )
 

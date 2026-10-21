@@ -13,7 +13,7 @@ const json = async (r) => {
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const wid = `uc141_${TAG}`;
     const name = `Activity check ${TAG}`;
     const yaml = `schemaVersion: 2\nid: ${wid}\nname: ${name}\nnodes:\n  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request}\n  - {id: done, type: ops.flow.end, typeVersion: 1, name: Done, parameters: {outcome: done}}\nconnections:\n  - {from: {node: start, port: payload}, to: {node: done, port: in}}\n`;
@@ -28,7 +28,7 @@ await withUiStack(
       page.setDefaultTimeout(60_000);
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

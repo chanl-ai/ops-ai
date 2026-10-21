@@ -16,7 +16,7 @@ const name = (i) => `Picker ${TAG} ${String(i).padStart(3, '0')}`;
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const bases = [];
     for (let i = 0; i < 120; i++) bases.push(await data(await fetch(`${kb}/v1/knowledge-bases`, { method: 'POST', headers: J, body: JSON.stringify({ name: name(i), owner: 'Operations' }) })));
     const target = bases[117];
@@ -30,7 +30,7 @@ await withUiStack(
       const asked = [];
       page.on('request', (r) => /\/options\?/.test(r.url()) && asked.push(r.url()));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

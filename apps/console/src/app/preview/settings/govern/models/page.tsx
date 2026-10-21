@@ -28,8 +28,8 @@ export default function ModelsPage() {
     <PreviewPageLayout title="Models" description="Providers, aliases, keys and budgets for every model call">
       <section id="providers" className="flex scroll-mt-20 flex-col gap-2">
         <h2 className="text-sm font-semibold">Providers</h2>
-        <EntityRow name="Northfield OpenAI" icon={<Cpu className="size-4" />} meta="openai · key held in the vault as OPENAI_PROD" trailing={<StatusDot status="ok" at={new Date(Date.now() - 180_000).toISOString()} />} actions={admin ? [{ label: 'Rebind key', onClick: () => mockSave('Rebind') }] : undefined} />
-        <EntityRow name="Northfield Anthropic" icon={<Cpu className="size-4" />} meta="anthropic · key held in the vault as ANTHROPIC_PROD" trailing={<StatusDot status="warn" detail="Rate limit reached twice in the last hour." at={new Date(Date.now() - 900_000).toISOString()} />} actions={admin ? [{ label: 'Rebind key', onClick: () => mockSave('Rebind') }] : undefined} />
+        <EntityRow name="Harbor & Pine OpenAI" icon={<Cpu className="size-4" />} meta="openai · key held in the vault as OPENAI_PROD" trailing={<StatusDot status="ok" at={new Date(Date.now() - 180_000).toISOString()} />} actions={admin ? [{ label: 'Rebind key', onClick: () => mockSave('Rebind') }] : undefined} />
+        <EntityRow name="Harbor & Pine Anthropic" icon={<Cpu className="size-4" />} meta="anthropic · key held in the vault as ANTHROPIC_PROD" trailing={<StatusDot status="warn" detail="Rate limit reached twice in the last hour." at={new Date(Date.now() - 900_000).toISOString()} />} actions={admin ? [{ label: 'Rebind key', onClick: () => mockSave('Rebind') }] : undefined} />
       </section>
       <section id="aliases" className="flex scroll-mt-20 flex-col gap-3">
         <h2 className="text-sm font-semibold">Aliases</h2>

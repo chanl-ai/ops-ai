@@ -167,9 +167,9 @@ await withUiStack(
     const browser = await chromium.launch();
     try {
       const errors = [];
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       james.on('pageerror', (e) => errors.push(e.message));
-      const jamesToken = await tokenFor('j.richardson@northfieldbank.com');
+      const jamesToken = await tokenFor('j.richardson@harborpine.example');
       const made = await fetch(`${agents}/v1/workflows`, { method: 'POST', headers: as(jamesToken), body: JSON.stringify({ name: `${NAME} returned`, trigger: 'A customer asks for a statement copy', template: 'blank' }) });
       const wf = (await made.json()).data;
 
@@ -198,7 +198,7 @@ await withUiStack(
       const ownDecision = await fetch(`${agents}/reviews/${review?.id}/decision`, { method: 'POST', headers: as(jamesToken), body: JSON.stringify({ decision: 'approved' }) });
       check('the requester cannot approve his own request: the button is off and the service refuses (403)', approveOff && ownDecision.status === 403, { approveOff, status: ownDecision.status });
 
-      const maya = await signIn(browser, consoleUrl, 'm.okafor@northfieldbank.com');
+      const maya = await signIn(browser, consoleUrl, 'm.okafor@harborpine.example');
       maya.on('pageerror', (e) => errors.push(e.message));
       await maya.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const mayaRow = maya.getByTestId(`review-row-${review?.id}`);
@@ -217,7 +217,7 @@ await withUiStack(
       const decision = await decided;
       check('Maya returns it with her reason (200)', decision?.status() === 200 && JSON.parse(decision.request().postData() ?? '{}').decision === 'returned', decision?.status());
 
-      const after = (await (await fetch(`${agents}/v1/workflows/${wf?.id}`, { headers: as(await tokenFor('m.okafor@northfieldbank.com')) })).json()).data;
+      const after = (await (await fetch(`${agents}/v1/workflows/${wf?.id}`, { headers: as(await tokenFor('m.okafor@harborpine.example')) })).json()).data;
       check('the returned workflow is still unpublished', after?.version === 0 && after?.status === 'draft', { version: after?.version, state: after?.status });
       check('no page errors', errors.length === 0, errors);
     } finally {

@@ -138,7 +138,7 @@ async def test_a_two_approver_write_needs_a_second_person(runtime: httpx.AsyncCl
     message = "Place a 24-hour hold on wire W-88213, the payee was added this morning."
     events = await run(runtime, tid, {"input": {"agent_id": "ag_fraud", "message": message}})
     assert events[-1]["data"]["status"] == "interrupted", events[-3:]
-    lee = "lee@northfieldbank.com"
+    lee = "lee@harborpine.example"
     mine = await step_up(runtime)
     first = await runtime.post(f"/v1/threads/{tid}/approvals", json={"stepUpToken": mine})
     assert first.json()["data"]["approvalToken"] is None
@@ -155,5 +155,5 @@ async def test_a_two_approver_write_needs_a_second_person(runtime: httpx.AsyncCl
         f"/v1/threads/{tid}/approvals", json={"stepUpToken": await step_up(runtime, lee)}, headers={"X-Dev-User": lee}
     )
     data = second.json()["data"]
-    assert data["approvers"] == ["j.richardson@northfieldbank.com", "lee@northfieldbank.com"]
+    assert data["approvers"] == ["j.richardson@harborpine.example", "lee@harborpine.example"]
     assert data["approvalToken"]

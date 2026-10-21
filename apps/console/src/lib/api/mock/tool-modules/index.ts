@@ -545,7 +545,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     const d = DISCOVERY.openapi;
     // As tools-service presets it: GET reads, every other method writes.
     const operations = d.operations.map((o) => (o.method ? { ...o, access: o.method === 'GET' ? ('read' as const) : ('write' as const) } : o));
-    return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.northfield.internal/api`, operations, warnings: d.warnings ?? [], noAuth: false };
+    return { type: 'openapi' as const, system, suggestedName: kebab(system), version: d.version, endpoint: source.specUrl ? source.specUrl.replace(/\/[^/]*$/, '') : `https://${kebab(system)}.harborpine.internal/api`, operations, warnings: d.warnings ?? [], noAuth: false };
   }
 
   /** The service's call-shape rules (tools-service `_checked_shape`): validated before anything is staged. */

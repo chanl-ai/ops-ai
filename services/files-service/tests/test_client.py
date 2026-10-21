@@ -25,7 +25,7 @@ def _client(
     files = TenantFiles(
         LocalObjectStore(tmp_path / "objects", signing_key=b"k" * 32), FilesStore(engine), CONFIG, scanning="hook"
     )
-    auth = Auth.for_dev(Settings(), audience="files", name="dev", email="dev@northfieldbank.com", tenant_id=tenant)
+    auth = Auth.for_dev(Settings(), audience="files", name="dev", email="dev@harborpine.example", tenant_id=tenant)
     app = create_files_app(files, engine=engine, auth=auth)
     http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://files")
     granted = scopes if scopes is not None else ["files:view", "files:create", "files:edit"]

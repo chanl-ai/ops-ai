@@ -5,7 +5,7 @@
 import { FILES_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 const SECRET = `uc105-secret-${Math.random().toString(36).slice(2, 10)}`;
 const PDF = Buffer.from('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj << /Type /Catalog >> endobj\ntrailer\n%%EOF\n', 'latin1');
 const armed = (p) => (p.catch(() => undefined), p);

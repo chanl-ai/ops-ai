@@ -33,7 +33,7 @@ def two_teams() -> dict[str, str]:
     """A builder in team_ops and team_fraud, acting in team_ops."""
     claims: dict[str, Any] = {
         "sub": "lee",
-        "email": "lee@northfield.example",
+        "email": "lee@harborpine.example",
         "name": "lee",
         "kind": "person",
         "aud": ["agents"],
@@ -57,7 +57,7 @@ async def email(s: Stack, outcome: str, *, run_id: str | None = None, subject: s
             TriggerEvent(
                 team_id="team_ops",
                 workflow_id="ops_check",
-                source="email:levy@northfield.example",
+                source="email:levy@harborpine.example",
                 event_key=f"email:{subject}",
                 sender="registry@court.example",
                 subject=subject,
@@ -90,7 +90,7 @@ async def test_another_persons_private_chat_never_shows(stack: Stack) -> None:  
     shared = await activity(c, reader({"chatThreadsOwnerOnly": False}), kind="chat")
     assert [r["id"] for r in shared["data"]] == [f"chat:{theirs}"]
     own = await activity(c, VIEWER, kind="chat")
-    assert [(r["id"], r["actor"]["id"]) for r in own["data"]] == [(f"chat:{theirs}", "vera@northfield.example")]
+    assert [(r["id"], r["actor"]["id"]) for r in own["data"]] == [(f"chat:{theirs}", "vera@harborpine.example")]
 
 
 async def test_facets_count_the_rows_under_the_other_filters(stack: Stack) -> None:  # noqa: F811
@@ -105,7 +105,7 @@ async def test_facets_count_the_rows_under_the_other_filters(stack: Stack) -> No
     # facets.kind ignores the kind filter, so the buttons can show every kind's count at once.
     assert emails["pagination"]["total"] == 2 and emails["facets"]["kind"] == by_kind
     assert emails["facets"]["status"] == {"done": 1, "skipped": 1}
-    scoped = await activity(c, BUILDER, source="channel:levy@northfield.example")
+    scoped = await activity(c, BUILDER, source="channel:levy@harborpine.example")
     assert {r["kind"] for r in scoped["data"]} == {"email"} and scoped["pagination"]["total"] == 2
 
 
@@ -116,7 +116,7 @@ async def test_a_skipped_email_says_why_and_links_no_run(stack: Stack) -> None: 
     assert (row["status"], row["outcome"], row["ref"]["kind"]) == ("skipped", "daily_cap", "email")
     assert row["actor"] == {"kind": "sender", "id": "registry@court.example", "name": "registry@court.example"}
     # No mailbox record for the address: the row names the address it came to.
-    assert row["source"] == {"type": "channel", "id": "levy@northfield.example", "name": "levy@northfield.example"}
+    assert row["source"] == {"type": "channel", "id": "levy@harborpine.example", "name": "levy@harborpine.example"}
 
 
 async def test_a_decision_on_a_workflows_human_task_is_listed_with_who_decided(stack: Stack) -> None:  # noqa: F811
@@ -131,7 +131,7 @@ async def test_a_decision_on_a_workflows_human_task_is_listed_with_who_decided(s
     [row] = (await activity(c, BUILDER, kind="decision"))["data"]
     assert (row["outcome"], row["actor"]["id"], row["source"]["id"]) == (
         "approved",
-        "maya@northfield.example",
+        "maya@harborpine.example",
         "ops_check",
     )
     assert row["ref"] == {"kind": "review", "id": run}
@@ -146,7 +146,7 @@ async def test_an_email_and_a_widget_chat_name_their_channel_records(stack: Stac
                 id="mbx_levy",
                 team_id="team_ops",
                 name="Levy notices",
-                address="levy@northfield.example",
+                address="levy@harborpine.example",
                 provider="imap",
                 created_by="b",
                 created_at="n",

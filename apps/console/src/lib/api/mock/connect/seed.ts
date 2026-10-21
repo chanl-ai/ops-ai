@@ -4,7 +4,7 @@ import type { IdentityAssurance } from '@/lib/types/connect';
  * Seed for what only Connect holds: the assistants staff have connected and how busy each exposed workflow is
  * over MCP. Exposure itself is MCP deployments in the deployments store.
  */
-export const MCP_URL = 'https://northfield.ops-ai.app/mcp';
+export const MCP_URL = 'https://harborpine.ops-ai.app/mcp';
 
 /** Workflows exposed over MCP at seed time, with their calls per day. */
 export const SEED_EXPOSED: { workflowId: string; callsPerDay: number; daysAgo: number }[] = [

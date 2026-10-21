@@ -8,7 +8,7 @@ import re
 
 from usecase_harness import bearer, check, data, finish, signed_in, signin_stack
 
-LENA, OMAR = "l.fischer@northfieldbank.com", "o.haddad@northfieldbank.com"
+LENA, OMAR = "l.fischer@harborpine.example", "o.haddad@harborpine.example"
 WRONG, NEW = "not the password at all", "a long new password 3"
 
 with signin_stack() as (api, _, mail):

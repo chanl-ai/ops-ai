@@ -12,9 +12,9 @@ const PAGES = ['/tools', '/access', '/logs/tool-calls', '/agents', '/workflows',
 await withUiStack(
   async (consoleUrl) => {
     // James's module with a read and a write, made through tools-service as a builder would.
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     // Egress writes are Security-admin only, so the host is added as Sam; every setup call is checked.
-    const S = { Authorization: `Bearer ${await tokenFor('s.adeyemi@northfieldbank.com')}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
+    const S = { Authorization: `Bearer ${await tokenFor('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     const setup = async (r) => {
       if (!r.ok) throw new Error(`setup: ${r.url} answered ${r.status}: ${(await r.text()).slice(0, 300)}`);
       return r;
@@ -34,7 +34,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

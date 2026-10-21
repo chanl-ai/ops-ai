@@ -21,7 +21,7 @@ export const DOCS: PreviewDoc[] = [
   { id: 'd2', name: 'Fee schedule.pdf', mime: 'application/pdf', kind: 'file', status: 'indexed', version: 1, updatedAt: ago(60 * 24 * 9), citedBy: ['Branch Concierge'] },
   { id: 'd3', name: 'Rate sheet (Oct).docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', kind: 'file', status: 'indexed', version: 2, updatedAt: ago(60 * 5), citedBy: [] },
   { id: 'd4', name: 'Deferral FAQ', mime: 'text/plain', kind: 'text', status: 'indexed', version: 1, updatedAt: ago(90), citedBy: ['Mortgage Intake'] },
-  { id: 'd5', name: 'northfieldbank.com/mortgages/rates', mime: 'text/html', kind: 'link', status: 'failed', version: 1, updatedAt: ago(30), citedBy: [] },
+  { id: 'd5', name: 'harborpine.example/mortgages/rates', mime: 'text/html', kind: 'link', status: 'failed', version: 1, updatedAt: ago(30), citedBy: [] },
 ];
 
 /** Ingestion presets, moved off the add flow into the base's settings. */

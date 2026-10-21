@@ -115,7 +115,7 @@ export const TEMPLATE_SEEDS: Seed[] = [
     expectedTools: [{ name: 'search_knowledge', purpose: 'Retrieve the policy passages to answer from', access: 'read' }],
     expectedKnowledge: ['All bank knowledge'],
     instructions:
-      '## Role and purpose\nYou answer questions from Northfield Bank staff about bank policy and procedure.\n\n## Rules\nAnswer only from the knowledge bases you can search.\nIf the policy does not cover the question, say so and name the team that owns the topic.\nNever answer questions about a specific customer account.',
+      '## Role and purpose\nYou answer questions from Harbor & Pine Bank staff about bank policy and procedure.\n\n## Rules\nAnswer only from the knowledge bases you can search.\nIf the policy does not cover the question, say so and name the team that owns the topic.\nNever answer questions about a specific customer account.',
     guardrails: guard({ maxToolCallsPerTurn: 3, whenUnsure: 'decline', blockedTopics: ['Account-specific questions'] }),
     example: { input: 'What is the hold period on a cheque over $1,500 deposited at an ATM?', output: 'Up to 5 business days (Funds availability policy, section 3.2). Holds can be shortened by a branch manager for customers with 12 months of history (section 3.4).' },
     starterTests: [

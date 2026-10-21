@@ -19,7 +19,7 @@ ADVISOR = "ag_advisor"
 GUARDRAIL = "gr_no_investment_advice"
 SKILL = "sk_hardship_triage"
 HARDSHIP = "My client lost her job and cannot make this month's mortgage payment. What can we do?"
-BLOCKED = "Should my client buy Northfield shares?"
+BLOCKED = "Should my client buy Harbor & Pine shares?"
 ALLOWED = "What does Priya Natarajan have with us?"
 # Unpinned and re-run: the non-vacuous check that step 2 depends on the pin, not on the question.
 UNPINNED = os.environ.get("UC085_UNPINNED") == "1"

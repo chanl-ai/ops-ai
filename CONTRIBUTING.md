@@ -85,7 +85,7 @@ title.
 | Filler | Do not use "simply", "just", "easy", "obviously" or "of course" |
 | Code references | `path:line` or `path`, relative to the repo root |
 | People | No personal names. Use roles ("the product owner", "the module owner") |
-| The bank | "The bank" in specs; "Northfield Bank" is the fictional tenant in the console |
+| The bank | "The bank" in specs; "Harbor & Pine Bank" is the fictional tenant in the console |
 | Claims | Every "works" claim has evidence or a command the reader can run. Mark anything unconfirmed as **unverified** |
 | File names | kebab-case, named for the topic. No dates, numbers or sequence prefixes in file names; ids such as a spec number or ADR id go in the title, the status line says whether a doc is current or superseded, and git keeps the history |
 | Content | Only what a reader acts on: decisions, rules, facts, gotchas and the evidence for them. No narrative of how a result was reached |

@@ -4,7 +4,7 @@
     "subject": "Charge I did not make at Harbourline Electronics",
     "body": "Hello, there is a charge of $212.40 from Harbourline Electronics on 2 October that I did not make. I have attached my statement, the merchant's receipt they emailed me, and a note from my phone showing I was in Moncton that day. Please reverse it.",
     "attachments": [
-      {"name": "statement-oct.txt", "text": "Northfield Visa statement, card ending 2231. 02 Oct HARBOURLINE ELECTRONICS HALIFAX $212.40. 03 Oct SOBEYS MONCTON $48.12."},
+      {"name": "statement-oct.txt", "text": "Harbor & Pine Visa statement, card ending 2231. 02 Oct HARBOURLINE ELECTRONICS HALIFAX $212.40. 03 Oct SOBEYS MONCTON $48.12."},
       {"name": "merchant-receipt.txt", "text": "Harbourline Electronics, Halifax. Order 55102, 02 Oct 2026 14:12. USB-C dock $212.40. Paid by card ending 2231, card not present."},
       {"name": "location-note.txt", "text": "Calendar export: 02 Oct 2026 09:00-17:00 Moncton client workshop, Delta Beausejour."}
     ]

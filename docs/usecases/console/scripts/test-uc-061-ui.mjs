@@ -20,11 +20,11 @@ const ASK = ['get_account', 'list_transactions', 'daily_spend', 'balance_history
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
-    const N = as(await tokenFor('n.petrov@northfieldbank.com'), 'team_security');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+    const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
     // Egress is Security's admin's to change (tools-service callers.security_admin); a refused setup fails here, not as
     // an egress_denied import later.
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     for (const [path, value] of [['hosts', stack.bank.host], ['ranges', stack.bank.range]]) {
       const res = await fetch(`${tools}/v1/egress/${path}`, { method: 'POST', headers: S, body: JSON.stringify({ value, note: 'uc-061' }) });
       if (!res.ok) throw new Error(`setup: allowing egress ${path} answered ${res.status}: ${await res.text()}`);
@@ -49,7 +49,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

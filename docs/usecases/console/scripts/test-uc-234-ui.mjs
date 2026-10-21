@@ -10,8 +10,8 @@ const files = `http://127.0.0.1:${FILES_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 const tokenFor = async (email) =>
   (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const json = async (r) => {
@@ -256,13 +256,13 @@ await withUiStack(
         if (asked.status !== 201) throw new Error(`the access request answered ${asked.status}: ${JSON.stringify(answered).slice(0, 400)}`);
         // Whoever the server says may decide it: the workflow's own team decides, and James asked, so not him.
         const people = [
-          ['m.okafor@northfieldbank.com', 'team_ops'],
-          ['p.shah@northfieldbank.com', 'team_ops'],
-          ['n.petrov@northfieldbank.com', 'team_security'],
-          ['s.adeyemi@northfieldbank.com', 'team_security'],
-          ['o.haddad@northfieldbank.com', 'team_fraud'],
-          ['l.fischer@northfieldbank.com', 'team_fraud'],
-          ['w.kamau@northfieldbank.com', 'team_platform'],
+          ['m.okafor@harborpine.example', 'team_ops'],
+          ['p.shah@harborpine.example', 'team_ops'],
+          ['n.petrov@harborpine.example', 'team_security'],
+          ['s.adeyemi@harborpine.example', 'team_security'],
+          ['o.haddad@harborpine.example', 'team_fraud'],
+          ['l.fischer@harborpine.example', 'team_fraud'],
+          ['w.kamau@harborpine.example', 'team_platform'],
         ];
         let review = null;
         let decider = null;
@@ -422,7 +422,7 @@ await withUiStack(
 
       await step('11 with task assist on, the task shows the AI assist labelled as AI and marks its suggestion without choosing it', async () => {
         // Priya, admin of Operations, turns task assist on (Govern > Policies).
-        const on = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/taskAssist`, { method: 'PUT', headers: { Authorization: `Bearer ${await tokenFor('p.shah@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: true }) });
+        const on = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/taskAssist`, { method: 'PUT', headers: { Authorization: `Bearer ${await tokenFor('p.shah@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: true }) });
         const facts = [{ label: 'Vendor', value: 'Acme Supplies' }, { label: 'New account', value: '****4410' }];
         const posted = await fetch(`${agents}/v1/tasks`, {
           method: 'POST',
@@ -473,7 +473,7 @@ await withUiStack(
         const sent = answer.request().postDataJSON();
         check(
           '12 Reject sends a read check back to a named person, or to the team queue when none is picked',
-          answer.status() === 200 && sent?.decision === 'reject' && sent?.inputs?.assignee === 'm.okafor@northfieldbank.com' && /Send to/.test(label),
+          answer.status() === 200 && sent?.decision === 'reject' && sent?.inputs?.assignee === 'm.okafor@harborpine.example' && /Send to/.test(label),
           { status: answer.status(), sent, label },
         );
       });

@@ -116,7 +116,7 @@ async def test_never_publishes_at_once_and_records_who(client: AsyncClient) -> N
     assert review["status"] == "approved", review
     body = review["agentPublish"]
     assert (body["reviewRequired"], body["policy"], body["majorChange"]) == (False, "never", True)
-    assert body["requestedBy"] == "james@northfield.example"
+    assert body["requestedBy"] == "james@harborpine.example"
     assert _data(await client.get(f"/v1/agents/{aid}", headers=BUILDER))["publishedVersion"] == v
 
 

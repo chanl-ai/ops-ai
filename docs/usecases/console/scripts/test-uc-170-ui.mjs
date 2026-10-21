@@ -21,7 +21,7 @@ await withUiStack(
   async (consoleUrl) => {
     const browser = await chromium.launch();
     try {
-      const sam = await signIn(browser, consoleUrl, 's.adeyemi@northfieldbank.com');
+      const sam = await signIn(browser, consoleUrl, 's.adeyemi@harborpine.example');
       await sam.goto(`${consoleUrl}/settings/policies`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const card = sam.getByTestId('setting-policy-stepUp');
       await card.waitFor({ timeout: 120_000 });
@@ -34,7 +34,7 @@ await withUiStack(
 
       // Each card is drawn from the server's kind and titled with its title (c-214), so a policy added on the server
       // shows with the right control and name and no console change.
-      const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 's.adeyemi@northfieldbank.com', password: 'northfield-demo' }) })).json()).data.token;
+      const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 's.adeyemi@harborpine.example', password: 'northfield-demo' }) })).json()).data.token;
       const served = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies`, { headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_security' } })).json()).data;
       const drawn = [];
       for (const pol of served) {
@@ -52,7 +52,7 @@ await withUiStack(
       const res = await put;
       await sam.reload({ waitUntil: 'domcontentloaded' });
       const after = await sam.getByTestId('setting-policy-stepUp').getByRole('radio', { name: /^On/ }).getAttribute('aria-checked', { timeout: 60_000 });
-      const server = (await (await fetch(`${platform}/v1/policies`, { headers: { Authorization: `Bearer ${await tokenFor('s.adeyemi@northfieldbank.com')}`, 'X-Team-Id': 'team_security' } })).json()).data.find((p) => p.key === 'stepUp').value;
+      const server = (await (await fetch(`${platform}/v1/policies`, { headers: { Authorization: `Bearer ${await tokenFor('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security' } })).json()).data.find((p) => p.key === 'stepUp').value;
       check('a Security admin saves a policy and it is still set after a reload and on the server', res?.status() === 200 && after === 'true' && server === true, { status: res?.status(), after, server });
 
       // Put it back, so the stack's other checks see the open default.
@@ -60,7 +60,7 @@ await withUiStack(
       await sam.getByTestId('setting-policy-stepUp').getByRole('button', { name: 'Save' }).click();
 
       // A number policy and a per-area one save too, each by its own control and each seen on the server.
-      const sauth = { Authorization: `Bearer ${await tokenFor('s.adeyemi@northfieldbank.com')}`, 'X-Team-Id': 'team_security' };
+      const sauth = { Authorization: `Bearer ${await tokenFor('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security' };
       const policy = async (key) => (await (await fetch(`${platform}/v1/policies`, { headers: sauth })).json()).data.find((p) => p.key === key);
       const sla = sam.getByTestId('setting-policy-reviewSlaHours');
       await sla.getByLabel(/in hours/).fill('12');
@@ -97,7 +97,7 @@ await withUiStack(
       await sam.getByTestId('setting-policy-toolWritesNeedApproval').getByRole('button', { name: 'Save' }).click();
       await sam.waitForTimeout(800);
 
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/settings/policies`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // Every member reads the policies (7faf3ddc); a builder sees the same cards with their controls off and no Save.
       const jcard = james.getByTestId('setting-policy-stepUp');
@@ -107,7 +107,7 @@ await withUiStack(
         saves: await james.locator('[data-testid^="setting-policy-"]').getByRole('button', { name: 'Save' }).count(),
         offDisabled: await jcard.getByRole('radio', { name: /^Off/ }).isDisabled(),
       };
-      const jtok = await tokenFor('j.richardson@northfieldbank.com');
+      const jtok = await tokenFor('j.richardson@harborpine.example');
       const refused = await fetch(`${platform}/v1/policies/stepUp`, { method: 'PUT', headers: { Authorization: `Bearer ${jtok}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: true }) });
       check('a builder reads the same cards with their controls off and no Save, and the server refuses his change (403)', jshown.cards >= 8 && jshown.saves === 0 && jshown.offDisabled && refused.status === 403, { ...jshown, status: refused.status });
 

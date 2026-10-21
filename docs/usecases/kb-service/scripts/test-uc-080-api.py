@@ -17,7 +17,7 @@ from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
 from usecase_harness import KB_PORT, TEAM, agents, check, data, finish, kb, put_in_files, sse
 
 RUN = int(time.time())
-OWNER = "maya@northfieldbank.com"
+OWNER = "maya@harborpine.example"
 QUESTION = "How many mortgage payments can a borrower who lost their job defer?"
 
 

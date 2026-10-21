@@ -10,7 +10,7 @@ import { PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack }
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 7);
-const NEWCOMER = `newcomer.${TAG}@northfieldbank.com`;
+const NEWCOMER = `newcomer.${TAG}@harborpine.example`;
 const NAME = `Newcomer ${TAG.toUpperCase()}`;
 const KEY = 'ops-platform-session';
 const stored = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
@@ -43,7 +43,7 @@ await withUiStack(
     const errors = [];
     let link = '';
     try {
-      const priya = await signIn(browser, consoleUrl, 'p.shah@northfieldbank.com', errors);
+      const priya = await signIn(browser, consoleUrl, 'p.shah@harborpine.example', errors);
 
       // 1. Access lists the team's members from platform-service, with the stored approver read as Reviewer.
       await step('1 Access lists the team from platform-service', async () => {
@@ -186,12 +186,12 @@ await withUiStack(
 
       // 7. A builder sees no Invite and platform-service refuses a member write from them.
       await step('7 a builder cannot manage members', async () => {
-        const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com', errors);
+        const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
         await james.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await james.getByRole('row', { name: /Priya Shah/ }).waitFor({ timeout: 60_000 });
         const invite = await james.getByTestId('access-invite').count();
         const token = (await stored(james))?.token;
-        const r = await fetch(`${platform}/v1/settings/members/invite`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ emails: [`x.${TAG}@northfieldbank.com`], role: 'admin' }) });
+        const r = await fetch(`${platform}/v1/settings/members/invite`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ emails: [`x.${TAG}@harborpine.example`], role: 'admin' }) });
         const code = (await r.json()).error?.code;
         check('7 a builder cannot manage members', invite === 0 && r.status === 403 && code === 'admin_required', { invite, status: r.status, code });
       });
@@ -200,7 +200,7 @@ await withUiStack(
       // a stranger's browser is asked to sign in as Omar and the service refuses the bare link; Omar, signed in as
       // himself, joins Operations as viewer and keeps his own account and teams.
       await step('8 an existing person accepts only as themselves', async () => {
-        const OMAR = 'o.haddad@northfieldbank.com';
+        const OMAR = 'o.haddad@harborpine.example';
         await priya.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await priya.getByTestId('access-invite').click();
         const dialog = priya.getByRole('dialog');

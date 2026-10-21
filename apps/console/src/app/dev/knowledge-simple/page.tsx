@@ -150,7 +150,7 @@ function Preview() {
             </TabsContent>
             <TabsContent value="link" className="flex flex-col gap-3 pt-3">
               <FormField id="doc-link" label="Page address" hint="A public https page. The page is read once now and again each night.">
-                <Input id="doc-link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://northfieldbank.com/mortgages/rates" />
+                <Input id="doc-link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://harborpine.example/mortgages/rates" />
               </FormField>
               <Button className="self-start" disabled={!/^https:\/\/\S+\.\S+/.test(link.trim())} onClick={() => (add({ name: link.trim().replace(/^https:\/\//, ''), mime: 'text/html', kind: 'link' }), setLink(''))}>
                 Add link

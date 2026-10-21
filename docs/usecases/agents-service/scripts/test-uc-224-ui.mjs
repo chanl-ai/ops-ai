@@ -11,12 +11,12 @@ import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleS
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 const NOTICE = readFileSync(join(ROOT, 'services/agents-service/tests/fixtures/mailbox/levy_notice_smudged.pdf'));
 const SEED = Object.fromEntries(JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).map((w) => [w.id, w]));
 const SENDER = 'registry@court.example';
-const MAILBOX = 'intake@northfield.test';
+const MAILBOX = 'intake@harborpine.test';
 
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token, type = 'application/json') => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': type });
@@ -160,7 +160,7 @@ await withUiStack(
       // Whoever the step lets decide sees its type's buttons; the page is the same for everyone else, with who decides.
       const ackFooter = (await page.getByTestId('task-footer').innerText()).replace(/\s+/g, ' ');
       let who = null;
-      for (const [email, team] of [['m.okafor@northfieldbank.com', 'team_ops'], ['p.shah@northfieldbank.com', 'team_ops'], ['n.petrov@northfieldbank.com', 'team_security'], ['o.haddad@northfieldbank.com', 'team_fraud'], ['w.kamau@northfieldbank.com', 'team_platform']]) {
+      for (const [email, team] of [['m.okafor@harborpine.example', 'team_ops'], ['p.shah@harborpine.example', 'team_ops'], ['n.petrov@harborpine.example', 'team_security'], ['o.haddad@harborpine.example', 'team_fraud'], ['w.kamau@harborpine.example', 'team_platform']]) {
         const signed = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data?.token;
         const seen = await fetch(`${agents}/reviews/${encodeURIComponent(started.runId)}`, { headers: { Authorization: `Bearer ${signed}`, 'X-Team-Id': team } });
         if (seen.ok && (await seen.json()).data?.canDecide) {
@@ -168,7 +168,7 @@ await withUiStack(
           break;
         }
       }
-      const decider = await consoleSignIn(browser, consoleUrl, who ?? 'p.shah@northfieldbank.com', PASSWORD, errors);
+      const decider = await consoleSignIn(browser, consoleUrl, who ?? 'p.shah@harborpine.example', PASSWORD, errors);
       await decider.goto(`${consoleUrl}/reviews/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await decider.getByTestId('task-footer').waitFor({ timeout: 60_000 });
       await decider.getByTestId('option-decision-form').waitFor({ timeout: 30_000 }).catch(() => undefined);

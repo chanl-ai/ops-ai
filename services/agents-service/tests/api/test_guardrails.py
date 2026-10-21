@@ -22,8 +22,8 @@ from ops_agents.store.guardrails import GuardrailRegistry
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
-LEE = {"X-Dev-User": "lee@northfieldbank.com"}
-KIM = {"X-Dev-User": "kim@northfieldbank.com"}
+LEE = {"X-Dev-User": "lee@harborpine.example"}
+KIM = {"X-Dev-User": "kim@harborpine.example"}
 ADVISOR = "ag_branch"
 RULE = {"name": "No investment advice", "topics": ["investment advice"], "message": "I can't give investment advice."}
 
@@ -245,7 +245,9 @@ async def test_a_test_turn_refused_on_its_question_names_the_rule_and_claims_no_
         _ok(await c.post(f"/v1/agents/{ADVISOR}/publish-requests", json={"version": agent["version"]}), 201)
         rt = cast(Any, c)._transport.app.state.runtime
         rt.ports = replace(rt.ports, model=_blocking_model(), models=None)
-        t = _ok(await c.post(f"/v1/agents/{ADVISOR}/test", json={"message": "Should my client buy Northfield shares?"}))
+        t = _ok(
+            await c.post(f"/v1/agents/{ADVISOR}/test", json={"message": "Should my client buy Harbor & Pine shares?"})
+        )
         assert t["blockedBy"] == {"name": RULE["name"], "topic": "investment advice", "when": "before"}, t
         assert (t["reply"], t["searched"], t["skills"], t["citations"]) == (RULE["message"], False, [], []), t
         answered = _ok(await c.post(f"/v1/agents/{ADVISOR}/test", json={"message": "What is the wire fee?"}))

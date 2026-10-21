@@ -45,7 +45,7 @@ async def test_a_person_asking_through_an_agent_names_the_agent(engine: AsyncEng
             )
         )
     rt: Any = SimpleNamespace(db=engine)
-    raw = f"james@northfield.example via agent:{agent}"
+    raw = f"james@harborpine.example via agent:{agent}"
     with tenant_scope(f"t-{uuid4().hex[:6]}"):
         who = await actors(rt, [raw])
     assert who[raw]["via"] == {"kind": "agent", "id": agent, "name": "Advisor's Helper"}, who

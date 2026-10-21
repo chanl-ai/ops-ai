@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { previewStore } from '@/lib/settings-preview-store';
 
 const PROVIDERS = [
-  { value: 'Northfield OpenAI', label: 'Northfield OpenAI', hint: 'openai' },
-  { value: 'Northfield Anthropic', label: 'Northfield Anthropic', hint: 'anthropic' },
+  { value: 'Harbor & Pine OpenAI', label: 'Harbor & Pine OpenAI', hint: 'openai' },
+  { value: 'Harbor & Pine Anthropic', label: 'Harbor & Pine Anthropic', hint: 'anthropic' },
 ];
 const CLEARANCE = [
   { value: 'Internal', label: 'Internal' },

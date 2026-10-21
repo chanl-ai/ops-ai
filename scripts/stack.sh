@@ -89,11 +89,11 @@ auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_P
 console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
 
 # Dev mail (c-187, c-192, c-199, c-229). Team mailboxes are records connected on Channels > Email; the dev stack seeds
-# two (services/agents-service/seed/mailboxes.json), levy@northfield.example and intake@northfield.test, both on
-# GreenMail over IMAP and read by tools-service with the DEV_IMAP_PASSWORD secret. tools-service reaches GreenMail as any outside host: mail.northfield.test is answered with this machine's
+# two (services/agents-service/seed/mailboxes.json), levy@harborpine.example and intake@harborpine.test, both on
+# GreenMail over IMAP and read by tools-service with the DEV_IMAP_PASSWORD secret. tools-service reaches GreenMail as any outside host: mail.harborpine.test is answered with this machine's
 # private address (OPS_EGRESS_RESOLVE, dev only, merged into any mapping .env sets), and the host and that address are
 # listed on the Egress page by whoever uses it (uc-192 does). Sent mail goes to Mailpit, and a mailbox's own reply
-# sender at smtp.northfield.test reaches Mailpit's SMTP the same way (uc-200).
+# sender at smtp.harborpine.test reaches Mailpit's SMTP the same way (uc-200).
 GREENMAIL_IMAP=${OPS_GREENMAIL_IMAP_PORT:-3143}
 MAILPIT_SMTP=${OPS_MAILPIT_SMTP_PORT:-1025}
 MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
@@ -108,11 +108,11 @@ AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS
 dev_egress_resolve() {
   IP=$(private_address) python3 -c 'import json,os
 ip=os.environ["IP"]
-m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.northfield.test"]=ip+":"+os.environ["GM"]; m["smtp.northfield.test"]=ip+":"+os.environ["MP"]
+m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.harborpine.test"]=ip+":"+os.environ["GM"]; m["smtp.harborpine.test"]=ip+":"+os.environ["MP"]
 m["api.bank.test"]=ip+":"+os.environ["FB"]
 print(json.dumps(m,separators=(",",":")))' 2>/dev/null
 }
-MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@northfield.example OPS_SMTP_HOST=127.0.0.1 OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
+MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SMTP_HOST=127.0.0.1 OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
 
 
 cmd_of() {

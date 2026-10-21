@@ -13,10 +13,10 @@ FLAGS = ("canEdit", "canDelete", "canPublish")
 
 
 async def test_a_viewer_reads_view_only_and_an_admin_reads_edit_and_delete(engine: AsyncEngine, tenant: str) -> None:
-    async with _signed_in(engine, tenant, "james@northfieldbank.com", TEAM, {TEAM: "builder"}) as james:
+    async with _signed_in(engine, tenant, "james@harborpine.example", TEAM, {TEAM: "builder"}) as james:
         kb = data(
             await james.post(
-                "/v1/knowledge-bases", json={"name": "Branch manual", "owner": "james@northfieldbank.com"}
+                "/v1/knowledge-bases", json={"name": "Branch manual", "owner": "james@harborpine.example"}
             ),
             201,
         )
@@ -24,8 +24,8 @@ async def test_a_viewer_reads_view_only_and_an_admin_reads_edit_and_delete(engin
             await james.post("/v1/sources", json={"type": "file", "name": "Branch PDFs", "collection": "B"}), 201
         )
     for email, role, expected in (
-        ("vera@northfieldbank.com", "viewer", (False, False, False)),
-        ("priya@northfieldbank.com", "admin", (True, True, False)),
+        ("vera@harborpine.example", "viewer", (False, False, False)),
+        ("priya@harborpine.example", "admin", (True, True, False)),
     ):
         async with _signed_in(engine, tenant, email, TEAM, {TEAM: role}) as who:
             base = data(await who.get(f"/v1/knowledge-bases/{kb['id']}"))

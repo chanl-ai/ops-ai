@@ -54,7 +54,7 @@ intakes: WeakKeyDictionary[httpx.AsyncClient, FileIntake] = WeakKeyDictionary()
 def kb_client(
     engine: AsyncEngine,
     tenant: str,
-    email: str = "james@northfieldbank.com",
+    email: str = "james@harborpine.example",
     files: FileIntake | None = None,
     *,
     admin: bool = False,

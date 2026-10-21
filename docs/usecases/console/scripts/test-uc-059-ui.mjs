@@ -20,8 +20,8 @@ const armed = (p) => (p.catch(() => undefined), p);
 await withUiStack(
   async (consoleUrl) => {
     // Egress is changed only by an admin of the Security team (c-079).
-    const P = { ...as(await tokenFor('s.adeyemi@northfieldbank.com')), 'X-Team-Id': 'team_security' };
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'));
+    const P = { ...as(await tokenFor('s.adeyemi@harborpine.example')), 'X-Team-Id': 'team_security' };
+    const J = as(await tokenFor('j.richardson@harborpine.example'));
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: HOST, note: 'uc-059 ui' }) });
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Holds ${TAG}`, name: `uc059-holds-${TAG}`, type: 'http' }) }))).id;
     await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'Place a hold', access: 'write', method: 'POST', url: `https://${HOST}/v1/holds`, headers: [] }) }));
@@ -32,7 +32,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

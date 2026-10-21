@@ -8,7 +8,7 @@ import secrets
 import httpx
 from usecase_harness import INVITED_PASSWORD, bearer, check, data, finish, invited, people_stack, signed_in
 
-PRIYA = "p.shah@northfieldbank.com"
+PRIYA = "p.shah@harborpine.example"
 
 
 def member(api: httpx.Client, h: dict[str, str], email: str) -> str:
@@ -17,10 +17,10 @@ def member(api: httpx.Client, h: dict[str, str], email: str) -> str:
 
 with people_stack() as (api, _):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
-    admin_email = f"admin.{secrets.token_hex(3)}@northfieldbank.com"
+    admin_email = f"admin.{secrets.token_hex(3)}@harborpine.example"
     admin = bearer(invited(api, priya, admin_email, "admin"), "team_ops")
 
-    person_email = f"person.{secrets.token_hex(3)}@northfieldbank.com"
+    person_email = f"person.{secrets.token_hex(3)}@harborpine.example"
     person = invited(api, admin, person_email, "viewer")
     check(
         "the new admin's invitee joins team_ops as viewer",
@@ -47,7 +47,7 @@ with people_stack() as (api, _):
 
     other = {**admin, "X-Team-Id": "team_fraud"}
     r = api.post(
-        "/v1/settings/members/invite", json={"emails": ["y@northfieldbank.com"], "role": "viewer"}, headers=other
+        "/v1/settings/members/invite", json={"emails": ["y@harborpine.example"], "role": "viewer"}, headers=other
     )
     check("the admin cannot invite into a team they are not in (403)", r.status_code == 403, r.text[:200])
 

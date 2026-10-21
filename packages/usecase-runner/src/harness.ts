@@ -34,10 +34,10 @@ const FAKE_OPENAI_PORT = Number(process.env.OPS_USECASE_FAKE_OPENAI_PORT ?? 8795
 /** The committed fake-OpenAI rules (the levy's and the demo's); services/models-service/scripts/fake_openai reads `<folder>/script.json`. */
 const DEMO_RULES = 'services/models-service/seed/demo-fake-openai';
 /** platform-service's dev seed: the demo's builder and Security approver, and the dev password. */
-const JAMES = 'j.richardson@northfieldbank.com';
-const NADIA = 'n.petrov@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const NADIA = 'n.petrov@harborpine.example';
 // The Security team's admin: only they change egress and secrets (c-079).
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 const DEMO_PASSWORD = 'northfield-demo';
 const CONSOLE_DIST_DIR = `node_modules/.cache/next-usecase-${CONSOLE_PORT}`;
 // The run's own tsconfig, beside its build directory, relative to apps/console.
@@ -220,8 +220,8 @@ export interface StackOptions {
     /** Point the agents service at this tools-service as its gateway, so agents are granted and call its operations. */
     gateway?: boolean;
     /**
-     * Let tools-service reach compose's GreenMail as `mail.northfield.test` (IMAP) and Mailpit as
-     * `smtp.northfield.test` (SMTP), dialled on this machine's private address; the use case still puts both hosts and
+     * Let tools-service reach compose's GreenMail as `mail.harborpine.test` (IMAP) and Mailpit as
+     * `smtp.harborpine.test` (SMTP), dialled on this machine's private address; the use case still puts both hosts and
      * `stack.mail.range` on the tenant's allow-list, as a person would.
      */
     mail?: boolean;
@@ -459,10 +459,10 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       if (options.tools.mail) {
         const here = privateAddress();
         const resolve = JSON.parse(bankSettings.OPS_EGRESS_RESOLVE ?? '{}') as Record<string, string>;
-        resolve['mail.northfield.test'] = `${here}:${process.env.OPS_GREENMAIL_IMAP_PORT ?? 3143}`;
-        resolve['smtp.northfield.test'] = `${here}:${process.env.OPS_MAILPIT_SMTP_PORT ?? 1025}`;
+        resolve['mail.harborpine.test'] = `${here}:${process.env.OPS_GREENMAIL_IMAP_PORT ?? 3143}`;
+        resolve['smtp.harborpine.test'] = `${here}:${process.env.OPS_MAILPIT_SMTP_PORT ?? 1025}`;
         bankSettings.OPS_EGRESS_RESOLVE = JSON.stringify(resolve);
-        stack.mail = { imapHost: 'mail.northfield.test', smtpHost: 'smtp.northfield.test', range: `${here}/32` };
+        stack.mail = { imapHost: 'mail.harborpine.test', smtpHost: 'smtp.harborpine.test', range: `${here}/32` };
       }
       opa = await startOpa();
       const toolsEnv = stackEnv(process.env, {
@@ -475,7 +475,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         // send_reply sends through the provider settings pick and fails with none (c-187): the dev fake writes each
         // mail to this run's folder.
         OPS_MAIL_PROVIDER: 'fake',
-        OPS_MAIL_FROM: 'ops@northfield.example',
+        OPS_MAIL_FROM: 'ops@harborpine.example',
         OPS_MAIL_FAKE_OUT_DIR: mkdtempSync(join(tmpdir(), 'usecase-mail-out-')),
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
         ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
@@ -508,7 +508,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
               OPS_SIGNIN_SECRETS: JSON.stringify({ [SIGNIN_SECRET]: 'uc-oidc-secret' }),
               OPS_SIGNIN_DNS_SERVERS: JSON.stringify([`127.0.0.1:${IDP_PORT}`]),
               OPS_MAIL_PROVIDER: 'fake',
-              OPS_MAIL_FROM: 'ops@northfieldbank.com',
+              OPS_MAIL_FROM: 'ops@harborpine.example',
               OPS_MAIL_FAKE_OUT_DIR: stack.mailDir,
             }
           : {}),

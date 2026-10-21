@@ -66,9 +66,9 @@ export function LoginForm({
     <AuthFormWrapper>
       <form onSubmit={submit} noValidate data-testid="login-form" data-mode={ssoMode ? 'sso' : 'password'}>
         <div className="flex flex-col gap-6">
-          <AuthHeading title="Welcome back" description="Sign in to Northfield Ops AI" />
+          <AuthHeading title="Welcome back" description="Sign in to Harbor & Pine Ops AI" />
           <FormField id="email" label="Work email" error={missing.email}>
-            <Input id="email" type="email" autoComplete="username" autoFocus value={email} aria-invalid={!!missing.email} onChange={(e) => (setEmail(e.target.value), setMissing({}), onEmailChange?.(e.target.value))} placeholder="e.g. name@northfieldbank.com" />
+            <Input id="email" type="email" autoComplete="username" autoFocus value={email} aria-invalid={!!missing.email} onChange={(e) => (setEmail(e.target.value), setMissing({}), onEmailChange?.(e.target.value))} placeholder="e.g. name@harborpine.example" />
           </FormField>
           {ssoMode ? (
             <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm" data-testid="login-sso-notice">
@@ -128,7 +128,7 @@ export function LoginForm({
                 </Link>
               </>
             ) : (
-              'New to Northfield Ops AI? Ask your workspace admin for an invite.'
+              'New to Harbor & Pine Ops AI? Ask your workspace admin for an invite.'
             )}
           </p>
         </div>

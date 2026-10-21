@@ -9,18 +9,18 @@ const DAY = 86_400_000;
 const txtFor = (domain: string) => `ops-ai-verify=${[...domain].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36)}`;
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
 
-/** Seed: SSO through Entra ID for northfield.ca, MFA required, invites only. The login screen reads this. */
+/** Seed: SSO through Entra ID for harborpine.ca, MFA required, invites only. The login screen reads this. */
 export const SEED_POLICY: SignInPolicy = {
   methods: { password: true, sso: true, google: false },
   sso: {
     provider: 'entra',
-    metadataUrl: 'https://login.microsoftonline.com/northfield.onmicrosoft.com/federationmetadata/2007-06/federationmetadata.xml',
-    domains: [{ domain: 'northfield.ca', verified: true, txtRecord: txtFor('northfield.ca'), verifiedAt: new Date(Date.now() - 140 * DAY).toISOString() }],
-    lastTest: { ok: true, at: new Date(Date.now() - 6 * DAY).toISOString(), message: 'Metadata fetched; test sign-in returned a signed assertion for northfield.ca' },
+    metadataUrl: 'https://login.microsoftonline.com/harborpine.onmicrosoft.com/federationmetadata/2007-06/federationmetadata.xml',
+    domains: [{ domain: 'harborpine.ca', verified: true, txtRecord: txtFor('harborpine.ca'), verifiedAt: new Date(Date.now() - 140 * DAY).toISOString() }],
+    lastTest: { ok: true, at: new Date(Date.now() - 6 * DAY).toISOString(), message: 'Metadata fetched; test sign-in returned a signed assertion for harborpine.ca' },
   },
   mfaRequired: true,
   sessionHours: 10,
-  allowedDomains: ['northfieldbank.com', 'northfield.ca'],
+  allowedDomains: ['harborpine.example', 'harborpine.ca'],
   selfSignup: false,
   updatedAt: new Date(Date.now() - 6 * DAY).toISOString(),
   updatedBy: 'Priya Shah',
@@ -81,7 +81,7 @@ export function createSignInPolicyMock(deps: { me: string }) {
     addDomain: (raw) =>
       respond(() => {
         const domain = raw.trim().toLowerCase();
-        if (!DOMAIN_RE.test(domain)) throw new ApiError(`${raw} is not a domain, e.g. northfield.ca.`, 400);
+        if (!DOMAIN_RE.test(domain)) throw new ApiError(`${raw} is not a domain, e.g. harborpine.ca.`, 400);
         if (policy.sso.domains.some((d) => d.domain === domain)) throw new ApiError(`${domain} is already listed.`, 409);
         policy.sso.domains.push({ domain, verified: false, txtRecord: txtFor(domain) });
         touch(`Added SSO domain ${domain}`, [{ field: 'Domains', after: domain }]);

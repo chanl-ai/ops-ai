@@ -5,7 +5,7 @@ called as a member of team A with team B's ids, and any 200 that carries one of 
       --origin https://<install> --outsider <email> --team-a <id> --owner <email> --team-b <id>
 
     uv run python scripts/team_isolation_probe.py --origin http://localhost:4016 --make-outsider \
-      --owner m.okafor@northfieldbank.com --team-b team_ops --seed
+      --owner m.okafor@harborpine.example --team-b team_ops --seed
 
 The owner (a member of B) lists every collection route acting in B, and each row's `id` becomes one of B's ids under
 that route's path. The outsider then calls each collection route acting in A, and each item route with B's ids in its

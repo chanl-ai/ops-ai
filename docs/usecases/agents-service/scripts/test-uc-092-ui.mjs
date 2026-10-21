@@ -6,8 +6,8 @@ import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 const NAME = `Refund triage 092 ${Math.random().toString(36).slice(2, 6)}`;
 const armed = (p) => (p.catch(() => undefined), p);
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;

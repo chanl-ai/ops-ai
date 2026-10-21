@@ -67,7 +67,7 @@ the bundle and push it to their own registry, then set `OPS_IMAGE_PREFIX` in the
 | Azure SQL and SQL Server | Scripts for review only: never applied to a server (c-345); the services do not run on SQL Server (c-337) |
 | A provider key for a real model | The proof connects the fake model only; a key is stored in Settings > Secrets and named with `connect_model.py --key-ref` (`compose.md`, "Connect a model") |
 | Image signing, an SBOM per image, arm64 images | Not built |
-| The sign-in screens name the demo bank | `components/auth/auth-form-wrapper.tsx`, `login-form.tsx` and `signup/page.tsx` write "Northfield Bank" and "Northfield Ops AI" into the console, so every install shows them; the brand needs to come from a setting |
+| The sign-in screens name the demo bank | `components/auth/auth-form-wrapper.tsx`, `login-form.tsx` and `signup/page.tsx` write "Harbor & Pine Bank" and "Harbor & Pine Ops AI" into the console, so every install shows them; the brand needs to come from a setting |
 | A real Azure Database for PostgreSQL server | The proof stands in for it with the admin's documented attributes; not yet run against one |
 | The bundle's proxy and opa images on this proof host | Not exercised: the proof host is arm64, where Go amd64 binaries abort under QEMU (`fatal error: taggedPointerPack`), so the proof runs those two as native builds of the same Dockerfile stages at the package's commit and gives health checks 60 s. The other eight images ran from the bundle. An amd64 VM runs the bundle's files unchanged |
 | The migrate job without a DBA after `first_admin.sh` was split out of `migrate.sh` | Not rerun by c-385; the DBA path ran `first_admin.sh` alone. Fly's `release.sh` and the Kubernetes Job call `migrate.sh` |

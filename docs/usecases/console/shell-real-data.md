@@ -11,7 +11,7 @@ page's workflow tools are agents-service's directory, not the console's mock.
 |---|---|---|
 | 1 | James signs in and reads the header | The workspace name is platform-service's `tenantName` from `/v1/me`, with no sample environment after it |
 | 2 | He opens Tools › Workflows | The rows are the workflow tools `GET /v1/tools?access=workflow` lists |
-| 3 | The workspace admin names the workspace Northfield Bank through `PATCH /v1/settings/workspace`; James tries the same | The admin's rename is saved and James is refused (403); James's header shows Northfield Bank after a reload |
+| 3 | The workspace admin names the workspace Harbor & Pine Bank through `PATCH /v1/settings/workspace`; James tries the same | The admin's rename is saved and James is refused (403); James's header shows Harbor & Pine Bank after a reload |
 | 4 | James opens Settings › Workspace; Wanjiru opens it, renames the workspace and saves | James sees the name locked; Wanjiru's save answers 200 and her header shows the new name |
 
 ## Acceptance layers

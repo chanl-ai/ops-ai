@@ -4,7 +4,7 @@
 // runtime half of check-standards rule 12: the static rule can be satisfied by a branch that never renders.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const PRIYA = 'p.shah@northfieldbank.com';
+const PRIYA = 'p.shah@harborpine.example';
 // Full-height shells keep their own frame (check-standards rule 12 lists them): the chat workspace and the workflow
 // editor (a workflow's own page).
 const SHELLS = new Set(['/chat']);

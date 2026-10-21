@@ -27,10 +27,10 @@ export const PROVIDERS: ModelProvider[] = [
   },
   {
     id: 'bank-llm',
-    name: 'Northfield private model',
+    name: 'Harbor & Pine private model',
     type: 'openai_compatible',
-    baseUrl: 'https://llm.northfield.internal/v1',
-    keySecret: 'NORTHFIELD_LLM_KEY',
+    baseUrl: 'https://llm.harborpine.internal/v1',
+    keySecret: 'HARBORPINE_LLM_KEY',
     keySet: true,
     health: { status: 'failed', at: minutesAgo(42), error: '401 invalid api key' },
     aliases: ['reasoning'],

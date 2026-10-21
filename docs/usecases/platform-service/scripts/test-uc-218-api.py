@@ -7,12 +7,12 @@ import secrets
 
 from usecase_harness import bearer, check, data, finish, invited, people_stack, signed_in
 
-PRIYA = "p.shah@northfieldbank.com"
+PRIYA = "p.shah@harborpine.example"
 
 with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, agents):
     priya = bearer(signed_in(api, PRIYA), "team_ops")
-    builder = bearer(invited(api, priya, f"b.{secrets.token_hex(3)}@northfieldbank.com", "builder"), "team_ops")
-    reviewer = bearer(invited(api, priya, f"r.{secrets.token_hex(3)}@northfieldbank.com", "approver"), "team_ops")
+    builder = bearer(invited(api, priya, f"b.{secrets.token_hex(3)}@harborpine.example", "builder"), "team_ops")
+    reviewer = bearer(invited(api, priya, f"r.{secrets.token_hex(3)}@harborpine.example", "approver"), "team_ops")
 
     agent = data(
         agents.post("/v1/agents", json={"name": f"Desk {secrets.token_hex(2)}", "role": "Answers"}, headers=builder)

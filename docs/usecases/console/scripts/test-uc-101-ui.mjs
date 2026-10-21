@@ -10,8 +10,8 @@ const OP = `get_statement_${TAG}`;
 const ACCOUNT = 'CHQ-2219';
 // The fake bank's key (FAKE_BANK_KEY's default). It is typed for one run and never set as a tenant secret.
 const BANK_KEY = 'dev-bank-key';
-const JAMES = 'j.richardson@northfieldbank.com';
-const RAVI = 'r.menon@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
 const json = async (r) => {
@@ -33,9 +33,9 @@ async function step(name, body) {
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const SAM = await as('s.adeyemi@northfieldbank.com', 'team_security');
+    const SAM = await as('s.adeyemi@harborpine.example', 'team_security');
     const J = await as(JAMES, 'team_ops');
-    const N = await as('n.petrov@northfieldbank.com', 'team_security');
+    const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: stack.bank.host, note: 'uc-101' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: stack.bank.range, note: 'uc-101' }) });
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Core bank ${TAG}`, name: `uc101-bank-${TAG}`, type: 'http' }) }))).id;

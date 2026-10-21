@@ -19,7 +19,7 @@ PDF = {"Content-Type": "application/pdf"}
 
 
 async def file_source(client: httpx.AsyncClient) -> dict[str, Any]:
-    body = {"type": "file", "name": "Lending PDFs", "collection": "Lending", "owner": "james@northfieldbank.com"}
+    body = {"type": "file", "name": "Lending PDFs", "collection": "Lending", "owner": "james@harborpine.example"}
     return data(await client.post("/v1/sources", json=body), 201)
 
 
@@ -86,7 +86,7 @@ async def test_a_knowledge_bases_documents_list_its_sources_items(client: httpx.
     kb = data(
         await client.post(
             "/v1/knowledge-bases",
-            json={"name": "Lending", "owner": "maya@northfieldbank.com", "sourceIds": [src["id"]]},
+            json={"name": "Lending", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]},
         ),
         201,
     )
@@ -101,7 +101,7 @@ async def test_a_changed_file_replaces_its_old_passages(client: httpx.AsyncClien
     """Reviewer's probe (c-056 T003): a file uploaded again under its name with new content becomes v2, and only v2's
     text is served, on the item page and to a question."""
     src = await file_source(client)
-    body = {"name": "Rates", "owner": "maya@northfieldbank.com", "sourceIds": [src["id"]]}
+    body = {"name": "Rates", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "rates.pdf", RATES)
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
@@ -125,7 +125,7 @@ async def test_a_replaced_document_leaves_a_change_row_with_who_and_which_versio
     """c-056 T006: the Changes page shows who replaced which document, from which version to which, and what the
     section said before and after; another tenant sees none of it."""
     src = await file_source(client)
-    body = {"name": "Rates", "owner": "maya@northfieldbank.com", "sourceIds": [src["id"]]}
+    body = {"name": "Rates", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "rates.pdf", RATES)
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
@@ -138,7 +138,7 @@ async def test_a_replaced_document_leaves_a_change_row_with_who_and_which_versio
     assert (row["fromVersion"], row["toVersion"], row["proposedBy"], row["origin"]) == (
         "v1",
         "v2",
-        "james@northfieldbank.com",
+        "james@harborpine.example",
         "source_sync",
     )
     assert "Fixed rates" in row["section"] and "4.89" in row["before"] and "5.19" in row["after"], row
@@ -182,7 +182,7 @@ async def test_a_bases_counts_and_health_come_from_its_documents(client: httpx.A
     """c-094 T005: the list and the overview counted every base as 0 documents and healthy; a failed document now
     counts as a failure and marks the base degraded, and each source says what it contributes."""
     src = await file_source(client)
-    body = {"name": "Teller", "owner": "maya@northfieldbank.com", "sourceIds": [src["id"]]}
+    body = {"name": "Teller", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
     await upload(client, src["id"], "scan.pdf", scanned_pdf())

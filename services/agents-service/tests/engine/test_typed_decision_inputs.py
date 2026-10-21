@@ -46,10 +46,10 @@ async def test_a_rejects_assignee_reaches_the_workflow(engine: AsyncEngine) -> N
     tenant, run_id, rt, w = await paused(engine, CHECK)
     with tenant_scope(tenant):
         await engine_reviews.decide(
-            rt, M, run_id, decision="reject", reason="Not a levy", inputs={"assignee": "m.okafor@northfieldbank.com"}
+            rt, M, run_id, decision="reject", reason="Not a levy", inputs={"assignee": "m.okafor@harborpine.example"}
         )
     await drain(w)
-    assert (await _review_output(engine, tenant, run_id))["inputs"] == {"assignee": "m.okafor@northfieldbank.com"}
+    assert (await _review_output(engine, tenant, run_id))["inputs"] == {"assignee": "m.okafor@harborpine.example"}
 
 
 async def test_an_input_the_action_does_not_declare_is_refused(engine: AsyncEngine) -> None:
