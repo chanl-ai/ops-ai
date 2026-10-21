@@ -279,7 +279,7 @@ class ChannelList:
                     sa.func.count().filter(t.c.created_at >= week),
                     sa.func.max(t.c.updated_at),
                 )
-                .where(t.c.tenant_id == tenant, t.c.deployment_id.is_not(None))
+                .where(t.c.tenant_id == tenant, t.c.deployment_id.is_not(None), team_visible(t))
                 .group_by(t.c.deployment_id)
             )
             for dep_id, n_day, n_err, n_week, last in (await c.execute(q)).all():

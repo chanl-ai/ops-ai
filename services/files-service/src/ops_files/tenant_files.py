@@ -220,7 +220,7 @@ class TenantFiles:
         return placed.store, placed.proxy
 
     async def _owned(self, who: Who, file_id: str) -> FileRow:
-        row = await self._files.get(who.tenant_id, file_id)
+        row = await self._files.get(file_id)
         if row is None or row["team"] != who.team:
             raise FileMissingError(file_id)
         return row
@@ -255,7 +255,7 @@ class TenantFiles:
 
     async def read_request(self, who: Who, file_id: str, key: str) -> ReadRequest:
         await self._owned(who, file_id)
-        found = await ReadRequestsStore(self._files.engine).get(who.tenant_id, key)
+        found = await ReadRequestsStore(self._files.engine).get(key)
         if found is None or found["file_id"] != file_id:
             raise FileMissingError(key)
         return _read_request(found)
@@ -268,10 +268,8 @@ class TenantFiles:
         if row["status"] != "available":
             raise UploadStateError(f"{file_id} is {row['status']}")
         stored = data.model_dump(mode="json", by_alias=True)
-        await self._files.update(
-            who.tenant_id, file_id, {"data": stored, "read_as": data.type_id, "read_path": data.path}
-        )
-        found = await self._files.get(who.tenant_id, file_id)
+        await self._files.update(file_id, {"data": stored, "read_as": data.type_id, "read_path": data.path})
+        found = await self._files.get(file_id)
         assert found is not None
         return self._detail(found, who)
 
@@ -375,7 +373,7 @@ class TenantFiles:
         file_id, held_hash = claimed
         if held_hash != request_hash:
             raise IdempotencyConflictError("this Idempotency-Key was used for a different upload")
-        row = await self._files.get(who.tenant_id, file_id)
+        row = await self._files.get(file_id)
         if row is None or row["team"] != who.team:
             raise IdempotencyConflictError("the file this Idempotency-Key created has been deleted")
         store, proxy = await self._placement(row)
@@ -406,7 +404,7 @@ class TenantFiles:
             scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
             request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
             claim = {"key_hash": hashlib.sha256(scope.encode()).hexdigest(), "request_hash": request_hash}
-            held = await self._files.idempotent_upload(who.tenant_id, claim["key_hash"])
+            held = await self._files.idempotent_upload(claim["key_hash"])
             if held is not None:
                 return await self._replay(who, held, request_hash)
         now = self._clock()
@@ -526,40 +524,40 @@ class TenantFiles:
             "uploaded_at": now,
             "current": True,
         }
-        existing = await self._files.make_available(who.tenant_id, file_id, values, version)
+        existing = await self._files.make_available(file_id, values, version)
         if existing == file_id:
             # Another complete of this same ticket won the race and made it available; this one is a repeat, and
             # deleting the object or the row here would delete the file it just completed.
-            done = await self._files.get(who.tenant_id, file_id)
+            done = await self._files.get(file_id)
             assert done is not None
             return CompletedUpload(file=self._detail(done, who), deduplicated=False)
         if existing is not None:
             await asyncio.to_thread(store.delete, key)
-            await self._files.repoint_idempotency(who.tenant_id, file_id, existing)
-            await self._files.remove(who.tenant_id, file_id)
-            first = await self._files.get(who.tenant_id, existing)
+            await self._files.repoint_idempotency(file_id, existing)
+            await self._files.remove(file_id)
+            first = await self._files.get(existing)
             assert first is not None
             if first.file["purpose"] == SAMPLE_PURPOSE and row["purpose"] != SAMPLE_PURPOSE:
                 # Files shows what people use a file for (c-380): a document type sample's bytes arriving as a mail or
                 # chat attachment take that purpose. Nothing else changes on dedupe, so an attachment later uploaded
                 # as a sample stays the attachment.
-                await self._files.update(who.tenant_id, existing, {"purpose": row["purpose"]})
-                first = await self._files.get(who.tenant_id, existing)
+                await self._files.update(existing, {"purpose": row["purpose"]})
+                first = await self._files.get(existing)
                 assert first is not None
             return CompletedUpload(file=self._detail(first, who), deduplicated=True)
 
         retention = self._config.retention_class(row["retention_class_id"])
         if retention.worm and row["delete_after"] is not None:
             await asyncio.to_thread(store.set_retention, key, retain_until(row["delete_after"]), "compliance")
-            await self._files.update(who.tenant_id, file_id, {"immutable": True})
-        done = await self._files.get(who.tenant_id, file_id)
+            await self._files.update(file_id, {"immutable": True})
+        done = await self._files.get(file_id)
         assert done is not None
         return CompletedUpload(file=self._detail(done, who), deduplicated=False)
 
     async def _reject[E: FilesError](self, row: FileRow, error: E) -> E:
         store, _ = await self._placement(row)
         await asyncio.to_thread(store.delete, row["storage_key"])
-        await self._files.update(row["tenant_id"], row["id"], {"status": "rejected"})
+        await self._files.update(row["id"], {"status": "rejected"})
         return error
 
     # ── read ──
@@ -583,7 +581,7 @@ class TenantFiles:
         """The file picker: the team's files labelled by name with size and date as the hint. A file not scanned clean
         is shown but cannot be picked, since nothing may use it yet (files 5.3.4)."""
         offset, window = options_window(None if ids else cursor, limit)
-        rows = await self._files.options(who.tenant_id, who.team, search=search, offset=offset, limit=window, ids=ids)
+        rows = await self._files.options(who.team, search=search, offset=offset, limit=window, ids=ids)
         options = [
             {
                 "id": r["id"],
@@ -612,7 +610,6 @@ class TenantFiles:
         filters: Mapping[str, Sequence[str]] | None = None,
     ) -> dict[str, Any]:
         found = await self._files.list(
-            who.tenant_id,
             who.team,
             page=page,
             page_size=page_size,
@@ -706,7 +703,7 @@ class TenantFiles:
         if await asyncio.to_thread(store.head, row["storage_key"]) is not None:
             await asyncio.to_thread(store.delete, row["storage_key"])
         payload = {"fileId": file_id, "digest": row["digest"], "name": row["name"], "deletedBy": who.actor}
-        await self._files.remove(who.tenant_id, file_id, event={"team": row["team"], "payload": payload})
+        await self._files.remove(file_id, event={"team": row["team"], "payload": payload})
 
     async def bulk_delete(self, who: Who, ids: list[str]) -> dict[str, Any]:
         """Deletes each file the rules allow; one that cannot be deleted is skipped with the reason the sheet shows."""
@@ -753,10 +750,10 @@ class TenantFiles:
             now = self._clock()
             if hold:
                 hold_id = f"hold_{uuid.uuid4().hex}"
-                await self._files.place_hold(who.tenant_id, file_id, hold_id, by=who.actor, at=now, reason=reason)
+                await self._files.place_hold(file_id, hold_id, by=who.actor, at=now, reason=reason)
             else:
                 assert row.hold is not None
-                await self._files.release_hold(who.tenant_id, row.hold.id, by=who.actor, at=now, reason=reason)
+                await self._files.release_hold(row.hold.id, by=who.actor, at=now, reason=reason)
             done.append(file_id)
         return {"updated": done, "skipped": skipped}
 
@@ -792,7 +789,6 @@ class TenantFiles:
         except NotDownloadableError as error:
             raise UploadStateError(f"{file_id} cannot be attached: {error}") from error
         await self._files.add_reference(
-            who.tenant_id,
             {
                 "file_id": file_id,
                 "ref_type": type,
@@ -808,17 +804,16 @@ class TenantFiles:
 
     async def remove_reference(self, who: Who, file_id: str, *, type: FileReferenceType, ref_id: str) -> FileDetail:
         await self._owned(who, file_id)
-        await self._files.remove_reference(who.tenant_id, file_id, type, ref_id)
+        await self._files.remove_reference(file_id, type, ref_id)
         return await self.get(who, file_id)
 
     async def record_scan(self, tenant: str, file_id: str, result: ScanResult) -> FileDetail:
         """The scan-result hook for an asynchronous scanner (ClamAV loop, Defender, GuardDuty). The tenant comes from
         the scanner's service token; the result is the only input."""
-        row = await self._files.get(tenant, file_id)
+        row = await self._files.get(file_id)
         if row is None:
             raise FileMissingError(file_id)
         await self._files.update(
-            tenant,
             file_id,
             {
                 "scan_status": result.status,
@@ -827,10 +822,8 @@ class TenantFiles:
                 "scan_detail": result.detail,
             },
         )
-        await self._files.set_blocked(
-            tenant, file_id, f"Quarantined: {result.detail}" if result.status == "infected" else None
-        )
-        done = await self._files.get(tenant, file_id)
+        await self._files.set_blocked(file_id, f"Quarantined: {result.detail}" if result.status == "infected" else None)
+        done = await self._files.get(file_id)
         assert done is not None
         return self._detail(done, None)
 

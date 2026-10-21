@@ -38,5 +38,4 @@ stops. No model is called.
 
 `a draft is refused a live run (409 not_live) and the editor offers only a test run`. With the start rule removed from
 `POST /v1/runs` (`routers/engine.py`, `if body.mode == "live"`) the start returns 202 and the check fails; the same
-reversion fails `tests/engine/test_lifecycle.py::test_a_draft_starts_only_test_runs_until_a_second_person_approves_it`
-(`.codeloop/evidence/075/red-api.md`).
+reversion fails `tests/engine/test_lifecycle.py::test_a_draft_starts_only_test_runs_until_a_second_person_approves_it`.

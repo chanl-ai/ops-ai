@@ -167,12 +167,14 @@ export function FileFieldList({ latest, onExtract, canExtract, selected, onSelec
                     <ConfidenceBadge value={scored?.confidence} />
                   )
                 }
+                note={
+                  quote && (
+                    <p className="truncate pb-1 text-xs text-muted-foreground italic" title={quote}>
+                      {scored?.citation?.page != null ? `p. ${scored.citation.page} · ` : ''}“{quote}”
+                    </p>
+                  )
+                }
               />
-              {quote && (
-                <p className="truncate pb-1 pl-[7.5rem] text-xs text-muted-foreground italic" title={quote}>
-                  {scored?.citation?.page != null ? `p. ${scored.citation.page} · ` : ''}“{quote}”
-                </p>
-              )}
             </div>
           );
         })}

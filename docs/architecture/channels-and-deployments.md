@@ -1,6 +1,6 @@
 # Channels and deployments
 
-Status: current, updated 2026-10-11 against HEAD; every decision is an option until the maintainers confirms it.
+Status: current, updated 2026-10-11 against HEAD; every decision is an option until it is confirmed.
 
 ## A deployment is one row
 

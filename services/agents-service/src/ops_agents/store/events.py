@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .leases import check_fence
@@ -36,7 +37,8 @@ thread_events = sa.Table(
     sa.Index("ix_thread_events_run", "thread_id", "run_id", "seq"),
     # The team event poll, by tenant first: a team id is the same in every tenant (c-280).
     sa.Index("ix_thread_events_tenant_team_position", "tenant_id", "team_id", "position"),
-    info=TENANT_SCOPED,
+    # Held to the caller's team by the database too (c-429, migration 0073).
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 # What the per-team stream carries: a thread's lifecycle, not its tokens and node steps.
@@ -91,7 +93,7 @@ class EventLog:
             # One statement: the next seq is read and written together, so an event costs one round trip.
             next_seq = (
                 sa.select(sa.func.coalesce(sa.func.max(thread_events.c.seq), 0) + 1)
-                .where(thread_events.c.thread_id == thread_id)
+                .where(thread_events.c.thread_id == thread_id, team_visible(thread_events))
                 .scalar_subquery()
             )
             stmt = thread_events.insert().values(**values, seq=next_seq).returning(thread_events.c.seq)
@@ -112,7 +114,10 @@ class EventLog:
         q = (
             thread_events.select()
             .where(
-                thread_events.c.thread_id == thread_id, thread_events.c.run_id == run_id, thread_events.c.seq > after
+                thread_events.c.thread_id == thread_id,
+                thread_events.c.run_id == run_id,
+                thread_events.c.seq > after,
+                team_visible(thread_events),
             )
             .order_by(thread_events.c.seq)
         )
@@ -128,6 +133,7 @@ class EventLog:
                 thread_events.c.tenant_id == current_tenant(),
                 thread_events.c.position > after,
                 thread_events.c.type.in_(LIFECYCLE),
+                team_visible(thread_events),
             )
             .order_by(thread_events.c.position)
             .limit(limit)
@@ -137,6 +143,10 @@ class EventLog:
 
     async def for_threads(self, thread_ids: list[str]) -> list[Any]:
         """Every event of the given threads, in seq order."""
-        q = thread_events.select().where(thread_events.c.thread_id.in_(thread_ids)).order_by(thread_events.c.seq)
+        q = (
+            thread_events.select()
+            .where(thread_events.c.thread_id.in_(thread_ids), team_visible(thread_events))
+            .order_by(thread_events.c.seq)
+        )
         async with tenant_tx(self.engine) as c:
             return list((await c.execute(q)).all())

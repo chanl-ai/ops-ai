@@ -1029,13 +1029,17 @@
             ],
             "properties": {
               "fileId": {
-                "type": "string"
+                "type": "string",
+                "title": "Notice file",
+                "format": "file"
               },
               "from": {
-                "type": "string"
+                "type": "string",
+                "title": "Sender's email"
               },
               "mailbox": {
-                "type": "string"
+                "type": "string",
+                "title": "Mailbox it arrived in"
               }
             }
           }
@@ -1098,6 +1102,29 @@
         "position": {
           "x": 720,
           "y": 0
+        }
+      },
+      {
+        "id": "reply_check",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "No mailbox or sender?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.input.mailbox",
+              "op": "empty"
+            },
+            {
+              "left": "$.input.from",
+              "op": "empty"
+            }
+          ],
+          "combine": "any"
+        },
+        "position": {
+          "x": 960,
+          "y": -160
         }
       },
       {
@@ -1262,6 +1289,23 @@
           "x": 360,
           "y": 160
         }
+      },
+      {
+        "id": "nothing_to_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to reply to",
+        "parameters": {
+          "outcome": "cases_opened",
+          "output": {
+            "cases": "$.nodes.open.out",
+            "message": "The acknowledgement was skipped: this notice did not arrive by email, so there is no mailbox or sender to reply to."
+          }
+        },
+        "position": {
+          "x": 1200,
+          "y": -160
+        }
       }
     ],
     "connections": [
@@ -1341,7 +1385,7 @@
           "port": "started"
         },
         "to": {
-          "node": "ack",
+          "node": "reply_check",
           "port": "in"
         }
       },
@@ -1352,6 +1396,26 @@
         },
         "to": {
           "node": "not_opened",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "true"
+        },
+        "to": {
+          "node": "nothing_to_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "false"
+        },
+        "to": {
+          "node": "ack",
           "port": "in"
         }
       },
@@ -1573,13 +1637,17 @@
             "type": "object",
             "properties": {
               "fileId": {
-                "type": "string"
+                "type": "string",
+                "title": "Levy document",
+                "format": "file"
               },
               "name": {
-                "type": "string"
+                "type": "string",
+                "title": "File name"
               },
               "from": {
-                "type": "string"
+                "type": "string",
+                "title": "Sender's email"
               }
             },
             "required": [
@@ -2400,6 +2468,29 @@
         }
       },
       {
+        "id": "reply_check",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "No mailbox or sender?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.input.mailbox",
+              "op": "empty"
+            },
+            {
+              "left": "$.input.from",
+              "op": "empty"
+            }
+          ],
+          "combine": "any"
+        },
+        "position": {
+          "x": 840,
+          "y": -10
+        }
+      },
+      {
         "id": "ack",
         "type": "ops.flow.humanReview",
         "typeVersion": 1,
@@ -2514,6 +2605,22 @@
           "x": 1400,
           "y": 450
         }
+      },
+      {
+        "id": "nothing_to_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to reply to",
+        "parameters": {
+          "outcome": "no_reply",
+          "output": {
+            "message": "The acknowledgement was skipped: this run has no mailbox or sender to reply to."
+          }
+        },
+        "position": {
+          "x": 1080,
+          "y": -10
+        }
       }
     ],
     "connections": [
@@ -2563,7 +2670,7 @@
           "port": "started"
         },
         "to": {
-          "node": "ack",
+          "node": "reply_check",
           "port": "in"
         }
       },
@@ -2583,7 +2690,7 @@
           "port": "started"
         },
         "to": {
-          "node": "ack",
+          "node": "reply_check",
           "port": "in"
         }
       },
@@ -2594,6 +2701,26 @@
         },
         "to": {
           "node": "failed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "true"
+        },
+        "to": {
+          "node": "nothing_to_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "false"
+        },
+        "to": {
+          "node": "ack",
           "port": "in"
         }
       },
@@ -3500,10 +3627,13 @@
             "type": "object",
             "properties": {
               "fileId": {
-                "type": "string"
+                "type": "string",
+                "title": "Attachment",
+                "format": "file"
               },
               "name": {
-                "type": "string"
+                "type": "string",
+                "title": "File name"
               }
             },
             "required": [
@@ -4016,6 +4146,29 @@
         }
       },
       {
+        "id": "reply_check",
+        "type": "ops.flow.if",
+        "typeVersion": 1,
+        "name": "No mailbox or sender?",
+        "parameters": {
+          "conditions": [
+            {
+              "left": "$.input.mailbox",
+              "op": "empty"
+            },
+            {
+              "left": "$.input.from",
+              "op": "empty"
+            }
+          ],
+          "combine": "any"
+        },
+        "position": {
+          "x": 3920,
+          "y": 140
+        }
+      },
+      {
         "id": "ack",
         "type": "ops.flow.humanReview",
         "typeVersion": 1,
@@ -4129,6 +4282,22 @@
         "position": {
           "x": 4480,
           "y": 600
+        }
+      },
+      {
+        "id": "nothing_to_reply",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Nothing to reply to",
+        "parameters": {
+          "outcome": "no_reply",
+          "output": {
+            "message": "The reply was skipped: this run has no mailbox or sender to reply to."
+          }
+        },
+        "position": {
+          "x": 4160,
+          "y": 140
         }
       }
     ],
@@ -4399,7 +4568,7 @@
           "port": "false"
         },
         "to": {
-          "node": "ack",
+          "node": "reply_check",
           "port": "in"
         }
       },
@@ -4409,7 +4578,7 @@
           "port": "started"
         },
         "to": {
-          "node": "ack",
+          "node": "reply_check",
           "port": "in"
         }
       },
@@ -4417,6 +4586,26 @@
         "from": {
           "node": "hold_once",
           "port": "error"
+        },
+        "to": {
+          "node": "reply_check",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "true"
+        },
+        "to": {
+          "node": "nothing_to_reply",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "reply_check",
+          "port": "false"
         },
         "to": {
           "node": "ack",

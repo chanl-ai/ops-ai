@@ -56,7 +56,7 @@ async def test_prune_waits_for_closed_thread_and_journal_row(pool: Pool, engine:
         )
         await c.execute(
             graph_runs.insert().values(
-                id=run_id, thread_id=thread_id, kind="run", status="running", events=[], created_at=now
+                id=run_id, thread_id=thread_id, kind="run", status="running", events=[], created_at=now, team_id="team"
             )
         )
 

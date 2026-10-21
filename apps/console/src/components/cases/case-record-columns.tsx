@@ -77,7 +77,15 @@ export const caseRecordColumns: ColumnDef<CaseRecord>[] = [
     id: 'assignee',
     accessorKey: 'assignee',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Owner" />,
-    cell: ({ row }) => <span className="text-sm">{row.original.assignee ?? <span className="text-muted-foreground">Unassigned</span>}</span>,
+    cell: ({ row }) => {
+      const { owner, assignee } = row.original;
+      if (!assignee) return <span className="text-sm text-muted-foreground">Unassigned</span>;
+      return (
+        <span className="text-sm whitespace-nowrap" title={assignee} data-testid="case-owner">
+          {owner?.name ?? assignee}
+        </span>
+      );
+    },
   },
   {
     id: 'priority',

@@ -52,7 +52,7 @@ Every service Makefile answers these. `make -C services/<x> help` lists them.
 
 `make up` starts platform, agents, tools, kb, files and the console. models-service is opt-in: start it with
 `make -C services/models-service run` and set `OPS_MODELS_URL`. `services/hitl-service` holds only a stub `Makefile`
-and `README.md`; the maintainers removed the service on 2026-10-16, and Reviews move into the `ops_hitl` package.
+and `README.md`; the service was removed on 2026-10-16, and Reviews move into the `ops_hitl` package.
 
 ## Naming rules
 

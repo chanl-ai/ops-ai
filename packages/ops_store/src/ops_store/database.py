@@ -2,8 +2,10 @@
 
   db = open_database(settings.database_url)   # the handle code outside a store holds; never AsyncEngine itself
 
-A connection that the database or a proxy closed while it sat in the pool is replaced on checkout (pool_pre_ping).
-Each connect attempt is bounded by `database_connect_timeout_s`, and a stalled or reset attempt is made again, up to
+A pooled connection is tested before it is handed out, and replaced when the database or a proxy closed it while it
+sat in the pool. On asyncpg the test is one round trip; SQLAlchemy's pool_pre_ping wraps it in BEGIN and ROLLBACK (for
+pgbouncer's transaction mode, which no install uses), three round trips on every transaction (c-451). Each connect
+attempt is bounded by `database_connect_timeout_s`, and a stalled or reset attempt is made again, up to
 `database_connect_attempts`.
 
 On a host running several builders' suites and Docker, an asyncpg connect has waited a full minute for the server's
@@ -19,7 +21,9 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import event
+from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.util import await_
 
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
@@ -30,10 +34,35 @@ log = get_logger(__name__)
 Database = AsyncEngine
 
 
+# Set on a pooled connection once it has been used: a connection made for this checkout needs no test.
+_CHECKED_IN = "ops_checked_in"
+
+
 def open_database(url: str, **options: Any) -> Database:
-    """The service's database handle: every checkout tests its connection first, and connects through the policy
-    below."""
-    return create_async_engine(url, pool_pre_ping=True, **options)
+    """The service's database handle: every checkout of a pooled connection tests it first, and
+    connects through the policy below."""
+    engine = create_async_engine(url, **options)
+    dialect = engine.dialect
+
+    def checked_in(_dbapi_connection: Any, record: Any) -> None:
+        record.info[_CHECKED_IN] = True
+
+    def test_before_use(dbapi_connection: Any, record: Any, _proxy: Any) -> None:
+        if not record.info.get(_CHECKED_IN):
+            return  # connected just now
+        driver = getattr(dbapi_connection, "driver_connection", None)
+        try:
+            if dialect.driver == "asyncpg" and driver is not None:
+                await_(driver.fetchrow(";"))
+            else:
+                dialect.do_ping(dbapi_connection)
+        except Exception as e:
+            # The pool discards this connection and checks out another (SQLAlchemy's pessimistic disconnect handling).
+            raise DisconnectionError(str(e)) from e
+
+    event.listen(engine.sync_engine, "checkin", checked_in)
+    event.listen(engine.sync_engine, "checkout", test_before_use)
+    return engine
 
 
 # An attempt that stalled or was cut off; refused credentials or a missing database fail at once, every time.

@@ -40,4 +40,4 @@ Route rules are `services/agents-service/tests/api/test_channel_mailboxes.py`; t
 
 ## Non-vacuous check
 
-Each route rule removed alone turns its test red: `.codeloop/evidence/199/t002-t004-red.txt`.
+Each route rule removed alone turns its test red.

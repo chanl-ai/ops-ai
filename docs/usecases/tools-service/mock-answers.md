@@ -32,7 +32,4 @@ port of its own.
 
 ## Non-vacuous check
 
-Step 2 fails with the executor's mock path removed: the test runs reach the bank, which answers 404
-(`.codeloop/evidence/332/uc-397-red-without-mock-answers.txt`). The port itself: `packages/ops_engine/tests/test_tool_timeout_port.py`
-(`.codeloop/evidence/332/timeout-port-red.txt`); the environment rule: `services/tools-service/tests/test_mocks.py`
-(`.codeloop/evidence/332/test-mocks-red-without-environment-check.txt`).
+Step 2 fails with the executor's mock path removed: the test runs reach the bank, which answers 404. The port itself: `packages/ops_engine/tests/test_tool_timeout_port.py`; the environment rule: `services/tools-service/tests/test_mocks.py`.

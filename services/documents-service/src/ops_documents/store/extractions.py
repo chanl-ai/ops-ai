@@ -21,8 +21,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
-from ops_documents.store.metadata import metadata
+from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_store import isolation
 from ops_store.outbox import add, outbox_table
+from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.team_scope import any_team, team_visible
 
 Status = Literal["queued", "running", "done", "failed", "unreadable"]
 PENDING: tuple[Status, ...] = ("queued", "running")
@@ -64,12 +67,13 @@ extractions = sa.Table(
     sa.Index("ix_extractions_status", "status"),
     sa.Index("ix_extractions_file", "tenant_id", "file_id"),
     sa.Index("ix_extractions_type_reads", "tenant_id", "team", "type_id", "status", "finished_at"),
+    info={**TENANT_SCOPED, **team_owned("team")},
 )
 
 # A correction keeps what it replaced, so per-field accuracy can be counted from these rows (c-240).
 # Service events documents-service reports (extraction.*), written in the transaction of the change they report and
 # relayed to agents-service (c-258's outbox).
-service_outbox = outbox_table(metadata, "documents_outbox")
+service_outbox = outbox_table(metadata, "documents_outbox", info=TENANT_SCOPED)
 # A correction's event waits this long before it is sent, and a newer correction of the same extraction replaces it, so
 # a person correcting several fields in a row starts one Save data run with the final read, not one per field.
 CORRECTION_SETTLE_SECONDS = 5.0
@@ -90,6 +94,9 @@ extraction_corrections = sa.Table(
     sa.Column("corrected_by", sa.String(320), nullable=False),
     sa.Column("corrected_at", sa.DateTime(timezone=True), nullable=False),
     sa.Index("ix_extraction_corrections_extraction", "tenant_id", "extraction_id"),
+    # The extraction's team, copied when the correction is written (c-415).
+    sa.Column("team", sa.String(64), nullable=False),
+    info={**TENANT_SCOPED, **team_owned("team")},
 )
 
 
@@ -146,7 +153,7 @@ class ExtractionsStore:
         """The new row, or the row that already holds its Idempotency-Key (the caller compares request hashes)."""
         row = {**values, "request": json.dumps(values["request"], sort_keys=True)}
         try:
-            async with self.engine.begin() as c:
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
                 await c.execute(sa.insert(extractions).values(**row))
         except IntegrityError:
             held = await self._one(
@@ -155,25 +162,28 @@ class ExtractionsStore:
             if held is None:
                 raise
             return held
-        found = await self.get(str(values["tenant_id"]), str(values["id"]))
+        found = await self.get(str(values["id"]))
         assert found is not None
         return found
 
-    async def held(self, tenant: str, key_hash: str) -> ExtractionRow | None:
+    async def held(self, key_hash: str) -> ExtractionRow | None:
         """The extraction an Idempotency-Key already holds, if any."""
+        tenant = isolation.tenant()
         return await self._one(extractions.c.tenant_id == tenant, extractions.c.key_hash == key_hash)
 
-    async def get(self, tenant: str, extraction_id: str) -> ExtractionRow | None:
+    async def get(self, extraction_id: str) -> ExtractionRow | None:
+        tenant = isolation.tenant()
         return await self._one(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
 
     async def _one(self, *where: Any) -> ExtractionRow | None:
-        async with self.engine.connect() as c:
-            m = (await c.execute(sa.select(extractions).where(*where))).mappings().first()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            m = (await c.execute(sa.select(extractions).where(*where, team_visible(extractions)))).mappings().first()
         return _row(m) if m is not None else None
 
-    async def start(self, tenant: str, extraction_id: str, at: datetime) -> bool:
+    async def start(self, extraction_id: str, at: datetime) -> bool:
         """Marks a queued or running row running and counts the attempt; False when it is already finished."""
-        async with self.engine.begin() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             done = await c.execute(
                 sa.update(extractions)
                 .where(
@@ -185,21 +195,21 @@ class ExtractionsStore:
             )
         return done.rowcount == 1
 
-    async def requeue(self, tenant: str, extraction_id: str) -> ExtractionRow:
+    async def requeue(self, extraction_id: str) -> ExtractionRow:
         """A failed extraction queued again, its error cleared, for a retry under the same Idempotency-Key."""
-        async with self.engine.begin() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
                 .values(status="queued", error_code=None, error=None, result=None, outcome=None, finished_at=None)
             )
-        found = await self.get(tenant, extraction_id)
+        found = await self.get(extraction_id)
         assert found is not None
         return found
 
     async def finish(
         self,
-        tenant: str,
         extraction_id: str,
         *,
         status: Status,
@@ -211,6 +221,7 @@ class ExtractionsStore:
         tokens: tuple[int, int] | None = None,
         fingerprint: str | None = None,
     ) -> None:
+        tenant = isolation.tenant()
         values: dict[str, Any] = {
             "status": status,
             "outcome": outcome,
@@ -223,34 +234,36 @@ class ExtractionsStore:
             values |= {"input_tokens": tokens[0], "output_tokens": tokens[1]}
         if fingerprint is not None:
             values["layout_fingerprint"] = fingerprint
-        async with self.engine.begin() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
                 .values(**values)
             )
 
-    async def tokens_per_call(self, tenant: str, type_id: str | None, *, last: int = 20) -> tuple[float, float] | None:
+    async def tokens_per_call(self, type_id: str | None, *, last: int = 20) -> tuple[float, float] | None:
         """The mean input and output tokens of the tenant's last `last` measured extractions, of one document type when
         `type_id` is given; None when there are none yet."""
+        tenant = isolation.tenant()
         where = [extractions.c.tenant_id == tenant, extractions.c.output_tokens.is_not(None)]
         if type_id is not None:
             where.append(extractions.c.type_id == type_id)
         recent = (
             sa.select(extractions.c.input_tokens, extractions.c.output_tokens)
-            .where(*where)
+            .where(*where, team_visible(extractions))
             .order_by(extractions.c.finished_at.desc())
             .limit(last)
             .subquery()
         )
         query = sa.select(sa.func.count(), sa.func.avg(recent.c.input_tokens), sa.func.avg(recent.c.output_tokens))
-        async with self.engine.connect() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             count, tokens_in, tokens_out = (await c.execute(query)).one()
         return (float(tokens_in), float(tokens_out)) if count else None
 
-    async def recent_reads(self, tenant: str, team: str, type_id: str, *, last: int) -> list[ExtractionRow]:
+    async def recent_reads(self, team: str, type_id: str, *, last: int) -> list[ExtractionRow]:
         """The team's last `last` finished reads of a document type, newest first (c-254's template offers)."""
-        async with self.engine.connect() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (
                 (
                     await c.execute(
@@ -260,6 +273,7 @@ class ExtractionsStore:
                             extractions.c.team == team,
                             extractions.c.type_id == type_id,
                             extractions.c.status == "done",
+                            team_visible(extractions),
                         )
                         .order_by(extractions.c.finished_at.desc())
                         .limit(last)
@@ -270,9 +284,10 @@ class ExtractionsStore:
             )
         return [_row(m) for m in rows]
 
-    async def keep_fingerprint(self, tenant: str, extraction_id: str, fingerprint: str) -> None:
+    async def keep_fingerprint(self, extraction_id: str, fingerprint: str) -> None:
         """A read saved before fingerprints were stored gets its own once (c-254)."""
-        async with self.engine.begin() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
@@ -280,12 +295,16 @@ class ExtractionsStore:
             )
 
     async def pending(self) -> list[ExtractionRow]:
-        """Every queued or running extraction, across tenants: what a restart picks up again."""
-        async with self.engine.connect() as c:
+        """Every queued or running extraction, across tenants: what a restart picks up again, each then read as its
+        own tenant and team."""
+        t = extractions
+        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
             rows = (
                 (
                     await c.execute(
-                        sa.select(extractions).where(extractions.c.status.in_(PENDING)).order_by(extractions.c.asked_at)
+                        sa.select(t)
+                        .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's"))
+                        .order_by(extractions.c.asked_at)
                     )
                 )
                 .mappings()
@@ -293,16 +312,23 @@ class ExtractionsStore:
             )
         return [_row(m) for m in rows]
 
-    async def for_file(
-        self, tenant: str, team: str, file_id: str, *, offset: int, limit: int
-    ) -> tuple[list[ExtractionRow], int]:
+    async def for_file(self, team: str, file_id: str, *, offset: int, limit: int) -> tuple[list[ExtractionRow], int]:
         """One page of the team's extractions of one file, newest first, and how many there are."""
+        tenant = isolation.tenant()
         where = (extractions.c.tenant_id == tenant, extractions.c.team == team, extractions.c.file_id == file_id)
-        query = sa.select(extractions).where(*where).order_by(extractions.c.asked_at.desc(), extractions.c.id)
-        async with self.engine.connect() as c:
+        query = (
+            sa.select(extractions)
+            .where(*where, team_visible(extractions))
+            .order_by(extractions.c.asked_at.desc(), extractions.c.id)
+        )
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (await c.execute(query.offset(offset).limit(limit))).mappings().all()
             total = int(
-                (await c.execute(sa.select(sa.func.count()).select_from(extractions).where(*where))).scalar_one()
+                (
+                    await c.execute(
+                        sa.select(sa.func.count()).select_from(extractions).where(*where, team_visible(extractions))
+                    )
+                ).scalar_one()
             )
         return [_row(m) for m in rows], total
 
@@ -316,7 +342,7 @@ class ExtractionsStore:
     ) -> None:
         """Records a correction and writes the extraction's answer with the corrected value, its event when given, and
         the example it teaches its document type (c-297), in one transaction."""
-        async with self.engine.begin() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             if example is not None:
                 await _keep_example(c, example)
             if event is not None:
@@ -340,6 +366,9 @@ class ExtractionsStore:
                         **values,
                         "original": json.dumps(values["original"]),
                         "corrected": json.dumps(values["corrected"]),
+                        "team": sa.select(extractions.c.team)
+                        .where(extractions.c.id == values["extraction_id"], team_visible(extractions))
+                        .scalar_subquery(),
                     }
                 )
             )
@@ -349,8 +378,9 @@ class ExtractionsStore:
                 .values(result=json.dumps(result))
             )
 
-    async def corrections(self, tenant: str, extraction_id: str) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+    async def corrections(self, extraction_id: str) -> list[dict[str, Any]]:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (
                 (
                     await c.execute(
@@ -358,6 +388,7 @@ class ExtractionsStore:
                         .where(
                             extraction_corrections.c.tenant_id == tenant,
                             extraction_corrections.c.extraction_id == extraction_id,
+                            team_visible(extraction_corrections),
                         )
                         .order_by(extraction_corrections.c.id)
                     )
@@ -378,11 +409,12 @@ class ExtractionsStore:
             for m in rows
         ]
 
-    async def purge(self, tenant: str, team: str, file_id: str) -> int:
+    async def purge(self, team: str, file_id: str) -> int:
         """Removes the team's extractions of a deleted file, their corrections and the examples those taught; the number
         of extractions removed.
         Another team's reads of the file are its own purge's to remove."""
-        async with self.engine.begin() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             ids = [
                 r[0]
                 for r in await c.execute(
@@ -390,6 +422,7 @@ class ExtractionsStore:
                         extractions.c.tenant_id == tenant,
                         extractions.c.team == team,
                         extractions.c.file_id == file_id,
+                        team_visible(extractions),
                     )
                 )
             ]
@@ -434,6 +467,7 @@ async def _keep_example(c: AsyncConnection, example: Mapping[str, Any]) -> None:
                 e.field == example["field"],
                 line,
                 e.value == value,
+                team_visible(document_type_examples),
             )
         )
     ).first()

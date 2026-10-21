@@ -150,12 +150,111 @@ function routeLinks(data, byId, items) {
   });
 }
 
+
+// The free layout: every band, group and box at the coordinates the data file gives, with coloured curved links, as
+// in docs/diagrams/enterprise-architecture.yaml. For a picture whose arrangement carries meaning a grid cannot hold.
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+const FREE_STATUS = { built: 'green', partial: 'blue', planned: 'slate', dependency: 'amber' };
+
+function renderFree(data, opts) {
+  const parts = { bands: [], groups: [], nodes: [], edges: [], dots: [] };
+  const c = (name) => `var(--d-${name})`;
+  const soft = (name) => `var(--d-${name}-soft)`;
+  const t = (x, y, str, attrs) =>
+    `<text x="${x}" y="${y}" ${Object.entries(attrs).map(([k, v]) => `${k}="${esc(v)}"`).join(' ')}>${esc(str)}</text>`;
+  const dot = (n, x, y, color) =>
+    `<circle cx="${x}" cy="${y}" r="15" fill="${c(color)}" opacity=".18"/><circle cx="${x}" cy="${y}" r="11" fill="${c(color)}"/>` +
+    t(x, y + 4, String(n), { 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 700, fill: '#fff', 'font-family': MONO });
+  for (const b of data.bands ?? []) {
+    parts.bands.push(
+      `<rect x="40" y="${b.y}" width="${data.width - 80}" height="28" rx="14" fill="${soft(b.color)}" stroke="${c(b.color)}" stroke-opacity=".35"/>` +
+        t(74, b.y + 18, b.label, { 'font-size': 10.5, 'font-weight': 700, 'letter-spacing': '.08em', fill: c(b.color), 'font-family': MONO }) +
+        t(196, b.y + 18, b.text, { 'font-size': 12, fill: 'var(--d-fg)', opacity: 0.85 }),
+    );
+    if (b.number) parts.dots.push(dot(b.number, 54, b.y + 14, b.color));
+  }
+  for (const g of data.groups ?? []) {
+    parts.groups.push(
+      `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="16" fill="${g.outline ? 'none' : soft(g.color)}" fill-opacity=".55" stroke="${c(g.color)}" stroke-opacity="${g.outline ? 0.5 : 0.35}"${g.outline ? ' stroke-dasharray="5 5"' : ''}/>` +
+        t(g.x + (g.number ? 36 : 14), g.y + 21, g.label, { 'font-size': 10.5, 'font-weight': 700, 'letter-spacing': '.08em', fill: c(g.color), 'font-family': MONO }),
+    );
+    if (g.number) parts.dots.push(dot(g.number, g.x + 18, g.y + 17, g.color));
+  }
+  const byId = Object.fromEntries((data.nodes ?? []).map((n) => [n.id, n]));
+  for (const n of data.nodes ?? []) {
+    if (n.hidden) continue;
+    if (n.ghost) {
+      parts.nodes.push(t(n.x + n.w / 2, n.y + n.h / 2 + 4, n.label, { 'text-anchor': 'middle', 'font-size': 11, fill: c(n.color), 'font-style': 'italic' }));
+      continue;
+    }
+    const lines = n.note ? String(n.note).split('\n') : [];
+    const top = lines.length ? n.y + 20 : n.y + n.h / 2 + 4;
+    let g =
+      `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="var(--d-card)" stroke="${c(n.color)}" stroke-opacity=".5"/>` +
+      `<rect x="${n.x}" y="${n.y + 8}" width="3" height="${n.h - 16}" rx="1.5" fill="${c(n.color)}"/>` +
+      t(n.x + 12, top, n.label, { 'font-size': 12.5, 'font-weight': 650, fill: 'var(--d-fg)' }) +
+      lines.map((ln, i) => t(n.x + 12, top + 16 + i * 14, ln, { 'font-size': 10.5, fill: 'var(--d-muted)' })).join('');
+    if (n.status) {
+      const color = FREE_STATUS[n.status];
+      const bw = n.status.length * 6.2 + 12;
+      const bx = n.x + n.w - bw - 6;
+      const by = lines.length > 3 || n.h > 60 ? n.y + n.h - 21 : n.y + 6;
+      g +=
+        `<rect x="${bx}" y="${by}" width="${bw}" height="15" rx="7.5" fill="${soft(color)}"/>` +
+        t(bx + bw / 2, by + 10.5, n.status.toUpperCase(), { 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 700, 'letter-spacing': '.04em', fill: c(color), 'font-family': MONO });
+    }
+    parts.nodes.push(n.href && opts.linkHref ? `<a href="${esc(opts.linkHref(n.href))}" class="lnk">${g}</a>` : g);
+    if (n.number) parts.dots.push(dot(n.number, n.x, n.y, n.color));
+  }
+  const port = (ref) => {
+    const [id, side] = ref.split('.');
+    const n = byId[id];
+    if (!n) throw new Error(`diagram edge: unknown node ${id}`);
+    return { l: [n.x, n.y + n.h / 2], r: [n.x + n.w, n.y + n.h / 2], t: [n.x + n.w / 2, n.y], b: [n.x + n.w / 2, n.y + n.h] }[side];
+  };
+  for (const e of data.edges ?? []) {
+    const [x1, y1] = port(e.from);
+    const [x2, y2] = port(e.to);
+    const sa = e.from.split('.')[1];
+    const vertical = sa === 'b' || sa === 't';
+    const dir = vertical ? Math.sign(y2 - y1) || 1 : Math.sign(x2 - x1) || 1;
+    const k = vertical ? Math.max(24, Math.abs(y2 - y1) / 2) : Math.max(18, Math.abs(x2 - x1) / 2);
+    const c1 = vertical ? [x1, y1 + k * dir] : [x1 + k * dir, y1];
+    const c2 = vertical ? [x2, y2 - k * dir] : [x2 - k * dir, y2];
+    const d = `M${x1} ${y1}C${c1[0]} ${c1[1]},${c2[0]} ${c2[1]},${x2} ${y2}`;
+    let g = `<path d="${d}" fill="none" stroke="${c(e.color)}" stroke-opacity=".22" stroke-width="4"/><path d="${d}" fill="none" stroke="${c(e.color)}" stroke-width="1.6"/>`;
+    for (const [x, y] of [[x1, y1], [x2, y2]]) {
+      g += `<circle cx="${x}" cy="${y}" r="4.5" fill="var(--d-card)" stroke="${c(e.color)}" stroke-width="1.6"/><circle cx="${x}" cy="${y}" r="1.8" fill="${c(e.color)}"/>`;
+    }
+    if (e.label) {
+      const at = e.at ?? 0.5;
+      const u = 1 - at;
+      const pts = [[x1, y1], c1, c2, [x2, y2]];
+      const w = [u * u * u, 3 * u * u * at, 3 * u * at * at, at * at * at];
+      const mx = w.reduce((m, wi, i) => m + wi * pts[i][0], 0);
+      const my = w.reduce((m, wi, i) => m + wi * pts[i][1], 0);
+      const lw = e.label.length * 5.8 + 12;
+      g += `<rect x="${mx - lw / 2}" y="${my - 8}" width="${lw}" height="16" rx="8" fill="var(--d-card)" stroke="${c(e.color)}" stroke-opacity=".4"/>`;
+      g += t(mx, my + 3.5, e.label, { 'text-anchor': 'middle', 'font-size': 9.5, fill: c(e.color), 'font-family': MONO });
+    }
+    parts.edges.push(g);
+  }
+  const style = opts.standalone ? `<style>${STANDALONE_CSS}</style>` : '';
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${data.width} ${data.height}" width="${data.width}" height="${data.height}" role="img" aria-label="${esc(data.title)}" class="ops-box-diagram ops-free">` +
+    `<title>${esc(data.title)}</title>${style}` +
+    ['bands', 'groups', 'nodes', 'edges', 'dots'].map((k) => `<g>${parts[k].join('')}</g>`).join('') +
+    `</svg>`
+  );
+}
+
 /**
  * @param {object} data the parsed YAML
  * @param {{ standalone?: boolean, linkHref?: (href: string) => string }} [opts] standalone: embed the light and
  *   dark palette (for an SVG file); linkHref: make boxes with an href into links (the live diagram)
  */
 export function renderBoxDiagram(data, opts = {}) {
+  if (data.layout === 'free') return renderFree(data, opts);
   const { width, height, items, byId } = layout(data);
   const links = routeLinks(data, byId, items);
   const parts = [];
@@ -204,7 +303,7 @@ export const DIAGRAM_CSS = `
 .ops-box-diagram .grp-muted,.ops-box-diagram .bx-muted{fill:var(--d-soft);stroke:var(--d-muted);stroke-width:1;stroke-dasharray:2 3}
 .ops-box-diagram .ln{fill:none;stroke:var(--d-fg);stroke-width:1.3}
 .ops-box-diagram .arrow{fill:var(--d-fg)}
-.ops-box-diagram text{fill:var(--d-fg)}
+.ops-box-diagram:not(.ops-free) text{fill:var(--d-fg)}
 .ops-box-diagram .t{font-size:13px}
 .ops-box-diagram .tb{font-size:13px;font-weight:600}
 .ops-box-diagram .ts{font-size:11.5px;fill:var(--d-muted)}
@@ -212,7 +311,11 @@ export const DIAGRAM_CSS = `
 .ops-box-diagram .lnk:hover rect{stroke:var(--d-accent);stroke-width:2}
 `;
 
+const LIGHT_COLOURS = '--d-green:#12804a;--d-green-soft:#e2f3ea;--d-indigo:#4a55d4;--d-indigo-soft:#eceefd;--d-violet:#7a44c8;--d-violet-soft:#f2ebfc;--d-teal:#0b7a83;--d-teal-soft:#e0f2f3;--d-blue:#1d6fd1;--d-blue-soft:#e4effc;--d-amber:#a5650b;--d-amber-soft:#fcf0dc;--d-rose:#b8324f;--d-rose-soft:#fbe8ed;--d-slate:#4c5868;--d-slate-soft:#edf0f4';
+const DARK_COLOURS = '--d-green:#4fcf8c;--d-green-soft:#11291d;--d-indigo:#929bff;--d-indigo-soft:#1b1f3d;--d-violet:#c19bff;--d-violet-soft:#251a3a;--d-teal:#5ccfd8;--d-teal-soft:#0f2a2d;--d-blue:#6fb0ff;--d-blue-soft:#11243b;--d-amber:#f0b45a;--d-amber-soft:#2e220f;--d-rose:#ff8fa8;--d-rose-soft:#36161f;--d-slate:#a9b5c5;--d-slate-soft:#1c232d';
 const LIGHT = '--d-fg:#1d1f22;--d-muted:#5d636b;--d-card:#ffffff;--d-soft:#f1f2f3;--d-accent:#2f5bd3;--d-new:#0f7a55;--d-new-soft:#e3f4ec;--d-pack:#5b3fd1;--d-pack-soft:#efeafc;--d-host:#1a5fb4;--d-host-soft:#e4edf9';
 const DARK = '--d-fg:#e6e8eb;--d-muted:#a0a6ae;--d-card:#1c1f23;--d-soft:#22262b;--d-accent:#8fb0ff;--d-new:#5fd3a5;--d-new-soft:#17332a;--d-pack:#b7a6ff;--d-pack-soft:#2a2347;--d-host:#8ab6f2;--d-host-soft:#1c2a40';
-const STANDALONE_CSS = `svg{${LIGHT}}@media (prefers-color-scheme: dark){svg{${DARK}}}${DIAGRAM_CSS}`;
+const STANDALONE_CSS = `svg{${LIGHT};${LIGHT_COLOURS}}@media (prefers-color-scheme: dark){svg{${DARK};${DARK_COLOURS}}}${DIAGRAM_CSS}`;
+/** The free layout's colours for the site: light by default, dark under the site's .dark class. */
+export const SITE_COLOURS_CSS = `.ops-box-diagram{${LIGHT_COLOURS}}.dark .ops-box-diagram{${DARK_COLOURS}}`;
 export const DIAGRAM_PALETTE = { light: LIGHT, dark: DARK };

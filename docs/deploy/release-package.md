@@ -1,6 +1,6 @@
 # Release package: one download a client team installs from
 
-Status: current. Built and proven by c-385 (`deploy/release/proof.sh`, evidence `.codeloop/evidence/385/proof.txt`);
+Status: current. Built and proven by c-385 (`deploy/release/proof.sh`);
 not yet installed on a client's machines. The guide inside the package is `install-guide.md`.
 
 A client team runs Ops AI on its own Linux machines with Docker, often with no internet access from those machines, and
@@ -55,7 +55,7 @@ stay.
 Not done: a push publishes. The names are `<IMAGE_PREFIX>/<service>:<version>`, by default
 `ghcr.io/chanl-ai/ops-ai/<service>`, which nested-path registries (GHCR, Azure Container Registry, Harbor) accept.
 Docker Hub takes one path level, so it needs `IMAGE_PREFIX=docker.io/<org>` and names like `<org>/platform`. A push
-needs the maintainers' approval, a login with write access (`docker login ghcr.io` with a token holding `write:packages`),
+needs a maintainer's approval, a login with write access (`docker login ghcr.io` with a token holding `write:packages`),
 `docker push` of the ten names in `images.txt`, and a decision on each package's visibility. A client can instead load
 the bundle and push it to their own registry, then set `OPS_IMAGE_PREFIX` in the env file.
 

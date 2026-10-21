@@ -1,6 +1,6 @@
 # Data
 
-Status: current, updated 2026-10-19. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-19. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 Store choices are in [ADR-0006](decisions/data-stores-and-evidence.md) (PostgreSQL as system of record, WORM object
 storage for evidence, pgvector for knowledge) and [ADR-0010](decisions/object-storage.md). A service never reads

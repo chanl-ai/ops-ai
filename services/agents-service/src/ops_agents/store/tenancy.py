@@ -30,10 +30,10 @@ LOCAL_TENANT = "local"
 TENANT_ROLE = "ops_runtime_tenant"
 SYSTEM_ROLE = "ops_runtime_system"
 
-# Why a path acts for every team of one tenant (`isolation.tenant_wide`). c-412 narrows each loop to the claimed row's
-# team; until then each acts for the tenant, as before c-409, under its own name.
+# Why a path acts for every team of one tenant (`isolation.tenant_wide`). c-412's slices narrow each loop to the claimed
+# row's team (the sweeper and the timer poller act as the thread's team since c-429); until then each acts for the
+# tenant under its own name.
 SEED = "seed"  # the dev seed writes records of every team into the local tenant
-THREAD_WORK = "thread_work"  # the sweeper and the timer poller work one claimed thread
 ENGINE_PASS = "engine_pass"  # the workflow worker runs one claimed run's pass
 MEMORY_RETENTION = "memory_retention"  # the retention sweep expires one tenant's memories
 MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound mailboxes
@@ -41,7 +41,7 @@ USAGE_COUNTS = "usage_counts"  # knowledge usage counts every team's agents citi
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
-CLAIM_THREAD = "claim_thread"  # GraphStore.tenant_of, for the sweeper and the timer poller
+CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
 RETENTION_TENANTS = "retention_tenants"  # Memories.tenants, for the retention sweep
 
 current_tenant = isolation.tenant
@@ -58,7 +58,6 @@ __all__ = [
     "SYSTEM_ROLE",
     "TENANT_ROLE",
     "TESTS",
-    "THREAD_WORK",
     "USAGE_COUNTS",
     "NoTenantError",
     "current_team",

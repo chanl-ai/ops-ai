@@ -3,7 +3,7 @@
 Status: first slice built (c-256). documents-service runs on :8760 (`make up` starts it as `documents`) with its own
 tables and migration chain (`alembic_version_documents`). It serves the extraction API (c-235) and document types,
 their versions, samples and capped test runs (c-236), the layout (c-247), classify (c-249), and boxes on every
-extracted field (c-252). Templates (c-253, c-254) are planned. Design: `.codeloop/wiki/concepts/documents-subsystem.md`.
+extracted field (c-252). Templates (c-253, c-254) are planned. Design: this page.
 
 | Item | Detail |
 |---|---|
@@ -88,7 +88,7 @@ of the page from the top left, narrowed to the value's words when the quote incl
 block or table cell ids they sit in (c-252, `ops_extract.boxes`). A quote not on its page, a file without word boxes
 (DOCX, HTML, text) and reads made before c-252 carry none. On a page OCR turned upright or straightened (c-294), each
 word's box is mapped back through those turns, so it lies where the word is printed on the scan as uploaded
-(layout-3). On five real levy reads every quoted field was boxed.
+(layout-3). On five real court order reads every quoted field was boxed.
 
 A document type version may hold layout templates (c-253): per template page, anchor labels with the box each is
 printed in and one zone per field, boxes as page fractions. Before the model, each template is matched against the
@@ -160,7 +160,7 @@ A field may carry two rules, checked before scoring: `pattern`, a regular expres
 `extractedValue`, marked `rejected` and sent to review. Before them, `clean` lists cleanup rules run on the model's
 text (c-287): `trimPunctuation` (a trailing comma after a name), `lastFour` (the last four digits of a masked number),
 `stripLabel` (a leading "Case reference: "). What the model said stays as `extractedValue`, and `cleaned` names the
-rules that changed it. On the levy fixtures' stored reads at default effort they take 59/65 values right to 63/65. The test estimate prices each call at the type's last 20
+rules that changed it. On the court order fixtures' stored reads at default effort they take 59/65 values right to 63/65. The test estimate prices each call at the type's last 20
 measured extractions, then the tenant's, then a fixed guess (`basis`).
 
 ## Run the checks
@@ -240,24 +240,25 @@ Example") instead of the value, because page text renders a table row as `label 
 ## Accuracy, time and cost per path
 
 Measured on the shared stack on 2026-10-19 with `experiments/measure_paths.py`: alias `extract` on gpt-5-mini at
-default effort, the restraining notice v4 and tax levy v3 (with cleanup rules) and the two non-levy types. Accuracy
+default effort, the restraining notice v4 and the tax order type (`tax_levy`) v3 (with cleanup rules) and the two types that are not
+court orders. Accuracy
 counts each expected value compared as a test run compares it.
 
 | Path | Reads | Fields right | Time a file | Cost a file |
 |---|---|---|---|---|
-| Model, fresh reads (5 levy, 5 non-levy, one an OCR'd skewed scan) | 10 | 80/84 (95%) | 20.0 s mean, 10.7 to 32.5 s | $0.0044 mean, $0.0022 to $0.0062 |
-| Model, stored reads (5 levy, read before the cleanup rules) | 5 | 59/65 (91%) | from the stored calls, about 25 s | from the stored calls, about $0.0055 |
-| Template, suggested from one model read of each non-levy master form | 14 | 90/91 (99%) | 0.02 s on a text PDF or a cached scan layout; 0.42 s the first time a scan is OCR'd | none |
+| Model, fresh reads (5 court order, 5 other, one an OCR'd skewed scan) | 10 | 80/84 (95%) | 20.0 s mean, 10.7 to 32.5 s | $0.0044 mean, $0.0022 to $0.0062 |
+| Model, stored reads (5 court order, read before the cleanup rules) | 5 | 59/65 (91%) | from the stored calls, about 25 s | from the stored calls, about $0.0055 |
+| Template, suggested from one model read of each master form that is not a court order | 14 | 90/91 (99%) | 0.02 s on a text PDF or a cached scan layout; 0.42 s the first time a scan is OCR'd | none |
 
-Page images (c-295), `experiments/measure_page_images.py`, 2026-10-19: two OCR'd levy scans read 24/25 text-only and
+Page images (c-295), `experiments/measure_page_images.py`, 2026-10-19: two OCR'd court order scans read 24/25 text-only and
 25/25 with the page image (the restraining notice's `notice_kind` was the miss), one image each, $0.0056 and $0.0043 a
 read against $0.0044 and $0.0042 text-only. The invoice scan read by its template with a review threshold of 0.99 sent 7
 crops on its re-read and read 7/7 for $0.0024. 5 calls, $0.021 in all; `pageImages` was turned off again after.
 
 Corrections teaching the type (c-297), `experiments/measure_type_examples.py`, 2026-10-19, stopped after 5 of 10 calls
 when the shared stack went down: the restraining notice scan read `notice_kind` as the synthetic-document banner, and
-its correction taught that banner line as where "Notice of tax levy" is printed; another restraining notice read after
-it fell from 11/11 to 9/11, `notice_kind` read as a tax levy. That finding is why a correction now teaches only when
+its correction taught that banner line as where `Notice of tax levy` is printed; another restraining notice read after
+it fell from 11/11 to 9/11, `notice_kind` read as a tax order. That finding is why a correction now teaches only when
 its cited line shows the corrected value; that correction would teach nothing. **Unverified:** no rerun since the fix,
 so the gain from examples is not yet measured.
 
@@ -267,8 +268,8 @@ call (2026-10-19, read again on the shared stack); the skewed invoice's due date
 
 The four fresh model misses: three values on the skewed invoice scan, where OCR misread digits, and TEST009's title.
 The template's one miss is that scan's due date read as 41/18/2026, which fails as a date and goes to review. The
-levy fixtures are each a different layout by design, so none of them is read by a template; restraining notices and
-levies printed from one master would be. An eleventh model call happened in the first run: a skewed statement scan
+court order fixtures are each a different layout by design, so none of them is read by a template; restraining notices
+and tax orders printed from one master would be. An eleventh model call happened in the first run: a skewed statement scan
 missed a template suggested before the zone cap and the model read it (6/6, 12.8 s, $0.0028), which is the intended
 fallback; after the fix the template reads that scan.
 

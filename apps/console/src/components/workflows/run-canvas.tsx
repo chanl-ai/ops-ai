@@ -1,12 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { Background, BackgroundVariant, type Edge, Panel, ReactFlow, ReactFlowProvider } from '@xyflow/react';
+import { Background, BackgroundVariant, type Edge, Panel, ReactFlow, ReactFlowProvider, useNodesInitialized, useNodesState, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { connectionId, indexTypes, inPorts, outPorts, repeatsOver, typeKey, withPositions } from '@/components/workflows/definition-editor/graph';
 import { type DefinitionFlowNode, definitionNodeTypes, type RunMark } from '@/components/workflows/definition-editor/definition-node';
 import { CanvasControls } from '@/components/workflows/canvas-controls';
+import { MIN_ZOOM, readableFit } from '@/components/workflows/definition-editor/canvas-view';
 import type { EngineDefinition, EngineNodeType, EngineRunStep } from '@/lib/types/engine';
 
 const TERMINAL = ['succeeded', 'failed', 'cancelled'];
@@ -44,30 +45,43 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
   // The editor's layout, so a definition the server stored unplaced (every node at 0,0) is drawn as the editor draws it.
   const laid = React.useMemo(() => withPositions(definition), [definition]);
 
-  const nodes: DefinitionFlowNode[] = laid.nodes.map((n) => {
-    const t = typeIndex.get(typeKey(n.type, n.typeVersion));
-    const index = lastStep.get(n.id);
-    return {
-      id: n.id,
-      type: 'definition',
-      position: n.position ?? { x: 0, y: 0 },
-      draggable: false,
-      connectable: false,
-      data: {
-        nodeId: n.id,
-        title: n.name || t?.label || n.id,
-        typeLabel: t ? t.label : `${n.type} · version ${n.typeVersion}`,
-        repeats: repeatsOver(n.parameters, definition.nodes),
-        group: t?.group ?? null,
-        inputs: t ? inPorts(t) : [],
-        outputs: t ? outPorts(t, n.parameters) : [],
-        unknown: !t,
-        hasError: false,
-        typeId: n.type,
-        run: runMark(index === undefined ? undefined : steps[index], runStatus),
-      },
-    };
-  });
+  const built = React.useMemo<DefinitionFlowNode[]>(
+    () =>
+      laid.nodes.map((n) => {
+        const t = typeIndex.get(typeKey(n.type, n.typeVersion));
+        const index = lastStep.get(n.id);
+        return {
+          id: n.id,
+          type: 'definition',
+          position: n.position ?? { x: 0, y: 0 },
+          draggable: false,
+          connectable: false,
+          data: {
+            nodeId: n.id,
+            title: n.name || t?.label || n.id,
+            typeLabel: t ? t.label : `${n.type} · version ${n.typeVersion}`,
+            repeats: repeatsOver(n.parameters, definition.nodes),
+            group: t?.group ?? null,
+            inputs: t ? inPorts(t) : [],
+            outputs: t ? outPorts(t, n.parameters) : [],
+            unknown: !t,
+            hasError: false,
+            typeId: n.type,
+            run: runMark(index === undefined ? undefined : steps[index], runStatus),
+          },
+        };
+      }),
+    [laid, typeIndex, lastStep, steps, runStatus, definition.nodes],
+  );
+  // Held in state so React Flow's measurements reach the nodes, which useNodesInitialized reads; a refetch maps onto the
+  // previous objects, as the editor does, so they keep their measurements.
+  const [nodes, setNodes, onNodesChange] = useNodesState<DefinitionFlowNode>(built);
+  React.useEffect(() => {
+    setNodes((prev) => {
+      const byId = new Map(prev.map((p) => [p.id, p]));
+      return built.map((b) => ({ ...byId.get(b.id), ...b }));
+    });
+  }, [built, setNodes]);
   const edges: Edge[] = definition.connections.map((c) => {
     const from = lastStep.get(c.from.node);
     // Taken: the source step left by this port and the target ran.
@@ -85,19 +99,32 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
     };
   });
 
+  // Opens as the editor does: fitted when the steps stay readable, else at a readable zoom from the trigger. Fitting
+  // waits for React Flow to measure the nodes.
+  const flow = useReactFlow();
+  const canvasRef = React.useRef<HTMLDivElement>(null);
+  const measured = useNodesInitialized();
+  const triggerId = laid.nodes.find((n) => typeIndex.get(typeKey(n.type, n.typeVersion))?.group === 'trigger')?.id;
+  const fitted = React.useRef(false);
+  React.useEffect(() => {
+    if (measured && !fitted.current) {
+      fitted.current = true;
+      readableFit(flow, canvasRef.current, triggerId);
+    }
+  }, [measured, flow, triggerId]);
+
   return (
-    <div className="h-112 overflow-hidden rounded-lg border" data-testid="run-canvas">
+    <div ref={canvasRef} className="h-112 overflow-hidden rounded-lg border" data-testid="run-canvas">
       <ReactFlow<DefinitionFlowNode, Edge>
         nodes={nodes}
         edges={edges}
         nodeTypes={definitionNodeTypes}
+        onNodesChange={onNodesChange}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         deleteKeyCode={null}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
-        minZoom={0.2}
+        minZoom={MIN_ZOOM}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
         className="bg-muted/30"

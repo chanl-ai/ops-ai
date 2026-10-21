@@ -34,5 +34,4 @@ Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api. Card: c-08
 ## Non-vacuous check
 
 Steps 4 and 9. With `_readable` in `services/files-service/src/ops_files/tenant_files.py` not checking the scan, step 4
-answers 200. With the hold check removed from `delete`, step 9 fell through to storage, whose legal hold refused it as an unhandled 500; storage refusals now answer 409 too. Both were seen failing
-(`.codeloop/evidence/087/`).
+answers 200. With the hold check removed from `delete`, step 9 fell through to storage, whose legal hold refused it as an unhandled 500; storage refusals now answer 409 too. Both were seen failing.

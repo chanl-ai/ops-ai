@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-140`. Service: `console` and every service behind it. Layers: ui.
 
-The maintainers demos the console on the shared stack. Each part of the demo used to be proven separately, so a page could be
+The demo runs the console on the shared stack. Each part of the demo used to be proven separately, so a page could be
 empty or broken on screen while its API test passed. This use case walks the whole demo in a browser on :3016, as a
 person would, and reports each part on its own.
 
@@ -29,7 +29,7 @@ The scenarios of `docs/console/demo-script.md`, in its order. `UC140_FROM=c` res
 | d | He asks Wire Fraud Sentinel to hold wire W-88213; Maya then Omar approve in Human Tasks | Both decisions answer 2xx (step-up when asked) and the chat says the hold is placed |
 | e | He filters Workflows › Runs to Customer lookup (seed walk) and opens the newest | Its run page says succeeded with its steps |
 | f | He asks the advisor to run the customer summary workflow for Priya | The workflow tool card opens its run page |
-| g | `make demo-mailbox` emails a levy notice; Maya follows it | Every mailbox line PASS; three or more levy cases with both deadlines; a Levy notice task with the customer and a dollar amount; the reply in Mailpit |
+| g | `make demo-mailbox` emails a court order notice; Maya follows it | Every mailbox line PASS; three or more court order cases with both deadlines; a `Levy notice` task with the customer and a dollar amount; the reply in Mailpit |
 
 ## Acceptance layers
 

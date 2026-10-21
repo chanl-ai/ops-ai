@@ -1,6 +1,6 @@
 # ADR-0006 Data stores and evidence
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal and the separate human-in-the-loop service, so timers and run history live in PostgreSQL through `ops_engine` and `ops_hitl`; PostgreSQL runs today, and MySQL 8 and Azure SQL are planned (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/data-model.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-6.
+Status: superseded in part on 2026-10-16: Temporal and the separate human-in-the-loop service were removed, so timers and run history live in PostgreSQL through `ops_engine` and `ops_hitl`; PostgreSQL runs today, and MySQL 8 and Azure SQL are planned (see [workflows and agents](../../design/workflows/workflows-and-agents.md) and [data](../data.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-6.
 
 ## Context
 

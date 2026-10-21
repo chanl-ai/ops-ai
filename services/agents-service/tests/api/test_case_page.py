@@ -9,14 +9,20 @@ from urllib.parse import quote
 
 from sqlalchemy import event
 
+from ops_agents.api.auth import step_up_signer
+from ops_agents.api.file_names import FilesServiceNames
+from ops_agents.api.people_names import PlatformPeopleNames
 from ops_agents.store.cases import CaseStore
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
-from ops_engine.store.tables import engine_runs
+from ops_engine.store.tables import engine_runs, engine_steps
+from ops_files_client.testing import FakeFilesService
+from ops_policy import mint_step_up
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import FRAUD_BUILDER
 from tests.api.test_case_routes import started_run
+from tests.api.test_started_by import Platform
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER
 
@@ -244,3 +250,132 @@ async def test_the_case_page_and_reviews_read_workflows_and_decisions_once_howev
         assert listed.status_code == 200 and len(page["waiting"]) == workflows, (listed.text[:200], page["waiting"])
         counts.append((*on_page, *_reads(seen)))
     assert counts[0] == counts[1], counts
+
+
+async def _linked_run(s: Stack, case_id: str, workflow: str) -> str:
+    c, _ = s
+    run = await started_run(c, BUILDER, workflow)
+    assert (
+        await c.post(f"/v1/cases/{case_id}/events", json={"kind": "run", "ref": run}, headers=BUILDER)
+    ).status_code == 201
+    return run
+
+
+NAMED, UNNAMED = "fil_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fil_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+
+async def test_a_linked_file_is_named_by_files_service_when_its_run_gave_only_the_id(stack: Stack) -> None:  # noqa: F811
+    """c-434: the case's Linked records and the run page showed a file as its id when the run's input carried the id
+    alone; a file files-service cannot name is sent with no name, so the console shows the id as an id."""
+    c, rt = stack
+    files = FakeFilesService()
+    files.files[NAMED] = {"id": NAMED, "tenant": TENANT, "team": "team_ops", "name": "notice.pdf",
+        "mime": "application/pdf", "size": 1, "digest": "d", "purpose": "case_attachment", "uploadedBy": "x",
+        "scan": {"status": "clean"}, "referenceCount": 0}  # fmt: skip
+    rt.file_names = FilesServiceNames(files.client(service="agents", scopes=["files:view"]))
+    case_id = await typed_case(stack)
+    run = await _linked_run(stack, case_id, "file_check")
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, input={"fileId": NAMED, "other": UNNAMED})
+    page = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
+    assert [(f["fileId"], f["name"]) for f in page["links"]["files"]] == [
+        (NAMED, "notice.pdf"),
+        (UNNAMED, None),
+    ]
+    detail = data(await c.get(f"/v1/runs/{run}", headers=BUILDER))
+    assert detail["files"] == [{"id": NAMED, "name": "notice.pdf"}, {"id": UNNAMED, "name": None}], detail
+
+
+async def test_an_approved_hold_reads_the_amount_the_approver_placed(stack: Stack) -> None:  # noqa: F811
+    """c-420: an approver changed the proposed 3,250.00 to 2,140.55 and the bank held 2,140.55, while the case's
+    Drafted actions row and the task still said 3,250.00."""
+    c, rt = stack
+    case_id = await typed_case(stack)
+    run = await _linked_run(stack, case_id, "hold_check")
+    hold = {
+        "name": "hold",
+        "label": "Hold",
+        "call": {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250, "reason": "NS-1"},
+                 "step": f"{run}:hold:1:1"},
+        "inputs": [{"name": "amount", "type": "number", "minimum": 0.01}],
+    }  # fmt: skip
+    waiting = {
+        "node": "review",
+        "iteration": 1,
+        "interruptId": "i1",
+        "payload": {"node": "review", "iteration": 1, "title": "Hold or flag", "options": [hold]},
+    }
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    # place_hold asks each approver for a step-up.
+    token = mint_step_up("maya@northfield.example", step_up_signer(rt))
+    decided = await c.post(
+        f"/reviews/{run}/decision",
+        json={"decision": "hold", "inputs": {"amount": 2140.55}, "stepUpToken": token},
+        headers=REVIEWER,
+    )
+    assert decided.status_code == 200, decided.text
+    review = data(await c.get(f"/reviews/{quote(data(decided)['id'], safe='')}", headers=BUILDER))
+    assert review["status"] == "approved" and review["amount"] == 2140.55, review["amount"]
+    assert "2,140.55" in review["proposal"], review["proposal"]
+    assert any(f["value"].startswith("2,140.55") for f in review["options"][0]["fields"]), review["options"]
+    page = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
+    [action] = page["actions"]
+    assert action["status"] == "approved" and "2,140.55" in action["label"], action
+
+
+async def test_an_approved_hold_the_bank_refused_reads_refused(stack: Stack) -> None:  # noqa: F811
+    """c-402: the bank answered 422 to an approved hold and the run went back to its review, while the case's Drafted
+    actions still said Approved, so two refused holds read as two placed holds."""
+    c, rt = stack
+    case_id = await typed_case(stack)
+    run = await _linked_run(stack, case_id, "refused_hold")
+    step = f"{run}:hold:1:1"
+    hold = {"name": "hold", "label": "Hold",
+            "call": {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250, "reason": "NS-1"},
+                     "step": step}}  # fmt: skip
+    waiting = {
+        "node": "review",
+        "iteration": 1,
+        "interruptId": "i1",
+        "payload": {"node": "review", "iteration": 1, "title": "Hold or flag", "options": [hold]},
+    }
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    token = mint_step_up("maya@northfield.example", step_up_signer(rt))
+    decision = {"decision": "hold", "stepUpToken": token}
+    decided = await c.post(f"/reviews/{run}/decision", json=decision, headers=REVIEWER)
+    assert decided.status_code == 200, decided.text
+    [placed] = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))["actions"]
+    assert placed["status"] == "approved", placed
+    with tenant_scope(TENANT):
+        async with EngineTransactions(rt.db).tenant_tx() as conn:
+            await conn.execute(
+                engine_steps.insert().values(
+                    run_id=run,
+                    node_id="hold",
+                    iteration=1,
+                    attempt=1,
+                    tenant_id=TENANT,
+                    status="error",
+                    effects="write",
+                    key=step,
+                    port="error",
+                    started_at="2026-10-20T16:40:59Z",
+                    output={"error": {"error": {"code": "INVALID_ARGUMENTS", "status": 422}}},
+                )
+            )
+    [refused] = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))["actions"]
+    assert refused["status"] == "refused", refused
+
+
+async def test_the_cases_list_names_each_owner_as_the_case_page_does(stack: Stack) -> None:  # noqa: F811
+    """c-403: the Cases list showed riley.chen@northfield.example where the case page said Riley Chen; the console may
+    not look the name up itself, so the list row carries it."""
+    c, rt = stack
+    rt.people_names = PlatformPeopleNames(Platform())  # pyright: ignore[reportArgumentType]
+    case_id = await typed_case(stack)
+    listed = data(await c.get("/v1/cases", params={"pageSize": 100}, headers=BUILDER))["data"]
+    row = next(r for r in listed if r["id"] == case_id)
+    assert row["owner"] == {"email": "james@northfield.example", "name": "James Richardson"}, row
+    assert row["owner"] == data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))["owner"]

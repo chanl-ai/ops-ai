@@ -3,7 +3,7 @@
 Status: first slice and sign-in providers (c-188) built, checked 2026-10-17. `services/platform-service` (`ops_platform`), public app on :8710 and
 internal app on :8711 (localhost only), with its own migration chain (`alembic_version_platform`). `make up` starts it
 and lists it in `make health`. Tests: `services/platform-service/tests`; use cases uc-021, uc-023, uc-025, uc-026.
-Design: `.codeloop/wiki/concepts/platform-service.md`, service map row `platform-service`.
+Design: this page, service map row `platform-service`.
 
 ## What it does
 
@@ -143,7 +143,7 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 | Item | Where it goes |
 |---|---|
 | agents-service and tools-service resolving callers through `ops_identity`, with RLS on their tables (uc-022, uc-024) | The adoption card |
-| MFA; a limit per client address on sign-in | Later slices of `.codeloop/wiki/concepts/sign-in-and-sessions.md` |
+| MFA; a limit per client address on sign-in | Later slices of [sign-in library](../../packages/ops_signin/overview.md) |
 | SAML single logout and identity-provider-initiated sign-in | c-217 (proposed) |
 | Sending invitations by mail | The notifications slice; today the admin shares the link from the invite response |
 | A pushed revocation list | Only if 15 minutes of reach after sign-out proves too long |

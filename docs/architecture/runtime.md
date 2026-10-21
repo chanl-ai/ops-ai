@@ -1,6 +1,6 @@
 # Inside the runtime
 
-Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 The runtime is `agents-service` (`services/agents-service`, module `ops_agents`), one FastAPI process on port 8700.
 Detail on the kernel is in agent-kernel, on nodes in
@@ -105,7 +105,7 @@ a time).
 
 ## The engine
 
-The maintainers removed Temporal on 2026-10-16. The engine is `packages/ops_engine`: a step journal, a Postgres work queue,
+Temporal was removed on 2026-10-16. The engine is `packages/ops_engine`: a step journal, a Postgres work queue,
 worker processes, leases with generation fencing and reconcile-by-key, with LangGraph as the runner on PostgreSQL
 ([workflow-runner.md](workflow-runner.md)). Slice 1 (c-061) is in code and runs inside agents-service; the agent and
 chat routes still call LangGraph directly. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the

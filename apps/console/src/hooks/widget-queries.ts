@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { WidgetTemplate, WidgetTemplateInput } from '@/lib/types/widgets';
@@ -11,7 +12,7 @@ const KEY = ['widget-templates'] as const;
 
 export const useWidgetTemplates = () => useQuery({ queryKey: KEY, queryFn: () => api.widgets.list(), staleTime: 60_000 });
 export const useWidgetTemplate = (widgetId: string) => useQuery({ queryKey: [...KEY, 'one', widgetId], queryFn: () => api.widgets.get(widgetId) });
-export const useWidgetTemplatesPage = (p: ListParams) => useQuery({ queryKey: [...KEY, 'page', p], queryFn: () => api.widgets.page(p), placeholderData: keepPreviousData });
+export const useWidgetTemplatesPage = (p: ListParams) => usePagedQuery({ queryKey: [...KEY, 'page', p], queryFn: () => api.widgets.page(p) });
 
 function useWidgetMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();

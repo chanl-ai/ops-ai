@@ -70,7 +70,7 @@ async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngin
                 await engine_reviews.get(rt, rid)
             with pytest.raises(NotFound):
                 await engine_reviews.decide(rt, B, rid, decision="rejected", reason=None)
-            assert [r for r in await engine_reviews.all_views(rt) if r["id"].startswith(rid)] == []
+            assert [r for r in await engine_reviews.all_rows(rt) if r["id"].startswith(rid)] == []
         assert (await RunStore(tx).get(rid) or {})["status"] == "waiting", "the other team's decision changed nothing"
 
 

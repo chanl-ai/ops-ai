@@ -81,6 +81,8 @@ class Runtime:
     policies: Any = None
     # Team display names from platform-service (team_names.py); None without a platform URL.
     team_names: Any = None
+    # File display names from files-service (file_names.py); None without a files URL.
+    file_names: Any = None
     # People's display names from platform-service (people_names.py); None without a platform URL.
     people_names: Any = None
     # API keys from platform-service for the Channels list (key_summaries.py); None without a platform URL.

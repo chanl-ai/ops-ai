@@ -1,7 +1,7 @@
 # Service map
 
-Status: current, 2026-10-18. Approved by the maintainers; where a row says designed or planned, it is the target and is not
-built yet. The maintainers' target design is `.codeloop/wiki/concepts/system-overview.md`; specs 14 and 17 defer to this page
+Status: current, 2026-10-18. Approved; where a row says designed or planned, it is the target and is not
+built yet. The target design is [workflows and agents](../design/workflows/workflows-and-agents.md); specs 14 and 17 defer to this page
 where they differ.
 
 ## Services
@@ -20,7 +20,7 @@ after the console section it serves. `packages/` holds reusable libraries; `serv
 | `models-service` | AI gateway (`docs/plan/ai-gateway-console.md`) | Model egress: aliases, provider keys, per-key ledgers and budgets, logging, failover, in front of Portkey (ADR-0008) | First slice built in `services/models-service` on :8730 (`docs/services/models-service/overview.md`); opt-in through `OPS_MODELS_URL`, and `make up` does not start it |
 | `kb-service` | Data Hub: Knowledge bases, Wiki | Sources, ingestion, indexing, retrieval, citations, freshness | First slice built in `services/kb-service` on :8740 (`docs/services/kb-service/overview.md`), started by `make up`; uses `packages/ops_ingest` |
 | `files-service` | Data Hub: Files, uploads | File bytes: upload, download, type judged from the bytes, scanning, dedupe, retention, legal hold, WORM evidence | First slice on :8750 (c-087): uploads, proxy routes on the local backend, dedupe, downloads, legal holds, scan hook; client in `packages/ops_files_client` |
-| `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain (c-256), on `packages/ops_extract` (`.codeloop/wiki/concepts/documents-subsystem.md`) |
+| `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain (c-256), on `packages/ops_extract` ([documents service](../services/documents-service/overview.md)) |
 
 There is no human-in-the-loop service. Reviews, Cases and work items move into the `ops_hitl` package (planned), and
 schedule, webhook, email and poll triggers into the `ops_triggers` package (planned); agents-service serves both today.
@@ -118,13 +118,13 @@ classes (designed).
 
 | Service | Specs and decisions |
 |---|---|
-| `platform-service` | `.codeloop/wiki/concepts/governance-and-admin.md`; `.codeloop/wiki/concepts/sign-in-and-sessions.md`; ADR-0004, ADR-0013 |
-| `agents-service` | `.codeloop/wiki/concepts/agent-builder.md` (including cases, queues, SLAs); `.codeloop/wiki/concepts/assurance-evals-and-release.md` (including Reviews); `.codeloop/wiki/concepts/agent-chat.md`; `.codeloop/wiki/concepts/model-risk.md`; `.codeloop/wiki/concepts/skills.md`; `.codeloop/wiki/concepts/prompts.md`; specs 14–17; `.codeloop/wiki/concepts/data-and-ai-gateways.md` 4.6, 5.6 (mailbox); ADR-0001, ADR-0003, ADR-0005, ADR-0012, ADR-0014, ADR-0015, ADR-0016 |
-| `tools-service` | `.codeloop/wiki/concepts/data-and-ai-gateways.md` 4.1–4.5, 5.1–5.5; ADR-0005 |
-| `models-service` | `.codeloop/wiki/concepts/data-and-ai-gateways.md` 4.8, 5.8–5.10; ADR-0008 |
-| `kb-service` | `.codeloop/wiki/concepts/knowledge.md`; ADR-0006 |
-| `files-service` | `.codeloop/wiki/concepts/files.md`; ADR-0006, ADR-0010 |
-| `documents-service` | `.codeloop/wiki/concepts/documents-subsystem.md`; sample documents and their test cases in `docs/services/documents-service/` (with the move) |
+| `platform-service` | [sign-in library](../packages/ops_signin/overview.md); ADR-0004, ADR-0013 |
+| `agents-service` | [agents and workflows](../console/agents-and-workflows.md) (including cases, queues, SLAs); [ADR-0012 Assurance: governance and testing as one system](decisions/assurance.md) (including Reviews); [chat in the console](../console/chat.md); the model-risk spec; [agent guardrails and skills](agent-guardrails.md); [agent guardrails and skills](agent-guardrails.md); specs 14–17; [tool system design](../design/tools/tool-system.md) (mailbox); ADR-0001, ADR-0003, ADR-0005, ADR-0012, ADR-0014, ADR-0015, ADR-0016 |
+| `tools-service` | [tool system design](../design/tools/tool-system.md); ADR-0005 |
+| `models-service` | [tool system design](../design/tools/tool-system.md); ADR-0008 |
+| `kb-service` | [kb-service](../services/kb-service/overview.md); ADR-0006 |
+| `files-service` | [files](../services/files-service/overview.md); ADR-0006, ADR-0010 |
+| `documents-service` | [documents service](../services/documents-service/overview.md); sample documents and their test cases in `docs/services/documents-service/` (with the move) |
 
 ## Decisions
 

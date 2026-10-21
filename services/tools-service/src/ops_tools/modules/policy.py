@@ -73,22 +73,6 @@ class CheckBeforeSend:
             return True
 
 
-class WorkspaceTeams:
-    def __init__(self, platform: ServiceClient) -> None:
-        """The workspace's own security team (c-202), read from platform-service with this service's `settings:view`
-        token for the tenant: it owns the platform tools module the registry writes for a tenant (registry.py)."""
-        self.platform = platform
-
-    async def security_team(self, tenant_id: str) -> str | None:
-        """None when it cannot be read."""
-        try:
-            data = await self.platform.get("/v1/settings/workspace-teams", tenant=tenant_id)
-            team = data.get("securityTeam")
-            return str(team) if team else None
-        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
-            return None
-
-
 class RequesterMayDecide:
     def __init__(self, platform: ServiceClient | None, *, dev: dict[str, Any] | None = None) -> None:
         """The tenant's `requesterMayDecide` (c-186), read live from platform-service, for decisions this service

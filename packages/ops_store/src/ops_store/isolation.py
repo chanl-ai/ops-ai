@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.logging import get_logger
@@ -179,13 +178,7 @@ async def system_tx(engine: AsyncEngine, reason: str, *, role: str | None = None
     whose grants limit what it reads), for work claimed before its tenant is known. Logged with `reason`."""
     _need(reason, "system_tx")
     base = _ctx.get()
-    log.info(
-        "isolation.widen",
-        reason=reason,
-        scope="system",
-        tenant=base.tenant_id if base else "-",
-        caller=base.kind if base else TASK,
-    )
+    _log_widen(base.kind if base else TASK, reason=reason, scope="system", tenant=base.tenant_id if base else "-")
     async with dialect.system_tx(engine, role=role) as conn:
         yield conn
 
@@ -194,12 +187,10 @@ async def enter_transaction(conn: AsyncConnection, ctx: Isolation, *, role: str 
     values = {"tenant_id": ctx.tenant_id, "team_id": ctx.team_id or "", "scope": ctx.scope}
     match dialect.dialect_of(conn):
         case "postgresql":
-            if role:
-                quoted = postgresql.dialect().identifier_preparer.quote(role)
-                await conn.execute(sa.text(f"SET LOCAL ROLE {quoted}"))
-            await conn.execute(
-                sa.select(*(sa.func.set_config(SETTINGS[k], v, True) for k, v in values.items())),
-            )
+            # The role is set by the same statement as the context: set_config('role', ...) is SET LOCAL ROLE, with the
+            # same membership check, and a transaction's setup is one round trip (c-451).
+            settings = [*([("role", role)] if role else []), *((SETTINGS[k], v) for k, v in values.items())]
+            await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
         case "mssql":
             for key, value in values.items():
                 await conn.execute(_MS_SET, {"k": key, "v": value})
@@ -225,15 +216,21 @@ def _widened(tenant_id: str, kind: str, reason: str, base: Isolation | None) -> 
     _need(reason, "tenant_wide")
     if not tenant_id:
         raise NoTenantError(f"tenant_wide({reason!r}) has no tenant")
-    log.info(
-        "isolation.widen",
+    _log_widen(
+        kind,
         reason=reason,
         scope="tenant",
         tenant=tenant_id,
-        caller=kind,
         team_before=base.team_id if base and base.team_id else "-",
     )
     return Isolation(tenant_id, None, "tenant", kind, reason)
+
+
+def _log_widen(caller: str, **fields: str) -> None:
+    """Every widening is logged with its reason. One a request's caller asked for is INFO, the audit trail of who read
+    past their team; a loop's (no caller: a relay, a claim, a poll) is DEBUG, since each loop widens on every pass,
+    twice a second, and at INFO that buried the request lines and cost a small host its CPU (c-451)."""
+    (log.debug if caller == TASK else log.info)("isolation.widen", caller=caller, **fields)
 
 
 def _widen_request(tenant_id: str, kind: str, reason: str) -> Isolation:

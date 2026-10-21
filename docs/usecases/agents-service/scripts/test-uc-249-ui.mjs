@@ -230,7 +230,7 @@ await withUiStack(
         await browser.close();
       }
       const why = 'Ended at Could not finish, an end marked as a failure';
-      check('7 a run that ends at a failure End reads failed in the list, on its page and in the editor', ended?.status === 'failed' && has(ended, ['start:payload', 'read:error']).length === 0 && ended?.outcome === 'failed' && row?.status === 'failed' && row?.error === why && shown.alert?.includes(why) && shown.result === 'failed' && shown.end === 'failed' && errors.length === 0, { status: ended?.status, steps: path(ended), row: row && { status: row.status, error: row.error }, shown, errors });
+      check('7 a run that ends at a failure End reads failed in the list, on its page and in the editor', ended?.status === 'failed' && has(ended, ['start:payload', 'read:error']).length === 0 && ended?.outcome === 'failed' && row?.status === 'failed' && row?.error === why && shown.alert?.includes(why) && shown.result === 'failed' && shown.end === 'Failed' && errors.length === 0, { status: ended?.status, steps: path(ended), row: row && { status: row.status, error: row.error }, shown, errors });
     });
 
     // 8. Activity filtered to the complaint's case: its own entries and what its run did, nothing of the hold's run.

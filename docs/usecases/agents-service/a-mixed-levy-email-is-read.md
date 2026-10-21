@@ -1,9 +1,9 @@
-# A mixed levy email is read by kind
+# A mixed court order email is read by kind
 
-Status: passing (2026-10-19). Id: `uc-246`. Service: `agents-service`. Layers: ui. The levy demo (2026-10-18).
+Status: passing (2026-10-19). Id: `uc-246`. Service: `agents-service`. Layers: ui. The court order demo.
 
-One email carries levy documents of different kinds. `levy_mail` reads each attachment in its own run of
-`levy_read_one`, in parallel: the kind is detected (Extract with Detect), a doubtful read waits for a person, each kind
+One email carries court order documents of different kinds. The court order mail workflow (`levy_mail`) reads each
+attachment in its own run of `levy_read_one`, in parallel: the kind is detected (Extract with Detect), a doubtful read waits for a person, each kind
 is worked out with a Calculate step, a case opens, and the outside system is told by webhook through the tools
 gateway. The sender gets a reply once acknowledged. Nothing is faked but the bank and the model; the fake model's
 answers for these files replay the shared stack's real run of 2026-10-19 (`docs/console/mailbox-demo.md`).
@@ -24,7 +24,7 @@ Mailpit reachable through tools-service (`tools.mail`), and the bank stand-in th
 | # | Step | Expected |
 |---|---|---|
 | 0 | Sam puts the mailbox password on the Secrets page and allows the mail hosts | 201 for each |
-| 1 | worker-x's mixed email (two restraining notices, a tax levy) plus a second tax levy arrives at `levies@northfield.test` | One `levy_mail` run waiting to reply, and one `levy_read_one` run per attachment |
+| 1 | worker-x's mixed email (two restraining notices, a tax order) plus a second tax order arrives at `levies@northfield.test` | One `levy_mail` run waiting to reply, and one `levy_read_one` run per attachment |
 | 2 | The four reads | From the first start to the last finish took less time than the reads one after another: they ran in parallel |
 | 3 | Detection and routing | TEST006 ends `restraining_notice`, TAXLEVY01 `tax_levy`; TEST012 and TAXLEVY02 wait at Check the read |
 | 4 | Maya approves both checks on Human Tasks | Each run continues to its kind and ends `restraining_notice` / `tax_levy` |

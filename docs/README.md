@@ -3,7 +3,7 @@
 Status: current. Every document below is a draft for review unless its own status line says otherwise.
 
 These documents design an operational AI platform for banks and describe the console in
-`apps/console/` that shows it. Backend code runs for all six services (`services/platform-service`, `services/agents-service`, `services/tools-service`, `services/models-service`, `services/kb-service`, `services/files-service`). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. Specs live in the codeloop wiki at `.codeloop/wiki/concepts/`. `architecture/README.md` is the entry page for the system as built.
+`apps/console/` that shows it. Backend code runs for all six services (`services/platform-service`, `services/agents-service`, `services/tools-service`, `services/models-service`, `services/kb-service`, `services/files-service`). Reviews, Cases and work items move into the planned `ops_hitl` package, hosted by agents-service. `architecture/README.md` is the entry page for the system as built.
 
 ## Map
 
@@ -26,12 +26,12 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | Path | Topic |
 |---|---|
 | `design/workflows/workflows-and-agents.md` | Agents and workflows as two ways of running work on shared services: stories, entities, state machines, the run, review and trigger APIs, the Node SDK, capability packs, portability, scale, security and the slice plan |
-| `design/workflows/workflow-nodes.md` | Node types and instances, typed ports, the catalogue, files owning reading, the levy notice as a worked example, and the runner options weighed |
+| `design/workflows/workflow-nodes.md` | Node types and instances, typed ports, the catalogue, files owning reading, the court order notice as a worked example, and the runner options weighed |
 | `design/workflows/canvas.md` | The workflow canvas mock the editor is built to: step list, step sheets, checks, shortcuts, themes and phone width |
 | `design/tools/tool-system.md` | One tool model for HTTP, MCP, workflows, agents, platform services and code; connections and sign-in kinds; one value syntax; test and production; the editor slices with wireframes |
 | `design/tools/mcp-server.md` | Serving governed tools over MCP per team and environment through the gateway: OAuth, held writes, masking, rate limits, console wireframes |
 | `design/human-tasks/task-page.md` | The Human Task page: one question per task, the full page with a footer row, task types as versioned records, wireframes |
-| `design/cases/case-page.md` | One generic case layout configured per workflow, shown for a tax levy, a complaint and a KYC review, and the case read it needs |
+| `design/cases/case-page.md` | One generic case layout configured per workflow, shown for a tax order, a complaint and a KYC review, and the case read it needs |
 | `design/chat/embedded-chat-screens.md` | The embedded chat on an intranet page, state by state: closed, open, phone, approval, answer widget, streaming, signed out, session ended |
 | `design/data/sql-server.md` | Running on SQL Server and Azure SQL beside PostgreSQL: the coupling inventory, the mapping, tenant isolation, migrations, proof and phases |
 | `design/data/database-packages.md` | Database code only in each service's store package: the layout, the import contracts, and what not to do |
@@ -66,26 +66,26 @@ its data file. Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `.codeloop/wiki/concepts/design-lessons.md` → `plan/implementation-plan.md` |
-| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until the maintainers confirms it) → `.codeloop/wiki/concepts/data-and-ai-gateways.md` → `architecture/service-map.md` |
-| Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → `.codeloop/wiki/concepts/assurance-evals-and-release.md` → `.codeloop/wiki/concepts/model-risk.md` → `.codeloop/wiki/concepts/governance-and-admin.md` → ADR-0005 |
+| Engineer | `background/problem-statement.md` → `architecture/overview.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
+| Architect | `background/problem-statement.md` → `architecture/overview.md` → `architecture/decisions/` (ADR-0001 to ADR-0016; every ADR is an option, not decided, until it is confirmed) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
+| Risk reviewer | `background/problem-statement.md` → `architecture/overview.md` (traceability, failure modes) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
 ## Requirements
 
 | # | Requirement | Where it is met |
 |---|---|---|
 | 1 | Implement the problem statement: seven reasons, three decisions and the model-traffic mandate, four components, edit classes, ten knowledge requirements | Every spec; traceability in `architecture/overview.md` |
-| 2 | Deliver the email-to-workflow reference flow: mailbox, understand, route to case, queue and SLA, drafted actions with per-action approval | `.codeloop/wiki/concepts/agent-builder.md`, `.codeloop/wiki/concepts/data-and-ai-gateways.md` |
+| 2 | Deliver the email-to-workflow reference flow: mailbox, understand, route to case, queue and SLA, drafted actions with per-action approval | [agents and workflows](console/agents-and-workflows.md), [tool system design](design/tools/tool-system.md) |
 | 3 | Fix the architecture first, with each decision stating options, criteria, evidence and what would change it | `architecture/decisions/` |
 | 4 | Build on open source (Temporal and peers) so existing implementations can plug in | ADR-0001, ADR-0007 |
 | 5 | Choose the implementation language on the merits | ADR-0002 |
 | 6 | Keep workflows and agents portable to other platforms; assess the Agent Workflow Protocol (AWP) and adjacent standards | ADR-0003 |
-| 7 | One spec per topic | `.codeloop/wiki/concepts/` |
-| 8 | Apply lessons from earlier agent platforms; the agents are internal and not voice or customer facing | `.codeloop/wiki/concepts/design-lessons.md`, cited in each spec |
+| 7 | One spec per topic | One page per topic under `architecture/` and `design/` |
+| 8 | Apply lessons from earlier agent platforms; the agents are internal and not voice or customer facing | The decision records, each with the lessons it applies |
 | 9 | Treat the console as the UI reference; each spec states what each screen needs from the backend | "UI mapping" section of each spec |
 | 10 | The bank runs no workflow or agent runtime today, so the runtime choice is greenfield; existing agents stay behind adapters | ADR-0001 |
 | 11 | Judge every decision on the marginal effort of the next workflow, not only the first | `architecture/overview.md` (throughput), each spec's "Marginal effort" section |
-| 12 | Staff chat with agents inside the platform, with MCP Apps for in-chat data views | `.codeloop/wiki/concepts/agent-chat.md`, ADR-0009 |
+| 12 | Staff chat with agents inside the platform, with MCP Apps for in-chat data views | [chat in the console](console/chat.md), ADR-0009 |
 | 13 | First workflow: the lending servicing inbox (hardship, payoff statements, address changes), with no money movement, so it fits the `low` and `medium` tiers | `architecture/service-map.md` | Services, packages, layering, cross-service contracts and deployment targets (VM, Compose, Kubernetes) |
 
 ## Architecture
@@ -110,8 +110,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
 | `architecture/operations.md` | Running it, environments, health, the acceptance gate, what to watch, runbooks |
-| `architecture/enterprise-architecture.html` | One-page picture for an enterprise: identity, observability and secrets bands, the platform, both gateways, and how to build, develop and deploy it, with status per part |
-| `architecture/data-model.html` | Every table, grouped by owning service, with keys, links, status per table and the database portability rules; companion to the architecture page |
+| `architecture/enterprise-architecture.md` | One-page picture for an enterprise: identity, observability and secrets bands, the platform, both gateways, and how to build, develop and deploy it, with status per part |
+| `architecture/data-model.md` | Every table, grouped by owning service, with keys, links, status per table and the database portability rules; companion to the architecture page |
 | `architecture/delivery.md` | What is proven, what is next, known gaps, the open decisions with defaults |
 
 ## Index
@@ -137,11 +137,10 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/decisions/execution-engine-seam.md` | Engine seam: Temporal preferred where allowed, LangGraph on PostgreSQL built first, one conformance suite |
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
-| `.codeloop/wiki/concepts/` | Specs, one per topic, in the codeloop wiki; start at `.codeloop/wiki/concepts/platform-features.md` |
 | `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
-| `plan/banker-demo.md` | Banker demo stage scripts: the levy notice from the fake mailbox to a held account, and the two agents answering from seeded knowledge bases; before-the-room checks, model switch, failure tables |
+| `plan/banker-demo.md` | Banker demo stage scripts: the court order notice from the fake mailbox to a held account, and the two agents answering from seeded knowledge bases; before-the-room checks, model switch, failure tables |
 | `deploy/fly.md` | Ops AI staging on Fly: one app per image in your Fly org, the shared Postgres, creating, deploying, connecting the model, logs, rolling back and the monthly cost |
 | `deploy/database.md` | The database for a DBA: roles and who runs what, the baseline for a fresh install, guarded upgrades between releases, drift, the start check, roll back and the proof |
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
@@ -155,7 +154,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/README.md` | The client guide's index: the twelve sections in order and what each holds |
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
-| `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a levy notice emailed to a team mailbox |
+| `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
 | `guide/data-and-database.md` | The entities, each service's tables, tenant and team isolation, files and knowledge, retention and the audit trail |
 | `guide/security-and-governance.md` | Sign-in and SSO, roles, approvals, the tool gateway and allow-list, secrets, masking, hardening |
 | `guide/models.md` | The AI gateway: aliases, keys, budgets, data sensitivity and the test model |
@@ -167,6 +166,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/support.md` | The support contact (placeholder) |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
+| `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
 | `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
 | `console/approved/channels/README.md` | The Channels screens the maintainers approved, at 1280 and 400 px, which the real pages are built to |
 | `console/proposed/files/README.md` | The file page and Extract screens built by c-262, at 1280 and 400 px, waiting for the maintainers' approval |
@@ -178,7 +178,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/strategy.md` | Console strategy: thin UI over a generated SDK, per-page audit with verdicts, the agentic core slice, chat on the thread calls, what to stop |
 | `console/tools-design.md` | Design of the tool module screens |
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
-| `console/mailbox-demo.md` | Runbook: `make up AUTH=platform` then `make demo-mailbox`, and the console pages to show the emailed levy notice on |
+| `console/mailbox-demo.md` | Runbook: `make up AUTH=platform` then `make demo-mailbox`, and the console pages to show the emailed court order notice on |
 | `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-sweep` |
 | `usecases/README.md` | Use case registry: how to run, rules (scripted model only, PASS needs evidence), layout, exit codes |
 | `usecases/agents-service/chat-turn-with-citation.md` | uc-001: chat turn with citation |
@@ -189,7 +189,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/task-assist.md` | uc-263: A typed task opens with task assist when the team turns it on |
 | `usecases/agents-service/personal-data-masked.md` | uc-265: Personal data is masked in an agent's replies, stored messages and workflow step output |
 | `usecases/tools-service/check-before-sending.md` | uc-266: A workflow's write is checked against the team's sending policy before it goes out |
-| `usecases/agents-service/calculate-a-levy-amount-and-deadline.md` | uc-231: A Calculate step works out a levy's amount and deadline |
+| `usecases/agents-service/calculate-a-levy-amount-and-deadline.md` | uc-231: A Calculate step works out a court order's amount and deadline |
 | `usecases/agents-service/write-tool-approval-step-up.md` | uc-002: write tool pauses and approval resumes with step-up |
 | `usecases/agents-service/simple-workflow.md` | uc-003: simple workflow through the four thread calls |
 | `usecases/agents-service/complex-workflow.md` | uc-004: complex workflow with fan-out, grade loop, review pause and send |
@@ -246,7 +246,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/connect-a-mailbox.md` | uc-199: a builder connects a team mailbox on Channels > Email, tests it, binds a workflow, pauses and resumes it |
 | `usecases/agents-service/reply-from-a-team-mailbox.md` | uc-200: a send_reply naming a team mailbox leaves from its own sender, for the calling team only |
 | `usecases/agents-service/start-a-workflow-per-item.md` | uc-209: a Start workflow step starts a child workflow for each item of a list |
-| `usecases/agents-service/levy-on-the-runner.md` | uc-210: a levy notice runs on the workflow runner from its mailbox |
+| `usecases/agents-service/levy-on-the-runner.md` | uc-210: a court order notice runs on the workflow runner from its mailbox |
 | `usecases/agents-service/mailed-documents-become-cases.md` | uc-223: documents emailed to a team mailbox become cases, and the sender gets a reply |
 | `usecases/agents-service/team-default-agent.md` | uc-128: chat starts on the team's default agent, which asks specialists |
 | `usecases/agents-service/agent-test-shows-steps.md` | uc-133: a test reply shows the knowledge searched and cited, the tools called and where it would pause |
@@ -264,6 +264,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/start-run-and-records.md` | uc-228: the start-run dialogs, a run page and a case page, with screenshots for a before-and-after comparison |
 | `usecases/console/human-task-page.md` | uc-234: a Human Task opens as its own page, with the question, the document beside the read values, Details folded and the decision in a footer row below the body |
 | `usecases/console/access-roles-and-checks.md` | uc-267: an admin reads Access › Roles and a built-in role's grid read-only, a member's access beyond their team role on Members, and a person's effective access with the role behind each action |
+| `usecases/console/demo-team-shows-each-once.md` | uc-450: on staging the demo team's Open cases and run picker show each record once, and Dispute Desk finds Marcus Bell's Coastal Air charge at the bank |
 | `usecases/console/every-page-has-the-header.md` | uc-264: every sidebar route and one record of each kind render the shared page header; the runtime half of check-standards rule 12 |
 | `usecases/console/services-unreachable.md` | uc-404: a link to a missing task says so; a session ended elsewhere goes back to sign-in keeping the page; with the run's platform-service stopped, one shell screen says the services are out of reach, with Try again |
 | `usecases/console/case-page-assembled.md` | uc-256: a case opened by a configured workflow shows its header and next action, fields in the case type's order, the task it waits on, the drafted action, linked records and recent activity from one case request; approved, the action reads approved |
@@ -280,7 +281,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/write-approval-policy.md` | uc-059: a builder sets a write's approvers, approving team and self-approval in the operation sheet, and the operation shows them |
 | `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the maintainers keeps the message box |
 | `usecases/console/chat-holds-in-reviews.md` | uc-057: a write held in a chat appears in Reviews marked From chat and is approved there |
-| `usecases/console/levy-cases-decided.md` | uc-077, retired (c-212): the v1 levy run's cases decided from the console |
+| `usecases/console/levy-cases-decided.md` | uc-077, retired (c-212): the v1 court order run's cases decided from the console |
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
@@ -295,6 +296,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/run-on-the-canvas.md` | uc-115: a run opens on its workflow's canvas with each step marked passed, failed or skipped, and a step's input and output one click away |
 | `usecases/console/workflow-canvas.md` | uc-121: the workflow editor's canvas fills the page with the sidebar collapsed, at a readable zoom, with floating controls, checks and minimap |
 | `usecases/console/edit-steps-in-a-sheet.md` | uc-122: a workflow step and the trigger open in a sheet beside the canvas, and steps are added from a panel with a tab per group and a search |
+| `usecases/console/start-run-form.md` | uc-445: Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |
@@ -307,7 +309,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/agent-runs-on-its-model.md` | uc-028: an agent runs on the model its publisher chose |
 | `usecases/agents-service/agent-calls-registry-operations.md` | uc-048: an agent is granted a published tools-service operation and calls it through the gateway |
 | `usecases/agents-service/write-approval-policy.md` | uc-049: a write runs only after as many distinct people as its operation's policy names approve it |
-| `usecases/agents-service/levy-from-mailbox.md` | uc-076, retired (c-212): the v1 levy flow from the mailbox deployment; uc-210 replaces it |
+| `usecases/agents-service/levy-from-mailbox.md` | uc-076, retired (c-212): the v1 court order flow from the mailbox deployment; uc-210 replaces it |
 | `usecases/agents-service/workflow-runner-basic-nodes.md` | uc-081: basic workflow nodes run through the queue and survive a worker crash |
 | `usecases/agents-service/agent-runs-a-workflow-by-search.md` | uc-084: an agent finds a workflow with search_tools and runs it; its agent step answers by schema |
 | `usecases/agents-service/agent-guardrails-blocked-topics.md` | uc-085: an agent refuses a blocked topic before answering, through a guardrail it pins by version |
@@ -351,7 +353,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/a-guarded-answer-streams-and-is-replaced.md` | uc-229: A guarded answer streams as it is written and is replaced when its check fails |
 | `usecases/agents-service/every-shape-of-email.md` | uc-226: A mailbox workflow takes every shape of email |
 | `usecases/agents-service/a-team-s-mailbox-runs-end.md` | uc-245: A team's mailbox runs end to end: connected and tested in the console, bound through a review, a PDF read, checked and decided by a person, a case opened, the reply sent from the mailbox, a redelivery ignored |
-| `usecases/agents-service/a-mixed-levy-email-is-read.md` | uc-246: A mixed levy email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply |
+| `usecases/agents-service/a-mixed-levy-email-is-read.md` | uc-246: A mixed court order email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply |
 | `usecases/agents-service/a-hold-on-a-customer-s.md` | uc-248: A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told |
 | `usecases/agents-service/a-complaint-email-is-triaged-attachments.md` | uc-249: A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply |
 | `usecases/agents-service/a-case-reads-assembled.md` | uc-251: A case reads assembled: typed fields in its case type's order, what it waits on and the drafted action, its run, workflow and file; decided on the task page, the action reads decided |
@@ -388,6 +390,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/kb-service/overview.md` | kb-service: knowledge bases with owners, file sources, sync into page and section passages, full-text retrieval, changes, and what is not built |
 | `services/models-service/overview.md` | models-service: aliases, keys with budgets, admission and OpenAI-compatible egress with a metadata-only call log |
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
+| `services/tools-service/design.md` | tools-service design: the flow, the Connections screens as wireframes, the API, the data and the sequences |
+| `services/documents-service/design.md` | documents-service design: the flow, six screens as wireframes, the API, the data, the sequences, the workflows that use it and the sample documents |
 | `services/tools-service/overview.md` | tools-service: the tool-module registry, calls resolved and validated through it, executors, and the executions log |
 | `services/files-service/overview.md` | files-service on :8750: uploads, proxy routes, dedupe, downloads, scan hook, retention and legal holds over local, S3 and Azure Blob stores; its client |
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |

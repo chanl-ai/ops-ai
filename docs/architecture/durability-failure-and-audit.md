@@ -1,6 +1,6 @@
 # Durability, failure and audit
 
-Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 LangGraph saves state between nodes. Keeping a run alive for days, with one owner at a time and no duplicated side
 effect, is our code, all in the same PostgreSQL. Fencing and timers are decided in

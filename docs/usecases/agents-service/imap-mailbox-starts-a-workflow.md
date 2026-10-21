@@ -38,4 +38,4 @@ first pass and IDLE are `services/agents-service/tests/engine/test_email_trigger
 
 ## Non-vacuous check
 
-Each guard and rule removed alone turns its test red: `.codeloop/evidence/192/`.
+Each guard and rule removed alone turns its test red.

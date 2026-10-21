@@ -43,5 +43,5 @@ input hash agrees with RFC 8785, and a money review cannot be approved twice by 
 ## Feeds
 
 [identity-and-tenancy.md](../../../architecture/identity-and-tenancy.md) (shortcut rows updated) and
-[human-in-the-loop.md](../../../architecture/human-in-the-loop.md) (rules and token facts updated). Open: the maintainers'
-call on chat self-approval, and a KMS `Signer` with only hitl-service able to mint.
+[human-in-the-loop.md](../../../architecture/human-in-the-loop.md) (rules and token facts updated). Open: the decision
+on chat self-approval, and a KMS `Signer` with only hitl-service able to mint.

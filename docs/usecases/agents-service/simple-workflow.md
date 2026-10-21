@@ -20,7 +20,7 @@ The script starts its own services on the scripted model; no model key is needed
 | 3 | `GET /v1/threads/{id}/state` | Nothing next; category `product_question`; answer with $25,000 citing `doc_wire_limits`; not a no-answer |
 | 4 | `GET /v1/threads?graph=simple_workflow` | The thread is listed |
 
-The console starts workflows only: the maintainers dropped the built-in graphs from Start run on 2026-10-19, so this use case has no ui layer.
+The console starts workflows only: the built-in graphs left Start run on 2026-10-19, so this use case has no ui layer.
 
 ## Acceptance layers
 

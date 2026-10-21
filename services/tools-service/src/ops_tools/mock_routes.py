@@ -107,7 +107,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
     async def _operation(who: Caller, module_id: str, op_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """The module, seen from the caller's team (404 otherwise, as every module read), and its operation."""
         m = await modules.get(who.tenant_id, module_id)
-        if m is None or not directory.sees(who.team, [m["owner_team"]]):
+        if m is None or not (directory.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")):
             raise NotFound(f"Module {module_id}")
         op = next((o for o in m["operations"] if o["id"] == op_id), None)
         if op is None:

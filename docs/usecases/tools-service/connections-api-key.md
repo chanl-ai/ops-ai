@@ -34,5 +34,4 @@ any other address is refused `CONNECTION_HOST_MISMATCH` (`services/tools-service
 
 ## Non-vacuous check
 
-Step 2: with the API key strategy replaced by none, the bank answers 401 to every connection call
-(`.codeloop/evidence/330/uc-390-red-without-strategy.txt`).
+Step 2: with the API key strategy replaced by none, the bank answers 401 to every connection call.

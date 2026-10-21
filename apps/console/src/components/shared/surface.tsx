@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 
+import { FieldRow } from '@/components/shared/field-row';
 import { cn } from '@/lib/utils';
 
 /** One bordered panel with a title row; rows inside separate with hairlines. Never nest one inside another. */
@@ -114,16 +115,14 @@ export function StatTile({ label, value, hint, tone = 'default', href }: { label
   return href ? <Link href={href}>{body}</Link> : body;
 }
 
-/** Label and value pairs for summaries and review steps; values wrap instead of truncating. */
+/** Label and value pairs for summaries and review steps; values wrap instead of truncating. Each pair is a FieldRow, so
+ * the label sits above its value in a narrow panel, as on every record rail (c-434). */
 export function KeyValues({ rows }: { rows: [string, ReactNode][] }) {
   return (
-    <dl className="divide-y">
+    <div>
       {rows.map(([k, v]) => (
-        <div key={k} className="flex gap-3 py-2 text-sm">
-          <dt className="w-32 shrink-0 text-xs text-muted-foreground uppercase tracking-wide">{k}</dt>
-          <dd className={cn('min-w-0 flex-1 break-words', (v === undefined || v === '' || v === null) && 'text-muted-foreground/60')}>{v === undefined || v === '' || v === null ? '—' : v}</dd>
-        </div>
+        <FieldRow key={k} label={k} value={v} wrap />
       ))}
-    </dl>
+    </div>
   );
 }

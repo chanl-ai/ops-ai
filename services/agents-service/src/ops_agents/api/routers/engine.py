@@ -55,6 +55,7 @@ from ..deps import Runtime, runtime
 from ..email_trigger import binding_of
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
+from ..file_names import named
 from ..schemas import SSE_RESPONSE, Out, PublishReview
 from .tool_catalog import known_tools
 
@@ -743,7 +744,7 @@ class RunChild(Out):
 
 class RunFile(Out):
     id: str
-    # The name the input gave it alongside the id (`{fileId, name}`), when it gave one.
+    # The name the input gave it alongside the id (`{fileId, name}`), else files-service's; None when neither says.
     name: str | None
 
 
@@ -964,7 +965,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     body = run_view(run) | {
         "steps": steps,
         "children": await started_runs(store, steps),
-        "files": files_in(run["input"]),
+        "files": await named(rt, str(run["team_id"]), files_in(run["input"])),
         "decisions": [d | {"by": names.get(d["by"]) if d["by"] else None} for d in decided],
         "result": await run_result(rt, run, steps),
         "canCancel": can_cancel(me, run),

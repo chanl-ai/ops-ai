@@ -13,11 +13,12 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .leases import check_fence
-from .tenancy import CLAIM_THREAD, current_team, current_tenant, system_tx, tenant_tx
+from .tenancy import CLAIM_THREAD, current_tenant, system_tx, tenant_tx
 
 graph_threads = sa.Table(
     "graph_threads",
@@ -47,7 +48,8 @@ graph_threads = sa.Table(
     sa.UniqueConstraint("tenant_id", "external_key", name="uq_graph_threads_tenant_external_key"),
     # A team's thread list, newest first (c-280).
     sa.Index("ix_graph_threads_team_updated", "tenant_id", "team_id", "updated_at"),
-    info=TENANT_SCOPED,
+    # Held to the caller's team by the database too (c-429, migration 0073): another team's thread is not found.
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 graph_versions = sa.Table(
@@ -74,8 +76,9 @@ graph_runs = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("finished_at", sa.String(32)),
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
-    sa.Column("team_id", sa.String(64)),
-    info=TENANT_SCOPED,
+    # The thread's team, copied when the run starts, so the policy holds the run without reading its thread.
+    sa.Column("team_id", sa.String(64), nullable=False),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -118,16 +121,20 @@ class GraphStore:
                 )
             )
 
-    async def tenant_of(self, thread_id: str) -> str | None:
-        """Which tenant a thread belongs to, read past row-level security. For the sweeper and the timer poller only,
-        which claim work before they know its tenant (tests/store/test_tenancy.py holds the list of callers)."""
+    async def owner_of(self, thread_id: str) -> tuple[str, str] | None:
+        """Which tenant and team a thread belongs to, read past row-level security. For the sweeper and the timer
+        poller only, which claim work before they know its owner (tests/store/test_tenancy.py holds the callers)."""
+        t = graph_threads
         async with system_tx(self.engine, CLAIM_THREAD) as c:
-            q = sa.select(graph_threads.c.tenant_id).where(graph_threads.c.id == thread_id)
-            return (await c.execute(q)).scalar_one_or_none()
+            q = sa.select(t.c.tenant_id, t.c.team_id).where(t.c.id == thread_id, any_team(t, "a loop finds its owner"))
+            row = (await c.execute(q)).first()
+        return (str(row[0]), str(row[1])) if row else None
 
     async def thread_by_key(self, external_key: str) -> dict[str, Any] | None:
         async with tenant_tx(self.engine) as c:
-            q = graph_threads.select().where(graph_threads.c.external_key == external_key, _mine(graph_threads))
+            q = graph_threads.select().where(
+                graph_threads.c.external_key == external_key, _mine(graph_threads), team_visible(graph_threads)
+            )
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
@@ -171,7 +178,11 @@ class GraphStore:
             row = (
                 (
                     await c.execute(
-                        graph_threads.select().where(graph_threads.c.external_key == external_key, _mine(graph_threads))
+                        graph_threads.select().where(
+                            graph_threads.c.external_key == external_key,
+                            _mine(graph_threads),
+                            team_visible(graph_threads),
+                        )
                     )
                 )
                 .mappings()
@@ -224,16 +235,24 @@ class GraphStore:
     async def thread(self, thread_id: str) -> dict[str, Any] | None:
         async with tenant_tx(self.engine) as c:
             row = (
-                (await c.execute(graph_threads.select().where(graph_threads.c.id == thread_id, _mine(graph_threads))))
+                (
+                    await c.execute(
+                        graph_threads.select().where(
+                            graph_threads.c.id == thread_id, _mine(graph_threads), team_visible(graph_threads)
+                        )
+                    )
+                )
                 .mappings()
                 .first()
             )
         return dict(row) if row else None
 
     async def threads(self, graph: str | None) -> list[dict[str, Any]]:
-        q = graph_threads.select().where(_mine(graph_threads)).order_by(graph_threads.c.updated_at.desc())
-        if (team := current_team()) is not None:
-            q = q.where(graph_threads.c.team_id == team)  # a list shows the selected team's threads only
+        q = (
+            graph_threads.select()
+            .where(_mine(graph_threads), team_visible(graph_threads))
+            .order_by(graph_threads.c.updated_at.desc())
+        )
         if graph:
             q = q.where(graph_threads.c.graph == graph)
         async with tenant_tx(self.engine) as c:
@@ -251,7 +270,13 @@ class GraphStore:
     async def run(self, run_id: str) -> dict[str, Any] | None:
         async with tenant_tx(self.engine) as c:
             row = (
-                (await c.execute(graph_runs.select().where(graph_runs.c.id == run_id, _mine(graph_runs))))
+                (
+                    await c.execute(
+                        graph_runs.select().where(
+                            graph_runs.c.id == run_id, _mine(graph_runs), team_visible(graph_runs)
+                        )
+                    )
+                )
                 .mappings()
                 .first()
             )
@@ -260,7 +285,7 @@ class GraphStore:
     async def runs(self, thread_id: str) -> list[dict[str, Any]]:
         q = (
             graph_runs.select()
-            .where(graph_runs.c.thread_id == thread_id, _mine(graph_runs))
+            .where(graph_runs.c.thread_id == thread_id, _mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at)
         )
         async with tenant_tx(self.engine) as c:
@@ -287,7 +312,11 @@ class GraphStore:
         }
         async with tenant_tx(self.engine) as c:
             row = (
-                await c.execute(sa.select(graph_runs.c.events, graph_runs.c.thread_id).where(graph_runs.c.id == run_id))
+                await c.execute(
+                    sa.select(graph_runs.c.events, graph_runs.c.thread_id).where(
+                        graph_runs.c.id == run_id, team_visible(graph_runs)
+                    )
+                )
             ).first()
             if row is None:
                 return
@@ -306,8 +335,13 @@ class GraphStore:
 
         async with tenant_tx(self.engine) as c:
             await check_fence(c, thread_id, generation)
-            if (await c.execute(sa.select(graph_runs.c.id).where(graph_runs.c.id == run_id))).first():
+            taken = sa.select(graph_runs.c.id).where(graph_runs.c.id == run_id, team_visible(graph_runs))
+            if (await c.execute(taken)).first():
                 return False
+            owner = graph_threads.c.team_id
+            team = (
+                sa.select(owner).where(graph_threads.c.id == thread_id, team_visible(graph_threads)).scalar_subquery()
+            )
             await c.execute(
                 graph_runs.insert().values(
                     id=run_id,
@@ -317,7 +351,7 @@ class GraphStore:
                     events=[],
                     created_at=now,
                     input=run_input,
-                    team_id=sa.select(graph_threads.c.team_id).where(graph_threads.c.id == thread_id).scalar_subquery(),
+                    team_id=team,
                 )
             )
             return True
@@ -332,7 +366,7 @@ class GraphStore:
 
         async with tenant_tx(self.engine) as c:
             q = sa.select(graph_runs.c.events, graph_runs.c.thread_id, graph_runs.c.status).where(
-                graph_runs.c.id == run_id
+                graph_runs.c.id == run_id, team_visible(graph_runs)
             )
             row = (await c.execute(q)).first()
             if row is None:
@@ -356,7 +390,9 @@ class GraphStore:
     async def meta(self, thread_id: str) -> dict[str, Any]:
         async with tenant_tx(self.engine) as c:
             meta: Any = (
-                await c.execute(sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id))
+                await c.execute(
+                    sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
+                )
             ).scalar_one_or_none()
         return dict(meta or {})
 
@@ -385,7 +421,7 @@ class GraphStore:
         recent = sa.func.sum(sa.case((t.c.created_at >= since, 1), else_=0))
         q = (
             sa.select(t.c.deployment_id, t.c.team_id, recent, sa.func.max(t.c.updated_at))
-            .where(t.c.deployment_id.in_(list(teams)))
+            .where(t.c.deployment_id.in_(list(teams)), team_visible(t))
             .group_by(t.c.deployment_id, t.c.team_id)
         )
         async with tenant_tx(self.engine) as c:
@@ -399,7 +435,7 @@ class GraphStore:
         patches do not lose one another; it waits on any transaction that holds the row, so a caller inside one
         must not pass it."""
         async with tenant_tx(self.engine) as c:
-            q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id)
+            q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
             if lock:
                 q = q.with_for_update()
             meta: Any = (await c.execute(q)).scalar_one_or_none()
@@ -414,6 +450,7 @@ class GraphStore:
             graph_threads.c.version == version,
             graph_threads.c.status.in_(statuses),
             _mine(graph_threads),
+            team_visible(graph_threads),
         )
         async with tenant_tx(self.engine) as c:
             return [str(r[0]) for r in await c.execute(q)]
@@ -434,7 +471,7 @@ class GraphStore:
                 graph_runs.c.input,
                 graph_runs.c.finished_at,
             )
-            .where(_mine(graph_runs))
+            .where(_mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at)
         )
         if only is not None:
@@ -451,6 +488,7 @@ class GraphStore:
             sa.or_(graph_threads.c.graph == "agent_wrapper", graph_threads.c.graph.like("agent:%")),
             graph_threads.c.created_at >= since,
             _mine(graph_threads),
+            team_visible(graph_threads),
         )
         async with tenant_tx(self.engine) as c:
             return [(str(g), dict(m or {})) for g, m in await c.execute(q)]
@@ -458,7 +496,7 @@ class GraphStore:
     async def thread_stats(self) -> list[tuple[str, str, str]]:
         """(graph, status, created at) of every thread."""
         q = sa.select(graph_threads.c.graph, graph_threads.c.status, graph_threads.c.created_at).where(
-            _mine(graph_threads)
+            _mine(graph_threads), team_visible(graph_threads)
         )
         async with tenant_tx(self.engine) as c:
             return [(str(g), str(s), str(t)) for g, s, t in await c.execute(q)]

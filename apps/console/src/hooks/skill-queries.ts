@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type {
@@ -30,13 +31,13 @@ export const sk = {
   candidates: (scope: unknown) => ['skills', 'candidates', scope] as const,
 };
 
-export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) => useQuery({ queryKey: sk.list(p), queryFn: () => api.skills.list(p), placeholderData: keepPreviousData });
+export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) => usePagedQuery({ queryKey: sk.list(p), queryFn: () => api.skills.list(p) });
 export const useSkill = (id: string) => useQuery({ queryKey: sk.one(id), queryFn: () => api.skills.get(id) });
 export const useSkillOptions = () => useQuery({ queryKey: sk.options, queryFn: api.skills.options, staleTime: 60_000 });
 export const useSkillGenerateOptions = (enabled: boolean) => useQuery({ queryKey: sk.generateOptions, queryFn: api.skills.generateOptions, enabled, staleTime: 30_000 });
 export const useSkillImportPreview = (fileId: string | undefined) => useQuery({ queryKey: sk.importPreview(fileId ?? ''), queryFn: () => api.skills.previewImport(fileId!), enabled: !!fileId, retry: false });
 /** Skills a new agent could pin; `scope` is null until the wizard knows the owner, tools and knowledge bases. */
-export const useSkillCandidates = (scope: SkillCandidateScope | null) => useQuery({ queryKey: sk.candidates(scope), queryFn: () => api.skills.candidates(scope!), enabled: !!scope, placeholderData: keepPreviousData });
+export const useSkillCandidates = (scope: SkillCandidateScope | null) => usePagedQuery({ queryKey: sk.candidates(scope), queryFn: () => api.skills.candidates(scope!), enabled: !!scope });
 export const useAgentSkills = (agentId: string) => useQuery({ queryKey: sk.agent(agentId), queryFn: () => api.skills.agents.get(agentId) });
 
 /** Skill writes can open reviews, change agents and always write the audit log, so those refresh too. */

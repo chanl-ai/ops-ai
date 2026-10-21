@@ -276,7 +276,7 @@ def render(rows: list[Row]) -> str:
         f" {sum('dev' in r.kind for r in rows)} dev only"
         " (not in the deployed image).",
         "",
-        "Chat runs on OpenAI (gpt-5.5) per the owner's ruling of 2026-10-10, so Pydantic AI is installed as"
+        "Chat runs on OpenAI (gpt-5.5) as decided on 2026-10-10, so Pydantic AI is installed as"
         " `pydantic-ai-slim[openai,anthropic]` with no `logfire`. Restriction note: the `openai` extra brings"
         " `tiktoken`, which downloads encoding files from a public blob store"
         " the first time it is used. For a deployment with no outbound internet, vendor the encoding file into"

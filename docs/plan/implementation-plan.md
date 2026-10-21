@@ -2,7 +2,7 @@
 
 Status: draft for review. Builds on the architecture overview (`docs/architecture/overview.md`), the
 decision records ADR-0001 to ADR-0012 (`docs/architecture/decisions/`), specs `01` to `04` and `07`
-to `09` (`.codeloop/wiki/concepts/`), the design lessons (`.codeloop/wiki/concepts/design-lessons.md`) and the problem
+to `09`, the design lessons and the problem
 statement (`docs/background/problem-statement.md`). Durations are in weeks from the start of phase 0
 (week 0) and carry no calendar dates. Every estimate is a target; section 11 says how each one is
 measured.

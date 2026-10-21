@@ -2865,6 +2865,197 @@
         "title": "CasePermissions",
         "type": "object"
       },
+      "CaseRow": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "createdBy": {
+            "title": "Createdby",
+            "type": "string"
+          },
+          "customerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customerid"
+          },
+          "customerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customername"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pausedSince": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pausedsince"
+          },
+          "priority": {
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "urgent"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "producerKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producerkey"
+          },
+          "resolutionDueAt": {
+            "title": "Resolutiondueat",
+            "type": "string"
+          },
+          "resolutionLeftS": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolutionlefts"
+          },
+          "respondedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Respondedat"
+          },
+          "responseDueAt": {
+            "title": "Responsedueat",
+            "type": "string"
+          },
+          "responseLeftS": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responselefts"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "waiting_on_customer",
+              "waiting_on_us",
+              "resolved",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "teamId",
+          "producerKey",
+          "subject",
+          "customerId",
+          "customerName",
+          "status",
+          "assignee",
+          "priority",
+          "responseDueAt",
+          "resolutionDueAt",
+          "respondedAt",
+          "pausedSince",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "responseLeftS",
+          "resolutionLeftS",
+          "owner"
+        ],
+        "title": "CaseRow",
+        "type": "object"
+      },
       "CaseRun": {
         "additionalProperties": false,
         "description": "A workflow thread as the console's Cases `RunRow`.",
@@ -5684,11 +5875,11 @@
         "title": "Envelope[ListResult[Agent]]",
         "type": "object"
       },
-      "Envelope_ListResult_CaseView__": {
+      "Envelope_ListResult_CaseRow__": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ListResult_CaseView_"
+            "$ref": "#/components/schemas/ListResult_CaseRow_"
           },
           "success": {
             "const": true,
@@ -5700,7 +5891,7 @@
           "success",
           "data"
         ],
-        "title": "Envelope[ListResult[CaseView]]",
+        "title": "Envelope[ListResult[CaseRow]]",
         "type": "object"
       },
       "Envelope_ListResult_DefinitionRow__": {
@@ -7188,8 +7379,15 @@
             "type": "string"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "viewerHref": {
             "title": "Viewerhref",
@@ -8503,12 +8701,12 @@
         "title": "ListResult[Agent]",
         "type": "object"
       },
-      "ListResult_CaseView_": {
+      "ListResult_CaseRow_": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/CaseView"
+              "$ref": "#/components/schemas/CaseRow"
             },
             "title": "Data",
             "type": "array"
@@ -8532,7 +8730,7 @@
           "pagination",
           "facets"
         ],
-        "title": "ListResult[CaseView]",
+        "title": "ListResult[CaseRow]",
         "type": "object"
       },
       "ListResult_DefinitionRow_": {
@@ -25143,7 +25341,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_ListResult_CaseView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_CaseRow__"
                 }
               }
             },

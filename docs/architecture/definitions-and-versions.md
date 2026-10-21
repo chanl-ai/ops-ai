@@ -1,6 +1,6 @@
 # Definitions and versions
 
-Status: current, written 2026-10-10 from the experiment ledger, links updated 2026-10-16; every decision is an option until the maintainers confirms it.
+Status: current, written 2026-10-10 from the experiment ledger, links updated 2026-10-16; every decision is an option until it is confirmed.
 
 The definition format and portability are in [ADR-0003](decisions/workflow-definition-format.md); the node catalogue
 in [workflow nodes](../design/workflows/workflow-nodes.md) §3; edit classes, registry and release in
@@ -78,7 +78,7 @@ A `condition` node chooses its next node by `rule`:
 | `score_gate` | `threshold`, `max_attempts`, `pass`, `fail` | `pass` once the grade reaches the threshold or attempts run out |
 | `decision` | `approved`, `rejected` | By the last review decision |
 | `route` | `routes: [{when: {field, op, value}, to}]`, `default` | The first route whose `when` holds, else `default` |
-| `option` | `<option>: <node>` per option, `default` | By the option the review was decided with (a `human` step with `options`, e.g. a levy case's `hold` and `flag`) |
+| `option` | `<option>: <node>` per option, `default` | By the option the review was decided with (a `human` step with `options`, e.g. a court order case's `hold` and `flag`) |
 | `outcome` | `ok`, `failed` | `failed` when the last tool call failed (`tool_error` set, e.g. the bank's 422 on a hold), else `ok` |
 
 A `when` compares one state field: `eq`, `ne`, `in` (a list), and `lt`, `le`, `gt`, `ge` on numbers. Fields are the

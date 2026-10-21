@@ -31,7 +31,9 @@ class WorkflowDirectory(Protocol):
 
 def _refs(rows: Iterable[dict[str, Any]]) -> dict[str, WorkflowRef]:
     return {
-        str(r["id"]): WorkflowRef(str(r["id"]), str(r["name"]), str(r["teamId"]), str(r.get("status", "live")))
+        str(r["id"]): WorkflowRef(
+            str(r["id"]), str(r["name"]), str(r.get("teamId") or ""), str(r.get("status", "live"))
+        )
         for r in rows
     }
 

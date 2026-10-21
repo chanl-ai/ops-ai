@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, Clock, Inbox, Layers, Mail, UserRound } from 'lucide-react';
+import { Clock, Inbox, Layers, Mail, UserRound } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { caseRecordColumns, PRIORITY_OPTIONS, STATUS_OPTIONS } from '@/components/cases/case-record-columns';
@@ -10,8 +10,6 @@ import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { useCaseRecords } from '@/hooks/case-record-queries';
 import { useMe } from '@/hooks/me-queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -63,17 +61,6 @@ export default function CasesPage() {
         <QueryError what="cases" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching} testId="cases-error" />
       ) : (
         <div className="flex flex-col gap-4">
-          {query.isError && (
-            <Alert variant="destructive">
-              <AlertCircle />
-              <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing cases failed. These are the last results that loaded.
-                <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-                  Try again
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
           <SavedViewTabs
             ariaLabel="Case views"
             presets={[

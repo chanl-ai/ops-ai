@@ -10,7 +10,6 @@ agents-service's Reviews.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
@@ -112,7 +111,7 @@ def team_of(owner_group: str | None, teams: list[dict[str, Any]]) -> str:
 
 
 def blank(
-    *, module_id: str, tenant_id: str, team_id: str, owner: str, me: str, at: datetime, input: dict[str, Any]
+    *, module_id: str, tenant_id: str, team_id: str | None, owner: str, me: str, at: datetime, input: dict[str, Any]
 ) -> Aggregate:
     """A draft with a name and a type and nothing else; operations, connection and settings are added on its page."""
     display = input["displayName"].strip()
@@ -163,7 +162,9 @@ def blank(
     }
 
 
-def runtime_module(catalog: list[dict[str, Any]], *, tenant_id: str, team_id: str, me: str, at: datetime) -> Aggregate:
+def runtime_module(
+    catalog: list[dict[str, Any]], *, tenant_id: str, team_id: str | None, me: str, at: datetime
+) -> Aggregate:
     """The agents catalogue's demo tools that no console module holds, as one published module the gateway runs
     locally, so every tool a call can name is in the registry."""
     m = blank(
@@ -212,14 +213,14 @@ def runtime_module(catalog: list[dict[str, Any]], *, tenant_id: str, team_id: st
     }
 
 
-def platform_module(names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:
-    """The platform tools `names` (of WORKFLOW_TOOLS), as one published module the gateway runs locally and `team_id`
-    owns, so its writes are approved by that team unless an operation names another."""
+def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggregate:
+    """The platform tools `names` (of WORKFLOW_TOOLS), as one published module the gateway runs locally. No team owns
+    it (c-433): every team reads and calls it, and a held write is decided by the calling run's team."""
     declared = {str(t["name"]): t for t in PLATFORM_TOOLS}
     m = blank(
         module_id=PLATFORM_MODULE,
         tenant_id=tenant_id,
-        team_id=team_id,
+        team_id=None,
         owner="Platform",
         me="tools-service",
         at=at,
@@ -268,21 +269,15 @@ def platform_module(names: list[str], *, tenant_id: str, team_id: str, at: datet
     }
 
 
-async def ensure_platform_tools(
-    store: ModuleStore, *, tenant_id: str, team: Callable[[], Awaitable[str | None]], at: datetime
-) -> Literal["present", "written", "unreadable"]:
+async def ensure_platform_tools(store: ModuleStore, *, tenant_id: str, at: datetime) -> Literal["present", "written"]:
     """Writes the Platform tools module for the platform tools no module of the tenant holds, so a workflow's reply
     resolves in every install and not only where the dev seed wrote its mail module. A module already there, edited or
-    not, is left as it is. `team` names the module's owning team, asked only when the module is to be written; None
-    from it writes nothing ("unreadable"), so a module is never kept with an owner chosen while the right one was
-    unknown."""
+    not, is left as it is. It is a workspace-level record: no team owns it (c-433)."""
     taken = await store.names_taken(tenant_id, list(WORKFLOW_TOOLS))
     missing = [n for n in WORKFLOW_TOOLS if n not in taken]
-    if not missing or await store.get(tenant_id, PLATFORM_MODULE) is not None:
+    if not missing or await store.get_any(tenant_id, PLATFORM_MODULE) is not None:
         return "present"
-    if (team_id := await team()) is None:
-        return "unreadable"
-    module = platform_module(missing, tenant_id=tenant_id, team_id=team_id, at=at)
+    module = platform_module(missing, tenant_id=tenant_id, at=at)
     return "written" if await store.insert_if_missing(module) else "present"
 
 
@@ -445,8 +440,8 @@ def aggregates(
     held = {o["name"] for m in out for o in m["operations"]}
     rest = [t for t in [*(catalog or []), *PLATFORM_TOOLS] if t["name"] not in held and not t.get("system")]
     if rest:
-        platform = team_of("Platform", teams)
-        out.append(runtime_module(rest, tenant_id=tenant_id, team_id=platform, me=seed["currentUser"], at=ago(30)))
+        # The catalogue's runtime tools are the platform's, like the platform tools module: no team owns them (c-433).
+        out.append(runtime_module(rest, tenant_id=tenant_id, team_id=None, me=seed["currentUser"], at=ago(30)))
     return out
 
 

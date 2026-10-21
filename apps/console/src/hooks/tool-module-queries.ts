@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { ApprovalRequestInput, BlankModuleInput, HttpOperationInput, GrantView, ImportOperationsInput, ModuleDetailsPatch, ModuleFilters, ModuleInput, ModuleSource, ModuleTestInput, ModuleView, OperationPatch } from '@/lib/types/tool-modules';
@@ -13,7 +14,7 @@ export const mk = {
   activity: (id: string) => ['modules', 'activity', id] as const,
 };
 
-export const useToolModules = (p: ListParams<ModuleFilters> & { view: ModuleView }) => useQuery({ queryKey: mk.list(p), queryFn: () => api.toolModules.list(p), placeholderData: keepPreviousData });
+export const useToolModules = (p: ListParams<ModuleFilters> & { view: ModuleView }) => usePagedQuery({ queryKey: mk.list(p), queryFn: () => api.toolModules.list(p) });
 export const useToolModule = (id: string) => useQuery({ queryKey: mk.one(id), queryFn: () => api.toolModules.get(id) });
 export const useModuleActivity = (id: string, enabled = true) => useQuery({ queryKey: mk.activity(id), queryFn: () => api.toolModules.activity(id), enabled });
 
@@ -45,4 +46,4 @@ export const useRevokeModuleApprovals = () => useModuleWrite(({ id, approvalIds,
 
 /** Every workflow's access across the team's modules, one view at a time (Access › Tool access, c-144). */
 export const useToolGrants = (p: { view: GrantView; search?: string; page: number; pageSize: number }) =>
-  useQuery({ queryKey: ['modules', 'grants', p], queryFn: () => api.toolModules.grants(p), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: ['modules', 'grants', p], queryFn: () => api.toolModules.grants(p) });

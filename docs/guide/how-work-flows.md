@@ -89,11 +89,11 @@ sequenceDiagram
 | A step fails three times | The run fails with the error on its record, and its case shows the failure to people |
 | The workflow is republished mid-run | The run keeps the version it started on; new runs take the new version |
 
-## Email to case: a tax levy notice
+## Email to case: a court order notice
 
 This is one worked example. A team connects its mailbox, publishes three workflows through review, and from then on
-each notice a court or tax authority emails is read, checked, turned into cases and answered. Nothing in it is code
-written for levies: the document type, the workflows, the tools and the task types are configuration.
+each notice a court or tax authority emails, ordering the bank to hold or pay a customer's funds, is read, checked,
+turned into cases and answered. Nothing in it is code written for court orders: the document type, the workflows, the tools and the task types are configuration.
 
 ```mermaid
 sequenceDiagram
@@ -107,13 +107,13 @@ sequenceDiagram
   Note over W: Mailed documents: the message id<br/>is the dedupe key
   W->>DO: Store each attachment
   loop Each attachment: Mailed document
-    W->>DO: Read it as a levy notice
+    W->>DO: Read it as a court order notice
     DO-->>W: Debtors, each value citing its place
     opt A score below the floor
       W-->>PE: Check the read beside the page
       PE->>W: Corrected values, or reject
     end
-    loop Each debtor: Levy case
+    loop Each debtor: Court order case
       W->>TO: Search customers, list accounts
       W->>W: Match the debtor, open a case
       W-->>PE: Hold funds or flag the customer?
@@ -132,8 +132,8 @@ Each debtor gets a case whatever happens to the others, and an unmatched debtor 
 | Configuration | What it holds |
 |---|---|
 | The mailbox | Provider, folder, the credential's name in the credential store, and the address replies come from |
-| A document type, "levy notice" | The fields to read, their checks, the score floor, and the examples corrections have taught it |
-| Three workflows | Mailed documents (one run per message), Mailed document (one per attachment), Levy case (one per debtor) |
+| A document type, "court order notice" | The fields to read, their checks, the score floor, and the examples corrections have taught it |
+| Three workflows | Mailed documents (one run per message), Mailed document (one per attachment), Court order case (one per debtor) |
 | Tools | Search customers, list accounts, place hold, add a note, send a reply: operations on your systems with their approval policies |
 | Task types | Check the read, hold or flag, send the acknowledgement: what the person sees and the actions they can take |
 

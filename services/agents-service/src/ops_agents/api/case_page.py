@@ -23,6 +23,7 @@ from .auth import Principal, caller_of
 from .case_type_seeds import seeded_case_types
 from .deps import Runtime
 from .engine_reviews import titles_by_run, view
+from .file_names import named
 from .routers.activity import scope_of
 from .routers.engine import files_in
 
@@ -116,15 +117,32 @@ def waiting_of(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def actions_of(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A Human Task that would call something is a drafted action, decided on its task page (interview Q2)."""
+def _called_step(review: dict[str, Any]) -> str | None:
+    """The engine step key (run:node:iteration:attempt) of the call an approval sent, as the decide route records it."""
+    resume = cast(dict[str, Any], review.get("resume") or {})
+    for part in ("call", "approval"):
+        step = cast(dict[str, Any], resume.get(part) or {}).get("step")
+        if step:
+            return str(step)
+    return None
+
+
+async def failed_calls(rt: Runtime, runs: list[dict[str, Any]]) -> set[str]:
+    """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
+    steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
+    return {str(s["key"]) for rows in steps.values() for s in rows if s["status"] == "error"}
+
+
+def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str, Any]]:
+    """A Human Task that would call something is a drafted action, decided on its task page (interview Q2). An approved
+    action whose call the other side refused reads `refused`: the approval alone does not mean it was done (c-402)."""
     return [
         {
             "id": r["id"],
             "taskId": r["id"],
             "label": r.get("proposal") or r["title"],
             "kind": "reply" if r.get("reply") else "tool",
-            "status": r["status"],
+            "status": "refused" if r["status"] == "approved" and _called_step(r) in failed else r["status"],
             "approvalsGiven": len(r.get("approvals") or []),
             "approvalsNeeded": 2 if r["policy"]["fourEyes"] else 1,
             "summary": r.get("consequence"),
@@ -151,6 +169,10 @@ async def assembled(rt: Runtime, me: Principal, row: dict[str, Any]) -> dict[str
     for r in runs:
         for f in files_in(r.get("input")):
             files[f["id"]] = files.get(f["id"]) or f["name"]
+    linked = await named(rt, team, [{"id": i, "name": n} for i, n in files.items()])
+    file_names = {str(f["id"]): f["name"] for f in linked if f["name"]}
+    # A file field reads as the file's name; its id stays in `fileId` for the link.
+    typed = [f | {"display": file_names.get(f["fileId"], f["display"])} if f["fileId"] else f for f in typed]
     # The Activity router's scope rules, so a case's recent lines are the ones Activity would show the caller.
     recent = await Activity(rt.db).page(scope_of(me, team), Filters(case=(case_id, team)), page=1, page_size=RECENT)
     who = await actors(
@@ -183,9 +205,9 @@ async def assembled(rt: Runtime, me: Principal, row: dict[str, Any]) -> dict[str
         "typedFields": typed,
         "waiting": waiting,
         "waitingAllHref": f"/reviews?case={case_id}",
-        "actions": actions_of(reviews),
+        "actions": actions_of(reviews, await failed_calls(rt, runs)),
         "links": {
-            "files": [{"fileId": i, "name": n or i, "viewerHref": f"/files?file={i}"} for i, n in files.items()],
+            "files": [{"fileId": f["id"], "name": f["name"], "viewerHref": f"/files?file={f['id']}"} for f in linked],
             "runs": [
                 {
                     "id": r["id"],

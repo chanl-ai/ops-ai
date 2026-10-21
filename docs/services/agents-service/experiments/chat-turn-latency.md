@@ -1,6 +1,6 @@
 # Chat turn latency: model time against agents-service overhead
 
-Status: E8, confirmed, cut short, 2026-10-10. The live batch stopped at 118 turns under the maintainers' cap of 10 real model
+Status: E8, confirmed, cut short, 2026-10-10. The live batch stopped at 118 turns under a cap of 10 real model
 calls per experiment. Script: `services/agents-service/experiments/e8_latency.py` (fake model, no tokens); `--only timed`
 makes 9 real calls, and the live part needs `--live-approved`. No tests.
 

@@ -1,0 +1,31 @@
+{
+  "defaultAgent": "dispute",
+  "skills": [
+    {
+      "name": "Dispute evidence checklist",
+      "useWhen": "A cardholder disputes a card transaction and the analyst asks what evidence the reason needs.",
+      "instructions": "Name the dispute reason first. Then list, from the Card dispute handbook, the evidence that reason needs, the posting-date limit (120 days credit, 90 days debit) and whether provisional credit applies. Cite the handbook section for each point and ask for anything missing before the dispute is filed.",
+      "ownerTeam": "Card operations"
+    },
+    {
+      "name": "Hold funds for a levy",
+      "useWhen": "A levy or garnishment notice names a customer and the team must work out what to hold.",
+      "instructions": "Confirm the debtor matches the customer by name plus the last four digits of the tax number or the address. Hold the lower of the amount the notice names and the available balance on accounts in the customer's sole name, leaving the exempt amount the Levy and garnishment procedures name. State the hold per account and what was left unheld, and why.",
+      "ownerTeam": "Legal orders"
+    }
+  ],
+  "guardrails": [
+    {
+      "name": "No legal advice",
+      "topics": ["legal advice", "whether to contest a court order"],
+      "message": "I can't give legal advice. A levy or court order is checked by the legal orders team; ask them, or the customer's own lawyer.",
+      "owner": "Legal orders"
+    },
+    {
+      "name": "No investment advice",
+      "topics": ["investment advice", "which fund or stock to buy"],
+      "message": "I can't recommend investments. A licensed advisor at the branch can help with that.",
+      "owner": "Retail banking"
+    }
+  ]
+}

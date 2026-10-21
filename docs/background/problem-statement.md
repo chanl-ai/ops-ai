@@ -7,7 +7,7 @@ the customer, drafting the reply or the record change, and handing it to a perso
 first such workflow usually takes several quarters to reach production, and the second takes almost
 as long as the first. This document states why, what the platform has to provide so that later
 workflows get cheaper, which decisions sit outside the platform team, and the reference flow the
-first workflows follow. The specs in `.codeloop/wiki/concepts/` trace their scope to the numbered items here.
+first workflows follow. The design pages trace their scope to the numbered items here.
 
 ## Reasons a workflow takes quarters
 

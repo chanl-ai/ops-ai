@@ -342,7 +342,7 @@ class StorageSettings:
         hit = self._cache.get(tenant)
         if hit is not None and time.monotonic() - hit[0] < _CACHE_SECONDS:
             return hit[1]
-        saved = await self._store.get(tenant)
+        saved = await self._store.get()
         self._cache[tenant] = (time.monotonic(), saved)
         return saved
 
@@ -378,7 +378,7 @@ class StorageSettings:
         return next((r.retention_class for r in (await self.document(tenant)).retention if r.purpose == purpose), None)
 
     async def _values(self, tenant: str, name: str) -> dict[str, str]:
-        row = await self._store.credential(tenant, name)
+        row = await self._store.credential(name)
         if row is None:
             raise UnknownCredentialError(f"no storage credential named {name}")
         return self._cipher.open(tenant, name, row.sealed)
@@ -421,7 +421,7 @@ class StorageSettings:
         before = await self.document(tenant)
         old = {t.purpose: t for t in before.targets}
         for target in body.document.targets:
-            if target.backend != "local" and await self._store.credential(tenant, target.credential) is None:
+            if target.backend != "local" and await self._store.credential(target.credential) is None:
                 raise UnknownCredentialError(
                     f"the {target.purpose} target names {target.credential}, which is not a storage credential"
                 )
@@ -432,11 +432,10 @@ class StorageSettings:
         kept = {t.location for t in body.document.targets} | {
             (self._default.store.backend, self._default.store.container)
         }
-        used = await self._store.locations_in_use(tenant)
+        used = await self._store.locations_in_use()
         if stranded := sorted(used - kept):
             raise TargetInUseError(f"{stranded[0][0]}/{stranded[0][1]} still holds files; keep a target on it")
         saved = await self._store.save(
-            tenant,
             base_version=body.version,
             document=body.document.model_dump(mode="json", by_alias=True),
             by=by,
@@ -447,10 +446,10 @@ class StorageSettings:
         return await self.view(tenant)
 
     async def has_credential(self, tenant: str, name: str) -> bool:
-        return await self._store.credential(tenant, name) is not None
+        return await self._store.credential(name) is not None
 
     async def credentials(self, tenant: str) -> list[CredentialView]:
-        rows = await self._store.credentials(tenant)
+        rows = await self._store.credentials()
         return [
             CredentialView.model_validate({"name": r.name, "kind": r.kind, "setBy": r.set_by, "setAt": r.set_at})
             for r in rows
@@ -459,7 +458,7 @@ class StorageSettings:
     async def set_credential(self, tenant: str, name: str, body: CredentialInput, *, by: str) -> CredentialView:
         sealed = self._cipher.seal(tenant, name, {k: v.strip() for k, v in body.values.items()})
         at = self._clock()
-        await self._store.put_credential(tenant, name, kind=body.kind, sealed=sealed, by=by, at=at)
+        await self._store.put_credential(name, kind=body.kind, sealed=sealed, by=by, at=at)
         # A store built with the old values signs with them until rebuilt.
         self._stores = {k: v for k, v in self._stores.items() if not (k[0] == tenant and k[2] == name)}
         return CredentialView(name=name, kind=body.kind, set_by=by, set_at=at)
@@ -467,7 +466,7 @@ class StorageSettings:
     async def delete_credential(self, tenant: str, name: str, *, by: str) -> bool:
         if any(t.credential == name for t in (await self.document(tenant)).targets):
             raise TargetInUseError(f"a target signs in with {name}; change the target first")
-        return await self._store.delete_credential(tenant, name, by=by, at=self._clock())
+        return await self._store.delete_credential(name, by=by, at=self._clock())
 
 
 def _changes(before: StorageDocument, after: StorageDocument) -> str:

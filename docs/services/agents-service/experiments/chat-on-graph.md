@@ -45,4 +45,4 @@ is decided in Reviews, and what a reload shows is rebuilt from the run inputs an
 ## Feeds
 
 `docs/architecture/api.md` (chat routes are a facade over threads) and `runtime.md` (one runtime for chat and
-workflows); hunks sent to the docs owner. Open: the maintainers' call on chat self-approval.
+workflows); hunks sent to the docs. Open: the decision on chat self-approval.

@@ -9,10 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from ops_agents.activities.catalog import Catalog
-from ops_service_kit.settings import Settings
 
 from .modules.seed import PLATFORM_TOOLS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
@@ -84,46 +83,20 @@ class Resolved:
     operation: dict[str, Any] | None = None
 
 
-class SecurityTeams(Protocol):
-    async def security_team(self, tenant_id: str) -> str | None:
-        """The workspace's own security team; None when it cannot be read."""
-        ...
-
-
 class ToolRegistry:
-    def __init__(
-        self,
-        catalog: Catalog,
-        modules: ModuleStore | None = None,
-        *,
-        platform_team: str | None = None,
-        workspace_teams: SecurityTeams | None = None,
-    ) -> None:
+    def __init__(self, catalog: Catalog, modules: ModuleStore | None = None) -> None:
         """Serves every tenant: each lookup names the tenant of the caller it is for. The Platform tools module the
-        registry writes for a tenant that has none is owned by the workspace's own security team (`workspace_teams`,
-        platform-service), or `platform_team` (the install's Security team by default) where no platform-service is
-        configured."""
+        registry writes for a tenant that has none belongs to no team (c-433)."""
         self.catalog = catalog
         self.modules = modules
-        self.platform_team = platform_team or Settings().security_team_id
-        self.workspace_teams = workspace_teams
         # Tenants whose platform tools this process has made sure of; a restart checks again, which writes nothing.
         self._platform_checked: set[str] = set()
-
-    async def _owner(self, tenant_id: str) -> str | None:
-        if self.workspace_teams is None:
-            return self.platform_team
-        return await self.workspace_teams.security_team(tenant_id)
 
     async def _platform_tools(self, tenant_id: str) -> None:
         if self.modules is None or tenant_id in self._platform_checked:
             return
-        done = await ensure_platform_tools(
-            self.modules, tenant_id=tenant_id, team=lambda: self._owner(tenant_id), at=datetime.now(UTC)
-        )
-        # An owner that could not be read is asked again on the next call.
-        if done != "unreadable":
-            self._platform_checked.add(tenant_id)
+        await ensure_platform_tools(self.modules, tenant_id=tenant_id, at=datetime.now(UTC))
+        self._platform_checked.add(tenant_id)
 
     def access(self, tool: str) -> str:
         """The agents catalogue's class; `resolve` is what the gateway decides by."""
@@ -154,7 +127,9 @@ class ToolRegistry:
             ]
         await self._platform_tools(tenant_id)
         rows: list[dict[str, Any]] = []
-        for module in await self.modules.all(tenant_id):
+        # A person's grant list reads their team's modules; another service's, every team's (`all_teams`).
+        modules = await (self.modules.all(tenant_id) if sees is not None else self.modules.all_teams(tenant_id))
+        for module in modules:
             if module["status"] != "published" or module["drift"] or (sees is not None and not sees(module)):
                 continue
             for op in served_operations(module):
@@ -178,7 +153,16 @@ class ToolRegistry:
 
     async def access_for(self, tool: str, tenant_id: str) -> str:
         """The class the gateway decides `tool` by for the tenant: the registry's operation, else a workflow tool."""
+        return self._access(tool, await self.resolve(tool, tenant_id=tenant_id))
+
+    async def described(self, tool: str, tenant_id: str) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+        """access_for, policy_for and output_schema_for of `tool`, from one resolve: a review list asks this once per
+        tool, and resolving three times read the tool's module three times (c-451)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id)
+        return self._access(tool, resolved), self._policy(tool, resolved), self._output(resolved)
+
+    @staticmethod
+    def _access(tool: str, resolved: Resolved | None) -> str:
         if resolved is not None:
             return resolved.access
         return WORKFLOW_TOOLS.get(tool, ("unknown", True))[0]
@@ -198,6 +182,11 @@ class ToolRegistry:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's
         (its `approvers`, no particular team). None for a tool neither holds."""
         if self.modules is None:
+            return self._policy(tool, None)
+        return self._policy(tool, await self.resolve(tool, tenant_id=tenant_id))
+
+    def _policy(self, tool: str, resolved: Resolved | None) -> dict[str, Any] | None:
+        if self.modules is None:
             definition = self.catalog.tool(tool)
             if definition is None:
                 return None
@@ -206,7 +195,6 @@ class ToolRegistry:
                 "approver_team": None,
                 "step_up": definition.approvers > 1,
             }
-        resolved = await self.resolve(tool, tenant_id=tenant_id)
         if resolved is None or resolved.module is None or resolved.operation is None:
             return None
         return approval_policy(resolved.module, resolved.operation)
@@ -216,8 +204,10 @@ class ToolRegistry:
         inferred from its example response (open, since an example may leave fields out), else None."""
         if self.modules is None:
             return None
-        resolved = await self.resolve(tool, tenant_id=tenant_id)
-        if resolved is None or resolved.operation is None:
+        return self._output(await self.resolve(tool, tenant_id=tenant_id))
+
+    def _output(self, resolved: Resolved | None) -> dict[str, Any] | None:
+        if self.modules is None or resolved is None or resolved.operation is None:
             return None
         op = resolved.operation
         if isinstance(op.get("response_schema"), dict) and op["response_schema"]:

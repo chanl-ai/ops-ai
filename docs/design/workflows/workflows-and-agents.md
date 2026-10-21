@@ -7,7 +7,7 @@ PostgreSQL and SQL Server, and MySQL is dropped.
 
 A bank's operations teams want to hand routine work to software, with a person approving anything that moves money or
 changes a record. Some of that work is open-ended: a banker asks a question, or a morning check reads held wires and
-decides what needs attention. Some of it is fixed: a levy notice arrives, is read, matched to a customer and turned
+decides what needs attention. Some of it is fixed: a court order notice arrives, is read, matched to a customer and turned
 into a case in the same steps every time. One runtime that does both badly is the common failure: either the
 open-ended work is squeezed into a fixed graph, or the fixed work inherits the unpredictability of a model choosing its
 own steps. This design keeps two ways of running work, agents and workflows, on one set of shared services, and lets
@@ -60,42 +60,42 @@ Ops AI). Slice names (A1, W1 and so on) refer to the implementation plan below.
 | Who | Story | Status |
 |---|---|---|
 | **Agents** | | |
-| Banker | I can ask an agent a question and get an answer cited by page and section, so that I can check it before I act | built |
-| Banker | I can see in the chat that the agent is waiting for an approval and on whom, so that I know why it stopped | partial: approval shown; the waiting state is A1 |
-| Reviewer | I can approve or reject a write the agent drafted, with step-up sign-in, so that nothing moves without a person | built in chat |
-| Operations manager | I can give an agent a job with a trigger, goal, report shape and budget, so that a routine check runs without anyone opening a chat | planned A3 |
-| Operations manager | I can open any job run and see its turns, tool calls, cost and report, so that I can trust or stop it | planned A4 |
-| Operations manager | I can pause an agent and every job it has, so that a misbehaving agent stops at once | partial: agent pause exists; jobs planned |
-| Builder | I can publish an agent version only through a review, so that every change has an approver | built |
-| Builder | I can attach skills and guardrails to an agent, so that it follows house rules | built |
-| Builder | I can test a draft agent and see the same approvals a real run would raise, so that I find problems before publishing | partial: test exists; on the run API in A1 |
-| Platform developer | I can start an agent run in stream, wait or background mode with an `Idempotency-Key`, so that any system can use an agent safely | planned A1 |
-| Platform developer | I can re-attach to a run's event stream after a dropped connection, so that no event is lost | partial: per thread run today |
-| Platform developer | I can let one agent call another as a tool with its own budget, so that specialists stay separate | planned A2 |
-| Capability author | I can add a guardrail kind or a knowledge source as a capability pack with a fake for tests, so that the kernel core never changes | planned K1 |
-| Banker | I can pick a model, set the temperature, switch tools off, choose knowledge and add instructions for a thread, each only within what the agent allows, so that I tailor the agent without a new version | built for chat threads |
+| Banker | As a banker I can ask an agent a question and get an answer cited by page and section, so that I can check it before I act. | built (uc-080) |
+| Banker | As a banker I can see in the chat that the agent is waiting for an approval and on whom, so that I know why it stopped. | partial: approval shown; the waiting state is A1 |
+| Reviewer | As a reviewer I can approve or reject a write the agent drafted, with step-up sign-in, so that nothing moves without a person. | built in chat (`services/agents-service/src/ops_agents/graphs/agent_wrapper.py:140-150`) |
+| Operations manager | As an operations manager I can give an agent a job with a trigger, goal, report shape and budget, so that a routine check runs without anyone opening a chat. | planned A3 |
+| Operations manager | As an operations manager I can open any job run and see its turns, tool calls, cost and report, so that I can trust or stop it. | planned A4 |
+| Operations manager | As an operations manager I can pause an agent and every job it has, so that a misbehaving agent stops at once. | partial: agent pause exists; jobs planned (`services/agents-service/src/ops_agents/api/routers/agents.py:584`) |
+| Builder | As a builder I can publish an agent version only through a review, so that every change has an approver. | built (`services/agents-service/src/ops_agents/api/routers/agents.py:557`) |
+| Builder | As a builder I can attach skills and guardrails to an agent, so that it follows house rules. | built (`services/agents-service/src/ops_agents/api/routers/skills.py:232`) |
+| Builder | As a builder I can test a draft agent and see the same approvals a real run would raise, so that I find problems before publishing. | partial: test exists; on the run API in A1 (`services/agents-service/src/ops_agents/api/routers/agents.py:626`) |
+| Platform developer | As a platform developer I can start an agent run in stream, wait or background mode with an `Idempotency-Key`, so that any system can use an agent safely. | planned A1 |
+| Platform developer | As a platform developer I can re-attach to a run's event stream after a dropped connection, so that no event is lost. | partial: per thread run today (`services/agents-service/src/ops_agents/api/routers/events.py:66`) |
+| Platform developer | As a platform developer I can let one agent call another as a tool with its own budget, so that specialists stay separate. | planned A2 |
+| Capability author | As a capability author I can add a guardrail kind or a knowledge source as a capability pack with a fake for tests, so that the kernel core never changes. | planned K1 |
+| Banker | As a banker I can pick a model, set the temperature, switch tools off, choose knowledge and add instructions for a thread, each only within what the agent allows, so that I tailor the agent without a new version. | built for chat threads |
 | **Workflows** | | |
-| Operations manager | I can have levy notices emailed in become cases, with spam closed and unknown senders sent to a person, so that the team only handles real work | partial: mailbox to cases runs on the workflow runner; the full exit set is L1 |
-| Reviewer | I can decide a workflow review step, with two distinct approvers when the operation's policy asks, so that four-eyes rules hold | built |
-| Banker | I can open a case and see each step, its timing and who decided, so that I can answer a customer | partial: run journal built; Cases from work items in S2 |
-| Builder | I can edit every node's settings in a form instead of JSON, so that I make fewer mistakes | built: forms generated from each type's schema |
-| Builder | I can publish a workflow version through review and pause it, so that only approved versions run | built |
-| Builder | I can loop over items and start a child workflow for each, so that batch work is one design | built: Start workflow for each item, with or without waiting |
-| Builder | I can pin a step's output, retry a step or run from a node, so that I debug without re-running everything | planned R1 |
-| Pack author | I can write a node type against one SDK contract and test it with fake ports, so that it works without a database or network | planned W1 |
-| Pack author | I can ship a pack as a reviewed package pinned by hash, so that operators know exactly what code ran each step | planned W1 |
-| Platform developer | I can start a workflow run with a run key and get the same run back on a repeat, so that retries are safe | built |
-| Operator | I can kill a worker mid-run and see the run continue without repeating a write, so that crashes cost nothing | built (uc-081) |
+| Operations manager | As an operations manager I can have court order notices emailed in become cases, with spam closed and unknown senders sent to a person, so that the team only handles real work. | partial: mailbox to cases runs on the workflow runner; the full exit set is L1 (uc-082) |
+| Reviewer | As a reviewer I can decide a workflow review step, with two distinct approvers when the operation's policy asks, so that four-eyes rules hold. | built (`packages/ops_engine/src/ops_engine/node_types.py:957`) |
+| Banker | As a banker I can open a case and see each step, its timing and who decided, so that I can answer a customer. | partial: run journal built; Cases from work items in S2 |
+| Builder | As a builder I can edit every node's settings in a form instead of JSON, so that I make fewer mistakes. | built: forms generated from each type's schema |
+| Builder | As a builder I can publish a workflow version through review and pause it, so that only approved versions run. | built |
+| Builder | As a builder I can loop over items and start a child workflow for each, so that batch work is one design. | built: Start workflow for each item, with or without waiting |
+| Builder | As a builder I can pin a step's output, retry a step or run from a node, so that I debug without re-running everything. | planned R1 |
+| Pack author | As a pack author I can write a node type against one SDK contract and test it with fake ports, so that it works without a database or network. | planned W1 |
+| Pack author | As a pack author I can ship a pack as a reviewed package pinned by hash, so that operators know exactly what code ran each step. | planned W1 |
+| Platform developer | As a platform developer I can start a workflow run with a run key and get the same run back on a repeat, so that retries are safe. | built (`packages/ops_engine/src/ops_engine/store/tables.py:83`) |
+| Operator | As an operator I can kill a worker mid-run and see the run continue without repeating a write, so that crashes cost nothing. | built (uc-081) |
 | **Shared services and gateways** | | |
-| Reviewer | I can work one Reviews inbox for agent approvals, workflow reviews and publish requests, so that nothing is missed | partial: one facade over three sources in agents-service; `ops_hitl` in S1a |
-| Reviewer | I can see how long is left on each review and what happens when it expires, so that I work in order | built: deadlines and reminders on review steps |
-| Operations manager | I can see agent job runs and workflow runs together in Cases, so that one list shows what is waiting | planned S2 |
-| Operations manager | I can cap how many runs a trigger starts per day, so that a flood of mail cannot run up cost | planned S3 |
-| Builder | I can connect a webhook whose signature is checked over the raw bytes and whose repeats start one run, so that outside systems can start work safely | planned S3 |
-| Platform developer | I can let an agent call a published workflow as a tool under the operation's approval policy, so that agents reuse deterministic steps | built ([workflows as tools](../../architecture/workflows-as-tools.md)) |
-| Operator | I can see every tool call with actor, decision and outcome, so that audit has one record | built |
-| Operator | I can run every service in one process on a laptop and split them in production with the same code, so that development matches production | planned H1 |
-| Operator | I can run Ops AI on the database the bank already runs | partial: PostgreSQL today; SQL Server per ADR-0017 |
+| Reviewer | As a reviewer I can work one Reviews inbox for agent approvals, workflow reviews and publish requests, so that nothing is missed. | partial: one facade over three sources in agents-service; `ops_hitl` in S1a (`services/agents-service/src/ops_agents/api/hitl_facade.py:1-35`) |
+| Reviewer | As a reviewer I can see how long is left on each review and what happens when it expires, so that I work in order. | built: deadlines and reminders on review steps (`services/agents-service/src/ops_agents/api/timers.py:1-12`) |
+| Operations manager | As an operations manager I can see agent job runs and workflow runs together in Cases, so that one list shows what is waiting. | planned S2 |
+| Operations manager | As an operations manager I can cap how many runs a trigger starts per day, so that a flood of mail cannot run up cost. | planned S3 |
+| Builder | As a builder I can connect a webhook whose signature is checked over the raw bytes and whose repeats start one run, so that outside systems can start work safely. | planned S3 |
+| Platform developer | As a platform developer I can let an agent call a published workflow as a tool under the operation's approval policy, so that agents reuse deterministic steps. | built ([workflows as tools](../../architecture/workflows-as-tools.md)) |
+| Operator | As an operator I can see every tool call with actor, decision and outcome, so that audit has one record. | built (`services/tools-service/src/ops_tools/store/calls.py:18`) |
+| Operator | As an operator I can run every service in one process on a laptop and split them in production with the same code, so that development matches production. | planned H1 |
+| Operator | As an operator I can run Ops AI on the database the bank already runs. | partial: PostgreSQL today; SQL Server per ADR-0017 |
 
 ## Design choices
 
@@ -154,7 +154,7 @@ and [a comparable workflow tool](../research/forge-workflow-study.md).
 | Skill, guardrail | Versioned instructions an agent loads on match; versioned checks on its answers | `registry_skills`, `registry_guardrails` |
 | Tenant, team, user, member | The customer organisation, a group that owns things, a person, a person's role in a team | platform-service tables |
 
-Every table as built, with keys and owning service, is in the [data model](../../architecture/data-model.html). The
+Every table as built, with keys and owning service, is in the [data model](../../architecture/data-model.md). The
 diagrams below show the design: solid boxes exist, dashed green boxes are new, dashed amber boxes exist and move to
 another service, and grey boxes retire with the first workflow engine. Every agent and workflow table also carries
 `tenant_id`.
@@ -854,7 +854,7 @@ W3 and L1, with S3 for the email binding. L2 retires the first engine after L1 a
 | W3 tools and channels packs | Call a tool moved out of the core; the "Send message" preset; reply, ask and handoff | W2, S3 | A dispute email with the agents pack absent |
 | W4 Workflows service | The workflows service with its routes, worker loop and adapters; routes renamed with an alias; the boot-without-agents test green | W0, S1b, S3 | The workflows, Reviews, triggers, tools and models services run a sweep without agents |
 | W5 Editor forms | The schema form renderer; ui hints for every type; the option-source endpoint; server errors by JSON pointer; the custom form registry with a round-trip test | W1 | Every built type edited without JSON; a custom form's invalid value refused by the server |
-| L1 Levy rebuild | Levy intake on parse, classify, extract, loop and start workflow; the levy case workflow with review and hold; spam closed; unknown senders to a person; the email binding | W2, W3, S3 | uc-082: spam closes, an unknown sender reaches a person, one case per debtor |
+| L1 Court order rebuild | Court order intake on parse, classify, extract, loop and start workflow; the court order case workflow with review and hold; spam closed; unknown senders to a person; the email binding | W2, W3, S3 | uc-082: spam closes, an unknown sender reaches a person, one case per debtor |
 | L2 Retire the first engine | Open threads on it migrated; mailbox deployments replaced by bindings; its compiler, registry and routes removed | L1, B1 | No first-engine thread open; both boot tests green |
 | B1 Agents pack and workflow tools | The agent step as a background run with a webhook; workflow resume on the run-ended webhook; the remove-the-pack test | A1, W4 | With the agents pack removed, every other use case passes |
 | R1 Runner tools | Pin a step and test with pins; retry a step and run from a node; version pinning and migrating paused runs; 200 concurrent runs | W1, A1, D2 | uc-083 on every supported database |

@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { SearchHit } from '@/lib/types/search';
 
@@ -15,7 +16,7 @@ export function useSearch(input: string, enabled: boolean) {
     const t = setTimeout(() => setQ(input.trim()), DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [input]);
-  const query = useQuery({ queryKey: ['search', q], queryFn: () => api.search.query(q), enabled: enabled && q.length > 0, placeholderData: keepPreviousData, staleTime: 10_000 });
+  const query = usePagedQuery({ queryKey: ['search', q], queryFn: () => api.search.query(q), enabled: enabled && q.length > 0, staleTime: 10_000 });
   // While typing, or while the debounced query is in flight, the shown results are for an older query.
   const settling = input.trim() !== q || (query.isFetching && query.isPlaceholderData);
   return { ...query, q, settling };

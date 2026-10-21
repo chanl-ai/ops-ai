@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0031_response_schema
+-- tools-service, stamped at tools_0032_platform_no_team
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -50,7 +50,7 @@ GO
 CREATE TABLE tool_modules (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
 	name VARCHAR(120) NOT NULL, 
 	display_name VARCHAR(200) NOT NULL, 
 	system VARCHAR(200) NOT NULL, 
@@ -407,5 +407,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0031_response_schema');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0032_platform_no_team');
 GO

@@ -72,13 +72,18 @@ async function signIn(email) {
 
 const leadToken = await signIn(lead.email);
 const teams = rows(await api('platform', '/v1/teams', { token: leadToken }));
-const team = teams.find((t) => t.name === TEAM.team.name)?.id;
-if (!team) throw new Error(`${lead.email} is not in ${TEAM.team.name}; run scripts/demo/seed_demo_team.py first`);
+// --team names the seeded team when it is not team.json's (the seed's --team, such as a second demo team).
+const TEAM_NAME = args.team ?? TEAM.team.name;
+const team = teams.find((t) => t.name === TEAM_NAME)?.id;
+if (!team) throw new Error(`${lead.email} is not in ${TEAM_NAME}; run scripts/demo/seed_demo_team.py first`);
 const as = { token: leadToken, team };
 
 const chatId = async (title) => rows(await api('agents', `/chat/threads?search=${encodeURIComponent(title)}`, as)).find((t) => t.title === title)?.id;
-const runOf = async (workflowId, match) => {
-  for (const row of rows(await api('agents', `/v1/runs?workflowId=${workflowId}&pageSize=50`, as))) if (!match || match(row)) return row.id;
+/** The newest of the team's runs of the workflow named `name` that `match` keeps: its id, or the workflow's id. */
+const runOf = async (name, match, workflow = false) => {
+  for (const row of rows(await api('agents', '/v1/runs?pageSize=100', as))) {
+    if (row.workflowName === name && (!match || match(row))) return workflow ? row.workflowId : row.id;
+  }
   return null;
 };
 const caseId = async (subject) =>
@@ -92,8 +97,10 @@ const ids = {
   chat: await chatId(disputeChat.title),
   levyChat: await chatId(TEAM.chats.find((c) => c.key === 'levy').title),
   // The seeded run, never a test-mode run a clip left: those are marked Test on the run page.
-  credited: await runOf('card_dispute_intake', (r) => r.mode === 'live' && r.outcome === 'credited' && (r.input?.amount ?? '') === '482.10'),
-  levyRun: await runOf('levy_debtor', (r) => r.mode === 'live' && r.status === 'waiting'),
+  credited: await runOf('Card dispute intake', (r) => r.mode === 'live' && r.outcome === 'credited' && (r.input?.amount ?? '') === '482.10'),
+  levyRun: (await runOf('Levy notice: one debtor', (r) => r.mode === 'live' && r.status === 'waiting')) ?? (await runOf('Levy notice: one debtor', (r) => r.mode === 'live' && r.outcome === 'held')),
+  // Workflow ids carry the seed's --workflow-prefix; the screens find them by name.
+  disputeWorkflow: (await runOf('Card dispute intake', () => true, true)),
   levyCase: await caseId('Levy notice: Marcus Bell (NS-2026-GN-01187)'),
   agent: await agentId('Dispute Desk'),
 };
@@ -105,23 +112,24 @@ const SCREENS = [
   { name: 'chat-levy', path: () => `/chat/${ids.levyChat}`, ready: 'Holds' },
   { name: 'agents', path: '/agents', ready: 'Dispute Desk', before: filterToTeam },
   { name: 'agent', path: () => `/agents/${ids.agent}`, ready: 'Instructions' },
-  { name: 'workflow', path: '/workflows/card_dispute_intake', ready: 'Check the dispute' },
+  { name: 'workflow', path: () => `/workflows/${ids.disputeWorkflow}`, ready: 'Check the dispute' },
+  { name: 'tools', path: '/tools', ready: 'Tools' },
   // The run page draws the whole graph small inside one card; the shot is its steps at twice the scale, cut to 1280
   // wide, so every step's name and status reads.
   { name: 'run', path: () => `/workflows/runs/${ids.credited}`, ready: 'Graph', element: 'The workflow as this run met it' },
   { name: 'human-tasks', path: '/reviews', ready: 'Provisional credit' },
   { name: 'cases', path: '/cases', ready: 'Levy notice' },
-  { name: 'case', path: () => `/cases/${ids.levyCase}`, ready: 'Waiting on someone' },
+  { name: 'case', path: () => `/cases/${ids.levyCase}`, ready: 'Linked records' },
   { name: 'knowledge', path: '/knowledge', ready: 'Card dispute handbook' },
-  { name: 'files', path: '/files', ready: 'notice-of-garnishment' },
-  { name: 'channels', path: '/channels/email', ready: 'Legal orders' },
+  { name: 'files', path: '/files', ready: 'Purpose' },
+  { name: 'channels', path: '/channels/email', ready: 'Connect a mailbox' },
   { name: 'activity', path: '/activity', ready: 'Activity' },
 ];
 
 async function filterToTeam(page) {
   // The agent list is the workspace's; the shot shows the demo team's agents with the Team filter set.
   await page.getByRole('button', { name: 'Team', exact: true }).first().click();
-  await page.getByRole('option', { name: new RegExp(TEAM.team.name) }).first().click();
+  await page.getByRole('option', { name: new RegExp(TEAM_NAME) }).first().click();
   await page.keyboard.press('Escape');
 }
 
@@ -133,6 +141,10 @@ async function context(browser, extra = {}, who = lead) {
   await page.getByLabel('Password').fill(env.OPS_DEMO_PASSWORD);
   await page.getByTestId('login-submit').click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 90_000 });
+  // The console acts in the team the tab chose (sessionStorage `ops-team`, as the team switcher sets it); a person in
+  // several teams lands on another one otherwise.
+  await page.evaluate((id) => sessionStorage.setItem('ops-team', id), team);
+  await page.reload({ waitUntil: 'domcontentloaded' });
   return { ctx, page };
 }
 
@@ -278,7 +290,7 @@ async function workflowRun(page) {
     ...as,
     token: await signIn(TEAM.people.find((p) => p.key === 'builder').email),
     method: 'POST',
-    body: { workflowId: 'card_dispute_intake', mode: 'test', input: TEAM.runs.find((r) => r.key === 'dispute-northline').input },
+    body: { workflowId: ids.disputeWorkflow, mode: 'test', input: TEAM.runs.find((r) => r.key === 'dispute-northline').input },
   });
   testRun = started.runId;
   await page.goto(`${ORIGIN}/workflows/runs/${testRun}`, { waitUntil: 'domcontentloaded' });
@@ -327,7 +339,7 @@ try {
   if (args.clips) {
     await clip(browser, 'hero', '/', hero);
     await clip(browser, 'agent', '/chat', agentAnswers);
-    await clip(browser, 'workflow', '/workflows/card_dispute_intake', workflowRun);
+    await clip(browser, 'workflow', () => `/workflows/${ids.disputeWorkflow}`, workflowRun);
     await clip(browser, 'task', () => `/reviews/${testRun}:review:1`, taskDecided, approver);
     await clip(browser, 'mail', '/channels/email', mailToCase);
   }

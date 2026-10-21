@@ -121,7 +121,7 @@ async def test_an_invoice_from_the_known_form_reads_from_its_zones_with_no_model
     values = {k: v["value"] for k, v in got["fields"].items()}
     assert values == {"invoice_no": "INV-20877", "vendor": "Northern Paper Co", "total": 318.4, "due": "2026-12-15"}
     assert all(v["boxes"] and v["confidence"] > 0.8 for v in got["fields"].values()), got["fields"]
-    assert await s.extractor.store.tokens_per_call(s.tenant, "supplier_invoice") is None, "F5: no measured tokens"
+    assert await s.extractor.store.tokens_per_call("supplier_invoice") is None, "F5: no measured tokens"
 
 
 async def test_a_statement_of_another_layout_takes_the_model_path_with_the_miss(make: Make) -> None:

@@ -1,5 +1,6 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ChannelFilters, ChannelPatch } from '@/lib/types/channels';
 
@@ -10,7 +11,7 @@ const ck = {
 
 /** A page of the team's channels with one summary per kind; polled, as health and traffic move on their own. */
 export const useChannels = (p: { page: number; pageSize: number } & ChannelFilters) =>
-  useQuery({ queryKey: ck.list(p), queryFn: () => api.channels.list(p), placeholderData: keepPreviousData, refetchInterval: 30_000 });
+  usePagedQuery({ queryKey: ck.list(p), queryFn: () => api.channels.list(p), refetchInterval: 30_000 });
 
 /** Every place an agent or workflow answers, with the version live there. */
 export const useLivePlaces = (kind: 'agent' | 'workflow', id: string) => useQuery({ queryKey: ck.live(kind, id), queryFn: () => api.channels.live(kind, id) });

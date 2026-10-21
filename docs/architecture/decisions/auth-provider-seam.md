@@ -1,6 +1,6 @@
 # ADR-0013 Auth provider seam
 
-Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
@@ -8,7 +8,7 @@ ADR-0005 decides how workflows are identified and how they act for a person or p
 (`docs/architecture/decisions/identity-and-entitlement.md:31`). It does not decide how a
 person signs in to the console. The console now has human sign-in in the mock: password with TOTP,
 SSO by verified domain, invites, forced MFA enrolment, session expiry, account security, and a
-step-up before money approvals (`.codeloop/wiki/concepts/sign-in-and-sessions.md`).
+step-up before money approvals ([sign-in library](../../packages/ops_signin/overview.md)).
 
 Three forces shape the choice. Banks sign staff in through their own IdP (Entra ID or Okta) and
 expect its MFA and joiner-leaver process to apply. Some accounts sit outside the IdP's domains
@@ -111,4 +111,4 @@ What would change this decision:
 - `apps/console/src/lib/types/sign-in.ts`; `apps/console/src/hooks/auth-queries.ts`
 - `apps/console/src/app/_shell/app-shell.tsx`; `apps/console/src/components/auth/reauth-dialog.tsx`
 - `docs/architecture/decisions/identity-and-entitlement.md`; `docs/architecture/decisions/assurance.md` (structure)
-- `.codeloop/wiki/concepts/sign-in-and-sessions.md`
+- [sign-in library](../../packages/ops_signin/overview.md)

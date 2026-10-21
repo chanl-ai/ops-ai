@@ -27,6 +27,7 @@ from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testdb import isolate_from_stack
+from ops_store import isolation
 
 OPS = {"X-Team-Id": "team_ops"}
 
@@ -73,7 +74,7 @@ def sign_in(app: FastAPI, tenant: str, role: str) -> None:
         if authorization:
             return await current_caller(request, authorization=authorization)
         team = x_team_id or "team_ops"
-        return Principal(
+        p = Principal(
             kind="person",
             sub="usr_dev",
             email="j.richardson@northfieldbank.com",
@@ -85,6 +86,9 @@ def sign_in(app: FastAPI, tenant: str, role: str) -> None:
             scopes=[],
             auth_method="session",
         )
+        # The stand-in replaces ops_identity's dependency, so it enters the request's context as that one does.
+        isolation.enter_caller(p, dev=False)
+        return p
 
     async def as_person_only(
         request: Request,

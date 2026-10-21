@@ -13,7 +13,7 @@ import { useEngineOptions } from '@/hooks/engine-queries';
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
 type Params = Record<string, unknown>;
-type Schema = { type?: string; enum?: unknown[]; anyOf?: Schema[]; default?: unknown; properties?: Record<string, Schema>; items?: Schema; required?: string[] };
+type Schema = { type?: string; enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: Schema[]; default?: unknown; properties?: Record<string, Schema>; items?: Schema; required?: string[] };
 
 export interface StepRef {
   id: string;
@@ -29,6 +29,19 @@ export interface StepRefs {
 }
 
 const NONE = '__none__';
+
+/**
+ * A field's choices with the words to show for each: JSON Schema's `oneOf` of `{ const, title }` names each option,
+ * and a plain `enum` value shows as written with a capital first letter. A setting that also takes a path (`anyOf`
+ * of the choices and `$.…`) lists the choices.
+ */
+export function schemaChoices(schema: { enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: { enum?: unknown[] }[] }): { value: string; label: string }[] {
+  const upper = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const titled = (schema.oneOf ?? []).filter((o) => o.const !== undefined);
+  if (titled.length) return titled.map((o) => ({ value: String(o.const), label: o.title ?? upper(String(o.const)) }));
+  return (schema.enum ?? schema.anyOf?.find((s) => s.enum)?.enum ?? []).map((v) => ({ value: String(v), label: upper(String(v)) }));
+}
+
 const asObject = (v: unknown): Params => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Params) : {});
 const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 /** Drops a cleared setting rather than storing an empty value the schema may refuse. */
@@ -93,9 +106,9 @@ function FieldControl({ id, spec, schema, value, steps, onChange }: { id: string
 }
 
 function EnumSelect({ id, schema, value, onChange }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void }) {
-  // A setting that also takes a path (`anyOf` of the choices and `$.…`) lists the choices; a saved path stays shown.
-  const listed = (schema.enum ?? schema.anyOf?.find((s) => s.enum)?.enum ?? []).map(String);
-  const options = typeof value === 'string' && value && !listed.includes(value) ? [...listed, value] : listed;
+  // A saved value the choices do not list (a path) stays shown as itself.
+  const listed = schemaChoices(schema);
+  const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value }] : listed;
   const fallback = schema.default !== undefined ? `Default (${String(schema.default)})` : 'Not set';
   return (
     <Select value={typeof value === 'string' ? value : NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
@@ -105,8 +118,8 @@ function EnumSelect({ id, schema, value, onChange }: { id: string; schema: Schem
       <SelectContent>
         <SelectItem value={NONE}>{fallback}</SelectItem>
         {options.map((o) => (
-          <SelectItem key={o} value={o}>
-            {o}
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
           </SelectItem>
         ))}
       </SelectContent>

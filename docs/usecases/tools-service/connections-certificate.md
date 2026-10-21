@@ -31,5 +31,4 @@ its own, so it never rides on another connection's calls.
 
 ## Non-vacuous check
 
-Step 2 fails `TLS_FAILED` with the certificate left out of the TLS context
-(`.codeloop/evidence/330/uc-395-red-without-certificate.txt`).
+Step 2 fails `TLS_FAILED` with the certificate left out of the TLS context.

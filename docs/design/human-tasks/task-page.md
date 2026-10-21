@@ -145,7 +145,7 @@ agent's reason), three fixed facts (agent, tools, environment and expiry) and th
 Each column is configuration: parameters filled by a workflow step or an API call. No column adds a region or an
 action to the product.
 
-| | Levy read check | KYC document check | Vendor bank-detail change | Tool access request | New supplier form |
+| | Court order read check | KYC document check | Vendor bank-detail change | Tool access request | New supplier form |
 |---|---|---|---|---|---|
 | Type | `document_check` | `document_check` | `write_approval` | `tool_access_request` | `data_entry` |
 | Question | Check {n} key fields read from {file} | Check the ID read for {applicant} against the passport scan | Change the bank account for {vendor} to {newAccount}? | Let {agent} use {module}? | Enter the details for new supplier {name} |

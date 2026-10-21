@@ -569,12 +569,15 @@ def _decided(d: dict[str, Any]) -> dict[str, Any]:
 
 
 async def all_reviews(rt: Runtime) -> list[dict[str, Any]]:
+    """Every review the selected team may see, each with who it is assigned to. A workflow step is the row
+    engine_reviews.all_rows makes, enough to count, filter and page on; `engine_reviews.expand` builds the full review
+    of the rows a caller shows."""
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     for row, waiting, d in await _thread_reviews(rt):
         out.append(await review_view(rt, row, waiting, now) if waiting else _decided(d or {}))
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
-    rows = out + await publish_reviews.all_views(rt) + await engine_reviews.all_views(rt)
+    rows = out + await publish_reviews.all_views(rt) + await engine_reviews.all_rows(rt)
     assigned = await ReviewAssignments(rt.db).current()
     return [r | {"assignee": assigned.get(str(r["id"]), r.get("assignee"))} for r in rows]
 
@@ -678,13 +681,17 @@ async def list_reviews(
     }
     in_view = [r for r in rows if views[view](r)]
     if search:
+        # A typed task's title comes from its task, so a search reads the full reviews it matches against.
         needle = search.lower()
+        in_view = await engine_reviews.expand(rt, in_view)
         in_view = [r for r in in_view if needle in r["title"].lower() or needle in r["id"].lower()]
     facets = _facets(in_view, ["risk", "workflowId", "kind", "agentSlug", "status"])
     for column, wanted in filters.items():
         if wanted:
             in_view = [r for r in in_view if str(r.get(column)) in wanted]
-    return {**page(in_view, page_no, size), "facets": facets, "viewCounts": counts, "stats": stats}
+    shown = page(in_view, page_no, size)
+    shown["data"] = await engine_reviews.expand(rt, shown["data"])
+    return {**shown, "facets": facets, "viewCounts": counts, "stats": stats}
 
 
 async def queue_place(rt: Runtime, review_id: str, view: str = "open") -> dict[str, Any]:

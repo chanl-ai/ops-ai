@@ -12,20 +12,29 @@ team the roles grid decides. Each failure mode drives the real routes with token
 from __future__ import annotations
 
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_engine.store.tables import metadata as engine_metadata
+from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
+from ops_service_kit.settings import Settings
+from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
+from tests.engine.test_lifecycle import definition
 from tests.engine.test_lifecycle_rights import (
     BUILDER,
     PLATFORM,
     TENANT,
+    introspect,
+    jwks,
     person,
     stack,  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
 )
@@ -158,3 +167,55 @@ async def test_a_reviewer_acting_in_another_team_publishes_the_agent_they_approv
         assert r.status_code == 200, r.text
         assert _data(await c.get(f"/v1/agents/{agent}", headers=BUILDER))["publishedVersion"] == 1
     await engine.dispose()
+
+
+async def test_a_workflow_definition_is_listed_with_its_team_so_it_can_be_granted() -> None:
+    # A v2 workflow is granted tool access as a v1 one is (c-433): tools-service finds it and its team here.
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    async with engine.begin() as conn:
+        await conn.run_sync(metadata.create_all)
+        await conn.run_sync(engine_metadata.create_all)
+    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
+    services = ServiceAuth(
+        audience="agents", verifiers=service_verifiers(settings, "agents"), scopes=settings.service_scopes
+    )
+    auth = Auth(
+        Identity(audience="agents", jwks=jwks, introspect=introspect, key_cache_s=0, services=services), services
+    )
+    app = create_app(
+        settings,
+        model=scripted_model(),
+        engine=engine,
+        checkpointer=InMemorySaver(),
+        graph_models=FakeGraphModels(),
+        auth=auth,
+        knowledge=fixture_knowledge(),
+    )
+    wid = f"c433_{uuid4().hex[:6]}"
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
+    ):
+        saved = await c.post("/v1/workflows/definitions", json={"definition": definition(wid)}, headers=BUILDER)
+        assert saved.status_code == 201, saved.text
+        asked = await c.post(f"/v1/workflows/definitions/{wid}/publish-requests", json={}, headers=BUILDER)
+        assert asked.status_code < 300, asked.text
+        token = mint_service_token(
+            dev_service_signer(), service="tools", audience="agents", tenant_id=TENANT, scopes=["workflows:view"]
+        )
+        r = await c.get("/v1/workflow-refs", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200, r.text
+        rows = {w["id"]: w for w in r.json()["data"]}
+        assert rows.get(wid, {}).get("teamId") == "team_ops", r.text[:300]
+    await engine.dispose()
+
+
+async def test_the_chat_agent_picker_offers_only_the_teams_agents(
+    stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
+) -> None:
+    # The live catalogue holds every team's agents; the picker read it whole, so another team's showed (c-407).
+    c, _ = stack
+    mine = {a["id"] for a in _data(await c.get("/chat/agents", headers=BUILDER))}
+    assert mine, "the owning team's live agents are offered"
+    theirs = {a["id"] for a in _data(await c.get("/chat/agents", headers=OUTSIDER))}
+    assert not mine & theirs, sorted(mine & theirs)

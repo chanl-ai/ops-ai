@@ -20,7 +20,7 @@ its attachments in Files and starts one run whose input is the email.
 | 1 | James asks for the mailbox options | `levy@northfield.example` is offered |
 | 2 | James saves a workflow whose trigger is Email received on that mailbox and publishes it | 201 and the workflow is live |
 | 3 | The worker's first pass on the new binding | No run: mail already in the folder is history |
-| 4 | The levy notice with its PDF is emailed to `levy@northfield.example` through GreenMail's SMTP | One run; its input has the sender, subject, body and the PDF as a Files id, never its bytes |
+| 4 | The court order notice with its PDF is emailed to `levy@northfield.example` through GreenMail's SMTP | One run; its input has the sender, subject, body and the PDF as a Files id, never its bytes |
 | 5 | Read the file from files-service as James | The bytes are the PDF's |
 | 6 | The same message again, with other brackets and domain case | No second run |
 | 7 (ui) | James adds Email received on the canvas, picks the mailbox, sets a folder and filters, saves | The sheet says how it starts; the saved version keeps mailbox, folder and filters |
@@ -38,4 +38,4 @@ failure modes (history, redelivery, two workers, Files first, filters, pause, a 
 
 ## Non-vacuous check
 
-Step 6 fails when the run key is not derived from the normalised Message-ID (`.codeloop/evidence/187/t004-t006-red.txt`).
+Step 6 fails when the run key is not derived from the normalised Message-ID.

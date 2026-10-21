@@ -1,13 +1,13 @@
 # ADR-0010 Object storage
 
-Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
 ADR-0006 puts evidence bundles, mail attachments, payloads and uploads in WORM-capable object storage but
 does not say which product or how the platform talks to it. Banks run on different clouds: some are on
 AWS, some on Azure, some on-premises with an S3-compatible appliance. The platform needs one Files API
-(`.codeloop/wiki/concepts/files.md`) whose behaviour does not change with the bank's choice: presigned direct
+([files](../../services/files-service/overview.md)) whose behaviour does not change with the bank's choice: presigned direct
 uploads, server-side encryption with the bank's key, retention, legal hold and storage-enforced
 immutability for evidence.
 

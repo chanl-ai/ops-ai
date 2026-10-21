@@ -89,7 +89,13 @@ def test_the_document_declares_the_shapes_chat_draws() -> None:
 def test_a_customers_accounts_list_as_rows() -> None:
     bank = client()
     rows = bank.get("/customers/CUS-1001/accounts", headers=KEY).json()
-    assert [(r["id"], r["balance"]) for r in rows] == [("CHQ-2219", 2140.55), ("SAV-4410", 18250.0)]
+    # The levy story holds on the first account listed, chequing at 2,140.55 (levy_case `hold`).
+    assert [(r["id"], r["type"]) for r in rows] == [
+        ("CHQ-2219", "chequing"),
+        ("SAV-4410", "savings"),
+        ("VISA-5521", "credit card"),
+    ]
+    assert rows[0]["balance"] == 2140.55
     assert bank.get("/customers/CUS-9999/accounts", headers=KEY).status_code == 404
 
 
@@ -99,3 +105,29 @@ def test_the_statement_takes_its_key_in_the_query_and_repeats_its_url() -> None:
     assert bank.get("/accounts/CHQ-2219/statement", headers=KEY).status_code == 401, "the header key is not this one"
     got = bank.get("/accounts/CHQ-2219/statement", params={"api_key": "dev-bank-key"}).json()
     assert got["period"] == "2026-09" and "api_key=dev-bank-key" in got["requestedUrl"]
+
+
+def charges(bank: TestClient, account: str, merchant: str) -> list[tuple[str, float]]:
+    rows = bank.get(f"/accounts/{account}/transactions", headers=KEY).json()
+    return [(t["date"], t["amount"]) for t in rows if merchant in t["description"].upper()]
+
+
+def test_each_seeded_dispute_finds_its_charge_at_the_bank() -> None:
+    """scripts/demo/team.json's dispute runs and chats name these charges; an agent asked about one finds it."""
+    bank = client()
+    assert charges(bank, "VISA-5521", "COASTAL AIR") == [("2026-10-16", -1240.0)]
+    assert charges(bank, "CHQ-1003", "NORTHLINE ELECTRONICS") == [("2026-10-11", -482.1)]
+    assert charges(bank, "BUS-7781", "LAKESHORE STREAMING") == [("2026-09-03", -64.99), ("2026-10-03", -64.99)]
+
+
+def test_a_dispute_opens_on_the_coastal_air_charge() -> None:
+    bank = client()
+    txn = next(
+        t["id"]
+        for t in bank.get("/accounts/VISA-5521/transactions", headers=KEY).json()
+        if "COASTAL" in t["description"]
+    )
+    r = bank.post(
+        "/disputes", json={"accountId": "VISA-5521", "transactionId": txn, "reason": "wrong amount"}, headers=KEY
+    )
+    assert r.status_code == 201, r.text

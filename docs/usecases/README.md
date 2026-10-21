@@ -84,7 +84,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-055 | console | A bank API goes from import to a governed agent call | ui | failing |
 | uc-056 | console | A grant no longer offered shows as stale and can be removed | ui | passing |
 | uc-057 | console | A write held in a chat is listed in Reviews and approved there | ui | passing |
-| uc-058 | console | Another person's chat stays private: a teammate gets 404 (owner decision, c7ebccb) | ui | passing |
+| uc-058 | console | Another person's chat stays private: a teammate gets 404 | ui | passing |
 | uc-059 | console | A builder sets a write's approval policy on the module page | ui | passing |
 | uc-060 | models-service | An alias reaches the fake OpenAI or the real one by its connection's base URL | api | passing |
 | uc-073 | console | Chat widgets draw by shape on the dev widget page | ui | passing |
@@ -150,7 +150,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-137 | console | A changed publish review setting applies to the next tool module publish, with no restart | ui | passing |
 | uc-138 | console | Knowledge, source and file pages follow what the caller may do with each record | ui | passing |
 | uc-139 | console | The console works cases: the list with both deadlines, server filters, a case's timeline, and runs under Workflows | ui | passing |
-| uc-140 | console | The demo walk on the shared stack: cited chat, a guardrail, a bank read, a held write approved, a run's agent step, a workflow as a tool, and the levy mailbox | ui | failing |
+| uc-140 | console | The demo walk on the shared stack: cited chat, a guardrail, a bank read, a held write approved, a run's agent step, a workflow as a tool, and the court order mailbox | ui | failing |
 | uc-141 | console | The one Activity page lists a run by name, filters by kind on the server, narrows to a source, and opens the run | ui | passing |
 | uc-142 | console | Channels on real data: the hub, tab dots and an email landing match /v1/channels; Deployments lands on Channels; an embed's version changes in its row | ui | passing |
 | uc-143 | console | Access › Tool access lists every workflow's tool access by view, counted on the server | ui | passing |
@@ -176,8 +176,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-199 | agents-service | A builder connects a team mailbox, tests it, binds a workflow, pauses and resumes it; mail starts runs only while it runs | api, ui | passing |
 | uc-200 | agents-service | A send_reply naming a team mailbox leaves from its own sender (Mailpit), once per key; another team's call sends nothing | api | passing |
 | uc-209 | agents-service | A Start workflow step starts one live child per list item in the parent's team, keyed so a retry starts none twice; a test run's children are test runs | api | passing |
-| uc-210 | agents-service | A levy notice in the levy mailbox runs on the workflow runner: one case per debtor, name-only debtors not matched, a 422 hold back to review, a redelivery opens nothing | api | passing |
-| uc-223 | agents-service | A PDF and a CSV mailed through GreenMail become levy cases in one child run each; refused files are skipped, a low read waits for a person, the reply leaves from the mailbox | api | passing |
+| uc-210 | agents-service | A court order notice in the court order mailbox runs on the workflow runner: one case per debtor, name-only debtors not matched, a 422 hold back to review, a redelivery opens nothing | api | passing |
+| uc-223 | agents-service | A PDF and a CSV mailed through GreenMail become court order cases in one child run each; refused files are skipped, a low read waits for a person, the reply leaves from the mailbox | api | passing |
 | uc-224 | agents-service | A person corrects a document read in Human Tasks and sees the reply and cases | ui | passing |
 | uc-225 | agents-service | A reviewer takes a workflow Human Task and sees its deadline | ui | passing |
 | uc-226 | agents-service | A mailbox workflow takes every shape of email | api | passing |
@@ -187,10 +187,10 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-244 | agents-service | Extract on a file saves what was read, and deleting the file purges it | api | passing |
 | uc-229 | agents-service | A guarded answer streams as it is written and is replaced when its check fails | ui | passing |
 | uc-230 | tools-service | A workflow step notifies an outside system's webhook with a case's data | api | passing |
-| uc-231 | agents-service | A Calculate step works out a levy's amount and deadline | api | passing |
+| uc-231 | agents-service | A Calculate step works out a court order's amount and deadline | api | passing |
 | uc-232 | console | The header names the workspace from platform-service and Tools › Workflows lists the registry directory, not the mock | ui | passing |
 | uc-245 | agents-service | A team's mailbox runs end to end: connected and tested in the console, bound through a review, a PDF read, checked and decided by a person, a case opened, the reply sent from the mailbox, a redelivery ignored | ui | passing |
-| uc-246 | agents-service | A mixed levy email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply | ui | passing |
+| uc-246 | agents-service | A mixed court order email is read by kind in parallel: a case and a webhook per document, a person checks the doubtful read, and the sender gets a reply | ui | passing |
 | uc-247 | agents-service | A builder tests an agent on a real chat thread the server marks test | api | passing |
 | uc-253 | agents-service | A builder tests an agent in the right panel of its page, with the chat page's components | ui | passing |
 | uc-254 | agents-service | A builder copies a task type and an API caller opens typed Human Tasks | api | current |
@@ -229,3 +229,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-399 | kb-service | People and services read knowledge usage, refs, search and workflow refs on one route each | api | passing |
 | uc-256 | console | A case page says what it is about, what it waits on and what is next | ui | current |
 | uc-404 | console | The console says when its services are out of reach, when a session has ended and when a linked task is gone | ui | current |
+| uc-450 | console | The demo team shows each case and workflow once, and Dispute Desk finds a seeded dispute's charge at the bank | ui | current |
+| uc-445 | console | Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file | ui | passing |

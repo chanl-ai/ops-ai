@@ -3,6 +3,9 @@
 // Files in a headless browser. Every request goes through the proxy, so a route the proxy misses fails here. Prints
 // one PASS or FAIL line per check and exits 1 on any FAIL. Any install with one origin: Fly, compose (deploy/compose).
 //   OPS_SMOKE_EMAIL=... OPS_SMOKE_PASSWORD=... node deploy/fly/smoke.mjs https://<your-app>.fly.dev
+// OPS_SMOKE_TEAM names the team it acts in (default: the admin's first team); keep it a test team, never a team shown
+// to people. At the end it removes what it made where a route allows: the agent, the workflow, the files, the chat and
+// the approver it invited. The run and the document type have no delete route and stay in that team.
 // Outside dev a publish waits for a second person: the walk invites one as approver (an admin's invite) to decide it.
 // The agent and the document read answer on whatever model the alias is bound to: run it against a fake model unless
 // real spend is intended. The read's fields match the fake's committed rules (services/models-service/seed/demo-fake-openai).
@@ -36,7 +39,7 @@ const session = await data(
     body: JSON.stringify({ email, password }),
   }),
 );
-const team = session.principal.teamId;
+const team = process.env.OPS_SMOKE_TEAM || session.principal.teamId;
 check('the admin signs in through /api/platform', Boolean(session.token && team), session.principal);
 const as = { Authorization: `Bearer ${session.token}`, 'X-Team-Id': team, 'Content-Type': 'application/json' };
 
@@ -238,6 +241,8 @@ try {
   check('the console signs in through platform-service', true);
 
   await page.goto(`${origin}/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  // Searched for by name: a busy test team's list pages, and the new agent can sort onto any page (c-441).
+  await page.getByPlaceholder('Search agents…').fill(`Smoke ${TAG}`, { timeout: 60_000 });
   const listed = await page.getByText(`Smoke ${TAG}`).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
   check('Agents lists the new agent from agents-service', listed);
 
@@ -254,8 +259,34 @@ try {
 } finally {
   await browser.close();
 }
+await removeWhatWasMade();
 console.log(failed ? `${failed} check(s) failed` : 'all checks passed');
 process.exit(failed ? 1 : 0);
+
+/** Deletes the walk's records through their routes; a refusal is printed, never a failed check. */
+async function removeWhatWasMade() {
+  const steps = [
+    ['agent', 'DELETE', `/api/agents/v1/agents/${agent.id}`],
+    ['workflow', 'DELETE', `/api/agents/v1/workflows/definitions/${WORKFLOW}`],
+    ['chat', 'POST', '/api/agents/chat/threads/bulk-delete', { ids: [thread] }],
+    ['file', 'DELETE', `/api/files/v1/files/${done.file?.id ?? ticket.fileId}`],
+    ['receipt', 'DELETE', `/api/files/v1/files/${pdfFile.file?.id ?? pdfTicket.fileId}`],
+  ];
+  if (approver) {
+    const members = await data(await fetch(`${origin}/api/platform/v1/settings/members`, { headers: as })).catch(() => []);
+    const rows = Array.isArray(members) ? members : members.data ?? [];
+    const made = rows.find((m) => m.email === `smoke-approver-${TAG}@example.com`);
+    if (made) steps.push(['approver', 'POST', '/api/platform/v1/settings/members/delete', { ids: [made.id] }]);
+  }
+  for (const [what, method, path, body] of steps) {
+    let r = await fetch(`${origin}${path}`, { method, headers: as, body: body ? JSON.stringify(body) : undefined }).catch((e) => ({ status: String(e) }));
+    if (what === 'workflow' && r.status === 409) {
+      // A workflow that has run keeps its versions for its runs: archived, it leaves the lists and starts nothing.
+      r = await fetch(`${origin}${path}/archive`, { method: 'POST', headers: as }).catch((e) => ({ status: String(e) }));
+    }
+    console.log(`${typeof r.status === 'number' && r.status < 300 ? 'REMOVED' : 'KEPT   '} ${what} ${path} ${r.status}`);
+  }
+}
 
 /** A one-page PDF with each line in Helvetica, its xref offsets computed, so the walk carries no binary fixture. */
 function receiptPdf(lines) {

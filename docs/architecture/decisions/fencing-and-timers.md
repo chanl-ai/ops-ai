@@ -1,6 +1,6 @@
 # ADR-0016 Fencing and timers
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal, so the Temporal adapter and the Temporal oracle in the recommendation no longer apply; fencing by lease generation carries into `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: superseded in part on 2026-10-16: Temporal was removed, so the Temporal adapter and the Temporal oracle in the recommendation no longer apply; fencing by lease generation carries into `ops_engine` (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
@@ -173,7 +173,7 @@ Days are estimates for one engineer.
 | | Cap retries of a breach resume that keeps failing (E5 gotcha), then journal it for manual handling |
 | | Test: a duplicate and an early external `fire` both do nothing |
 
-## Open questions for the maintainers
+## Open questions
 
 1. Fence check in the gateway: read the shared lease table, or keep its own highest-seen generation? Default: its own, so the gateway stays deployable apart.
 2. May a deployment use an external scheduler (Cloud Tasks, EventBridge) at all? Default: not until one asks; the poller is the only scheduler shipped.

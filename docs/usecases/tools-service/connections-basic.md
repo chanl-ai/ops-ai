@@ -30,4 +30,4 @@ a secret part written once and never shown. A change against a revision someone 
 
 ## Non-vacuous check
 
-Step 2: with the basic strategy replaced by none, both calls fail 401 (`.codeloop/evidence/330/uc-391-red-without-strategy.txt`).
+Step 2: with the basic strategy replaced by none, both calls fail 401.

@@ -90,15 +90,38 @@ async def test_sql_server_sets_and_clears_all_three_keys() -> None:
     ]
 
 
+def _widened(caplog: pytest.LogCaptureFixture) -> list[tuple[int, str]]:
+    return [(r.levelno, r.getMessage()) for r in caplog.records if r.getMessage().startswith("isolation.widen")]
+
+
 def test_a_widening_names_its_reason_and_logs_it(caplog: pytest.LogCaptureFixture) -> None:
     with pytest.raises(ValueError, match="reason"), isolation.tenant_wide("  ", tenant_id="tenant-a"):
         pass
-    with caplog.at_level(logging.INFO, logger="ops_store.isolation"), isolation.scope("tenant-a", "team-a"):
+
+    def request() -> None:
+        isolation.enter("tenant-a", "team-a", kind="person")
         with isolation.tenant_wide("admin_platform_resource"):
             assert isolation.current().scope == "tenant" and acting_team() is None
         assert isolation.current().scope == "team" and acting_team() == "team-a"
-    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("isolation.widen")]
-    assert "reason=admin_platform_resource" in line and "tenant=tenant-a" in line and "caller=" in line
+
+    with caplog.at_level(logging.INFO, logger="ops_store.isolation"):
+        contextvars.copy_context().run(request)
+    ((level, line),) = _widened(caplog)
+    assert level == logging.INFO
+    assert "reason=admin_platform_resource" in line and "tenant=tenant-a" in line and "caller=person" in line
+
+
+def test_a_loops_widening_is_logged_below_info(caplog: pytest.LogCaptureFixture) -> None:
+    """A relay or claim loop widens on every pass; its line is DEBUG, so INFO keeps the requests' widenings (c-451)."""
+
+    def loop() -> None:
+        with isolation.tenant_wide("outbox_relay", tenant_id="tenant-a"):
+            pass
+
+    with caplog.at_level(logging.DEBUG, logger="ops_store.isolation"):
+        contextvars.Context().run(loop)
+    ((level, line),) = _widened(caplog)
+    assert level == logging.DEBUG and "reason=outbox_relay" in line and "caller=task" in line
 
 
 def test_a_widening_with_no_tenant_named_keeps_the_callers_tenant() -> None:
@@ -117,7 +140,7 @@ async def test_a_system_transaction_needs_a_reason(engine: AsyncEngine, caplog: 
     with pytest.raises(ValueError, match="reason"):
         async with isolation.system_tx(engine, ""):
             pass
-    with caplog.at_level(logging.INFO, logger="ops_store.isolation"):
+    with caplog.at_level(logging.DEBUG, logger="ops_store.isolation"):
         async with isolation.system_tx(engine, "claim_work") as c:
             assert (await c.execute(sa.select(1))).scalar_one() == 1
-    assert any("isolation.widen" in r.getMessage() and "reason=claim_work" in r.getMessage() for r in caplog.records)
+    assert any(level == logging.DEBUG and "reason=claim_work" in line for level, line in _widened(caplog))

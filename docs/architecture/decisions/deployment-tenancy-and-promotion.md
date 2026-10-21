@@ -1,6 +1,6 @@
 # ADR-0004 Deployment, tenancy and promotion
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4.
+Status: superseded in part on 2026-10-16: Temporal was removed, so the Temporal clusters, payload codec and authoriser in the decision no longer apply; services run in `ops-host` processes (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-4.
 
 ## Context
 

@@ -5,7 +5,7 @@ PostgreSQL tables and migration chain, tenant and team scoped routes, platform t
 client for other services (`packages/ops_files_client`). The local backend works on the dev stack through proxy
 routes; S3 and Azure Blob sign upload and download URLs and move bytes through obstore, covered by unit tests on
 fakes. The sync library (`FileService`) stays for the in-process callers that have not moved yet. Design:
-`.codeloop/wiki/concepts/files-service-design.md`.
+this page.
 
 | Item | Detail |
 |---|---|

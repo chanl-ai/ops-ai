@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, CheckCircle2, Clock, Inbox, Mail, UserCheck, Users } from 'lucide-react';
+import { CheckCircle2, Clock, Inbox, Mail, UserCheck, Users } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -16,8 +16,6 @@ import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { RunnerRuns } from '@/components/workflows/runner-runs';
 import { RunSheet } from '@/components/workflows/run-sheet';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { useAssignRuns, useCaseQueues, useCaseRun, useCaseRuns, useRunState } from '@/hooks/case-queries';
 import { useTestFromRun, useWorkflows } from '@/hooks/queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -112,18 +110,6 @@ export default function RunsPage() {
         <QueryError what="runs" onRetry={() => query.refetch()} retrying={query.isFetching} testId="cases-error" />
       ) : (
         <div className="flex flex-col gap-4">
-          {query.isError && (
-            <Alert variant="destructive">
-              <AlertCircle />
-              <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing runs failed. These are the last results that loaded.
-                <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-                  Try again
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
           <SavedViewTabs
             ariaLabel="Run views"
             presets={[

@@ -2,13 +2,19 @@ import { getNodesBounds, type Node, type ReactFlowInstance } from '@xyflow/react
 
 /** The smallest zoom at which a step's title and ports can still be read; fit never goes below it. */
 export const READABLE_ZOOM = 0.65;
-/** How far a person may zoom out by hand, to see the shape of a large workflow. */
-export const MIN_ZOOM = 0.5;
+/** How far the canvas zooms out: low enough that Fit to view shows every step of a wide workflow (13 steps, 2,340 px)
+ * on a 400 px phone. */
+export const MIN_ZOOM = 0.1;
 const PAD = 48;
 
+/** Fit to view (the button and the 1 key): every step on screen, however small that makes them. */
+export function wholeFit(flow: Pick<ReactFlowInstance, 'fitView'>) {
+  void flow.fitView({ padding: 0.08, minZoom: MIN_ZOOM, maxZoom: 1 });
+}
+
 /**
- * Fits the graph into the canvas, but never below `READABLE_ZOOM`: a graph too wide to read whole opens at that zoom
- * with `startId` (the trigger) at the left edge, and the person pans the rest.
+ * The view a canvas opens at: the graph fitted, but never below `READABLE_ZOOM`, so a graph too wide to read whole opens
+ * at that zoom with `startId` (the trigger) at the left edge, and the person pans the rest or presses Fit to view.
  */
 export function readableFit(flow: Pick<ReactFlowInstance, 'getNodes' | 'setViewport'>, el: HTMLElement | null, startId?: string) {
   const nodes = flow.getNodes() as Node[];

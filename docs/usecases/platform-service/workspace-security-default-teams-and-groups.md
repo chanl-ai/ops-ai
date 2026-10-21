@@ -30,5 +30,4 @@ URLs, an OIDC client secret named `uc-oidc`, and the local fake identity provide
 
 ## Non-vacuous check
 
-`Sam no longer holds it in team_security`: with the re-mirroring removed, Sam keeps Security admin and the check fails
-(`.codeloop/evidence/202/`).
+`Sam no longer holds it in team_security`: with the re-mirroring removed, Sam keeps Security admin and the check fails.

@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { WorkspaceTeamFilters, WorkspaceTeamInput } from '@/lib/types/team';
@@ -10,7 +11,7 @@ const KEY = ['workspace-teams'] as const;
 
 /** Every team of the workspace, one server page at a time (workspace admins, c-198). */
 export const useWorkspaceTeams = (params: ListParams<WorkspaceTeamFilters>) =>
-  useQuery({ queryKey: [...KEY, params], queryFn: () => api.workspaceTeams.list(params), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: [...KEY, params], queryFn: () => api.workspaceTeams.list(params) });
 
 /** Whether the person is a workspace admin who may list and change teams, from the server's permissions. */
 export const useWorkspaceTeamsEditor = () => useQuery({ queryKey: [...KEY, 'editor'], queryFn: () => api.workspaceTeams.editor() });

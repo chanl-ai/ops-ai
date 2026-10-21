@@ -61,6 +61,22 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
 }
+Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
+# Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as
+# that chain's migrations grant its BYPASSRLS role on PostgreSQL: the agents loops' role, and the outbox relays and
+# documents' restart (c-415). Held equal to the PostgreSQL grants by test_model_parity.py.
+SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
+    SYSTEM_CHAIN: (SYSTEM_USER, SYSTEM_READS),
+    "files": ("ops_files_system", {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ())}),
+    "documents": (
+        "ops_documents_system",
+        {
+            "documents_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
+            "extractions": (("SELECT",), ()),
+            "document_type_tests": (("SELECT",), ()),
+        },
+    ),
+}
 # Each chain's first SQL Server baseline (2026-10-19, each chain's head that day). Revisions up to and including it are
 # PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both run.
 BASELINE = {
@@ -275,7 +291,7 @@ def compile_all(
         for t in c.tables:
             statements.append(_sql(CreateTable(t)) + ";")
             statements += [_sql(CreateIndex(ix)) + ";" for ix in sorted(t.indexes, key=lambda x: str(x.name))]
-        system = SYSTEM_USER if chain == SYSTEM_CHAIN else None
+        system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else None
         statements += [f"{s};" for s in security_ddl(chain, c.tables, column_type=_column_type, system_user=system)]
         statements += stamped
         omitted = "".join(f"-- not on SQL Server yet: {o}\n" for o in c.omitted)
@@ -332,8 +348,8 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
         f"-- Run as {MIGRATOR} in the database after the bundle and after each upgrade; every statement runs again.\n",
         "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.\n",
         "-- No other permission, so it can create, alter or drop nothing, read no other service's tables, and\n",
-        f"-- every security policy applies to it. The agents user may also impersonate {SYSTEM_USER} (no login),\n",
-        "-- which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.\n",
+        "-- every security policy applies to it. A chain's user may also impersonate that chain's system user (no\n",
+        "-- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.\n",
     ]
     statements: list[str] = []
     for c in chains_:
@@ -346,16 +362,17 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
             "\n".join(f"GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.{t} TO {user};" for t in c["tables"])
             + f"\nGRANT SELECT ON dbo.{c['versionTable']} TO {user};"
         )
-        if c["name"] == SYSTEM_CHAIN:
-            statements.append(f"IF USER_ID(N'{SYSTEM_USER}') IS NULL CREATE USER {SYSTEM_USER} WITHOUT LOGIN;")
+        if c["name"] in SYSTEM_USERS:
+            system, reads = SYSTEM_USERS[c["name"]]
+            statements.append(f"IF USER_ID(N'{system}') IS NULL CREATE USER {system} WITHOUT LOGIN;")
             statements.append(
                 "\n".join(
                     f"GRANT {', '.join(privileges)} ON dbo.{t}"
                     + (f" ({', '.join(columns)})" if columns else "")
-                    + f" TO {SYSTEM_USER};"
-                    for t, (privileges, columns) in SYSTEM_READS.items()
+                    + f" TO {system};"
+                    for t, (privileges, columns) in reads.items()
                 )
-                + f"\nGRANT IMPERSONATE ON USER::{SYSTEM_USER} TO {user};"
+                + f"\nGRANT IMPERSONATE ON USER::{system} TO {user};"
             )
     return "".join(out) + batches(statements)
 

@@ -18,6 +18,9 @@ class BoundLogger:
         merged = {**self._context, **fields}
         return event + "".join(f" {k}={v}" for k, v in merged.items())
 
+    def debug(self, event: str, **fields: Any) -> None:
+        self._log.debug(self._fmt(event, fields))
+
     def info(self, event: str, **fields: Any) -> None:
         self._log.info(self._fmt(event, fields))
 

@@ -48,8 +48,15 @@ TIMEOUT_S = 20.0
 VERSION_PARAM = re.compile(r"version", re.I)
 
 
+# GET routes a service serves outside its committed OpenAPI (the chat API is left out of agents-service's document).
+EXTRA_GETS: dict[str, list[str]] = {
+    "agents": ["/chat/agents", "/chat/default-agent", "/chat/threads", "/chat/threads/{thread_id}"],
+}
+
+
 def routes(service: str) -> list[tuple[str, list[str], list[str]]]:
-    """Each GET path of `service`, its path parameters and its required query parameters."""
+    """Each GET path of `service` (its committed OpenAPI and EXTRA_GETS), its path parameters and its required query
+    parameters."""
     spec = json.loads((ROOT / "services" / f"{service}-service" / "openapi.json").read_text())
     out = []
     for path, ops in sorted(spec["paths"].items()):
@@ -59,6 +66,7 @@ def routes(service: str) -> list[tuple[str, list[str], list[str]]]:
         params = [*get.get("parameters", []), *ops.get("parameters", [])]
         required = [p["name"] for p in params if p.get("in") == "query" and p.get("required")]
         out.append((path, re.findall(r"{([^}]+)}", path), required))
+    out += [(path, re.findall(r"{([^}]+)}", path), []) for path in EXTRA_GETS.get(service, [])]
     return out
 
 

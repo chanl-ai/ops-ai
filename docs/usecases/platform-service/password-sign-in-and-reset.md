@@ -35,4 +35,4 @@ identity provider and no model is called.
 ## Non-vacuous check
 
 `the link works once`: with the used-at condition removed from the reset, the second use answers 204 and the check
-fails (`.codeloop/evidence/188/`).
+fails.

@@ -78,8 +78,10 @@ def team_visible(table: sa.Table) -> sa.ColumnElement[bool]:
     column_name = table.info.get(TEAM_KEY)
     if column_name is None:
         raise ValueError(f"{table.name} is not marked TEAM_OWNED or team_owned_via")
-    owner: sa.ColumnElement[str] = table.c[str(column_name)]
-    return sa.or_(owner == team, owner.is_(None))
+    owner: sa.Column[str] = table.c[str(column_name)]
+    # A NOT NULL team column holds no workspace-level rows, and the bare equality lets the planner seek on an index
+    # leading (tenant_id, team_id, ...); the OR with IS NULL would not.
+    return owner == team if not owner.nullable else sa.or_(owner == team, owner.is_(None))
 
 
 def any_team(table: sa.Table, reason: str) -> sa.ColumnElement[bool]:

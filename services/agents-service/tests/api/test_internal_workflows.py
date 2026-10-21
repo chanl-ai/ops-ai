@@ -43,3 +43,21 @@ async def test_a_person_reads_their_teams_workflows_and_a_service_needs_a_tenant
     assert (await client.get(URL, headers=service(None))).status_code == 401, "a token naming no tenant is refused"
     unscoped = await client.get(URL, headers=service(scopes=()))
     assert unscoped.status_code == 403 and unscoped.json()["error"]["code"] == "scope_required", unscoped.text
+
+
+async def test_a_service_token_naming_a_team_still_reads_every_teams_workflows(client: AsyncClient) -> None:
+    # tools-service calls on behalf of a person, so its token names that person's team; the workflow it checks a grant
+    # for may belong to any team (c-407: the registry read is scoped to the acting team, so this read names why not).
+    body = {"name": f"Cards {new_id('x')}", "trigger": "manual"}
+    made = (await client.post("/v1/workflows", json=body, headers={"X-Team-Id": "team_cards"})).json()["data"]
+    token = mint_service_token(
+        dev_service_signer(),
+        service="tools",
+        audience="agents",
+        tenant_id="local",
+        scopes=["workflows:view"],
+        team_id="team_lending",
+    )
+    r = await client.get(URL, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200, r.text
+    assert made["id"] in [w["id"] for w in r.json()["data"]], "a team-named service token read one team's workflows"

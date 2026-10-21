@@ -4,6 +4,13 @@
 # node_modules (offline, from the store) and its own test database, dropped at exit, so two lanes checking at once
 # never share one.
 set -euo pipefail
+# One runner on this machine runs the full suite (the planning repo scripts/ops-ai/qa-watch.sh sets QA_RUNNER=1). Several
+# builders running it at once slowed every run and timed out database connects; ask the runner with scripts/qa.sh wait.
+# QA_LOCAL=1 runs it here anyway, for a machine with no runner.
+if [ -z "${QA_RUNNER:-}${QA_LOCAL:-}" ]; then
+  echo "verify-head: ask the QA runner instead: scripts/qa.sh wait (QA_LOCAL=1 runs it here)" >&2
+  exec "$(dirname "$0")/qa.sh" wait
+fi
 root="$(git rev-parse --show-toplevel)"
 head="$(git -C "$root" rev-parse --short HEAD)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/ops-ai-head.XXXXXX")"

@@ -154,26 +154,26 @@ The Parse node's contract, as designed:
 The Extract node takes `documents[]`, so a debtor named in the email body and one listed in the PDF come out the same,
 each with a source reference `{fileId, page}` that the case and the citation both show.
 
-## Worked example: a levy notice
+## Worked example: a court order notice
 
-A levy (a garnishment or requirement to pay) arrives by email from a court or tax authority and asks the bank to hold
+A court order notice (a garnishment or requirement to pay) arrives by email from a court or tax authority and asks the bank to hold
 funds for one or more debtors. It is the first workflow these types were tested against, and it is split into two
 workflows. One notice can name several people, and each needs its own owner, deadline, decision and audit trail; a
 human step inside a loop would hold the whole notice until every person was decided.
 
 ### Intake
 
-![Levy intake: mailbox, parse, classify, trusted sender, extract debtors, already seen, for each debtor identify the customer and start a case; every exit goes to a person or closes with a label](images/levy-intake.png)
+![Court order intake: mailbox, parse, classify, trusted sender, extract debtors, already seen, for each debtor identify the customer and start a case; every exit goes to a person or closes with a label](images/levy-intake.png)
 
-Every exit is a node, not an exception. Only a trusted, new levy reaches extraction and the bank.
+Every exit is a node, not an exception. Only a trusted, new order reaches extraction and the bank.
 
 | Situation | Node that handles it | Outcome |
 |---|---|---|
-| Spam, marketing, unrelated mail | Classify (levy, release or amendment, other legal, not relevant) | Closed with a label; no further model spend |
+| Spam, marketing, unrelated mail | Classify (court order, release or amendment, other legal, not relevant) | Closed with a label; no further model spend |
 | Sender is not a known court or registry | Trusted sender?, against a registry list | A person checks it; never straight to a hold |
 | Attachment unreadable, no text layer | The `unreadable` port | A person reads it |
 | The same notice again, by mail or another route | Already seen?, on the court case number | Linked to the open cases and closed |
-| Release or amendment of an earlier levy | Classify, then an agent finds the open case | The release path on that case |
+| Release or amendment of an earlier order | Classify, then an agent finds the open case | The release path on that case |
 | Debtor not found, or several possible customers | Matched?, after the identify agent | A person picks the customer or marks it unmatched |
 | Several debtors in one notice | For each debtor | One case each, started and left to run |
 | The registry replies to the bank's confirmation | The mailbox threads it to the case | A follow-up on the same case |
@@ -191,9 +191,9 @@ step that listens for the last case to close.
 
 ### The case
 
-![Levy case: started by intake, prepare the case with an agent and bank tools, a person decides hold or flag, place the hold as a governed write, confirm to the registry, end](images/levy-case.png)
+![Court order case: started by intake, prepare the case with an agent and bank tools, a person decides hold or flag, place the hold as a governed write, confirm to the registry, end](images/levy-case.png)
 
-Prepare the case notes any other open levy on the customer and recommends an amount per account when funds are short
+Prepare the case notes any other open court order on the customer and recommends an amount per account when funds are short
 or spread across accounts. The Hold option takes a list of account and amount pairs, and the review carries the
 registry's deadline (five business days) with escalation. The person decides with the agent's recommendation in front
 of them. Hold is a governed write covered by the decision's approval and a step-up. The registry confirmation is drafted
@@ -209,7 +209,7 @@ The workflows that run on the built types today, a customer hold and a complaint
 |---|---|---|
 | How tools, knowledge, model and memory attach | Through typed connections; later narrowed to model and knowledge, with tools and memory on the agent | The type model makes every attachment drawable and checkable |
 | Type versions pin per instance | Yes | A published workflow keeps running on the type version it pinned, which replay needs; a builder adopts a new type version per node |
-| Start workflow mode for levy | Continue | A notice must not stay open while its cases run for days |
+| Start workflow mode for court orders | Continue | A notice must not stay open while its cases run for days |
 | Loop as an explicit node | Yes, with `each` and `done` ports | Implicit fan-out cannot be drawn or checked |
 | Human review's options are its out ports | Yes, with Approve and Reject as the default two | The canvas shows every outcome as a path |
 

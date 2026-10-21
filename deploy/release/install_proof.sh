@@ -29,12 +29,21 @@ secret() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
 fail() { echo "proof: FAIL $*"; exit 1; }
 say() { echo "proof: $*"; }
 
-# Anonymous pulls: a Docker config of its own with no credentials, on the same engine and plugins.
+# Anonymous pulls: a Docker config of its own on the same engine and plugins. An empty config is not enough: the CLI
+# falls back to the platform's credential helper (osxkeychain, desktop) when none is named, so this one names a helper
+# that never has credentials.
+# SIGNED_IN=1 keeps this machine's registry login, for a run before the packages are public; the evidence says so.
 export DOCKER_HOST=${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}
-mkdir -p "$WORK/docker"
-echo '{}' >"$WORK/docker/config.json"
+[ "${SIGNED_IN:-0}" = 1 ] || {
+mkdir -p "$WORK/docker" "$WORK/bin"
+printf '#!/bin/sh\n[ "$1" = get ] && { echo "credentials not found in native keychain"; exit 1; }\n[ "$1" = list ] && echo "{}"\nexit 0\n' \
+  >"$WORK/bin/docker-credential-anonymous"
+chmod +x "$WORK/bin/docker-credential-anonymous"
+export PATH=$WORK/bin:$PATH
+echo '{"credsStore":"anonymous"}' >"$WORK/docker/config.json"
 [ -d "$HOME/.docker/cli-plugins" ] && ln -s "$HOME/.docker/cli-plugins" "$WORK/docker/cli-plugins"
 export DOCKER_CONFIG=$WORK/docker
+}
 
 cleanup() {
   if [ "${KEEP:-0}" = 1 ]; then say "left running: $PROJECT on :$PORT, $DBA_PROJECT on :$DBA_PORT (folder $WORK)"; return; fi
@@ -66,13 +75,20 @@ SHA=$(git -C "$CLONE" rev-parse HEAD)
 VERSION=$(tr -d ' \n' <"$CLONE/deploy/release/version")
 say "clone at $SHA; deploy/release/version says $VERSION"
 
-say "2. no local copy of ghcr.io/chanl-ai/ops-ai/*:$VERSION and no registry login"
+say "2. no local copy of ghcr.io/chanl-ai/ops-ai/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
 for t in platform agents tools models kb files documents opa proxy console db-scripts; do
   docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" >/dev/null 2>&1 || true
 done
 [ -z "$(docker images -q --filter "reference=ghcr.io/chanl-ai/ops-ai/*:$VERSION")" ] || fail "an image for $VERSION is still here"
+if [ "${SIGNED_IN:-0}" != 1 ]; then
 grep -q ghcr "$DOCKER_CONFIG/config.json" && fail "the proof's Docker config holds a login"
-say "docker config $DOCKER_CONFIG: $(cat "$DOCKER_CONFIG/config.json")"
+say "docker config: $(cat "$DOCKER_CONFIG/config.json") (a helper that never has credentials)"
+tok=$(curl -s "https://ghcr.io/token?scope=repository:chanl-ai/ops-ai/platform:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  "https://ghcr.io/v2/chanl-ai/ops-ai/platform/manifests/$VERSION")
+say "anonymous GET of ghcr.io/chanl-ai/ops-ai/platform:$VERSION's manifest: $code"
+[ "$code" = 200 ] || fail "the images are not public yet (anonymous manifest answered $code)"
+fi
 
 say "3. ./install.sh unattended from an answers file (project $PROJECT, port $PORT, built-in PostgreSQL, test model)"
 ADMIN_PW="proof admin $(secret)"
@@ -86,7 +102,7 @@ ADMIN_PASSWORD=$ADMIN_PW
 DATABASE=builtin
 MODEL=test
 EOF
-(cd "$CLONE" && ./install.sh --answers "$WORK/answers.txt" --yes) | tee "$LOG/install.txt" | grep -v '^ \(Container\|Volume\|Network\|Image\)\b'
+(cd "$CLONE" && ./install.sh --answers "$WORK/answers.txt" --yes) | tee "$LOG/install.txt" | grep -v '^ \(Container\|Volume\|Network\|Image\)\b' || fail "that step exited non-zero"
 T1=$(date +%s)
 grep -q '^Ops AI .* is running' "$LOG/install.txt" || fail "install did not finish"
 say "clone to signed in: $((T1 - T0))s"
@@ -105,27 +121,27 @@ walk "http://localhost:$PORT" admin@example.com "$ADMIN_PW"
 say "5. ./install.sh again on the working install"
 before=$(shasum -a 256 "$CLONE/ops-ai.env" | cut -c1-64)
 ids=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | sort | tr '\n' ' ')
-(cd "$CLONE" && ./install.sh --yes) | tee "$LOG/rerun.txt"
+(cd "$CLONE" && ./install.sh --yes) | tee "$LOG/rerun.txt" || fail "that step exited non-zero"
 grep -q 'nothing changed' "$LOG/rerun.txt" || fail "the rerun did not say it changed nothing"
 [ "$before" = "$(shasum -a 256 "$CLONE/ops-ai.env" | cut -c1-64)" ] || fail "the rerun rewrote ops-ai.env"
 [ "$ids" = "$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | sort | tr '\n' ' ')" ] || fail "the rerun replaced containers"
 say "rerun: ops-ai.env unchanged (sha256 $before), same containers"
 
 say "6. ./install.sh upgrade to the same version"
-(cd "$CLONE" && ./install.sh upgrade) | tee "$LOG/upgrade.txt"
+(cd "$CLONE" && ./install.sh upgrade) | tee "$LOG/upgrade.txt" || fail "that step exited non-zero"
 grep -q "Already at version $VERSION; nothing changed" "$LOG/upgrade.txt" || fail "upgrade to the same version changed something"
 [ "$before" = "$(shasum -a 256 "$CLONE/ops-ai.env" | cut -c1-64)" ] || fail "upgrade rewrote ops-ai.env"
 [ -z "$(find "$CLONE/backups" -name "*.tar.gz" 2>/dev/null)" ] || fail "a same-version upgrade made a backup"
 
 say "7. backup, a change after it, restore"
-(cd "$CLONE" && ./install.sh backup) | tee "$LOG/backup.txt"
+(cd "$CLONE" && ./install.sh backup) | tee "$LOG/backup.txt" || fail "that step exited non-zero"
 BACKUP=$(ls -t "$CLONE"/backups/*.tar.gz | head -n 1)
 tar tzf "$BACKUP" | sed 's/^/proof: backup holds /'
 DC="docker compose -p $PROJECT"
 $DC exec -T postgres psql -q -U ops -d ops -c 'CREATE TABLE install_proof_marker (id int)'
 docker run --rm -v "${PROJECT}_files-data:/data" alpine sh -c 'echo after-backup > /data/install-proof-marker'
 $DC exec -T postgres psql -At -U ops -d ops -c "SELECT 'marker table present: ' || count(*) FROM pg_tables WHERE tablename = 'install_proof_marker'"
-(cd "$CLONE" && ./install.sh restore "$BACKUP") | tee "$LOG/restore.txt"
+(cd "$CLONE" && ./install.sh restore "$BACKUP") | tee "$LOG/restore.txt" || fail "that step exited non-zero"
 grep -q '^Restored from' "$LOG/restore.txt" || fail "restore did not finish"
 n=$($DC exec -T postgres psql -At -U ops -d ops -c "SELECT count(*) FROM pg_tables WHERE tablename = 'install_proof_marker'")
 [ "$n" = 0 ] || fail "the table made after the backup is still there"
@@ -134,7 +150,7 @@ say "restore: the table and the file made after the backup are gone; the check p
 walk "http://localhost:$PORT" admin@example.com "$ADMIN_PW"
 
 say "8. ./install.sh status"
-(cd "$CLONE" && ./install.sh status) | tee "$LOG/status.txt"
+(cd "$CLONE" && ./install.sh status) | tee "$LOG/status.txt" || fail "that step exited non-zero"
 
 say "8b. an upgrade whose check fails rolls back: version $VERSION-broken, every image the same but a console that exits"
 BROKEN=$VERSION-broken
@@ -159,6 +175,11 @@ grep -q "rolled back to $VERSION" "$LOG/rollback.txt" || fail "the broken upgrad
 say "rollback: exit 1, back on $VERSION from the backup it took, and status passes"
 
 say "9. DBA mode against a separate PostgreSQL 17 (TLS, admin without superuser), model through Secrets"
+# The first install stops first: two stacks on one laptop's Docker share its memory, and health checks time out.
+(cd "$CLONE" && ./install.sh uninstall --yes --delete-data) || fail "uninstall"
+[ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT")" ] || fail "uninstall left containers"
+[ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")" ] || fail "uninstall left volumes"
+say "uninstall: no container or volume of $PROJECT is left"
 DBA_ADMIN_PW=$(secret)
 docker rm -fv $PG $FAKE >/dev/null 2>&1 || true
 docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 postgres:17 \
@@ -205,26 +226,28 @@ docker exec $PG psql -At -U postgres -d ops -c "SELECT DISTINCT 'connected: ' ||
   sed 's/^/proof: /'
 docker exec $PG psql -At -U postgres -d ops -c "SELECT 'schema owner of graph_threads: ' || tableowner FROM pg_tables WHERE tablename = 'graph_threads'" | sed 's/^/proof: /'
 walk "http://localhost:$DBA_PORT" admin@example.com "$DBA_ADMIN2_PW"
-(cd "$CLONE_DBA" && ./install.sh upgrade) | tee "$LOG/upgrade-dba.txt"
+(cd "$CLONE_DBA" && ./install.sh upgrade) | tee "$LOG/upgrade-dba.txt" || fail "that step exited non-zero"
 grep -q "nothing changed" "$LOG/upgrade-dba.txt" || fail "DBA-mode upgrade to the same version changed something"
 printf 'postgresql://opsadmin:%s@host.docker.internal:%s/ops?sslmode=require\n' "$DBA_ADMIN_PW" "$PG_PORT" >"$WORK/admin-url"
-(cd "$CLONE_DBA" && ./install.sh backup --admin-url-file "$WORK/admin-url") | tee "$LOG/backup-dba.txt"
+(cd "$CLONE_DBA" && ./install.sh backup --admin-url-file "$WORK/admin-url") | tee "$LOG/backup-dba.txt" || fail "that step exited non-zero"
 BACKUP_DBA=$(ls -t "$CLONE_DBA"/backups/*.tar.gz | head -n 1)
 (cd "$CLONE_DBA" && ./install.sh restore "$BACKUP_DBA" --admin-url-file "$WORK/admin-url") >"$LOG/restore-dba.txt" 2>&1 ||
   { cat "$LOG/restore-dba.txt"; fail "DBA-mode restore"; }
 grep '^PASS\|^FAIL\|^Restored' "$LOG/restore-dba.txt"
 
 say "10. no secret in this output"
+# Every value in the two settings files whose name says it is secret (keys, passwords, connection strings), the admin
+# passwords, the DBA admin's and the provider key; by name, so a printed project name or URL is not counted.
+: >"$WORK/secrets.txt"
 for f in "$CLONE/ops-ai.env" "$CLONE_DBA/ops-ai.env"; do
-  sed -n 's/^[A-Z_]*=//p' "$f" | awk 'length($0) >= 16' >>"$WORK/secrets.txt"
+  grep -E '^OPS_[A-Z_]*(KEY|KEYS|PASSWORD|DATABASE_URL)[A-Z_]*=.' "$f" | grep -v '^OPS_SERVICE_PUBLIC_KEYS=' >>"$WORK/secrets.txt" || true
 done
-printf '%s\n%s\n%s\n' "$ADMIN_PW" "$DBA_ADMIN2_PW" "$DBA_ADMIN_PW" >>"$WORK/secrets.txt"
-sed -n 's/^MODEL_API_KEY=//p' "$WORK/answers-dba.txt" >>"$WORK/secrets.txt"
-leaks=0
-while IFS= read -r s; do
-  case $s in http*|*example.com*|"Organisation name"|ghcr.io*) continue ;; esac
-  if grep -rqF -- "$s" "$LOG"; then leaks=$((leaks + 1)); fi
+printf 'ADMIN=%s\nDBA_ADMIN=%s\nDBA_SERVER_ADMIN=%s\n' "$ADMIN_PW" "$DBA_ADMIN2_PW" "$DBA_ADMIN_PW" >>"$WORK/secrets.txt"
+grep '^MODEL_API_KEY=' "$WORK/answers-dba.txt" >>"$WORK/secrets.txt"
+leaks=""
+while IFS= read -r line; do
+  if grep -rqF -- "${line#*=}" "$LOG"; then leaks="$leaks ${line%%=*}"; fi
 done <"$WORK/secrets.txt"
-[ "$leaks" = 0 ] || fail "$leaks secret value(s) appear in the logs"
-say "$(wc -l <"$WORK/secrets.txt" | tr -d ' ') secret values checked against every log: none printed"
+[ -z "$leaks" ] || fail "secret values appear in the logs:$leaks"
+say "$(wc -l <"$WORK/secrets.txt" | tr -d ' ') secret values (keys, passwords, connection strings) checked against every log: none printed"
 say "PASS install proof at $SHA, version $VERSION; clone to signed in $((T1 - T0))s"

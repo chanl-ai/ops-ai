@@ -1,6 +1,6 @@
 # ADR-0009 Chat experience inside the platform
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal; a chat session runs on agents-service's own agent run API (see `.codeloop/wiki/concepts/system-overview.md` and `.codeloop/wiki/concepts/chat.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-9.
+Status: superseded in part on 2026-10-16: Temporal was removed; a chat session runs on agents-service's own agent run API (see [workflows and agents](../../design/workflows/workflows-and-agents.md) and [chat in the console](../../console/chat.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-9.
 
 ## Context
 

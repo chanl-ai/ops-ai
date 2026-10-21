@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ops_access import can
-from ops_identity import Auth, CurrentService, install_auth
+from ops_identity import Auth, CurrentService, Principal, install_auth
 from ops_service_kit.errors import Forbidden, NotFound, ServiceUnavailable
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers
 from ops_service_kit.logging import quiet_request_logs
@@ -35,6 +35,7 @@ from .secrets import SecretMissing, SecretOutOfScope, SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
 from .store.mocks import MockStore
+from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
 from .tools import ToolRunner
 
@@ -270,6 +271,15 @@ def create_gateway_app(
             raise NotFound(f"Secret {', '.join(e.names)}") from e
         return JSONResponse({"success": True, "data": {"values": found}})
 
+    def team_view(caller: Principal) -> Callable[[Aggregate], bool] | None:
+        """The modules a run of the caller's team may reach (c-433): its own, workspace-level ones, and those approved
+        for one of its workflows, a grant that covers the team's agents too. None for a token naming no team, which
+        acts for the whole tenant."""
+        if not caller.team_id:
+            return None
+        team = (directory or Directory(teams=())).team(caller.team_id)
+        return lambda m: (directory or Directory(teams=())).sees_module(team, m)
+
     @app.get(
         "/v1/grantable-operations",
         tags=["gateway"],
@@ -280,7 +290,7 @@ def create_gateway_app(
         """The operations an agent of the caller's tenant may be granted, for a service holding `tools:view` (c-168).
         agents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own."""
         can(caller, "tools", "view", what="the grantable operations")
-        rows = await registry.grantable(caller.tenant_id)
+        rows = await registry.grantable(caller.tenant_id, team_view(caller))
         if await all_writes_wait(caller.tenant_id, caller.team_id):
             # The caller's team has every write wait, so the agents that list these pause before each one.
             rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
@@ -291,11 +301,9 @@ def create_gateway_app(
     async def tool_access(name: str, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
         on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
-        tenant = caller.tenant_id
-        access = await registry.access_for(name, tenant)
+        access, policy, output = await registry.described(name, caller.tenant_id)
         if access == "unknown":
             return as_response(Refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"]))
-        policy = await registry.policy_for(name, tenant)
         approval = (
             {
                 "approvers": policy["approvers"],
@@ -305,8 +313,7 @@ def create_gateway_app(
             if policy
             else {"approvers": 1, "approverTeam": None, "stepUp": False}
         )
-        # What the operation answers (c-353): a workflow step's output fields before it runs; null when unknown.
-        output = await registry.output_schema_for(name, tenant)
+        # `output`: what the operation answers (c-353), a step's output fields before it runs; null when unknown.
         data = {"name": name, "access": access, "approval": approval, "outputSchema": output}
         return JSONResponse({"success": True, "data": data})
 
@@ -356,6 +363,7 @@ def create_gateway_app(
             run_context=body.run_context.model_dump(),
             approval_token=body.approval_token,
         )
-        return as_response(await calls.call(caller, request, generation=x_lease_generation, channel=API))
+        found = await calls.call(caller, request, generation=x_lease_generation, channel=API, sees=team_view(caller))
+        return as_response(found)
 
     return app

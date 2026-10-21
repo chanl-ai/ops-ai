@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_files.store.files import service_outbox
+from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.store.read_requests import EVENT, ReadRequestsStore
 from ops_identity import ServiceClient
 from ops_store.outbox import Relay, Send
@@ -26,13 +26,12 @@ def sender(agents: ServiceClient, requests: ReadRequestsStore) -> Send:
         if body["name"] == EVENT and isinstance(answer, dict):
             done = cast(dict[str, Any], answer)
             runs = cast(list[str], done.get("runIds") or [])
-            await requests.started(
-                tenant, str(body["key"]), status=str(done.get("status")), run_id=next(iter(runs), None)
-            )
+            await requests.started(str(body["key"]), status=str(done.get("status")), run_id=next(iter(runs), None))
 
     return send
 
 
 async def keep_relaying(engine: AsyncEngine, agents: ServiceClient) -> None:
     """Until the server stops, which cancels the task."""
-    await Relay(engine, service_outbox, sender(agents, ReadRequestsStore(engine))).run(asyncio.Event())
+    relay = Relay(engine, service_outbox, sender(agents, ReadRequestsStore(engine)), role=SYSTEM_ROLE)
+    await relay.run(asyncio.Event())

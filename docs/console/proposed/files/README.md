@@ -1,6 +1,6 @@
 # File page and Extract, proposed
 
-Status: proposed, waiting for the maintainers. Built by c-262 from `docs/services/documents-service/design.html` screens 1
+Status: proposed, waiting for approval. Built by c-262 from `docs/services/documents-service/design.md` screens 1
 to 3, on the stack's real fixtures (TEST012.pdf, a synthetic restraining notice) and the demo's fake model. uc-227
 takes these screenshots; once approved they move to `docs/console/approved/files`.
 
@@ -13,7 +13,7 @@ takes these screenshots; once approved they move to `docs/console/approved/files
 | Files with Read as | [files-read-as-1280](files-read-as-1280.png) | |
 | Field boxes on the page, a field and its box selecting each other | [file-preview-boxes-1280](file-preview-boxes-1280.png) | |
 | A corrected value with what was read beside it | [file-fields-corrected-1280](file-fields-corrected-1280.png) | |
-| Fields restyled, before and after (owner: "they seem a bit muted") | [fields-look-fields-side-by-side](fields-look-fields-side-by-side.png), [fields-look-preview-side-by-side](fields-look-preview-side-by-side.png) | |
+| Fields restyled, before and after | [fields-look-fields-side-by-side](fields-look-fields-side-by-side.png), [fields-look-preview-side-by-side](fields-look-preview-side-by-side.png) | |
 
 Differences from the design, and why:
 

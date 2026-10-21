@@ -13,7 +13,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from ops_engine import default_registry
-from ops_engine.compiler import WriteInDoubtError, channel, compile_definition
+from ops_engine.compiler import NodeFailedError, WriteInDoubtError, channel, compile_definition
 from ops_engine.definition import parse, validate
 from ops_engine.journal import MemoryJournal, StepRow
 from ops_engine.ports import Access, AgentRequest, AgentResult, EnginePorts, Faults, ToolResult
@@ -257,8 +257,9 @@ async def test_a_review_will_not_approve_a_write_with_an_empty_input() -> None:
         journal=MemoryJournal(),
         checkpointer=InMemorySaver(),
     )
-    with pytest.raises(ValueError, match="amount is empty"):
+    with pytest.raises(NodeFailedError, match="review could not open: hold has no amount to use") as failed:
         await g.ainvoke({"input": {}}, config("r11"), durability="sync")
+    assert "amount is empty" in failed.value.detail, "the technical text stays behind the plain message"
 
 
 class FakeAgents:

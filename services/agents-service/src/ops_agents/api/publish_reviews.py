@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ops_agents.graphs.definition import WorkflowDefinition
-from ops_service_kit.errors import Conflict, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
 from . import deployment_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
@@ -34,8 +34,15 @@ def is_request_id(review_id: str) -> bool:
     return review_id.startswith(ID_PREFIXES)
 
 
-async def view(rt: Runtime, req: dict[str, Any], *, names: dict[tuple[str, int], str] | None = None) -> dict[str, Any]:
-    """`names`: the workflow versions' names, read together by a list so a workflow request reads none of its own."""
+async def view(
+    rt: Runtime,
+    req: dict[str, Any],
+    *,
+    names: dict[tuple[str, int], str] | None = None,
+    agents: dict[tuple[str, int], tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """`names`: the workflow versions' names, and `agents` each agent version's name and slug (named_versions), read
+    together by a list so a request reads none of its own."""
     if req["kind"] == deployment_reviews.KIND:
         return await deployment_reviews.view(rt, req)
     if req["kind"] == tool_module_reviews.KIND:
@@ -74,9 +81,12 @@ async def view(rt: Runtime, req: dict[str, Any], *, names: dict[tuple[str, int],
         policy = {**v["policy"], "id": "gp_guardrail_publish", "name": "Guardrail publish"}
         return {**v, "workflowId": "", "actionTool": "publish_guardrail", "policy": policy, "reasoning": topics}
     if req["kind"] == "agent":
-        row = await registry(rt).row(req["subject_id"])
-        name = (await registry(rt).version(req["subject_id"], int(req["version"])))["spec"]["name"]
-        return review_view(req, name=name, slug=row["slug"], sla_hours=await sla_hours(rt))
+        key = (str(req["subject_id"]), int(req["version"]))
+        found = agents if agents is not None else await registry(rt).named_versions({key})
+        if key not in found:
+            raise NotFound(f"Agent {key[0]} version {key[1]}")
+        name, slug = found[key]
+        return review_view(req, name=name, slug=slug, sla_hours=await sla_hours(rt))
     if req["kind"] == engine_lifecycle.KIND:
         subject = str(req["subject_id"])
         named = None if names is None else names.get((subject, int(req["version"])), subject)
@@ -96,11 +106,13 @@ async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     requests = await registry(rt).all_requests()
     pinned = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == engine_lifecycle.KIND}
     names = {k: str(row["name"]) for k, row in (await engine_lifecycle.definitions(rt).pinned(pinned)).items()}
+    asked = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == "agent"}
+    agents = await registry(rt).named_versions(asked)
     for req in requests:
         if req["kind"] == tool_access_reviews.KIND and req["status"] == "pending":
             continue
         try:
-            out.append(await view(rt, req, names=names))
+            out.append(await view(rt, req, names=names, agents=agents))
         except Exception:
             continue
     return out

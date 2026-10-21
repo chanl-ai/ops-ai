@@ -117,13 +117,13 @@ async def test_requests_run_as_the_tenant_role_which_cannot_bypass_rls(engine: A
 
 
 def test_only_the_two_loops_reach_past_rls() -> None:
-    """`tenant_of` and `Memories.tenants` are the reads under the bypass role; only the sweeper, the timer poller and
+    """`owner_of` and `Memories.tenants` are the reads under the bypass role; only the sweeper, the timer poller and
     the memory retention loop may call them."""
     callers: set[str] = set()
     system_users: set[str] = set()
     for path in SRC.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Attribute) and node.attr == "tenant_of":
+            if isinstance(node, ast.Attribute) and node.attr == "owner_of":
                 callers.add(path.relative_to(SRC).as_posix())
             if isinstance(node, ast.Name) and node.id == "system_tx":
                 system_users.add(path.relative_to(SRC).as_posix())
@@ -153,6 +153,23 @@ async def test_two_threads_worked_by_one_sweep_each_get_their_own_tenant(engine:
     assert got == [a, b]
     with pytest.raises(NoTenantError):
         current_tenant()  # the loop's own context never took a tenant
+
+
+async def test_a_sweep_works_a_thread_as_its_own_team(engine: AsyncEngine) -> None:
+    """The sweeper and the timer poller act as the claimed thread's team, not for its whole tenant (c-429)."""
+    from ops_agents.api.tenant_tasks import as_thread_tenant  # noqa: PLC0415
+    from ops_store import isolation  # noqa: PLC0415
+
+    tenant, thread_id = f"a-{uuid4().hex[:8]}", new_id("gth")
+    with tenant_scope(tenant):
+        await GraphStore(engine).create_thread(thread_id, "g", {}, "team_b", now_iso())
+
+    async def seen() -> tuple[str, str | None, str]:
+        ctx = isolation.current()
+        return ctx.tenant_id, ctx.team_id, ctx.scope
+
+    rt: Any = SimpleNamespace(graph_store=GraphStore(engine), graphs={"g": object()}, leases=object())
+    assert await as_thread_tenant(rt, thread_id, seen) == (tenant, "team_b", "team")
 
 
 class S(TypedDict):

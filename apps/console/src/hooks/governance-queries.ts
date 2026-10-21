@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { AuditFilters, AuditView, GrantFilters, GrantInput, GrantView, RoleFilters, RoleInput, ToolCallFilters } from '@/lib/types/governance';
 import type { ListParams } from '@/lib/types/query';
@@ -17,15 +18,13 @@ export const gk = {
   options: ['access', 'options'] as const,
 };
 
-const paged = { placeholderData: keepPreviousData };
-
-export const useToolCalls = (p: ListParams<ToolCallFilters>) => useQuery({ queryKey: gk.calls(p), queryFn: () => api.governance.toolCalls.list(p), ...paged });
+export const useToolCalls = (p: ListParams<ToolCallFilters>) => usePagedQuery({ queryKey: gk.calls(p), queryFn: () => api.governance.toolCalls.list(p) });
 export const useToolCall = (id: string | null) => useQuery({ queryKey: gk.call(id ?? ''), queryFn: () => api.governance.toolCalls.get(id!), enabled: !!id });
-export const useAudit = (p: ListParams<AuditFilters> & { view: AuditView }) => useQuery({ queryKey: gk.audit(p), queryFn: () => api.governance.audit.list(p), ...paged });
+export const useAudit = (p: ListParams<AuditFilters> & { view: AuditView }) => usePagedQuery({ queryKey: gk.audit(p), queryFn: () => api.governance.audit.list(p) });
 
-export const useIdentities = (p: ListParams) => useQuery({ queryKey: gk.identities(p), queryFn: () => api.governance.access.identities(p), ...paged });
-export const useGrants = (p: ListParams<GrantFilters> & { view: GrantView }) => useQuery({ queryKey: gk.grants(p), queryFn: () => api.governance.access.grants(p), ...paged });
-export const useRoles = (p: ListParams<RoleFilters>) => useQuery({ queryKey: gk.roles(p), queryFn: () => api.governance.access.roles(p), ...paged });
+export const useIdentities = (p: ListParams) => usePagedQuery({ queryKey: gk.identities(p), queryFn: () => api.governance.access.identities(p) });
+export const useGrants = (p: ListParams<GrantFilters> & { view: GrantView }) => usePagedQuery({ queryKey: gk.grants(p), queryFn: () => api.governance.access.grants(p) });
+export const useRoles = (p: ListParams<RoleFilters>) => usePagedQuery({ queryKey: gk.roles(p), queryFn: () => api.governance.access.roles(p) });
 export const useAccessOptions = () => useQuery({ queryKey: gk.options, queryFn: api.governance.access.options, staleTime: 60_000 });
 
 function useAccessWrite<A, R>(fn: (a: A) => Promise<R>) {

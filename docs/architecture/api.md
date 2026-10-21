@@ -1,6 +1,6 @@
 # The API
 
-Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/apis.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 ## Decisions
 

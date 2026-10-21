@@ -169,7 +169,11 @@ async def test_the_security_review_view_lists_pending_reviews_and_drops_decided_
     c, people = signed_in
     mid, v = await _reviewed_module(c, people["james"], "c163-ledger")
     params = {"view": "security_review", "pageSize": 100}
-    listed = (await c.get("/v1/tool-modules", params=params, headers=people["nadia"])).json()["data"]
+    # Security decides the review in Human Tasks; its Tools page lists only its own team's modules (c-423), so the
+    # owning team's list carries the pending review.
+    theirs = (await c.get("/v1/tool-modules", params=params, headers=people["nadia"])).json()["data"]
+    assert mid not in [m["id"] for m in theirs["data"]], "another team's module is not listed to Security"
+    listed = (await c.get("/v1/tool-modules", params=params, headers=people["james"])).json()["data"]
     row = next((m for m in listed["data"] if m["id"] == mid), None)
     assert row is not None and row["pendingReview"] == {
         "id": v["reviewId"],
@@ -178,5 +182,5 @@ async def test_the_security_review_view_lists_pending_reviews_and_drops_decided_
         "requestedAt": v["requestedAt"],
     }
     await c.post(f"/v1/tool-modules/{mid}/review-decisions", json=_decision(v), headers=service_headers(tenant))
-    after = (await c.get("/v1/tool-modules", params=params, headers=people["nadia"])).json()["data"]
+    after = (await c.get("/v1/tool-modules", params=params, headers=people["james"])).json()["data"]
     assert all(m["id"] != mid for m in after["data"])

@@ -33,6 +33,7 @@ from ops_agents.graphs.definition import CompiledCache, WorkflowDefinition
 from ops_agents.graphs.metering import MeteredModels
 from ops_agents.graphs.models import GraphModels, PydanticAiModels
 from ops_agents.graphs.registry import build_graphs
+from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient, install_auth
 from ops_metering import PriceTable
 from ops_service_kit.ids import now_iso
@@ -54,6 +55,7 @@ from .child_runs import ChildRuns
 from .deps import Runtime
 from .envelope import install_error_handlers
 from .fencing import ToolsFence
+from .file_names import FilesServiceNames
 from .key_summaries import PlatformKeySummaries
 from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
@@ -324,6 +326,9 @@ def create_app(
             else None
         )
         rt.tool_directory = directory
+        if settings.files_url:
+            files = FilesClient.from_settings(settings, service="agents", scopes=["files:view"])
+            rt.file_names = FilesServiceNames(files)
         rt.knowledge_bases = knowledge
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)

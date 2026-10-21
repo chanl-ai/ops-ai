@@ -24,6 +24,7 @@ from ops_service_kit.http import Envelope, ListResult, Pagination
 from ...store.cases import CaseNotFound, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
+from ..actors import actors
 from ..auth import Principal, caller_in, caller_of
 from ..case_page import assembled
 from ..deps import Runtime, runtime
@@ -125,6 +126,11 @@ class PersonRef(Out):
     name: str
 
 
+class CaseRow(CaseView):
+    # Who works the case, by name as its page says it; the list joins it so the console looks nothing up (c-403).
+    owner: PersonRef | None
+
+
 class NamedRef(Out):
     id: str
     name: str
@@ -195,7 +201,8 @@ class DraftedAction(Out):
 
 class FileLink(Out):
     file_id: str
-    name: str
+    # None when files-service cannot say; the console shows the id.
+    name: str | None
     viewer_href: str
 
 
@@ -336,7 +343,7 @@ class CasesQuery(BaseModel):
     pageSize: int = Field(default=25, ge=1, le=100)  # noqa: N815
 
 
-@router.get("", response_model=Envelope[ListResult[CaseView]])
+@router.get("", response_model=Envelope[ListResult[CaseRow]])
 async def list_cases(rt: Rt, me: Me, q: Annotated[CasesQuery, Query()]) -> JSONResponse:
     """The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving
     out a case that waits on the customer."""
@@ -355,7 +362,13 @@ async def list_cases(rt: Rt, me: Me, q: Annotated[CasesQuery, Query()]) -> JSONR
     pagination = Pagination(
         page=q.page, page_size=q.pageSize, total=total, total_pages=pages, has_next=q.page < pages, has_prev=q.page > 1
     )
-    result = {"data": [_view(r) for r in rows], "pagination": pagination.model_dump(by_alias=True), "facets": {}}
+    # One batched read of the page's owners; a person platform-service cannot name keeps their email as the name.
+    who = await actors(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
+    listed = [
+        _view(r) | {"owner": {"email": r["assignee"], "name": who[r["assignee"]]["name"]} if r["assignee"] else None}
+        for r in rows
+    ]
+    result = {"data": listed, "pagination": pagination.model_dump(by_alias=True), "facets": {}}
     return ok(result)
 
 

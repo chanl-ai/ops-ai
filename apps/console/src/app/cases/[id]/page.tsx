@@ -16,6 +16,8 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
+import { CopyIconButton } from '@/components/shared/setting/copy-field';
+import { MiddleTruncate } from '@/components/shared/setting/middle-truncate';
 import { AttributeCard, RecordLayout } from '@/components/shared/record-layout';
 import { Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +31,7 @@ import { relativeTime } from '@/lib/format';
 import type { CaseClock, CasePriority, CaseRecordDetail, CaseRecordPatch, CaseStatus } from '@/lib/types/case-records';
 
 const ACTION_KIND: Record<string, string> = { reply: 'Reply', tool: 'Tool call' };
-const ACTION_STATUS: Record<string, string> = { pending: 'Waiting on its task', approved: 'Approved', rejected: 'Rejected' };
+const ACTION_STATUS: Record<string, string> = { pending: 'Waiting on its task', approved: 'Approved', refused: 'Refused', rejected: 'Rejected' };
 
 /** A clock from the server's state: met and paused say so; a running or breached one counts down or up. */
 function ClockState({ clock, paused, testId }: { clock: CaseClock; paused: boolean; testId: string }) {
@@ -169,7 +171,17 @@ export default function CasePage() {
                 {/* Each kind of link has its row, so an empty one says None rather than vanishing. */}
                 {!links.files.length && <FieldRow icon={FileText} label="Files" value="None" />}
                 {links.files.map((f) => (
-                  <FieldRow key={f.fileId} icon={FileText} label="File" value={f.name} href={f.viewerHref} wrap testId="case-link-file" />
+                  // The file by name; its id copies from the button and shows whole on hover.
+                  <FieldRow
+                    key={f.fileId}
+                    icon={FileText}
+                    label="File"
+                    value={f.name ?? <MiddleTruncate text={f.fileId} />}
+                    href={f.viewerHref}
+                    wrap
+                    adornment={<CopyIconButton value={f.fileId} label="file id" />}
+                    testId="case-link-file"
+                  />
                 ))}
                 {!links.runs.length && <FieldRow label="Runs" value="None" />}
                 {links.runs.map((r) => (
@@ -275,7 +287,11 @@ export default function CasePage() {
                       <ItemDescription>{[ACTION_KIND[a.kind] ?? a.kind, a.approvalsNeeded > 1 ? `${a.approvalsGiven} of ${a.approvalsNeeded} approvals` : 'one approver'].join(' · ')}</ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <Badge variant={a.status === 'approved' ? 'secondary' : 'outline'} className="font-normal">
+                      <Badge
+                        variant={a.status === 'approved' ? 'secondary' : 'outline'}
+                        className={a.status === 'refused' ? 'border-destructive/40 bg-destructive/10 font-normal text-destructive' : 'font-normal'}
+                        title={a.status === 'refused' ? 'Approved, but the call answered with an error' : undefined}
+                      >
                         {ACTION_STATUS[a.status] ?? a.status}
                       </Badge>
                       <Button variant="ghost" size="sm" asChild>

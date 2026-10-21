@@ -1,0 +1,86 @@
+<svg class="flow" viewBox="0 0 1060 440" role="img" aria-label="Pipeline: arrive, store, layout, classify and split, extract by template or by model, validate and score, use; review by a person; learning loop back to the document type." xmlns="http://www.w3.org/2000/svg" width="1060" height="440"><style>
+svg{--bg:#f7f8f7;--panel:#fff;--fg:#1d2420;--muted:#5d6a63;--line:#c9d3cd;--wire:#eef1ef;--wire2:#dfe5e1;--accent:#1f7a55;--accent-soft:#e3f2ea;--warn:#a5640b;--warn-soft:#fbefdc;--learn:#4b4fb0;--learn-soft:#e9eaf8;--hl:rgba(31,122,85,.18);--hl2:rgba(165,100,11,.22);color-scheme:light}
+@media (prefers-color-scheme:dark){svg:not([data-theme="light"]){--bg:#121614;--panel:#1a201d;--fg:#e4ebe7;--muted:#9aa8a0;--line:#34403a;--wire:#212825;--wire2:#2c3430;--accent:#5fc89b;--accent-soft:#1d3329;--warn:#e7a54a;--warn-soft:#3a2c17;--learn:#9a9ef0;--learn-soft:#25264a;--hl:rgba(95,200,155,.22);--hl2:rgba(231,165,74,.25);color-scheme:dark}}
+svg[data-theme="dark"]{--bg:#121614;--panel:#1a201d;--fg:#e4ebe7;--muted:#9aa8a0;--line:#34403a;--wire:#212825;--wire2:#2c3430;--accent:#5fc89b;--accent-soft:#1d3329;--warn:#e7a54a;--warn-soft:#3a2c17;--learn:#9a9ef0;--learn-soft:#25264a;--hl:rgba(95,200,155,.22);--hl2:rgba(231,165,74,.25);color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0}
+main{max-width:1180px;margin:0 auto;padding-block:32px 64px;padding-inline:16px;display:flex;flex-direction:column;gap:32px}
+h1{font-size:1.6rem;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 6px}
+h3{font-size:.95rem;margin:0 0 6px}
+p{margin:0 0 8px;max-width:75ch}
+.lede{color:var(--muted)}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.9rem}
+nav.toc a{color:var(--accent)}
+figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+figcaption{color:var(--muted);font-size:.85rem;margin-top:10px}
+svg.flow{display:block;min-width:900px;width:100%;height:auto}
+svg.flow text{fill:currentColor;font-family:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card p,.card li{font-size:.9rem;color:var(--muted)}
+.card ul{margin:6px 0 0;padding-left:18px}
+.tag{display:inline-block;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:1px 6px;margin-bottom:6px}
+.t-svc{background:var(--accent-soft);color:var(--accent)}
+.t-learn{background:var(--learn-soft);color:var(--learn)}
+.t-open{background:var(--warn-soft);color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+th,td{text-align:left;padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+code{font-size:.84em}
+.pill{display:inline-block;font-size:.72rem;border-radius:999px;padding:0 7px;white-space:nowrap}
+.built{background:var(--accent-soft);color:var(--accent)}
+.planned{background:var(--warn-soft);color:var(--warn)}
+.moves{background:var(--learn-soft);color:var(--learn)}
+/* low-fi wireframes */
+.wf{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.wf-title{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.wf-title b{font-size:.95rem}
+.c{font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--learn);background:var(--learn-soft);border-radius:3px;padding:0 4px;white-space:nowrap}
+.box{background:var(--wire);border:1px dashed var(--line);border-radius:6px;padding:8px;font-size:.82rem;color:var(--muted);min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:.78rem;background:var(--panel);color:var(--fg)}
+.btn.p{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.line{height:7px;border-radius:3px;background:var(--wire2);margin:5px 0}
+.split{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:8px}
+@media (max-width:640px){.split{grid-template-columns:1fr}}
+.page{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;min-height:220px}
+.hlb{position:relative;border-radius:2px;padding:1px 3px}
+.hlb.a{background:var(--hl);outline:1.5px solid var(--accent)}
+.hlb.w{background:var(--hl2);outline:1.5px solid var(--warn)}
+.trow{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.4fr) minmax(0,1fr);gap:6px;font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--wire2)}
+.fld{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;font-size:.78rem;padding:6px;border-radius:5px;border:1px solid var(--wire2);background:var(--panel)}
+.fld small{color:var(--muted);grid-column:1/-1}
+.conf{font-size:.72rem;border-radius:999px;padding:0 6px}
+.mermaid{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+svg{background:var(--panel, #fff)}</style>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<g style="color:var(--muted)" stroke="currentColor" stroke-width="1.4" fill="none">
+<line x1="118" y1="90" x2="146" y2="90" marker-end="url(#ar)"/><line x1="266" y1="90" x2="294" y2="90" marker-end="url(#ar)"/><line x1="414" y1="90" x2="442" y2="90" marker-end="url(#ar)"/>
+<line x1="562" y1="90" x2="590" y2="60" marker-end="url(#ar)"/><line x1="562" y1="90" x2="590" y2="130" marker-end="url(#ar)"/>
+<line x1="740" y1="60" x2="768" y2="90" marker-end="url(#ar)"/><line x1="740" y1="130" x2="768" y2="90" marker-end="url(#ar)"/>
+<line x1="888" y1="90" x2="916" y2="90" marker-end="url(#ar)"/><line x1="976" y1="122" x2="976" y2="236" marker-end="url(#ar)"/>
+<path d="M916 270 L740 270" marker-end="url(#ar)"/><path d="M660 300 L660 380 L600 380" marker-end="url(#ar)"/>
+<path d="M440 380 L320 380 L320 300" marker-end="url(#ar)" stroke-dasharray="5 4"/>
+</g>
+<g style="color:var(--line)" fill="var(--panel)" stroke="currentColor" stroke-width="1.2">
+<rect x="10" y="58" width="108" height="64" rx="8"/><rect x="146" y="58" width="120" height="64" rx="8"/><rect x="294" y="58" width="120" height="64" rx="8"/><rect x="442" y="58" width="120" height="64" rx="8"/>
+<rect x="590" y="30" width="150" height="58" rx="8"/><rect x="590" y="104" width="150" height="58" rx="8"/><rect x="768" y="58" width="120" height="64" rx="8"/><rect x="916" y="58" width="120" height="64" rx="8"/>
+<rect x="916" y="238" width="120" height="64" rx="8"/><rect x="580" y="238" width="160" height="64" rx="8"/><rect x="440" y="350" width="160" height="60" rx="8"/><rect x="120" y="238" width="240" height="64" rx="8"/>
+</g>
+<g font-size="12.5" text-anchor="middle">
+<text x="64" y="86" font-weight="600">Arrive</text><text x="64" y="104" style="fill:var(--muted)">email · API · upload</text>
+<text x="206" y="86" font-weight="600">Store</text><text x="206" y="104" style="fill:var(--muted)">files-service</text>
+<text x="354" y="86" font-weight="600">Layout</text><text x="354" y="104" style="fill:var(--muted)">blocks + boxes</text>
+<text x="502" y="86" font-weight="600">Classify, split</text><text x="502" y="104" style="fill:var(--muted)">which type, which pages</text>
+<text x="665" y="55" font-weight="600">Template path</text><text x="665" y="73" style="fill:var(--muted)">zones, no model</text>
+<text x="665" y="129" font-weight="600">Model path</text><text x="665" y="147" style="fill:var(--muted)">quotes; boxes found</text>
+<text x="828" y="86" font-weight="600">Validate, score</text><text x="828" y="104" style="fill:var(--muted)">rules · lookups</text>
+<text x="976" y="86" font-weight="600">Workflow decides</text><text x="976" y="104" style="fill:var(--muted)">store · review · act</text>
+<text x="976" y="266" font-weight="600">Workflow: read check</text><text x="976" y="284" style="fill:var(--muted)">a person corrects</text>
+<text x="660" y="266" font-weight="600">Corrections saved</text><text x="660" y="284" style="fill:var(--muted)">original kept</text>
+<text x="520" y="376" font-weight="600">Learn</text><text x="520" y="394" style="fill:var(--muted)">examples · accuracy</text>
+<text x="240" y="266" font-weight="600">Document type, new version</text><text x="240" y="284" style="fill:var(--muted)">template or description, confirmed</text>
+</g>
+<g font-size="11" style="fill:var(--muted)" text-anchor="middle"><text x="976" y="172">fields flagged below the floor</text><text x="380" y="345">"make a template?"</text><text x="380" y="372">after 5 confirmed, same layout</text></g>
+</svg>

@@ -497,7 +497,15 @@ def ensure_document_types(builder: Session, kinds: list[dict[str, Any]]) -> None
         }
         made = builder("documents").post("/v1/document-types", json=body)
         if made.status_code == 409:
-            say("FOUND", f"document type {kind['name']}", kind["id"])
+            # The id is taken in the workspace; it is this team's only if the team can read it.
+            if builder("documents").get(f"/v1/document-types/{kind['id']}").status_code == 200:
+                say("FOUND", f"document type {kind['name']}", kind["id"])
+            else:
+                say(
+                    "FAIL",
+                    f"document type {kind['name']}",
+                    f"{kind['id']} is another team's: seed with --workflow-prefix",
+                )
             continue
         data(made)
         say("MADE", f"document type {kind['name']}", f"{kind['id']} v1, {len(body['fields'])} fields")
@@ -617,6 +625,18 @@ def definition_of(wf: dict[str, Any], names: dict[str, str], mailbox: str | None
     return copy
 
 
+def levy_story(wf: dict[str, Any]) -> bool:
+    """Whether a team.json workflow belongs to the levy story: a copy of a seeded levy workflow, which
+    deploy/fly/staging/mailbox_demo.py levy makes under the team's own ids."""
+    return "seed" in wf
+
+
+def team_workflows(spec: dict[str, Any], *, no_levy: bool) -> list[dict[str, Any]]:
+    """The workflows the seed makes: with `--no-levy` the levy walk makes the levy story's, so the seed leaves them out
+    and the team has one copy of each."""
+    return [wf for wf in spec["workflows"] if not (no_levy and levy_story(wf))]
+
+
 def ensure_workflows(
     builder: Session, approver: Session, workflows: list[dict[str, Any]], names: dict[str, str], mailbox: str | None
 ) -> None:
@@ -640,6 +660,102 @@ def ensure_workflows(
             api.post(f"/v1/workflows/definitions/{wid}/publish-requests", json={"note": "First release for the team."})
         )
         decide_publish(approver, review, f"workflow {definition['name']}")
+
+
+def ensure_tool_access(
+    admin: Session, team: str, *, owning_team: str, modules: list[str], approver: Session, why: str
+) -> None:
+    """`--tool-access`: each of the team's live workflows is granted the operations of each module another team owns
+    (the bank system, the platform tools), as a builder asks on the module's Access tab and that team's approver
+    decides in Human Tasks. The grant is what lets the team's people see those modules and its runs call them (c-423,
+    c-433). A workflow no team owns is left out; one already granted, or waiting, is not asked again."""
+    ours = Session(admin.urls, admin.token, admin.email, team)
+    flows = [
+        w
+        for w in items(data(ours("agents").get("/v1/workflows/definitions", params={"pageSize": 100})))
+        if w.get("status") == "live"
+    ]
+    owner = sign_in(admin.urls, admin.email, admin.password, owning_team)
+    approver.team = owning_team
+    for module_id in modules:
+        module = data(owner("tools").get(f"/v1/tool-modules/{module_id}"))
+        operations = [o["name"] for o in module["operations"] if o.get("enabled", True)]
+        for flow in flows:
+            what = f"tool access {module['displayName']} for {flow['name']} ({flow['workflowId']})"
+            held = [a for a in module.get("approvals") or [] if a["workflowId"] == flow["workflowId"]]
+            if any(a["status"] == "approved" for a in held):
+                say("FOUND", what, "approved")
+                continue
+            asked = next((a for a in held if a["status"] == "requested"), None)
+            if asked is None:
+                body = {
+                    "workflowId": flow["workflowId"],
+                    "environment": "production",
+                    "operations": operations,
+                    "expiresInDays": 365,
+                    "justification": why,
+                }
+                # Asked by the module's own team, which reads the module; tools-service finds the workflow in any team.
+                r = owner("tools").post(f"/v1/tool-modules/{module_id}/approvals", json=body)
+                if r.status_code == 422:
+                    say("SKIP", what, "no team owns the workflow")
+                    continue
+                asked = data(r)
+            key = str(asked["reviewId"])
+            review = until(lambda k=key: _review_by_key(approver, k), seconds=90)
+            if review is None:
+                say("FAIL", what, f"no Human Task for {key} within 90 s (is the workflow worker up?)")
+                continue
+            decide(approver, str(review["id"]), {"decision": "approve", "reason": why})
+            say("MADE", what, f"approved by {approver.email}")
+
+
+def _review_by_key(who: Session, key: str) -> dict[str, Any] | None:
+    """The Human Task of a service event's run, once the run has reached it."""
+    r = who("agents").get(f"/reviews/by-run-key/{key}")
+    return data(r) if r.status_code == 200 else None
+
+
+EXTRAS_FILE = HERE / "team_extras.json"
+
+
+def ensure_extras(people: dict[str, Session], agents: dict[str, str], extras: dict[str, Any]) -> None:
+    """`--extras`: what a bank team holds beside team.json's story: its shared skills and guardrails, each published
+    through review, and the agent its chats start on. Each is found by name before it is made."""
+    builder, approver, admin = people["builder"], people["approver"], people["admin"]
+    have = {s["name"]: s for s in items(data(builder("agents").get("/v1/skills", params={"pageSize": 100})))}
+    for skill in extras.get("skills", []):
+        found = have.get(skill["name"]) or data(builder("agents").post("/v1/skills", json=skill))
+        sid = str(found["id"])
+        detail = data(builder("agents").get(f"/v1/skills/{sid}"))
+        if detail.get("publishedVersion") is not None:
+            say("FOUND", f"skill {skill['name']}", f"{sid} published")
+            continue
+        if not detail.get("pendingReviewId"):
+            note = {"note": "For the team."}
+            detail = data(builder("agents").post(f"/v1/skills/{sid}/publish-requests", json=note))
+        # A skill's publish answers the skill; its open request is `pendingReviewId`, none when it went live at once.
+        pending = detail.get("pendingReviewId")
+        decide_publish(approver, {"id": pending} if pending else {"status": "published"}, f"skill {skill['name']}")
+    rules = {g["name"]: g for g in items(data(builder("agents").get("/v1/guardrails", params={"pageSize": 100})))}
+    for rule in extras.get("guardrails", []):
+        found = rules.get(rule["name"]) or data(builder("agents").post("/v1/guardrails", json=rule))
+        gid = str(found["id"])
+        if found.get("publishedVersion") is not None:
+            say("FOUND", f"guardrail {rule['name']}", f"{gid} published")
+            continue
+        if not found.get("pendingRequestId"):
+            body = {"version": found.get("version") or 1, "note": "For the team."}
+            found = data(builder("agents").post(f"/v1/guardrails/{gid}/publish-requests", json=body))
+        pending = found.get("pendingRequestId")
+        decide_publish(approver, {"id": pending} if pending else {"status": "published"}, f"guardrail {rule['name']}")
+    if (key := extras.get("defaultAgent")) and key in agents:
+        found = data(admin("agents").get("/chat/default-agent"))
+        if found.get("agentId") == agents[key]:
+            say("FOUND", "default chat agent", agents[key])
+        else:
+            data(admin("agents").put("/chat/default-agent", json={"agentId": agents[key]}))
+            say("MADE", "default chat agent", agents[key])
 
 
 # ── The levy notice by email ─────────────────────────────────────────────────────────────────────────────────────
@@ -1021,15 +1137,21 @@ def ensure_runs(people: dict[str, Session], runs: list[dict[str, Any]], names: d
 
 
 def prefixed(spec: dict[str, Any], prefix: str) -> None:
-    """Every workflow the team makes under `prefix` + its id, with the workflows it starts and the runs that name it
-    following, so the team's copies never meet another team's ids."""
+    """Every workflow and document type the team makes under `prefix` + its id, with the workflows and types each
+    workflow names and the runs that name it following, so the team's copies never meet another team's ids: both
+    kinds of id are unique in the workspace and belong to the first team that makes one (c-440)."""
     ids: dict[str, str] = {}
     for wf in spec["workflows"]:
         own = wf.get("id") or json.loads((HERE / "workflows" / wf["file"]).read_text())["id"]
         ids[own] = wf["id"] = f"{prefix}{own}"
+    kinds: dict[str, str] = {}
+    for kind in spec["documentTypes"]:
+        kinds[kind["id"]] = kind["id"] = f"{prefix}{kind['id']}"
     for wf in spec["workflows"]:
         if "workflows" in wf:
             wf["workflows"] = {k: ids.get(v, v) for k, v in wf["workflows"].items()}
+        if "documentTypes" in wf:
+            wf["documentTypes"] = {k: kinds.get(v, v) for k, v in wf["documentTypes"].items()}
     for run in spec["runs"]:
         run["workflow"] = ids.get(run["workflow"], run["workflow"])
 
@@ -1062,14 +1184,29 @@ def main() -> int:
     ap.add_argument(
         "--workflow-prefix",
         default="",
-        help="put before every workflow id the team makes: a workflow id belongs to the first team that publishes "
-        "it, so a second demo team in one workspace needs its own ids",
+        help="put before every workflow and document type id the team makes: each id belongs to the first team that "
+        "makes it, so a second demo team in one workspace needs its own ids",
+    )
+    ap.add_argument(
+        "--tool-access",
+        action="append",
+        default=[],
+        metavar="MODULE_ID",
+        help="a tool module another team owns that the team's workflows are granted; repeatable",
+    )
+    ap.add_argument("--tool-access-team", help="the team that owns the --tool-access modules and decides the grants")
+    ap.add_argument("--tool-approver", help="a person who decides that team's tool access requests")
+    ap.add_argument("--tool-approver-password-env", default="OPS_DEMO_TOOL_APPROVER_PASSWORD")
+    ap.add_argument(
+        "--extras",
+        action="store_true",
+        help="also make team_extras.json: the team's skills and guardrails, published, and its default chat agent",
     )
     ap.add_argument(
         "--no-levy",
         action="store_true",
-        help="leave out the levy notice story: its read runs on the documents model, which is a real one on staging; "
-        "the levy walk (docs/console/mailbox-demo.md) makes that story from a mailbox instead",
+        help="leave out the levy notice story and its workflows: its read runs on the documents model, which is a real "
+        "one on staging; the levy walk (docs/console/mailbox-demo.md) makes that story and its workflows instead",
     )
     args = ap.parse_args()
     env = read_env(args.admin_env)
@@ -1116,7 +1253,15 @@ def main() -> int:
     names = {f"agent:{k}": v for k, v in agents.items()}
     ensure_document_types(builder, spec["documentTypes"])
     mailbox = ensure_mailbox(admin, lead, env, spec["mailbox"])
-    ensure_workflows(builder, people["approver"], spec["workflows"], names, mailbox)
+    ensure_workflows(builder, people["approver"], team_workflows(spec, no_levy=args.no_levy), names, mailbox)
+    if args.tool_access:
+        if not (args.tool_access_team and args.tool_approver and os.environ.get(args.tool_approver_password_env)):
+            raise SystemExit("seed: --tool-access needs --tool-access-team, --tool-approver and its password")
+        approver = sign_in(urls, args.tool_approver, os.environ[args.tool_approver_password_env])
+        why = "The team's workflows read customers and accounts and write holds and replies through these tools."
+        ensure_tool_access(
+            admin, team, owning_team=args.tool_access_team, modules=args.tool_access, approver=approver, why=why
+        )
     ensure_runs(people, spec["runs"], names)
     if args.no_levy:
         say("SKIP", "levy notice story", "--no-levy")
@@ -1124,6 +1269,8 @@ def main() -> int:
         ensure_levy_mail(people, env, mailbox, spec["levyMail"])
     ensure_cases(people, spec["cases"])
     ensure_chats(people, spec["chats"], agents)
+    if args.extras:
+        ensure_extras(people, agents, json.loads(EXTRAS_FILE.read_text()))
     MODELS.live_now()
     print(f"\n{len(FAILED)} failed", flush=True)
     return len(FAILED)

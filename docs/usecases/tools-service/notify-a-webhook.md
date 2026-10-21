@@ -2,7 +2,7 @@
 
 Status: passing. Id: `uc-230`. Service: `tools-service`. Layers: api.
 
-The levy demo sends the data read from a notice to an outside system. `notify_webhook` is an operation of the core
+The court order demo sends the data read from a notice to an outside system. `notify_webhook` is an operation of the core
 bank module: a POST through the gateway, to a host on the egress allow-list, signed with a stored secret, logged like
 any call. The bank stand-in's `/webhooks` receiver plays the outside system and lists what it received on a page.
 

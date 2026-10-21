@@ -43,4 +43,4 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 `a viewer reading the audit is 403`: with the admin check on the audit route removed, Maya reads it (200) and the
 check fails.
 
-UI layer: with the console's platform adapter not applied, steps 1 to 3 fail (`.codeloop/evidence/077/red-adapter-off.txt`).
+UI layer: with the console's platform adapter not applied, steps 1 to 3 fail.

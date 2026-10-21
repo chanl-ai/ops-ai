@@ -42,6 +42,7 @@ from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 
 log = get_logger("ops_documents.extraction")
 
@@ -448,7 +449,7 @@ class Extractor:
         answers outcome unknown, for a person, when no kind fits or the model is less sure than the floor."""
         if body.get("detect") and not body.get("documentTypeId") and not body.get("fields"):
             if idempotency_key is not None:
-                held = await self.store.held(who.tenant_id, _key_hash(who, idempotency_key))
+                held = await self.store.held(_key_hash(who, idempotency_key))
                 if held is not None and held.status != "failed":
                     # A retried step reads the first answer; it never pays for a second classification.
                     return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
@@ -509,7 +510,7 @@ class Extractor:
             if held.status != "failed" or held.error_code == "schema_error":
                 return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
             # A retry after the floor or the model was out of reach runs it again; a schema error stays the answer.
-            held = await self.store.requeue(held.tenant_id, held.id)
+            held = await self.store.requeue(held.id)
         pages = None
         if inline or row.size <= SYNC_BYTES:
             pages = await self._pages(who, row, request)
@@ -580,23 +581,19 @@ class Extractor:
         if held.id != extraction_id:
             return answer_of(held)
         result = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
-        await self.store.finish(
-            who.tenant_id, extraction_id, status="done", outcome="unknown", result=result, at=self.clock()
-        )
+        await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
         return answer_of(await self._row(who.tenant_id, extraction_id))
 
     async def get(self, who: Who, extraction_id: str) -> dict[str, Any] | None:
-        row = await self.store.get(who.tenant_id, extraction_id)
+        row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
-        return answer_of(row) | {"corrections": await self.store.corrections(who.tenant_id, extraction_id)}
+        return answer_of(row) | {"corrections": await self.store.corrections(extraction_id)}
 
     async def for_file(self, who: Who, file_id: str, *, page: int, page_size: int) -> tuple[list[dict[str, Any]], int]:
         """One page of the team's extractions of a file it can see, newest first (c-250: the file page's Fields tab)."""
         await self.files.readable(who, file_id)
-        rows, total = await self.store.for_file(
-            who.tenant_id, who.team, file_id, offset=(page - 1) * page_size, limit=page_size
-        )
+        rows, total = await self.store.for_file(who.team, file_id, offset=(page - 1) * page_size, limit=page_size)
         return [answer_of(r) for r in rows], total
 
     async def correct(
@@ -604,7 +601,7 @@ class Extractor:
     ) -> dict[str, Any] | None:
         """A checker's value for one field of a done extraction. The answer then carries the corrected value, and the
         correction row keeps the original value and confidence, so a correction never erases what was extracted."""
-        row = await self.store.get(who.tenant_id, extraction_id)
+        row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
         if row.status != "done" or row.result is None:
@@ -700,7 +697,7 @@ class Extractor:
         doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
         if not doc_type:
             return None
-        newest, _ = await self.store.for_file(who.tenant_id, who.team, row.file_id, offset=0, limit=1)
+        newest, _ = await self.store.for_file(who.team, row.file_id, offset=0, limit=1)
         if not newest or newest[0].id != row.id:
             return None
         name = await self.types.name(who, str(doc_type.get("id"))) if self.types is not None else None
@@ -741,15 +738,18 @@ class Extractor:
         task.add_done_callback(self._tasks.discard)
 
     async def _background(self, row: ExtractionRow) -> None:
+        """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them."""
+        with isolation.scope(row.tenant_id, row.team):
+            await self._read(row)
+
+    async def _read(self, row: ExtractionRow) -> None:
         try:
             who = Who(tenant_id=row.tenant_id, team=row.team, actor=row.asked_by)
             file = await self.files.readable(who, row.file_id)
             await self._run(row, file, await self._pages(who, file, row.request))
         except Exception as e:
             log.warning("extraction failed", extra={"extraction": row.id, "error": str(e)})
-            await self.store.finish(
-                row.tenant_id, row.id, status="failed", at=self.clock(), error_code="failed", error=str(e)
-            )
+            await self.store.finish(row.id, status="failed", at=self.clock(), error_code="failed", error=str(e))
 
     async def _pages(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Pages:
         """The text the model reads, from the file's layout: titles, headings and each table cell on lines of their
@@ -759,8 +759,8 @@ class Extractor:
 
     async def _run(self, row: ExtractionRow, file: FileInfo, pages: Pages) -> ExtractionRow:
         tenant, eid = row.tenant_id, row.id
-        if not await self.store.start(tenant, eid, self.clock()):
-            done = await self.store.get(tenant, eid)
+        if not await self.store.start(eid, self.clock()):
+            done = await self.store.get(eid)
             assert done is not None
             return done
         request = row.request
@@ -768,7 +768,7 @@ class Extractor:
         if not pages.texts:
             # No text layer and no OCR asked (or OCR found nothing): empty fields would pass as found.
             await self.store.finish(
-                tenant, eid, status="unreadable", outcome="unreadable", at=self.clock(),
+                eid, status="unreadable", outcome="unreadable", at=self.clock(),
                 result={"fileId": row.file_id, "pages": pages.count},
             )  # fmt: skip
             return await self._row(tenant, eid)
@@ -834,7 +834,7 @@ class Extractor:
         tokens = (usage.input_tokens, usage.output_tokens)
         fp = fingerprint_of(out, pages.layout) if not many and pages.layout is not None else None
         await self.store.finish(
-            tenant, eid, status="done", outcome=outcome, result=out, at=self.clock(), tokens=tokens, fingerprint=fp
+            eid, status="done", outcome=outcome, result=out, at=self.clock(), tokens=tokens, fingerprint=fp
         )
         return await self._row(tenant, eid)
 
@@ -881,7 +881,7 @@ class Extractor:
                 # estimate averages, which price a whole model read.
                 out["rereadTokens"] = {"input": usage.input_tokens, "output": usage.output_tokens}
             # No tokens: a template read is left out of the measured cost an estimate prices model reads at.
-            await self.store.finish(row.tenant_id, row.id, status="done", outcome=outcome, result=out, at=self.clock())
+            await self.store.finish(row.id, status="done", outcome=outcome, result=out, at=self.clock())
             return await self._row(row.tenant_id, row.id), None
         return None, best.wire() if best is not None else None
 
@@ -988,18 +988,16 @@ class Extractor:
         ocr = bool(row.request.get("ocr"))
         layouts = self.layouts or Layouts(self.files)
         if layouts.store is not None:
-            cached = await layouts.store.get(row.tenant_id, row.file_digest, LAYOUT_ENGINE, ocr=ocr)
+            cached = await layouts.store.get(row.file_digest, LAYOUT_ENGINE, ocr=ocr)
             if cached is not None:
                 return cached
         return await layouts.of(who, await self.files.readable(who, row.file_id), ocr=ocr)
 
     async def _fail(self, row: ExtractionRow, code: str, message: str, extra: dict[str, Any] | None = None) -> None:
-        await self.store.finish(
-            row.tenant_id, row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra
-        )
+        await self.store.finish(row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra)
 
     async def _row(self, tenant: str, extraction_id: str) -> ExtractionRow:
-        found = await self.store.get(tenant, extraction_id)
+        found = await self.store.get(extraction_id)
         assert found is not None
         return found
 

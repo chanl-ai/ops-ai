@@ -59,8 +59,35 @@ class WriteInDoubtError(RuntimeError):
     again; the run is tried again later."""
 
 
+class StepError(ValueError):
+    """A step's refusal that carries a sentence for people (`plain`) beside its technical text (`str()`)."""
+
+    def __init__(self, plain: str, detail: str) -> None:
+        super().__init__(detail)
+        self.plain = plain
+
+
 class NodeFailedError(RuntimeError):
-    """A node used every attempt its effects class allows and its type has no error port to route the failure to."""
+    """A node used every attempt its effects class allows and its type has no error port to route the failure to.
+    `str()` is the plain message the run shows people; `detail` is the technical text, also kept on the step's row."""
+
+    def __init__(self, plain: str, detail: str) -> None:
+        super().__init__(plain)
+        self.plain = plain
+        self.detail = detail
+
+
+def technical(e: BaseException) -> str:
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
+def plain_failure(step: str, e: BaseException, attempts: int) -> str:
+    """What people read when a step fails for good: the step's own sentence when it wrote one, else which step failed.
+    The exception's text stays on the step's row, never in this message."""
+    if isinstance(e, StepError):
+        return e.plain
+    tried = f" after {attempts} attempts" if attempts > 1 else ""
+    return f"{step} failed{tried}, so the run stopped. The step shows the technical detail."
 
 
 @dataclass(frozen=True)
@@ -325,7 +352,11 @@ def write_call(call: NodeCall, node_id: str) -> dict[str, Any]:
     arguments = dict(cast(dict[str, Any], params.get("input") or {}))
     if missing := sorted(k for k, v in arguments.items() if v is None):
         # Approving a call with a value read as nothing would bind the token to it; refuse instead.
-        raise ValueError(f"{node_id}'s input {', '.join(missing)} is empty when {call.node.id} opens")
+        plain = (
+            f"{call.node.name or call.node.id} could not open: {target.name or node_id} has no "
+            f"{', '.join(missing)} to use from this run."
+        )
+        raise StepError(plain, f"{node_id}'s input {', '.join(missing)} is empty when {call.node.id} opens")
     step = f"{call.run_id}:{node_id}:{next_iteration(call.scope, node_id)}:1"
     return {"tool": str(params.get("operation")), "input": arguments, "step": step}
 
@@ -917,7 +948,17 @@ class Wrapper:
             )
             if r is not last:
                 await self.journal.begin(replace(r, status="waiting"))
-            return await self.record(r, await executor(call(r)))
+            try:
+                outcome = await executor(call(r))
+            except GraphInterrupt:
+                raise
+            except Exception as e:
+                # A review that cannot open (its approved write reads nothing) is a failed step, kept on its row.
+                detail = technical(e)
+                await self.journal.finish(r, status="error", port=None, output=None, error=detail)
+                await self.ports.hooks.after_step(run_id, nid, "error")
+                raise NodeFailedError(plain_failure(self.node.name or nid, e, 1), detail) from e
+            return await self.record(r, outcome)
 
         if last is not None and last.status == "waiting":
             # A step that paused (Run workflow waiting for its children, c-263) resumes in the same attempt: its
@@ -956,7 +997,7 @@ class Wrapper:
                 await self.journal.finish(r, status="waiting", port=None, output=None, error=None)
                 raise
             except Exception as e:
-                message = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                message = technical(e)
                 if reconciled:
                     # A timeout or a 5xx says nothing about whether the write happened; the gateway's record does.
                     return await self.reconcile(r, cause=message)
@@ -970,7 +1011,9 @@ class Wrapper:
                     return await self.record(r, Outcome("error", {"error": message}), error=message)
                 await self.journal.finish(r, status="error", port=None, output=None, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
-                raise NodeFailedError(f"{nid} failed after {attempt - first + 1} attempts: {message}") from e
+                tried = attempt - first + 1
+                detail = f"{nid} failed after {tried} attempts: {message}"
+                raise NodeFailedError(plain_failure(self.node.name or nid, e, tried), detail) from e
             return await self.record(r, outcome)
 
     async def record(self, r: StepRow, outcome: Outcome, *, error: str | None = None) -> dict[str, Any]:

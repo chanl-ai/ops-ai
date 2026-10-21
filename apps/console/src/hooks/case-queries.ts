@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ActionDecision, CaseFilters, CaseView, EmailWorkflowConfig, RunRowFilters, RunView, SampleMailInput, StartRunInput } from '@/lib/types/cases';
 import type { ListParams } from '@/lib/types/query';
@@ -18,11 +19,11 @@ export const ck = {
 };
 
 export const useCases = (p: ListParams<CaseFilters> & { view: CaseView }) =>
-  useQuery({ queryKey: ck.list(p), queryFn: () => api.cases.list(p), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: ck.list(p), queryFn: () => api.cases.list(p) });
 export const useCase = (id: string) => useQuery({ queryKey: ck.one(id), queryFn: () => api.cases.get(id) });
 /** Runs across every workflow for the Cases page. */
 export const useCaseRuns = (p: ListParams<RunRowFilters> & { view: RunView }) =>
-  useQuery({ queryKey: ck.runs(p), queryFn: () => api.cases.runs(p), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: ck.runs(p), queryFn: () => api.cases.runs(p) });
 /** One run by id, for a `?run=` link to a run that is not on the current page. */
 export const useCaseRun = (id: string | null) => useQuery({ queryKey: ck.run(id ?? ''), queryFn: () => api.cases.run(id!), enabled: !!id });
 /** A run's thread state, read beside its row while its sheet or review is open. */

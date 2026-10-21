@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useTeam } from '@/hooks/use-team';
 import { api } from '@/lib/api';
@@ -16,7 +17,7 @@ export const ik = {
   impact: (ids: string[]) => ['integrations', 'impact', ids] as const,
 };
 
-export const useIntegrations = (p: ListParams<IntegrationFilters> & { view: IntegrationView }) => useQuery({ queryKey: ik.list(p), queryFn: () => api.integrations.list(p), placeholderData: keepPreviousData });
+export const useIntegrations = (p: ListParams<IntegrationFilters> & { view: IntegrationView }) => usePagedQuery({ queryKey: ik.list(p), queryFn: () => api.integrations.list(p) });
 export const useIntegration = (id: string) => useQuery({ queryKey: ik.one(id), queryFn: () => api.integrations.get(id) });
 export const useIntegrationOptions = (enabled = true) => useQuery({ queryKey: ik.options, queryFn: api.integrations.options, enabled });
 export const useIntegrationCatalog = (enabled = true) => useQuery({ queryKey: ik.catalog, queryFn: api.integrations.catalog, enabled, staleTime: 60_000 });

@@ -6,7 +6,7 @@ Status: proposed design. Parts are built; the "Slices and state" table says whic
 ## The problem
 
 A builder at a bank wants an agent to look up an account in core banking, screen a name on a compliance MCP server
-and start the levy workflow. Before this design those were three different things in three places. Only the first
+and start the court order workflow. Before this design those were three different things in three places. Only the first
 was edited on the Tools page, and its editor assumed every operation was an HTTP request:
 
 | Problem | Effect on the builder |
@@ -31,7 +31,7 @@ it panel, composed from components the console already has.
 It extends what tools-service does and redesigns none of it: the registry, versions and security review, workflow
 approvals with expiry, the egress allow-list, the secret store, record binding, the test console, transforms and
 limits stay as they are. Read with [tools-service overview](../../services/tools-service/overview.md),
-[tools-service design](../../services/tools-service/design.html), [tool lifecycle](../../architecture/tool-lifecycle.md)
+[tools-service design](../../services/tools-service/design.md), [tool lifecycle](../../architecture/tool-lifecycle.md)
 and [tool screens](../../console/tools-design.md).
 
 ## Principles that shaped every screen
@@ -436,7 +436,7 @@ workflow.
 
 ### 12. Workflows as tools
 
-Job: a builder lets an agent start a published workflow, such as levy intake, and tell the person what happened.
+Job: a builder lets an agent start a published workflow, such as court order intake, and tell the person what happened.
 
 Copilot Studio, n8n, Retool and Workato all require a published workflow with a response step; none shows a pattern for
 a tool call that waits on a person mid-workflow. Decision: set on the workflow's own page, Settings › Use as a tool: a

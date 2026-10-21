@@ -196,3 +196,59 @@ async def test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_ca
         ("levy_case", "Marcus Bell"),
         ("levy_case", "Jordan Whitfield"),
     ]
+
+
+class Mail(Bank):
+    """The bank, plus the mail sender: a reply goes out and is kept with its input."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent: list[dict[str, Any]] = []
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        if operation == "send_reply":
+            self.sent.append(input)
+            return ToolResult(True, {"sent": True})
+        return await super().call(operation, input, key, generation, token)
+
+
+async def _notice(thread: str, given: dict[str, Any]) -> tuple[Any, dict[str, Any], Runs, Mail, Any, Any]:
+    runs, mail = Runs(), Mail()
+    ports = EnginePorts(tools=mail, reviews=Reviews(), documents=Documents(), runs=runs)  # type: ignore[arg-type]
+    g = compile_definition(
+        levy("mail_document"), default_registry(), ports=ports, journal=MemoryJournal(), checkpointer=InMemorySaver()
+    )
+    cfg: Any = {"configurable": {"thread_id": thread, "run_id": thread, "lease_generation": 1}}
+    await g.ainvoke({"input": given}, cfg, durability="sync")
+    state = await g.aget_state(cfg)
+    return state.interrupts, dict(state.values), runs, mail, g, cfg
+
+
+async def test_a_notice_started_from_the_form_ends_with_its_cases_and_the_reply_skipped() -> None:
+    """c-446: started from the Start-run form with a file id and a From address only (staging wfrun_ae6001c606ce), the
+    run opened the cases and then failed at the acknowledgement, which had no mailbox or subject to reply with."""
+    paused, values, runs, mail, _, _ = await _notice("md1", {"fileId": "fil_1", "from": "registry@court.test"})
+    assert not paused, "nothing waits at the acknowledgement"
+    assert [i["record"]["name"] for _, i in runs.started] == ["Marcus Bell", "Jordan Whitfield"]
+    end = values[channel("nothing_to_reply")]["out"]
+    assert end["outcome"] == "cases_opened" and "did not arrive by email" in end["output"]["message"]
+    assert channel("ack") not in values and not mail.sent
+
+
+async def test_an_emailed_notice_still_waits_for_the_acknowledgement_and_replies_from_the_mailbox() -> None:
+    given = {
+        "fileId": "fil_1",
+        "name": "levy_notice.pdf",
+        "from": "registry@court.test",
+        "subject": "Garnishment notice NS-1",
+        "mailbox": "levies@northfield.test",
+    }
+    [paused], values, _, mail, g, cfg = await _notice("md2", given)
+    assert values[channel("reply_check")]["port"] == "false", "the reply check found a mailbox and a sender"
+    assert paused.value["node"] == "ack" and paused.value["call"]["input"]["mailbox"] == "levies@northfield.test"
+    await g.ainvoke(Command(resume={"decision": "approved", "by": "maya"}), cfg, durability="sync")
+    values = dict((await g.aget_state(cfg)).values)
+    assert values[channel("replied")]["out"]["outcome"] == "replied"
+    assert [(m["to"], m["mailbox"]) for m in mail.sent] == [("registry@court.test", "levies@northfield.test")]

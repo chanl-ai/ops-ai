@@ -34,4 +34,4 @@ The answer is 404, never 403, so a caller cannot learn that a file id exists out
 ## Non-vacuous check
 
 Step 3. With the team check removed from `_owned` in `services/files-service/src/ops_files/tenant_files.py`, Sam reads
-and deletes the file; this was seen failing (`.codeloop/evidence/087/`).
+and deletes the file; this was seen failing.

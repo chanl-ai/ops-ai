@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { SessionFilters } from '@/lib/types/account';
 import type { InviteAcceptInput } from '@/lib/types/invites';
@@ -29,7 +30,7 @@ export const useTestSsoConnection = () => usePolicyWrite(() => api.signInPolicy.
 const AK = { profile: ['account', 'profile'] as const, mfa: ['account', 'mfa'] as const, sessions: (p: unknown) => ['account', 'sessions', p] as const };
 export const useAccountProfile = () => useQuery({ queryKey: AK.profile, queryFn: () => api.account.profile() });
 export const useMfaDevices = () => useQuery({ queryKey: AK.mfa, queryFn: () => api.account.mfa.list() });
-export const useAccountSessions = (p: ListParams<SessionFilters>) => useQuery({ queryKey: AK.sessions(p), queryFn: () => api.account.sessions.list(p), placeholderData: keepPreviousData });
+export const useAccountSessions = (p: ListParams<SessionFilters>) => usePagedQuery({ queryKey: AK.sessions(p), queryFn: () => api.account.sessions.list(p) });
 function useAccountWrite<A, R>(fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['account'] }) });
