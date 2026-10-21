@@ -65,7 +65,7 @@ export function ForgotPasswordForm({ pending, error, sentTo, previewUrl, managed
         <div className="flex flex-col gap-6">
           <AuthHeading title="Reset your password" description="Enter your work email and we’ll send a link to choose a new one." />
           <FormField id="forgot-email" label="Work email" error={missing ?? undefined}>
-            <Input id="forgot-email" type="email" autoFocus value={email} aria-invalid={!!missing} onChange={(e) => (setEmail(e.target.value), setMissing(null))} placeholder="e.g. name@northfieldbank.com" />
+            <Input id="forgot-email" type="email" autoFocus value={email} aria-invalid={!!missing} onChange={(e) => (setEmail(e.target.value), setMissing(null))} placeholder="e.g. name@harborpine.example" />
           </FormField>
           <AuthError message={error} />
           <LoadingButton type="submit" className="w-full" isLoading={pending} loadingText="Sending…" data-testid="forgot-send">

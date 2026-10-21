@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const PRIYA = 'p.shah@northfieldbank.com';
+const PRIYA = 'p.shah@harborpine.example';
 
 async function step(name, body) {
   try {

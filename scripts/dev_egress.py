@@ -1,6 +1,6 @@
 """Lists this machine's private address and the dev mail and bank hosts on the shared stack's egress allow-list.
 
-tools-service reaches GreenMail (mail.northfield.test), Mailpit (smtp.northfield.test) and the fake bank
+tools-service reaches GreenMail (mail.harborpine.test), Mailpit (smtp.harborpine.test) and the fake bank
 (api.bank.test) at this machine's private address (scripts/stack.sh, OPS_EGRESS_RESOLVE). That address changes when
 the network does, and an allow-list naming yesterday's address refuses every mail and bank call. `make up` runs this
 after the services start: it signs in as the Security team's admin and adds, through tools-service's own egress API,
@@ -17,10 +17,10 @@ import httpx
 
 PLATFORM = f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 TOOLS = f"http://127.0.0.1:{os.environ.get('OPS_TOOLS_PORT', '8720')}"
-SECURITY_ADMIN, PASSWORD = "s.adeyemi@northfieldbank.com", "northfield-demo"
+SECURITY_ADMIN, PASSWORD = "s.adeyemi@harborpine.example", "northfield-demo"
 HOSTS = {
-    "mail.northfield.test": "dev GreenMail",
-    "smtp.northfield.test": "dev Mailpit",
+    "mail.harborpine.test": "dev GreenMail",
+    "smtp.harborpine.test": "dev Mailpit",
     "api.bank.test": "dev fake bank",
 }
 

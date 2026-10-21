@@ -13,8 +13,8 @@ from httpx import AsyncClient
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
-LEE = {"X-Dev-User": "lee@northfieldbank.com"}
-KIM = {"X-Dev-User": "kim@northfieldbank.com"}
+LEE = {"X-Dev-User": "lee@harborpine.example"}
+KIM = {"X-Dev-User": "kim@harborpine.example"}
 BRANCH = "ag_branch"
 HARDSHIP: dict[str, Any] = {
     "name": "Hardship request triage",

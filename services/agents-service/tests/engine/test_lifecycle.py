@@ -29,8 +29,8 @@ from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 
-JAMES = {"X-Dev-User": "j.richardson@northfieldbank.com"}
-MAYA = {"X-Dev-User": "m.okafor@northfieldbank.com"}
+JAMES = {"X-Dev-User": "j.richardson@harborpine.example"}
+MAYA = {"X-Dev-User": "m.okafor@harborpine.example"}
 
 
 class NoTools:

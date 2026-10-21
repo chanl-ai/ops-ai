@@ -36,5 +36,5 @@ async def test_a_review_names_its_case_and_its_decision_lands_on_the_timeline(
     timeline = data(await c.get(f"/v1/cases/{case['id']}", headers=JAMES))["events"]
     decision = [e for e in timeline if e["kind"] == "decision"]
     assert [(e["ref"], e["by"], e["detail"]["decision"]) for e in decision] == [
-        (f"{run_id}:review:1", "m.okafor@northfieldbank.com", "approved")
+        (f"{run_id}:review:1", "m.okafor@harborpine.example", "approved")
     ]

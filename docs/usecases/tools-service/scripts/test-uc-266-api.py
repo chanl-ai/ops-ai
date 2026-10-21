@@ -100,10 +100,10 @@ with ExitStack() as stack:
         saved.text[:200],
     )
 
-    priya = bearer(signed_in(people, "p.shah@northfieldbank.com"), "team_ops")
+    priya = bearer(signed_in(people, "p.shah@harborpine.example"), "team_ops")
     gw = httpx.Client(base_url=gateway, timeout=30)
     policy = gw.put(
-        "/v1/send-policy", json={"text": POLICY}, headers={**OPS, "X-Dev-User": "p.shah@northfieldbank.com"}
+        "/v1/send-policy", json={"text": POLICY}, headers={**OPS, "X-Dev-User": "p.shah@harborpine.example"}
     )
     check(
         "1 the team's sending policy is saved (v1)",

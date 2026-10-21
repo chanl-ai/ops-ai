@@ -329,7 +329,7 @@ class Settings(BaseSettings):
     # Ignored outside dev, where publishing waits for a reviewer.
     registry_auto_approve: bool = True
     dev_user_name: str = "James Richardson"
-    dev_user_email: str = "j.richardson@northfieldbank.com"
+    dev_user_email: str = "j.richardson@harborpine.example"
     # Dev only: the access policies the dev caller's identity carries, as a platform token would (c-186), e.g.
     # OPS_DEV_POLICIES='{"requesterMayDecide": false}'. Empty: every policy at its open default.
     dev_policies: dict[str, Any] = Field(default_factory=dict[str, Any])

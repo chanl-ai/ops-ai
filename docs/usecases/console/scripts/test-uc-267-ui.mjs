@@ -27,7 +27,7 @@ await withUiStack(
       page.setDefaultTimeout(60_000);
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('w.kamau@northfieldbank.com');
+      await page.getByLabel('Email').fill('w.kamau@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -116,7 +116,7 @@ await withUiStack(
         const ask = async (shotName) => {
           await page.getByTestId('check-access').click();
           const dialog = page.getByRole('dialog');
-          await dialog.getByTestId('check-requested').fill('m.okafor@northfieldbank.com');
+          await dialog.getByTestId('check-requested').fill('m.okafor@harborpine.example');
           const sent = page.waitForResponse((r) => r.url().endsWith('/v1/access/check'), { timeout: 30_000 });
           await dialog.getByTestId('check-run').click();
           await sent;
@@ -136,7 +136,7 @@ await withUiStack(
         };
         const before = await ask('access-check');
         // The workspace stops a requester deciding their own request; the same check now refuses for that reason.
-        const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'w.kamau@northfieldbank.com', password: 'northfield-demo' }) })).json()).data.token;
+        const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'w.kamau@harborpine.example', password: 'northfield-demo' }) })).json()).data.token;
         const off = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/requesterMayDecide`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: false }) });
         const after = await ask();
         check(
@@ -149,13 +149,13 @@ await withUiStack(
       await step('5 A button the person may not use is shown locked, and its ⓘ says why and who can grant it', async () => {
         // James, a Builder of Operations, drafts an agent; Maya, a Reviewer there, opens it.
         const tokenOf = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-        const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Locked publish desk', role: 'Answers balance questions' }) });
+        const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Locked publish desk', role: 'Answers balance questions' }) });
         const agent = (await made.json()).data;
         if (made.status >= 300) throw new Error(`setup: creating the agent answered ${made.status}`);
         const maya = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
         maya.on('pageerror', (e) => errors.push(e.message));
         await maya.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await maya.getByLabel('Email').fill('m.okafor@northfieldbank.com');
+        await maya.getByLabel('Email').fill('m.okafor@harborpine.example');
         await maya.getByLabel('Password').fill('northfield-demo');
         await maya.getByRole('button', { name: /^Sign in/ }).first().click();
         await maya.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -163,7 +163,7 @@ await withUiStack(
         const locked = maya.getByTestId('locked-agents-publish');
         if (!(await locked.waitFor({ timeout: 45_000 }).then(() => true, () => false))) {
           const header = (await maya.getByTestId('page-header').innerText().catch(() => '')).replace(/\s+/g, ' ');
-          const detail = await (await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents/${agent.id}`, { headers: { Authorization: `Bearer ${await tokenOf('m.okafor@northfieldbank.com')}`, 'X-Team-Id': 'team_ops' } })).json();
+          const detail = await (await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents/${agent.id}`, { headers: { Authorization: `Bearer ${await tokenOf('m.okafor@harborpine.example')}`, 'X-Team-Id': 'team_ops' } })).json();
           throw new Error(`no locked Publish; header: ${header.slice(0, 200)}; canPublish ${detail.data?.canPublish}; versions ${JSON.stringify((detail.data?.versions ?? []).map((v) => v.state))}`);
         }
         const disabled = await locked.isDisabled();

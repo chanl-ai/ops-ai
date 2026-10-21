@@ -30,10 +30,10 @@ async function openReview(page, consoleUrl, rid) {
 await withUiStack(
   async (consoleUrl) => {
     // James's module, with its first review requested (the request is his; the decision is Security's).
-    const james = await tokenFor('j.richardson@northfieldbank.com');
+    const james = await tokenFor('j.richardson@harborpine.example');
     const J = as(james, 'team_ops');
     // Egress is the Security team's admins' to change, so Sam allows the host.
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     const allowed = await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-040 ui' }) });
     check("Security's admin allows the module's host for egress", allowed.ok, { status: allowed.status });
     const made = await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc040-ui-${TAG}`, type: 'http' }) })).json();
@@ -47,7 +47,7 @@ await withUiStack(
     try {
       const errors = [];
       // James, on his module's Approval tab: it waits for Security, with a link to Human Tasks and no decide form.
-      const jp = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const jp = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       jp.on('pageerror', (e) => errors.push(e.message));
       await jp.goto(`${consoleUrl}/tools/${id}?tab=approval`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const link = jp.getByRole('link', { name: 'Open in Human Tasks' });
@@ -56,15 +56,15 @@ await withUiStack(
 
       // Maya, an approver on Operations: Human Tasks offers her no approval on Security's review, and Reviews refuses
       // her decision.
-      const mp = await signIn(browser, consoleUrl, 'm.okafor@northfieldbank.com');
+      const mp = await signIn(browser, consoleUrl, 'm.okafor@harborpine.example');
       mp.on('pageerror', (e) => errors.push(e.message));
       const offered = await openReview(mp, consoleUrl, rid);
-      const maya = await tokenFor('m.okafor@northfieldbank.com');
+      const maya = await tokenFor('m.okafor@harborpine.example');
       const refused = await fetch(`${agents}/v1/publish-requests/${rid}/decision`, { method: 'POST', headers: as(maya, 'team_ops'), body: JSON.stringify({ decision: 'approved' }) });
       check('an approver on another team is offered no approval and Reviews refuses her (403)', !offered && refused.status === 403, { offered, status: refused.status });
 
       // Nadia, Security's approver: returning it needs a reason; then she approves it in Human Tasks.
-      const np = await signIn(browser, consoleUrl, 'n.petrov@northfieldbank.com');
+      const np = await signIn(browser, consoleUrl, 'n.petrov@harborpine.example');
       np.on('pageerror', (e) => errors.push(e.message));
       check('Security opens the review in Human Tasks', await openReview(np, consoleUrl, rid));
       let posted = 0;
@@ -108,7 +108,7 @@ await withUiStack(
       const asJames = await controls(jp);
       const asNadia = await controls(np);
       check('a builder and a Security approver see egress and secrets with no add controls', asJames.egress + asJames.secrets + asNadia.egress + asNadia.secrets === 0, { asJames, asNadia });
-      const sp = await signIn(browser, consoleUrl, 's.adeyemi@northfieldbank.com');
+      const sp = await signIn(browser, consoleUrl, 's.adeyemi@harborpine.example');
       sp.on('pageerror', (e) => errors.push(`sam: ${e.message}`));
       const asSam = await controls(sp);
       check("Security's admin sees Add host and Add secret", asSam.egress === 1 && asSam.secrets === 1, asSam);

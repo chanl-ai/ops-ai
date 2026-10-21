@@ -33,8 +33,8 @@ def ask(agents: httpx.Client, who: dict[str, str], tid: str) -> list[str]:
 
 
 with people_stack() as (api, agents):
-    james = bearer(signed_in(api, "j.richardson@northfieldbank.com"), "team_ops")
-    ravi = bearer(signed_in(api, "r.menon@northfieldbank.com"), "team_ops")
+    james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
+    ravi = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
     before = agent_tasks(agents, james)
 
     # 1. A builder starts a test: the server marks the thread test.

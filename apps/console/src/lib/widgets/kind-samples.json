@@ -395,9 +395,9 @@
       "data": {
         "name": "Priya Natarajan",
         "role": "Claims adjuster",
-        "organisation": "Northfield Insurance",
+        "organisation": "Harbor & Pine Insurance",
         "phone": "416 555 0142",
-        "email": "p.natarajan@northfield.example",
+        "email": "p.natarajan@harborpine.example",
         "hours": "Mon to Fri, 8:30 to 17:00",
         "actions": [{ "label": "Ask Priya to call", "reply": "Ask Priya Natarajan to call me" }]
       }

@@ -35,7 +35,7 @@ def _upload(file_id: str, tenant: str, team: str = "team_ops") -> dict[str, Any]
         "storage_container": "local",
         "storage_key": f"{tenant}/{team}/chat_attachment/2026/10/{file_id}",
         "declared_size": 10,
-        "uploaded_by": "james@northfieldbank.com",
+        "uploaded_by": "james@harborpine.example",
         "uploaded_at": NOW,
         "version_count": 0,
     }
@@ -51,7 +51,7 @@ def _version(file_id: str, tenant: str) -> dict[str, Any]:
         "digest": DIGEST,
         "size": 10,
         "storage_key": f"{tenant}/team_ops/chat_attachment/2026/10/{file_id}",
-        "uploaded_by": "james@northfieldbank.com",
+        "uploaded_by": "james@harborpine.example",
         "uploaded_at": NOW,
         "current": True,
     }

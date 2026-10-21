@@ -243,12 +243,12 @@ async def test_an_emailed_notice_still_waits_for_the_acknowledgement_and_replies
         "name": "levy_notice.pdf",
         "from": "registry@court.test",
         "subject": "Garnishment notice NS-1",
-        "mailbox": "levies@northfield.test",
+        "mailbox": "levies@harborpine.test",
     }
     [paused], values, _, mail, g, cfg = await _notice("md2", given)
     assert values[channel("reply_check")]["port"] == "false", "the reply check found a mailbox and a sender"
-    assert paused.value["node"] == "ack" and paused.value["call"]["input"]["mailbox"] == "levies@northfield.test"
+    assert paused.value["node"] == "ack" and paused.value["call"]["input"]["mailbox"] == "levies@harborpine.test"
     await g.ainvoke(Command(resume={"decision": "approved", "by": "maya"}), cfg, durability="sync")
     values = dict((await g.aget_state(cfg)).values)
     assert values[channel("replied")]["out"]["outcome"] == "replied"
-    assert [(m["to"], m["mailbox"]) for m in mail.sent] == [("registry@court.test", "levies@northfield.test")]
+    assert [(m["to"], m["mailbox"]) for m in mail.sent] == [("registry@court.test", "levies@harborpine.test")]

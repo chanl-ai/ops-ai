@@ -22,7 +22,7 @@ from tests.api.test_chat import new_thread, send
 from tests.conftest import step_up
 
 PLATFORM = Ed25519Signer.generate("platform-test")
-MAYA = "m.okafor@northfieldbank.com"
+MAYA = "m.okafor@harborpine.example"
 
 
 def platform_step_up(email: str, *, now: float | None = None, ttl_s: int = 300, **extra: Any) -> str:
@@ -69,7 +69,7 @@ async def test_this_services_own_step_up_is_still_accepted() -> None:
 async def test_a_platform_step_up_for_someone_else_is_refused() -> None:
     rt = await runtime()
     with pytest.raises(StepUpRequired, match="someone else"):
-        require_step_up(rt, MAYA, platform_step_up("n.petrov@northfieldbank.com"))
+        require_step_up(rt, MAYA, platform_step_up("n.petrov@harborpine.example"))
 
 
 async def test_a_platform_step_up_from_another_tenant_is_refused() -> None:

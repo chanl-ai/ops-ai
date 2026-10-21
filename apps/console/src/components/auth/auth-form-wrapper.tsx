@@ -2,7 +2,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /**
- * The card every sign-in screen sits in: the form on the left, the Northfield panel on the right on wide screens.
+ * The card every sign-in screen sits in: the form on the left, the Harbor & Pine panel on the right on wide screens.
  */
 export function AuthFormWrapper({ children, className, showPanel = true }: { children: React.ReactNode; className?: string; showPanel?: boolean }) {
   return (
@@ -14,8 +14,8 @@ export function AuthFormWrapper({ children, className, showPanel = true }: { chi
             <div className="relative hidden bg-gradient-to-br from-primary/90 to-primary/70 md:block dark:from-primary/80 dark:to-primary/50">
               <div className="relative flex h-full flex-col justify-between p-8 text-primary-foreground">
                 <div className="flex items-center gap-2">
-                  <NorthfieldMark className="bg-white/20 text-white" />
-                  <span className="text-lg font-semibold">Northfield Bank</span>
+                  <HarborPineMark className="bg-white/20 text-white" />
+                  <span className="text-lg font-semibold">Harbor & Pine Bank</span>
                 </div>
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-semibold">Ops AI</h2>
@@ -27,12 +27,12 @@ export function AuthFormWrapper({ children, className, showPanel = true }: { chi
           )}
         </CardContent>
       </Card>
-      <p className="text-center text-xs text-balance text-muted-foreground">For Northfield staff. Need access? Ask your workspace admin.</p>
+      <p className="text-center text-xs text-balance text-muted-foreground">For Harbor & Pine staff. Need access? Ask your workspace admin.</p>
     </div>
   );
 }
 
-export function NorthfieldMark({ className }: { className?: string }) {
+export function HarborPineMark({ className }: { className?: string }) {
   return <span className={cn('flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground', className)}>N</span>;
 }
 

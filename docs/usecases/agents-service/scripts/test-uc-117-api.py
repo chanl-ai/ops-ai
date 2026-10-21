@@ -11,8 +11,8 @@ import httpx
 from usecase_harness import agents, check, data, finish, sse
 
 INTRANET = "https://intranet.bank.example"
-JAMES = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@northfieldbank.com"}
-APPROVER = {"X-Team-Id": "team_ops", "X-Dev-User": "lee@northfieldbank.com"}
+JAMES = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
+APPROVER = {"X-Team-Id": "team_ops", "X-Dev-User": "lee@harborpine.example"}
 HOLD = 'call place_wire_hold {"wireId": "W-1", "hours": 24, "reason": "Unusual payee"}'
 
 

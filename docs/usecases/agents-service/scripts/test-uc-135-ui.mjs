@@ -10,7 +10,7 @@ const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFO
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const created = await (await fetch(`${agentsUrl}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: 'ag_branch', kbIds: [] }) })).json();
     if (!created.data) throw new Error(`thread: ${JSON.stringify(created).slice(0, 300)}`);
     // Whatever earlier runs left with this agent goes first, so the list below is this run's alone.
@@ -23,7 +23,7 @@ await withUiStack(
       const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

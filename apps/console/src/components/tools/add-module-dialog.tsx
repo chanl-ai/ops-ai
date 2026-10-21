@@ -38,10 +38,10 @@ function httpsProblem(raw: string) {
   try {
     u = new URL(raw.trim());
   } catch {
-    return 'That is not a complete address. Enter it with https://, e.g. https://servicenow.northfield.internal/mcp.';
+    return 'That is not a complete address. Enter it with https://, e.g. https://servicenow.harborpine.internal/mcp.';
   }
   if (u.protocol !== 'https:') return 'Use an https address; the gateway does not call plain http.';
-  if (!u.hostname.includes('.')) return 'Enter the full host name, e.g. servicenow.northfield.internal.';
+  if (!u.hostname.includes('.')) return 'Enter the full host name, e.g. servicenow.harborpine.internal.';
   return null;
 }
 
@@ -142,7 +142,7 @@ export function AddModuleDialog({
         return;
       }
       if (!source) {
-        setFieldErr(kind === 'mcp' ? { url: 'Enter the server’s address, e.g. https://servicenow.northfield.internal/mcp.' } : { spec: 'Add the spec as a URL or a file.' });
+        setFieldErr(kind === 'mcp' ? { url: 'Enter the server’s address, e.g. https://servicenow.harborpine.internal/mcp.' } : { spec: 'Add the spec as a URL or a file.' });
         return;
       }
       if (source.kind === 'mcp') {
@@ -261,13 +261,13 @@ export function AddModuleDialog({
           </RadioGroup>
           {kind === 'mcp' && (
             <FormField id="mcp-url" label="Server URL" error={fieldErr.url} hint="Streamable HTTP endpoint. The gateway lists its tools now and keeps that list as the reviewed snapshot.">
-              <Input id="mcp-url" value={url} aria-invalid={!!fieldErr.url} onChange={(e) => (setUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://servicenow.northfield.internal/mcp" className="font-mono text-sm" />
+              <Input id="mcp-url" value={url} aria-invalid={!!fieldErr.url} onChange={(e) => (setUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://servicenow.harborpine.internal/mcp" className="font-mono text-sm" />
             </FormField>
           )}
           {kind === 'openapi' && (
             <div className="flex flex-col gap-3">
               <FormField id="spec-url" label="Spec URL" optional error={fieldErr.spec}>
-                <Input id="spec-url" value={specUrl} aria-invalid={!!fieldErr.spec} onChange={(e) => (setSpecUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://deposits.api.northfield.internal/openapi.json" className="font-mono text-sm" />
+                <Input id="spec-url" value={specUrl} aria-invalid={!!fieldErr.spec} onChange={(e) => (setSpecUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://deposits.api.harborpine.internal/openapi.json" className="font-mono text-sm" />
               </FormField>
               <FormField id="spec-file" label="Or upload the spec" optional hint="OpenAPI 3.0 or 3.1.">
                 <FileUpload

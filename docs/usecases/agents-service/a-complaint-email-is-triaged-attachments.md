@@ -17,7 +17,7 @@ module's team approves it. Real mail both ways. Nothing is faked but the bank an
 | PostgreSQL, OPA, GreenMail and Mailpit for the isolated stack | `make db-up ISOLATED=1` |
 | The run | `make usecase-test UC=uc-249 LAYER=ui ISOLATED=1` |
 
-The stack is the banker demo with the seeded mailboxes (`complaints@northfield.test` for `complaint_triage`) and
+The stack is the banker demo with the seeded mailboxes (`complaints@harborpine.test` for `complaint_triage`) and
 GreenMail and Mailpit reachable through tools-service (`tools.mail`). The `payment_receipt` document type is
 configuration that the use case makes through the documents API.
 
@@ -30,7 +30,7 @@ configuration that the use case makes through the documents API.
 | 2 | The attachment's run | `attachment_record` ends `recorded`: Recognise and read it (`read:ok`, type `payment_receipt`), Keep the read on the file (`save:ok`) |
 | 3 | The triage and the case | The agent answers urgency `high` and a hold asked; the case has priority `urgent` and the triage's category |
 | 4 | The hold it started | `customer_hold` matched the customer by the sender's address (no SSN given), worked out 2000, and waits at Approve the hold |
-| 5 | Wanjiru approves the reply | Reply to the customer (`reply:ok`), outcome `replied`, one more reply from `complaints@northfield.test` in Mailpit; the run reads `waiting` with no finish time, because the hold it started still waits |
+| 5 | Wanjiru approves the reply | Reply to the customer (`reply:ok`), outcome `replied`, one more reply from `complaints@harborpine.test` in Mailpit; the run reads `waiting` with no finish time, because the hold it started still waits |
 | 6 | James opens the complaint's run page, then Maya and Priya approve the hold, each re-authenticating | The page says "Waiting on a run it started"; the hold ends `held` and the complaint run then reads `succeeded` |
 | 7 | `attachment_record` on a file that does not exist | `read:error`, the End Could not finish (marked failed): the run reads `failed` in the list with "Ended at Could not finish, an end marked as a failure", its page shows The run failed and the Result, and the editor shows the End's Counts as setting as `failed` |
 | 8 | Activity filtered to the complaint's case (`GET /v1/activity?case=`) | The case's own entries, the complaint run, the email that started it and the reply's decision; nothing of the hold's run |

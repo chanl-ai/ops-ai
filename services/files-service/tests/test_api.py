@@ -64,7 +64,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
             scanning=scanning,
         )
         auth = Auth.for_dev(
-            Settings(), audience="files", name="james", email="james@northfieldbank.com", tenant_id=tenant
+            Settings(), audience="files", name="james", email="james@harborpine.example", tenant_id=tenant
         )
         app = create_files_app(files, engine=engine, auth=auth)
 
@@ -75,7 +75,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
     return make
 
 
-def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@northfieldbank.com") -> None:
+def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@harborpine.example") -> None:
     """A person signed in with a real role in the team they act in (X-Team-Id, else team_ops), so `can()` decides as
     it does in a deployment (c-149); a request with a bearer token (a service) is resolved as usual."""
 

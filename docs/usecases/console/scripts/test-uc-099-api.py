@@ -15,9 +15,9 @@ import httpx
 from usecase_harness import PLATFORM_INTERNAL_PORT, PLATFORM_PORT, agents, check, data, finish, kb, platform
 
 PASSWORD = "northfield-demo"
-JAMES = "j.richardson@northfieldbank.com"
-RAVI = "r.menon@northfieldbank.com"
-MAYA = "m.okafor@northfieldbank.com"
+JAMES = "j.richardson@harborpine.example"
+RAVI = "r.menon@harborpine.example"
+MAYA = "m.okafor@harborpine.example"
 
 RULE = {"name": "No tax advice 099", "topics": ["tax advice"], "message": "I can't give tax advice."}
 SKILL = {

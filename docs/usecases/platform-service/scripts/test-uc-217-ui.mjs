@@ -2,12 +2,12 @@
 // page is editable with no View only; on a pending review they see who decides and no Approve; Access offers no Invite.
 import { AGENTS_PORT, INVITED_PASSWORD, check, chromium, consoleSignIn, finish, invitePerson, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const EMAIL = `builder.${Math.random().toString(36).slice(2, 7)}@northfieldbank.com`;
+const EMAIL = `builder.${Math.random().toString(36).slice(2, 7)}@harborpine.example`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 
 await withUiStack(
   async (consoleUrl) => {
-    const token = await invitePerson('p.shah@northfieldbank.com', EMAIL, 'builder');
+    const token = await invitePerson('p.shah@harborpine.example', EMAIL, 'builder');
     const H = { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const agent = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: H, body: JSON.stringify({ name: `Desk ${Date.now() % 10000}`, role: 'Answers' }) })).json()).data;
     const request = (await (await fetch(`${agents}/v1/agents/${agent.id}/publish-requests`, { method: 'POST', headers: H, body: JSON.stringify({ version: agent.version }) })).json()).data;

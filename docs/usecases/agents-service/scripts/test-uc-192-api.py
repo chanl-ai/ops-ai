@@ -6,7 +6,7 @@ docs/usecases/agents-service/imap-mailbox-starts-a-workflow.md.
 Runs against the shared stack (`OPS_STACK_AUTH=platform make up`, which also starts GreenMail and Mailpit in
 compose). The steps a bank's admins take for a real mailbox, on GreenMail: Sam puts the mailbox password on the
 Secrets page for team_ops and lists the mail host and its address on the Egress page; James binds a workflow to
-intake@northfield.test; an email with a PDF is sent to GreenMail over SMTP; the worker reads it over IMAP through
+intake@harborpine.test; an email with a PDF is sent to GreenMail over SMTP; the worker reads it over IMAP through
 tools-service and starts one run with the PDF in Files. No model call is made."""
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"
 TOOLS = f"http://127.0.0.1:{os.environ.get('OPS_TOOLS_PORT', '8720')}"
 FILES = f"http://127.0.0.1:{os.environ.get('OPS_FILES_PORT', '8750')}"
 SMTP = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
-MAILBOX, HOST, SECRET = "intake@northfield.test", "mail.northfield.test", "DEV_IMAP_PASSWORD"
+MAILBOX, HOST, SECRET = "intake@harborpine.test", "mail.harborpine.test", "DEV_IMAP_PASSWORD"
 PDF = b"%PDF-1.4 uc-192 notice"
 RUN = uuid.uuid4().hex[:8]
 WID = f"uc192_{RUN}"
@@ -69,8 +69,8 @@ def until(what: str, probe: Any, timeout: float = WAIT_S) -> Any:
     raise TimeoutError(f"waited {timeout:.0f}s for {what}")
 
 
-sam = headers("s.adeyemi@northfieldbank.com", "team_security")
-james = headers("j.richardson@northfieldbank.com", "team_ops")
+sam = headers("s.adeyemi@harborpine.example", "team_security")
+james = headers("j.richardson@harborpine.example", "team_ops")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, headers=james, timeout=30)
 

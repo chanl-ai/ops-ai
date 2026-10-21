@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const SHOTS = process.env.UC228_SHOTS;
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const json = async (r) => {

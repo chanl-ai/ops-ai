@@ -29,9 +29,9 @@ async function signIn(browser, consoleUrl, email, errors) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const SAM = await as('s.adeyemi@northfieldbank.com', 'team_security');
-    const J = await as('j.richardson@northfieldbank.com', 'team_ops');
-    const N = await as('n.petrov@northfieldbank.com', 'team_security');
+    const SAM = await as('s.adeyemi@harborpine.example', 'team_security');
+    const J = await as('j.richardson@harborpine.example', 'team_ops');
+    const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: HOST, note: 'uc-137' }) });
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Rates ${TAG}`, name: `uc137-rates-${TAG}`, type: 'http' }) }))).id;
     await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'A rate', access: 'read', method: 'GET', url: `https://${HOST}/v1/rates/{currency}`, headers: [] }) }));
@@ -47,8 +47,8 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const priya = await signIn(browser, consoleUrl, 'p.shah@northfieldbank.com', errors);
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com', errors);
+      const priya = await signIn(browser, consoleUrl, 'p.shah@harborpine.example', errors);
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
       const setTools = async (label) => {
         await priya.goto(`${consoleUrl}/settings/policies/publish-reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await priya.getByLabel('Tool modules review').click({ timeout: 120_000 });

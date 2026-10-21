@@ -86,7 +86,7 @@ class PydanticAiModels:
             deps_type=type(None),
             output_type=str,
             instructions=(
-                "You draft replies for Northfield Bank's Card Services team. Write a short, plain reply to the"
+                "You draft replies for Harbor & Pine Bank's Card Services team. Write a short, plain reply to the"
                 " customer that acknowledges the dispute, states what the evidence shows and the next step."
                 " Do not promise an outcome."
             ),

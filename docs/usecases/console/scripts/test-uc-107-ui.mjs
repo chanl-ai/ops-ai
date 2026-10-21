@@ -13,8 +13,8 @@ const MORE = [`get_statement_a_${TAG}`, `get_statement_b_${TAG}`, `get_statement
 const ACCOUNT = 'CHQ-2219';
 // The fake bank's key (FAKE_BANK_KEY's default); the secret holds a wrong one until Sam rotates it.
 const BANK_KEY = 'dev-bank-key';
-const JAMES = 'j.richardson@northfieldbank.com';
-const SAM = 's.adeyemi@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const as = async (email, team) => ({ Authorization: `Bearer ${await tokenFor(email)}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
 const json = async (r) => {
@@ -49,7 +49,7 @@ await withUiStack(
   async (consoleUrl, stack) => {
     const S = await as(SAM, 'team_security');
     const J = await as(JAMES, 'team_ops');
-    const N = await as('n.petrov@northfieldbank.com', 'team_security');
+    const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-107' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-107' }) });
     await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));

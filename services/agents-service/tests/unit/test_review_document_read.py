@@ -204,7 +204,7 @@ ACK: dict[str, Any] = {
             "to": "clerk@court.example",
             "subject": "Levy notice",
             "body": "We received your document.",
-            "mailbox": "intake@northfield.test",
+            "mailbox": "intake@harborpine.test",
         },
     },
 }
@@ -231,7 +231,7 @@ async def test_an_acknowledgement_shows_the_reply_and_the_case_each_started_run_
     review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": ACK}}, case_id="", titles=TITLES)
     assert review["reply"] == {
         "to": "clerk@court.example",
-        "mailbox": "intake@northfield.test",
+        "mailbox": "intake@harborpine.test",
         "subject": "Levy notice",
         "body": "We received your document.",
         # A case reads by its subject, so the page never shows the id to decide on.

@@ -20,7 +20,7 @@ await withUiStack(
         page.setDefaultTimeout(60_000);
         page.on('pageerror', (e) => errors.push(e.message));
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByLabel('Email').fill('p.shah@northfieldbank.com');
+        await page.getByLabel('Email').fill('p.shah@harborpine.example');
         await page.getByLabel('Password').fill('northfield-demo');
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

@@ -18,7 +18,7 @@ const COMPOSED = { type: 'card', title: 'Two holds are open', children: [{ type:
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Holds desk ${TAG}`, role: 'Explains payment holds' }) }));
     const offered = (await json(await fetch(`${agentsUrl}/v1/tools`, { headers: J }))).map((t) => t.id ?? t.name);
     check('the tool Hold review needs is in the directory', offered.includes('lookup_account'), offered);
@@ -29,7 +29,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

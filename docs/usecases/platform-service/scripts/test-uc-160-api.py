@@ -7,7 +7,7 @@ import re
 
 from usecase_harness import bearer, check, finish, signed_in, signin_stack
 
-RAVI = "r.menon@northfieldbank.com"
+RAVI = "r.menon@harborpine.example"
 NEW = "teller password 2026"
 
 with signin_stack() as (api, _, mail):
@@ -18,7 +18,7 @@ with signin_stack() as (api, _, mail):
     link = re.search(r"/reset-password/(prt_[A-Za-z0-9_-]+)", sent[0]["body"]) if len(sent) == 1 else None
     check("one reset mail goes to Ravi with a console link", bool(link) and sent[0]["to"] == [RAVI], sent)
     token = link.group(1) if link else "prt_missing000"
-    r = api.post("/v1/auth/password/forgot", json={"email": "nobody@northfieldbank.com"})
+    r = api.post("/v1/auth/password/forgot", json={"email": "nobody@harborpine.example"})
     check(
         "a request for an unknown email is answered the same and sends nothing",
         r.status_code == 204 and len(list(mail.glob("*.json"))) == 1,

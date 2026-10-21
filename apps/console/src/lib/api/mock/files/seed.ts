@@ -51,8 +51,8 @@ export const STORAGE: Omit<MockStorage, 'updatedAt'> & { updatedDaysAgo: number 
   updatedBy: 'James Richardson',
   updatedDaysAgo: 12,
   targets: [
-    { environment: 'prod', backend: 's3', connectionId: 'int_aws_storage', residency: 'Canada (Central), ca-central-1', s3: { bucket: 'northfield-opsai-prod-files', region: 'ca-central-1', kmsKeyAlias: 'alias/opsai-prod-files', objectLockEvidence: true } },
-    { environment: 'test', backend: 's3', connectionId: 'int_aws_storage', residency: 'Canada (Central), ca-central-1', s3: { bucket: 'northfield-opsai-test-files', region: 'ca-central-1', kmsKeyAlias: 'alias/opsai-test-files', objectLockEvidence: true } },
+    { environment: 'prod', backend: 's3', connectionId: 'int_aws_storage', residency: 'Canada (Central), ca-central-1', s3: { bucket: 'harborpine-opsai-prod-files', region: 'ca-central-1', kmsKeyAlias: 'alias/opsai-prod-files', objectLockEvidence: true } },
+    { environment: 'test', backend: 's3', connectionId: 'int_aws_storage', residency: 'Canada (Central), ca-central-1', s3: { bucket: 'harborpine-opsai-test-files', region: 'ca-central-1', kmsKeyAlias: 'alias/opsai-test-files', objectLockEvidence: true } },
     { environment: 'dev', backend: 'azure_blob', connectionId: 'int_azure_storage', residency: 'Canada Central', azure: { account: 'nfopsaidev', container: 'files', encryptionScope: 'opsai-dev-cmk', immutabilityPolicy: false } },
   ],
   limits: LIMITS,
@@ -112,7 +112,7 @@ export function fileSeeds(contracts: string[], lendingFiles: string[]): FileSeed
     { id: 'file_chat_statement', name: 'wire-confirmation-0912.pdf', purpose: 'chat_attachment', team: 'Fraud Strategy', by: 'Maya Okafor', daysAgo: 52, sizeKb: 132 },
     { id: 'file_chat_screenshot', name: 'app-error-screenshot.png', purpose: 'chat_attachment', team: 'Retail Banking', by: 'Tom Haddad', daysAgo: 6, sizeKb: 410 },
     { id: 'file_spec_payments', name: 'payments-hub-openapi.yaml', purpose: 'tool_spec', team: 'Fraud Strategy', by: 'Maya Okafor', daysAgo: 260, sizeKb: 46, refs: [{ type: 'tool_module', id: 'mod_payments_hub', name: 'Payments hub', href: '/tools/mod_payments_hub' }], versions: 2, content: 'openapi: 3.1.0\ninfo:\n  title: Payments hub\n  version: 2.3.0\npaths:\n  /wires/{id}/hold:\n    post:\n      operationId: place_wire_hold' },
-    { id: 'file_logo', name: 'northfield-logo.svg', purpose: 'avatar', team: 'Platform', by: 'James Richardson', daysAgo: 300, sizeKb: 4, sensitivity: 'public' },
+    { id: 'file_logo', name: 'harborpine-logo.svg', purpose: 'avatar', team: 'Platform', by: 'James Richardson', daysAgo: 300, sizeKb: 4, sensitivity: 'public' },
     { id: 'file_audit_sep', name: 'audit-log-2026-09-08.csv', purpose: 'export', team: 'Platform', by: 'James Richardson', daysAgo: 27, sizeKb: 2210, content: 'at,actor,action,target,summary\n2026-09-08T14:02:11Z,Priya Shah,published,workflow,Published Lending servicing inbox v3' },
     { id: 'file_evidence_wire_v6', name: 'evidence-outbound-wire-review-v6.zip', purpose: 'evidence_bundle', team: 'Fraud Strategy', by: 'Eval runner', daysAgo: 70, sizeKb: 3840, refs: [{ type: 'evidence', id: 'mr_wf_wire', name: 'Outbound wire review v6', href: '/model-risk/mr_wf_wire' }], hold: { by: 'Legal (Litigation)', reason: 'LH-2026-014: wire fraud claim, preserve every record for the v6 release', daysAgo: 30 } },
   ];

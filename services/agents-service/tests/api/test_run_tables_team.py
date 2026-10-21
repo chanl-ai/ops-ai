@@ -24,7 +24,7 @@ from tests.api.test_write_approval_policy import (
 def builder(sub: str, team: str) -> dict[str, str]:
     claims = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],

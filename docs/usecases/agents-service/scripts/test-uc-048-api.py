@@ -20,9 +20,9 @@ ACCOUNT = "CHQ-2219"
 def module(gw: Any) -> tuple[str, str]:
     """A draft module with one read and one write on the fake bank; returns its id and pending review id."""
     url = f"https://{HOST}/v1"
-    name = f"northfield-{RUN}"
+    name = f"harborpine-{RUN}"
     made = data(
-        gw.post("/v1/tool-modules/blank", json={"displayName": f"Northfield {RUN}", "name": name, "type": "http"})
+        gw.post("/v1/tool-modules/blank", json={"displayName": f"Harbor & Pine {RUN}", "name": name, "type": "http"})
     )
     for op in (
         {
@@ -90,7 +90,7 @@ with (
     read = after.get(READ) or {}
     check(
         "once published, the operation is offered with its module, access and input schema",
-        read.get("server") == f"Northfield {RUN}"
+        read.get("server") == f"Harbor & Pine {RUN}"
         and read.get("access") == "read"
         and (read.get("inputSchema") or {}).get("required") == ["accountId"],
         read,

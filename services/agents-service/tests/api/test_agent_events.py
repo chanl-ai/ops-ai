@@ -20,7 +20,7 @@ from ops_agents.store.graphs import metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
 
-ASKER = "dana@northfieldbank.com"
+ASKER = "dana@harborpine.example"
 
 
 def app_for(**settings: Any) -> Any:

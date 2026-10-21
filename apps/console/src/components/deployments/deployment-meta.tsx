@@ -93,7 +93,7 @@ export function CodeBlock({ label, code, onCopy }: { label: string; code: string
 /** How to connect the channel: the snippet, request or routing a developer or mail admin needs. */
 export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deployment; onReconnect?: () => void; reconnecting?: boolean }) {
   if (d.channel === 'widget' && d.widget) {
-    const snippet = `<script src="https://cdn.northfieldbank.com/ops-ai/widget-1.4.2.js"\n  integrity="sha384-Q8mJ3yN0vR2kXwTf6pLd9aHs4eB7cU1oZgVy5iKnM2tPqW8rSx3jF0lAbCdE9hGu"\n  crossorigin="anonymous"\n  data-deployment="${d.id}"\n  data-position="${d.widget.position}"\n  async></script>`;
+    const snippet = `<script src="https://cdn.harborpine.example/ops-ai/widget-1.4.2.js"\n  integrity="sha384-Q8mJ3yN0vR2kXwTf6pLd9aHs4eB7cU1oZgVy5iKnM2tPqW8rSx3jF0lAbCdE9hGu"\n  crossorigin="anonymous"\n  data-deployment="${d.id}"\n  data-position="${d.widget.position}"\n  async></script>`;
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">Paste before the closing body tag on any page of an allowed domain. The widget refuses to load anywhere else.</p>

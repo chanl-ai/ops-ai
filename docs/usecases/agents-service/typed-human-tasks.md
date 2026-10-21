@@ -12,7 +12,7 @@ is decided in Human Tasks like any other, and the caller reads the decision from
 | Needs | How |
 |---|---|
 | The agents service and a workflow worker on the use case database | harness `agents()` and `engine_worker()` |
-| A caller and a reviewer | dev users lee@ and m.okafor@northfieldbank.com in team_all |
+| A caller and a reviewer | dev users lee@ and m.okafor@harborpine.example in team_all |
 
 ## Steps and expected results
 

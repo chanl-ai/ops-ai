@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .conftest import kb_client
 
-POLICIES = {"name": "Lending policies", "owner": "maya@northfieldbank.com", "description": "Mortgage rules"}
+POLICIES = {"name": "Lending policies", "owner": "maya@harborpine.example", "description": "Mortgage rules"}
 
 
 def data(r: httpx.Response, status: int = 200) -> Any:
@@ -28,7 +28,7 @@ async def test_a_knowledge_base_needs_an_owner(client: httpx.AsyncClient) -> Non
     r = await client.post("/v1/knowledge-bases", json={"name": "Lending policies"})
     assert r.status_code == 400 and r.json()["error"]["code"] == "collection_without_owner", r.text
     kb = data(await client.post("/v1/knowledge-bases", json=POLICIES), 201)
-    assert (kb["owner"], kb["health"], kb["retrieval"]["searchMode"]) == ("maya@northfieldbank.com", "never", "keyword")
+    assert (kb["owner"], kb["health"], kb["retrieval"]["searchMode"]) == ("maya@harborpine.example", "never", "keyword")
     again = await client.post("/v1/knowledge-bases", json={**POLICIES, "name": "lending POLICIES"})
     assert again.status_code == 409, again.text
 
@@ -45,7 +45,7 @@ async def test_another_tenants_knowledge_is_not_reachable(engine: AsyncEngine, c
 
 async def test_lists_and_details_join_the_names_the_console_shows(client: httpx.AsyncClient) -> None:
     src = await source(client)
-    mine = {**POLICIES, "owner": "james@northfieldbank.com", "sourceIds": [src["id"]]}
+    mine = {**POLICIES, "owner": "james@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=mine), 201)
     row = data(await client.get("/v1/knowledge-bases"))["data"][0]
     assert (row["id"], row["sourceNames"]) == (kb["id"], ["Policy PDFs"])

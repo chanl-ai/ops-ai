@@ -16,7 +16,7 @@ from usecase_harness import TEAM, agents, check, data, fake_openai, finish, free
 
 SERVICE = service_headers("models")
 RUNTIME_KEY = "mk_dev_agents"  # models-service's dev seed: agents-service's own key
-SYSTEM = "You are Wire Fraud Sentinel, an assistant for Northfield Bank's Fraud Operations team."
+SYSTEM = "You are Wire Fraud Sentinel, an assistant for Harbor & Pine Bank's Fraud Operations team."
 HOLD_TOOL = {"type": "function", "function": {"name": "place_wire_hold", "parameters": {"type": "object"}}}
 HOLD_ARGS = {"wireId": "W-1001", "action": "hold", "hours": 24}
 

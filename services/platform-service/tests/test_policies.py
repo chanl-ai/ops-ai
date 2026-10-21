@@ -43,7 +43,7 @@ DEFAULTS: dict[str, Any] = {
 }
 # The AI uses: the one documented exception to open defaults, off until a team turns them on.
 OFF_UNTIL_ON = ("aiSteps", "taskAssist", "checkBeforeSend", "pageImages")
-ADA = "ada@northfieldbank.com"
+ADA = "ada@harborpine.example"
 
 
 async def tenant(engine: AsyncEngine) -> str:

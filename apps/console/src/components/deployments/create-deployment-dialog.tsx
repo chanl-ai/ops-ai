@@ -54,7 +54,7 @@ const initial = (workflowId = ''): Values => ({
   workflowId,
   channel: 'widget',
   environment: 'staging',
-  title: 'Ask Northfield',
+  title: 'Ask Harbor & Pine',
   welcome: 'Hi! How can we help today?',
   domains: '',
   position: 'right',

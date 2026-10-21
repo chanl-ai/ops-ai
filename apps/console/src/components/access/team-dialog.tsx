@@ -82,7 +82,7 @@ export function TeamDialog({
         </FormField>
         {!team && (
           <FormField id="team-admin" label="First admin" error={errors.admin} hint="Someone who already has an account in this workspace.">
-            <Input id="team-admin" type="email" value={admin} aria-invalid={!!errors.admin} onChange={(e) => (setAdmin(e.target.value), setErrors({}))} placeholder="e.g. name@northfieldbank.com" />
+            <Input id="team-admin" type="email" value={admin} aria-invalid={!!errors.admin} onChange={(e) => (setAdmin(e.target.value), setErrors({}))} placeholder="e.g. name@harborpine.example" />
           </FormField>
         )}
       </div>

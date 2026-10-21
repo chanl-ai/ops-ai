@@ -15,7 +15,7 @@ const at = (hours) => new Date(Date.now() + hours * 3_600_000).toISOString();
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const open = (subject, extra) => fetch(`${agents}/v1/cases`, { method: 'POST', headers: J, body: JSON.stringify({ subject: `${subject} ${TAG}`, customer_name: 'Alex Martin', ...extra }) }).then(json);
     const due = await open('Card replacement', { priority: 'high', responseDueAt: at(2), resolutionDueAt: at(30) });
     const late = await open('Disputed wire', { priority: 'urgent', responseDueAt: at(-30), resolutionDueAt: at(-2) });
@@ -28,7 +28,7 @@ await withUiStack(
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

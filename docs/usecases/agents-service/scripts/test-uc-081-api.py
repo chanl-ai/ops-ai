@@ -35,7 +35,7 @@ from usecase_harness import (
     tools,
 )
 
-MAYA = {**TEAM, "X-Dev-User": "m.okafor@northfieldbank.com"}
+MAYA = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
 DEFINITION = """
 schemaVersion: 2
 id: uc081_refund_check

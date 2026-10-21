@@ -3,7 +3,7 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
 await withUiStack(
@@ -41,10 +41,10 @@ await withUiStack(
           body: JSON.stringify({ name }),
         });
       const refused = (await rename(JAMES, 'team_ops', 'Not Allowed')).status;
-      const renamed = await rename('w.kamau@northfieldbank.com', 'team_platform', 'Northfield Bank');
+      const renamed = await rename('w.kamau@harborpine.example', 'team_platform', 'Harbor & Pine Bank');
       await page.reload({ waitUntil: 'domcontentloaded' });
       const after = page.getByTestId('header-workspace');
-      const shows = await after.filter({ hasText: 'Northfield Bank' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      const shows = await after.filter({ hasText: 'Harbor & Pine Bank' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
       check('3 the workspace admin names the workspace through the platform API, a builder is refused, and the header shows the new name', renamed.status === 200 && refused === 403 && shows, { renamed: renamed.status, refused, shows });
 
       // 4 On Settings › Workspace the builder sees the name locked; Wanjiru renames it there and the header follows.
@@ -53,7 +53,7 @@ await withUiStack(
       const admin = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
       admin.on('pageerror', (e) => errors.push(e.message));
       await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await admin.getByLabel('Email').fill('w.kamau@northfieldbank.com');
+      await admin.getByLabel('Email').fill('w.kamau@harborpine.example');
       await admin.getByLabel('Password').fill('northfield-demo');
       await admin.getByRole('button', { name: /^Sign in/ }).first().click();
       await admin.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -61,11 +61,11 @@ await withUiStack(
       const field = admin.getByTestId('workspace-name');
       await field.waitFor({ timeout: 30_000 });
       for (let i = 0; i < 30 && (await field.isDisabled()); i++) await admin.waitForTimeout(500);
-      await field.fill('Northfield Bank Operations');
+      await field.fill('Harbor & Pine Bank Operations');
       const saved = admin.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith('/v1/settings/workspace'), { timeout: 30_000 }).catch(() => null);
       await admin.locator('#name').getByRole('button', { name: 'Save' }).click();
       const answer = await saved;
-      const headerShows = await admin.getByTestId('header-workspace').filter({ hasText: 'Northfield Bank Operations' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      const headerShows = await admin.getByTestId('header-workspace').filter({ hasText: 'Harbor & Pine Bank Operations' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
       check('4 Settings › Workspace saves the name for a workspace admin, and is locked for a builder', builderLocked && answer?.status() === 200 && headerShows, { builderLocked, status: answer?.status(), headerShows });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

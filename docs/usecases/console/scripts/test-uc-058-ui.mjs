@@ -16,7 +16,7 @@ const json = async (r) => {
 await withUiStack(
   async (consoleUrl) => {
     // James's chat with a new agent, one message long.
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Helper ${TAG}`, role: 'Answers questions' }) }));
     await json(await fetch(`${agentsUrl}/v1/agents/${agent.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: agent.version, note: 'uc-058' }) }));
     const thread = (await json(await fetch(`${agentsUrl}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: agent.id, kbIds: [] }) }))).id;
@@ -40,13 +40,13 @@ await withUiStack(
         return page;
       };
 
-      const M = as(await tokenFor('m.okafor@northfieldbank.com'), 'team_ops');
+      const M = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
       const mayaApi = (await fetch(`${agentsUrl}/chat/threads/${thread}`, { headers: M })).status;
-      const maya = await open('m.okafor@northfieldbank.com', false);
+      const maya = await open('m.okafor@harborpine.example', false);
       const mayaReads = await maya.getByText(`Hello from James ${TAG}`).count();
       check("a teammate gets 404 on the owner's chat and sees none of it", mayaApi === 404 && mayaReads === 0, { mayaApi, mayaReads });
 
-      const james = await open('j.richardson@northfieldbank.com', true);
+      const james = await open('j.richardson@harborpine.example', true);
       const jamesBox = await james.locator('textarea').count();
       check('the owner reads the chat and has the message box', jamesBox === 1, { jamesBox });
 

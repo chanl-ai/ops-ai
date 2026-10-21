@@ -128,8 +128,8 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
             "mod_x",
             1,
             note="",
-            by="james@northfield.example",
-            body={**body, "teamId": "team_ops", "savedBy": "maya@northfield.example"},
+            by="james@harborpine.example",
+            body={**body, "teamId": "team_ops", "savedBy": "maya@harborpine.example"},
             approved=False,
         )
     assert await flag(c, f"/reviews/{req['id']}", "canDecide", REVIEWER) is True

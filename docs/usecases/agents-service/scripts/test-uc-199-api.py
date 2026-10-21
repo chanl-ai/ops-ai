@@ -25,9 +25,9 @@ PLATFORM = f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"
 TOOLS = f"http://127.0.0.1:{os.environ.get('OPS_TOOLS_PORT', '8720')}"
 SMTP = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
-HOST, SECRET = "mail.northfield.test", "DEV_IMAP_PASSWORD"
+HOST, SECRET = "mail.harborpine.test", "DEV_IMAP_PASSWORD"
 RUN = uuid.uuid4().hex[:8]
-ADDRESS = f"desk-{RUN}@northfield.test"
+ADDRESS = f"desk-{RUN}@harborpine.test"
 WID = f"uc199_{RUN}"
 POLL = float(os.environ.get("OPS_EMAIL_POLL_SECONDS", "3"))
 
@@ -57,10 +57,10 @@ def send(subject: str) -> None:
         s.send_message(m)
 
 
-sam = headers("s.adeyemi@northfieldbank.com", "team_security")
-james = headers("j.richardson@northfieldbank.com", "team_ops")
-ravi = headers("r.menon@northfieldbank.com", "team_ops")
-omar = headers("o.haddad@northfieldbank.com", "team_fraud")
+sam = headers("s.adeyemi@harborpine.example", "team_security")
+james = headers("j.richardson@harborpine.example", "team_ops")
+ravi = headers("r.menon@harborpine.example", "team_ops")
+omar = headers("o.haddad@harborpine.example", "team_fraud")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, timeout=60)
 

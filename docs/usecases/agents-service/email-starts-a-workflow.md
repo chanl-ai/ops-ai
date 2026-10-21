@@ -10,17 +10,17 @@ its attachments in Files and starts one run whose input is the email.
 
 | Needs | How |
 |---|---|
-| The shared stack with platform sign-in | `OPS_STACK_AUTH=platform make up`; the dev seed (`services/agents-service/seed/mailboxes.json`) connects `levy@northfield.example`, an IMAP mailbox on the stack's GreenMail, for team_ops |
+| The shared stack with platform sign-in | `OPS_STACK_AUTH=platform make up`; the dev seed (`services/agents-service/seed/mailboxes.json`) connects `levy@harborpine.example`, an IMAP mailbox on the stack's GreenMail, for team_ops |
 | files-service | part of the stack; the worker writes attachments there as agents-service |
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James asks for the mailbox options | `levy@northfield.example` is offered |
+| 1 | James asks for the mailbox options | `levy@harborpine.example` is offered |
 | 2 | James saves a workflow whose trigger is Email received on that mailbox and publishes it | 201 and the workflow is live |
 | 3 | The worker's first pass on the new binding | No run: mail already in the folder is history |
-| 4 | The court order notice with its PDF is emailed to `levy@northfield.example` through GreenMail's SMTP | One run; its input has the sender, subject, body and the PDF as a Files id, never its bytes |
+| 4 | The court order notice with its PDF is emailed to `levy@harborpine.example` through GreenMail's SMTP | One run; its input has the sender, subject, body and the PDF as a Files id, never its bytes |
 | 5 | Read the file from files-service as James | The bytes are the PDF's |
 | 6 | The same message again, with other brackets and domain case | No second run |
 | 7 (ui) | James adds Email received on the canvas, picks the mailbox, sets a folder and filters, saves | The sheet says how it starts; the saved version keeps mailbox, folder and filters |

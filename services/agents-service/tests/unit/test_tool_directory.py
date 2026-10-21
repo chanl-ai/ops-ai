@@ -24,7 +24,7 @@ def op(name: str, access: str = "read") -> dict[str, Any]:
         "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
         "requiresApproval": access != "read",
         "moduleId": "mod_bank",
-        "moduleName": "Northfield Core Banking",
+        "moduleName": "Harbor & Pine Core Banking",
     }
 
 
@@ -98,8 +98,8 @@ async def test_a_run_gets_only_granted_names_the_registry_still_offers_with_thei
             directory(tools, Clock()), ["get_account", "hidden_since", "workflow:dispute_email", "update_address"]
         )
     assert [(g.name, g.server, g.access) for g in grants] == [
-        ("get_account", "Northfield Core Banking", "read"),
-        ("update_address", "Northfield Core Banking", "write"),
+        ("get_account", "Harbor & Pine Core Banking", "read"),
+        ("update_address", "Harbor & Pine Core Banking", "write"),
     ]
     assert grants[0].description == "get_account does a thing"
     assert grants[0].input_schema["required"] == ["id"]

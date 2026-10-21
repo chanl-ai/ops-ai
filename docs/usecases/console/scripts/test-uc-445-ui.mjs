@@ -13,7 +13,7 @@ import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack 
 const SHARED = process.env.OPS_UC445_SHARED === '1';
 const agents = `http://127.0.0.1:${SHARED ? 8700 : AGENTS_PORT}`;
 const platform = `http://127.0.0.1:${SHARED ? 8710 : PLATFORM_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const PDF = join(ROOT, 'services/documents-service/tests/fixtures/restraining/TEST012.pdf');
 // Screenshots are the card's evidence only from the shared stack; a private run keeps them in its own temp folder.
 const SHOTS = SHARED ? join(ROOT, '.codeloop/evidence/445', process.env.OPS_UC445_PHASE ?? 'after') : mkdtempSync(join(tmpdir(), 'uc445-'));
@@ -142,7 +142,7 @@ async function body(consoleUrl) {
       await shot('notice-form');
       if (!hasPicker) return;
       await form.locator('#run-from').fill('levies@courts.example');
-      await form.locator('#run-mailbox').fill('legal-orders@northfieldbank.example');
+      await form.locator('#run-mailbox').fill('legal-orders@harborpine.example');
       await form.locator('input[type="file"]').first().setInputFiles(PDF);
       await form.getByText('TEST012.pdf').first().waitFor({ timeout: 60_000 });
       await shot('notice-uploaded');
@@ -155,7 +155,7 @@ async function body(consoleUrl) {
       if (!uploaded) return check('3 the notice picks a file already in Files and the run gets its id', false, 'no uploaded file from step 2');
       await openForm(wf.notice.name);
       await form.locator('#run-from').fill('levies@courts.example');
-      await form.locator('#run-mailbox').fill('legal-orders@northfieldbank.example');
+      await form.locator('#run-mailbox').fill('legal-orders@harborpine.example');
       await form.getByTestId('run-files-fileId-pick').getByRole('button', { name: /Pick a file from Files/ }).click();
       await page.getByPlaceholder('Search files', { exact: true }).fill('TEST012');
       await page.getByRole('option', { name: /TEST012\.pdf/ }).first().click();

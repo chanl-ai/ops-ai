@@ -10,7 +10,7 @@ from tests.conftest import step_up
 from tests.gateway.conftest import Gateway
 from tests.gateway.test_dispute_e2e import apps, runtime  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixtures
 
-LEE = "lee@northfieldbank.com"
+LEE = "lee@harborpine.example"
 
 
 async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gateway(

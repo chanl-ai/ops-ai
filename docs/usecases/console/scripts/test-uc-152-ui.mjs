@@ -20,7 +20,7 @@ const MOVED = [
   ['/settings/storage', '/settings/workspace/storage'],
 ];
 
-const signIn = async (browser, consoleUrl, email = 's.adeyemi@northfieldbank.com') => {
+const signIn = async (browser, consoleUrl, email = 's.adeyemi@harborpine.example') => {
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
@@ -74,15 +74,15 @@ await withUiStack(
       const tools = `http://127.0.0.1:${TOOLS_PORT}`;
       const tok = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
       const tag = Math.random().toString(36).slice(2, 6);
-      const S = { Authorization: `Bearer ${await tok('s.adeyemi@northfieldbank.com')}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
-      const J = { Authorization: `Bearer ${await tok('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+      const S = { Authorization: `Bearer ${await tok('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
+      const J = { Authorization: `Bearer ${await tok('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
       const KEY = `PICK_${tag.toUpperCase()}`;
       await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: KEY, value: 'not-a-key' }) });
       await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: `pick-${tag}.bank.example`, note: 'uc-152' }) });
       const made = await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Pick ${tag}`, name: `pick-${tag}`, type: 'http' }) })).json();
       const opName = `get_pick_${tag}`;
       await fetch(`${tools}/v1/tool-modules/${made.data.id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: opName, description: '', access: 'read', method: 'GET', url: `https://pick-${tag}.bank.example/v1/x` }) });
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/tools/${made.data.id}/operations/${opName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByRole('button', { name: 'Add header' }).click({ timeout: 120_000 });
       await james.getByRole('button', { name: 'Insert a secret as the header value' }).first().click();
@@ -90,7 +90,7 @@ await withUiStack(
       await james.getByRole('option', { name: KEY }).click();
       const value = await james.getByLabel('Header value').first().inputValue();
       // Whether Add a secret shows follows the server's grid for him, not a role named in the console.
-      const perms = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/me/permissions`, { headers: { Authorization: `Bearer ${await tok('j.richardson@northfieldbank.com')}` } })).json()).data;
+      const perms = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/me/permissions`, { headers: { Authorization: `Bearer ${await tok('j.richardson@harborpine.example')}` } })).json()).data;
       const mayAdd = perms.teams.some((t) => t.permissions.some((p) => p.area === 'secrets_egress' && p.action === 'create'));
       check('a builder picks a secret as a header value and is offered Add a secret exactly when the server’s grid lets him', value === `{{${KEY}}}` && (addOption === 1) === mayAdd, { value, addOption, mayAdd });
       await sam.goto(`${consoleUrl}/tools/${made.data.id}/operations/${opName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

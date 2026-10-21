@@ -22,10 +22,10 @@ async function signIn(browser, consoleUrl, email) {
 await withUiStack(
   async (consoleUrl) => {
     // James's published module with one read, and his request for a workflow's access to it.
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'), 'team_ops');
-    const N = as(await tokenFor('n.petrov@northfieldbank.com'), 'team_security');
+    const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
+    const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
     // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
-    const S = as(await tokenFor('s.adeyemi@northfieldbank.com'), 'team_security');
+    const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-143' }) });
     const id = (await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc143-${TAG}`, type: 'http' }) })).json()).data.id;
     const op = `get_statement_${TAG}`;
@@ -42,7 +42,7 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const page = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com');
+      const page = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       page.setDefaultTimeout(60_000);
       page.on('pageerror', (e) => errors.push(e.message));
 

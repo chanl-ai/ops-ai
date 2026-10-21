@@ -90,7 +90,7 @@ async def test_a_version_a_person_published_is_not_replaced(tmp_path: Path) -> N
     engine = create_async_engine(db)
     async with engine.begin() as c:
         mark = sa.update(registry_workflow_versions).where(registry_workflow_versions.c.workflow_id == "levy-case")
-        await c.execute(mark.values(published_by="maya@northfieldbank.com"))
+        await c.execute(mark.values(published_by="maya@harborpine.example"))
         await c.execute(
             sa.update(registry_workflows).where(registry_workflows.c.id == "levy-case").values(status="live")
         )
@@ -134,7 +134,7 @@ async def test_outside_dev_approving_the_seed_request_moves_the_pointer_to_the_s
         r = await client.post(
             f"/reviews/{request['id']}/decision",
             json={"decision": "approved"},
-            headers={"X-Dev-User": "m.okafor@northfieldbank.com"},
+            headers={"X-Dev-User": "m.okafor@harborpine.example"},
         )
         assert r.status_code == 200, r.text
         assert await live_version(client) == first + 1
@@ -161,7 +161,7 @@ async def test_outside_dev_a_persons_draft_is_kept_when_the_seed_asks_for_review
             .values(
                 draft=mine.get("graph") or {"nodes": [], "edges": []},
                 draft_saved_at="2026-10-15T20:00:00.000Z",
-                draft_saved_by="maya@northfieldbank.com",
+                draft_saved_by="maya@harborpine.example",
             )
         )
     await engine.dispose()
@@ -169,5 +169,5 @@ async def test_outside_dev_a_persons_draft_is_kept_when_the_seed_asks_for_review
     async with stack(db, seed, environment="production") as client:
         assert len(await pending_seed_requests(client)) == 1, "the seed's change still waits for review"
         draft = (await client.get("/v1/workflows/levy-case")).json()["data"]["draft"]
-        assert draft is not None and draft["savedBy"] == "maya@northfieldbank.com", draft
+        assert draft is not None and draft["savedBy"] == "maya@harborpine.example", draft
         assert await live_version(client) == first

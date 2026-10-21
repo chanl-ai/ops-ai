@@ -35,8 +35,8 @@ from tests.conftest import FakeGraphModels, fixture_knowledge, scripted_model
 
 from .conftest import REVIEW_KEY, SEED, Gateway
 
-STARTER = {"X-Dev-User": "j.richardson@northfieldbank.com"}
-REVIEWER = {"X-Dev-User": "m.okafor@northfieldbank.com"}
+STARTER = {"X-Dev-User": "j.richardson@harborpine.example"}
+REVIEWER = {"X-Dev-User": "m.okafor@harborpine.example"}
 
 
 def definition(wid: str, *, reviewed: bool) -> dict[str, Any]:

@@ -7,12 +7,12 @@ import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUi
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
-const SAM = 's.adeyemi@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const SECRET = 'DESK_IMAP_PASSWORD';
 const RUN = Math.random().toString(36).slice(2, 8);
-const DESK = `desk-${RUN}@northfield.test`;
+const DESK = `desk-${RUN}@harborpine.test`;
 const LEVY = `levies-${RUN}@gmail.com`;
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token, team) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': team, 'Content-Type': 'application/json' });
@@ -22,7 +22,7 @@ const WORKFLOW = {
   id: `uc199_${RUN}`,
   name: 'Desk intake by email',
   nodes: [
-    { id: 'start', type: 'ops.trigger.email', typeVersion: 1, name: 'Email arrives', parameters: { mailbox: 'levy@northfield.example' }, position: { x: 0, y: 0 } },
+    { id: 'start', type: 'ops.trigger.email', typeVersion: 1, name: 'Email arrives', parameters: { mailbox: 'levy@harborpine.example' }, position: { x: 0, y: 0 } },
     { id: 'done', type: 'ops.flow.end', typeVersion: 1, name: 'Done', parameters: {}, position: { x: 300, y: 0 } },
   ],
   connections: [{ from: { node: 'start', port: 'payload' }, to: { node: 'done', port: 'in' } }],
@@ -67,7 +67,7 @@ await withUiStack(
         const list = page.getByRole('table');
         await list.locator('[data-testid^="channel-row-"]').first().waitFor({ timeout: 60_000 });
         const text = await list.innerText();
-        check('1 Channels lists the team mailboxes from the records', /levy@northfield\.example/.test(text) && /intake@northfield\.test/.test(text), text);
+        check('1 Channels lists the team mailboxes from the records', /levy@harborpine\.example/.test(text) && /intake@harborpine\.test/.test(text), text);
       });
 
       await step('2 James connects an IMAP mailbox, tests it and lands on its page', async () => {
@@ -76,7 +76,7 @@ await withUiStack(
         await page.getByTestId('connect-mailbox-submit').click();
         await page.locator('#connect-page-name').fill(`Service desk ${RUN}`);
         await page.locator('#connect-page-address').fill(DESK);
-        await page.locator('#connect-page-host').fill('mail.northfield.test');
+        await page.locator('#connect-page-host').fill('mail.harborpine.test');
         await page.locator('#connect-page-port').fill('143');
         await page.locator('#connect-page-tls').click();
         await pickSecret(page, 'connect-page-secret');
@@ -98,10 +98,10 @@ await withUiStack(
         await page.getByLabel('Microsoft 365').click();
         await page.getByTestId('connect-mailbox-submit').click();
         await page.locator('#connect-page-name').fill(`Lending ${RUN}`);
-        await page.locator('#connect-page-address').fill(`lending-${RUN}@northfield.example`);
+        await page.locator('#connect-page-address').fill(`lending-${RUN}@harborpine.example`);
         // An IMAP host and user name mean nothing to Microsoft 365: the form asks for the app registration instead.
         const imapAsked = (await page.locator('#connect-page-host').count()) + (await page.locator('#connect-page-username').count());
-        await page.locator('#connect-page-graphTenantId').fill('northfield.onmicrosoft.com');
+        await page.locator('#connect-page-graphTenantId').fill('harborpine.onmicrosoft.com');
         await page.locator('#connect-page-graphClientId').fill('3f1c2b7a-0d4e-4c1a-9b8e-2a6f5d7c9e10');
         await pickSecret(page, 'connect-page-secret');
         await page.getByTestId('mailbox-replies').getByLabel('Microsoft 365').click();
@@ -116,7 +116,7 @@ await withUiStack(
         const saved = mid ? (await (await fetch(`${agents}/v1/channels/mailboxes/${mid}`, { headers: J })).json()).data : null;
         check(
           '2b James connects a Microsoft 365 mailbox with its app registration, replying through Graph',
-          imapAsked === 0 && fromAsked === 0 && tested.ok !== null && saved?.provider === 'graph' && saved.graphTenantId === 'northfield.onmicrosoft.com' && saved.graphClientId === '3f1c2b7a-0d4e-4c1a-9b8e-2a6f5d7c9e10' && saved.passwordSecret === SECRET && saved.sender === 'graph',
+          imapAsked === 0 && fromAsked === 0 && tested.ok !== null && saved?.provider === 'graph' && saved.graphTenantId === 'harborpine.onmicrosoft.com' && saved.graphClientId === '3f1c2b7a-0d4e-4c1a-9b8e-2a6f5d7c9e10' && saved.passwordSecret === SECRET && saved.sender === 'graph',
           { imapAsked, fromAsked, tested, saved: saved && { provider: saved.provider, tenant: saved.graphTenantId, client: saved.graphClientId, secret: saved.passwordSecret, sender: saved.sender } },
         );
       });

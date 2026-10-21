@@ -21,7 +21,7 @@ import httpx
 
 FIXTURES = Path(__file__).resolve().parents[3] / "services" / "agents-service" / "tests" / "fixtures" / "seed"
 # platform-service's dev seed (James Richardson, builder); the password is the dev seed's.
-EMAIL, PASSWORD = "j.richardson@northfieldbank.com", "northfield-demo"
+EMAIL, PASSWORD = "j.richardson@harborpine.example", "northfield-demo"
 
 
 def headers(platform: str | None) -> dict[str, str]:
@@ -65,7 +65,9 @@ def seed(kb: httpx.Client, files: httpx.Client, owner: str) -> dict[str, int]:
             )
         )
         ids = [
-            put_in_files(files, f"{p['document_id']}.md", f"# {p['title']}\n\n## {p['section']}\n\n{p['text']}\n".encode())
+            put_in_files(
+                files, f"{p['document_id']}.md", f"# {p['title']}\n\n## {p['section']}\n\n{p['text']}\n".encode()
+            )
             for p in passages
             if p["kb_id"] == base["id"]
         ]

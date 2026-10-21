@@ -146,6 +146,6 @@ export const EMAIL_CONFIGS: Record<string, EmailWorkflowConfig> = {
 };
 
 export const MAILBOXES: Record<string, string> = {
-  wf_card_inbox: 'cardservices@northfieldbank.com',
-  wf_lending_inbox: 'lendingservicing@northfieldbank.com',
+  wf_card_inbox: 'cardservices@harborpine.example',
+  wf_lending_inbox: 'lendingservicing@harborpine.example',
 };

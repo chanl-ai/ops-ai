@@ -10,11 +10,11 @@ export interface SampleMember {
   lastActiveAt: string;
 }
 export const MEMBERS: SampleMember[] = [
-  { id: 'usr_3f9a1c70', name: 'James Richardson', email: 'j.richardson@northfieldbank.com', role: 'Builder', team: 'Operations', lastActiveAt: ago(8) },
-  { id: 'usr_a41d7e22', name: 'Maya Okafor', email: 'm.okafor@northfieldbank.com', role: 'Approver', team: 'Operations', lastActiveAt: ago(95) },
-  { id: 'usr_58c2b9f4', name: 'Sam Adeyemi', email: 's.adeyemi@northfieldbank.com', role: 'Security admin', team: 'Security', lastActiveAt: ago(3) },
-  { id: 'usr_e07b36d1', name: 'Nadia Petrov', email: 'n.petrov@northfieldbank.com', role: 'Approver', team: 'Security', lastActiveAt: ago(60 * 7) },
-  { id: 'usr_91d4a8c5', name: 'Priya Shah', email: 'p.shah@northfieldbank.com', role: 'Admin', team: 'Platform', lastActiveAt: ago(22) },
+  { id: 'usr_3f9a1c70', name: 'James Richardson', email: 'j.richardson@harborpine.example', role: 'Builder', team: 'Operations', lastActiveAt: ago(8) },
+  { id: 'usr_a41d7e22', name: 'Maya Okafor', email: 'm.okafor@harborpine.example', role: 'Approver', team: 'Operations', lastActiveAt: ago(95) },
+  { id: 'usr_58c2b9f4', name: 'Sam Adeyemi', email: 's.adeyemi@harborpine.example', role: 'Security admin', team: 'Security', lastActiveAt: ago(3) },
+  { id: 'usr_e07b36d1', name: 'Nadia Petrov', email: 'n.petrov@harborpine.example', role: 'Approver', team: 'Security', lastActiveAt: ago(60 * 7) },
+  { id: 'usr_91d4a8c5', name: 'Priya Shah', email: 'p.shah@harborpine.example', role: 'Admin', team: 'Platform', lastActiveAt: ago(22) },
 ];
 
 export interface SampleKey {
@@ -40,8 +40,8 @@ export interface SampleWebhook {
   lastDeliveryAt: string;
 }
 export const WEBHOOKS: SampleWebhook[] = [
-  { id: 'wh_2d8c5e71', name: 'Case system', url: 'https://cases.northfield.example/hooks/ops', events: ['run.finished', 'review.requested'], health: 'ok', lastDeliveryAt: ago(2) },
-  { id: 'wh_77a1f0b3', name: 'Pager', url: 'https://pager.northfield.example/in/ops-ai', events: ['sla.breached'], health: 'warn', lastDeliveryAt: ago(60 * 5) },
+  { id: 'wh_2d8c5e71', name: 'Case system', url: 'https://cases.harborpine.example/hooks/ops', events: ['run.finished', 'review.requested'], health: 'ok', lastDeliveryAt: ago(2) },
+  { id: 'wh_77a1f0b3', name: 'Pager', url: 'https://pager.harborpine.example/in/ops-ai', events: ['sla.breached'], health: 'warn', lastDeliveryAt: ago(60 * 5) },
 ];
 
 export interface SampleGate {

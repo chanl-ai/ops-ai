@@ -38,9 +38,9 @@ from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
 
 SEED = Path(__file__).resolve().parents[1] / "seed"
 PDFS = SEED / "pdfs"
-JAMES, NADIA = "j.richardson@northfieldbank.com", "n.petrov@northfieldbank.com"
+JAMES, NADIA = "j.richardson@harborpine.example", "n.petrov@harborpine.example"
 # Writes Nadia's base: an admin of team_security, the team that owns it.
-SAM = "s.adeyemi@northfieldbank.com"
+SAM = "s.adeyemi@harborpine.example"
 DOCUMENTS = {
     "retail-product-sheet": "Retail Product Sheet",
     "branch-operations-manual": "Branch Operations Manual",

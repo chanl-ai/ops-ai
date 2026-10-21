@@ -7,8 +7,8 @@ import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const INTRANET = 'http://127.0.0.1:4611';
 const NAME = `Teller Desk ${Math.random().toString(36).slice(2, 6)}`;
-const JAMES = 'j.richardson@northfieldbank.com';
-const RAVI = 'r.menon@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
 

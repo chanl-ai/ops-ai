@@ -2,7 +2,7 @@ import type { CaseAction, CaseDetail, CaseEvent, CaseMessage, CaseStatus } from 
 
 import { EMAIL_CONFIGS, MAILBOXES } from './configs';
 
-/** Seed cases: realistic inbound emails for Northfield Bank. Names and accounts are invented. */
+/** Seed cases: realistic inbound emails for Harbor & Pine Bank. Names and accounts are invented. */
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -51,7 +51,7 @@ const T: Template[] = [
   {
     workflowId: 'wf_card_inbox', intentId: 'lost_stolen', account: 'Visa •• 7720',
     subject: 'URGENT wallet stolen',
-    body: 'My wallet was stolen on the subway about an hour ago. My Northfield Visa ending 7720 was in it. Please block it right away.',
+    body: 'My wallet was stolen on the subway about an hour ago. My Harbor & Pine Visa ending 7720 was in it. Please block it right away.',
     fields: { card_last4: '7720', last_known_use: 'Coffee shop, 08:12 today' },
   },
   {
@@ -70,7 +70,7 @@ const T: Template[] = [
   {
     workflowId: 'wf_card_inbox', intentId: 'fee_refund', account: 'Mastercard •• 6610',
     subject: 'Annual fee waiver',
-    body: 'I have been a Northfield customer for 12 years. Could you waive this year’s $120 annual fee on my World card?',
+    body: 'I have been a Harbor & Pine customer for 12 years. Could you waive this year’s $120 annual fee on my World card?',
     fields: { fee_type: 'Annual fee', amount: '$120.00' }, amount: 120,
   },
   {
@@ -211,7 +211,7 @@ export function seedCases(me: string, workflowName: (id: string) => string): Cas
     const actions: CaseAction[] = intent.actions.map((tool, k) => {
       const rule = cfg.approvals.find((a) => a.action === tool);
       const needsApproval = !!rule && !(rule.autoApproveBelow != null && (t.amount ?? 0) < rule.autoApproveBelow);
-      const input = tool === 'send_reply' ? `Hi ${name.split(' ')[0]},\n\n${REPLY[t.intentId]}\n\nNorthfield Bank` : JSON.stringify(TOOL_INPUT[tool]?.(t) ?? {}, null, 2);
+      const input = tool === 'send_reply' ? `Hi ${name.split(' ')[0]},\n\n${REPLY[t.intentId]}\n\nHarbor & Pine Bank` : JSON.stringify(TOOL_INPUT[tool]?.(t) ?? {}, null, 2);
       let actionStatus: CaseAction['status'] = 'drafted';
       let approvals: CaseAction['approvals'] = [];
       let result: string | undefined;

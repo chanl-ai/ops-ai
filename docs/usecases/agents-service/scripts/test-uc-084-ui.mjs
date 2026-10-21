@@ -6,7 +6,7 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const AGENT = 'ag_advisor';
 // The demo seed's names (seed/engine_workflows.json); the v2 workflow tool answers with `runId`, which the card links.

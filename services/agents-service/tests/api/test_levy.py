@@ -30,7 +30,7 @@ from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events, step_up
 
 NOTICE: dict[str, Any] = json.loads((SEED.parent / "mailbox" / "levy_notice.json").read_text())
-MAYA = "m.okafor@northfieldbank.com"
+MAYA = "m.okafor@harborpine.example"
 
 
 class Stack:

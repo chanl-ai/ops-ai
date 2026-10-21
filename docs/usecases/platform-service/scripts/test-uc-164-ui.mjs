@@ -24,7 +24,7 @@ await withUiStack(
       const sam = await (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
       const errors = [];
       sam.on('pageerror', (e) => errors.push(e.message));
-      await signIn(sam, consoleUrl, 'w.kamau@northfieldbank.com');
+      await signIn(sam, consoleUrl, 'w.kamau@harborpine.example');
       await sam.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const link = sam.getByTestId('access-teams');
       const linked = await link.waitFor({ timeout: 60_000 }).then(() => true, () => false);
@@ -35,7 +35,7 @@ await withUiStack(
 
       await sam.getByTestId('teams-create').click();
       await sam.getByLabel('Name').fill('Lending');
-      await sam.getByLabel('First admin').fill('r.menon@northfieldbank.com');
+      await sam.getByLabel('First admin').fill('r.menon@harborpine.example');
       await sam.getByLabel('First admin').press('Enter');
       const row = sam.getByRole('row', { name: /Lending/ });
       const created = await row.waitFor({ timeout: 30_000 }).then(() => true, () => false);
@@ -44,7 +44,7 @@ await withUiStack(
 
       await sam.getByTestId('teams-create').click();
       await sam.getByLabel('Name').fill('lending');
-      await sam.getByLabel('First admin').fill('r.menon@northfieldbank.com');
+      await sam.getByLabel('First admin').fill('r.menon@harborpine.example');
       await sam.getByTestId('team-submit').click();
       const taken = await sam.getByText('Another team in this workspace has that name.').waitFor({ timeout: 15_000 }).then(() => true, () => false);
       check('a second lending in another case is refused under the name field', taken);
@@ -68,7 +68,7 @@ await withUiStack(
       check('the Teams page fits 400 px with no page scroll', !wide);
 
       const james = await (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
-      await signIn(james, consoleUrl, 'j.richardson@northfieldbank.com');
+      await signIn(james, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/access/teams`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const refused = await james.getByTestId('teams-no-access').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('James sees that workspace admins manage teams, and no Create team', refused && (await james.getByTestId('teams-create').count()) === 0);

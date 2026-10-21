@@ -15,7 +15,7 @@ mkdirSync(EVIDENCE, { recursive: true });
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const kb = `http://127.0.0.1:${KB_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const TAG = Math.random().toString(36).slice(2, 6);
 const KB = `Lending policy ${TAG}`;

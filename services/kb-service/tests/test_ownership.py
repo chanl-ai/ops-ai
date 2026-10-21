@@ -22,11 +22,11 @@ from ops_service_kit.settings import Settings
 from .conftest import kb_client
 from .test_bases_and_sources import data, source
 
-OWNED_BY_MAYA = {"name": "Lending policies", "owner": "maya@northfieldbank.com"}
+OWNED_BY_MAYA = {"name": "Lending policies", "owner": "maya@harborpine.example"}
 
 
 async def test_the_owner_changes_their_own(engine: AsyncEngine, tenant: str) -> None:
-    async with kb_client(engine, tenant, "maya@northfieldbank.com") as maya:
+    async with kb_client(engine, tenant, "maya@harborpine.example") as maya:
         kb = data(await maya.post("/v1/knowledge-bases", json=OWNED_BY_MAYA), 201)
         src = await source(maya)
         renamed = data(await maya.patch(f"/v1/knowledge-bases/{kb['id']}", json={"name": "Lending rules"}))
@@ -39,16 +39,16 @@ async def test_the_owner_changes_their_own(engine: AsyncEngine, tenant: str) -> 
 
 
 async def test_a_tenant_admin_can_step_in(engine: AsyncEngine, tenant: str) -> None:
-    async with kb_client(engine, tenant, "maya@northfieldbank.com") as maya:
+    async with kb_client(engine, tenant, "maya@harborpine.example") as maya:
         kb = data(await maya.post("/v1/knowledge-bases", json=OWNED_BY_MAYA), 201)
-    async with kb_client(engine, tenant, "priya@northfieldbank.com", admin=True) as priya:
-        moved = data(await priya.patch(f"/v1/knowledge-bases/{kb['id']}", json={"owner": "lee@northfieldbank.com"}))
-        assert moved["owner"] == "lee@northfieldbank.com"
+    async with kb_client(engine, tenant, "priya@harborpine.example", admin=True) as priya:
+        moved = data(await priya.patch(f"/v1/knowledge-bases/{kb['id']}", json={"owner": "lee@harborpine.example"}))
+        assert moved["owner"] == "lee@harborpine.example"
 
 
 async def test_a_knowledge_base_can_be_created_under_an_id_it_already_has(engine: AsyncEngine, tenant: str) -> None:
     async with kb_client(engine, tenant) as client:
-        body = {"id": "kb_people", "name": "Fraud & payments", "owner": "maya@northfieldbank.com"}
+        body = {"id": "kb_people", "name": "Fraud & payments", "owner": "maya@harborpine.example"}
         made = data(await client.post("/v1/knowledge-bases", json=body), 201)
         assert made["id"] == "kb_people"
         again = await client.post("/v1/knowledge-bases", json={**body, "name": "Another"})
@@ -95,15 +95,15 @@ def _signed_in(engine: AsyncEngine, tenant: str, email: str, team: str, roles: d
 
 async def test_an_admin_of_another_team_cannot_change_it(engine: AsyncEngine, tenant: str) -> None:
     """An admin role is held per team, so an admin of payments has no say over a knowledge base lending owns."""
-    async with _signed_in(engine, tenant, "maya@northfieldbank.com", "team_lending", {"team_lending": "builder"}) as m:
+    async with _signed_in(engine, tenant, "maya@harborpine.example", "team_lending", {"team_lending": "builder"}) as m:
         kb = data(await m.post("/v1/knowledge-bases", json=OWNED_BY_MAYA), 201)
-        src = await source(m, owner="maya@northfieldbank.com")
+        src = await source(m, owner="maya@harborpine.example")
     roles = {"team_payments": "admin", "team_lending": "viewer"}
-    async with _signed_in(engine, tenant, "priya@northfieldbank.com", "team_lending", roles) as priya:
+    async with _signed_in(engine, tenant, "priya@harborpine.example", "team_lending", roles) as priya:
         for r, code in (
             (await priya.patch(f"/v1/knowledge-bases/{kb['id']}", json={"name": "Taken"}), "role_required"),
             (await priya.post(f"/v1/sources/{src['id']}/sync"), "role_required"),
         ):
             assert r.status_code == 403 and r.json()["error"]["code"] == code, r.text
-    async with _signed_in(engine, tenant, "lee@northfieldbank.com", "team_lending", {"team_lending": "admin"}) as lee:
+    async with _signed_in(engine, tenant, "lee@harborpine.example", "team_lending", {"team_lending": "admin"}) as lee:
         assert (await lee.patch(f"/v1/knowledge-bases/{kb['id']}", json={"name": "Lending rules"})).status_code == 200

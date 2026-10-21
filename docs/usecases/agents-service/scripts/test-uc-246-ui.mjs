@@ -12,12 +12,12 @@ const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const MAILPIT = `http://127.0.0.1:${process.env.OPS_MAILPIT_HTTP_PORT ?? 8025}`;
 const GREENMAIL_SMTP = process.env.OPS_GREENMAIL_SMTP_PORT ?? '3025';
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
-const SAM = 's.adeyemi@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
 // The reply goes out through send_reply on the Messaging Platform team's mail module, so that team approves the write.
-const WANJIRU = 'w.kamau@northfieldbank.com';
-const MAILBOX = 'levies@northfield.test';
+const WANJIRU = 'w.kamau@harborpine.example';
+const MAILBOX = 'levies@harborpine.test';
 const SENDER = 'service@process.example';
 const SETTLED = ['succeeded', 'failed', 'cancelled'];
 // Worker-x's mixed levy email (two restraining notices and a tax levy) plus a second tax levy whose taxpayer the model

@@ -10,7 +10,7 @@ import { IDP_PORT, PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, finish, 
 
 const SHOTS = join(ROOT, '.codeloop/evidence/195');
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
-const zone = `${randomBytes(4).toString('hex')}.northfield.test`;
+const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const CERT = `-----BEGIN CERTIFICATE-----${'A'.repeat(120)}-----END CERTIFICATE-----`;
 
 async function signIn(page, consoleUrl, email) {
@@ -31,7 +31,7 @@ async function pick(page, label, option) {
 await withUiStack(
   async (consoleUrl, stack) => {
     // Passwords stay on for everyone outside the SSO domain, so James can still sign in once SSO is set.
-    const token = (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'w.kamau@northfieldbank.com', password: 'northfield-demo' }) })).json()).data?.token;
+    const token = (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'w.kamau@harborpine.example', password: 'northfield-demo' }) })).json()).data?.token;
     const password = await fetch(`${platform}/v1/settings/sign-in/providers/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_security' }, body: JSON.stringify({ kind: 'password', label: 'Password' }) });
     check('Wanjiru keeps passwords on through the API', password.ok, password.status);
     const browser = await chromium.launch();
@@ -40,7 +40,7 @@ await withUiStack(
       const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
-      await signIn(page, consoleUrl, 'w.kamau@northfieldbank.com');
+      await signIn(page, consoleUrl, 'w.kamau@harborpine.example');
       await page.goto(`${consoleUrl}/settings/security/sign-in`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       check('Settings > Sign-in lists the providers from platform-service', await shown(page.getByTestId('sign-in-providers'), 90_000));
 
@@ -56,7 +56,7 @@ await withUiStack(
       await page.getByRole('button', { name: 'Cancel' }).click();
 
       await page.getByTestId('add-provider').click();
-      await page.getByLabel('Name', { exact: true }).fill('Northfield SSO');
+      await page.getByLabel('Name', { exact: true }).fill('Harbor & Pine SSO');
       await page.getByLabel('Issuer URL').fill(`${stack.idpUrl}/oidc/northfield`);
       await page.getByLabel('Client ID').fill('ops-console');
       await pick(page, 'Client secret', SIGNIN_SECRET);
@@ -64,7 +64,7 @@ await withUiStack(
       await page.locator('input#provider-domains').press('Enter');
       await pick(page, 'New people join as', 'Chat user');
       await page.getByTestId('provider-submit').click();
-      const row = page.getByTestId('sign-in-providers').getByRole('row', { name: /Northfield SSO/ });
+      const row = page.getByTestId('sign-in-providers').getByRole('row', { name: /Harbor & Pine SSO/ });
       check('the OIDC provider is saved and listed with its domain pending', (await shown(row)) && (await row.innerText()).includes(`${zone} (pending)`), await row.innerText().catch(() => ''));
       const domain = page.getByTestId(`domain-${zone}`);
       const value = await domain.getByRole('textbox').inputValue().catch(() => '');
@@ -78,7 +78,7 @@ await withUiStack(
       await page.getByTestId(`verify-${zone}`).click();
       const verified = await shown(domain.getByText('Verified'));
       check('after the record is published, Verify marks the domain verified', put.ok && verified);
-      check('the verified domain now signs in through Northfield SSO', (await ssoOf(`teller@${zone}`))?.label === 'Northfield SSO');
+      check('the verified domain now signs in through Harbor & Pine SSO', (await ssoOf(`teller@${zone}`))?.label === 'Harbor & Pine SSO');
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       check('after a reload the provider and its verified domain are still there', (await shown(page.getByTestId(`domain-${zone}`).getByText('Verified'), 60_000)) && (await page.getByTestId(`verify-${zone}`).count()) === 0);
@@ -90,7 +90,7 @@ await withUiStack(
       check('no page errors', errors.length === 0, errors);
 
       const james = await (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
-      await signIn(james, consoleUrl, 'j.richardson@northfieldbank.com');
+      await signIn(james, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/settings/security/sign-in`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       check('James is told the Security team sets sign-in, with no Add provider', (await shown(james.getByTestId('sign-in-no-access'), 60_000)) && (await james.getByTestId('add-provider').count()) === 0);
     } finally {

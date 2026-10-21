@@ -32,7 +32,7 @@ TENANT = "acme"
 def person(sub: str, team: str, role: str, *, policies: dict[str, Any] | None = None) -> dict[str, str]:
     claims: dict[str, Any] = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],

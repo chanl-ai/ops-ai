@@ -47,7 +47,7 @@ async def test_a_deleted_file_reports_file_deleted_and_a_refused_delete_reports_
         None,
     )
     payload = cast(dict[str, Any], event["payload"])
-    assert (payload["fileId"], payload["name"], payload["deletedBy"]) == (fid, "s.pdf", "james@northfieldbank.com")
+    assert (payload["fileId"], payload["name"], payload["deletedBy"]) == (fid, "s.pdf", "james@harborpine.example")
     assert payload["digest"], payload
 
 

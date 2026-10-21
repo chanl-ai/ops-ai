@@ -3,7 +3,7 @@
 import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 // Pages whose data is the mock's. Each must carry the notice and have no enabled control inside its gate.
 const SAMPLE_PAGES = ['/account', '/account/security', '/settings/notifications', '/settings/sign-in', '/settings/webhooks', '/settings/api-keys', '/settings/policies/gates'];
 

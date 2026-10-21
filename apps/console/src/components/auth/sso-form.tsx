@@ -28,7 +28,7 @@ export function SsoForm({ initialEmail = '', pending, error, onContinue }: { ini
         <div className="flex flex-col gap-6">
           <AuthHeading icon={<KeyRound className="size-6" />} title="Sign in with SSO" description="Use your company account. You will be sent to your identity provider and back." />
           <FormField id="sso-email" label="Work email" error={missing ?? undefined}>
-            <Input id="sso-email" type="email" autoFocus value={email} aria-invalid={!!missing} onChange={(e) => (setEmail(e.target.value), setMissing(null))} placeholder="e.g. name@northfield.ca" />
+            <Input id="sso-email" type="email" autoFocus value={email} aria-invalid={!!missing} onChange={(e) => (setEmail(e.target.value), setMissing(null))} placeholder="e.g. name@harborpine.ca" />
           </FormField>
           <AuthError message={error} />
           <LoadingButton type="submit" className="w-full" isLoading={pending} loadingText="Opening your sign-in…" data-testid="sso-continue">

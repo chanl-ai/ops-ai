@@ -24,8 +24,8 @@ def person(public: httpx.Client, email: str, team: str) -> dict[str, str]:
 
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="uc093-") as tmp, platform() as (public, _), files(Path(tmp)) as f:
-        james = person(public, "j.richardson@northfieldbank.com", "team_ops")
-        priya = person(public, "p.shah@northfieldbank.com", "team_ops")
+        james = person(public, "j.richardson@harborpine.example", "team_ops")
+        priya = person(public, "p.shah@harborpine.example", "team_ops")
         scanner = service_headers("files", service="scanner", scopes=["files:decide"])
         kb = service_headers("files", service="kb")
 

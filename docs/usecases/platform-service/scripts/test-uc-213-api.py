@@ -7,10 +7,10 @@ import secrets
 
 from usecase_harness import SIGNIN_SECRET, bearer, check, data, finish, signed_in, signin_stack
 
-WANJIRU, JAMES = "w.kamau@northfieldbank.com", "j.richardson@northfieldbank.com"
+WANJIRU, JAMES = "w.kamau@harborpine.example", "j.richardson@harborpine.example"
 
 with signin_stack() as (api, idp, _):
-    zone = f"{secrets.token_hex(4)}.northfield.test"
+    zone = f"{secrets.token_hex(4)}.harborpine.test"
     james = bearer(signed_in(api, JAMES), "team_ops")
     admin = bearer(signed_in(api, WANJIRU), "team_security")
     r = api.get("/v1/settings/sign-in/secret-names", headers=james)
@@ -24,7 +24,7 @@ with signin_stack() as (api, idp, _):
     api.put("/v1/settings/sign-in/providers/password", json={"kind": "password", "label": "Password"}, headers=admin)
     provider = {
         "kind": "oidc",
-        "label": "Northfield SSO",
+        "label": "Harbor & Pine SSO",
         "domains": [zone],
         "oidc": {
             "issuer": f"{str(idp.base_url).rstrip('/')}/oidc/northfield",
@@ -74,13 +74,13 @@ with signin_stack() as (api, idp, _):
     check("verify with the published record passes (200)", bool(proven.get("verifiedAt")), r.text[:200])
     r = api.post("/v1/auth/options", json={"email": teller})
     check(
-        "the verified domain now signs in through Northfield SSO",
-        r.status_code == 200 and (data(r)["sso"] or {}).get("label") == "Northfield SSO",
+        "the verified domain now signs in through Harbor & Pine SSO",
+        r.status_code == 200 and (data(r)["sso"] or {}).get("label") == "Harbor & Pine SSO",
         r.text[:200],
     )
 
     r = api.put(
-        "/v1/settings/sign-in/providers/oidc-northfield", json={**provider, "label": "Northfield"}, headers=admin
+        "/v1/settings/sign-in/providers/oidc-northfield", json={**provider, "label": "Harbor & Pine"}, headers=admin
     )
     kept = next((c for c in data(r).get("verification", []) if c["domain"] == zone), {}) if r.status_code == 200 else {}
     check("saving the provider again keeps the domain verified", bool(kept.get("verifiedAt")), r.text[:300])

@@ -67,7 +67,7 @@ async def imported_before_levy(gw: Api) -> str:
     assert old, found
     body = {
         "name": "northfield-core-banking",
-        "displayName": "Northfield Core Banking",
+        "displayName": "Harbor & Pine Core Banking",
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],

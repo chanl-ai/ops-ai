@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, finish, proveDomains, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
-const zone = `${randomBytes(4).toString('hex')}.northfield.test`;
+const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const TELLER = `new.teller@${zone}`;
 const SHOTS = join(ROOT, '.codeloop/evidence/188');
 
@@ -22,16 +22,16 @@ const signIn = async (email) => (await call('POST', '/v1/auth/sign-in', { email,
 await withUiStack(
   async (consoleUrl, stack) => {
     // Setup through the API, each status checked: Sam (Security admin) joins team_ops as admin, then sets the provider.
-    const priya = await signIn('p.shah@northfieldbank.com');
-    let sam = await signIn('s.adeyemi@northfieldbank.com');
-    const invited = await call('POST', '/v1/settings/members/invite', { emails: ['s.adeyemi@northfieldbank.com'], role: 'admin' }, priya, 'team_ops');
+    const priya = await signIn('p.shah@harborpine.example');
+    let sam = await signIn('s.adeyemi@harborpine.example');
+    const invited = await call('POST', '/v1/settings/members/invite', { emails: ['s.adeyemi@harborpine.example'], role: 'admin' }, priya, 'team_ops');
     const token = invited.body?.data?.invites?.[0]?.token;
     const accepted = await call('POST', `/v1/invites/${token}/accept`, { name: 'Sam Adeyemi' }, sam);
     check('Sam joins team_ops as admin through an invitation he accepts', invited.status === 200 && accepted.status === 200, { invited: invited.status, accepted: accepted.status });
-    sam = await signIn('s.adeyemi@northfieldbank.com');
+    sam = await signIn('s.adeyemi@harborpine.example');
     const oidc = await call('PUT', '/v1/settings/sign-in/providers/oidc-northfield', {
       kind: 'oidc',
-      label: 'Northfield SSO',
+      label: 'Harbor & Pine SSO',
       domains: [zone],
       oidc: { issuer: `${stack.idpUrl}/oidc/northfield`, clientId: 'ops-console', clientSecretRef: SIGNIN_SECRET },
       jit: { team: 'team_ops', role: 'chat_user' },
@@ -50,7 +50,7 @@ await withUiStack(
       await form.waitFor({ timeout: 120_000 });
 
       // Non-vacuous half: an email whose domain has no provider keeps the password form.
-      await page.getByLabel('Work email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Work email').fill('j.richardson@harborpine.example');
       await page.waitForResponse((r) => r.url() === `${platform}/v1/auth/options`, { timeout: 30_000 });
       await page.waitForTimeout(300);
       check('an email with no SSO domain shows the password form', (await form.getAttribute('data-mode')) === 'password' && (await page.getByLabel('Password').count()) === 1);
@@ -58,7 +58,7 @@ await withUiStack(
       await page.getByLabel('Work email').fill(TELLER);
       await page.getByTestId('login-sso-notice').waitFor({ timeout: 30_000 }).catch(() => undefined);
       const notice = (await page.getByTestId('login-sso-notice').innerText().catch(() => '')).trim();
-      check('the teller’s email turns the form into Continue with SSO, naming the provider', (await form.getAttribute('data-mode')) === 'sso' && notice.includes('Northfield SSO') && (await page.getByLabel('Password').count()) === 0, notice);
+      check('the teller’s email turns the form into Continue with SSO, naming the provider', (await form.getAttribute('data-mode')) === 'sso' && notice.includes('Harbor & Pine SSO') && (await page.getByLabel('Password').count()) === 0, notice);
       mkdirSync(SHOTS, { recursive: true });
       await page.screenshot({ path: join(SHOTS, 'uc-161-login-sso.png') });
 

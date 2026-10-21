@@ -275,7 +275,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
     const uploaded: AuditEntry = {
       id: `aud_${f.id}_up`,
       at: f.uploadedAt,
-      actor: f.uploadedBy === 'Mailbox intake' || f.uploadedBy === 'Eval runner' ? { kind: 'workflow', name: f.uploadedBy, detail: `svc-${slug(f.uploadedBy)}` } : { kind: 'person', name: f.uploadedBy, detail: `${slug(f.uploadedBy).replace('-', '.')}@northfield.example` },
+      actor: f.uploadedBy === 'Mailbox intake' || f.uploadedBy === 'Eval runner' ? { kind: 'workflow', name: f.uploadedBy, detail: `svc-${slug(f.uploadedBy)}` } : { kind: 'person', name: f.uploadedBy, detail: `${slug(f.uploadedBy).replace('-', '.')}@harborpine.example` },
       action: f.purpose === 'evidence_bundle' || f.purpose === 'export' ? 'created' : 'uploaded',
       target: { type: 'file', name: f.name, href: href(f) },
       teamId: team.id,

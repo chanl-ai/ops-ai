@@ -38,10 +38,10 @@ export const acceptedName = (email: string, teamId: string) => invites.get(token
 
 // Fixed demo links: an open password invite, an open SSO invite, an expired one and a used one.
 const seed = (token: string, i: Omit<StoredInvite, 'token'>) => invites.set(token, { ...i, token });
-seed('demo-invite', { email: 'sam.ortiz@northfieldbank.com', team: 'Lending Ops', teamId: 'team_lending', role: 'Reviewer', invitedBy: 'James Richardson', invitedAt: new Date(Date.now() - 2 * 3_600_000).toISOString() });
-seed('demo-invite-sso', { email: 'li.chen@northfield.ca', team: 'Card Services', teamId: 'team_cards', role: 'Builder', invitedBy: 'Maya Okafor', invitedAt: new Date(Date.now() - 26 * 3_600_000).toISOString() });
-seed('demo-invite-expired', { email: 'r.patel@northfieldbank.com', team: 'Fraud Strategy', teamId: 'team_fraud', role: 'Viewer', invitedBy: 'Daniel Brooks', invitedAt: new Date(Date.now() - 9 * DAY).toISOString() });
-seed('demo-invite-used', { email: 'grace.kim@northfieldbank.com', team: 'Retail Banking', teamId: 'team_retail', role: 'Builder', invitedBy: 'Anika Singh', invitedAt: new Date(Date.now() - 3 * DAY).toISOString(), acceptedAt: new Date(Date.now() - 2 * DAY).toISOString(), acceptedName: 'Grace Kim' });
+seed('demo-invite', { email: 'sam.ortiz@harborpine.example', team: 'Lending Ops', teamId: 'team_lending', role: 'Reviewer', invitedBy: 'James Richardson', invitedAt: new Date(Date.now() - 2 * 3_600_000).toISOString() });
+seed('demo-invite-sso', { email: 'li.chen@harborpine.ca', team: 'Card Services', teamId: 'team_cards', role: 'Builder', invitedBy: 'Maya Okafor', invitedAt: new Date(Date.now() - 26 * 3_600_000).toISOString() });
+seed('demo-invite-expired', { email: 'r.patel@harborpine.example', team: 'Fraud Strategy', teamId: 'team_fraud', role: 'Viewer', invitedBy: 'Daniel Brooks', invitedAt: new Date(Date.now() - 9 * DAY).toISOString() });
+seed('demo-invite-used', { email: 'grace.kim@harborpine.example', team: 'Retail Banking', teamId: 'team_retail', role: 'Builder', invitedBy: 'Anika Singh', invitedAt: new Date(Date.now() - 3 * DAY).toISOString(), acceptedAt: new Date(Date.now() - 2 * DAY).toISOString(), acceptedName: 'Grace Kim' });
 
 const PASSWORD_MIN = 12;
 

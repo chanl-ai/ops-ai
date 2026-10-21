@@ -29,7 +29,7 @@ from send_levy_email import message  # noqa: E402
 PLATFORM = f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 AGENTS = f"http://127.0.0.1:{os.environ.get('OPS_AGENTS_PORT', '8700')}"
 FILES = f"http://127.0.0.1:{os.environ.get('OPS_FILES_PORT', '8750')}"
-MAILBOX = os.environ.get("UC150_MAILBOX", "levy@northfield.example")
+MAILBOX = os.environ.get("UC150_MAILBOX", "levy@harborpine.example")
 GREENMAIL_SMTP = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
 NOTICE: dict[str, Any] = json.loads(
     (ROOT / "services" / "agents-service" / "tests" / "fixtures" / "mailbox" / "levy_notice.json").read_text()
@@ -61,7 +61,7 @@ def until(what: str, probe: Any, timeout: float = WAIT_S) -> Any:
     raise TimeoutError(f"waited {timeout:.0f}s for {what}")
 
 
-james = {"Authorization": f"Bearer {token('j.richardson@northfieldbank.com')}", "X-Team-Id": "team_ops"}
+james = {"Authorization": f"Bearer {token('j.richardson@harborpine.example')}", "X-Team-Id": "team_ops"}
 api = httpx.Client(base_url=AGENTS, headers=james, timeout=30)
 
 options = api.get("/v1/workflows/option-sources", params={"source": "mailboxes"})

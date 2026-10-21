@@ -11,11 +11,11 @@ const AGENT = 'ag_branch';
 const ACCOUNT = 'CHQ-2219';
 // The fake bank's key (FAKE_BANK_KEY's default); both secrets hold it, so a wrong or missing one is refused with 401.
 const BANK_KEY = 'dev-bank-key';
-const JAMES = 'j.richardson@northfieldbank.com';
-const NADIA = 'n.petrov@northfieldbank.com';
-const MAYA = 'm.okafor@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const NADIA = 'n.petrov@harborpine.example';
+const MAYA = 'm.okafor@harborpine.example';
 // Egress and secrets are changed only by an admin of the Security team (c-079).
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
@@ -336,7 +336,7 @@ await withUiStack(
         '11 the Activity tab shows actor, decision and outcome for each call',
         // The person who asked is not on the row yet: the caller is the verified agents service until the runner signs
         // a run context naming the user (.codeloop/wiki/concepts/data-and-ai-gateways.md 4.3, planned).
-        !!write && /m\.okafor@northfieldbank\.com/.test(text) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
+        !!write && /m\.okafor@harborpinebank\.com/.test(text) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
         { row: text.replace(/\s+/g, ' ').slice(0, 300), runLink, thread, approval: write?.approval, subject: write?.subject, actor: write?.actor },
       );
     });

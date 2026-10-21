@@ -17,7 +17,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Productivity',
     description: 'Shared mailboxes for case intake and replies, through Microsoft Graph.',
     authMethods: ['oauth_consent', 'service_principal'],
-    instanceHint: 'northfield.onmicrosoft.com',
+    instanceHint: 'harborpine.onmicrosoft.com',
     owner: 'Messaging Platform',
     available: true,
     scopes: [
@@ -34,7 +34,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Policy sites, libraries and files for knowledge sources and lookups.',
     authMethods: ['service_principal', 'oauth_consent'],
-    instanceHint: 'northfield.sharepoint.com',
+    instanceHint: 'harborpine.sharepoint.com',
     owner: 'Digital Workplace',
     available: true,
     scopes: [
@@ -50,7 +50,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Spaces, pages and attachments for knowledge sources.',
     authMethods: ['oauth_consent', 'api_key'],
-    instanceHint: 'northfield.atlassian.net',
+    instanceHint: 'harborpine.atlassian.net',
     owner: 'Digital Workplace',
     available: true,
     scopes: [
@@ -67,7 +67,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Shared drives and folders; Docs, Sheets and Slides are exported.',
     authMethods: ['oauth_consent', 'service_principal'],
-    instanceHint: 'northfieldbank.com',
+    instanceHint: 'harborpine.example',
     owner: 'Digital Workplace',
     available: true,
     scopes: [
@@ -83,7 +83,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Repositories of documentation, read through a GitHub app installation.',
     authMethods: ['service_principal'],
-    instanceHint: 'github.com/northfield-bank',
+    instanceHint: 'github.com/harborpine-bank',
     owner: 'Platform',
     available: true,
     scopes: [
@@ -98,7 +98,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Pages and databases shared with the integration.',
     authMethods: ['oauth_consent'],
-    instanceHint: 'notion.so/northfield',
+    instanceHint: 'notion.so/harborpine',
     owner: 'Retail Product',
     available: true,
     scopes: [
@@ -113,7 +113,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Knowledge',
     description: 'Help centre articles, and tickets for case history.',
     authMethods: ['oauth_consent', 'api_key'],
-    instanceHint: 'northfield.zendesk.com',
+    instanceHint: 'harborpine.zendesk.com',
     owner: 'Customer Care',
     available: true,
     scopes: [
@@ -129,7 +129,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'CRM',
     description: 'Contacts, cases and activity through Salesforce’s hosted MCP server.',
     authMethods: ['oauth_consent', 'service_principal'],
-    instanceHint: 'northfield.my.salesforce.com',
+    instanceHint: 'harborpine.my.salesforce.com',
     owner: 'CRM Platform',
     available: true,
     scopes: [
@@ -146,7 +146,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Core systems',
     description: 'Accounts, loans, customer profiles and servicing actions in the core ledger.',
     authMethods: ['service_principal', 'mtls'],
-    instanceHint: 'corebanking.api.northfield.internal',
+    instanceHint: 'corebanking.api.harborpine.internal',
     owner: 'Core Banking Platform',
     available: true,
     scopes: [
@@ -163,7 +163,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Core systems',
     description: 'Card accounts, transactions and dispute actions.',
     authMethods: ['mtls'],
-    instanceHint: 'cards.api.northfield.internal',
+    instanceHint: 'cards.api.harborpine.internal',
     owner: 'Card Services',
     available: true,
     scopes: [
@@ -179,7 +179,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Internal',
     description: 'Signed agreements, statements and identity documents held on customer cases.',
     authMethods: ['mtls'],
-    instanceHint: 'cms.northfield.internal',
+    instanceHint: 'cms.harborpine.internal',
     owner: 'Enterprise Data',
     available: true,
     scopes: [
@@ -227,7 +227,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Internal',
     description: 'Incidents and requests in the IT and operations service desk.',
     authMethods: ['oauth_consent', 'service_principal'],
-    instanceHint: 'northfield.service-now.com',
+    instanceHint: 'harborpine.service-now.com',
     owner: 'IT Service Management',
     available: true,
     scopes: [
@@ -243,7 +243,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Core systems',
     description: 'Wire history, payee details and holds.',
     authMethods: ['api_key', 'mtls'],
-    instanceHint: 'payments.api.northfield.internal',
+    instanceHint: 'payments.api.harborpine.internal',
     owner: 'Payments Operations',
     available: true,
     scopes: [
@@ -258,7 +258,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Internal',
     description: 'Any MCP server inside the bank network. Its tool list becomes a tool module.',
     authMethods: ['service_principal', 'mtls', 'api_key'],
-    instanceHint: 'https://<server>.northfield.internal/mcp',
+    instanceHint: 'https://<server>.harborpine.internal/mcp',
     owner: 'Platform',
     available: true,
     scopes: [
@@ -273,7 +273,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Risk & compliance',
     description: 'Sanctions screening and corporate registry lookups.',
     authMethods: ['mtls', 'service_principal'],
-    instanceHint: 'https://compliance-mcp.northfield.internal/mcp',
+    instanceHint: 'https://compliance-mcp.harborpine.internal/mcp',
     owner: 'Financial Crime Ops',
     available: true,
     scopes: [
@@ -312,7 +312,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Core systems',
     description: 'Mortgage and loan applications, conditions and pre-approvals.',
     authMethods: ['service_principal'],
-    instanceHint: 'los.api.northfield.internal',
+    instanceHint: 'los.api.harborpine.internal',
     owner: 'Lending Ops',
     available: true,
     scopes: [
@@ -328,7 +328,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Internal',
     description: 'Advisor availability and appointment booking.',
     authMethods: ['api_key'],
-    instanceHint: 'scheduler.api.northfield.internal',
+    instanceHint: 'scheduler.api.harborpine.internal',
     owner: 'Branch Network',
     available: true,
     scopes: [
@@ -343,7 +343,7 @@ export const CATALOG: CatalogSeed[] = [
     category: 'Productivity',
     description: 'Send envelopes and check signature status.',
     authMethods: ['oauth_consent'],
-    instanceHint: 'northfield.docusign.net',
+    instanceHint: 'harborpine.docusign.net',
     owner: 'Digital Workplace',
     available: true,
     scopes: [
@@ -393,26 +393,26 @@ const vault = (path: string) => `vault://prod/integrations/${path}`;
  * consent has expired and the Wire fraud playbook's Confluence connection is revoked, so their dependants show it.
  */
 export const CONNECTIONS: (ConnectionSeed & { credentialRef?: string })[] = [
-  { id: 'int_sharepoint', catalogId: 'cat_sharepoint', name: 'SharePoint · policy sites', instanceUrl: 'https://northfield.sharepoint.com', tenant: 'northfield.onmicrosoft.com', authMethod: 'service_principal', scopes: ['Sites.Selected', 'Sites.Read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 190, expiresIn: 210, rotateIn: 40, base: 'healthy', credentialRef: vault('sharepoint/app-certificate') },
-  { id: 'int_confluence', catalogId: 'cat_confluence', name: 'Confluence · northfield.atlassian.net', instanceUrl: 'https://northfield.atlassian.net', authMethod: 'oauth_consent', scopes: ['read:confluence-space', 'read:confluence-content', 'read:confluence-attachments'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 150, expiresIn: 35, base: 'revoked', since: 9, lastError: 'Atlassian returned 401: the app’s access was revoked. Syncs stop until it is reconnected.' },
-  { id: 'int_github', catalogId: 'cat_github', name: 'GitHub app · northfield-bank', instanceUrl: 'https://github.com/northfield-bank', authMethod: 'service_principal', scopes: ['metadata:read', 'contents:read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 140, expiresIn: 300, rotateIn: 120, base: 'healthy', credentialRef: vault('github/app-private-key') },
-  { id: 'int_notion', catalogId: 'cat_notion', name: 'Notion · Northfield Product', instanceUrl: 'https://notion.so/northfield', authMethod: 'oauth_consent', scopes: ['read_content'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 160, expiresIn: 18, base: 'healthy' },
-  { id: 'int_zendesk', catalogId: 'cat_zendesk', name: 'Zendesk · help centre', instanceUrl: 'https://northfield.zendesk.com', authMethod: 'oauth_consent', scopes: ['hc:read'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 75, expiresIn: 120, base: 'healthy' },
-  { id: 'int_m365_mail', catalogId: 'cat_m365', name: 'Microsoft 365 · outbound mail app', instanceUrl: 'https://graph.microsoft.com', tenant: 'northfield.onmicrosoft.com', authMethod: 'service_principal', scopes: ['Mail.Read', 'Mail.Send'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 120, expiresIn: 245, rotateIn: 60, base: 'healthy', credentialRef: vault('m365/outbound-mail-app') },
-  { id: 'int_m365_cards', catalogId: 'cat_m365', name: 'Microsoft 365 · cardservices@', instanceUrl: 'https://graph.microsoft.com', tenant: 'northfield.onmicrosoft.com', authMethod: 'oauth_consent', scopes: ['Mail.Read', 'Mail.Send', 'MailboxSettings.Read'], ownerTeam: 'Card Services', createdBy: 'Daniel Brooks', createdDaysAgo: 45, expiresIn: 64, base: 'healthy' },
-  { id: 'int_m365_lending', catalogId: 'cat_m365', name: 'Microsoft 365 · lendingservicing@', instanceUrl: 'https://graph.microsoft.com', tenant: 'northfield.onmicrosoft.com', authMethod: 'oauth_consent', scopes: ['Mail.Read', 'Mail.Send'], ownerTeam: 'Lending Ops', createdBy: 'Tom Haddad', createdDaysAgo: 20, expiresIn: -1, base: 'needs_reconnect', since: 1, lastError: 'Microsoft Graph returned 401: the mailbox consent expired. New email is not being read.' },
-  { id: 'int_core_banking', catalogId: 'cat_core_banking', name: 'Core banking', instanceUrl: 'https://corebanking.api.northfield.internal/v3', authMethod: 'service_principal', scopes: ['accounts.read', 'customers.read', 'servicing.write', 'transfers.write'], ownerTeam: 'Platform', createdBy: 'Daniel Brooks', createdDaysAgo: 230, expiresIn: 135, rotateIn: 41, base: 'healthy', credentialRef: vault('core-banking/oauth-client') },
-  { id: 'int_card_platform', catalogId: 'cat_card_platform', name: 'Card platform', instanceUrl: 'https://cards.api.northfield.internal', authMethod: 'mtls', scopes: ['cards.read', 'transactions.read', 'disputes.write'], ownerTeam: 'Card Services', createdBy: 'Daniel Brooks', createdDaysAgo: 210, expiresIn: 160, rotateIn: 70, base: 'healthy', credentialRef: vault('card-platform/client-certificate') },
-  { id: 'int_salesforce', catalogId: 'cat_salesforce', name: 'Salesforce', instanceUrl: 'https://northfield.my.salesforce.com', authMethod: 'oauth_consent', scopes: ['contacts.read', 'cases.read', 'cases.write'], ownerTeam: 'Retail Banking', createdBy: 'Lena Fischer', createdDaysAgo: 40, expiresIn: 12, base: 'healthy' },
-  { id: 'int_case_mgmt', catalogId: 'cat_case_mgmt', name: 'Case management system', instanceUrl: 'https://cms.northfield.internal/mcp', authMethod: 'mtls', scopes: ['documents.read', 'cases.read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 30, expiresIn: 330, rotateIn: 150, base: 'healthy', credentialRef: vault('case-management/client-certificate') },
-  { id: 'int_payments_hub', catalogId: 'cat_payments_hub', name: 'Payments hub', instanceUrl: 'https://payments.api.northfield.internal', authMethod: 'api_key', scopes: ['wires.read', 'holds.write'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 260, expiresIn: 9, rotateIn: 9, base: 'healthy', credentialRef: vault('payments-hub/api-key') },
-  { id: 'int_compliance_mcp', catalogId: 'cat_compliance_mcp', name: 'Compliance MCP', instanceUrl: 'https://compliance-mcp.northfield.internal/mcp', authMethod: 'mtls', scopes: ['screening.read', 'registry.read'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 100, expiresIn: 200, rotateIn: 90, base: 'healthy', credentialRef: vault('compliance-mcp/client-certificate') },
+  { id: 'int_sharepoint', catalogId: 'cat_sharepoint', name: 'SharePoint · policy sites', instanceUrl: 'https://harborpine.sharepoint.com', tenant: 'harborpine.onmicrosoft.com', authMethod: 'service_principal', scopes: ['Sites.Selected', 'Sites.Read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 190, expiresIn: 210, rotateIn: 40, base: 'healthy', credentialRef: vault('sharepoint/app-certificate') },
+  { id: 'int_confluence', catalogId: 'cat_confluence', name: 'Confluence · harborpine.atlassian.net', instanceUrl: 'https://harborpine.atlassian.net', authMethod: 'oauth_consent', scopes: ['read:confluence-space', 'read:confluence-content', 'read:confluence-attachments'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 150, expiresIn: 35, base: 'revoked', since: 9, lastError: 'Atlassian returned 401: the app’s access was revoked. Syncs stop until it is reconnected.' },
+  { id: 'int_github', catalogId: 'cat_github', name: 'GitHub app · harborpine-bank', instanceUrl: 'https://github.com/harborpine-bank', authMethod: 'service_principal', scopes: ['metadata:read', 'contents:read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 140, expiresIn: 300, rotateIn: 120, base: 'healthy', credentialRef: vault('github/app-private-key') },
+  { id: 'int_notion', catalogId: 'cat_notion', name: 'Notion · Harbor & Pine Product', instanceUrl: 'https://notion.so/harborpine', authMethod: 'oauth_consent', scopes: ['read_content'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 160, expiresIn: 18, base: 'healthy' },
+  { id: 'int_zendesk', catalogId: 'cat_zendesk', name: 'Zendesk · help centre', instanceUrl: 'https://harborpine.zendesk.com', authMethod: 'oauth_consent', scopes: ['hc:read'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 75, expiresIn: 120, base: 'healthy' },
+  { id: 'int_m365_mail', catalogId: 'cat_m365', name: 'Microsoft 365 · outbound mail app', instanceUrl: 'https://graph.microsoft.com', tenant: 'harborpine.onmicrosoft.com', authMethod: 'service_principal', scopes: ['Mail.Read', 'Mail.Send'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 120, expiresIn: 245, rotateIn: 60, base: 'healthy', credentialRef: vault('m365/outbound-mail-app') },
+  { id: 'int_m365_cards', catalogId: 'cat_m365', name: 'Microsoft 365 · cardservices@', instanceUrl: 'https://graph.microsoft.com', tenant: 'harborpine.onmicrosoft.com', authMethod: 'oauth_consent', scopes: ['Mail.Read', 'Mail.Send', 'MailboxSettings.Read'], ownerTeam: 'Card Services', createdBy: 'Daniel Brooks', createdDaysAgo: 45, expiresIn: 64, base: 'healthy' },
+  { id: 'int_m365_lending', catalogId: 'cat_m365', name: 'Microsoft 365 · lendingservicing@', instanceUrl: 'https://graph.microsoft.com', tenant: 'harborpine.onmicrosoft.com', authMethod: 'oauth_consent', scopes: ['Mail.Read', 'Mail.Send'], ownerTeam: 'Lending Ops', createdBy: 'Tom Haddad', createdDaysAgo: 20, expiresIn: -1, base: 'needs_reconnect', since: 1, lastError: 'Microsoft Graph returned 401: the mailbox consent expired. New email is not being read.' },
+  { id: 'int_core_banking', catalogId: 'cat_core_banking', name: 'Core banking', instanceUrl: 'https://corebanking.api.harborpine.internal/v3', authMethod: 'service_principal', scopes: ['accounts.read', 'customers.read', 'servicing.write', 'transfers.write'], ownerTeam: 'Platform', createdBy: 'Daniel Brooks', createdDaysAgo: 230, expiresIn: 135, rotateIn: 41, base: 'healthy', credentialRef: vault('core-banking/oauth-client') },
+  { id: 'int_card_platform', catalogId: 'cat_card_platform', name: 'Card platform', instanceUrl: 'https://cards.api.harborpine.internal', authMethod: 'mtls', scopes: ['cards.read', 'transactions.read', 'disputes.write'], ownerTeam: 'Card Services', createdBy: 'Daniel Brooks', createdDaysAgo: 210, expiresIn: 160, rotateIn: 70, base: 'healthy', credentialRef: vault('card-platform/client-certificate') },
+  { id: 'int_salesforce', catalogId: 'cat_salesforce', name: 'Salesforce', instanceUrl: 'https://harborpine.my.salesforce.com', authMethod: 'oauth_consent', scopes: ['contacts.read', 'cases.read', 'cases.write'], ownerTeam: 'Retail Banking', createdBy: 'Lena Fischer', createdDaysAgo: 40, expiresIn: 12, base: 'healthy' },
+  { id: 'int_case_mgmt', catalogId: 'cat_case_mgmt', name: 'Case management system', instanceUrl: 'https://cms.harborpine.internal/mcp', authMethod: 'mtls', scopes: ['documents.read', 'cases.read'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 30, expiresIn: 330, rotateIn: 150, base: 'healthy', credentialRef: vault('case-management/client-certificate') },
+  { id: 'int_payments_hub', catalogId: 'cat_payments_hub', name: 'Payments hub', instanceUrl: 'https://payments.api.harborpine.internal', authMethod: 'api_key', scopes: ['wires.read', 'holds.write'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 260, expiresIn: 9, rotateIn: 9, base: 'healthy', credentialRef: vault('payments-hub/api-key') },
+  { id: 'int_compliance_mcp', catalogId: 'cat_compliance_mcp', name: 'Compliance MCP', instanceUrl: 'https://compliance-mcp.harborpine.internal/mcp', authMethod: 'mtls', scopes: ['screening.read', 'registry.read'], ownerTeam: 'Fraud Strategy', createdBy: 'Maya Okafor', createdDaysAgo: 100, expiresIn: 200, rotateIn: 90, base: 'healthy', credentialRef: vault('compliance-mcp/client-certificate') },
   { id: 'int_work_number', catalogId: 'cat_work_number', name: 'The Work Number', instanceUrl: 'https://api.theworknumber.com', authMethod: 'service_principal', scopes: ['verifications.read'], ownerTeam: 'Lending Ops', createdBy: 'Priya Shah', createdDaysAgo: 85, expiresIn: 95, rotateIn: -2, base: 'error', since: 0.2, lastError: 'The token endpoint returned 400 invalid_client: the client secret was rotated in the vault and this reference points at the old version.', credentialRef: vault('work-number/oauth-client-2025') },
   { id: 'int_equifax', catalogId: 'cat_equifax', name: 'Equifax', instanceUrl: 'https://api.equifax.ca/business/consumer-credit/v1', authMethod: 'service_principal', scopes: ['reports.read'], ownerTeam: 'Lending Ops', createdBy: 'Priya Shah', createdDaysAgo: 110, expiresIn: 75, rotateIn: 75, base: 'healthy', credentialRef: vault('equifax/oauth-client') },
-  { id: 'int_loan_origination', catalogId: 'cat_loan_origination', name: 'Loan origination', instanceUrl: 'https://los.api.northfield.internal', authMethod: 'service_principal', scopes: ['applications.read', 'applications.write', 'preapprovals.write'], ownerTeam: 'Lending Ops', createdBy: 'Priya Shah', createdDaysAgo: 120, expiresIn: 140, rotateIn: 55, base: 'healthy', credentialRef: vault('loan-origination/oauth-client') },
+  { id: 'int_loan_origination', catalogId: 'cat_loan_origination', name: 'Loan origination', instanceUrl: 'https://los.api.harborpine.internal', authMethod: 'service_principal', scopes: ['applications.read', 'applications.write', 'preapprovals.write'], ownerTeam: 'Lending Ops', createdBy: 'Priya Shah', createdDaysAgo: 120, expiresIn: 140, rotateIn: 55, base: 'healthy', credentialRef: vault('loan-origination/oauth-client') },
   { id: 'int_aws_storage', catalogId: 'cat_aws_s3', name: 'Amazon S3 · ops files', instanceUrl: 'https://s3.ca-central-1.amazonaws.com', authMethod: 'service_principal', scopes: ['s3:PutObject', 's3:GetObject', 's3:DeleteObject', 'kms:GenerateDataKey'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 210, expiresIn: 330, rotateIn: 80, base: 'healthy', credentialRef: vault('aws/opsai-files-role') },
   { id: 'int_azure_storage', catalogId: 'cat_azure_blob', name: 'Azure Blob · dev files', instanceUrl: 'https://nfopsaidev.blob.core.windows.net', authMethod: 'service_principal', scopes: ['Blob.Write', 'Blob.Read', 'Blob.Delete'], ownerTeam: 'Platform', createdBy: 'James Richardson', createdDaysAgo: 60, expiresIn: 300, rotateIn: 120, base: 'healthy', credentialRef: vault('azure/opsai-dev-files-sp') },
-  { id: 'int_branch_scheduler', catalogId: 'cat_branch_scheduler', name: 'Branch scheduler', instanceUrl: 'https://scheduler.api.northfield.internal', authMethod: 'api_key', scopes: ['slots.read', 'appointments.write'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 70, expiresIn: 280, rotateIn: 100, base: 'healthy', credentialRef: vault('branch-scheduler/api-key') },
+  { id: 'int_branch_scheduler', catalogId: 'cat_branch_scheduler', name: 'Branch scheduler', instanceUrl: 'https://scheduler.api.harborpine.internal', authMethod: 'api_key', scopes: ['slots.read', 'appointments.write'], ownerTeam: 'Retail Banking', createdBy: 'Tom Haddad', createdDaysAgo: 70, expiresIn: 280, rotateIn: 100, base: 'healthy', credentialRef: vault('branch-scheduler/api-key') },
 ];
 
 /** Which connection each seeded tool module calls through. Data Hub knowledge is served inside the gateway. */

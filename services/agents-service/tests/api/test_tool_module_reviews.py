@@ -106,7 +106,7 @@ async def test_only_tools_service_opens_a_review_for_the_person_and_their_team(
     assert opened.status_code == 201, opened.text
     review = opened.json()["data"]
     assert review["id"].startswith("TMP-") and review["status"] == "pending"
-    assert review["customer"] == "Requested by james@northfield.example" and review["policy"]["reviewers"] == "Security"
+    assert review["customer"] == "Requested by james@harborpine.example" and review["policy"]["reviewers"] == "Security"
 
 
 async def test_security_decides_a_security_change_and_the_decision_reaches_tools_service(
@@ -136,7 +136,7 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     tools:publish, opens a tool module review naming who asked, recorded as opened on their behalf. A person's token
     cannot name someone else, tools-service cannot open another kind, and no other service opens one."""
     c, _ = stack
-    asked = {**BODY, "requestedBy": "james@northfield.example"}
+    asked = {**BODY, "requestedBy": "james@harborpine.example"}
 
     def token(name: str, scopes: list[str]) -> dict[str, str]:
         minted = mint_service_token(
@@ -147,7 +147,7 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     opened = await c.post("/v1/publish-requests", json=asked, headers=token("tools", ["tools:publish"]))
     assert opened.status_code == 201, opened.text
     review = opened.json()["data"]
-    assert review["customer"] == "Requested by tools-service on behalf of james@northfield.example", review
+    assert review["customer"] == "Requested by tools-service on behalf of james@harborpine.example", review
     person = await c.post(
         "/v1/publish-requests", json=asked, headers={**BUILDER, "X-Service-Authorization": service("tools")}
     )

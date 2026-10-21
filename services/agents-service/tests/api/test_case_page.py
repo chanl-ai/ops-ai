@@ -43,10 +43,10 @@ async def typed_case(s: Stack, *, customer: str = "C-1001", team: str = "team_op
             team_id=team,
             subject="Charged twice",
             priority="high",
-            by="james@northfield.example",
+            by="james@harborpine.example",
             customer_id=customer,
             customer_name="Marcus Bell",
-            assignee="james@northfield.example",
+            assignee="james@harborpine.example",
             fields=values,
             type_id="complaint",
             type_version=1,
@@ -67,7 +67,7 @@ async def test_fields_come_in_the_case_types_order_formatted_then_what_it_does_n
     ], fields
     assert page["caseType"] == {"id": "complaint", "version": 1, "name": "Complaint"}
     assert page["fields"]["amount"] == "1250", "the name-to-value map stays as it was for today's page"
-    assert page["owner"]["email"] == "james@northfield.example" and page["customer"]["href"] == "/cases?customer=C-1001"
+    assert page["owner"]["email"] == "james@harborpine.example" and page["customer"]["href"] == "/cases?customer=C-1001"
 
 
 async def test_editing_a_case_type_changes_no_case_already_open_and_a_viewer_cannot_make_one(stack: Stack) -> None:  # noqa: F811
@@ -308,7 +308,7 @@ async def test_an_approved_hold_reads_the_amount_the_approver_placed(stack: Stac
     with tenant_scope(TENANT):
         await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
     # place_hold asks each approver for a step-up.
-    token = mint_step_up("maya@northfield.example", step_up_signer(rt))
+    token = mint_step_up("maya@harborpine.example", step_up_signer(rt))
     decided = await c.post(
         f"/reviews/{run}/decision",
         json={"decision": "hold", "inputs": {"amount": 2140.55}, "stepUpToken": token},
@@ -342,7 +342,7 @@ async def test_an_approved_hold_the_bank_refused_reads_refused(stack: Stack) -> 
     }
     with tenant_scope(TENANT):
         await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
-    token = mint_step_up("maya@northfield.example", step_up_signer(rt))
+    token = mint_step_up("maya@harborpine.example", step_up_signer(rt))
     decision = {"decision": "hold", "stepUpToken": token}
     decided = await c.post(f"/reviews/{run}/decision", json=decision, headers=REVIEWER)
     assert decided.status_code == 200, decided.text
@@ -370,12 +370,12 @@ async def test_an_approved_hold_the_bank_refused_reads_refused(stack: Stack) -> 
 
 
 async def test_the_cases_list_names_each_owner_as_the_case_page_does(stack: Stack) -> None:  # noqa: F811
-    """c-403: the Cases list showed riley.chen@northfield.example where the case page said Riley Chen; the console may
+    """c-403: the Cases list showed riley.chen@harborpine.example where the case page said Riley Chen; the console may
     not look the name up itself, so the list row carries it."""
     c, rt = stack
     rt.people_names = PlatformPeopleNames(Platform())  # pyright: ignore[reportArgumentType]
     case_id = await typed_case(stack)
     listed = data(await c.get("/v1/cases", params={"pageSize": 100}, headers=BUILDER))["data"]
     row = next(r for r in listed if r["id"] == case_id)
-    assert row["owner"] == {"email": "james@northfield.example", "name": "James Richardson"}, row
+    assert row["owner"] == {"email": "james@harborpine.example", "name": "James Richardson"}, row
     assert row["owner"] == data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))["owner"]

@@ -4,9 +4,9 @@ the workflow worker reads it over IMAP like any team mailbox and levy_intake ope
     uv run python scripts/send_levy_email.py
     uv run python scripts/send_levy_email.py --key-suffix ref-2   # a new message, not a redelivery
     uv run python scripts/send_levy_email.py --fixture ../documents-service/tests/fixtures/mail/mixed_levies.json \
-        --mailbox levies@northfield.test --key-suffix run-2   # the mixed levies email, as a new message
+        --mailbox levies@harborpine.test --key-suffix run-2   # the mixed levies email, as a new message
 
-`levy@northfield.example` (seed/mailboxes.json) is an IMAP mailbox on the stack's GreenMail, read by tools-service with
+`levy@harborpine.example` (seed/mailboxes.json) is an IMAP mailbox on the stack's GreenMail, read by tools-service with
 the DEV_IMAP_PASSWORD secret. Sending the same notice twice starts nothing the second time: the trigger keys a run on
 the message's ID and content.
 """
@@ -43,7 +43,7 @@ def message(item: dict[str, Any], to: str) -> EmailMessage:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mailbox", default="levy@northfield.example")
+    ap.add_argument("--mailbox", default="levy@harborpine.example")
     ap.add_argument("--fixture", type=Path, default=FIXTURE, help="a Graph message item with its attachments")
     ap.add_argument("--smtp-port", type=int, default=int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025")))
     ap.add_argument(

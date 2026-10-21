@@ -3,8 +3,8 @@
 import { PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const TAG = Math.random().toString(36).slice(2, 6);
-const JAMES = 'j.richardson@northfieldbank.com';
-const SAM = 's.adeyemi@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const signIn = async (browser, consoleUrl, width = 1440, email = JAMES) => {

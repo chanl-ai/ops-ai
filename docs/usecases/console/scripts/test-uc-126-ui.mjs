@@ -4,7 +4,7 @@
 import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 const ROOT = '/preview/settings';
 const PAGES = ['', '/workspace', '/workspace/storage', '/team', '/team/notifications', '/team/webhooks', '/team/api-keys', '/govern/access', '/govern/policies', '/govern/security', '/govern/models', '/account', '/agent', '/tool', '/kit'];
 
@@ -93,11 +93,11 @@ await withUiStack(
       await sam.getByRole('link', { name: 'Security', exact: true }).click();
       await sam.waitForURL(/govern\/security/, { timeout: 30_000 });
       const inPage = {
-        host: await sam.getByTestId('egress-hosts').getByText('regional.statements.northfield.example').count(),
+        host: await sam.getByTestId('egress-hosts').getByText('regional.statements.harborpine.example').count(),
         secret: await sam.getByTestId('secrets-list').getByText('REGION_ROUTING_KEY').count(),
         cardAdd: await sam.getByTestId('setting-egress-add').getByRole('button', { name: 'Allow host' }).count(),
       };
-      check('a host and a secret added in the tool page’s dialogs show on Security, where the same form is a card', preset === 'regional.statements.northfield.example' && inPage.host === 1 && inPage.secret === 1 && inPage.cardAdd === 1, { preset, inPage });
+      check('a host and a secret added in the tool page’s dialogs show on Security, where the same form is a card', preset === 'regional.statements.harborpine.example' && inPage.host === 1 && inPage.secret === 1 && inPage.cardAdd === 1, { preset, inPage });
 
       // A person without the role sees the lock with the role's name, and the card's field is off.
       await sam.getByTestId('viewer-role').click();

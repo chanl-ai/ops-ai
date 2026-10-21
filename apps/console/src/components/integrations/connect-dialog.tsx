@@ -125,7 +125,7 @@ export function ConnectDialog({
       const u = new URL(instanceUrl.trim());
       return u.protocol === 'https:' ? null : 'Use an https address.';
     } catch {
-      return 'Enter the full address, e.g. https://northfield.service-now.com.';
+      return 'Enter the full address, e.g. https://harborpine.service-now.com.';
     }
   })();
   const credProblem = auth === 'oauth_consent' ? (consent === 'granted' ? null : 'Sign in and grant consent to continue.') : vaultProblem(credentialRef);
@@ -408,7 +408,7 @@ export function ConnectionCredentialFields({
                 </div>
                 <p className="text-base font-semibold">Permissions requested</p>
                 <p className="text-sm">
-                  <span className="font-medium">Northfield Ops AI</span> wants to:
+                  <span className="font-medium">Harbor & Pine Ops AI</span> wants to:
                 </p>
                 <ul className="flex flex-col gap-1.5 text-sm">
                   {granted.map((s) => (

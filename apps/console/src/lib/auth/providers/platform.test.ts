@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { AuthError } from '../provider.ts';
 import { createPlatformProvider } from './platform.ts';
 
-const principal = { kind: 'person', sub: 'usr_approver', email: 'm.okafor@northfieldbank.com', name: 'Maya Okafor', tenantId: 'local', teamId: 'team_ops', teamIds: ['team_ops'], roles: { team_ops: 'approver' }, scopes: [], authMethod: 'dev' };
+const principal = { kind: 'person', sub: 'usr_approver', email: 'm.okafor@harborpine.example', name: 'Maya Okafor', tenantId: 'local', teamId: 'team_ops', teamIds: ['team_ops'], roles: { team_ops: 'approver' }, scopes: [], authMethod: 'dev' };
 const issued = { token: 'session-token', refreshToken: 'ses_1.secret', expiresAt: new Date(Date.now() + 900_000).toISOString(), principal };
 
 /** A platform-service stand-in: records each request and answers sign-in and step-up the way the real one does. */
@@ -26,7 +26,7 @@ test('reauthenticate sends the password under the session token and returns the 
   const expiresAt = new Date(Date.now() + 300_000).toISOString();
   const calls = platformFetch(() => Response.json({ success: true, data: { token: 'step-up-token', expiresAt } }));
   const provider = createPlatformProvider('http://platform');
-  await provider.signInWithPassword('m.okafor@northfieldbank.com', 'northfield-demo');
+  await provider.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
   const stepUp = await provider.reauthenticate({ method: 'password', password: 'northfield-demo' });
   assert.deepEqual(stepUp, { token: 'step-up-token', expiresAt });
   const call = calls.find((c) => c.path === '/v1/auth/step-up');
@@ -36,7 +36,7 @@ test('reauthenticate sends the password under the session token and returns the 
 test('a wrong password surfaces the service message as invalid credentials', async () => {
   platformFetch(() => Response.json({ success: false, error: { code: 'wrong_password', message: 'That password is not right.' } }, { status: 401 }));
   const provider = createPlatformProvider('http://platform');
-  await provider.signInWithPassword('m.okafor@northfieldbank.com', 'northfield-demo');
+  await provider.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
   await assert.rejects(provider.reauthenticate({ method: 'password', password: 'nope' }), (e: unknown) => e instanceof AuthError && e.code === 'invalid_credentials' && e.message === 'That password is not right.');
 });
 
@@ -61,7 +61,7 @@ test('a refresh that fails on the network keeps the session; only a 401 ends it'
   let answer: () => Response | Promise<Response> = () => Response.json({ success: true, data: expiring() });
   globalThis.fetch = (async (url: string | URL | Request) => (String(url).endsWith('/v1/auth/refresh') ? answer() : Response.json({ success: true, data: expiring() }))) as typeof fetch;
   const provider = createPlatformProvider('http://platform');
-  await provider.signInWithPassword('m.okafor@northfieldbank.com', 'northfield-demo');
+  await provider.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
   answer = () => Promise.reject(new TypeError('fetch failed'));
   assert.ok(await provider.renew(), 'offline: still signed in');
   answer = () => Response.json({ success: false, error: { code: 'service_unavailable', message: 'restarting' } }, { status: 503 });
@@ -85,7 +85,7 @@ test("a tab that refreshes after another already did takes the other's tokens an
     return Response.json({ success: true, data: expiring() });
   }) as typeof fetch;
   const first = createPlatformProvider('http://platform');
-  await first.signInWithPassword('m.okafor@northfieldbank.com', 'northfield-demo');
+  await first.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
   const second = createPlatformProvider('http://platform');
   assert.equal(second.identity()?.token, 'session-token', 'a new tab is signed in from shared storage');
   assert.equal((await first.renew())?.token, 'token-1');

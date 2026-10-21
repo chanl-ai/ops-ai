@@ -159,14 +159,14 @@ async def refusal(client: AsyncClient, tid: str, token: str, **headers: str) -> 
 async def test_forged_step_up_is_refused(stack: tuple[AsyncClient, Runtime], monkeypatch: pytest.MonkeyPatch) -> None:
     client, _ = stack
     tid = await money_paused(client, monkeypatch)
-    forged = mint_step_up("j.richardson@northfieldbank.com", HmacSigner(b"guessed-key"))
+    forged = mint_step_up("j.richardson@harborpine.example", HmacSigner(b"guessed-key"))
     assert "(signature)" in await refusal(client, tid, forged)
 
 
 async def test_expired_step_up_is_refused(stack: tuple[AsyncClient, Runtime], monkeypatch: pytest.MonkeyPatch) -> None:
     client, rt = stack
     tid = await money_paused(client, monkeypatch)
-    stale = mint_step_up("j.richardson@northfieldbank.com", step_up_signer(rt), now=time.time() - 301)
+    stale = mint_step_up("j.richardson@harborpine.example", step_up_signer(rt), now=time.time() - 301)
     assert "(expired)" in await refusal(client, tid, stale)
 
 
@@ -175,7 +175,7 @@ async def test_step_up_for_another_person_is_refused(
 ) -> None:
     client, _ = stack
     tid = await money_paused(client, monkeypatch)
-    lees = await step_up(client, "lee@northfieldbank.com")
+    lees = await step_up(client, "lee@harborpine.example")
     assert "(subject)" in await refusal(client, tid, lees)
 
 

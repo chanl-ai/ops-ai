@@ -1,6 +1,6 @@
 import type { WikiGate, WikiProvenance } from '@/lib/types/wiki';
 
-/** Northfield's Wiki at seed time: 14 pages across four collections, two remembered by agents and two drifted. */
+/** Harbor & Pine's Wiki at seed time: 14 pages across four collections, two remembered by agents and two drifted. */
 export interface PageSeed {
   id: string;
   title: string;
@@ -20,7 +20,7 @@ export interface PageSeed {
 
 export const COLLECTIONS: { id: string; name: string; gate: WikiGate; audience: string; knowledgeBases: string[] }[] = [
   { id: 'col_lending', name: 'Lending policy', gate: 'team', audience: 'Lending Ops and Compliance', knowledgeBases: ['Lending policy'] },
-  { id: 'col_fees', name: 'Fees and limits', gate: 'open', audience: 'Everyone at Northfield', knowledgeBases: ['Retail banking', 'Cards & disputes'] },
+  { id: 'col_fees', name: 'Fees and limits', gate: 'open', audience: 'Everyone at Harbor & Pine', knowledgeBases: ['Retail banking', 'Cards & disputes'] },
   { id: 'col_onboarding', name: 'Onboarding', gate: 'gated', audience: 'Onboarding, with Compliance approval per page', knowledgeBases: ['Compliance'] },
   { id: 'col_playbooks', name: 'Support playbooks', gate: 'team', audience: 'Retail Banking and Card Services', knowledgeBases: ['Retail banking', 'Cards & disputes', 'Fraud & payments'] },
 ];

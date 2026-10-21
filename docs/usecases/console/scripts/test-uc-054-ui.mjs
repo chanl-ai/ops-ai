@@ -9,7 +9,7 @@ const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFO
 await withUiStack(
   async (consoleUrl, stack) => {
     // An admin allows the bank's host and the private range it serves on.
-    const P = { Authorization: `Bearer ${await tokenFor('p.shah@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const P = { Authorization: `Bearer ${await tokenFor('p.shah@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-054' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-054' }) });
 
@@ -19,7 +19,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

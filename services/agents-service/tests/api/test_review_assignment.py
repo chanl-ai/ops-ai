@@ -42,14 +42,14 @@ async def test_a_reassignment_keeps_who_had_it_before(stack: tuple[AsyncClient, 
     client, rt = stack
     tid = await paused_dispute(client)
     await assign(client, [tid])
-    assert await assign(client, [tid], "m.okafor@northfieldbank.com") == {"updated": [tid], "skipped": []}
-    assert (await data(client, f"/reviews/{tid}"))["assignee"] == "m.okafor@northfieldbank.com"
+    assert await assign(client, [tid], "m.okafor@harborpine.example") == {"updated": [tid], "skipped": []}
+    assert (await data(client, f"/reviews/{tid}"))["assignee"] == "m.okafor@harborpine.example"
     assert (await data(client, "/reviews?view=mine&page=1&pageSize=25"))["viewCounts"]["mine"] == 0
     async with rt.db.connect() as c:
         rows = (
             await c.execute(sa.select(review_assignments.c.assignee).order_by(review_assignments.c.assigned_at))
         ).all()
-    assert len(rows) == 2 and rows[-1].assignee == "m.okafor@northfieldbank.com"
+    assert len(rows) == 2 and rows[-1].assignee == "m.okafor@harborpine.example"
 
 
 async def test_only_someone_who_may_decide_assigns_and_a_decided_review_is_not_assigned(

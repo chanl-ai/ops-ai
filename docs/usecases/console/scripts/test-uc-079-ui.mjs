@@ -11,10 +11,10 @@ import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium,
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const PASSWORD = 'northfield-demo';
-const MAYA = 'm.okafor@northfieldbank.com';
-const NADIA = 'n.petrov@northfieldbank.com';
+const MAYA = 'm.okafor@harborpine.example';
+const NADIA = 'n.petrov@harborpine.example';
 // Security's admin: Nadia reviews in Security and may not edit its bases, so the fee schedule is replaced as Sam.
-const SAM = 's.adeyemi@northfieldbank.com';
+const SAM = 's.adeyemi@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token, team) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': team });
 const json = async (r) => {

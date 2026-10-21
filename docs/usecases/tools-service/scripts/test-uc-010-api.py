@@ -16,7 +16,7 @@ OPERATION = {
     "description": "Monthly statement for an account",
     "access": "read",
     "method": "GET",
-    "url": f"https://statements-{RUN}.northfield.internal/v1/accounts/{{accountId}}/statement",
+    "url": f"https://statements-{RUN}.harborpine.internal/v1/accounts/{{accountId}}/statement",
     "headers": [{"key": "Authorization", "value": "Bearer sk_live_9f2c"}],
 }
 APPROVAL = {
@@ -49,7 +49,7 @@ with agents(), tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT
         unlisted.status_code == 422,
         unlisted.text[:200],
     )
-    gw.post("/v1/egress/hosts", json={"value": f"statements-{RUN}.northfield.internal", "note": "statements"})
+    gw.post("/v1/egress/hosts", json={"value": f"statements-{RUN}.harborpine.internal", "note": "statements"})
     added = gw.post(f"/v1/tool-modules/{module_id}/operations", json=referenced)
     ops = [o["name"] for o in data(added)["operations"]] if added.status_code == 200 else []
     check("the operation is added with a vault reference instead", ops == [OPERATION["name"]], added.text[:200])

@@ -15,7 +15,7 @@ export interface ConnectClient {
   snippet: (url: string) => string;
 }
 
-const SERVER = 'northfield-ops-ai';
+const SERVER = 'harborpine-ops-ai';
 
 export const CONNECT_CLIENTS: ConnectClient[] = [
   {
@@ -23,7 +23,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     name: 'Claude Desktop',
     initials: 'C',
     kind: 'url',
-    steps: ['Open Settings, then Connectors.', 'Choose Add custom connector and paste the URL.', 'Sign in with your Northfield account when Claude asks.'],
+    steps: ['Open Settings, then Connectors.', 'Choose Add custom connector and paste the URL.', 'Sign in with your Harbor & Pine account when Claude asks.'],
     snippet: (url) => url,
   },
   {
@@ -31,7 +31,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     name: 'Claude Code',
     initials: 'CC',
     kind: 'command',
-    steps: ['Run the command in a terminal.', 'Run /mcp inside Claude Code and sign in with your Northfield account.'],
+    steps: ['Run the command in a terminal.', 'Run /mcp inside Claude Code and sign in with your Harbor & Pine account.'],
     snippet: (url) => `claude mcp add --scope user --transport http ${SERVER} ${url}`,
   },
   {
@@ -48,7 +48,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     name: 'ChatGPT',
     initials: 'G',
     kind: 'url',
-    steps: ['Open Settings, then Connectors, then Create.', 'Name it Northfield Ops AI, paste the URL and choose OAuth.', 'Your workspace admin may need to allow custom connectors first.'],
+    steps: ['Open Settings, then Connectors, then Create.', 'Name it Harbor & Pine Ops AI, paste the URL and choose OAuth.', 'Your workspace admin may need to allow custom connectors first.'],
     snippet: (url) => url,
   },
   {
@@ -56,7 +56,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     name: 'Microsoft Copilot (Teams)',
     initials: 'MC',
     kind: 'link',
-    steps: ['In Copilot Studio, open your agent, then Tools, then Add a tool, then Model Context Protocol.', 'Paste the URL and choose OAuth 2.0 with the Northfield tenant.', 'Publish the agent to Teams.'],
+    steps: ['In Copilot Studio, open your agent, then Tools, then Add a tool, then Model Context Protocol.', 'Paste the URL and choose OAuth 2.0 with the Harbor & Pine tenant.', 'Publish the agent to Teams.'],
     snippet: (url) => url,
   },
   {

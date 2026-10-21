@@ -3,7 +3,7 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
-const EMAIL = 'j.richardson@northfieldbank.com';
+const EMAIL = 'j.richardson@harborpine.example';
 const KEY = 'ops-platform-session';
 const stored = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
 
@@ -123,7 +123,7 @@ await withUiStack(
       // A person in two teams lands in their own one: the switcher and the calls both name Operations, not the
       // console's default (Platform). Wanjiru invites James to Platform and he accepts; then he signs in afresh.
       const tokenOf = async (email) => (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data;
-      const wanjiru = await tokenOf('w.kamau@northfieldbank.com');
+      const wanjiru = await tokenOf('w.kamau@harborpine.example');
       const invited = await (await fetch(`${platform}/v1/settings/members/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wanjiru.token}`, 'X-Team-Id': 'team_platform' }, body: JSON.stringify({ emails: [EMAIL], role: 'viewer' }) })).json();
       const inviteToken = invited.data?.invites?.[0]?.token;
       const james = await tokenOf(EMAIL);

@@ -40,13 +40,13 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const ravi = await signIn(browser, consoleUrl, 'r.menon@northfieldbank.com', errors);
+      const ravi = await signIn(browser, consoleUrl, 'r.menon@harborpine.example', errors);
       await ravi.goto(`${consoleUrl}/agents/${AGENT}?tab=channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await ravi.getByText('Embeds on other sites').waitFor({ timeout: 120_000 });
       const raviButton = await ravi.getByTestId('widget-embed-open').count();
       await ravi.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const raviWhy = await ravi.getByTestId('read-only-why').innerText({ timeout: 120_000 });
-      const sam = await signIn(browser, consoleUrl, 's.adeyemi@northfieldbank.com', errors);
+      const sam = await signIn(browser, consoleUrl, 's.adeyemi@harborpine.example', errors);
       await sam.goto(`${consoleUrl}/agents/${AGENT}?tab=channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await sam.getByText('Embeds on other sites').waitFor({ timeout: 120_000 });
       const samButton = await sam.getByTestId('widget-embed-open').count();
@@ -57,7 +57,7 @@ await withUiStack(
         raviButton === 0 && samButton === 0 && !raviWhy.includes('Ravi Menon') && /Operations/.test(samWhy) && !samWhy.includes('Sam Adeyemi'),
         { raviButton, samButton, raviWhy, samWhy },
       );
-      const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com', errors);
+      const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
       await james.goto(`${consoleUrl}/agents/${AGENT}?tab=channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('widget-embed-open').click({ timeout: 120_000 });
       const one = await create(james, james.getByRole('dialog', { name: 'Embed on a page' }), `Intranet ${TAG}`);

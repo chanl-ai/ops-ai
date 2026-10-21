@@ -772,7 +772,7 @@
         "typeVersion": 1,
         "name": "Notice received",
         "parameters": {
-          "mailbox": "levy@northfield.example",
+          "mailbox": "levy@harborpine.example",
           "folder": "inbox",
           "hasAttachment": true
         },
@@ -1524,7 +1524,7 @@
         "typeVersion": 1,
         "name": "Document received",
         "parameters": {
-          "mailbox": "intake@northfield.test",
+          "mailbox": "intake@harborpine.test",
           "folder": "inbox",
           "hasAttachment": true
         },
@@ -2389,7 +2389,7 @@
         "typeVersion": 1,
         "name": "Levy email received",
         "parameters": {
-          "mailbox": "levies@northfield.test",
+          "mailbox": "levies@harborpine.test",
           "folder": "inbox"
         },
         "position": {
@@ -3806,7 +3806,7 @@
         "typeVersion": 1,
         "name": "Complaint received",
         "parameters": {
-          "mailbox": "complaints@northfield.test",
+          "mailbox": "complaints@harborpine.test",
           "folder": "inbox"
         },
         "position": {

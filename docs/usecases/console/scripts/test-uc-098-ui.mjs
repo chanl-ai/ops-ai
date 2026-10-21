@@ -8,7 +8,7 @@ const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFO
 
 await withUiStack(
   async (consoleUrl) => {
-    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+    const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     for (let i = 0; i < 12; i++) {
       const r = await fetch(`${agentsUrl}/v1/guardrails`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Rule ${TAG} ${String(i).padStart(2, '0')}`, topics: [`topic-${TAG}-${i}`], message: 'Not here.' }) });
       if (r.status !== 201) throw new Error(`setup: creating a guardrail answered ${r.status}: ${await r.text()}`);
@@ -23,7 +23,7 @@ await withUiStack(
       const asked = [];
       page.on('request', (r) => r.url().includes(`:${AGENTS_PORT}/v1/guardrails?`) && asked.push(new URL(r.url()).searchParams));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

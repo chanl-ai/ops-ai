@@ -4,12 +4,12 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const PRIYA = 'p.shah@northfieldbank.com';
-const JAMES = 'j.richardson@northfieldbank.com';
+const PRIYA = 'p.shah@harborpine.example';
+const JAMES = 'j.richardson@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 // Reading policies is the security team's; Sam reads what Priya saved.
-const readPolicy = async () => (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { headers: { Authorization: `Bearer ${await tokenFor('s.adeyemi@northfieldbank.com')}`, 'X-Team-Id': 'team_security' } }).then((r) => r.json())).data?.value?.team_ops?.agents;
+const readPolicy = async () => (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { headers: { Authorization: `Bearer ${await tokenFor('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security' } }).then((r) => r.json())).data?.value?.team_ops?.agents;
 const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
 const call = async (method, path, headers, body) => {
   const r = await fetch(`${agents}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });

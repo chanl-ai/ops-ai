@@ -21,11 +21,11 @@ from usecase_harness import (
 from ops_access import CHAT_USER
 
 with signin_stack() as (api, idp, _):
-    zone = f"{secrets.token_hex(4)}.northfield.test"
+    zone = f"{secrets.token_hex(4)}.harborpine.test"
     sam = security_admin_on_ops(api)
     provider = {
         "kind": "oidc",
-        "label": "Northfield SSO",
+        "label": "Harbor & Pine SSO",
         "domains": [zone],
         "oidc": {
             "issuer": f"{str(idp.base_url).rstrip('/')}/oidc/northfield",
@@ -42,8 +42,8 @@ with signin_stack() as (api, idp, _):
     teller = f"new.teller@{zone}"
     r = api.post("/v1/auth/options", json={"email": teller})
     check(
-        "the domain signs in through Northfield SSO",
-        r.status_code == 200 and data(r)["sso"] == {"kind": "oidc", "label": "Northfield SSO"},
+        "the domain signs in through Harbor & Pine SSO",
+        r.status_code == 200 and data(r)["sso"] == {"kind": "oidc", "label": "Harbor & Pine SSO"},
         r.text[:200],
     )
 
@@ -77,7 +77,7 @@ with signin_stack() as (api, idp, _):
         else {}
     )
     check("the next sign-in is the same person", again.get("sub") == principal.get("sub") and bool(again), again)
-    priya = signed_in(api, "p.shah@northfieldbank.com")
+    priya = signed_in(api, "p.shah@harborpine.example")
     rows = data(api.get("/v1/settings/members", headers=bearer(priya, "team_ops")))["data"]
     mine = [m for m in rows if m["email"] == teller]
     check("team_ops lists the teller once, as a chat user", len(mine) == 1 and mine[0]["role"] == "chat_user", mine)

@@ -29,7 +29,7 @@ async function upload(J, name, text) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const jToken = await tokenFor('j.richardson@northfieldbank.com');
+    const jToken = await tokenFor('j.richardson@harborpine.example');
     const J = { Authorization: `Bearer ${jToken}`, 'X-Team-Id': 'team_ops' };
     const tenant = JSON.parse(Buffer.from(jToken.split('.')[1], 'base64url').toString()).tenant_id;
     const used = await upload(J, `used-${TAG}.txt`, `used ${TAG}`);
@@ -53,7 +53,7 @@ await withUiStack(
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
         return { page, errors };
       };
-      const { page, errors } = await signIn('j.richardson@northfieldbank.com');
+      const { page, errors } = await signIn('j.richardson@harborpine.example');
       const asked = [];
       page.on('request', (r) => r.url().startsWith(`${files}/v1/files?`) && asked.push(new URL(r.url()).searchParams));
 
@@ -122,7 +122,7 @@ await withUiStack(
       check('Upload on Files takes a new file under the chosen purpose and lists it', listed && offersPick === 0 && stored[0]?.purpose === 'knowledge_source', { listed, offersPick, stored: stored.map((f) => [f.name, f.purpose]), newest: all.map((f) => f.name).slice(0, 3) });
 
       // Step 6: an admin of the team places a hold.
-      const priya = await signIn('p.shah@northfieldbank.com');
+      const priya = await signIn('p.shah@harborpine.example');
       await priya.page.goto(`${consoleUrl}/files?file=${held.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const pSheet = priya.page.getByTestId('file-sheet');
       await pSheet.getByRole('button', { name: 'Legal hold' }).click({ timeout: 60_000 });

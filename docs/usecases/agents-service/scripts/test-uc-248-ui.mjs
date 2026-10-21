@@ -34,15 +34,15 @@ const path = (run) => (run?.steps ?? []).map((s) => `${s.nodeId}:${s.port ?? s.s
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const J = as(await tokenFor('j.richardson@northfieldbank.com'));
-    const P = as(await tokenFor('p.shah@northfieldbank.com'));
+    const J = as(await tokenFor('j.richardson@harborpine.example'));
+    const P = as(await tokenFor('p.shah@harborpine.example'));
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const start = async (workflowId, input) => (await (await fetch(`${agents}/v1/runs`, { method: 'POST', headers: J, body: JSON.stringify({ workflowId, mode: 'live', input }) })).json()).data?.runId;
     const resting = (id) => until(async () => {
       const r = await detail(id);
       return r && (r.status === 'waiting' || SETTLED.includes(r.status)) ? r : undefined;
     });
-    const M = as(await tokenFor('m.okafor@northfieldbank.com'));
+    const M = as(await tokenFor('m.okafor@harborpine.example'));
     // A hold needs two approvals: each person in turn approves while the run still waits at that step.
     const approveEach = async (id, node, people) => {
       const codes = [];
@@ -78,7 +78,7 @@ await withUiStack(
         const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
         page.on('pageerror', (e) => errors.push(e.message));
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByLabel('Email').fill('m.okafor@northfieldbank.com');
+        await page.getByLabel('Email').fill('m.okafor@harborpine.example');
         await page.getByLabel('Password').fill(PASSWORD);
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -120,7 +120,7 @@ await withUiStack(
         const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
         page.on('pageerror', (e) => errors.push(e.message));
         await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+        await page.getByLabel('Email').fill('j.richardson@harborpine.example');
         await page.getByLabel('Password').fill(PASSWORD);
         await page.getByRole('button', { name: /^Sign in/ }).first().click();
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

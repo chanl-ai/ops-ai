@@ -12,14 +12,14 @@ const SEED: SignInProvider[] = [
   {
     id: 'oidc-northfield',
     kind: 'oidc',
-    label: 'Northfield SSO',
+    label: 'Harbor & Pine SSO',
     enabled: true,
-    domains: ['northfield.ca', 'northfieldbank.com'],
-    oidc: { issuer: 'https://login.northfield.ca/oidc', clientId: 'ops-console', clientSecretRef: 'northfield-oidc', scopes: null },
+    domains: ['harborpine.ca', 'harborpine.example'],
+    oidc: { issuer: 'https://login.harborpine.ca/oidc', clientId: 'ops-console', clientSecretRef: 'northfield-oidc', scopes: null },
     saml: null,
     jit: { team: 'team_ops', role: 'chat_user' },
     groups: null,
-    verification: [check('northfield.ca', new Date(Date.now() - 140 * DAY).toISOString()), check('northfieldbank.com', null)],
+    verification: [check('harborpine.ca', new Date(Date.now() - 140 * DAY).toISOString()), check('harborpine.example', null)],
   },
 ];
 
@@ -62,6 +62,6 @@ export function createMockSignInProviders(): SignInProvidersApi {
       return structuredClone(p);
     },
     secretNames: async () => ['northfield-oidc'],
-    samlMetadataUrl: 'https://platform.northfield.example/v1/auth/saml/metadata',
+    samlMetadataUrl: 'https://platform.harborpine.example/v1/auth/saml/metadata',
   };
 }

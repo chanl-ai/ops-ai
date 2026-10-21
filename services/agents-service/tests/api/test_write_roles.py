@@ -48,7 +48,7 @@ VIEWER_DEV_SIGN_IN = {
     + mint(
         {
             "sub": "vera",
-            "email": "vera@northfield.example",
+            "email": "vera@harborpine.example",
             "name": "vera",
             "kind": "person",
             "aud": ["agents"],
@@ -411,7 +411,7 @@ async def test_the_saver_of_a_workflow_no_team_owns_needs_a_builder_role(
 ) -> None:
     """A creator who has since become a viewer reads only, as an API key carrying its creator's email does."""
     c, engine = stack
-    await unowned_live(engine, "james_refunds", by="james@northfield.example")
+    await unowned_live(engine, "james_refunds", by="james@harborpine.example")
     demoted = person("james", "team_ops", "viewer")
     r = await c.post("/v1/workflows/definitions/james_refunds/pause", headers=demoted)
     assert r.status_code == 403 and r.json()["error"]["code"] == "role_required", r.text

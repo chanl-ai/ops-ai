@@ -36,7 +36,7 @@ async def test_each_starter_is_named(stack: Stack) -> None:  # noqa: F811
                 id="mbx_levy",
                 team_id="team_ops",
                 name="Levy notices",
-                address="levy@northfield.example",
+                address="levy@harborpine.example",
                 provider="imap",
                 created_by="b",
                 created_at="n",
@@ -48,17 +48,17 @@ async def test_each_starter_is_named(stack: Stack) -> None:  # noqa: F811
         same = {k: base[k] for k in ("team_id", "workflow_id", "version", "digest", "mode", "input")}
         await RunStore(tx).create(same | {"id": "wfrun_child", "run_key": "k1", "created_by": f"run:{parent}"})
         await RunStore(tx).create(
-            same | {"id": "wfrun_mail", "run_key": "k2", "created_by": "trigger:email:levy@northfield.example"}
+            same | {"id": "wfrun_mail", "run_key": "k2", "created_by": "trigger:email:levy@harborpine.example"}
         )
     assert await started_by(stack, parent) == {
         "kind": "person",
-        "id": "james@northfield.example",
-        "name": "james@northfield.example",
+        "id": "james@harborpine.example",
+        "name": "james@harborpine.example",
     }
     child = await started_by(stack, "wfrun_child")
     assert (child["kind"], child["runId"], child["name"]) == ("run", parent, "Refund check"), child
     mail = await started_by(stack, "wfrun_mail")
-    assert (mail["kind"], mail["id"], mail["name"]) == ("trigger", "levy@northfield.example", "Levy notices"), mail
+    assert (mail["kind"], mail["id"], mail["name"]) == ("trigger", "levy@harborpine.example", "Levy notices"), mail
 
 
 class Platform:
@@ -70,7 +70,7 @@ class Platform:
     async def get(self, path: str) -> list[dict[str, str]]:
         assert path == "/v1/people-names"
         self.reads += 1
-        return [{"email": "james@northfield.example", "name": "James Richardson"}]
+        return [{"email": "james@harborpine.example", "name": "James Richardson"}]
 
 
 async def test_a_person_who_started_a_run_is_named(stack: Stack) -> None:  # noqa: F811

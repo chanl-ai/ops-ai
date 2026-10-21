@@ -4,7 +4,7 @@
 import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const ROOT = '/preview/channels';
 const MAILBOX = 'levy.notices.test@gmail.com';
 
@@ -141,10 +141,10 @@ await withUiStack(
         await dialog.getByRole('radio', { name: /Other IMAP/ }).click();
         await dialog.getByTestId('connect-mailbox-submit').click();
         await dialog.locator('#connect-name').fill('Court filings');
-        await dialog.locator('#connect-address').fill('filings@northfield.example');
-        await dialog.locator('#connect-host').fill('mail.northfield.example');
+        await dialog.locator('#connect-address').fill('filings@harborpine.example');
+        await dialog.locator('#connect-host').fill('mail.harborpine.example');
         await pickOption(p, '#connect-secret', 'KYB_MAILBOX_PASSWORD');
-        await dialog.locator('#connect-smtpHost').fill('smtp.northfield.example:587');
+        await dialog.locator('#connect-smtpHost').fill('smtp.harborpine.example:587');
         await pickOption(p, '#connect-senderSecret', 'KYB_MAILBOX_PASSWORD');
         await dialog.getByTestId('connect-mailbox-submit').click();
         await dialog.waitFor({ state: 'detached', timeout: 10_000 });

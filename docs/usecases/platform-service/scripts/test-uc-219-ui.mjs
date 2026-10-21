@@ -4,13 +4,13 @@
 import { INVITED_PASSWORD, PLATFORM_PORT, check, chromium, consoleSignIn, finish, invitePerson, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const TAG = Math.random().toString(36).slice(2, 7);
-const ADMIN = `admin.${TAG}@northfieldbank.com`;
-const PERSON = `person.${TAG}@northfieldbank.com`;
+const ADMIN = `admin.${TAG}@harborpine.example`;
+const PERSON = `person.${TAG}@harborpine.example`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 
 await withUiStack(
   async (consoleUrl) => {
-    await invitePerson('p.shah@northfieldbank.com', ADMIN, 'admin');
+    await invitePerson('p.shah@harborpine.example', ADMIN, 'admin');
     const browser = await chromium.launch();
     const errors = [];
     try {

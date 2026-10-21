@@ -19,7 +19,7 @@ export default function SignupPage() {
         <AuthHeading
           icon={<UserPlus className="size-6" />}
           title={open ? 'Create your account' : 'Ask your admin for an invite'}
-          description={open ? 'Sign up with your work email through your company’s identity provider.' : 'Northfield Ops AI accounts are created by invite. Your workspace admin can send you one from Settings → Members.'}
+          description={open ? 'Sign up with your work email through your company’s identity provider.' : 'Harbor & Pine Ops AI accounts are created by invite. Your workspace admin can send you one from Settings → Members.'}
         />
         <Button asChild className="w-full">
           <Link href={open ? '/sso' : '/login'}>{open ? 'Continue with SSO' : 'Back to sign in'}</Link>

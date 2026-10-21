@@ -3,7 +3,7 @@
 // not held) gets a harmless question; the fake model answers with share advice, which the after-answer check catches.
 import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const ADVICE = 'You should buy Northfield shares';
+const ADVICE = 'You should buy Harbor & Pine shares';
 const CORRECTED = "I can't give investment advice. A licensed adviser can talk your client through the fund.";
 
 await withUiStack(
@@ -39,7 +39,7 @@ await withUiStack(
         };
       });
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('m.okafor@northfieldbank.com');
+      await page.getByLabel('Email').fill('m.okafor@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -47,7 +47,7 @@ await withUiStack(
       await page.goto(`${consoleUrl}/chat?agent=ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const box = page.getByLabel('Message');
       await box.waitFor({ timeout: 120_000 });
-      await box.fill('UC229 FUND QUESTION: what should my client know about the Northfield fund?');
+      await box.fill('UC229 FUND QUESTION: what should my client know about the Harbor & Pine fund?');
       await page.locator('button[aria-label="Send"]').click();
       await page.waitForFunction(() => (window.__frames ?? []).some((f) => f.type === 'done' || f.type === 'error'), null, { timeout: 120_000 });
       const frames = await page.evaluate(() => window.__frames);
@@ -77,14 +77,14 @@ await withUiStack(
       const admin = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       admin.on('pageerror', (e) => errors.push(e.message));
       await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await admin.getByLabel('Email').fill('p.shah@northfieldbank.com');
+      await admin.getByLabel('Email').fill('p.shah@harborpine.example');
       await admin.getByLabel('Password').fill('northfield-demo');
       await admin.getByRole('button', { name: /^Sign in/ }).first().click();
       await admin.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       await admin.goto(`${consoleUrl}/chat?agent=ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const adminBox = admin.getByLabel('Message');
       await adminBox.waitFor({ timeout: 120_000 });
-      await adminBox.fill('UC229 FUND QUESTION: what should my client know about the Northfield fund?');
+      await adminBox.fill('UC229 FUND QUESTION: what should my client know about the Harbor & Pine fund?');
       await admin.locator('button[aria-label="Send"]').click();
       await admin.getByText(CORRECTED).first().waitFor({ timeout: 30_000 });
       await admin.reload({ waitUntil: 'domcontentloaded' });

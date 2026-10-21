@@ -56,8 +56,8 @@ def pdf(pages: list[list[str]]) -> bytes:
     return out.getvalue()
 
 
-INVOICE = pdf([["Invoice INV-2219", "Northfield Supplies"], ["Amount due: $1,234.50", "Due 2026-11-30"]])
-INVENTED = pdf([["Invoice INV-7777", "Northfield Supplies"], ["Amount due: $1,234.50", "Due 30 Nov 2026"]])
+INVOICE = pdf([["Invoice INV-2219", "Harbor & Pine Supplies"], ["Amount due: $1,234.50", "Due 2026-11-30"]])
+INVENTED = pdf([["Invoice INV-7777", "Harbor & Pine Supplies"], ["Amount due: $1,234.50", "Due 30 Nov 2026"]])
 SCAN = pdf([[]])
 
 
@@ -198,7 +198,7 @@ def main() -> None:
         )
 
         # Sam, the Security admin, sets the workspace floor in Govern > Policies (platform-service).
-        sam = bearer(signed_in(people, "s.adeyemi@northfieldbank.com"), "team_security")
+        sam = bearer(signed_in(people, "s.adeyemi@harborpine.example"), "team_security")
         floor = people.put("/v1/policies/extractionFloor", json={"value": 0.95}, headers=sam)
         outcome, out = run(api, "uc124_invoices", invoice)
         check(

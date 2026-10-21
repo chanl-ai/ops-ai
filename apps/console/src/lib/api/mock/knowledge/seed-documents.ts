@@ -32,7 +32,7 @@ const disputeCredit: SeedDocument = {
   docClass: 'guide',
   metadata: { product: 'credit_card', jurisdiction: 'CA' },
   sections: [
-    { heading: '1. Who this guide is for', body: 'Card Services agents and branch staff handling a cardholder’s dispute of a credit card transaction. It applies to Northfield Visa and Mastercard credit cards.' },
+    { heading: '1. Who this guide is for', body: 'Card Services agents and branch staff handling a cardholder’s dispute of a credit card transaction. It applies to Harbor & Pine Visa and Mastercard credit cards.' },
     {
       heading: '2. Time limits',
       topic: 'dispute_window',
@@ -267,9 +267,9 @@ const annualFee: SeedDocument = {
   format: 'article',
   docClass: 'pricing',
   metadata: { product: 'credit_card', jurisdiction: 'CA' },
-  boilerplate: ['<nav>Personal › Credit cards › Pricing › Annual fee</nav>', 'Was this page helpful? Yes · No', '© 2026 Northfield Bank. All rights reserved. Privacy · Accessibility · Security'],
+  boilerplate: ['<nav>Personal › Credit cards › Pricing › Annual fee</nav>', 'Was this page helpful? Yes · No', '© 2026 Harbor & Pine Bank. All rights reserved. Privacy · Accessibility · Security'],
   sections: [
-    { heading: 'Annual fees by card', topic: 'annual_fee_amount', body: 'Northfield Rewards Visa: $120 a year. Low Rate Mastercard: $29 a year. Student Visa: no annual fee.' },
+    { heading: 'Annual fees by card', topic: 'annual_fee_amount', body: 'Harbor & Pine Rewards Visa: $120 a year. Low Rate Mastercard: $29 a year. Student Visa: no annual fee.' },
     { heading: 'Cancellation and refunds', topic: 'annual_fee_refund', body: 'The annual fee is refunded in full when the card is closed within 30 days of the fee posting. After 30 days the fee is not refunded.' },
     { heading: 'Switching cards', topic: 'annual_fee_switch', body: 'Moving to a no-fee card takes effect from the next statement, and the current year’s fee is pro-rated.' },
   ],
@@ -335,7 +335,7 @@ const helpArticle: SeedDocument = {
   format: 'article',
   docClass: 'help',
   metadata: { product: 'cards' },
-  boilerplate: ['<nav>Help centre › Cards › Disputes</nav>', '<div class="cookie-banner">We use cookies to improve your experience. Accept · Manage</div>', 'Was this article helpful? 👍 👎', '© 2026 Northfield Bank · Contact us · Branch locator'],
+  boilerplate: ['<nav>Help centre › Cards › Disputes</nav>', '<div class="cookie-banner">We use cookies to improve your experience. Accept · Manage</div>', 'Was this article helpful? 👍 👎', '© 2026 Harbor & Pine Bank · Contact us · Branch locator'],
   sections: [
     { heading: 'Before you dispute', body: 'Contact the merchant first. Many charges are resolved by a refund within a few days.' },
     { heading: 'Dispute in the app', topic: 'dispute_how', body: 'Open the transaction, tap Report a problem and choose the reason. Most disputes get a provisional credit within 10 business days.' },
@@ -352,7 +352,7 @@ const emailTemplate: SeedDocument = {
   sections: [
     { heading: 'Subject', body: 'We have credited your account while we look into your dispute' },
     { heading: 'Body', topic: 'provisional_letter', body: 'Dear {customer.first_name}, we have added a provisional credit of {dispute.amount} to your account while we investigate. If the merchant shows the charge was valid, we will reverse the credit after giving you 5 business days’ notice.' },
-    { heading: 'Sign-off', body: 'Card Services, Northfield Bank' },
+    { heading: 'Sign-off', body: 'Card Services, Harbor & Pine Bank' },
   ],
 };
 

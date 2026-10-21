@@ -36,7 +36,7 @@ SETTINGS = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, embed_ori
 def who(sub: str, role: str, team: str = "team_ops") -> dict[str, str]:
     claims = {
         "sub": sub,
-        "email": f"{sub}@northfield.example",
+        "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
         "aud": ["agents"],
@@ -215,10 +215,10 @@ async def test_a_persons_token_never_mints_a_server_session(client: AsyncClient)
     dep = await deploy(client)
     url = f"/v1/widget-deployments/{dep['id']}/sessions"
     viewer = await client.post(
-        url, json={"email": "usr_v@northfield.example", "name": "V", "origin": INTRANET}, headers=VIEWER
+        url, json={"email": "usr_v@harborpine.example", "name": "V", "origin": INTRANET}, headers=VIEWER
     )
     other = await client.post(
-        url, json={"email": "ceo@northfield.example", "name": "CEO", "origin": INTRANET}, headers=BUILDER
+        url, json={"email": "ceo@harborpine.example", "name": "CEO", "origin": INTRANET}, headers=BUILDER
     )
     assert viewer.status_code == 403 and viewer.json()["error"]["code"] == "widget_key_required"
     assert other.status_code == 403 and other.json()["error"]["code"] == "widget_key_required"
@@ -411,7 +411,7 @@ async def test_a_mint_key_expires_and_its_create_and_revoke_are_audited(
     await client.post(f"/v1/widget-deployments/{dep['id']}/keys/{key_id}/revoke", headers=BUILDER)
     audit = (await client.get(f"/v1/widget-deployments/{dep['id']}/keys/audit", headers=BUILDER)).json()["data"]
     assert [(r["keyId"], r["action"]) for r in audit] == [(key_id, "revoked"), (key_id, "created")], audit
-    assert all(r["actor"] == "usr_b@northfield.example" for r in audit), audit
+    assert all(r["actor"] == "usr_b@harborpine.example" for r in audit), audit
 
 
 async def test_the_loader_is_served_without_a_key(client: AsyncClient) -> None:

@@ -10,7 +10,7 @@ only the cardholder's chequing account. This use case checks all three on a depl
 
 | Needs | How |
 |---|---|
-| A deployed console and its demo team | Staging, Northfield Operations (`team_a0877a1d8907`), seeded per `docs/deploy/fly-staging.md` |
+| A deployed console and its demo team | Staging, Harbor & Pine Operations (`team_a0877a1d8907`), seeded per `docs/deploy/fly-staging.md` |
 | A person in that team | `STG_EMAIL` and `STG_PASSWORD` in the environment; `STG_ORIGIN` and `STG_TEAM` name the console and team |
 | The bank stand-in at the commit that holds the dispute charges | `<your-app>-bank`, deployed from an export of that commit |
 

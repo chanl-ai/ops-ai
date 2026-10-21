@@ -58,7 +58,7 @@ export const WORKFLOW_ACCESS: Record<string, { tools: string[]; kbs: string[] }>
   wf_advisor: { tools: [], kbs: [] },
 };
 
-export const principalOf = (workflowName: string) => `wf.${workflowName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}@ops.northfieldbank.com`;
+export const principalOf = (workflowName: string) => `wf.${workflowName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}@ops.harborpine.example`;
 
 /** Model aliases the AI gateway resolves; agents name a model, runs call it through its alias. */
 export const MODEL_ALIAS: Record<string, { alias: string; inPerM: number; outPerM: number }> = {
@@ -71,4 +71,4 @@ export const MODEL_ALIAS: Record<string, { alias: string; inPerM: number; outPer
 export const POLICY_VERSION: Record<string, number> = { gp_1: 4, gp_2: 2, gp_3: 6, gp_5: 3, gp_7: 5, gp_9: 1 };
 
 export const PEOPLE = ['James Richardson', 'Maya Okafor', 'Anika Singh', 'Daniel Brooks', 'Priya Shah', 'Tom Haddad', 'Lena Fischer', 'Omar Siddiqui', 'Grace Liu', 'Rafael Costa'];
-export const emailOf = (name: string) => `${name.split(' ')[0][0].toLowerCase()}.${name.split(' ').slice(-1)[0].toLowerCase()}@northfieldbank.com`;
+export const emailOf = (name: string) => `${name.split(' ')[0][0].toLowerCase()}.${name.split(' ').slice(-1)[0].toLowerCase()}@harborpine.example`;

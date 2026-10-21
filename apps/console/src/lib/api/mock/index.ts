@@ -453,7 +453,7 @@ export function createMockApi(): OpsApi {
       latestVersion: w?.version ?? d.version,
       // MCP deployments follow the workflow's release pointer, so they always serve the newest published version.
       version: d.channel === 'mcp' && w && w.status !== 'draft' ? w.version : d.version,
-      api: d.api && { ...d.api, endpoint: `https://api.northfieldbank.com/ops/v1/run/${w ? w.id.replace('wf_', '') : d.workflowId}` },
+      api: d.api && { ...d.api, endpoint: `https://api.harborpine.example/ops/v1/run/${w ? w.id.replace('wf_', '') : d.workflowId}` },
     };
   };
   deployments.push(...F.DEPLOYMENTS.map((d) => ({ ...d, workflowName: '', latestVersion: d.version, api: d.api && { ...d.api, endpoint: '' }, email: d.email && { ...d.email, connectionId: MAILBOX_CONNECTION[d.id] } })));
@@ -584,7 +584,7 @@ export function createMockApi(): OpsApi {
 
   const signIn = createSignInPolicyMock({ me });
   // Without a mock session (OIDC or Firebase adapters) the account is the demo user's.
-  const account = createAccountMock({ person: () => currentMockUser() ?? { id: 'usr_james', email: 'j.richardson@northfieldbank.com', name: me, method: 'password', mfaEnrolled: true }, setPassword: setMockPassword, mfaRequired: () => signIn.policy().mfaRequired, teamOf: (email) => (email.startsWith('maya.') ? { team: 'Card Services', role: 'Reviewer' } : email.startsWith('new.') ? { team: 'Lending Ops', role: 'Builder' } : { team: 'Platform', role: 'Admin' }) });
+  const account = createAccountMock({ person: () => currentMockUser() ?? { id: 'usr_james', email: 'j.richardson@harborpine.example', name: me, method: 'password', mfaEnrolled: true }, setPassword: setMockPassword, mfaRequired: () => signIn.policy().mfaRequired, teamOf: (email) => (email.startsWith('maya.') ? { team: 'Card Services', role: 'Reviewer' } : email.startsWith('new.') ? { team: 'Lending Ops', role: 'Builder' } : { team: 'Platform', role: 'Admin' }) });
   const invites = createInvitesMock({ isSsoEmail: signIn.isSsoEmail, ssoProviderLabel: () => ({ entra: 'Microsoft Entra ID', okta: 'Okta', oidc: 'your identity provider', saml: 'your identity provider' })[signIn.policy().sso.provider], mfaRequired: () => signIn.policy().mfaRequired, onAccepted: (a) => registerMockUser({ email: a.email, name: a.name, teamIds: [a.teamId], role: a.role === 'Admin' ? 'admin' : a.role === 'Viewer' ? 'viewer' : 'member', method: a.method, password: a.password }) });
   const self: OpsApi = {
     overview: {

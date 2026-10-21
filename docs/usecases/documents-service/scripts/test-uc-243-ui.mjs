@@ -8,7 +8,7 @@ import { DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, finis
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const TYPE = 'restraining_notice';
 const FIXTURES = join(ROOT, 'services/documents-service/tests/fixtures/restraining');
 const SAMPLE = 'TEST003.pdf';

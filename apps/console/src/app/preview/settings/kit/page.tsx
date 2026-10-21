@@ -60,7 +60,7 @@ export default function KitPage() {
   const [scope, setScope] = React.useState<Record<string, ScopeValue>>({ dev: 'default', staging: 'on', prod: 'default' });
   const [sw, setSw] = React.useState(true);
   const [inherit, setInherit] = React.useState(true);
-  const [slug, setSlug] = React.useState('northfield');
+  const [slug, setSlug] = React.useState('harborpine');
   return (
     <PreviewPageLayout title="Field kit" description="The cards and fields every settings page is built from" history={false}>
       <Piece id="setting-card" name="SettingCard" where="every page. One setting, its control, a footer with the constraint and a Save; locked, the footer names the role.">
@@ -87,7 +87,7 @@ export default function KitPage() {
         <ChoiceChecks name="kit-check" label="Channels" choices={MODES} value={checks} onChange={setChecks} />
       </Piece>
       <Piece id="copy-field" name="CopyField, CopyId and MiddleTruncate" where="ids, URLs and embed snippets; the id column of every records table.">
-        <CopyField value="https://api.northfield.example/ops/hooks/sources/src_9c2e41" label="URL" />
+        <CopyField value="https://api.harborpine.example/ops/hooks/sources/src_9c2e41" label="URL" />
         <p className="text-sm">
           Id in a table cell: <CopyId value="ws_5e1f09a7c3b24d68" /> · truncated alone: <MiddleTruncate text="ws_5e1f09a7c3b24d68" />
         </p>
@@ -151,7 +151,7 @@ export default function KitPage() {
         </div>
       </Piece>
       <Piece id="image-gated" name="ImageSettingCard and GatedCard" where="Workspace › General. A picture on the right; a feature that needs a plan or role, with its price and action.">
-        <ImageSettingCard title="Logo" description="Shown beside the name." name="Northfield Bank" onSave={() => undefined} />
+        <ImageSettingCard title="Logo" description="Shown beside the name." name="Harbor & Pine Bank" onSave={() => undefined} />
         <GatedCard title="Audit export" description="Send the audit log to the archive." needs="the Enterprise plan" price="From $400 a month" action="Talk to us" onAction={() => undefined} />
       </Piece>
       <Piece id="layout" name="Layout rules" where="every page. Fields are lighter than the page, splits resize, tab labels never spill, tables select and show ids.">

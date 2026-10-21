@@ -40,7 +40,7 @@ const ago = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 // Sample rows in the shape agents-service's GET /v1/activity is to return (one row per thing that happened).
 const ROWS: Omit<ActivityRow, 'rowTestId'>[] = [
   { id: 'email:msg_81c2', kind: 'email', title: 'Notice of garnishment NS-2026-GN-01187', status: 'done', outcome: 'started', source: 'Court levies', channel: 'email', actor: 'registry@courts.example', at: ago(9) },
-  { id: 'workflow_run:wfrun_a1d9', kind: 'workflow_run', title: 'Levy intake', status: 'waiting', outcome: 'waiting', source: 'Court levies', channel: 'email', actor: 'Email to levies@northfield.example', at: ago(9) },
+  { id: 'workflow_run:wfrun_a1d9', kind: 'workflow_run', title: 'Levy intake', status: 'waiting', outcome: 'waiting', source: 'Court levies', channel: 'email', actor: 'Email to levies@harborpine.example', at: ago(9) },
   { id: 'decision:rev_77e1', kind: 'decision', title: 'Hold on CHQ-2219 for 3,250.00 CAD', status: 'done', outcome: 'approved', source: 'Levy intake', channel: 'email', actor: 'Maya Okafor', at: ago(4) },
   { id: 'email:msg_80aa', kind: 'email', title: 'Re: Notice of garnishment', status: 'skipped', outcome: 'duplicate', source: 'Court levies', channel: 'email', actor: 'registry@courts.example', at: ago(7) },
   { id: 'chat:th_f79d', kind: 'chat', title: 'What does Priya Natarajan have with us?', status: 'done', outcome: 'answered', source: 'Advisor intranet', channel: 'chat', agent: 'ag_advisor', actor: 'James Richardson', at: ago(6) },

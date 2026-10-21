@@ -32,7 +32,7 @@ export function MfaSetupForm({ setup, loading, pending, error, onEnrol }: { setu
           <AuthHeading icon={<ShieldCheck className="size-6" />} title="Set up two-step verification" description="Your workspace requires it. It takes a minute with any authenticator app." />
           <ol className="flex flex-col gap-4 text-sm">
             <li className="flex flex-col gap-2">
-              <span className="font-medium">1. Add Northfield Ops AI to your authenticator</span>
+              <span className="font-medium">1. Add Harbor & Pine Ops AI to your authenticator</span>
               {loading || !setup ? (
                 <Skeleton className="h-16 w-full" />
               ) : (

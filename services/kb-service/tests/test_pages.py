@@ -7,7 +7,7 @@ import httpx
 
 from .test_bases_and_sources import data
 
-BASE = {"name": "Teller procedures", "owner": "james@northfieldbank.com"}
+BASE = {"name": "Teller procedures", "owner": "james@harborpine.example"}
 
 
 async def test_a_page_is_indexed_found_and_saved_again_as_its_next_version(client: httpx.AsyncClient) -> None:

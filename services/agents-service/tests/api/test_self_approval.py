@@ -17,7 +17,7 @@ from ops_agents.store.graphs import metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events, step_up
 
-DANA, LEE = "dana@northfieldbank.com", "lee@northfieldbank.com"
+DANA, LEE = "dana@harborpine.example", "lee@harborpine.example"
 
 
 async def client(**policies: bool) -> AsyncIterator[AsyncClient]:

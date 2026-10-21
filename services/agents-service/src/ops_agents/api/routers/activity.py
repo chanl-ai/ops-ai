@@ -78,7 +78,7 @@ class ActivityRow(Out):
 class ActivityQuery(BaseModel):
     kind: list[KindName] = Field(default_factory=list[KindName])
     status: list[StatusName] = Field(default_factory=list[StatusName])
-    # `type:id`, e.g. workflow:levy_case or channel:levy@northfield.example; repeat to keep several.
+    # `type:id`, e.g. workflow:levy_case or channel:levy@harborpine.example; repeat to keep several.
     source: list[str] = Field(default_factory=list)
     # The selected team when left out; `all` for every team the caller is in; or one of those teams by id.
     team: str | None = None

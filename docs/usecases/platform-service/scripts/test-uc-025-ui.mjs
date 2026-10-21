@@ -5,7 +5,7 @@ import { PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/use
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 7);
-const NEWCOMER = `audited.${TAG}@northfieldbank.com`;
+const NEWCOMER = `audited.${TAG}@harborpine.example`;
 const NAME = `Audited ${TAG.toUpperCase()}`;
 const KEY = 'ops-platform-session';
 const stored = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
@@ -35,7 +35,7 @@ await withUiStack(
     const browser = await chromium.launch();
     const errors = [];
     try {
-      const priya = await signIn(browser, consoleUrl, 'p.shah@northfieldbank.com', errors);
+      const priya = await signIn(browser, consoleUrl, 'p.shah@harborpine.example', errors);
       const token = (await stored(priya))?.token;
       const H = { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
       // The invite and the join are set up through the API; uc-023 drives them through the console.
@@ -71,7 +71,7 @@ await withUiStack(
 
       // 3. James, a builder, is told the log is for admins, and platform-service refuses him.
       await step('3 a builder is told only an admin reads the log', async () => {
-        const james = await signIn(browser, consoleUrl, 'j.richardson@northfieldbank.com', errors);
+        const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
         await james.goto(`${consoleUrl}/logs/audit`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const said = await james.getByTestId('audit-admin-only').waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const t = (await stored(james))?.token;

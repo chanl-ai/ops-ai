@@ -30,7 +30,7 @@ async def test_a_keys_threads_count_in_its_tenant_only(engine: AsyncEngine) -> N
     ours, theirs = f"t-{uuid4().hex[:6]}", f"t-{uuid4().hex[:6]}"
     for tenant in (ours, ours, theirs):
         with tenant_scope(tenant):
-            meta = {"ownerEmail": "case-system@northfield.example", "startedBy": f"key:{kid}"}
+            meta = {"ownerEmail": "case-system@harborpine.example", "startedBy": f"key:{kid}"}
             await GraphStore(engine).create_thread(f"gth_{uuid4().hex[:10]}", "agent:ag_x", meta, "team_ops", at)
     key = {"id": kid, "name": "CI", "prefix": kid, "teamId": "team_ops", "status": "active", "target": None}
     with tenant_scope(ours):

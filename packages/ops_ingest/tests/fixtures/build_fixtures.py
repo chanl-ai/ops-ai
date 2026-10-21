@@ -120,7 +120,7 @@ HTML = """<!doctype html>
 </article>
 </main>
 <aside class="sidebar">Related: Travel insurance</aside>
-<footer class="site-footer">Copyright 2026 Northfield Bank. All rights reserved.</footer>
+<footer class="site-footer">Copyright 2026 Harbor & Pine Bank. All rights reserved.</footer>
 </body></html>
 """
 

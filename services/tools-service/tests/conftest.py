@@ -187,7 +187,7 @@ def catalog_tools() -> list[dict[str, Any]]:
     """agents-service's fixture tools, minus its stand-ins for the fake bank's operations (c-057): a tenant here
     imports the bank's document itself, and an operation name held by another module refuses the import."""
     tools: list[dict[str, Any]] = json.loads((AGENTS_FIXTURES / "tools.json").read_text())
-    return [t for t in tools if t.get("server") != "Northfield Core Banking"]
+    return [t for t in tools if t.get("server") != "Harbor & Pine Core Banking"]
 
 
 def test_auth(settings: Settings, tenant: str, user: str, *, dev: bool) -> Auth:

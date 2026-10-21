@@ -67,7 +67,7 @@ export function seedNotifications(teamId: string): NotificationSettings {
     updatedBy: 'James Richardson',
     channels: [
       { id: 'in_app', name: 'In Ops AI', connected: true, detail: 'Bell and Reviews queue', actionable: true },
-      { id: 'email', name: 'Email', connected: true, detail: 'From ops-ai@northfieldbank.com', actionable: true },
+      { id: 'email', name: 'Email', connected: true, detail: 'From ops-ai@harborpine.example', actionable: true },
       { id: 'teams', name: 'Microsoft Teams', connected: true, detail: TEAMS_CHANNEL[teamId] ?? 'Ops AI › Alerts', actionable: true },
       { id: 'slack', name: 'Slack', connected: false, detail: 'Not connected', actionable: false },
     ],
@@ -96,11 +96,11 @@ export function seedWebhooks(teamName: (id: string) => string): (Webhook & { tea
     createdAt: minsAgo(createdDays * D),
   });
   return [
-    w('wh_siem', 'team_platform', 'Splunk Cloud SIEM', 'https://http-inputs-northfield.splunkcloud.com/services/collector', ['audit.created', 'call.denied', 'access.changed'], 'active', 4120, 61),
-    w('wh_snow', 'team_platform', 'ServiceNow incidents', 'https://northfield.service-now.com/api/now/ops_ai/events', ['run.failed', 'mailbox.disconnected'], 'failing', 38, 120),
-    w('wh_fraudcm', 'team_fraud', 'Fraud case manager', 'https://fcm.internal.northfieldbank.com/hooks/ops-ai', ['review.decided', 'run.completed'], 'active', 1611, 88),
-    w('wh_disputes', 'team_cards', 'Dispute system of record', 'https://disputes.internal.northfieldbank.com/v2/events', ['case.closed', 'review.decided'], 'active', 702, 40),
-    w('wh_loansvc', 'team_lending', 'Loan servicing callbacks', 'https://loansvc.internal.northfieldbank.com/ops-ai', ['case.closed'], 'paused', 12, 33),
+    w('wh_siem', 'team_platform', 'Splunk Cloud SIEM', 'https://http-inputs-harborpine.splunkcloud.com/services/collector', ['audit.created', 'call.denied', 'access.changed'], 'active', 4120, 61),
+    w('wh_snow', 'team_platform', 'ServiceNow incidents', 'https://harborpine.service-now.com/api/now/ops_ai/events', ['run.failed', 'mailbox.disconnected'], 'failing', 38, 120),
+    w('wh_fraudcm', 'team_fraud', 'Fraud case manager', 'https://fcm.internal.harborpine.example/hooks/ops-ai', ['review.decided', 'run.completed'], 'active', 1611, 88),
+    w('wh_disputes', 'team_cards', 'Dispute system of record', 'https://disputes.internal.harborpine.example/v2/events', ['case.closed', 'review.decided'], 'active', 702, 40),
+    w('wh_loansvc', 'team_lending', 'Loan servicing callbacks', 'https://loansvc.internal.harborpine.example/ops-ai', ['case.closed'], 'paused', 12, 33),
   ];
 }
 
@@ -126,7 +126,7 @@ export function seedDeliveries(hook: Webhook, volume: number): WebhookDelivery[]
       // A paused hook's newest few are the events skipped since it was paused.
       at: paused && i < 4 ? minsAgo(i * 900 + 60) : minsAgo(start + i * step + Math.floor(r() * Math.min(step, 20)) + 1),
       error: failed ? (failing ? 'Gateway timeout after 3 attempts' : 'Internal Server Error') : status === 'skipped' ? 'Webhook paused' : undefined,
-      payload: { event, id: `evt_${(i * 7919).toString(36)}`, workspace: 'Northfield Bank', data: event.startsWith('review') ? { reviewId: F.REVIEWS[i % F.REVIEWS.length].id, decision: 'approved' } : event.startsWith('case') ? { caseId: `CASE-${4100 + (i % 36)}` } : { workflowId: F.WORKFLOWS[i % F.WORKFLOWS.length].id } },
+      payload: { event, id: `evt_${(i * 7919).toString(36)}`, workspace: 'Harbor & Pine Bank', data: event.startsWith('review') ? { reviewId: F.REVIEWS[i % F.REVIEWS.length].id, decision: 'approved' } : event.startsWith('case') ? { caseId: `CASE-${4100 + (i % 36)}` } : { workflowId: F.WORKFLOWS[i % F.WORKFLOWS.length].id } },
       responseBody: status === 'success' ? '{"ok":true}' : failed ? (failing ? '<html>504 Gateway Time-out</html>' : '{"error":"internal"}') : undefined,
     };
   });

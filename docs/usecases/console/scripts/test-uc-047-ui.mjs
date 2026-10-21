@@ -14,7 +14,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
@@ -73,7 +73,7 @@ await withUiStack(
       // A team admin is offered the audit log; a builder is not (c-144).
       const admin = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await admin.getByLabel('Email').fill('p.shah@northfieldbank.com');
+      await admin.getByLabel('Email').fill('p.shah@harborpine.example');
       await admin.getByLabel('Password').fill('northfield-demo');
       await admin.getByRole('button', { name: /^Sign in/ }).first().click();
       await admin.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

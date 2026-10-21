@@ -75,7 +75,7 @@ def test_decisions_in_lists_each_decided_task_with_who_when_why_and_its_task() -
             "nodeId": "person",
             "iteration": 0,
             "status": "ok",
-            "output": {"decision": "approve", "reason": "Matches the notice", "by": "p.shah@northfieldbank.com"},
+            "output": {"decision": "approve", "reason": "Matches the notice", "by": "p.shah@harborpine.example"},
             "attempts": [{"finishedAt": "2026-10-19T12:00:00+00:00"}],
         },
         # Still waiting: no decision yet, so nothing is listed for it.
@@ -88,7 +88,7 @@ def test_decisions_in_lists_each_decided_task_with_who_when_why_and_its_task() -
             "reviewId": "wfrun_1:person:0",
             "action": "approve",
             "reason": "Matches the notice",
-            "by": "p.shah@northfieldbank.com",
+            "by": "p.shah@harborpine.example",
             "at": "2026-10-19T12:00:00+00:00",
         }
     ]

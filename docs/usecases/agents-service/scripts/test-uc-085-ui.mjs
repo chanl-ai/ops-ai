@@ -4,7 +4,7 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const GUARDRAIL = 'gr_no_investment_advice';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
@@ -34,7 +34,7 @@ await withUiStack(
       await page.goto(`${consoleUrl}/chat/${created.data.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const box = page.getByRole('textbox', { name: 'Message' });
       await box.waitFor({ timeout: 120_000 });
-      await box.fill('Should my client buy Northfield shares?');
+      await box.fill('Should my client buy Harbor & Pine shares?');
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const res = await sent;
@@ -81,7 +81,7 @@ await withUiStack(
       check('switching the guardrail off shows "Off" and saves a version with it off', offShown && offPin?.enabled === false, { offShown, offPin });
       await fetch(`${agents}/v1/agents/ag_advisor/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version: offAgent?.version, note: 'guardrail off for a test' }) });
       const offThread = (await (await fetch(`${agents}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: 'ag_advisor', kbIds: [] }) })).json()).data;
-      const stream = await (await fetch(`${agents}/chat/threads/${offThread.id}/messages`, { method: 'POST', headers: { ...J, Accept: 'text/event-stream' }, body: JSON.stringify({ content: 'Should my client buy Northfield shares?' }) })).text();
+      const stream = await (await fetch(`${agents}/chat/threads/${offThread.id}/messages`, { method: 'POST', headers: { ...J, Accept: 'text/event-stream' }, body: JSON.stringify({ content: 'Should my client buy Harbor & Pine shares?' }) })).text();
       const offReply = (await (await fetch(`${agents}/chat/threads/${offThread.id}`, { headers: J })).json()).data?.messages?.at(-1);
       check('with it off, the shares question gets a real answer, not the guardrail\'s message', offReply?.role === 'assistant' && !!offReply.content?.trim() && !offReply.guardrail && offReply.content !== message && !stream.includes('"guardrail_unavailable"'), { reply: offReply?.content?.slice(0, 160), guardrail: offReply?.guardrail });
       await page.reload({ waitUntil: 'domcontentloaded' });

@@ -96,11 +96,11 @@ def latest(documents: httpx.Client, type_id: str) -> dict[str, Any]:
 def main() -> None:
     kinds = seeded()
     builder_docs, files = (
-        person("j.richardson@northfieldbank.com", DOCS),
-        person("j.richardson@northfieldbank.com", FILES),
+        person("j.richardson@harborpine.example", DOCS),
+        person("j.richardson@harborpine.example", FILES),
     )
-    admin_docs = person("p.shah@northfieldbank.com", DOCS)
-    security = person("w.kamau@northfieldbank.com", PLATFORM)
+    admin_docs = person("p.shah@harborpine.example", DOCS)
+    security = person("w.kamau@harborpine.example", PLATFORM)
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     models = httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=30)
     runs: list[str] = []

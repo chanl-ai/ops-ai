@@ -33,7 +33,7 @@ MEASURED = ["TEST003_scan.pdf", "VAR02.pdf"]
 def main() -> None:
     _, folder = seeded()[TYPE]
     expected_of = {name: row["expected"] for name, row in json.loads((folder / "expected.json").read_text()).items()}
-    builder, files = person("j.richardson@northfieldbank.com", DOCS), person("j.richardson@northfieldbank.com", FILES)
+    builder, files = person("j.richardson@harborpine.example", DOCS), person("j.richardson@harborpine.example", FILES)
     found = builder.get(f"/v1/document-types/{TYPE}").json()["data"]
     version = next(v for v in found["versions"] if v["version"] == found["latestVersion"])
     before_ids = {e["id"] for e in builder.get(f"/v1/document-types/{TYPE}/examples").json()["data"]}

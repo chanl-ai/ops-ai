@@ -50,7 +50,7 @@ try {
   // 1. James signs in and creates an agent: a session and a record the restart must keep.
   await step('1 signed in, with an agent saved', async () => {
     await open(page, '/login');
-    await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+    await page.getByLabel('Email').fill('j.richardson@harborpine.example');
     await page.getByLabel('Password').fill('northfield-demo');
     await page.getByRole('button', { name: /^Sign in/ }).first().click();
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

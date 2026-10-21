@@ -19,7 +19,7 @@ from usecase_harness import (
     sso_round_trip,
 )
 
-WANJIRU, PRIYA, SAM = "w.kamau@northfieldbank.com", "p.shah@northfieldbank.com", "s.adeyemi@northfieldbank.com"
+WANJIRU, PRIYA, SAM = "w.kamau@harborpine.example", "p.shah@harborpine.example", "s.adeyemi@harborpine.example"
 
 
 def access(session: dict[str, object], team: str) -> list[str]:
@@ -38,7 +38,7 @@ with signin_stack() as (api, idp, _):
     check("Priya, a team admin, cannot set the workspace's teams (403)", r.status_code == 403, r.status_code)
     check("Sam holds Security admin in team_security", "security_admin" in access(signed_in(api, SAM), "team_security"))
 
-    r = api.post("/v1/settings/teams", json={"name": "Lobby", "admin": "r.menon@northfieldbank.com"}, headers=admin)
+    r = api.post("/v1/settings/teams", json={"name": "Lobby", "admin": "r.menon@harborpine.example"}, headers=admin)
     lobby = data(r)["id"] if r.status_code == 201 else "team_missing"
     check("Wanjiru creates Lobby (201)", r.status_code == 201, r.text[:200])
     r = api.put("/v1/settings/workspace-teams", json={"securityTeam": "team_ops", "defaultTeam": lobby}, headers=admin)
@@ -55,11 +55,11 @@ with signin_stack() as (api, idp, _):
         "/v1/me names team_ops as the security team", me.get("securityTeamId") == "team_ops", me.get("securityTeamId")
     )
 
-    zone = f"{secrets.token_hex(4)}.northfield.test"
+    zone = f"{secrets.token_hex(4)}.harborpine.test"
     base = str(idp.base_url).rstrip("/")
     provider = {
         "kind": "oidc",
-        "label": "Northfield SSO",
+        "label": "Harbor & Pine SSO",
         "domains": [zone],
         "oidc": {"issuer": f"{base}/oidc/northfield", "clientId": "ops-console", "clientSecretRef": SIGNIN_SECRET},
         "jit": {"role": "chat_user"},

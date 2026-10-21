@@ -25,9 +25,9 @@ from usecase_harness import (
     service_headers,
 )
 
-OPS = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@northfieldbank.com"}
-FRAUD = {"X-Team-Id": "team_fraud", "X-Dev-User": "o.haddad@northfieldbank.com"}
-CARDS = {"X-Team-Id": "team_cards", "X-Dev-User": "j.richardson@northfieldbank.com"}
+OPS = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
+FRAUD = {"X-Team-Id": "team_fraud", "X-Dev-User": "o.haddad@harborpine.example"}
+CARDS = {"X-Team-Id": "team_cards", "X-Dev-User": "j.richardson@harborpine.example"}
 
 
 def ids(rows: Any) -> list[str]:

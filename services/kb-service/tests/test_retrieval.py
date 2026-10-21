@@ -33,7 +33,7 @@ def agents(tenant: str, scopes: tuple[str, ...] = ("knowledge:view",)) -> dict[s
 
 async def indexed_kb(client: httpx.AsyncClient) -> dict[str, Any]:
     src = await file_source(client)
-    body = {"name": "Lending", "owner": "maya@northfieldbank.com", "sourceIds": [src["id"]]}
+    body = {"name": "Lending", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
     await upload(client, src["id"], "rates.pdf", RATES)
@@ -116,9 +116,9 @@ async def test_an_agent_citing_a_retired_base_still_answers_from_its_others(
     knowledge. A retired base is skipped; an id kb-service never had is still refused, as is another tenant's."""
     gone = await indexed_kb(client)
     shared = [x["sourceId"] for x in data(await client.get(f"/v1/knowledge-bases/{gone['id']}"))["sources"]]
-    body = {"name": "Rates desk", "owner": "maya@northfieldbank.com", "sourceIds": shared}
+    body = {"name": "Rates desk", "owner": "maya@harborpine.example", "sourceIds": shared}
     kept = data(await client.post("/v1/knowledge-bases", json=body), 201)
-    async with kb_client(engine, tenant, email="maya@northfieldbank.com") as maya:
+    async with kb_client(engine, tenant, email="maya@harborpine.example") as maya:
         assert (await maya.delete(f"/v1/knowledge-bases/{gone['id']}")).status_code == 204
     assert (await client.get(f"/v1/knowledge-bases/{gone['id']}")).status_code == 404
     question = {"kbIds": [gone["id"], kept["id"]], "question": "five-year fixed mortgage rate for insured borrowers"}

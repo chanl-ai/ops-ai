@@ -7,14 +7,14 @@
     { "id": "team_platform", "name": "Platform", "ownerGroups": ["platform"], "scope": "all" }
   ],
   "people": [
-    { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@northfieldbank.com", "teams": { "team_ops": "admin" } },
-    { "id": "usr_builder", "name": "James Richardson", "email": "j.richardson@northfieldbank.com", "teams": { "team_ops": "builder" } },
-    { "id": "usr_approver", "name": "Maya Okafor", "email": "m.okafor@northfieldbank.com", "teams": { "team_ops": "approver" } },
-    { "id": "usr_viewer", "name": "Ravi Menon", "email": "r.menon@northfieldbank.com", "teams": { "team_ops": "viewer" } },
-    { "id": "usr_security", "name": "Nadia Petrov", "email": "n.petrov@northfieldbank.com", "teams": { "team_security": "approver" } },
-    { "id": "usr_security_admin", "name": "Sam Adeyemi", "email": "s.adeyemi@northfieldbank.com", "teams": { "team_security": "admin" } },
-    { "id": "usr_fraud_approver", "name": "Omar Haddad", "email": "o.haddad@northfieldbank.com", "teams": { "team_fraud": "approver" } },
-    { "id": "usr_fraud_approver_2", "name": "Lena Fischer", "email": "l.fischer@northfieldbank.com", "teams": { "team_fraud": "approver" } },
-    { "id": "usr_workspace_admin", "name": "Wanjiru Kamau", "email": "w.kamau@northfieldbank.com", "teams": { "team_platform": "admin" }, "everyTeam": ["admin", "security_admin"] }
+    { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@harborpine.example", "teams": { "team_ops": "admin" } },
+    { "id": "usr_builder", "name": "James Richardson", "email": "j.richardson@harborpine.example", "teams": { "team_ops": "builder" } },
+    { "id": "usr_approver", "name": "Maya Okafor", "email": "m.okafor@harborpine.example", "teams": { "team_ops": "approver" } },
+    { "id": "usr_viewer", "name": "Ravi Menon", "email": "r.menon@harborpine.example", "teams": { "team_ops": "viewer" } },
+    { "id": "usr_security", "name": "Nadia Petrov", "email": "n.petrov@harborpine.example", "teams": { "team_security": "approver" } },
+    { "id": "usr_security_admin", "name": "Sam Adeyemi", "email": "s.adeyemi@harborpine.example", "teams": { "team_security": "admin" } },
+    { "id": "usr_fraud_approver", "name": "Omar Haddad", "email": "o.haddad@harborpine.example", "teams": { "team_fraud": "approver" } },
+    { "id": "usr_fraud_approver_2", "name": "Lena Fischer", "email": "l.fischer@harborpine.example", "teams": { "team_fraud": "approver" } },
+    { "id": "usr_workspace_admin", "name": "Wanjiru Kamau", "email": "w.kamau@harborpine.example", "teams": { "team_platform": "admin" }, "everyTeam": ["admin", "security_admin"] }
   ]
 }

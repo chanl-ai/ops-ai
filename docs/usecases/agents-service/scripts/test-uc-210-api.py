@@ -54,12 +54,12 @@ sys.path.insert(0, str(AGENTS_DIR / "scripts"))
 from send_levy_email import message  # noqa: E402
 
 RUN = uuid.uuid4().hex[:8]
-MAILBOX = f"levy-{RUN}@northfield.example"
+MAILBOX = f"levy-{RUN}@harborpine.example"
 GREENMAIL_SMTP = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
 GREENMAIL_IMAP = int(os.environ.get("OPS_GREENMAIL_IMAP_PORT", "3143"))
-IMAP_HOST, SECRET = "mail.northfield.test", "DEV_IMAP_PASSWORD"
+IMAP_HOST, SECRET = "mail.harborpine.test", "DEV_IMAP_PASSWORD"
 OPS = {"X-Team-Id": "team_ops"}
-MAYA = {**OPS, "X-Dev-User": "m.okafor@northfieldbank.com"}
+MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
 SECURITY = {"X-Dev-User": "Nadia Petrov"}
 BANK_KEY = {"X-Api-Key": "dev-bank-key"}
 SETTLED = ("succeeded", "failed", "cancelled")
@@ -131,7 +131,7 @@ def bank_module(gw: httpx.Client) -> None:
     ]
     body = {
         "name": "northfield-core-banking",
-        "displayName": "Northfield Core Banking",
+        "displayName": "Harbor & Pine Core Banking",
         "system": found["system"],
         "type": "openapi",
         "endpoint": found["endpoint"],

@@ -278,7 +278,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
         {d.schedule.kind === 'webhook' &&
           (() => {
             const wh = d.schedule;
-            const url = `https://api.northfieldbank.com/ops/hooks/sources/${source.id}`;
+            const url = `https://api.harborpine.example/ops/hooks/sources/${source.id}`;
             return (
               <div className="flex flex-col gap-2 rounded-md border bg-background p-3">
                 <div className="flex items-center gap-2">

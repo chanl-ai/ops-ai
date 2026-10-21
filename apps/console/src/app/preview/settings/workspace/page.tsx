@@ -28,17 +28,17 @@ const ALIASES = [
 export default function WorkspaceGeneralPage() {
   const { can } = useViewerRole();
   const admin = can('Admin');
-  const [name, setName] = React.useState('Northfield Bank');
-  const [slug, setSlug] = React.useState('northfield');
+  const [name, setName] = React.useState('Harbor & Pine Bank');
+  const [slug, setSlug] = React.useState('harborpine');
   const [alias, setAlias] = React.useState<string | null>('advisor-default');
   const [overridable, setOverridable] = React.useState(true);
   const [notify, setNotify] = React.useState<Record<string, ScopeValue>>({ dev: 'default', staging: 'on', prod: 'default' });
   return (
     <PreviewPageLayout title="Workspace" description="The name, address and defaults every team in this workspace inherits">
-      <SettingCard id="name" title="Workspace name" description="The name people see in the header and in emails." help="Please use 32 characters at maximum." onSave={() => mockSave('Name')} dirty={name !== 'Northfield Bank'} locked={!admin} requiredRole="Admin">
+      <SettingCard id="name" title="Workspace name" description="The name people see in the header and in emails." help="Please use 32 characters at maximum." onSave={() => mockSave('Name')} dirty={name !== 'Harbor & Pine Bank'} locked={!admin} requiredRole="Admin">
         <Input value={name} maxLength={32} onChange={(e) => setName(e.target.value)} aria-label="Workspace name" className="w-full sm:w-1/2 bg-card" />
       </SettingCard>
-      <SettingCard id="slug" title="Workspace address" description="The address people open to reach this workspace." help="Lowercase letters, digits and dashes. Changing it breaks saved links." onSave={() => mockSave('Address')} dirty={slug !== 'northfield'} locked={!admin} requiredRole="Admin">
+      <SettingCard id="slug" title="Workspace address" description="The address people open to reach this workspace." help="Lowercase letters, digits and dashes. Changing it breaks saved links." onSave={() => mockSave('Address')} dirty={slug !== 'harborpine'} locked={!admin} requiredRole="Admin">
         <div className="w-full">
           <PrefixedInput prefix="ops.example.com/" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} aria-label="Workspace address" />
         </div>
@@ -65,11 +65,11 @@ export default function WorkspaceGeneralPage() {
       <div className="flex flex-col gap-4 pt-4">
         <h2 className="text-sm font-semibold text-destructive">Danger zone</h2>
         <div id="transfer">
-          <DangerCard title="Transfer ownership" description="Hand the workspace to another admin. You stay an admin." precondition="Ensure at least one more Owner is in the workspace." action="Transfer ownership" confirmName="Northfield Bank" onConfirm={() => mockSave('Transfer')} />
+          <DangerCard title="Transfer ownership" description="Hand the workspace to another admin. You stay an admin." precondition="Ensure at least one more Owner is in the workspace." action="Transfer ownership" confirmName="Harbor & Pine Bank" onConfirm={() => mockSave('Transfer')} />
         </div>
-        <DangerCard title="Leave workspace" description="Remove yourself from this workspace and every team in it." precondition="Ensure at least one more Owner stays." action="Leave workspace" confirmName="Northfield Bank" onConfirm={() => mockSave('Leave')} blockedReason="You are the only Owner. Transfer ownership first." />
+        <DangerCard title="Leave workspace" description="Remove yourself from this workspace and every team in it." precondition="Ensure at least one more Owner stays." action="Leave workspace" confirmName="Harbor & Pine Bank" onConfirm={() => mockSave('Leave')} blockedReason="You are the only Owner. Transfer ownership first." />
         <div id="delete">
-          <DangerCard title="Delete workspace" description="Deletes every agent, workflow, file and audit record. This cannot be undone." precondition="Ensure no run is in progress and the audit export has finished." action="Delete workspace" confirmName="Northfield Bank" onConfirm={() => mockSave('Delete')} />
+          <DangerCard title="Delete workspace" description="Deletes every agent, workflow, file and audit record. This cannot be undone." precondition="Ensure no run is in progress and the audit export has finished." action="Delete workspace" confirmName="Harbor & Pine Bank" onConfirm={() => mockSave('Delete')} />
         </div>
       </div>
       <Button asChild variant="link" className="w-fit px-0">

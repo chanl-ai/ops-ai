@@ -21,11 +21,11 @@ identity provider and no model is called.
 |---|---|---|
 | 1 | Priya invites Sam to team_ops as admin; Sam accepts as himself | Sam may now send new people to team_ops |
 | 2 | Sam sets an OIDC provider for a new domain, first sign-in team team_ops as Chat user, and keeps passwords on | 200 twice |
-| 3 | Ask how `new.teller@<domain>` signs in | `sso: {kind: oidc, label: Northfield SSO}` |
+| 3 | Ask how `new.teller@<domain>` signs in | `sso: {kind: oidc, label: Harbor & Pine SSO}` |
 | 4 | The teller signs in at the provider and completes with the flow key | An `oidc` session, role `chat_user` on team_ops; only chat permissions; members list 403 |
 | 5 | Sign in again | The same person; team_ops lists them once as a chat user |
 | 6 | The provider vouches for an address outside its domains | `error=sign_in_refused`; nobody is made |
-| ui | On the console, type the domain's email: the form becomes Continue with SSO naming Northfield SSO; continue | The fake provider sends the browser back and the console signs the teller in |
+| ui | On the console, type the domain's email: the form becomes Continue with SSO naming Harbor & Pine SSO; continue | The fake provider sends the browser back and the console signs the teller in |
 
 ## Acceptance layers
 

@@ -15,8 +15,8 @@ const json = async (r) => {
   return body.data;
 };
 const PEOPLE = [
-  ['Priya', 'p.shah@northfieldbank.com'],
-  ['Ravi', 'r.menon@northfieldbank.com'],
+  ['Priya', 'p.shah@harborpine.example'],
+  ['Ravi', 'r.menon@harborpine.example'],
 ];
 
 async function signIn(browser, consoleUrl, email, errors) {
@@ -32,7 +32,7 @@ async function signIn(browser, consoleUrl, email, errors) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const P = await as('p.shah@northfieldbank.com');
+    const P = await as('p.shah@harborpine.example');
     // The first base and source the admin may change, by each one's own detail.
     const firstEditable = async (list, path) => {
       for (const row of list) if ((await json(await fetch(`${kb}/v1/${path}/${row.id}`, { headers: P }))).canEdit) return row;

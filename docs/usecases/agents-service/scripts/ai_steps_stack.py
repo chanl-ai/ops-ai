@@ -37,7 +37,7 @@ def ai_stack(name: str) -> Generator[tuple[httpx.Client, httpx.Client]]:
 
 def turn_on(people: httpx.Client, key: str = "aiSteps", team: str = "team_ops") -> httpx.Response:
     """Priya Shah, admin of team_ops, turns an AI feature on for the team (Govern > Policies): aiSteps or taskAssist."""
-    priya = bearer(signed_in(people, "p.shah@northfieldbank.com"), team)
+    priya = bearer(signed_in(people, "p.shah@harborpine.example"), team)
     return people.put(f"/v1/policies/{key}", json={"value": True}, headers=priya)
 
 

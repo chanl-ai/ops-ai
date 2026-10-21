@@ -164,7 +164,7 @@ export interface CatalogSystem {
   /** Auth methods this system accepts, the first one recommended. */
   authMethods: AuthMethod[];
   scopes: ScopeDef[];
-  /** e.g. `northfield.sharepoint.com`. */
+  /** e.g. `harborpine.sharepoint.com`. */
   instanceHint: string;
   /** Team that owns the system and approves scope requests. */
   owner: string;

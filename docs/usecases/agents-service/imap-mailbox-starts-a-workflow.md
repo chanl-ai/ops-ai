@@ -12,14 +12,14 @@ attachments in Files first. GreenMail in compose plays the mailbox; a real Gmail
 | Needs | How |
 |---|---|
 | The shared stack with platform sign-in, GreenMail and Mailpit | `OPS_STACK_AUTH=platform make up` |
-| `intake@northfield.test` in the mailbox settings | `scripts/stack.sh` (IMAP on `mail.northfield.test`, secret `DEV_IMAP_PASSWORD`) |
+| `intake@harborpine.test` in the mailbox settings | `scripts/stack.sh` (IMAP on `mail.harborpine.test`, secret `DEV_IMAP_PASSWORD`) |
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Sam adds the secret for team_ops, the host `mail.northfield.test` and this machine's address as a range | 201, or 200/409 when already there |
-| 2 | James opens the mailbox picker | `intake@northfield.test` shows as `team_ops · IMAP` |
+| 1 | Sam adds the secret for team_ops, the host `mail.harborpine.test` and this machine's address as a range | 201, or 200/409 when already there |
+| 2 | James opens the mailbox picker | `intake@harborpine.test` shows as `team_ops · IMAP` |
 | 3 | James saves and publishes a workflow bound to it | 201 |
 | 4 | Mail sent before the first pass | No run |
 | 5 | An email with a PDF sent to GreenMail over SMTP | One run within seconds; the PDF as a Files id |

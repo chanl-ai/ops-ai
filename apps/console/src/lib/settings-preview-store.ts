@@ -37,16 +37,16 @@ interface State {
 
 let state: State = {
   hosts: [
-    { id: 'eh_2m9k4w81', host: 'api.corebank.northfield.example', note: 'Core banking read API', addedBy: 'Sam Adeyemi', addedAt: ago(60 * 24 * 12) },
-    { id: 'eh_7c1p5x3d', host: 'statements.northfield.example', note: 'Statement renderer', addedBy: 'Sam Adeyemi', addedAt: ago(60 * 24 * 5) },
+    { id: 'eh_2m9k4w81', host: 'api.corebank.harborpine.example', note: 'Core banking read API', addedBy: 'Sam Adeyemi', addedAt: ago(60 * 24 * 12) },
+    { id: 'eh_7c1p5x3d', host: 'statements.harborpine.example', note: 'Statement renderer', addedBy: 'Sam Adeyemi', addedAt: ago(60 * 24 * 5) },
   ],
   secrets: [
     { id: 'sc_4a8f2e61', name: 'STATEMENTS_KEY', hint: '4f2a', teams: ['Operations'], lastUsedAt: ago(14), rotatedAt: ago(60 * 24 * 20) },
     { id: 'sc_9d3b7c05', name: 'CORE_BANK_TOKEN', hint: 'c91e', teams: [], lastUsedAt: ago(3), rotatedAt: ago(60 * 24 * 41) },
   ],
   aliases: [
-    { id: 'ma_1f6e8a22', alias: 'advisor-default', provider: 'Northfield OpenAI', model: 'gpt-5.1', clearance: 'Internal' },
-    { id: 'ma_5b0c3d97', alias: 'policy-strict', provider: 'Northfield Anthropic', model: 'claude-sonnet-4-5', clearance: 'Confidential' },
+    { id: 'ma_1f6e8a22', alias: 'advisor-default', provider: 'Harbor & Pine OpenAI', model: 'gpt-5.1', clearance: 'Internal' },
+    { id: 'ma_5b0c3d97', alias: 'policy-strict', provider: 'Harbor & Pine Anthropic', model: 'claude-sonnet-4-5', clearance: 'Confidential' },
   ],
 };
 const listeners = new Set<() => void>();

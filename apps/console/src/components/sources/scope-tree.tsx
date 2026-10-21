@@ -34,10 +34,10 @@ export const TREES: Partial<Record<SourceType, TreeNode[]>> = {
     { id: 'sd-marketing', label: 'Marketing (shared drive)', kind: 'drive', children: [{ id: 'g-brand', label: 'Brand', kind: 'folder', count: 140 }, { id: 'g-campaigns', label: 'Campaigns 2026', kind: 'folder', count: 322 }] },
   ],
   github: [
-    { id: 'platform-docs', label: 'northfield-bank/platform-docs', kind: 'repo', count: 214 },
-    { id: 'api-gateway', label: 'northfield-bank/api-gateway', kind: 'repo', count: 31 },
-    { id: 'mobile-app', label: 'northfield-bank/mobile-app', kind: 'repo', count: 12 },
-    { id: 'infra', label: 'northfield-bank/infra', kind: 'repo', count: 64 },
+    { id: 'platform-docs', label: 'harborpine-bank/platform-docs', kind: 'repo', count: 214 },
+    { id: 'api-gateway', label: 'harborpine-bank/api-gateway', kind: 'repo', count: 31 },
+    { id: 'mobile-app', label: 'harborpine-bank/mobile-app', kind: 'repo', count: 12 },
+    { id: 'infra', label: 'harborpine-bank/infra', kind: 'repo', count: 64 },
   ],
   notion: [
     { id: 'n-wiki', label: 'Product wiki', kind: 'page', count: 88, children: [{ id: 'n-specs', label: 'Specs', kind: 'page', count: 40 }, { id: 'n-research', label: 'Research repository', kind: 'page', count: 22 }] },

@@ -1,4 +1,4 @@
-// Writes the console mock's tool-module seed as JSON for tools-service, so the API serves the same Northfield modules
+// Writes the console mock's tool-module seed as JSON for tools-service, so the API serves the same Harbor & Pine modules
 // the mock shows: the dev seed (services/tools-service/seed/, what `make up` loads) and the tests' fixture, which adds
 // the mock's workflows for the tests' stand-in workflow directory. Workflows themselves are agents-service's, so the
 // dev seed carries none; each seeded approval keeps its workflow's name and owning team. Run from the repo root after

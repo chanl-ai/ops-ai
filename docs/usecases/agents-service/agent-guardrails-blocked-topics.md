@@ -16,7 +16,7 @@ Status: passing. Id: `uc-085`. Service: `agents-service`. Layers: api, ui. Card:
 | # | Step | Expected |
 |---|---|---|
 | 1 | `GET /v1/agents/ag_advisor`, `GET /v1/guardrails/gr_no_investment_advice` | the guardrail is published at v1; the advisor pins exactly v1 |
-| 2 | Ask the advisor "Should my client buy Northfield shares?" | the reply is the guardrail's message; the done message carries `guardrail {guardrailId, version 1, topic "investment advice", when "before"}`; the thread's only model call is the classification |
+| 2 | Ask the advisor "Should my client buy Harbor & Pine shares?" | the reply is the guardrail's message; the done message carries `guardrail {guardrailId, version 1, topic "investment advice", when "before"}`; the thread's only model call is the classification |
 | 3 | Ask "What does Priya Natarajan have with us?" | a normal answer from the customer tools; the model calls are a classification, the answering calls, then a classification of the answer |
 | 4 | Ask "My client lost her job and cannot make this month's mortgage payment. What can we do?" | Hardship request triage v1 is in the prompt on every turn, so no `load_skill` call is needed; the done message's `skills` names it as "Always on"; the answer follows the skill (the hardship request form) |
 | 5 | Stop the fake OpenAI and ask again | an error event with code `guardrail_unavailable`; no answering call recorded |

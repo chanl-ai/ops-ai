@@ -68,7 +68,7 @@ PER_PERSON = {
     "input": {"name": "$.item.name", "position": "$.index", "notice": "$.input.notice"},
 }
 
-james = headers("j.richardson@northfieldbank.com", "team_ops")
+james = headers("j.richardson@harborpine.example", "team_ops")
 api = httpx.Client(base_url=AGENTS, timeout=60, headers=james)
 
 

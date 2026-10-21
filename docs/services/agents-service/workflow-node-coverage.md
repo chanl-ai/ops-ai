@@ -55,7 +55,7 @@ Run once each on 2026-10-19, with the same step paths as the isolated runs:
 | Run | Workflow | Outcome |
 |---|---|---|
 | `wfrun_1578bdad3f3d` | `customer_hold`, started by request | `held`; case opened, hold noted, webhook sent |
-| `wfrun_3d72d0968cf5` | `complaint_triage`, started by an email to `complaints@northfield.test` | `replied`; the agent answered urgency `high`, case `case_f66d03aaa0d3` opened at `urgent` |
+| `wfrun_3d72d0968cf5` | `complaint_triage`, started by an email to `complaints@harborpine.test` | `replied`; the agent answered urgency `high`, case `case_f66d03aaa0d3` opened at `urgent` |
 | `wfrun_77de8856f47a` | `attachment_record`, one per attachment | `recorded`; the receipt was recognised as `payment_receipt` |
 | `wfrun_633f15328761` | `customer_hold`, started by the complaint | waits at Approve the hold, as intended |
 

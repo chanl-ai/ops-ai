@@ -30,9 +30,9 @@ async function step(name, body) {
 
 await withUiStack(
   async (consoleUrl) => {
-    const SAM = await as('s.adeyemi@northfieldbank.com', 'team_security');
-    const J = await as('j.richardson@northfieldbank.com', 'team_ops');
-    const N = await as('n.petrov@northfieldbank.com', 'team_security');
+    const SAM = await as('s.adeyemi@harborpine.example', 'team_security');
+    const J = await as('j.richardson@harborpine.example', 'team_ops');
+    const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: HOST, note: 'uc-090' }) });
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Rates ${TAG}`, name: `uc090-rates-${TAG}`, type: 'http' }) }))).id;
     const add = (body) => fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify(body) }).then(json);
@@ -47,7 +47,7 @@ await withUiStack(
       const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Email').fill('j.richardson@northfieldbank.com');
+      await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });

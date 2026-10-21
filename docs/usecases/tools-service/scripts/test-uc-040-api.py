@@ -1,4 +1,5 @@
-"""uc-040 Security decides a tool module review, api layer: docs/usecases/tools-service/security-decides-a-module-review.md.
+"""uc-040 Security decides a tool module review, api layer:
+docs/usecases/tools-service/security-decides-a-module-review.md.
 platform-service issues the people's tokens; tools-service and agents-service verify them (OPS_AUTH_MODE=platform). The
 review is a publish request decided in agents-service's Reviews, as Human Tasks decides it (c-163)."""
 
@@ -8,7 +9,6 @@ import time
 from typing import Any
 
 import httpx
-
 from usecase_harness import (
     AGENTS_PORT,
     PLATFORM_INTERNAL_PORT,
@@ -61,10 +61,10 @@ with (
     agents(env=settings) as api,
     tools(settings={**settings, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as gw,
 ):
-    james = signed_in(pub, "j.richardson@northfieldbank.com", "team_ops")
-    maya = signed_in(pub, "m.okafor@northfieldbank.com", "team_ops")
-    nadia = signed_in(pub, "n.petrov@northfieldbank.com", "team_security")
-    sam = signed_in(pub, "s.adeyemi@northfieldbank.com", "team_security")
+    james = signed_in(pub, "j.richardson@harborpine.example", "team_ops")
+    maya = signed_in(pub, "m.okafor@harborpine.example", "team_ops")
+    nadia = signed_in(pub, "n.petrov@harborpine.example", "team_security")
+    sam = signed_in(pub, "s.adeyemi@harborpine.example", "team_security")
     allowed = gw.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-040"}, headers=sam)
     check("Security's admin allows the module's host for egress", allowed.status_code in (200, 201), allowed.text[:200])
     mid, rid = reviewed_module(gw, james, f"uc040-statements-{RUN}")

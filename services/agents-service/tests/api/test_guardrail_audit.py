@@ -21,7 +21,7 @@ from .role_app import ok, role_app
 
 ADVISOR = "ag_branch"
 RULE = {"name": "No investment advice", "topics": ["investment advice"], "message": "I can't give investment advice."}
-ANSWER = "Buy Northfield shares before Friday."
+ANSWER = "Buy Harbor & Pine shares before Friday."
 
 
 def _withdrawing_model() -> FunctionModel:

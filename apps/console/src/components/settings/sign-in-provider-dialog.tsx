@@ -182,7 +182,7 @@ export function SignInProviderDialog({
             </Select>
           </FormField>
           <FormField id="provider-label" label="Name" error={errors.label} hint="Shown on the sign-in page.">
-            <Input id="provider-label" value={f.label} maxLength={200} aria-invalid={!!errors.label} onChange={(e) => set('label', e.target.value)} placeholder="e.g. Northfield SSO" />
+            <Input id="provider-label" value={f.label} maxLength={200} aria-invalid={!!errors.label} onChange={(e) => set('label', e.target.value)} placeholder="e.g. Harbor & Pine SSO" />
           </FormField>
         </div>
         <div className="flex items-start gap-3">
@@ -260,7 +260,7 @@ export function SignInProviderDialog({
         {sso && (
           <>
             <FormField id="provider-domains" label="Email domains" error={errors.domains} hint="Each is verified by a DNS TXT record before it sends anyone here. Press Enter after each.">
-              <TagInput id="provider-domains" value={f.domains} invalid={!!errors.domains} onChange={(v) => set('domains', v.map((d) => d.toLowerCase()))} placeholder="e.g. northfield.ca" />
+              <TagInput id="provider-domains" value={f.domains} invalid={!!errors.domains} onChange={(v) => set('domains', v.map((d) => d.toLowerCase()))} placeholder="e.g. harborpine.ca" />
             </FormField>
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField id="provider-role" label="New people join as" error={errors.jit} hint="Someone new to the workspace gets an account on their first sign-in.">

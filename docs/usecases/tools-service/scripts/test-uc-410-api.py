@@ -88,11 +88,11 @@ with ExitStack() as stack:
     stack.enter_context(tools({**bank["settings"], **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
     stack.enter_context(agents(gateway_url=gw_url, env=AUTH))
 
-    priya = signed_in(api, "p.shah@northfieldbank.com")
-    sam = signed_in(api, "s.adeyemi@northfieldbank.com")
-    nadia = signed_in(api, "n.petrov@northfieldbank.com")
-    wanjiru = signed_in(api, "w.kamau@northfieldbank.com")
-    ravi = signed_in(api, "r.menon@northfieldbank.com")
+    priya = signed_in(api, "p.shah@harborpine.example")
+    sam = signed_in(api, "s.adeyemi@harborpine.example")
+    nadia = signed_in(api, "n.petrov@harborpine.example")
+    wanjiru = signed_in(api, "w.kamau@harborpine.example")
+    ravi = signed_in(api, "r.menon@harborpine.example")
     ops = stack.enter_context(httpx.Client(base_url=gw_url, headers=bearer(priya, "team_ops"), timeout=30))
     security = stack.enter_context(httpx.Client(base_url=gw_url, headers=bearer(sam, "team_security"), timeout=30))
 

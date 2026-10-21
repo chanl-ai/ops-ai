@@ -21,12 +21,12 @@ from usecase_harness import (
 )
 
 with signin_stack() as (api, idp, _):
-    zone = f"{secrets.token_hex(4)}.northfield.test"
+    zone = f"{secrets.token_hex(4)}.harborpine.test"
     base = str(idp.base_url).rstrip("/")
-    priya = signed_in(api, "p.shah@northfieldbank.com")
+    priya = signed_in(api, "p.shah@harborpine.example")
     saml = {
         "kind": "saml",
-        "label": "Northfield SAML",
+        "label": "Harbor & Pine SAML",
         "domains": [zone],
         "saml": {
             "idpEntityId": f"{base}/saml/northfield",
@@ -41,7 +41,7 @@ with signin_stack() as (api, idp, _):
     r = set_provider(api, idp, "saml-northfield", saml, sam)
     check("Sam makes the workspace SAML-only (200)", r.status_code == 200, r.text[:300])
 
-    r = api.post("/v1/auth/sign-in", json={"email": "j.richardson@northfieldbank.com", "password": "northfield-demo"})
+    r = api.post("/v1/auth/sign-in", json={"email": "j.richardson@harborpine.example", "password": "northfield-demo"})
     check("a password sign-in in the SAML-only workspace is refused (401)", r.status_code == 401, r.status_code)
 
     # The SAML request answered by another provider's key.
@@ -73,7 +73,7 @@ with signin_stack() as (api, idp, _):
         json={"code": good["query"].get("code", "x" * 20), "flowKey": good["flowKey"] or "x" * 20},
     )
     check("the same code a second time is refused (401)", r.status_code == 401, r.status_code)
-    r = api.post("/v1/auth/sso/start", json={"email": "p.shah@northfieldbank.com"})
+    r = api.post("/v1/auth/sso/start", json={"email": "p.shah@harborpine.example"})
     check(
         "an email domain with no provider cannot start SSO (400)",
         r.status_code == 400 and r.json()["error"]["code"] == "sso_not_enabled",

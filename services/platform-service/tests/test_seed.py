@@ -33,7 +33,7 @@ async def test_a_role_changed_through_the_api_stays_when_the_seed_runs_again(
     # The seed runs on every start; it adds what is missing and never undoes a person's change.
     await seed(database_url, PEOPLE)
     admin = await platform.public.post(
-        "/v1/auth/sign-in", json={"email": "p.shah@northfieldbank.com", "password": DEMO_PASSWORD}
+        "/v1/auth/sign-in", json={"email": "p.shah@harborpine.example", "password": DEMO_PASSWORD}
     )
     h = {"Authorization": f"Bearer {admin.json()['data']['token']}", "X-Team-Id": "team_ops"}
     changed = await platform.public.post(
@@ -42,7 +42,7 @@ async def test_a_role_changed_through_the_api_stays_when_the_seed_runs_again(
     assert changed.status_code == 200, changed.text
     await seed(database_url, PEOPLE)
     r = await platform.public.post(
-        "/v1/auth/sign-in", json={"email": "j.richardson@northfieldbank.com", "password": DEMO_PASSWORD}
+        "/v1/auth/sign-in", json={"email": "j.richardson@harborpine.example", "password": DEMO_PASSWORD}
     )
     assert r.json()["data"]["principal"]["roles"] == {"team_ops": "admin"}, r.text
 
@@ -66,7 +66,7 @@ async def test_the_everyone_admin_seed_makes_each_person_admin_everywhere_and_of
 
     async def james_teams() -> set[str]:
         r = await platform.public.post(
-            "/v1/auth/sign-in", json={"email": "j.richardson@northfieldbank.com", "password": DEMO_PASSWORD}
+            "/v1/auth/sign-in", json={"email": "j.richardson@harborpine.example", "password": DEMO_PASSWORD}
         )
         return set(r.json()["data"]["principal"]["teamIds"])
 

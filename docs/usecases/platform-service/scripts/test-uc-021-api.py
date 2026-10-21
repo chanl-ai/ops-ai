@@ -6,7 +6,7 @@ import time
 
 from usecase_harness import check, data, finish, platform
 
-JAMES = {"email": "j.richardson@northfieldbank.com", "password": "northfield-demo"}
+JAMES = {"email": "j.richardson@harborpine.example", "password": "northfield-demo"}
 
 
 def bearer(token: str) -> dict[str, str]:

@@ -46,7 +46,7 @@ PERM_VERSION = 187
 def editor() -> dict[str, str]:
     claims = {
         "sub": "erin",
-        "email": "erin@northfield.example",
+        "email": "erin@harborpine.example",
         "name": "erin",
         "kind": "person",
         "aud": ["agents"],

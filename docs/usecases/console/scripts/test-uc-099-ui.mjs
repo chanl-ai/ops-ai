@@ -4,8 +4,8 @@
 // pause and delete only to someone it lets edit the team's records.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const RAVI = 'r.menon@northfieldbank.com';
-const JAMES = 'j.richardson@northfieldbank.com';
+const RAVI = 'r.menon@harborpine.example';
+const JAMES = 'j.richardson@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
 async function signIn(browser, consoleUrl, email, errors, mes) {

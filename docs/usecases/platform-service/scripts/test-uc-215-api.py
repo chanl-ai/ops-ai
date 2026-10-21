@@ -20,12 +20,12 @@ from usecase_harness import (
 from ops_signin.fake_idp import self_signed
 
 with signin_stack() as (api, idp, _):
-    zone = f"{secrets.token_hex(4)}.northfield.test"
+    zone = f"{secrets.token_hex(4)}.harborpine.test"
     base = str(idp.base_url).rstrip("/")
     sam = security_admin_on_ops(api)
     provider = {
         "kind": "saml",
-        "label": "Northfield SAML",
+        "label": "Harbor & Pine SAML",
         "domains": [zone],
         "saml": {
             "idpEntityId": f"{base}/saml/strict",

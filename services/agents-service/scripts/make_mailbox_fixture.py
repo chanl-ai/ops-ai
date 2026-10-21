@@ -54,7 +54,7 @@ LEVY_PERSONS: list[dict[str, str]] = [
         "case_no": "MB-2026-GN-00318",
     },
 ]
-DOMAIN = "mail.northfield.example"
+DOMAIN = "mail.harborpine.example"
 WORDS = [
     "statement",
     "merchant",
@@ -131,7 +131,7 @@ def levy_pdf(persons: list[dict[str, str]]) -> bytes:
     c.setTitle("Notice of Garnishment")
     y = 740
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(72, y, "NOTICE OF GARNISHMENT - THIRD PARTY (Northfield Bank)")
+    c.drawString(72, y, "NOTICE OF GARNISHMENT - THIRD PARTY (Harbor & Pine Bank)")
     y -= 24
     c.setFont("Helvetica", 10)
     c.drawString(72, y, "The garnishee shall hold funds of each judgment debtor listed below up to the amount shown.")

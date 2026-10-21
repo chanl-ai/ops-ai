@@ -129,7 +129,7 @@ export const kbs: KnowledgeBase[] = [
       members: { mode: "all", principals: [] },
       anyApiKey: true,
       mcp: { enabled: true, toolName: "search_support" },
-      publicLink: { enabled: true, slug: "northfield-help", answerStyle: "chat", rateLimit: 1000, showSourceLinks: true },
+      publicLink: { enabled: true, slug: "harborpine-help", answerStyle: "chat", rateLimit: 1000, showSourceLinks: true },
       documentPermissions: "workspace",
     },
     automation: "suggest",
@@ -257,7 +257,7 @@ export const playgroundAnswers: PlaygroundAnswer[] = [
       "The annual fee on a credit card is refunded in full if the card is closed within 30 days of the fee posting [1]. After 30 days the fee is not refunded, but the customer can move to a no-fee card from the next statement [2]. Refund requests go through the branch or the contact centre; closing the card online refunds the fee automatically within one statement cycle [1].",
     followed: "Pricing site · /pricing/credit-cards/annual-fee (v3.1) — pricing page beats Branch FAQ",
     citations: [
-      { n: 1, documentId: "src_pricing_crawl_it_23", title: "Annual fee", section: "Cancellation and refunds", page: undefined, version: "v3.1", snippet: "The annual fee is refunded in full when the card is closed within 30 days of the fee posting.", url: "https://www.northfieldbank.com/pricing/credit-cards/annual-fee" },
+      { n: 1, documentId: "src_pricing_crawl_it_23", title: "Annual fee", section: "Cancellation and refunds", page: undefined, version: "v3.1", snippet: "The annual fee is refunded in full when the card is closed within 30 days of the fee posting.", url: "https://www.harborpine.example/pricing/credit-cards/annual-fee" },
       { n: 2, documentId: "src_branch_faq_it_0", title: "Branch FAQ", section: "Q: Can a customer get an annual card fee refunded?", version: "v1.3", snippet: "After the first 30 days we do not refund the fee; we can move the customer to a no-fee card from the next statement." },
     ],
     chunks: [
@@ -360,11 +360,11 @@ export const genericAnswer: PlaygroundAnswer = {
     "Based on the indexed documents, the closest match is the procedure section cited below [1]. It states the rule in general terms; the FAQ adds who to contact for the local process [2]. If you need the exact figure, open the cited document at the section shown.",
   followed: "Highest-scoring document after precedence rules",
   citations: [
-    { n: 1, documentId: "src_hr_sharepoint_it_3", title: "Suspicious transaction reporting", section: "1. Scope", page: 1, version: "v3.0", snippet: "This procedure applies to all employees, contractors and directors of Northfield Bank." },
+    { n: 1, documentId: "src_hr_sharepoint_it_3", title: "Suspicious transaction reporting", section: "1. Scope", page: 1, version: "v3.0", snippet: "This procedure applies to all employees, contractors and directors of Harbor & Pine Bank." },
     { n: 2, documentId: "src_hr_sharepoint_it_150", title: "Customer due diligence standard — FAQ", section: "Q: Who do I ask?", version: "v1.0", snippet: "Contact your Financial Crime Operations partner for anything the standard does not cover." },
   ],
   chunks: [
-    { chunkId: "c1", documentId: "src_hr_sharepoint_it_3", documentTitle: "Suspicious transaction reporting", sourceName: "AML & KYC procedures", score: 0.72, location: "p.1 · 1. Scope", text: "This procedure applies to all employees, contractors and directors of Northfield Bank.", rejected: false, version: "v3.0" },
+    { chunkId: "c1", documentId: "src_hr_sharepoint_it_3", documentTitle: "Suspicious transaction reporting", sourceName: "AML & KYC procedures", score: 0.72, location: "p.1 · 1. Scope", text: "This procedure applies to all employees, contractors and directors of Harbor & Pine Bank.", rejected: false, version: "v3.0" },
     { chunkId: "c2", documentId: "src_hr_sharepoint_it_150", documentTitle: "Customer due diligence standard — FAQ", sourceName: "AML & KYC procedures", score: 0.61, location: "Q: Who do I ask?", text: "Contact your Financial Crime Operations partner for anything the standard does not cover.", rejected: false, version: "v1.0" },
     { chunkId: "c3", documentId: "src_hr_sharepoint_it_14", documentTitle: "Account opening identity checks", sourceName: "AML & KYC procedures", score: 0.41, location: "p.1", text: "Collect two forms of ID and record the verification method.", rejected: true, version: "v2.1" },
   ],

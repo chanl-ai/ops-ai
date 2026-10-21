@@ -17,7 +17,7 @@ EMAIL = {"sender": "a@b.example", "subject": "Dispute", "body": "I did not make 
 def member(role: str) -> Principal:
     return Principal(
         name=role,
-        email=f"{role}@northfieldbank.com",
+        email=f"{role}@harborpine.example",
         team_id="team_ops",
         tenant_id="local",
         team_ids=("team_ops",),

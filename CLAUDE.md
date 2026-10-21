@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Ops AI is an open design for an operational AI platform for enterprises, plus working code that shows it. The console
-(`apps/console/`) is a Next.js app for a fictional bank, Northfield Bank: what agents did, what is waiting on a
+(`apps/console/`) is a Next.js app for a fictional bank, Harbor & Pine Bank: what agents did, what is waiting on a
 person, and the configuration behind both. It runs against an in-memory mock API that the backend services in
 `services/` replace one area at a time. Read `.codeloop/wiki/concepts/builder-best-practices.md` before starting any card. Read `AGENTS.md` and `CONTRIBUTING.md` before changing anything; console
 rules are in `apps/console/CLAUDE.md`.
@@ -162,5 +162,5 @@ status line and is listed in `docs/README.md`. `scripts/check-docs.mjs` enforces
 
 Doc file names are topics; specs keep their number and ADRs their id in the title, so "spec 14" and "ADR-0005" still
 resolve. Docs hold decisions, rules, facts, gotchas and evidence, not narrative. Specs follow the 11-section shape in
-`CONTRIBUTING.md`. Use roles, never personal names. Say "the bank" in specs; "Northfield Bank" appears only in the
+`CONTRIBUTING.md`. Use roles, never personal names. Say "the bank" in specs; "Harbor & Pine Bank" appears only in the
 console. Mark unconfirmed claims **unverified**.

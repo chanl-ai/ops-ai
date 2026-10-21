@@ -4,8 +4,8 @@ import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
-const JAMES = 'j.richardson@northfieldbank.com';
-const RAVI = 'r.menon@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const INTRANET = 'https://intranet.bank.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
@@ -29,7 +29,7 @@ await withUiStack(
     const one = await post('/v1/widget-deployments', { name: 'Intranet help (ui)', agentId: 'ag_fraud', origins: [INTRANET] }, J);
     const two = await post('/v1/widget-deployments', { name: 'Branch kiosk (ui)', agentId: 'ag_fraud', origins: [INTRANET] }, J);
     const { secret } = await post(`/v1/widget-deployments/${one.id}/keys`, { name: 'intranet server' }, J);
-    const person = { email: 'm.okafor@northfieldbank.com', name: 'Maya Okafor', origin: INTRANET };
+    const person = { email: 'm.okafor@harborpine.example', name: 'Maya Okafor', origin: INTRANET };
     const mint = () => fetch(`${agents}/v1/widget-deployments/${one.id}/sessions`, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' }, body: JSON.stringify(person) });
     const { session } = (await (await mint()).json()).data;
     await fetch(`${agents}/v1/widget/${one.id}/threads`, { method: 'POST', headers: { 'X-Widget-Session': session, Origin: INTRANET } });

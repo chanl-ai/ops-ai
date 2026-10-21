@@ -9,7 +9,7 @@ import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, ch
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const JAMES = 'j.richardson@northfieldbank.com';
+const JAMES = 'j.richardson@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const json = async (r) => {
   const body = await r.json();
@@ -128,7 +128,7 @@ await withUiStack(
         // A person approves the check in Human Tasks; the workflow then saves what was read on the file.
         const w = runOf.run.waiting;
         // Maya approves for Operations; James builds and does not decide reviews.
-        const M = { Authorization: `Bearer ${await tokenFor('m.okafor@northfieldbank.com')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+        const M = { Authorization: `Bearer ${await tokenFor('m.okafor@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
         const decided = await fetch(`${agents}/reviews/${encodeURIComponent(`${runOf.id}:${w.node}:${w.iteration}`)}/decision`, { method: 'POST', headers: M, body: JSON.stringify({ decision: 'approve' }) });
         if (!decided.ok) throw new Error(`decision ${decided.status}: ${(await decided.text()).slice(0, 300)}`);
         let finished;
@@ -207,19 +207,19 @@ await withUiStack(
       await step('9 a person corrects a value on Fields, and the value as read stays beside it', async () => {
         await page.goto(`${fileUrl}/fields`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByTestId('fields-edit').click();
-        await page.getByLabel('Garnishee for Record 1').fill('Northfield Bank Test Intake');
+        await page.getByLabel('Garnishee for Record 1').fill('Harbor & Pine Bank Test Intake');
         const patched = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/fields\/garnishee$/.test(r.url()), { timeout: 30_000 });
         await page.getByTestId('fields-save').click();
         const res = await patched;
         // Saved once the page leaves edit mode and reads the file's reads again.
         await page.getByTestId('fields-edit').waitFor({ timeout: 30_000 });
         const row = page.getByTestId('read-field-0-garnishee');
-        await row.getByText('Northfield Bank Test Intake').waitFor({ timeout: 30_000 });
+        await row.getByText('Harbor & Pine Bank Test Intake').waitFor({ timeout: 30_000 });
         const rowText = await row.innerText();
         const reads = await json(await fetch(`${documents}/v1/documents/extractions?fileId=${file.id}&page=1&pageSize=5`, { headers: J }));
         const g = reads.data[0].fields.garnishee;
         await page.screenshot({ path: join(SHOTS, 'file-fields-corrected-1280.png') });
-        check('9 a person corrects a value on Fields, and the value as read stays beside it', res.status() === 200 && g.value === 'Northfield Bank Test Intake' && g.corrected === true && !(reads.data[0].needsReview ?? []).includes('garnishee') && !/Check/.test(rowText) && rowText.includes('Northfield Bank Test Intake') && rowText.includes('Northfield Bank'), { status: res.status(), field: g, keys: Object.keys(reads.data[0]), records: reads.data[0].records?.length, needsReview: reads.data[0].needsReview, rowText: rowText.slice(0, 160) });
+        check('9 a person corrects a value on Fields, and the value as read stays beside it', res.status() === 200 && g.value === 'Harbor & Pine Bank Test Intake' && g.corrected === true && !(reads.data[0].needsReview ?? []).includes('garnishee') && !/Check/.test(rowText) && rowText.includes('Harbor & Pine Bank Test Intake') && rowText.includes('Harbor & Pine Bank'), { status: res.status(), field: g, keys: Object.keys(reads.data[0]), records: reads.data[0].records?.length, needsReview: reads.data[0].needsReview, rowText: rowText.slice(0, 160) });
       });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

@@ -2,7 +2,7 @@
 
 Status: current.
 
-Ops AI is the operations console for a bank's AI agents (demo tenant: Northfield Bank). These rules are
+Ops AI is the operations console for a bank's AI agents (demo tenant: Harbor & Pine Bank). These rules are
 enforced by `pnpm verify` (type-check, the embed app's type-check, since it draws these chat components through its own `@/lib/api`, and `scripts/check-standards.mjs`), which the pre-commit hook runs.
 A rule that is not checked by the script is still a rule; the script covers the ones a grep can prove.
 

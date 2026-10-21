@@ -55,7 +55,7 @@ the team. A team is the data boundary: another team's records answer 404 on ever
 
 | Team | Id | What it holds | Who belongs |
 |---|---|---|---|
-| Northfield Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@<your-app>.example (viewer), the seed's four bank staff, the first admin |
+| Harbor & Pine Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@<your-app>.example (viewer), the seed's four bank staff, the first admin |
 | Security | `team_security` | The workspace Security team: egress, secrets, the bank module and the platform tools; test leftovers from earlier walks | The first admin, approver@<your-app>.example, admin@demo.example (admin, for the mailbox and its secret) |
 | Customer Operations | `team_319b708e5de1` | A test team: c-383's first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
 
@@ -72,7 +72,7 @@ Reseed or refresh the demo team (every line FOUND on a second run):
 ```
 OPS_DEMO_MEMBER_PASSWORD=<phone password> OPS_DEMO_TOOL_APPROVER_PASSWORD=<Security approver password> \
 uv run python scripts/demo/seed_demo_team.py --origin https://<your-app>-one.fly.dev --admin-env <env file> \
-  --team "Northfield Operations" --workflow-prefix northfield_ --no-levy --extras \
+  --team "Harbor & Pine Operations" --workflow-prefix northfield_ --no-levy --extras \
   --member admin@demo.example:admin --member builder@demo.example:builder --member approver@demo.example:approver \
   --tool-access mod_3a1fdc1ba8a4 --tool-access-team team_security \
   --tool-approver approver@<your-app>.example
