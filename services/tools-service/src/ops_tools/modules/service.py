@@ -425,7 +425,8 @@ class ModuleService:
         workflows: running as another team's workflow would borrow its approval."""
         seen: dict[str, dict[str, Any]] = {}
         for a in m["approvals"]:
-            if a["workflow_id"] not in seen and self.dir.sees(team, self._workflow_groups(a)):
+            ours = a.get("workflow_team_id") == team.id or self.dir.sees(team, self._workflow_groups(a))
+            if a["workflow_id"] not in seen and ours:
                 seen[a["workflow_id"]] = a
         owner: dict[str, Any] = {
             "id": OWNER_CONTEXT,
@@ -590,10 +591,14 @@ class ModuleService:
 
     async def _find(self, who: Caller, module_id: str) -> Aggregate:
         m = await self.store.get(who.tenant_id, module_id)
-        if m is None:
+        if m is None or not self._sees(who, m):
             raise NotFound("Module")
-        self.dir.guard(who.team, self._owners(m), "module")
         return m
+
+    def _sees(self, who: Caller, m: Aggregate) -> bool:
+        """The caller's team reads the module: its own, a workspace-level one, or one approved for its workflows
+        (c-423). Only the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
+        return self.dir.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")
 
     async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
         """The module, when the caller may change it: a `system` module is the provisioner's alone (c-180)."""
@@ -647,7 +652,7 @@ class ModuleService:
         """Every workflow's access to the modules the caller's team sees, newest request first, one page of `view`,
         searched by workflow, module or requester; `facets.view` counts each view."""
         now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self.dir.sees(who.team, self._owners(m))]
+        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
         rows = [(a, m) for m in mods for a in self._approvals(m)]
         views = {id(a): self._grant_views(a, now) for a, _ in rows}
         counts = {v: sum(1 for a, _ in rows if v in views[id(a)]) for v in GRANT_VIEWS}
@@ -676,7 +681,7 @@ class ModuleService:
         sort_order: str | None,
     ) -> dict[str, Any]:
         now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self.dir.sees(who.team, self._owners(m))]
+        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
         traffic = await self._traffic(who.tenant_id, mods)
         have = await self._secret_names(who.tenant_id)
         conns = await self._connections_of(who.tenant_id, mods)
@@ -783,8 +788,8 @@ class ModuleService:
     ) -> dict[str, Any]:
         """Every call the gateway received, newest first, limited to the modules the caller's team sees. `key` finds
         the calls sent under one idempotency key: how a workflow run reconciles a write after a crash."""
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self.dir.sees(who.team, self._owners(m))}
-        scope = None if who.team.scope == "all" else list(mods)
+        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
+        scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_id is not None:
             scope = [module_id] if scope is None or module_id in scope else []
         if key is not None:
@@ -821,8 +826,8 @@ class ModuleService:
         row = await self.calls.get(call_id, tenant_id=who.tenant_id)
         if row is None:
             raise NotFound("Call")
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self.dir.sees(who.team, self._owners(m))}
-        if who.team.scope != "all" and row["module_id"] not in mods:
+        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
+        if (who.verified or who.team.scope != "all") and row["module_id"] not in mods:
             raise NotFound("Call")
         return call_row(row, _workflow_names(list(mods.values())), mods.get(row["module_id"] or ""))
 
@@ -927,7 +932,7 @@ class ModuleService:
             raise Conflict(f"An operation named {name} already exists in another module.")
 
     async def _name_free(self, who: Caller, name: str) -> bool:
-        return all(m["name"] != name for m in await self.store.all(who.tenant_id))
+        return name not in await self.store.names(who.tenant_id)
 
     async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
@@ -1136,7 +1141,7 @@ class ModuleService:
         out: dict[str, Any] = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
-            if m is None or not self.dir.sees(who.team, self._owners(m)):
+            if m is None or not self._sees(who, m):
                 out["skipped"].append({"id": module_id, "reason": "Not found"})
                 continue
             try:
@@ -1604,7 +1609,7 @@ class ModuleService:
         current version publishes it and clears drift, since the reviewed tool list is the one now held; a no sends a
         module never published back to draft, and withdraws the declined version of a published one. Applying the same
         decision twice changes nothing."""
-        m = await self.store.get(tenant_id, module_id)
+        m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Module")
         v = next((x for x in m["versions"] if x["version"] == version and x.get("review_id") == request_id), None)
@@ -1642,12 +1647,25 @@ class ModuleService:
         wf = (await self.workflows.all(who.tenant_id)).get(i["workflow_id"])
         if wf is None:
             raise ValidationFailed("Choose a workflow.")
-        owner = self.dir.team_by_id(wf.team_id)
-        if owner is None:
-            # Fail closed: a workflow whose team has no record here belongs to no one who could decide it.
-            raise Unprocessable(f"{wf.name} belongs to team {wf.team_id}, which tools-service has no record of.")
+        if not wf.team_id:
+            # Fail closed: a workflow no team owns has no one the grant would be for.
+            raise Unprocessable(f"{wf.name} belongs to no team, so no team can be granted access for it.")
+        # The workflow's platform team, which the dev seed need not hold (c-423): the grant is for that team id.
+        owner = self.dir.team(wf.team_id)
         if not i["operations"]:
             raise ValidationFailed("Choose at least one operation.")
+        # The default policy: the module's team decides, unless an operation asked for names its own approving team.
+        decider = next(
+            (o["approver_team"] for o in m["operations"] if o["name"] in i["operations"] and o.get("approver_team")),
+            m["team_id"],
+        )
+        if decider is None:
+            # A workspace-level module (the platform's tools, c-433) serves every team's runs with no grant, and no team
+            # would decide a request for it (c-439).
+            raise Unprocessable(
+                f"{m['display_name']} belongs to no team: every team's workflows may already use it, so there is "
+                "nothing to request."
+            )
         production = i["environment"] == "production"
         most = 365 if production else 90
         if not 1 <= i["expires_in_days"] <= most:
@@ -1678,16 +1696,9 @@ class ModuleService:
             "status": "requested",
             "expires_at": now + timedelta(days=i["expires_in_days"]),
             "reason": None,
-            # Decided in Human Tasks (c-166). The default policy: the module's team decides, unless an operation asked
-            # for names its own approving team; who in that team may decide is can(reviews.decide), as for any review.
-            "decider_team": next(
-                (
-                    o["approver_team"]
-                    for o in m["operations"]
-                    if o["name"] in i["operations"] and o.get("approver_team")
-                ),
-                m["team_id"],
-            ),
+            # Decided in Human Tasks (c-166) by `decider`; who in that team may decide is can(reviews.decide), as for
+            # any review.
+            "decider_team": decider,
             # The system workflow's run key (c-257): the module page opens its review in Human Tasks by it.
             "review_id": f"{ACCESS_REQUESTED}:{approval_id}",
         }
@@ -1710,7 +1721,7 @@ class ModuleService:
         """A tool access review's decision from Human Tasks (c-166), applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
         another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant."""
-        m = await self.store.get(tenant_id, module_id)
+        m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Tool module")
         a = next((x for x in m["approvals"] if x["id"] == approval_id), None)

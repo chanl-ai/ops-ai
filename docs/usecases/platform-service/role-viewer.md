@@ -33,4 +33,4 @@ password (c-218). No model is called.
 
 ## Non-vacuous check
 
-Inviting uc-216's person as admin instead of viewer fails six of its checks (`.codeloop/evidence/218/red-viewer-invited-as-admin.txt`).
+Inviting uc-216's person as admin instead of viewer fails six of its checks.

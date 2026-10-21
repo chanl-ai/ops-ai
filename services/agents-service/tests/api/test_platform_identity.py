@@ -1,5 +1,5 @@
 """OPS_AUTH_MODE=platform through the real ops_identity resolution, by failure mode: the tenant taken from anywhere
-but the token, another tenant's thread being visible, another team's thread opening without a team switch, the dev
+but the token, another tenant's thread being visible, another team's thread opening or showing its team, the dev
 headers still working, and an internal route taking a service token that names no tenant. The key set and key
 introspection are local stand-ins for platform-service, whose own seam test drives them for real."""
 
@@ -94,14 +94,13 @@ async def test_another_tenants_thread_is_not_found_and_not_listed(client: AsyncC
     assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=other)).json()["data"]]
 
 
-async def test_another_teams_thread_is_refused_with_the_owning_team_and_not_listed(client: AsyncClient) -> None:
+async def test_another_teams_thread_is_not_found_and_not_listed(client: AsyncClient) -> None:
+    """Another team's thread answers 404, as another tenant's does, so its id reveals nothing (c-429)."""
     tid = await new_thread(client, token("acme", ["team_a"]))
     team_b = token("acme", ["team_b"])
     assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=team_b)).json()["data"]]
     r = await client.get(f"/v1/threads/{tid}/state", headers=team_b)
-    assert r.status_code == 403, r.text
-    assert r.json()["error"]["code"] == "team_forbidden"
-    assert r.json()["error"]["details"] == {"teamId": "team_a"}
+    assert r.status_code == 404, r.text
 
 
 async def test_dev_headers_and_other_audiences_are_refused(client: AsyncClient) -> None:

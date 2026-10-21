@@ -98,7 +98,7 @@ async def test_the_owners_write_answers_from_the_stub_and_never_reaches_the_syst
 
 async def test_a_team_that_does_not_own_the_module_cannot_try_it_as_owner(g: Gateway) -> None:
     r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"}, **{"X-Team-Id": "team_cards"})
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, "another team's module is not read at all (c-423): " + r.text
     assert g.received == []
 
 

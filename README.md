@@ -32,14 +32,14 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/hero.gif" alt="A bank operations team's morning in the Ops AI console: the overview of what waits on a person, a chat where Dispute Desk answers with cited handbook rules, the Human Tasks queue, and a levy notice case waiting for a hold decision" width="800" />
+  <img src="docs/media/hero.gif" alt="A bank operations team's morning in the Ops AI console: the overview of what waits on a person, a chat where Dispute Desk answers with cited handbook rules, the Human Tasks queue, and a court order case waiting for a hold decision" width="800" />
 </p>
 
 ---
 
 ## Why Ops AI?
 
-Banks want AI to do operations work: read the levy notice, check the card dispute, answer the branch's question.
+Banks want AI to do operations work: read the court order notice, check the card dispute, answer the branch's question.
 Most agent platforms stop at the answer; a bank's risk review asks who approved the write, which version ran and where the record is.
 Ops AI makes those answers part of every run, so an agent can be put to work on real accounts.
 
@@ -53,7 +53,7 @@ PostgreSQL, on one machine or on Kubernetes.
 
 - **Writes need a person.** A tool call that changes something runs only with an approval token bound to its exact
   input; money moves need a step-up sign-in and, where the policy says so, two approvers.
-- **Use cases are configuration.** The levy notice, the card dispute and the account opening below are agents,
+- **Use cases are configuration.** The court order notice, the card dispute and the account opening below are agents,
   workflows, document types and settings made through the public API, with no code written for any of them.
 - **Every run is on the record.** Runs, decisions, tool calls and model calls are listed per team, with who did what.
 - **Runs offline.** A fake model answers from committed rules, so the whole platform runs with no model key and no
@@ -106,7 +106,7 @@ asks for a step-up sign-in first.
 
 <p align="center"><img src="docs/media/task.gif" alt="Riley Chen opens the Human Task 'Provisional credit of 482.10 CAD for Jordan Whitfield', reads where it came from, approves it, and the run ends at Credited" width="850"></p>
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/human-tasks-dark.png"><img src="docs/media/human-tasks-light.png" alt="The Human Tasks queue with open, past-SLA and median time to decision cards, and two pending tasks: a provisional credit of 1,240.00 CAD and a levy hold-or-flag decision" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/human-tasks-dark.png"><img src="docs/media/human-tasks-light.png" alt="The Human Tasks queue with open, past-SLA, median time to decision and approved-as-proposed cards, and the pending task: a provisional credit of 1,240.00 CAD for Marcus Bell" width="850"></picture></p>
 
 ### Email to a case
 
@@ -114,16 +114,16 @@ A team connects a mailbox on Channels > Email. A new email starts the workflow t
 in Files, a document type reads each one with the quote and page for every field, a case opens per person the notice
 names, and the acknowledgement goes back to the sender once a person approves it.
 
-<p align="center"><img src="docs/media/mail.gif" alt="The legal orders mailbox on Channels > Email, the levy run its notice started waiting at Hold or flag, the team's cases, and the levy case for Marcus Bell with the Human Task it waits on" width="850"></p>
+<p align="center"><img src="docs/media/mail.gif" alt="The legal orders mailbox on Channels > Email, the run its court order notice started waiting at Hold or flag, the team's cases, and the court order case for Marcus Bell with the Human Task it waits on" width="850"></p>
 
 ### Cases
 
 A case holds one customer's issue: its owner, status, response and resolution clocks, the runs and Human Tasks behind
 it, the actions drafted for it and every note. Workflows open cases; people work them.
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/cases-dark.png"><img src="docs/media/cases-light.png" alt="The team's open cases: three levy notices, two card disputes and a business account application, each with customer, status, owner and priority" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/cases-dark.png"><img src="docs/media/cases-light.png" alt="The team's open cases: three court order notices, two card disputes and a business account application, each with customer, status, owner and priority" width="850"></picture></p>
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/case-dark.png"><img src="docs/media/case-light.png" alt="The levy case for Marcus Bell: linked file and run, cases for the same customer, the next action Hold or flag, the Human Task waiting on someone, and the hold actions drafted" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/case-dark.png"><img src="docs/media/case-light.png" alt="The court order case for Marcus Bell: linked file and run, cases for the same customer, the next action Hold or flag, the Human Task waiting on someone, and the hold actions drafted" width="850"></picture></p>
 
 ### Knowledge
 
@@ -131,7 +131,7 @@ Knowledge bases index the documents a team uploads or syncs from a source, chunk
 the agents granted each base. Retrieval today is PostgreSQL full-text search scored by how many of the question's
 words a passage holds.
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/knowledge-dark.png"><img src="docs/media/knowledge-light.png" alt="The knowledge bases list: Levy and garnishment procedures, Account opening handbook and Card dispute handbook, each healthy with its sources and documents" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/knowledge-dark.png"><img src="docs/media/knowledge-light.png" alt="The knowledge bases list: the court order procedures, Account opening handbook and Card dispute handbook, each healthy with its sources and documents" width="850"></picture></p>
 
 ### Files and document types
 
@@ -147,7 +147,14 @@ People join a team by invitation with a role (admin, builder, approver, viewer);
 roles grid, and a refusal names the role that would allow it. Activity lists everything that happened in the team:
 runs, chats, emails received, decisions, tool calls and case changes.
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/activity-dark.png"><img src="docs/media/activity-light.png" alt="The Activity page listing case notes and field changes on the levy and card dispute cases, each with its kind, status, source and time" width="850"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/activity-dark.png"><img src="docs/media/activity-light.png" alt="The Activity page listing case notes and field changes on the court order and card dispute cases, each with its kind, status, source and time" width="850"></picture></p>
+
+### Tools through the gateway
+
+A bank system's API becomes a tool module with an operation per call; each operation has its access (read or write),
+its credentials from Secrets and its approval policy. Every call goes through the gateway and lands in its call log.
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/tools-dark.png"><img src="docs/media/tools-light.png" alt="The Tools page on staging: two modules, Platform tools and Northfield Core Banking with 12 read and write operations, 77 calls through the data gateway in the last day" width="850"></picture></p>
 
 ### And more
 
@@ -235,7 +242,8 @@ make health                              # each service, its port and whether it
 
 Open http://localhost:3016 and sign in as the workspace admin `w.kamau@northfieldbank.com` with the development
 password `northfield-demo`. The development seed adds a few teams, agents and tools of its own; `make down KEEP_DB=1`
-stops the stack and keeps the data. These steps were run from a fresh clone on 2026-10-20: every service answered
+stops the stack and keeps the data. Every service's API reference is on one page at http://localhost:8799 (a
+service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-10-20: every service answered
 `ok`, the console signed in, and a chat turn on the fake model answered with a citation.
 
 To answer with a real model instead, put `OPENAI_API_KEY` in a `.env` file at the root (git ignores it) and run
@@ -277,7 +285,7 @@ uv run python scripts/demo/seed_demo_team.py --origin http://localhost:3016 --ad
 node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/demo.env
 ```
 
-The first command makes Customer Operations: four people, three handbooks, three agents, the card dispute and levy
+The first command makes Customer Operations: four people, three handbooks, three agents, the card dispute and court order
 workflows with runs that passed, failed and wait, decided Human Tasks, worked cases and finished chats. A second run
 changes nothing. The second retakes every screenshot in `docs/media/`; `--clips` also records the clips.
 

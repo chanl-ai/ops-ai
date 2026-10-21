@@ -175,9 +175,12 @@ async def test_a_review_is_decided_by_a_reviewer_of_its_team(stack: tuple[AsyncC
     tid = await paused_case(c)
     url = f"/reviews/{tid}/decision"
     body = {"decision": "rejected", "reason": "not this one"}
-    wrong = [await c.post(url, json=body, headers=h) for h in (SECOND_BUILDER, KEY, OTHER_REVIEWER)]
+    wrong = [await c.post(url, json=body, headers=h) for h in (SECOND_BUILDER, KEY)]
     assert all(r.status_code == 403 for r in wrong), [r.text for r in wrong]
     assert refused(wrong[0]) and refused(wrong[1])
+    # A reviewer of another team does not see the review at all (c-429).
+    outside = await c.post(url, json=body, headers=OTHER_REVIEWER)
+    assert outside.status_code == 404, outside.text
     assert (await c.post(url, json=body, headers=REVIEWER)).status_code == 200
 
 

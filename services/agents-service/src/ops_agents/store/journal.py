@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .graphs import graph_runs, graph_threads
 from .leases import thread_leases
@@ -46,6 +47,7 @@ class GraphJournal:
         query = sa.select(graph_threads.c.id).where(
             graph_threads.c.id == thread_id,
             graph_threads.c.status.not_in(OPEN_STATUSES),
+            team_visible(graph_threads),
             finished,
             ~running,
             ~leased,

@@ -2,8 +2,7 @@
 
 Status: current (c-387). Staging runs from one image on one Fly app, `<your-app>-one`, at
 https://<your-app>-one.fly.dev, against the staging database `<your-app>-db`. Deployed from 4d5a9e56 on
-2026-10-20 by `make stg-deploy`: every process up and the click walk 41 of 41 OK, the first row of each list opened
-(`.codeloop/evidence/387/stg-deploy-4d5a9e56.txt`). The fourteen per-service apps of `deploy/fly.md` are stopped, not
+2026-10-20 by `make stg-deploy`: every process up and the click walk 41 of 41 OK, the first row of each list opened. The fourteen per-service apps of `deploy/fly.md` are stopped, not
 deleted, and stay the layout production can use. Files: `deploy/fly/`, `deploy/host/`.
 
 ## What runs
@@ -28,7 +27,7 @@ restarts one that exits, and stops the machine when one exits more than five tim
 | caddy | `caddy run` (`deploy/fly/Caddyfile`), started last | 8080 | the origin |
 
 The bank stand-in stays its own app, `<your-app>-bank` (stopped): workflows call it as an outside system at its
-public URL. Start it with `fly machine start` before a levy run.
+public URL. Start it with `fly machine start` before a court order run.
 
 ## Logins and keys
 
@@ -48,6 +47,44 @@ The machine holds every value the per-service apps held, staged by
 
 A process gets only what its `env` table names (`deploy/host/tests/test_ops_host.py`,
 `test_a_withheld_secret_reaches_only_the_process_that_names_it`).
+
+## The demo team and the test teams
+
+Staging has one tenant ("Ops AI staging"); platform-service has no route that makes a second one, so the boundary is
+the team. A team is the data boundary: another team's records answer 404 on every route (c-407, c-423).
+
+| Team | Id | What it holds | Who belongs |
+|---|---|---|---|
+| Northfield Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@<your-app>.example (viewer), the seed's four bank staff, the first admin |
+| Security | `team_security` | The workspace Security team: egress, secrets, the bank module and the platform tools; test leftovers from earlier walks | The first admin, approver@<your-app>.example, admin@demo.example (admin, for the mailbox and its secret) |
+| Customer Operations | `team_319b708e5de1` | A test team: c-383's first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
+
+Walks and probes act in a test team and remove what they make where a route allows:
+
+| Walk | Team | Cleanup |
+|---|---|---|
+| `deploy/fly/smoke.mjs` | `OPS_SMOKE_TEAM` (use `team_security`); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
+| `docs/usecases/lib/stg_click_walk.mjs` | The first admin's first team; it only reads | None needed |
+| `scripts/team_isolation_probe.py --seed` | The team given as B (use `team_319b708e5de1`) | Deletes what it seeded; a case has no delete route and stays |
+
+Reseed or refresh the demo team (every line FOUND on a second run):
+
+```
+OPS_DEMO_MEMBER_PASSWORD=<phone password> OPS_DEMO_TOOL_APPROVER_PASSWORD=<Security approver password> \
+uv run python scripts/demo/seed_demo_team.py --origin https://<your-app>-one.fly.dev --admin-env <env file> \
+  --team "Northfield Operations" --workflow-prefix northfield_ --no-levy --extras \
+  --member admin@demo.example:admin --member builder@demo.example:builder --member approver@demo.example:approver \
+  --tool-access mod_3a1fdc1ba8a4 --tool-access-team team_security \
+  --tool-approver approver@<your-app>.example
+```
+
+The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD`, `OPS_DEMO_MODEL_ALIAS=fake` and
+`OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the seed's own chats and runs make no real model call and the agents answer
+people on the real model afterwards. `scripts/demo/check_demo_team.py` proves each login's role in the team and that
+a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module
+(c-433); the platform tools need no grant, since no team owns them.
+
+Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types): c-437.
 
 ## Deploy
 
@@ -127,7 +164,7 @@ with `--base-url http://<your-app>-fake.internal:8746/v1`.
 | Item | State |
 |---|---|
 | Files uploaded before the move | Copied on 2026-10-20 (c-406): `<your-app>-files` started, `/data/files/objects` tarred out over `fly ssh`, unpacked into the machine's `/data/files` without overwriting, the old machine stopped again. Before the copy their downloads answered 502 |
-| One process for the Python services | Research: `.codeloop/specs/387-staging-runs-from-one-image-on-one-fly-m/research-process-layout.md` |
+| One process for the Python services | Measured before staging moved to one machine |
 | Outgoing mail | `OPS_MAIL_PROVIDER=none` |
 | The embed app | Not in the image |
 | Processes run as root in the container | The per-service images run as uid 10001; this one does not yet |

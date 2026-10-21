@@ -75,7 +75,7 @@ security); without the file the script stops and says to ask the DBA.
 
 | Claim | Evidence |
 |---|---|
-| Clone to signed in, images pulled anonymously from GHCR | `install_proof.sh` steps 1 to 3 |
+| Clone to signed in, images pulled from GHCR | `install_proof.sh` steps 1 to 3, run with `SIGNED_IN=1` (a registry login) while the packages are internal; the anonymous run waits for them to be public (**unverified**) |
 | Every console page loads | `docs/usecases/lib/stg_click_walk.mjs`, steps 4 and 7 |
 | A rerun and a same-version upgrade change nothing | steps 5 and 6: `ops-ai.env` checksum and container ids unchanged |
 | Backup and restore | step 7: a table and a file made after the backup are gone after the restore |

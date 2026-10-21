@@ -28,7 +28,6 @@ import { KIND_LABEL, ReviewStatusBadge, RiskBadge } from '@/components/status-ba
 import { KindView } from '@/components/chat/widgets/kind-view';
 import { TaskDecide } from '@/components/tasks/task-page';
 import { taskView } from '@/components/tasks/task-regions';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAssignReviews, useBulkDecideReviews, useLookups, useReview, useReviewByRunKey, useReviews } from '@/hooks/queries';
 import { useRunState } from '@/hooks/case-queries';
@@ -172,18 +171,6 @@ export default function ReviewsPage() {
               footer={{ text: `${stats?.decidedToday ?? 0} decided today`, subtext: 'Last 7 days' }}
             />
           </StatCardGrid>
-
-          {query.isError && (
-            <Alert variant="destructive">
-              <AlertCircle />
-              <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing the queue failed. These are the last results that loaded.
-                <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-                  Try again
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
 
           <SavedViewTabs
             ariaLabel="Review views"

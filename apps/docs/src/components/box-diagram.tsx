@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import yaml from 'js-yaml';
 
-import { DIAGRAM_CSS, renderBoxDiagram } from '@/lib/box-diagram.mjs';
+import { DIAGRAM_CSS, renderBoxDiagram, SITE_COLOURS_CSS } from '@/lib/box-diagram.mjs';
 import { repoIndex } from '@/lib/repo.mjs';
 
 /**
@@ -23,7 +23,7 @@ export function BoxDiagram({ name, caption }: { name: string; caption?: string }
   return (
     <figure className="ops-figure ops-diagram not-prose">
       {/* The same rules the exported SVG embeds; the colours come from the site theme (global.css, --d-*). */}
-      <style dangerouslySetInnerHTML={{ __html: DIAGRAM_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: DIAGRAM_CSS + SITE_COLOURS_CSS }} />
       <div className="ops-figure-media" dangerouslySetInnerHTML={{ __html: svg }} />
       {caption && <figcaption>{caption}</figcaption>}
     </figure>

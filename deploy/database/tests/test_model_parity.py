@@ -110,7 +110,8 @@ HAND_MADE = {
     "column": "ALTER TABLE files ADD COLUMN hand_made varchar(10)",
     "index": "CREATE INDEX ix_hand_made ON files (tenant_id)",
     "check": "ALTER TABLE files ADD CONSTRAINT ck_hand_made CHECK (length(id) > 0)",
-    "isolation": "ALTER TABLE files ENABLE ROW LEVEL SECURITY; ALTER TABLE files FORCE ROW LEVEL SECURITY",
+    # Every files table is isolated since c-415, so the hand-made change takes one table's forced isolation away.
+    "isolation": "ALTER TABLE files_outbox NO FORCE ROW LEVEL SECURITY",
 }
 
 
@@ -129,25 +130,24 @@ def test_a_change_made_by_hand_fails_the_owning_chain(scratch: URL, kind: str) -
     assert any("files" in line for line in found), f"{kind} made by hand went unseen: {found}"
 
 
-def test_the_sql_server_system_principal_reads_what_postgresql_s_system_role_reads(scratch: URL) -> None:
-    """mssql.SYSTEM_READS restates the agents migrations' grants to ops_runtime_system; this holds the two equal."""
+@pytest.mark.parametrize("chain", sorted(mssql.SYSTEM_USERS))
+def test_the_sql_server_system_principal_reads_what_postgresql_s_system_role_reads(scratch: URL, chain: str) -> None:
+    """mssql.SYSTEM_USERS restates each chain's migrations' grants to its BYPASSRLS role; this holds the two equal."""
+    user, reads = mssql.SYSTEM_USERS[chain]
 
     def grants(c: sa.Connection) -> list[tuple[str, str, str | None]]:
         q = """SELECT table_name, privilege_type, NULL FROM information_schema.role_table_grants
-               WHERE grantee = 'ops_runtime_system'
+               WHERE grantee = :u
                UNION ALL
                SELECT table_name, privilege_type, column_name FROM information_schema.column_privileges
-               WHERE grantee = 'ops_runtime_system'"""
-        return [(str(t), str(p), col) for t, p, col in c.execute(sa.text(q))]
+               WHERE grantee = :u"""
+        return [(str(t), str(p), col) for t, p, col in c.execute(sa.text(q), {"u": user})]
 
     found = _run(scratch, grants)
     whole = {(t, p) for t, p, col in found if col is None}
     # column_privileges also lists every column of a table-wide grant; only a grant narrower than its table counts.
     on_pg = {(t, p, "") for t, p in whole} | {(t, p, str(col)) for t, p, col in found if col and (t, p) not in whole}
     declared = {
-        (t, p, col)
-        for t, (privileges, columns) in mssql.SYSTEM_READS.items()
-        for p in privileges
-        for col in (columns or ("",))
+        (t, p, col) for t, (privileges, columns) in reads.items() for p in privileges for col in (columns or ("",))
     }
     assert on_pg == declared

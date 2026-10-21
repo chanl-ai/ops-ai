@@ -292,8 +292,8 @@ def create_documents_app(
             raise StateError(f"{body.file_id} still exists; only a deleted file is purged") from None
         else:
             raise StateError(f"{body.file_id} still exists; only a deleted file is purged")
-        removed = await extractor.store.purge(who.tenant_id, who.team, body.file_id)
-        samples = await document_types.store.purge_samples(who.tenant_id, who.team, body.file_id)
+        removed = await extractor.store.purge(who.team, body.file_id)
+        samples = await document_types.store.purge_samples(who.team, body.file_id)
         return ok({"extractions": removed, "samples": samples})
 
     types = APIRouter(prefix="/v1/document-types", tags=["document-types"], responses=errors)

@@ -235,21 +235,78 @@ def isolation_ddl(table: sa.Table, dialect: str, *, kind: IsolationKind | None =
     raise NotImplementedError(f"isolation_ddl: no policies for {dialect}")
 
 
+def role_ddl(name: str, *, bypass: bool = False) -> str:
+    """PostgreSQL: a role with no login a migration grants tables to; `bypass` makes it a system role that row-level
+    security does not apply to. Roles are cluster-wide, so one made by another database is left as it is."""
+    attrs = "NOLOGIN BYPASSRLS" if bypass else "NOLOGIN"
+    return f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+
+
+def member_ddl(role: str, login: str) -> str:
+    """PostgreSQL: makes a service's runtime login a member of a role its transactions switch to (SET LOCAL ROLE).
+    Changes nothing when the login does not exist (services that connect as the superuser) or is a member already, so
+    it runs as the migrator wherever roles.sql granted the role. A migration that adds such a role grants it with this:
+    roles.sql runs once per server, so a login made before the role existed is otherwise never a member (c-444)."""
+    return (
+        f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "
+        f"AND NOT pg_has_role('{login}', '{role}', 'MEMBER') THEN GRANT {role} TO {login}; END IF; END $$"
+    )
+
+
+def isolation_drop_ddl(table: sa.Table, dialect: str) -> list[str]:
+    """The reverse of `isolation_ddl` for a table that had no isolation before (a migration's downgrade): its generated
+    policy gone, row-level security off on PostgreSQL."""
+    t = table.name
+    names = (f"{t}_isolation", f"{t}_tenant")
+    if dialect == "postgresql":
+        return [
+            *(f"DROP POLICY IF EXISTS {n} ON {t}" for n in names),
+            f"ALTER TABLE {t} NO FORCE ROW LEVEL SECURITY",
+            f"ALTER TABLE {t} DISABLE ROW LEVEL SECURITY",
+        ]
+    if dialect == "mssql":
+        drop = "IF OBJECT_ID(N'{0}', N'SP') IS NOT NULL DROP SECURITY POLICY {0}"
+        return [drop.format(f"{MSSQL_SECURITY}.{n}") for n in names]
+    raise NotImplementedError(f"isolation_drop_ddl: no policies for {dialect}")
+
+
 def security_ddl(
     chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
 ) -> list[str]:
-    """SQL Server: the chain's schema-bound predicate functions for each kind its tables use, then each table's policy.
-    Reads see the context's tenant (and, for a team table, the context's team, the null team, or every team in a
-    tenant-wide scope); writes must be the context's tenant (and team, unless tenant-wide). `system_user` (the agents
-    chain's) passes both: its grants limit what it reads and which columns it updates. Nothing a login can set opens
-    another tenant's rows; a missing tenant matches no row."""
+    """SQL Server, for the baseline: the chain's schema, its predicate functions for each kind its tables use, then each
+    table's policy. Reads see the context's tenant (and, for a team table, the context's team, the null team, or every
+    team in a tenant-wide scope); writes must be the context's tenant (and team, unless tenant-wide). `system_user` (the
+    agents chain's) passes both: its grants limit what it reads and which columns it updates. Nothing a login can set
+    opens another tenant's rows; a missing tenant matches no row."""
     marked = [t for t in tables if isolation_kind(t) in ("team", "tenant")]
     if not marked:
         return []
     out = [f"IF SCHEMA_ID(N'{MSSQL_SECURITY}') IS NULL EXEC (N'CREATE SCHEMA {MSSQL_SECURITY} AUTHORIZATION dbo')"]
+    out += [create for _name, create in _mssql_functions(chain, marked, column_type, system_user)]
+    for t in marked:
+        out.append(isolation_ddl(t, "mssql", chain=chain)[-1])
+    return out
+
+
+def mssql_predicates_ddl(
+    chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
+) -> list[str]:
+    """SQL Server, for a migration after the baseline: the predicate functions `tables` need, each created only when it
+    does not exist yet, so a migration can run them before `isolation_ddl` on any install."""
+    marked = [t for t in tables if isolation_kind(t) in ("team", "tenant")]
+    return [
+        f"IF OBJECT_ID(N'{name}', N'IF') IS NULL EXEC (N'{create.replace(chr(39), chr(39) * 2)}')"
+        for name, create in _mssql_functions(chain, marked, column_type, system_user)
+    ]
+
+
+def _mssql_functions(
+    chain: str, marked: list[sa.Table], column_type: Callable[[sa.Column[Any]], str], system_user: str | None
+) -> list[tuple[str, str]]:
+    """(name, CREATE FUNCTION) for the read and write predicate of each kind `marked` uses."""
     system = f" OR USER_NAME() = N'{system_user}'" if system_user else ""
-    kinds = sorted({k for t in marked if (k := isolation_kind(t))}, reverse=True)
-    for kind in kinds:
+    out: list[tuple[str, str]] = []
+    for kind in sorted({k for t in marked if (k := isolation_kind(t))}, reverse=True):
         of_kind = [t for t in marked if isolation_kind(t) == kind]
         tenants = {column_type(tenant_column(t)) for t in of_kind}
         if len(tenants) != 1:
@@ -276,13 +333,17 @@ def security_ddl(
             read = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id IS NULL OR @team_id = {ctx_team})"
             write = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id = {ctx_team})"
         out += [
-            f"CREATE FUNCTION {fn}_read ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
-            f"SELECT 1 AS visible WHERE {read}{system}",
-            f"CREATE FUNCTION {fn}_write ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
-            f"SELECT 1 AS allowed WHERE {write}{system}",
+            (
+                f"{fn}_read",
+                f"CREATE FUNCTION {fn}_read ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
+                f"SELECT 1 AS visible WHERE {read}{system}",
+            ),
+            (
+                f"{fn}_write",
+                f"CREATE FUNCTION {fn}_write ({params})\nRETURNS TABLE WITH SCHEMABINDING AS RETURN\n"
+                f"SELECT 1 AS allowed WHERE {write}{system}",
+            ),
         ]
-    for t in marked:
-        out.append(isolation_ddl(t, "mssql", chain=chain)[-1])
     return out
 
 

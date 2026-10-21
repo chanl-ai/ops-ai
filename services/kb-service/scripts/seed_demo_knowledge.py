@@ -225,12 +225,14 @@ async def replace_fee_schedule(kb: httpx.AsyncClient, store: Store, seeded: Seed
     return data(await kb.post(f"/v1/sources/{seeded.fee_source}/sync"))
 
 
-async def ask(kb: httpx.AsyncClient, seeded: Seeded) -> list[dict[str, Any]]:
-    """Every demo question through K12 on its base: the best passage's score (None when nothing passes the floor)."""
+async def ask(kb_for: dict[str, httpx.AsyncClient], seeded: Seeded) -> list[dict[str, Any]]:
+    """Every demo question through K12 on its base, asked by the client of the team that owns the base (`kb_for`, as
+    seed takes it): another team's base answers 404 (c-407, c-453). The best passage's score (None when nothing passes
+    the floor)."""
     out: list[dict[str, Any]] = []
     for question, base, covered in QUESTIONS:
-        kb_id = seeded.retail_kb if base == "retail" else seeded.branch_kb
-        answer = data(await kb.post(f"/v1/knowledge-bases/{kb_id}/query", json={"question": question}))
+        kb_id, owner = (seeded.retail_kb, JAMES) if base == "retail" else (seeded.branch_kb, NADIA)
+        answer = data(await kb_for[owner].post(f"/v1/knowledge-bases/{kb_id}/query", json={"question": question}))
         chunks: list[dict[str, Any]] = list(answer.get("chunks") or [])
         best = max((float(c["score"]) for c in chunks), default=None)
         cite = answer["citations"][0] if answer.get("citations") else None
@@ -298,7 +300,7 @@ async def seed_from(
         httpx.AsyncClient(base_url=kb_url, headers=by_owner[NADIA], timeout=120) as nadia,
     ):
         seeded = await seed({JAMES: james, NADIA: nadia}, files_store(files_url), pdfs)
-        return seeded, await ask(james, seeded)
+        return seeded, await ask({JAMES: james, NADIA: nadia}, seeded)
 
 
 def sign_in(platform: str, email: str, password: str) -> dict[str, str]:
@@ -351,7 +353,7 @@ async def run(args: argparse.Namespace, headers: dict[str, dict[str, str]], pdfs
         if args.fees == "v2":
             synced = await replace_fee_schedule(nadia, store, seeded, pdfs["fee-schedule-v2"].read_bytes())
             print(f"fee schedule v2: sync {synced['status']} {synced['counts']}")
-        for row in await ask(james, seeded):
+        for row in await ask({JAMES: james, NADIA: nadia}, seeded):
             mark = "ok" if row["ok"] else "BELOW FLOOR" if row["covered"] else "UNEXPECTED PASSAGE"
             print(f"  {mark:>18}  score={row['score']}  cites={row['cites']}  {row['question']}")
         if args.agents:

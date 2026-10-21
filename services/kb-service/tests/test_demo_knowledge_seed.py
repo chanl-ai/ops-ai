@@ -78,7 +78,7 @@ async def test_the_seed_indexes_both_bases_for_their_owners_and_clears_the_floor
         assert (retail["owner"], branch["owner"]) == (seed.JAMES, seed.NADIA)
         assert retail["health"] == "healthy" and branch["health"] == "healthy"
         # Sections became pages: a fee answer cites the fee schedule's page and section.
-        answers = await seed.ask(james, seeded)
+        answers = await seed.ask({seed.JAMES: james, seed.NADIA: nadia}, seeded)
         assert all(a["ok"] for a in answers), answers
         # A question no base covers finds nothing; every covered one (the rate, minimum balance and fee too) is cited.
         assert [a["score"] is None for a in answers] == [not covered for _, _, covered in seed.QUESTIONS]
@@ -100,6 +100,25 @@ async def test_the_seed_indexes_both_bases_for_their_owners_and_clears_the_floor
         assert "35.00" in after["answer"] and "30.00" not in after["answer"], after["answer"]
         changes = (await nadia.get("/v1/knowledge-changes")).json()["data"]["data"]
         assert any("Fee Schedule changed from v1 to v2" in c["summary"] for c in changes), changes
+
+
+async def test_each_question_is_asked_by_the_team_that_owns_its_base() -> None:
+    """Under platform sign-in a person reads only their team's bases (c-407): asking every question as James, in the
+    operations team, answered 404 on Security's Branch operations and stopped uc-248 and uc-249 in setup (c-453)."""
+    seed = seed_module()
+    asked: dict[str, set[str]] = {seed.JAMES: set(), seed.NADIA: set()}
+
+    def owner_of(email: str) -> httpx.AsyncClient:
+        def answer(request: httpx.Request) -> httpx.Response:
+            asked[email].add(request.url.path.split("/")[3])
+            return httpx.Response(200, json={"success": True, "data": {"chunks": [], "citations": []}})
+
+        return httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://kb")
+
+    seeded = seed.Seeded("kb_retail", "kb_branch", "src_retail", "src_manual", "src_fees")
+    async with owner_of(seed.JAMES) as james, owner_of(seed.NADIA) as nadia:
+        await seed.ask({seed.JAMES: james, seed.NADIA: nadia}, seeded)
+    assert asked == {seed.JAMES: {"kb_retail"}, seed.NADIA: {"kb_branch"}}, asked
 
 
 async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(

@@ -21,6 +21,7 @@ from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unpro
 from ops_service_kit.http import Envelope, ListResult
 from ops_service_kit.ids import new_id, now_iso
 
+from .. import engine_lifecycle
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
 from ..auth import Principal, principal, require_builder
@@ -449,5 +450,14 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
     tenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it."""
     team = None if caller.kind == "service" else caller.team_id
     can(caller, "workflows", "view", team=team, what="the workflow list")
-    rows = [r for r in await registry(rt).rows() if team is None or r["team_id"] == team]
-    return ok([{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows])
+    reg = registry(rt)
+    rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r["team_id"] == team]
+    refs = [{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows]
+    # Workflow definitions (v2) are grantable too (c-433): each one a version has been approved for, with its team; one
+    # no team owns is listed with an empty team, and a grant for it is refused.
+    for d in await engine_lifecycle.definitions(rt).summaries(team=team):
+        if d["current_stage"] is None or (team is not None and d["team_id"] != team):
+            continue
+        owner = d["team_id"] or ""
+        refs.append({"id": d["workflow_id"], "name": d["name"], "teamId": owner, "status": d["current_stage"]})
+    return ok(refs)

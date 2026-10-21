@@ -30,7 +30,7 @@ import { ApiError } from '@/lib/api/contract';
 import type { DefinitionCheck, DefinitionPublished, DefinitionValidation, EngineDefinition, EngineNode, EngineNodeType } from '@/lib/types/engine';
 
 import { CanvasControls } from '../canvas-controls';
-import { MIN_ZOOM, readableFit } from './canvas-view';
+import { MIN_ZOOM, readableFit, wholeFit } from './canvas-view';
 import { ChecksPanel } from './checks-panel';
 import { type DefinitionFlowNode, definitionNodeTypes } from './definition-node';
 import { connectionId, inPorts, indexTypes, outPorts, repeatsOver, typeKey, uniqueNodeId, withPositions } from './graph';
@@ -319,17 +319,17 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
   }, [fullscreen, sheetId]);
 
   const triggerId = React.useMemo(() => def.nodes.find((n) => typeOf(n)?.group === 'trigger')?.id, [def.nodes, typeOf]);
-  const fit = React.useCallback(() => readableFit(flow, canvasRef.current, triggerId), [flow, triggerId]);
+  const fit = React.useCallback(() => wholeFit(flow), [flow]);
 
-  // The first fit waits for React Flow to measure the nodes; fitting before that sees zero-sized nodes.
+  // The first view waits for React Flow to measure the nodes; fitting before that sees zero-sized nodes.
   const measured = useNodesInitialized();
   const fitted = React.useRef(false);
   React.useEffect(() => {
     if (measured && !fitted.current) {
       fitted.current = true;
-      fit();
+      readableFit(flow, canvasRef.current, triggerId);
     }
-  }, [measured, fit]);
+  }, [measured, flow, triggerId]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

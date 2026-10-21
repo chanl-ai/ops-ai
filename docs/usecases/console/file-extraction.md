@@ -4,7 +4,7 @@ Status: current. Id: `uc-227`. Service: `console` on files-service and documents
 
 A builder checks a document at file level before any workflow uses it: the file's own page shows its pages, Extract
 reads it with a document type, and each field shows its value, confidence and the text it came from, with doubtful
-fields marked. The Files list then says how each file was read. Design: `docs/services/documents-service/design.html`
+fields marked. The Files list then says how each file was read. Design: `docs/services/documents-service/design.md`
 screens 1 to 3.
 
 ## Preconditions

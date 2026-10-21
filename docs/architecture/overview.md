@@ -1,6 +1,6 @@
 # Architecture overview
 
-Status: current, updated 2026-10-16. The maintainers' decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 ## The rule
 
@@ -19,7 +19,7 @@ email-to-case workflow use the same five steps:
 
 The graph never knows which channel woke it; a channel adapter turns what arrives into steps 1 and 2.
 
-That is how the code runs today. In the maintainers' design, Ops AI is one platform in which agents and workflows are two
+That is how the code runs today. In the decided design, Ops AI is one platform in which agents and workflows are two
 ways of running work: agents on their own run API, workflows on the `ops_engine` runner, both using the same shared
 services and the data and AI gateways ([workflows and agents](../design/workflows/workflows-and-agents.md)).
 
@@ -107,7 +107,7 @@ code runs them on LangGraph on PostgreSQL; workflows move to the `ops_engine` ru
 
 | Topic | Spec or decision |
 |---|---|
-| Runtime service and its dependencies | [inside the runtime](runtime.md) (written for Temporal, which the maintainers removed; the call shapes still apply) |
+| Runtime service and its dependencies | [inside the runtime](runtime.md) (written for Temporal, which was removed; the call shapes still apply) |
 | One agent turn | [inside the runtime](runtime.md) |
 | Node catalogue and human steps | [workflow nodes](../design/workflows/workflow-nodes.md) |
 | Python layout, libraries, verify gate | [service map](service-map.md) |

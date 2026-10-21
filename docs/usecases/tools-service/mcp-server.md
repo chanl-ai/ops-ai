@@ -37,7 +37,6 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 ## Non-vacuous check
 
 The write in step 3 is declared to run at once, so only the MCP rule holds it. When `gateway_calls.py` stops making
-an MCP write wait, step 3 fails: the write reaches the bank and the log shows an allowed call
-(`.codeloop/evidence/356/uc-410-red-without-mcp-write-wait.txt`). `services/tools-service/tests/test_mcp_server.py`
+an MCP write wait, step 3 fails: the write reaches the bank and the log shows an allowed call. `services/tools-service/tests/test_mcp_server.py`
 also fails without that rule. It fails as well when the team check is removed from the call path: a Card Services key
-then runs Lending Ops' read (`.codeloop/evidence/356/unit-red-without.txt`).
+then runs Lending Ops' read.

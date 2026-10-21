@@ -34,4 +34,4 @@ identity team would import it. No model is called.
 ## Non-vacuous check
 
 With the signature check after decryption, the encryption requirement and the key transport check removed, three
-tests in `packages/ops_signin/tests/test_saml.py` fail (`.codeloop/evidence/197/red-saml.txt`).
+tests in `packages/ops_signin/tests/test_saml.py` fail.

@@ -2,7 +2,7 @@
 
 Status: passing (2026-10-19). Id: `uc-245`. Service: `agents-service`. Layers: ui. Card c-230, epic c-227.
 
-A team connects its mailbox in the console, binds the levy workflows to it through publish review, and from then on
+A team connects its mailbox in the console, binds the court order workflows to it through publish review, and from then on
 every email is run once, read, checked by a person when the read is doubtful, turned into a case, and answered from
 the team's own address. This is the mailbox path with nothing faked but the bank and the model: real SMTP into
 GreenMail, IMAP reads through tools-service with the password on the Secrets page, the egress allow-list, and the
@@ -29,7 +29,7 @@ fake OpenAI with the demo's rules, tools-service with the core fake bank, and `m
 | 2 | James publishes copies of levy_case, mail_document and mail_intake bound to the mailbox | Each publish request is pending; James approving his own is 403; Priya approves all three |
 | 3 | A court clerk emails a notice PDF to the mailbox (SMTP to GreenMail) | One mail_intake run, its PDF stored in Files, `from` the sender |
 | 4 | The read scores below the floor; Maya opens Human Tasks and approves Check the debtors | The document run waited at `check`; Maya's decision is 200 |
-| 5 | The approved read starts the debtor's levy run | A case opens naming the debtor as read |
+| 5 | The approved read starts the debtor's court order run | A case opens naming the debtor as read |
 | 6 | The Messaging Platform team (owner of the mail module that sends replies) approves the acknowledgement | One reply in Mailpit, from the mailbox's own address, and the document run ends `replied` |
 | 7 | The same message bytes are delivered again | No second intake run |
 

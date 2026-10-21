@@ -36,7 +36,7 @@ from .graph_mailbox import graph_clients
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mock_routes import mocks_router
 from .modules.directory import Directory
-from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WorkspaceTeams, WriteApprovals
+from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
 from .modules.review_handoff import keep_handing_over
 from .modules.reviews import Reviews
 from .modules.routes import executions_router, modules_router
@@ -159,14 +159,7 @@ def main() -> None:
     )
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(
-            catalog,
-            store,
-            platform_team=settings.security_team_id,
-            workspace_teams=WorkspaceTeams(client("platform", settings.platform_url, ["settings:view"]))
-            if settings.platform_url
-            else None,
-        ),
+        registry=ToolRegistry(catalog, store),
         log=calls,
         # The mail provider settings pick (OPS_MAIL_PROVIDER); a missing secret stops start-up here. An SMTP password
         # named by OPS_SMTP_PASSWORD_SECRET is read from the Secrets page at each send, as send_reply.

@@ -31,13 +31,13 @@ class Layouts:
         """The cached layout of the file's bytes, read and kept on the first ask. A file with no digest yet is read
         each time, since nothing identifies its bytes."""
         if self.store is not None and file.digest:
-            cached = await self.store.get(who.tenant_id, file.digest, ENGINE, ocr=ocr)
+            cached = await self.store.get(file.digest, ENGINE, ocr=ocr)
             if cached is not None:
                 return cached
         data = await self.files.read(who, file)
         layout = await asyncio.to_thread(build_layout, data, filename=file.name, mime=file.mime, ocr=ocr)
         if self.store is not None and file.digest:
-            await self.store.put(who.tenant_id, file.digest, ENGINE, ocr=ocr, layout=layout, at=self.clock())
+            await self.store.put(file.digest, ENGINE, ocr=ocr, layout=layout, at=self.clock())
         return layout
 
     async def compute(self, who: Who, file_id: str, *, ocr: bool) -> Layout:
@@ -48,7 +48,7 @@ class Layouts:
         file = await self.files.readable(who, file_id)
         if self.store is None or not file.digest:
             return None
-        return await self.store.get(who.tenant_id, file.digest, ENGINE, ocr=ocr)
+        return await self.store.get(file.digest, ENGINE, ocr=ocr)
 
 
 def page_of(layout: Layout, page: int) -> dict[str, Any]:

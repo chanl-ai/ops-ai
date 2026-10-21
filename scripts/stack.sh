@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 STACK=${OPS_STACK:-shared}
 # files before kb: kb-service stores uploads in files-service and its dev seed uploads on start.
-SERVICES=(platform agents tools files documents kb console embed)
+SERVICES=(platform agents tools files documents kb console embed apidocs)
 # The workflow runner's worker serves no port; v2 runs (POST /v1/runs) and every mailbox trigger wait until it runs.
 WORKERS=(worker)
 # What the demos need beside the services (c-212, c-223, the mailbox demo): models-service with the fake OpenAI behind
@@ -44,6 +44,8 @@ OPA_PORT=${OPS_OPA_PORT:-8181}
 PG_PORT=${OPS_PG_PORT:-5477}
 MODELS_PORT=${OPS_MODELS_PORT:-8730}
 FAKE_OPENAI_PORT=${OPS_FAKE_OPENAI_PORT:-8746}
+# Every service's API reference on one page (scripts/api_docs.py).
+API_DOCS_PORT=${OPS_API_DOCS_PORT:-8799}
 # Fixed in services/tools-service/scripts/fake_bank, which serves on this machine's private address, not loopback.
 FAKE_BANK_PORT=8745
 # A restart must start a service the way the stack is already running: the dev .env (model and provider settings) is
@@ -61,7 +63,7 @@ PLATFORM_INTERNAL_PORT=${OPS_PLATFORM_INTERNAL_PORT:-8711}
 mkdir -p "$LOG_DIR" "$RUN_DIR"
 RUN_ABS=$(cd "$RUN_DIR" && pwd)
 
-port_of() { case "$1" in platform) echo "$PLATFORM_PORT" ;; agents) echo "$AGENTS_PORT" ;; tools) echo "$TOOLS_PORT" ;; kb) echo "$KB_PORT" ;; files) echo "$FILES_PORT" ;; documents) echo "$DOCUMENTS_PORT" ;; console) echo "$CONSOLE_PORT" ;; embed) echo "$EMBED_PORT" ;; models) echo "$MODELS_PORT" ;; fakeai) echo "$FAKE_OPENAI_PORT" ;; fakebank) echo "$FAKE_BANK_PORT" ;; esac; }
+port_of() { case "$1" in platform) echo "$PLATFORM_PORT" ;; agents) echo "$AGENTS_PORT" ;; tools) echo "$TOOLS_PORT" ;; kb) echo "$KB_PORT" ;; files) echo "$FILES_PORT" ;; documents) echo "$DOCUMENTS_PORT" ;; console) echo "$CONSOLE_PORT" ;; embed) echo "$EMBED_PORT" ;; models) echo "$MODELS_PORT" ;; fakeai) echo "$FAKE_OPENAI_PORT" ;; fakebank) echo "$FAKE_BANK_PORT" ;; apidocs) echo "$API_DOCS_PORT" ;; esac; }
 
 url_of() {
   case "$1" in
@@ -76,6 +78,7 @@ url_of() {
     embed) echo "http://127.0.0.1:$EMBED_PORT/embed/v1.js" ;;
     models) echo "http://127.0.0.1:$MODELS_PORT/health" ;;
     fakeai) echo "http://127.0.0.1:$FAKE_OPENAI_PORT/health" ;;
+    apidocs) echo "http://127.0.0.1:$API_DOCS_PORT/health" ;;
     # The fake bank answers https on the private address under its own certificate; health checks that it runs.
     worker | fakebank) echo "" ;;
   esac
@@ -130,6 +133,7 @@ cmd_of() {
     models) echo "env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
     fakebank) echo "uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
+    apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
     # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).

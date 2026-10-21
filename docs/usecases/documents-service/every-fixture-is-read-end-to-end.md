@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-250`. Service: `documents-service`. Layers: api. Cards: c-255, c-295, c-297.
 
-Every text fixture of the four seeded document types (restraining notices, tax levies, supplier invoices, bank
+Every text fixture of the four seeded document types (restraining notices, tax orders, supplier invoices, bank
 statements) is uploaded to files-service and read by documents-service with its type. One fixture of each type is read
 with Detect. For the invoice and statement master forms, five reads offer a template, a template is suggested from
 them and saved as a new version, and the rest of the form (a text PDF, a shifted scan and a skewed scan) is read by

@@ -1,6 +1,6 @@
 # ADR-0007 Build vs adopt
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal; the adopted engine is LangGraph, wrapped by `ops_engine` (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-7.
+Status: superseded in part on 2026-10-16: Temporal was removed; the adopted engine is LangGraph, wrapped by `ops_engine` (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-7.
 
 ## Context
 

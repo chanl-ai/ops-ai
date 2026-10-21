@@ -7,6 +7,7 @@ import { CircleStop, Workflow } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { FieldRow } from '@/components/shared/field-row';
+import { MiddleTruncate } from '@/components/shared/setting/middle-truncate';
 import { CopyIconButton, CopyId } from '@/components/shared/setting/copy-field';
 import { AttributeCard, RecordLayout } from '@/components/shared/record-layout';
 import { JsonBlock } from '@/components/shared/json-block';
@@ -98,7 +99,7 @@ export default function EngineRunPage() {
                 ['Finished', run.finishedAt ? relativeTime(run.finishedAt) : '—'],
                 ['Started by', <StartedBy key="p" run={run} testId={parentRun ? 'run-parent' : 'run-started-by'} />],
                 ...(files.length
-                  ? ([['Files', <span key="f" className="flex flex-wrap gap-2" data-testid="run-files">{files.map((f) => <Link key={f.id} href={`/files?file=${f.id}`} className={f.name ? 'text-sm underline underline-offset-2' : 'font-mono text-xs underline underline-offset-2'}>{f.name ?? f.id}</Link>)}</span>]] as [string, React.ReactNode][])
+                  ? ([['Files', <span key="f" className="flex flex-wrap gap-2" data-testid="run-files">{files.map((f) => <Link key={f.id} href={`/files?file=${f.id}`} title={f.id} className={f.name ? 'min-w-0 break-words text-sm underline underline-offset-2' : 'text-xs underline underline-offset-2'}>{f.name ?? <MiddleTruncate text={f.id} />}</Link>)}</span>]] as [string, React.ReactNode][])
                   : []),
                             ] as [string, React.ReactNode][]
               ).map(([label, value]) => (

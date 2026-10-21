@@ -9,7 +9,7 @@ embedding or AI gateway client yet.
 | Purpose | Syncs knowledge sources, enforces required metadata, chunks, embeds through the AI gateway under the ingestion identity, indexes, tracks freshness and maintains the citation index that triggers re-tests. |
 | Owns | Separate PostgreSQL instance with pgvector; source copies in the object store. |
 | Depends on | Source systems (through the data gateway's network zone), the AI gateway, `services/shared`. |
-| Specs | `.codeloop/wiki/concepts/knowledge.md` 4, 5.1–5.8, 5.14, 5.15, 5.18; ADR-0006, ADR-0008 |
+| Specs | [kb-service](../../services/kb-service/overview.md); ADR-0006, ADR-0008 |
 
 The service map that applies to every service is `docs/architecture/service-map.md`; trust rules are in
 `docs/architecture/identity-and-tenancy.md`.

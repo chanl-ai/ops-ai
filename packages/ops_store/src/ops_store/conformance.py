@@ -128,18 +128,22 @@ async def isolation_suite(
     as `role`
     with raw SQL and no WHERE clause, so only the policy can filter: for a team table (T1, A), (T1, B), (T1, no team
     where the column allows it) and (T2, A); for a tenant table one row of each tenant. `fill` builds a row's other
-    columns for a table whose own defaults do not (foreign keys)."""
+    columns a table's types cannot give (a foreign key), over the values the suite makes from its types."""
     t1, t2, a, b = (f"{p}_{secrets.token_hex(3)}" for p in ("iso_t1", "iso_t2", "iso_a", "iso_b"))
     failures: list[str] = []
     for table in tables:
         kind = isolation_kind(table)
         if kind not in ("team", "tenant"):
             continue
-        make = (fill or {}).get(table.name) or _filler(table)
+        make = _with(_filler(table), (fill or {}).get(table.name))
         tenant = tenant_column(table)
         team = team_column(table) if kind == "team" else None
         shared = team is not None and team.nullable
-        rows = [(t1, a), (t1, b), (t2, a)] + ([(t1, None)] if shared else [])
+        rows = (
+            [(t1, a), (t1, b), (t2, a)] + ([(t1, None)] if shared else [])
+            if team is not None
+            else [(t1, None), (t2, None)]
+        )
         async with engine.begin() as c:
             for row_tenant, row_team in rows:
                 values = {**make(row_tenant, row_team), tenant.name: row_tenant}
@@ -189,7 +193,9 @@ async def _isolation_checks(
         with scope(t1, None):
             if (got := await seen()) != mine:
                 out.append(f"a tenant transaction read {got}, expected its tenant's {mine}")
-            if not await refused({**make(t2, None), tenant.name: t2}):
+            # A tenant with no rows yet, so a table keyed by tenant alone refuses only by the policy, not the key.
+            t3 = f"iso_t3_{secrets.token_hex(3)}"
+            if not await refused({**make(t3, None), tenant.name: t3}):
                 out.append("a tenant transaction wrote another tenant's row")
             if n := await changed(tenant == t2):
                 out.append(f"a tenant transaction updated {n} of another tenant's rows")
@@ -226,6 +232,13 @@ def _pairs(rows: Sequence[sa.Row[Any]], has_team: bool) -> list[tuple[str, str |
         values = tuple(row)
         out.append((str(values[0]), str(values[1]) if has_team and values[1] is not None else None))
     return sorted(out, key=lambda pair: (pair[0], pair[1] or ""))
+
+
+def _with(base: RowFill, extra: RowFill | None) -> RowFill:
+    """`base`'s values with `extra`'s on top: a table's own fill names only what the types cannot (a foreign key)."""
+    if extra is None:
+        return base
+    return lambda tenant, team: {**base(tenant, team), **extra(tenant, team)}
 
 
 def _filler(table: sa.Table) -> RowFill:

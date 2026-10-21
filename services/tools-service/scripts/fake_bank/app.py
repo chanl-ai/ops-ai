@@ -28,7 +28,10 @@ from bank_auth import router as auth_router  # pyright: ignore[reportMissingImpo
 
 KEY = os.environ.get("FAKE_BANK_KEY", "dev-bank-key")
 
-app = FastAPI(title="Northfield Core Banking", version="1.0.0", servers=[{"url": "https://api.bank.test"}])
+# The address the OpenAPI document gives, which an import makes the module's endpoint: api.bank.test on a dev stack,
+# the stand-in's public https address where it runs as a staging app (deploy/fly/staging/bank.toml).
+PUBLIC_URL = os.environ.get("FAKE_BANK_PUBLIC_URL", "https://api.bank.test")
+app = FastAPI(title="Northfield Core Banking", version="1.0.0", servers=[{"url": PUBLIC_URL}])
 # The bank's sign-in and the routes protected each way a connection signs in (c-330); kept out of the OpenAPI document.
 app.include_router(auth_router)  # pyright: ignore[reportUnknownArgumentType]
 
@@ -137,7 +140,8 @@ CUSTOMERS = {
         segment="retail",
         address="12 Harbour Street, Halifax NS B3J 1A1",
         ssnLast4="4471",
-        accountIds=["CHQ-2219", "SAV-4410"],
+        # The card goes last: the levy story holds on the first account listed (levy_case `hold`).
+        accountIds=["CHQ-2219", "SAV-4410", "VISA-5521"],
     ),
     "CUS-1002": Customer(
         id="CUS-1002",
@@ -166,6 +170,10 @@ ACCOUNTS = {
     "SAV-4410": Account(
         id="SAV-4410", customerId="CUS-1001", type="savings", currency="CAD", balance=18250.00, status="open"
     ),
+    # A credit card's balance is what the cardholder owes, so nothing on it can be held.
+    "VISA-5521": Account(
+        id="VISA-5521", customerId="CUS-1001", type="credit card", currency="CAD", balance=-1612.40, status="open"
+    ),
     "CHQ-1003": Account(
         id="CHQ-1003", customerId="CUS-1003", type="chequing", currency="CAD", balance=640.10, status="open"
     ),
@@ -190,6 +198,23 @@ TRANSACTIONS = [
     ),
     Transaction(
         id="TXN-9101", accountId="BUS-7781", date=date(2026, 10, 12), description="Supplier payment", amount=-4200.00
+    ),
+    # The charges scripts/demo/team.json's dispute runs and chats name, so an agent asked about one finds it.
+    Transaction(
+        id="TXN-9201", accountId="VISA-5521", date=date(2026, 10, 16), description="COASTAL AIR", amount=-1240.00
+    ),
+    Transaction(
+        id="TXN-9202",
+        accountId="CHQ-1003",
+        date=date(2026, 10, 11),
+        description="NORTHLINE ELECTRONICS",
+        amount=-482.10,
+    ),
+    Transaction(
+        id="TXN-9203", accountId="BUS-7781", date=date(2026, 9, 3), description="LAKESHORE STREAMING", amount=-64.99
+    ),
+    Transaction(
+        id="TXN-9204", accountId="BUS-7781", date=date(2026, 10, 3), description="LAKESHORE STREAMING", amount=-64.99
     ),
 ]
 DISPUTES: dict[str, Dispute] = {}

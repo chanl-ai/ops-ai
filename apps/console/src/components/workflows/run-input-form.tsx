@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { NodeSettingsForm } from '@/components/workflows/definition-editor/node-form';
+import { NodeSettingsForm, schemaChoices } from '@/components/workflows/definition-editor/node-form';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FileUpload } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
@@ -11,26 +11,30 @@ import { Textarea } from '@/components/ui/textarea';
 import { fileOptions } from '@/hooks/options-queries';
 import type { NodeForm, NodeFormField } from '@/lib/types/engine';
 
-type Schema = { type?: string | string[]; format?: string; enum?: unknown[]; title?: string; description?: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; default?: unknown };
+type Schema = { type?: string | string[]; format?: string; enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; title?: string; description?: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; default?: unknown };
 type FileRef = { fileId: string; name?: string };
 
 // A run's input refers to no earlier step, so the form offers none.
 const NO_STEPS = { all: [], earlier: [] };
 
-/** A file input: an object naming a `fileId` (one file) or a list of them (several), as the trigger's schema declares. */
-function fileShape(s: Schema): 'one' | 'many' | null {
+/**
+ * A file input, as the trigger's schema declares it: a string with `format: "file"` holds one file's id, an object
+ * naming a `fileId` (or with `format: "file"`) holds one file, and a list of those holds several.
+ */
+function fileShape(s: Schema): 'id' | 'one' | 'many' | null {
   const isFile = (x?: Schema) => !!x && (x.format === 'file' || (x.type === 'object' && !!x.properties?.fileId));
+  if (s.type === 'string' && s.format === 'file') return 'id';
   if (isFile(s)) return 'one';
   if (s.type === 'array' && isFile(s.items)) return 'many';
   return null;
 }
 
 /** The settings form's widget for a schema field, or null when only JSON can say it. */
-function widgetFor(s: Schema): NodeFormField['widget'] | null {
-  if (s.enum?.length) return 'select';
-  if (s.type === 'string') return s.format === 'date' ? 'date' : 'text';
-  if (s.type === 'number' || s.type === 'integer') return 'number';
-  if (s.type === 'boolean') return 'switch';
+function widgetFor(field: Schema): NodeFormField['widget'] | null {
+  if (schemaChoices(field).length) return 'select';
+  if (field.type === 'string') return field.format === 'date' ? 'date' : 'text';
+  if (field.type === 'number' || field.type === 'integer') return 'number';
+  if (field.type === 'boolean') return 'switch';
   return null;
 }
 
@@ -80,9 +84,12 @@ export function RunInputForm({ schema: raw, value, onChange, error }: { schema: 
       </TabsList>
       <TabsContent value="form" className="flex flex-col gap-4" data-testid="run-input-form">
         {files.map(([name, field]) => {
-          const many = fileShape(field) === 'many';
-          const current: FileRef[] = many ? ((value[name] as FileRef[] | undefined) ?? []) : value[name] ? [value[name] as FileRef] : [];
-          const set = (next: FileRef[]) => onChange({ ...value, [name]: many ? next : next[0] });
+          const shape = fileShape(field);
+          const many = shape === 'many';
+          const held = value[name];
+          const current: FileRef[] = many ? ((held as FileRef[] | undefined) ?? []) : typeof held === 'string' && held ? [{ fileId: held }] : held && typeof held === 'object' ? [held as FileRef] : [];
+          // A string field gets the id alone, which is what a workflow reading `$.input.<name>` as an id expects.
+          const set = (next: FileRef[]) => onChange({ ...value, [name]: many ? next : shape === 'id' ? next[0]?.fileId : next[0] });
           return (
             <FormField key={name} id={`run-${name}`} label={label(name, field)} optional={!required.has(name)} hint={field.description ?? (many ? 'Upload files or pick ones already in Files.' : 'Upload a file or pick one already in Files.')}>
               <div className="flex flex-col gap-2" data-testid={`run-files-${name}`}>

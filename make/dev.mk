@@ -55,10 +55,11 @@ down: ## Stop what `make up` started, then compose (KEEP_DB=1 leaves compose run
 
 restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|files|platform|console for one), migrating each first
 	@# Each service's chain is applied between stop and start, as make up does, so a restart of newer code never
-	@# meets a table without its new columns. The console has no database; the worker uses agents-service's.
+	@# meets a table without its new columns. The console, the embed app and the API docs page have no database; the
+	@# worker uses agents-service's.
 	@if [ -n "$(SVC)" ]; then \
 		$(STACK) stop $(SVC) && \
-		{ [ "$(SVC)" = console ] || [ "$(SVC)" = worker ] || $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate; } && \
+		{ case "$(SVC)" in console|worker|embed|apidocs) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate;; esac; } && \
 		$(STACK) start $(SVC); \
 	else \
 		$(STACK) down && \

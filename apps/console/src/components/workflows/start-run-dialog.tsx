@@ -8,6 +8,7 @@ import { DialogShell } from '@/components/shared/dialog-shell';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -170,7 +171,8 @@ export function StartRunDialog({
 
 /**
  * The frame both ways of starting a run share: the title and description, Cancel and Start run in the footer, and the
- * reason a start failed. A failed start keeps the dialog and what was typed, so the person can retry.
+ * reason a start failed. A failed start keeps the dialog and what was typed, so the person can retry. Without
+ * `onStart` the footer holds Cancel alone, and shows `loadingText` while `pending`.
  */
 function StartRunShell({
   open,
@@ -192,7 +194,7 @@ function StartRunShell({
   canStart?: boolean;
   loadingText: string;
   submitTestId: string;
-  onStart: () => void;
+  onStart?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -207,9 +209,11 @@ function StartRunShell({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>
-          <LoadingButton type="button" onClick={onStart} isLoading={pending} loadingText={loadingText} disabled={!canStart} data-testid={submitTestId}>
-            Start run
-          </LoadingButton>
+          {(onStart || pending) && (
+            <LoadingButton type="button" onClick={onStart} isLoading={pending} loadingText={loadingText} disabled={!canStart} data-testid={submitTestId}>
+              Start run
+            </LoadingButton>
+          )}
         </div>
       }
     >
@@ -335,8 +339,9 @@ export function requestInputSchema(def: { nodes: { type: string; parameters?: Re
 
 /**
  * Start any of the team's workflows from the list: pick one from the full list, searched and paged on the server
- * (agents start from Chat, so none are offered), then fill that workflow's own run form. A runner workflow opens the
- * form its editor opens; a graph workflow of the earlier engine opens the input form it has always had.
+ * (agents start from Chat, so none are offered), and that workflow's own run form opens as soon as it has loaded. A
+ * runner workflow opens the form its editor opens; a graph workflow of the earlier engine opens the input form it has
+ * always had.
  */
 export function StartWorkflowRunDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
@@ -353,29 +358,52 @@ export function StartWorkflowRunDialog({ open, onOpenChange }: { open: boolean; 
   const startGraph = useStartRun();
   const close = () => setChosen(null);
   const view = definition.data;
+  const ready = !!chosen && (!!view || graph);
+  const failed = !!chosen && definition.isError && !graph ? (definition.error?.message ?? 'The workflow did not load.') : null;
+  // The picker hands over to the form once the workflow has loaded; until then it says it is opening.
+  React.useEffect(() => {
+    if (ready) onOpenChange(false);
+  }, [ready, onOpenChange]);
   return (
     <>
       <StartRunShell
         open={open}
-        onOpenChange={onOpenChange}
-        title="Start a run"
-        description="Choose a workflow; its own input form comes next."
-        pending={false}
-        canStart={picked.length === 1}
-        loadingText="Opening…"
-        submitTestId="start-run-next"
-        onStart={() => {
-          setChosen(picked[0]);
-          onOpenChange(false);
+        onOpenChange={(o) => {
+          // Cancelled while the workflow loads: no form opens afterwards.
+          if (!o && !ready) setChosen(null);
+          onOpenChange(o);
         }}
+        title="Start a run"
+        description="Choose a workflow to open its input form."
+        pending={!!chosen && !ready && !failed}
+        loadingText="Opening…"
+        submitTestId="start-run-opening"
       >
-        <FormField id="start-run-workflow" label="Workflow" hint="Every workflow of your team; search by name.">
-          <EntityPicker source={workflowOptions} multiple={false} value={picked} onChange={setPicked} addLabel="Choose a workflow" searchPlaceholder="Search workflows" testId="start-run-workflow" />
-        </FormField>
+        <div className="flex flex-col gap-4">
+          {failed && (
+            <Alert variant="destructive">
+              <AlertDescription>{failed}</AlertDescription>
+            </Alert>
+          )}
+          <FormField id="start-run-workflow" label="Workflow" hint="Every workflow of your team; search by name.">
+            <EntityPicker
+              source={workflowOptions}
+              multiple={false}
+              value={picked}
+              onChange={(ids) => {
+                setPicked(ids);
+                setChosen(ids[0] ?? null);
+              }}
+              addLabel="Choose a workflow"
+              searchPlaceholder="Search workflows"
+              testId="start-run-workflow"
+            />
+          </FormField>
+        </div>
       </StartRunShell>
       {view && (
         <StartDefinitionRunDialog
-          open={!!chosen && !!view}
+          open={!!chosen && !!view && !open}
           onOpenChange={(o) => !o && close()}
           workflowName={view.name || view.definition.name || view.workflowId}
           latestVersion={view.version}
@@ -390,7 +418,7 @@ export function StartWorkflowRunDialog({ open, onOpenChange }: { open: boolean; 
         />
       )}
       <StartRunDialog
-        open={graph}
+        open={graph && !open}
         onOpenChange={(o) => !o && close()}
         workflows={(startable.data ?? []).filter((w) => w.name === chosen)}
         loading={startable.isPending}

@@ -2,7 +2,7 @@
 
 Status: first slice built, 2026-10-15 (c-056); checked 2026-10-16. `services/kb-service` (`ops_kb`), on :8740, with its
 own migration chain (`alembic_version_kb`, kb_0001 to kb_0004). Tests: `services/kb-service/tests`. Designed surface:
-`.codeloop/wiki/concepts/knowledge.md` section 6. Use case: uc-080
+this page section 6. Use case: uc-080
 (`docs/usecases/kb-service/knowledge-cited-answers.md`).
 
 ## What it does

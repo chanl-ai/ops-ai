@@ -11,6 +11,7 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .graphs import graph_threads
@@ -235,7 +236,9 @@ class ChannelStore:
     async def thread_for_key(self, external_key: str) -> str | None:
         """The case opened for a message, as soon as it exists: find-or-create writes it before the first run starts,
         while the ledger is written only after the message is handled."""
-        q = sa.select(graph_threads.c.id).where(graph_threads.c.external_key == external_key)
+        q = sa.select(graph_threads.c.id).where(
+            graph_threads.c.external_key == external_key, team_visible(graph_threads)
+        )
         async with tenant_tx(self.engine) as c:
             found: Any = (await c.execute(q)).scalar_one_or_none()
         return str(found) if found is not None else None

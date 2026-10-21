@@ -3,28 +3,30 @@
 Status: current, 2026-10-20. The shared-stack runbook below is walked by `make demo-mailbox` (green 2026-10-18). The
 walk from your own inbox at the end has not been walked yet: it needs a real mailbox connected on the shared stack.
 
-An emailed levy notice becomes levy cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
+An emailed court order notice (a court or authority ordering the bank to hold or pay a customer's funds) becomes
+cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
 
 1. `make up` starts the database, mail (GreenMail, Mailpit), every service, the workflow worker, models-service and
    the fakes, signs people in through platform-service, binds the `default` model alias to real OpenAI gpt-5-mini (the
    key from .env; `DEMO_MODEL=` picks another, `DEMO_MODEL=fake` keeps the fake) and prints a health table.
 2. `make demo-mailbox` emails a notice with a PDF attached to intake@northfield.test and prints PASS or FAIL for each
-   step: run started, attachment in Files, fields read, levy cases, case opened, the acknowledge Human Task, the
+   step: run started, attachment in Files, fields read, court order cases, case opened, the acknowledge Human Task, the
    reply in Mailpit.
    Each run sends a new message, so it can be repeated. `make demo-mailbox LOW=1` sends a scan of the notice instead:
    it is read by OCR, every field falls below the floor, and a "Check the debtors read" Human Task comes before any case.
 3. Show the result. Sign in at <http://localhost:3016> as m.okafor@northfieldbank.com (password `northfield-demo`):
-   Cases (one high-priority case per debtor, "Levy notice: <name> (<court case>)"), Workflows > Runs (the run URL is
-   printed last), Human Tasks (one "Levy notice" per matched debtor), Files (the PDF)
+   Cases (one high-priority case per debtor, `Levy notice: <name> (<court case>)`), Workflows > Runs (the run URL is
+   printed last), Human Tasks (one `Levy notice` task per matched debtor), Files (the PDF)
    and the reply at <http://localhost:8025>.
 4. A FAIL on `stack` names what is down; run `make up` again and `make logs SVC=<name>` for the service.
 
-## Levy mail, mixed kinds
+## Court order mail, mixed kinds
 
-The levy demo (2026-10-18 plan): one email carrying two restraining notices and a tax levy. Each attachment is read in
-its own run of `levy_read_one`, in parallel; the kind is detected, a doubtful read goes to a person, each kind is worked
-out with a Calculate step, a case opens, and the outside system is told by webhook. Seeded workflows: `levy_mail`
-(Email received on `levies@northfield.test`), `levy_read_one`, and `levy_files` (the same handling from uploaded files).
+The court order demo (2026-10-18 plan): one email carrying two restraining notices and a tax authority's order. Each
+attachment is read in its own run of the court order read workflow (`levy_read_one`), in parallel; the kind is
+detected, a doubtful read goes to a person, each kind is worked out with a Calculate step, a case opens, and the outside
+system is told by webhook. Seeded workflows: the court order mail workflow (`levy_mail`, Email received on
+`levies@northfield.test`), `levy_read_one`, and `levy_files` (the same handling from uploaded files).
 
 1. Send the email: from `services/agents-service`,
    `uv run python scripts/send_levy_email.py --fixture ../documents-service/tests/fixtures/mail/mixed_levies.json --mailbox levies@northfield.test --key-suffix run-2`.
@@ -32,11 +34,11 @@ out with a Calculate step, a case opens, and the outside system is told by webho
    is recorded as a duplicate and starts nothing.
 2. Within a minute, Workflows > Runs shows one `levy_mail` run waiting at "Reply to service@process.example" and three
    `levy_read_one` runs, one per attachment, started together. Cases shows "Restraining notice: Parker Demo
-   (SYN-2026-0006)", "Restraining notice: Sage Prototype (SYN-2026-0012)" and "Tax levy: Riley Fixture
-   (SYN-TL-2026-0101)"; the bank stand-in's webhook page (`https://<this machine's address>:8745/webhooks`) lists one
-   `levy.processed` payload per document, the tax levy's with its amount (7482.19) and days to respond (21).
+   (SYN-2026-0006)", "Restraining notice: Sage Prototype (SYN-2026-0012)" and the tax order's case
+   `Tax levy: Riley Fixture (SYN-TL-2026-0101)`; the bank stand-in's webhook page
+   (`https://<this machine's address>:8745/webhooks`) lists one `levy.processed` payload per document, the tax order's with its amount (7482.19) and days to respond (21).
 3. Approve the reply on Human Tasks. The reply goes out through `send_reply` on the Messaging Platform team's mail
-   module, so a person with that team's approval rights decides it: replies are a separate approval from the levy work.
+   module, so a person with that team's approval rights decides it: replies are a separate approval from the court order work.
    On the shared stack everyone is seeded admin of every team, so anyone can; on a real workspace it is that team.
 4. Workflows > `levy_files` > Run with files starts the same per-document handling from uploaded files.
 
@@ -59,7 +61,7 @@ and Mail.Send. Keep the notice PDF to hand: `services/agents-service/tests/fixtu
 | 1 | Sam (Security admin), Settings > Secrets | Add the app password as a secret for Operations, e.g. `DEAN_GMAIL_APP_PASSWORD` | The secret listed, value hidden |
 | 2 | Sam, Settings > Egress | Allow `imap.gmail.com` and `smtp.gmail.com` | Both hosts allowed |
 | 3 | James (builder), Channels > Email > Connect mailbox | Gmail, your address, the secret; replies by SMTP from the same address and secret; Test connection | Every test step passes, with your newest message's sender and subject |
-| 4 | James, Workflows > Levy intake | Pick your mailbox in the Email received trigger, save, request publish | A publish review waits |
+| 4 | James, Workflows > the court order intake workflow (`Levy intake`) | Pick your mailbox in the Email received trigger, save, request publish | A publish review waits |
 | 5 | Priya (admin), Human Tasks | Approve the publish review | The workflow is live on your mailbox |
 | 6 | You, your own mail app | Email the notice PDF to your address | Within a minute: a run in Workflows > Runs, the PDF in Files |
 | 7 | Maya, Human Tasks | If the read was doubtful, check and approve it; then the case appears in Cases | One case per debtor |
@@ -82,7 +84,7 @@ reading its reply need its password, which is held only in Secrets.
 |---|---|
 | Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed c-421), so the test account stays in Security |
 | Workflows | Security: `mail_intake` (Mailed documents) v2 live on the test mailbox, starting `mail_document` per attachment, which starts `levy_case` per debtor |
-| Demo team | Northfield Operations (`team_a0877a1d8907`): the garnishment notice type and the levy workflows `levy_document_a0877a1d` (Levy notice: read the document) and `levy_debtor_a0877a1d` (Levy notice: one debtor), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
+| Demo team | Northfield Operations (`team_a0877a1d8907`): the garnishment notice type and the court order workflows `levy_document_a0877a1d` (`Levy notice: read the document`) and `levy_debtor_a0877a1d` (`Levy notice: one debtor`), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
 | Model | The read uses alias `extract`, or `default` when there is none. Staging has no `extract`, so `default` serves it: gpt-4.1-mini on OpenAI, key `OPENAI_API_KEY` in Secrets, through models-service key `purpose:documents` (cap 5 USD). One real model call per notice |
 | Bank stand-in | `<your-app>-bank`, its public URL; holds wait for a person. Its holds live in memory, so they last until the machine restarts: Marcus Bell's chequing account holds 2,140.55, so after one hold on it a second one fails. Restart it before a demo with `fly machine restart 185d5e7bd3d548 -a <your-app>-bank` (restarted after the last walk on 2026-10-20). The walk flags an account with nothing free |
 | Files | The PDFs uploaded before the move to one machine were copied from the stopped files app's volume on 2026-10-20, so the notice opens on the task page |
@@ -90,8 +92,8 @@ reading its reply need its password, which is held only in Secrets.
 
 ### Set a team up
 
-`mailbox_demo.py levy` puts the levy story in a team: egress for the mail providers and the bank stand-in, the
-garnishment notice document type, and the levy workflows from `scripts/demo/team.json`, each published through the
+`mailbox_demo.py levy` puts the court order story in a team: egress for the mail providers and the bank stand-in, the
+garnishment notice document type, and the court order workflows from `scripts/demo/team.json`, each published through the
 second person (who joins the team as an approver). With `--mailbox`, a mailbox already connected in the team, it also
 makes the email intake on that mailbox. Re-runnable: what exists is reported FOUND.
 
@@ -141,7 +143,7 @@ node deploy/fly/staging/mailbox_demo_shots.mjs cases/<case id> reviews/<run id>:
 Walked with `--upload` on 2026-10-20, every step PASS: document run `wfrun_ae2d63cb7d1b`; cases `case_49a13613a105`
 (Marcus Bell, flagged: his chequing account was already held by the walk before), `case_747e1514a0d8` (Priya
 Natarajan, hold `HLD-307645` of 12,400.00 on `BUS-7781`, found at the bank) and `case_0206efee86de` (Jordan Whitfield,
-no bank customer); the reply sent from the test mailbox. Evidence: `.codeloop/evidence/406/`.
+no bank customer); the reply sent from the test mailbox.
 
 ### Connect your own mailbox
 
@@ -158,7 +160,7 @@ Gmail (IMAP and SMTP with an app password):
 | 1 | <https://myaccount.google.com/apppasswords> | With 2-Step Verification on, create an app password named "Ops AI" and copy the 16 letters |
 | 2 | Security team, Settings > Secrets > Add secret | Name `OWNER_MAILBOX_PASSWORD`, the app password as its value, team Northfield Operations |
 | 3 | Northfield Operations, Channels > Email > Connect a mailbox | Gmail; a name; your address; App password `OWNER_MAILBOX_PASSWORD`; Send replies with SMTP, from your address, SMTP password `OWNER_MAILBOX_PASSWORD`. Test connection shows your newest subject; then Connect mailbox |
-| 4 | A terminal in the ops-ai repo | `mailbox_demo.py levy` as in "Set a team up", with `--mailbox <your address>`: it makes "Levy notices by email" (`levy_mail_intake_a0877a1d`) on your mailbox and publishes it through the second person |
+| 4 | A terminal in the ops-ai repo | `mailbox_demo.py levy` as in "Set a team up", with `--mailbox <your address>`: it makes `Levy notices by email` (`levy_mail_intake_a0877a1d`) on your mailbox and publishes it through the second person |
 | 5 | Another mail account | Email `levy_notice.pdf` to your address. Within a minute: a run in Workflows > Runs and the PDF in Files |
 | 6 | Human Tasks | Each matched debtor's "Hold or flag": Hold, with the amount (up to what the account has free). Then "Send the acknowledgement": Approve. The reply reaches the account you sent from |
 

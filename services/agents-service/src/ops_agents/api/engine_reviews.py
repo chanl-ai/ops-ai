@@ -7,6 +7,7 @@ v1 graph: v1 reviews are listed exactly as before, and with no engine run waitin
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import math
@@ -35,9 +36,12 @@ from .review_text import describe_call, question, source_file
 from .task_type_seeds import task_type_store
 from .task_view import TaskReads, typed_task
 from .team_names import deciding_team
-from .tool_access import policy_of
+from .tool_access import WritePolicy, policy_of
 
 log = get_logger("ops_agents.api.engine_reviews")
+
+# The key of an all_rows row that holds what expand builds its full review from; expand drops it with the row.
+BUILD = "_engine_review"
 
 # The default options' decisions, as the console sends them, and the ports they choose.
 DEFAULT_DECISIONS = {"approved": "approve", "rejected": "reject", "approve": "approve", "reject": "reject"}
@@ -359,6 +363,27 @@ def review_deadline(payload: dict[str, Any], workspace_hours: float, now: dateti
     return out
 
 
+def as_decided(payload: dict[str, Any], resume: dict[str, Any]) -> dict[str, Any]:
+    """The paused step's payload with the call its decision sent in place of the one proposed, so a decided review reads
+    what was done: an approver who changed an input (a hold's amount) sees that value, as the bank was told (c-420).
+    A new payload; the stored one is left as it is."""
+    sent = resume.get("call")
+    if not isinstance(sent, dict):
+        return payload
+    if isinstance(payload.get("call"), dict):
+        return payload | {"call": sent}
+    listed = cast(list[Any], payload.get("options") or [])
+    chosen = resume.get("option")
+    return payload | {
+        "options": [
+            cast(dict[str, Any], o) | {"call": sent}
+            if isinstance(o, dict) and cast(dict[str, Any], o).get("name") == chosen
+            else o
+            for o in listed
+        ]
+    }
+
+
 async def view(
     rt: Runtime,
     run: dict[str, Any],
@@ -376,13 +401,11 @@ async def view(
         case_id = (await CaseStore(rt.db).cases_of_runs([str(run["id"])])).get(str(run["id"]))
     if titles is None:
         titles = await titles_of(rt, run)
-    waiting: dict[str, Any] = dict(run.get("waiting") or {})
-    payload: dict[str, Any] = dict((decided or {}).get("payload") or waiting.get("payload") or {})
+    payload = _payload(run, decided)
     options = _options(payload)
     calls = _calls(payload)
     policies = [await policy_of(rt, str(c["tool"])) for c in calls if c.get("tool")]
     two = any(p.approvers > 1 for p in policies)
-    write = any(p.access == "write" for p in policies)
     # Who decides it, as _check_decider checks: a write's approving team, else the run's team.
     approving = next((p.approver_team for p in policies if p.approver_team), None)
     step_up = any(p.step_up for p in policies)
@@ -420,7 +443,7 @@ async def view(
         "workflowVersion": run.get("version"),
         "agentSlug": run["workflow_id"],
         "kind": "approval",
-        "risk": "high" if two else "medium" if write else "low",
+        "risk": _risk(policies),
         # No model scores a v2 review step: no confidence, not a confidence of zero.
         "confidence": None,
         "actionTool": str(call.get("tool") or ""),
@@ -504,30 +527,84 @@ async def _decisions(rt: Runtime, run_id: str) -> list[dict[str, Any]]:
     return [cast(dict[str, Any], w["payload"]) for w in await _runs(rt).work(run_id) if w["kind"] == "resume"]
 
 
-async def all_views(rt: Runtime) -> list[dict[str, Any]]:
-    """Each review step of the selected team's runs: the one a run waits on as pending, and every decided one."""
+def _payload(run: dict[str, Any], decided: dict[str, Any] | None) -> dict[str, Any]:
+    """The step's payload as its review reads it: the decided call in place of the proposed one once decided."""
+    waiting: dict[str, Any] = dict(run.get("waiting") or {})
+    payload: dict[str, Any] = dict((decided or {}).get("payload") or waiting.get("payload") or {})
+    if decided is not None:
+        payload = as_decided(payload, cast(dict[str, Any], decided.get("resume") or {}))
+    return payload
+
+
+def _risk(policies: list[WritePolicy]) -> str:
+    """A step whose call needs two approvers is high risk, any other write medium, a read low."""
+    if any(p.approvers > 1 for p in policies):
+        return "high"
+    return "medium" if any(p.access == "write" for p in policies) else "low"
+
+
+async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
+    """Each review step of the selected team's runs (the one a run waits on as pending, and every decided one) as a
+    row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
+    and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
+    review for the rows a page shows, so a count reads no more than its rows (c-451)."""
     try:
         runs = await _runs(rt).list(team_id=current_team())
     except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
         log.warning("engine_reviews_unavailable", error=type(e).__name__)
         return []
-    out: list[dict[str, Any]] = []
     on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
-    named = await titles_by_run(rt, runs)
     decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    payloads = [cast(dict[str, Any], d.get("payload") or {}) for ds in decisions.values() for d in ds] + [
-        cast(dict[str, Any], dict(r.get("waiting") or {}).get("payload") or {}) for r in runs
-    ]
-    reads = TaskReads(rt, runs, [str(p["step_id"]) for p in payloads if p.get("step_id")])
+    steps: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     for run in runs:
-        # "" says "looked up, on no case", so view does not ask again per row.
-        case_id = on_case.get(str(run["id"]), "")
-        titles = named[str(run["id"])]
-        decided = decisions.get(str(run["id"]), [])
-        out.extend([await view(rt, run, d, case_id=case_id, titles=titles, reads=reads) for d in decided])
+        steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
         if run["status"] == "waiting" and run.get("waiting"):
-            out.append(await view(rt, run, case_id=case_id, titles=titles, reads=reads))
+            steps.append((run, None))
+    payloads = [_payload(run, d) for run, d in steps]
+    # Every tool the steps call, asked at once; within one_read_per_tool each is then asked once for the request.
+    tools = sorted({str(c["tool"]) for p in payloads for c in _calls(p) if c.get("tool")})
+    await asyncio.gather(*(policy_of(rt, t) for t in tools))
+    hours = await sla_hours(rt)
+    now = datetime.now(UTC)
+    out: list[dict[str, Any]] = []
+    for (run, decided), payload in zip(steps, payloads, strict=True):
+        policies = [await policy_of(rt, str(c["tool"])) for c in _calls(payload) if c.get("tool")]
+        row: dict[str, Any] = {
+            "id": step_id(run, payload),
+            "title": str(payload.get("title") or f"Review {run['workflow_id']}"),
+            "workflowId": run["workflow_id"],
+            "agentSlug": run["workflow_id"],
+            "kind": "approval",
+            "risk": _risk(policies),
+            "status": "pending" if decided is None else _decided_status(decided),
+            "slaMinutes": review_deadline(payload, hours, now)["minutes"] if decided is None else None,
+            "createdAt": run["updated_at"],
+            # "" says "looked up, on no case", so expand does not ask again per row.
+            "caseId": on_case.get(str(run["id"])) or None,
+            BUILD: (run, decided, on_case.get(str(run["id"]), "")),
+        }
+        if decided is not None:
+            row["decidedAt"] = decided.get("at")
+        out.append(row)
     return out
+
+
+async def expand(rt: Runtime, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each row all_rows made, as its full review (who it is assigned to kept); every other row as it is. What the
+    rows' typed tasks and titles read is read once for all of them."""
+    light = [r for r in rows if BUILD in r]
+    if not light:
+        return rows
+    runs = list({str(r[BUILD][0]["id"]): r[BUILD][0] for r in light}.values())
+    named = await titles_by_run(rt, runs)
+    payloads = [_payload(r[BUILD][0], r[BUILD][1]) for r in light]
+    reads = TaskReads(rt, runs, [str(p["step_id"]) for p in payloads if p.get("step_id")])
+    built: dict[int, dict[str, Any]] = {}
+    for r in light:
+        run, decided, case_id = r[BUILD]
+        full = await view(rt, run, decided, case_id=case_id, titles=named[str(run["id"])], reads=reads)
+        built[id(r)] = full | ({"assignee": r["assignee"]} if "assignee" in r else {})
+    return [built.get(id(r), r) for r in rows]
 
 
 async def all_places(rt: Runtime) -> list[dict[str, Any]]:
@@ -720,7 +797,9 @@ async def decide(
     if edited is not NOTHING and resume["decision"] == "approved":
         resume["edited"] = edited
     if call is not None:
-        approval = await _approve_call(rt, approver, run_id, call, step_up_token=step_up_token)
+        approval = await _approve_call(
+            rt, approver, run_id, call, step_up_token=step_up_token, team_id=str(run["team_id"])
+        )
         if approval is None:
             return await view(rt, run) | {"status": "in_review"}
         # A reference to the recorded approvals, never the token: the worker mints the token from them when it calls
@@ -766,16 +845,18 @@ async def _approve_call(
     call: dict[str, Any],
     *,
     step_up_token: str | None,
+    team_id: str,
 ) -> dict[str, Any] | None:
-    """Records `approver`'s approval of `call` and returns the approval reference ({step, inputHash, approvers}) once
-    as many distinct people as its policy names have approved this exact input; None while more are needed."""
+    """Records `approver`'s approval of `call` in the run's team (`team_id`) and returns the approval reference
+    ({step, inputHash, approvers}) once as many distinct people as its policy names have approved this exact input;
+    None while more are needed."""
     tool = str(call["tool"])
     policy = await policy_of(rt, tool)  # its approving team was checked with the decider (_check_decider)
     if policy.step_up or workspace_step_up(approver):
         require_step_up(rt, approver.email, step_up_token)
     digest = input_hash(call["input"])
     found = await ReviewStore(rt.db).approve(
-        run_id, str(call["step"]), approver.email, digest, distinct=policy.approvers > 1
+        run_id, str(call["step"]), approver.email, digest, distinct=policy.approvers > 1, team_id=team_id
     )
     if found is None:
         raise Forbidden("You already approved this; a second, different person has to approve it.")

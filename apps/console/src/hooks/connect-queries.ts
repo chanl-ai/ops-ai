@@ -1,14 +1,15 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ConnectAudience, ConnectRange, ConnectSettingsInput } from '@/lib/types/connect';
 
 export const ck = { overview: (p: unknown) => ['connect', p] as const };
 
 /** Everything the Connect page shows for one range, computed by the API. */
-export const useConnect = (p: { range: ConnectRange }) => useQuery({ queryKey: ck.overview(p), queryFn: () => api.connect.get(p), placeholderData: keepPreviousData });
+export const useConnect = (p: { range: ConnectRange }) => usePagedQuery({ queryKey: ck.overview(p), queryFn: () => api.connect.get(p) });
 
 function useConnectWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {
   const qc = useQueryClient();

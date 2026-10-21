@@ -1,6 +1,6 @@
 # Human Task page (c-289)
 
-Status: proposed, reworked after the maintainers' review, waiting for the design checker. Design: the
+Status: proposed, reworked after review, waiting for the design checker. Design: the
 [Human Task page design](../../../design/human-tasks/task-page.md). Proof: `make usecase-test UC=uc-234 LAYER=ui` and
 `make usecase-test UC=uc-224 LAYER=ui`.
 
@@ -23,7 +23,7 @@ raw key or raw float reaches the page, and any workflow's step is worded the sam
 | B, read check with key fields | `side-by-side-read-check-1280.png` | `side-by-side-read-check-400.png` |
 | C, tool access request (generic held-action view until task types land) | `side-by-side-tool-access-1280.png` | `side-by-side-tool-access-400.png` |
 | D, acknowledgement | `side-by-side-acknowledgement-1280.png` | `side-by-side-acknowledgement-400.png` |
-| A held action with options (the levy case's hold or flag; no wireframe) | `task-held-action-1280.png` | `task-held-action-400.png` |
+| A held action with options (the court order case's hold or flag; no wireframe) | `task-held-action-1280.png` | `task-held-action-400.png` |
 
 Other screens: `quick-view-1280.png`, `task-key-fields-confirmed-1280.png`, `task-read-check-1280-reason.png` (Reject
 pressed without a reason: the footer gains the reason row and the body gets shorter).

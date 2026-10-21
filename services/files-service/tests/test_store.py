@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ops_files.store import AsyncEngine, FilesStore
+from ops_store import isolation
 
 DIGEST = "a" * 64
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
@@ -59,34 +60,40 @@ def _version(file_id: str, tenant: str) -> dict[str, Any]:
 async def test_two_completions_of_the_same_bytes_leave_one_available_file(engine: AsyncEngine, tenant: str) -> None:
     store = FilesStore(engine)
     ids = [f"fil_{tenant}_one", f"fil_{tenant}_two"]
-    for file_id in ids:
-        await store.insert_upload(_upload(file_id, tenant))
-    results = await asyncio.gather(
-        *(store.make_available(tenant, file_id, _available(), _version(file_id, tenant)) for file_id in ids)
-    )
+    with isolation.scope(tenant, "team_ops"):
+        for file_id in ids:
+            await store.insert_upload(_upload(file_id, tenant))
+        results = await asyncio.gather(
+            *(store.make_available(file_id, _available(), _version(file_id, tenant)) for file_id in ids)
+        )
     # Exactly one completion won; the other was handed the winner's id and wrote nothing.
     assert results.count(None) == 1
     winner = ids[results.index(None)]
     loser = ids[1 - results.index(None)]
     assert results[ids.index(loser)] == winner
-    listed = await store.list(tenant, "team_ops", page=1, page_size=10)
+    with isolation.scope(tenant, "team_ops"):
+        listed = await store.list("team_ops", page=1, page_size=10)
+        loser_row = await store.get(loser)
     assert [row["id"] for row in listed.rows] == [winner]
-    loser_row = await store.get(tenant, loser)
     assert loser_row is not None and loser_row["status"] == "uploading"
 
 
 async def test_the_same_bytes_in_another_team_are_a_second_file(engine: AsyncEngine, tenant: str) -> None:
     store = FilesStore(engine)
     ops, sec = f"fil_{tenant}_ops", f"fil_{tenant}_sec"
-    await store.insert_upload(_upload(ops, tenant))
-    await store.insert_upload(_upload(sec, tenant, team="team_security"))
-    assert await store.make_available(tenant, ops, _available(), _version(ops, tenant)) is None
-    assert await store.make_available(tenant, sec, _available(), _version(sec, tenant)) is None
+    with isolation.scope(tenant, "team_ops"):
+        await store.insert_upload(_upload(ops, tenant))
+        assert await store.make_available(ops, _available(), _version(ops, tenant)) is None
+    with isolation.scope(tenant, "team_security"):
+        await store.insert_upload(_upload(sec, tenant, team="team_security"))
+        assert await store.make_available(sec, _available(), _version(sec, tenant)) is None
 
 
 async def test_a_file_is_not_found_from_another_tenant(engine: AsyncEngine, tenant: str) -> None:
     store = FilesStore(engine)
     mine = f"fil_{tenant}_mine"
-    await store.insert_upload(_upload(mine, tenant))
-    assert await store.get(f"{tenant}_other", mine) is None
-    assert (await store.list(f"{tenant}_other", "team_ops", page=1, page_size=10)).total == 0
+    with isolation.scope(tenant, "team_ops"):
+        await store.insert_upload(_upload(mine, tenant))
+    with isolation.scope(f"{tenant}_other", "team_ops"):
+        assert await store.get(mine) is None
+        assert (await store.list("team_ops", page=1, page_size=10)).total == 0

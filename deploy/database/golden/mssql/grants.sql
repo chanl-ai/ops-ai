@@ -2,8 +2,8 @@
 -- Run as ops_migrator in the database after the bundle and after each upgrade; every statement runs again.
 -- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.
 -- No other permission, so it can create, alter or drop nothing, read no other service's tables, and
--- every security policy applies to it. The agents user may also impersonate ops_runtime_system (no login),
--- which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.
+-- every security policy applies to it. A chain's user may also impersonate that chain's system user (no
+-- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.
 -- agents-service
 IF USER_ID(N'ops_agents_runtime') IS NULL CREATE USER ops_agents_runtime FOR LOGIN ops_agents_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
@@ -163,6 +163,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_credentials TO ops_files_run
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_settings_audit TO ops_files_runtime;
 GRANT SELECT ON dbo.alembic_version_files TO ops_files_runtime;
 GO
+IF USER_ID(N'ops_files_system') IS NULL CREATE USER ops_files_system WITHOUT LOGIN;
+GO
+GRANT SELECT, UPDATE, DELETE ON dbo.files_outbox TO ops_files_system;
+GRANT IMPERSONATE ON USER::ops_files_system TO ops_files_runtime;
+GO
 -- documents-service
 IF USER_ID(N'ops_documents_runtime') IS NULL CREATE USER ops_documents_runtime FOR LOGIN ops_documents_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
@@ -176,4 +181,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_ru
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extraction_corrections TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_layouts TO ops_documents_runtime;
 GRANT SELECT ON dbo.alembic_version_documents TO ops_documents_runtime;
+GO
+IF USER_ID(N'ops_documents_system') IS NULL CREATE USER ops_documents_system WITHOUT LOGIN;
+GO
+GRANT SELECT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_system;
+GRANT SELECT ON dbo.extractions TO ops_documents_system;
+GRANT SELECT ON dbo.document_type_tests TO ops_documents_system;
+GRANT IMPERSONATE ON USER::ops_documents_system TO ops_documents_runtime;
 GO

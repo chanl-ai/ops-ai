@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { EvalCaseFilters, EvalCaseInput, EvalRunFilters, SaveTurnInput } from '@/lib/types/evals';
 import type { ListParams } from '@/lib/types/query';
@@ -18,11 +19,9 @@ export const ek = {
   options: (agentId: string) => ['agent', agentId, 'evals', 'options'] as const,
 };
 
-const paged = { placeholderData: keepPreviousData };
-
 export const useEvalSuites = (agentId: string) => useQuery({ queryKey: ek.suites(agentId), queryFn: () => api.evals.suites(agentId) });
-export const useEvalCases = (agentId: string, p: ListParams<EvalCaseFilters>) => useQuery({ queryKey: ek.cases(agentId, p), queryFn: () => api.evals.cases(agentId, p), ...paged });
-export const useEvalRuns = (agentId: string, p: ListParams<EvalRunFilters>) => useQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p), ...paged });
+export const useEvalCases = (agentId: string, p: ListParams<EvalCaseFilters>) => usePagedQuery({ queryKey: ek.cases(agentId, p), queryFn: () => api.evals.cases(agentId, p) });
+export const useEvalRuns = (agentId: string, p: ListParams<EvalRunFilters>) => usePagedQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p) });
 export const useEvalRun = (runId: string | null) =>
   useQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId, refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
 export const useEvalOptions = (agentId: string) => useQuery({ queryKey: ek.options(agentId), queryFn: () => api.evals.options(agentId), staleTime: 60_000 });

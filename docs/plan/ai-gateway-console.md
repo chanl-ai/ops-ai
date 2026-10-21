@@ -3,8 +3,8 @@
 Status: plan for review, nothing built.
 
 Date: 2026-10-10. Owner: console and ai-gateway. Reads with [ADR-0008](../architecture/decisions/ai-gateway.md),
-[spec 03](../../.codeloop/wiki/concepts/data-and-ai-gateways.md) sections 4.8 and 5.8 to 5.10, [spec 08](../../.codeloop/wiki/concepts/model-risk.md) and
-[spec 09](../../.codeloop/wiki/concepts/governance-and-admin.md).
+[spec 03](../design/tools/tool-system.md) sections 4.8 and 5.8 to 5.10, the model-risk spec and
+the governance spec.
 
 The console has no screen today for model providers, aliases, gateway keys, budgets or model-call activity.
 Settings → Usage shows model cost per team and workflow for chargeback, and the agent page's model select lists
@@ -325,9 +325,9 @@ version's pricing at call time. The key secret is never returned; lists show an 
 | Source | Used for |
 |---|---|
 | [ADR-0008 AI gateway](../architecture/decisions/ai-gateway.md) | Day-one scope, key-and-budget service |
-| [Spec 03 data and AI gateways](../../.codeloop/wiki/concepts/data-and-ai-gateways.md) | 4.8 entities, 5.8 to 5.11 rules, 6.5 operations, section 7 gaps |
-| [Spec 08 model risk](../../.codeloop/wiki/concepts/model-risk.md) | Inventory entry and its alias field |
-| [Spec 09 governance and admin](../../.codeloop/wiki/concepts/governance-and-admin.md) | Tool-call log, usage, API keys |
+| [Spec 03 data and AI gateways](../design/tools/tool-system.md) | 4.8 entities, 5.8 to 5.11 rules, 6.5 operations, section 7 gaps |
+| the model-risk spec | Inventory entry and its alias field |
+| the governance spec | Tool-call log, usage, API keys |
 | [Console rules](../../apps/console/CLAUDE.md), [page plan](../console/page-plan.md), `apps/console/src/lib/nav.ts` | Components, layers, nav |
 | [Portkey model catalog](https://portkey.ai/docs/product/model-catalog) | Integrations, AI providers, model provisioning |
 | [Portkey budget limits](https://portkey.ai/docs/product/ai-gateway/virtual-keys/budget-limits) | Cost and token limits, reset periods, plan availability |

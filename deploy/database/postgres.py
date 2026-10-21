@@ -18,12 +18,16 @@ from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg  # pyright: ignore[reportMissingTypeStubs]
 
+from ops_store.schema import member_ddl
+
 # pg_dump's header before each object: "-- Name: graph_threads; Type: TABLE; Schema: public; Owner: -".
 _HEADER = re.compile(r"^-- (?:Data for )?Name: (?P<name>.+?); Type: (?P<type>[^;]+); Schema: (?P<schema>[^;]+);", re.M)
 # pg_dump 17.6 and later fence a dump with \restrict and \unrestrict and a random token. The bundles are generated and
 # reviewed, and a random line would change every checksum, so the fences are dropped.
 _FENCE = re.compile(r"^\\(un)?restrict .*$\n?", re.M)
 _GRANTEE = re.compile(r"\bTO (\"?[A-Za-z_][A-Za-z0-9_]*\"?);")
+# A statement only a superuser may run: CREATE or ALTER ROLE, or a role granted to a role (GRANT <role> TO, no ON).
+_ROLE_STATEMENT = re.compile(r"\b(CREATE|ALTER) ROLE\b|\bGRANT \w+ TO \w+")
 _ON_TABLE = re.compile(r"ON (?:TABLE|SEQUENCE) public\.(\"?[A-Za-z_][A-Za-z0-9_]*\"?)")
 
 
@@ -191,13 +195,13 @@ class Postgres:
 
     @staticmethod
     def superuser_statements(sql: str) -> tuple[str, list[str]]:
-        """Splits out what only a superuser may run (creating or altering roles), so a step runs as the migrator and
-        those statements go to a script a superuser runs first. Statements are separated by blank lines, as
-        Alembic renders them."""
+        """Splits out what only a superuser may run (creating or altering roles, granting one to a login), so a step
+        runs as the migrator and those statements go to a script a superuser runs first. Statements are separated by
+        blank lines, as Alembic renders them."""
         kept: list[str] = []
         moved: list[str] = []
         for statement in re.split(r"\n\s*\n", sql):
-            if re.search(r"\b(CREATE|ALTER) ROLE\b", statement):
+            if _ROLE_STATEMENT.search(statement):
                 moved.append(statement.strip())
                 kept.append("-- (a role statement here is in upgrade-roles.sql, run first by a superuser)")
             else:
@@ -328,8 +332,12 @@ class Postgres:
         tables: dict[str, list[str]],
         sequences: dict[str, list[str]],
         read_only: dict[str, list[str]],
+        members: dict[str, set[str]],
     ) -> str:
-        """Run by the migrator after the bundle and after every upgrade; every statement can run again."""
+        """Run by the migrator after the bundle and after every upgrade; every statement can run again. `members`: per
+        runtime role, the roles it switches to, as roles.sql grants them. A role a migration added after roles.sql ran
+        reaches its login here, run as a superuser (staging's deploy); as the migrator each is already a member, from
+        roles.sql or the step's upgrade-roles.sql, and the statement changes nothing (c-444)."""
         out = [
             "-- Each service's runtime role: DML on its own tables, its sequences, read on its version table.\n",
             "-- Only the owner creates objects: some server templates still grant CREATE on public to PUBLIC.\n",
@@ -347,4 +355,6 @@ class Postgres:
             ro = read_only.get(chain, [])
             if ro:
                 out.append(f"GRANT SELECT ON TABLE {', '.join(f'public.{t}' for t in ro)} TO {role};\n")
+            for target in sorted(members.get(role, set())):
+                out.append(member_ddl(target, role) + ";\n")
         return "".join(out)

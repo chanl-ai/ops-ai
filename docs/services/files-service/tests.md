@@ -86,7 +86,7 @@ and the code restored.
 ## Hosted service
 
 Run with `make -C services/files-service test` (PostgreSQL from `make db-up`). Each row was seen failing with its
-check removed; the outputs are in `.codeloop/evidence/087/`.
+check removed.
 
 | # | Failure mode | Test |
 |---|---|---|

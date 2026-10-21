@@ -31,6 +31,7 @@ from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import StreamingObjectStore
 from ops_storage.local import LocalObjectStore
 from ops_storage.s3 import S3Config, S3ObjectStore
+from ops_store import isolation
 from tests.conftest import AZURITE_KEY
 
 PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj << /Type /Catalog >> endobj\ntrailer\n%%EOF\n"
@@ -86,7 +87,7 @@ def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@northfield
         if authorization:
             return await current_caller(request, authorization=authorization)
         team = x_team_id or "team_ops"
-        return Principal(
+        p = Principal(
             kind="person",
             sub="usr_dev",
             email=email,
@@ -98,6 +99,9 @@ def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@northfield
             scopes=[],
             auth_method="session",
         )
+        # The stand-in replaces ops_identity's dependency, so it enters the request's context as that one does.
+        isolation.enter_caller(p, dev=False)
+        return p
 
     async def as_person_only(
         request: Request,

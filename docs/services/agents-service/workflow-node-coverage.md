@@ -38,7 +38,7 @@ make usecase-test UC=uc-249 LAYER=ui ISOLATED=1
 | Run workflow for each and wait (`ops.action.workflow`) | Read each file two at a time (`uc402_letter` → `uc402_read_one`) | uc-402 #1, #2 (one child fails, listed) | done |
 | Wait for a duration (`ops.flow.wait`) | Pause two seconds (`uc403_pause`) | uc-403 #1 | out |
 | Wait until a date (`ops.flow.wait`) | Until the response date (`uc403_due`): past, not a date | uc-403 #2 | out, error |
-| Human review with reminders (`ops.flow.humanReview`) | Check the levy (`uc403_remind`) | uc-403 #3, #4 | approve |
+| Human review with reminders (`ops.flow.humanReview`) | The court order check, `Check the levy` (`uc403_remind`) | uc-403 #3, #4 | approve |
 | Open case (`ops.action.openCase`) | Open a case (`customer_hold`, `complaint_triage`, priority from the triage) | uc-248 #2; uc-249 #3 | opened |
 | Add to case (`ops.action.addToCase`) | Note the hold on the case (`customer_hold`) | uc-248 #2, #5 | added |
 | Save data on file (`ops.files.setData`) | Keep the read on the file (`attachment_record`) | uc-249 #2 | ok |

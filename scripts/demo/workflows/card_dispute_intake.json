@@ -21,32 +21,50 @@
      ],
      "properties": {
       "cardholder": {
-       "type": "string"
+       "type": "string",
+       "title": "Cardholder name"
       },
       "ssnLast4": {
-       "type": "string"
+       "type": "string",
+       "title": "Last four digits of SSN"
       },
       "merchant": {
-       "type": "string"
+       "type": "string",
+       "title": "Merchant"
       },
       "amount": {
-       "type": "string"
+       "type": "string",
+       "title": "Amount"
       },
       "postedOn": {
-       "type": "string"
+       "type": "string",
+       "format": "date",
+       "title": "Date posted"
       },
       "cardType": {
-       "type": "string"
+       "type": "string",
+       "title": "Card type",
+       "oneOf": [
+        {
+         "const": "debit",
+         "title": "Debit card"
+        },
+        {
+         "const": "credit",
+         "title": "Credit card"
+        }
+       ]
       },
       "reason": {
-       "type": "string"
+       "type": "string",
+       "title": "What happened"
       }
      }
     }
    },
    "position": {
     "x": 0,
-    "y": 200
+    "y": 0
    }
   },
   {
@@ -61,8 +79,8 @@
     }
    },
    "position": {
-    "x": 260,
-    "y": 200
+    "x": 240,
+    "y": 0
    }
   },
   {
@@ -90,8 +108,8 @@
     ]
    },
    "position": {
-    "x": 520,
-    "y": 200
+    "x": 480,
+    "y": 0
    }
   },
   {
@@ -106,8 +124,8 @@
     }
    },
    "position": {
-    "x": 780,
-    "y": 200
+    "x": 720,
+    "y": 0
    }
   },
   {
@@ -148,8 +166,8 @@
     }
    },
    "position": {
-    "x": 1040,
-    "y": 200
+    "x": 960,
+    "y": 0
    }
   },
   {
@@ -171,8 +189,8 @@
     }
    },
    "position": {
-    "x": 1300,
-    "y": 200
+    "x": 1200,
+    "y": 0
    }
   },
   {
@@ -191,8 +209,8 @@
     "slaHours": 24
    },
    "position": {
-    "x": 1560,
-    "y": 200
+    "x": 1440,
+    "y": 0
    }
   },
   {
@@ -205,8 +223,8 @@
     "note": "Provisional credit of {$.input.amount} CAD approved by {$.nodes.review.out.by}."
    },
    "position": {
-    "x": 1820,
-    "y": 120
+    "x": 1680,
+    "y": -110
    }
   },
   {
@@ -219,8 +237,8 @@
     "output": "$.nodes.case.out"
    },
    "position": {
-    "x": 2080,
-    "y": 120
+    "x": 1920,
+    "y": -110
    }
   },
   {
@@ -233,8 +251,8 @@
     "output": "$.nodes.review.out"
    },
    "position": {
-    "x": 1820,
-    "y": 320
+    "x": 1680,
+    "y": 130
    }
   },
   {
@@ -248,8 +266,8 @@
     "result": "failed"
    },
    "position": {
-    "x": 780,
-    "y": 420
+    "x": 720,
+    "y": 230
    }
   },
   {
@@ -262,8 +280,8 @@
     "result": "failed"
    },
    "position": {
-    "x": 520,
-    "y": 420
+    "x": 480,
+    "y": 230
    }
   },
   {
@@ -276,8 +294,8 @@
     "result": "failed"
    },
    "position": {
-    "x": 1300,
-    "y": 420
+    "x": 1200,
+    "y": 230
    }
   }
  ],

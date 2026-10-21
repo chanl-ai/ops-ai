@@ -1,6 +1,6 @@
 # ADR-0001 Durable execution and workflow runtime
 
-Status: superseded in part on 2026-10-16: the maintainers removed Temporal; the engine is `ops_engine` on LangGraph and PostgreSQL (see `.codeloop/wiki/concepts/system-overview.md`). Earlier status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-1. Superseded in part by [ADR-0015](execution-engine-seam.md): Temporal is the preferred engine, no longer the only one; LangGraph on PostgreSQL is a second supported engine behind the same seam, chosen per deployment.
+Status: superseded in part on 2026-10-16: Temporal was removed; the engine is `ops_engine` on LangGraph and PostgreSQL (see [workflows and agents](../../design/workflows/workflows-and-agents.md)). Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment. Formerly DR-1. Superseded in part by [ADR-0015](execution-engine-seam.md): Temporal is the preferred engine, no longer the only one; LangGraph on PostgreSQL is a second supported engine behind the same seam, chosen per deployment.
 
 ## Context
 

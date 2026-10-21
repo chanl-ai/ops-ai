@@ -4,7 +4,7 @@ Status: current. `services/tools-service` (`ops_tools`), on :8720, with its own 
 (`alembic_version_tools`). Tests: `services/tools-service/tests` (registry, routes, egress, import, MCP, secrets and the
 executors, against an in-process fake bank and MCP server) and `services/agents-service/tests/gateway` (the
 gateway's policy, fences and approval tokens).
-Design: [design page](design.html), service map row `tools-service`, [identity and tenancy](../../architecture/identity-and-tenancy.md).
+Design: [design page](design.md), service map row `tools-service`, [identity and tenancy](../../architecture/identity-and-tenancy.md).
 Proposed extensions: [tool system design](../../design/tools/tool-system.md) and [MCP server design](../../design/tools/mcp-server.md).
 
 ## What it does

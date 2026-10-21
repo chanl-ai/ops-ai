@@ -24,7 +24,7 @@ from langgraph.types import Command
 from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.logging import get_logger
 
-from .compiler import CHANNEL, CompiledCache, WriteInDoubtError
+from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, technical
 from .definition import parse
 from .journal import RunCancelledError
 from .node_types import TypeRegistry
@@ -39,6 +39,16 @@ MAX_PASSES = 3
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.
 MAX_DOUBT_PASSES = 20
 RECURSION_LIMIT = 100
+
+# A failure that no step reported: the engine itself, its database or a definition that no longer compiles.
+UNEXPECTED = "The run stopped on an error outside its steps. The technical detail is in the run's events."
+
+
+def failure_of(e: Exception) -> tuple[str, str]:
+    """(plain message, technical detail) for a pass that failed."""
+    if isinstance(e, NodeFailedError):
+        return e.plain, e.detail
+    return UNEXPECTED, technical(e)
 
 
 class ClaimLostError(RuntimeError):
@@ -206,18 +216,20 @@ class Worker:
                     await self.runs.update(run["id"], generation=generation, status="queued", error=str(e))
                     await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
         except Exception as e:
-            message = f"{type(e).__name__}: {e}"
+            # The run's error is what people read on the run page; the technical text goes on the event and the
+            # work row (and on the step's own row for a step that failed).
+            message, detail = failure_of(e)
             log.exception("engine_pass_failed", run=run["id"], work=work.id, attempt=work.attempts)
             with suppress(LeaseSupersededError):
                 if work.attempts < MAX_PASSES:
                     await self.runs.update(run["id"], generation=generation, status="queued", error=message)
-                    await self.queue.release(work, float(2 ** (work.attempts - 1)), error=message)
+                    await self.queue.release(work, float(2 ** (work.attempts - 1)), error=detail)
                 else:
                     await self.runs.update(
                         run["id"], generation=generation, status="failed", error=message, finished_at=now_iso()
                     )
-                    await self._event(run, generation, "failed", None, {"message": message})
-                    await self.queue.done(work, status="failed", error=message)
+                    await self._event(run, generation, "failed", None, {"message": message, "detail": detail})
+                    await self.queue.done(work, status="failed", error=detail)
                     await self._drop_checkpoints(run["id"])
                     await self.runs.settle_parents(run)
         finally:

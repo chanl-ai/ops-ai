@@ -1,7 +1,6 @@
 # The database: install, upgrade and verify from reviewed scripts
 
-Status: current for PostgreSQL (c-336); proven on a throwaway server (`deploy/database/proof.sh`, evidence
-`.codeloop/evidence/336/proof.txt`). SQL Server and Azure SQL use the same targets with `DIALECT=mssql` (c-344): the
+Status: current for PostgreSQL (c-336); proven on a throwaway server (`deploy/database/proof.sh`). SQL Server and Azure SQL use the same targets with `DIALECT=mssql` (c-344): the
 scripts are generated and reviewed as golden files, and have not yet been applied to a SQL Server (c-345). See
 [SQL Server](#sql-server-and-azure-sql).
 
@@ -40,7 +39,7 @@ made: never production. `REF` is exported with `git archive`, so uncommitted fil
 | `roles.sql` | Every role above, each guarded so it can run again; set each login's password afterwards (`ALTER ROLE ... PASSWORD`) |
 | `01-agents.sql` ... `07-documents.sql` | The objects each service's chain creates, for review. Apply the bundle, not these |
 | `bundle.sql` | The whole schema in the server's dependency order: tables, constraints, indexes, row-level security and policies, grants to the no-login roles, and the rows a fresh migration writes (each chain's version row) |
-| `grants.sql` | Each runtime role's rights, and CREATE on the public schema revoked from everyone but its owner (some server templates grant it to all; Fly's PostgreSQL 18 did); every statement can run again |
+| `grants.sql` | Each runtime role's rights, its membership of the no-login roles its tables grant to (granted only where it is missing, so a role a later migration added reaches a login roles.sql made before it, c-444), and CREATE on the public schema revoked from everyone but its owner (some server templates grant it to all; Fly's PostgreSQL 18 did); every statement can run again |
 | `manifest.json` | The commit, dialect, each chain's head revision, version table, runtime role and tables, and every file's sha256 |
 | `SHA256SUMS` | `shasum -a 256 -c SHA256SUMS` checks the files arrived unchanged |
 
@@ -119,7 +118,7 @@ older release refuses to start on the newer schema, so the two cannot be mixed b
 
 Release tags do not exist yet, so `FROM`, `TO` and `REF` take any git ref. `make db-release SERVER=<url> TAG=<tag>
 FROM=<previous tag>` writes `dist/db/<tag>/baseline/` and `dist/db/<tag>/upgrade-from-<previous>/`; attach both to the
-tag's release (`gh release upload <tag> dist/db/<tag>/**/*`). Tagging and uploading are the maintainers'; no CI job does
+tag's release (`gh release upload <tag> dist/db/<tag>/**/*`). Tagging and uploading are done by hand; no CI job does
 it yet.
 
 ## Proof
@@ -137,7 +136,7 @@ sh deploy/database/proof.sh [FROM]          # FROM defaults to c60afb6c; a throw
 | 5 | models-service at HEAD refuses to start on FROM's schema |
 
 `deploy/compose/proof.sh` installs the same baseline on a throwaway server and runs the whole compose stack with each
-service on its own login (walk 13 of 13, `.codeloop/evidence/336/compose-runtime-logins.txt`); Fly staging runs the
+service on its own login (walk 13 of 13); Fly staging runs the
 same way (`docs/deploy/fly.md`).
 
 ## SQL Server and Azure SQL

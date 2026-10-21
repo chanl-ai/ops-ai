@@ -1,6 +1,6 @@
 # Human in the loop
 
-Status: current, updated 2026-10-18. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-18. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 A pause is an interrupt in a graph: state is saved, nothing runs, and the thread waits for one decision. A two-person
 approval, an SLA timeout and a customer reply all use the same shape; only what the interrupt needs and what decides
@@ -27,7 +27,7 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 | Decide is the only door for a policy-owned interrupt; `runs` answers 409 for it | Partial. `POST /reviews/{threadId}/decision` records the decision keyed by the interrupt id, then resumes; a repeat with the same decision resumes at most once (uc-008). `POST /v1/threads/{id}/runs/stream` still accepts a resume |
 | One signed approval token per action, bound to one call's input hash | In code ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Any edit to the input after approval invalidates every approval of it | In code: only approvals with the current hash count |
-| The requester cannot decide | Being changed (2026-10-18): no hard-coded rule; the team's `requesterMayDecide` policy decides, and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. Chat honours `allow_self_approval_in_chat` (default true until the maintainers decides; uc-009 runs it false). `POST /v1/threads/{id}/approvals` has no requester check |
+| The requester cannot decide | Being changed: no hard-coded rule; the team's `requesterMayDecide` policy decides, and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. Chat honours `allow_self_approval_in_chat` (default true until the maintainers decides; uc-009 runs it false). `POST /v1/threads/{id}/approvals` has no requester check |
 | Step-up authenticates the approver and approves nothing by itself | In code: verified for signature, subject and five-minute age on every money decision ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Money needs two distinct approvers; the API collects both, then resumes once | In code: the approvals route returns a token only at two approvers and refuses the same approver twice (403); OPA refuses one |
 | Parallel interrupts resume as one map `{interrupt id: decision}` collected by the API | Designed |
@@ -36,8 +36,8 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 
 ## Task types and the task screen
 
-Designed and approved by the maintainers on 2026-10-18 (cards c-288 and c-289). The design, with wireframes and five use
-cases, is in the maintainers' planning repo (`human-task-redesign`, v2). Ops AI serves thousands of use cases, so no task
+Designed and approved on 2026-10-18. The design, with wireframes and five use
+cases, is [the task page design](../design/human-tasks/task-page.md). Ops AI serves thousands of use cases, so no task
 screen is written for one of them.
 
 | Part | Decision |

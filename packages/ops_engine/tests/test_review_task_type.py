@@ -10,7 +10,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from ops_engine import default_registry
-from ops_engine.compiler import compile_definition
+from ops_engine.compiler import NodeFailedError, compile_definition
 from ops_engine.definition import parse, validate
 from ops_engine.journal import MemoryJournal
 from ops_engine.ports import EnginePorts
@@ -81,5 +81,6 @@ async def test_a_named_version_is_kept() -> None:
 
 
 async def test_a_type_that_is_not_published_fails_the_step() -> None:
-    with pytest.raises(LookupError):
+    with pytest.raises(NodeFailedError) as failed:
         await _pause({"id": "no_such_type"}, "tt3")
+    assert isinstance(failed.value.__cause__, LookupError)

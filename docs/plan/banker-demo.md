@@ -1,8 +1,8 @@
 # Banker demo stage scripts
 
-Status: demo scripts; steps marked "pending" wait on the task named. Fake bank, fake mailbox and the scripted model stand in for the outside world; nothing inside the services is special-cased for the demo. Two stories: the levy notice (c-057) and the two knowledge agents (c-058).
+Status: demo scripts; steps marked "pending" wait on the task named. Fake bank, fake mailbox and the scripted model stand in for the outside world; nothing inside the services is special-cased for the demo. Two stories: the court order notice (c-057) and the two knowledge agents (c-058).
 
-## Levy notice from the mailbox to a held account
+## Court order notice from the mailbox to a held account
 
 
 ### Before the room
@@ -18,7 +18,7 @@ Status: demo scripts; steps marked "pending" wait on the task named. Fake bank, 
 
 | Step | Who | Do | What appears |
 |---|---|---|---|
-| 1 | Presenter | `uv run python scripts/send_levy_email.py --key-suffix <today>` in `services/agents-service` | the sent line; within a few seconds the worker starts one levy intake run (c-212: the levy runs on the workflow runner, not the v1 thread flow the rest of this script describes) |
+| 1 | Presenter | `uv run python scripts/send_levy_email.py --key-suffix <today>` in `services/agents-service` | the sent line; within a few seconds the worker starts one court order intake run (c-212: court orders run on the workflow runner, not the v1 thread flow the rest of this script describes) |
 | 2 | Maya | Cases | one intake run and one case per matched debtor: Marcus Bell, Priya Natarajan; Jordan Whitfield listed as unmatched on the intake run |
 | 3 | Maya | open a case | the notice's persons as rows, the customer and accounts as a record, the child cases; the run trace shows the loop over three records |
 | 4 | Maya | Reviews, open Priya's case, Hold, keep the amount from the notice, confirm | the step-up dialog (pending c-055 T022), then the hold placed in the bank with its id on the case |

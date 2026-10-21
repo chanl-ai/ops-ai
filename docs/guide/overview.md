@@ -74,7 +74,7 @@ AI gateway.*
 | Agents and workflows are two ways of running work | An agent decides its own next step inside the limits it was given. A workflow runs fixed steps and survives a crash without repeating a write. Each works without the other, and they meet only through their public APIs: a workflow step can call an agent, and an agent can start a published workflow as a tool |
 | A person approves every write | A write to one of your systems needs an approval token bound to the exact input the reviewer saw. Changing one character of the input after approval voids it |
 | Two gateways are the only way out | Tool calls go through the data gateway, which checks the approval, the policy and an allow-list of hosts. Model calls go through the AI gateway, which checks the caller's key, budget and the data's sensitivity |
-| Use cases are configuration | A new process is workflows, document types, agents, tools and settings that a builder configures and publishes. No use case needs new code or a new screen. The tax levy notice used in this guide is one worked example among several |
+| Use cases are configuration | A new process is workflows, document types, agents, tools and settings that a builder configures and publishes. No use case needs new code or a new screen. The court order notice used in this guide is one worked example among several |
 | A team is the data boundary | Agents, workflows, knowledge and the work they produce belong to a team. Roles decide what a person may do inside the teams they belong to |
 | Every change is versioned and reviewed | Agents, workflows, skills, guardrails, task types and tool modules are published as immutable versions through a review by a second person. A running case keeps the version it started on |
 

@@ -30,4 +30,4 @@ there.
 
 ## Non-vacuous check
 
-Step 1: with the bearer strategy replaced by none, both calls fail 401 (`.codeloop/evidence/330/uc-392-red-without-strategy.txt`).
+Step 1: with the bearer strategy replaced by none, both calls fail 401.

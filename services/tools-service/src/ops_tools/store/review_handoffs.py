@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store.outbox import add as add_event
+from ops_store.team_scope import any_team
 
 from .modules import module_approvals, module_versions, service_outbox, tool_modules
 
@@ -25,7 +26,7 @@ class ReviewHandoffs:
                 for r in await c.execute(
                     sa.select(
                         tool_modules.c.tenant_id, tool_modules.c.id, tool_modules.c.display_name, tool_modules.c.team_id
-                    )
+                    ).where(any_team(tool_modules, "the start-up hand-over reads every tenant's modules"))
                 )
             }
             waiting = [

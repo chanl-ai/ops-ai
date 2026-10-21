@@ -320,7 +320,7 @@ class Demo:
                 "documentTypes": {k: own(v) for k, v in (w.get("documentTypes") or {}).items()},
             }
             for w in spec["workflows"]
-            if "seed" in w
+            if demo_seed.levy_story(w)
         ]
         self.egress([*MAIL_HOSTS, bank_host], [])
         builder, approver = self.person("admin"), self.person("approver")

@@ -2,7 +2,7 @@
 
 Status: current (design mock; nothing in it is stored, and no live page or route reads it).
 
-The maintainers asked for a workspace Channels app and for how a workflow's Email received trigger reaches a connected
+This design answers a request for a workspace Channels app and for how a workflow's Email received trigger reaches a connected
 mailbox. `/preview/channels` draws both on sample data, on a development server only (`src/proxy.ts` answers 404
 elsewhere). The walk is use case `uc-165` (`docs/usecases/console/channels-preview.md`).
 

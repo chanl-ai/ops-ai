@@ -2,7 +2,7 @@
 
 Status: current (design mock for card c-178; nothing in it is stored, and no live page or route has moved).
 
-The maintainers adopted the settings standard from the UX review of 2026-10-17
+The settings standard was adopted from the UX review of 2026-10-17
 and asked for a mock before anything moves. `/preview/settings` draws the proposed tree on sample data. It runs on a
 development server only (`src/proxy.ts` answers 404 elsewhere).
 

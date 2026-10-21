@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api, brand } from '@/lib/api';
 import type {
   AgentInput,
@@ -37,18 +38,15 @@ export const qk = {
   workflowVersions: (id: string) => ['workflow', id, 'versions'] as const,
 };
 
-/** Paged lists keep the previous page on screen while the next one loads. */
-const paged = { placeholderData: keepPreviousData };
-
 export const useOverview = () => useQuery({ queryKey: qk.overview, queryFn: api.overview.get });
 /** The demo brand from the console's env, when one is set. */
 export const useBrand = () => brand;
 
 export const useLookups = () => useQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
 
-export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => useQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...paged, ...opts });
+export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...opts });
 export const useAgent = (id: string) => useQuery({ queryKey: qk.agent(id), queryFn: () => api.agents.get(id) });
-export const useWorkflows = (p: ListParams<WorkflowFilters>) => useQuery({ queryKey: qk.workflows(p), queryFn: () => api.workflows.list(p), ...paged });
+export const useWorkflows = (p: ListParams<WorkflowFilters>) => usePagedQuery({ queryKey: qk.workflows(p), queryFn: () => api.workflows.list(p) });
 export const useWorkflow = (id: string) => useQuery({ queryKey: qk.workflow(id), queryFn: () => api.workflows.get(id) });
 // While a typed task's AI assist is still being written (its region says pending: true), the task is read again every
 // 2 s. The server drops the region once an assist runs past its limit, which ends the polling.
@@ -63,11 +61,11 @@ export const useReview = (id: string | null) =>
 export const useReviewPlace = (id: string | null) => useQuery({ queryKey: ['reviews', 'place', id], queryFn: () => api.reviews.place(id!), enabled: !!id });
 export const useReviewByRunKey = (runKey: string | null) =>
   useQuery({ queryKey: ['reviews', 'run-key', runKey], queryFn: () => api.reviews.byRunKey(runKey!), enabled: !!runKey });
-export const useReviews = (p: ReviewListParams) => useQuery({ queryKey: qk.reviews(p), queryFn: () => api.reviews.list(p), ...paged });
+export const useReviews = (p: ReviewListParams) => usePagedQuery({ queryKey: qk.reviews(p), queryFn: () => api.reviews.list(p) });
 /** The sidebar badge reads the same list endpoint and view count as the Reviews page, so the two never disagree. */
 export const useOpenReviewCount = () => useQuery({ queryKey: ['reviews', 'open-count'], queryFn: () => api.reviews.list({ view: 'open', page: 1, pageSize: 1 }), select: (r) => r.viewCounts.open });
-export const usePolicies = (p: ListParams<PolicyFilters>) => useQuery({ queryKey: qk.policies(p), queryFn: () => api.policies.list(p), ...paged });
-export const useTools = (p: ListParams<ToolFilters>) => useQuery({ queryKey: qk.tools(p), queryFn: () => api.tools.list(p), ...paged });
+export const usePolicies = (p: ListParams<PolicyFilters>) => usePagedQuery({ queryKey: qk.policies(p), queryFn: () => api.policies.list(p) });
+export const useTools = (p: ListParams<ToolFilters>) => usePagedQuery({ queryKey: qk.tools(p), queryFn: () => api.tools.list(p) });
 
 /** Invalidates the given roots after a successful write so every list and count refreshes. */
 function useWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {
@@ -96,7 +94,7 @@ export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.
 export const useModelAliases = () => useQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000 });
 export const useGuardrails = () => useQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
 // Under the same key as the whole list, so the guardrail writes' invalidation refreshes the page too.
-export const useGuardrailsPage = (p: ListParams) => useQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p), ...paged });
+export const useGuardrailsPage = (p: ListParams) => usePagedQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p) });
 export const useGuardrail = (id: string) => useQuery({ queryKey: ['agent-guardrails', 'one', id], queryFn: () => api.guardrails.get(id) });
 export const useGrantableTools = () => useQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
 export const useBulkUpdateAgents = () =>
@@ -124,7 +122,7 @@ export const useLastValidation = (id: string) => useQuery({ queryKey: ['workflow
 export const useRequestPublish = (id: string) =>
   useWrite((i: { graph: WorkflowGraph; note: string; validationRunId?: string; checksFailing: number }) => api.workflows.requestPublish(id, i), ['workflows', 'workflow', 'reviews', 'overview']);
 
-export const useDeployments = (p: ListParams<DeploymentFilters>) => useQuery({ queryKey: ['deployments', p], queryFn: () => api.deployments.list(p), ...paged });
+export const useDeployments = (p: ListParams<DeploymentFilters>) => usePagedQuery({ queryKey: ['deployments', p], queryFn: () => api.deployments.list(p) });
 export const useCreateDeployment = () => useWrite((i: DeploymentInput) => api.deployments.create(i), ['deployments', 'workflows', 'workflow']);
 export const useUpdateDeployment = () => useWrite(({ id, ...p }: DeploymentPatch & { id: string }) => api.deployments.update(id, p), ['deployments']);
 export const useDeleteDeployment = () => useWrite((id: string) => api.deployments.remove(id), ['deployments', 'workflows', 'workflow']);
@@ -144,7 +142,7 @@ export const useWorkflowStatus = (id: string) => useWrite((s: LifecycleStatus) =
 export const useDeleteWorkflow = () => useWrite((id: string) => api.workflows.remove(id), ['workflows', 'lookups', 'overview']);
 export const useRestoreWorkflow = (id: string) => useWrite((v: number) => api.workflows.restore(id, v), ['workflows', 'workflow']);
 export const useWorkflowRuns = (id: string, p: ListParams<RunFilters>) =>
-  useQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () => api.workflows.runs(id, p), ...paged });
+  usePagedQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () => api.workflows.runs(id, p) });
 export const useWorkflowVersions = (id: string) => useQuery({ queryKey: qk.workflowVersions(id), queryFn: () => api.workflows.versions(id) });
 export const useBulkUpdateWorkflows = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.workflows.bulkUpdate!(ids, patch), ['workflows', 'overview']);
@@ -163,7 +161,6 @@ export const useDeletePolicy = () => useWrite((id: string) => api.policies.remov
 export const useBulkUpdatePolicies = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { sla?: string; reviewers?: string } }) => api.policies.bulkUpdate(ids, patch), ['policies', 'reviews']);
 export const useBulkDeletePolicies = () => useWrite((ids: string[]) => api.policies.bulkRemove(ids), ['policies']);
-
 
 export const useCreateTool = () => useWrite((i: ToolInput) => api.tools.create(i), ['tools']);
 export const useUpdateTool = () => useWrite(({ id, ...i }: Partial<ToolInput> & { id: string; enabled?: boolean }) => api.tools.update(id, i), ['tools']);

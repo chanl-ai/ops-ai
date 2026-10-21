@@ -36,5 +36,4 @@ with the connection's token, refreshed for the same resource after a 401.
 
 ## Non-vacuous check
 
-Step 5 fails with the server's 401 when the MCP path does not sign in through the connection
-(`.codeloop/evidence/331/uc-396-red-without-mcp-sign-in.txt`). The issuer check is `tests/test_mcp_signin.py`.
+Step 5 fails with the server's 401 when the MCP path does not sign in through the connection. The issuer check is `tests/test_mcp_signin.py`.

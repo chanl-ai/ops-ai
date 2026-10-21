@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { CreateFromTemplateInput, TemplateFilters, TemplateSubmissionInput } from '@/lib/types/templates';
@@ -12,7 +13,7 @@ export const tk = {
   one: (id: string) => ['templates', 'one', id] as const,
 };
 
-export const useTemplates = (p: ListParams<TemplateFilters>, enabled = true) => useQuery({ queryKey: tk.list(p), queryFn: () => api.templates.list(p), placeholderData: keepPreviousData, enabled });
+export const useTemplates = (p: ListParams<TemplateFilters>, enabled = true) => usePagedQuery({ queryKey: tk.list(p), queryFn: () => api.templates.list(p), enabled });
 export const useTemplate = (id: string | null) => useQuery({ queryKey: tk.one(id ?? ''), queryFn: () => api.templates.get(id!), enabled: !!id });
 
 export function useCreateFromTemplate() {

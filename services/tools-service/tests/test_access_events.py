@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.store.event_relay import sender
-from ops_tools.store.modules import service_outbox
+from ops_tools.store.modules import module_operations, service_outbox, tool_modules
 
 from .service_clients import claims, fake_service
 from .test_module_roles import ACCESS, MODULES
@@ -80,3 +80,24 @@ async def test_the_relay_posts_each_event_to_agents_service_for_its_tenant_and_t
     assert got == [
         {"path": "/v1/events", "tenant": "local", "team": "team_ops", "scopes": ["events:emit"], "body": body}
     ], got
+
+
+async def test_a_request_for_a_module_no_team_owns_is_refused_plainly(
+    signed_in: tuple[httpx.AsyncClient, dict[str, dict[str, str]]],  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    """A workspace-level module (the platform's tools, c-433) serves every team's runs with no grant, and no team
+    would decide a request for it: the asker is told so, not answered 500 (c-439)."""
+    c, people = signed_in
+    m, o = tool_modules, module_operations
+    async with engine.connect() as conn:
+        q = sa.select(m.c.id, o.c.name).join(o, (o.c.module_id == m.c.id) & (o.c.tenant_id == m.c.tenant_id))
+        found = (await conn.execute(q.where(m.c.tenant_id == tenant, m.c.team_id.is_(None)))).first()
+    assert found is not None, "the seed holds a module no team owns"
+    module, operation = found
+    body = ACCESS | {"operations": [operation]}
+    r = await c.post(f"{MODULES}/{module}/approvals", json=body, headers=people["james"])
+    assert r.status_code == 422, r.text
+    assert "belongs to no team" in r.json()["error"]["message"], r.text
+    assert await _events(engine, tenant) == []

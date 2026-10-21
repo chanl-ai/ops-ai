@@ -149,6 +149,9 @@ def _state(meta: dict[str, Any]) -> str:
 
 @router.get("/agents")
 async def agents(rt: Rt) -> JSONResponse:
+    """The live agents the caller's team may chat with: the catalogue serves every team's, so it is narrowed to the
+    agents the team reads (c-407), and another team's agent is not offered."""
+    ours = {r["id"] for r in await registry(rt).rows()}
     try:
         names = {k.id: k.name for k in await rt.kbs().bases()}
     except ApiError:
@@ -167,6 +170,7 @@ async def agents(rt: Rt) -> JSONResponse:
                 kbs=[KbRef(id=k, name=names.get(k, k)) for k in _allowed_kbs(rt, a)],
             ).wire()
             for a in rt.catalog.agents
+            if a.id in ours
         ]
     )
 

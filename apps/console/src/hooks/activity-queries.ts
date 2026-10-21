@@ -1,11 +1,12 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ActivityFilters } from '@/lib/types/activity';
 
 /** A page of the workspace's activity; polled, since runs and emails keep arriving while the page is open. */
 export const useActivity = (p: { page: number; pageSize: number } & ActivityFilters) =>
-  useQuery({ queryKey: ['activity', p], queryFn: () => api.activity.list(p), placeholderData: keepPreviousData, refetchInterval: 10_000 });
+  usePagedQuery({ queryKey: ['activity', p], queryFn: () => api.activity.list(p), refetchInterval: 10_000 });
 
 /** How many activity rows these sources have, counted by the server (one row asked for, the total read). */
 export const useActivityCount = (source: string[]) =>

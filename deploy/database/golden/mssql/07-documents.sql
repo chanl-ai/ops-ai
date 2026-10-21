@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0010
+-- documents-service, stamped at documents_0012
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -29,6 +29,7 @@ CREATE TABLE document_type_versions (
 	note VARCHAR(500) NULL, 
 	created_by VARCHAR(320) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT document_type_versions_pkey PRIMARY KEY (tenant_id, type_id, version)
 );
 GO
@@ -41,6 +42,7 @@ CREATE TABLE document_type_samples (
 	expected VARCHAR(max) NOT NULL, 
 	added_by VARCHAR(320) NOT NULL, 
 	added_at DATETIMEOFFSET NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT document_type_samples_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
@@ -148,6 +150,7 @@ CREATE TABLE extraction_corrections (
 	corrected VARCHAR(max) NOT NULL, 
 	corrected_by VARCHAR(320) NOT NULL, 
 	corrected_at DATETIMEOFFSET NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT extraction_corrections_pkey PRIMARY KEY (id)
 );
 GO
@@ -164,10 +167,82 @@ CREATE TABLE documents_layouts (
 	CONSTRAINT documents_layouts_pkey PRIMARY KEY (tenant_id, file_digest, engine, ocr)
 );
 GO
+IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.documents_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_documents_system';
+GO
+CREATE FUNCTION ops_security.documents_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_documents_system';
+GO
+CREATE FUNCTION ops_security.documents_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_documents_system';
+GO
+CREATE FUNCTION ops_security.documents_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_documents_system';
+GO
+CREATE SECURITY POLICY ops_security.document_types_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.document_types,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_types AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_types AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.document_type_versions_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.document_type_versions,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.document_type_samples_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.document_type_samples,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_samples AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_samples AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.document_type_tests_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.document_type_tests,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_tests AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_tests AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.document_type_examples_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.document_type_examples,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_examples AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.document_type_examples AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.extractions_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.extractions,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.extractions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.extractions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.documents_outbox_tenant
+    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_outbox,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_outbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_outbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.extraction_corrections_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.extraction_corrections,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.extraction_corrections AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.extraction_corrections AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.documents_layouts_tenant
+    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_layouts,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_layouts AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_layouts AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_documents (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0010');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0012');
 GO

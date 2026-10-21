@@ -1,6 +1,6 @@
 # ADR-0014 Agent loop library
 
-Status: option, not decided. No ADR has been confirmed by the maintainers as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
@@ -145,7 +145,7 @@ approval binding, context builder and trace are ours.
 |---|---|
 | Pydantic AI plain runs in the agent-block host and the agent Test sheet turn (CD-12); deferred-tool approvals with hash binding; `VercelAIAdapter` stream; OpenTelemetry spans to the bank's collector; tool-call suite per alias | Chat sessions with in-turn approvals (`07` phase 2); evaluate `TemporalDurability` for long agent runs; `agent-kernel` extraction for an existing TypeScript service if it needs in-turn approval or the language flips |
 
-## Open questions for the maintainers
+## Open questions
 
 1. Is ADR-0002 final at Python? Default: yes, and this ADR's Python pick applies.
 2. Which AI SDK major does the console's `useChat` target? Default: v6, the version `VercelAIAdapter`

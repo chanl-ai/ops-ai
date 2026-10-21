@@ -29,7 +29,7 @@ asks the questions, Maya Okafor (m.okafor@northfieldbank.com) approves.
 | d | Chat, Wire Fraud Sentinel | "Wire W-88213 for $48,500 went to a payee added today. Put a 24 hour hold on it." | An approval card for the hold. Maya approves (password again for the step-up), then Omar Haddad (o.haddad@northfieldbank.com) from Fraud; the reply says the hold is in place |
 | e | Workflows > Runs | Open the latest "Customer lookup (seed walk)" run | Each step with its input and output, ending succeeded |
 | f | Chat, Advisor's Helper | "Run the customer summary workflow for Priya Natarajan." | A workflow tool card, then a summary of Priya; the run opens from the card |
-| g | Terminal, then the console | `make demo-mailbox`, then open Cases, Human Tasks and <http://localhost:8025> | Three high-priority levy cases, a "Levy notice" Human Task per matched debtor (customer, amount, CAD), the reply in Mailpit |
+| g | Terminal, then the console | `make demo-mailbox`, then open Cases, Human Tasks and <http://localhost:8025> | Three high-priority court order cases, a `Levy notice` Human Task per matched debtor (customer, amount, CAD), the reply in Mailpit |
 
 More answers with a citation, for questions from the room:
 
@@ -45,7 +45,7 @@ scores below the floor, and the run stops at "Check the debtors read from the do
 opens. OCR reads all three debtors correctly, so approving as read opens the same cases as the text notice.
 
 The correction moment: say the court has phoned to reduce Marcus Bell's amount to 3,000. Change his amount on the
-check before approving, and his "Levy notice" Human Task shows 3,000.00 CAD instead of the 3,250.00 the notice
+check before approving, and his court order task (`Levy notice`) shows 3,000.00 CAD instead of the 3,250.00 the notice
 printed. The person corrects the read, and the workflow carries on from the corrected value. A correction naming a
 field the read does not have is refused. Status: the API takes the correction (`inputs.edited` on
 `POST /reviews/{id}/decision`); the Human Task form for it is still being built.

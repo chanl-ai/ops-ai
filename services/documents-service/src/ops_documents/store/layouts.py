@@ -14,7 +14,9 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_documents.store.metadata import metadata
+from ops_documents.store.metadata import ROLE, metadata
+from ops_store import isolation
+from ops_store.schema import TENANT_SCOPED
 
 documents_layouts = sa.Table(
     "documents_layouts",
@@ -27,6 +29,8 @@ documents_layouts = sa.Table(
     sa.Column("pages", sa.Integer, nullable=False),
     sa.Column("layout", sa.Text, nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    # Workspace-level: a layout is read from the bytes, which any team holding the same file already has (c-415).
+    info=TENANT_SCOPED,
 )
 
 
@@ -34,21 +38,21 @@ class LayoutsStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def get(self, tenant: str, digest: str, engine: str, *, ocr: bool) -> dict[str, Any] | None:
+    async def get(self, digest: str, engine: str, *, ocr: bool) -> dict[str, Any] | None:
+        tenant = isolation.tenant()
         query = sa.select(documents_layouts.c.layout).where(
             documents_layouts.c.tenant_id == tenant,
             documents_layouts.c.file_digest == digest,
             documents_layouts.c.engine == engine,
             documents_layouts.c.ocr == ocr,
         )
-        async with self.engine.connect() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             text = (await c.execute(query)).scalar_one_or_none()
         return json.loads(text) if text is not None else None
 
-    async def put(
-        self, tenant: str, digest: str, engine: str, *, ocr: bool, layout: dict[str, Any], at: datetime
-    ) -> None:
+    async def put(self, digest: str, engine: str, *, ocr: bool, layout: dict[str, Any], at: datetime) -> None:
         """Keeps the layout; two readers of the same bytes racing keep the first, which is the same layout."""
+        tenant = isolation.tenant()
         row = {
             "tenant_id": tenant,
             "file_digest": digest,
@@ -59,7 +63,7 @@ class LayoutsStore:
             "created_at": at,
         }
         try:
-            async with self.engine.begin() as c:
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
                 await c.execute(sa.insert(documents_layouts).values(**row))
         except IntegrityError:
             return

@@ -61,7 +61,7 @@ service. Without a model key the service starts, `/health` reports the missing k
 | Three graphs through the four calls, plus a kill-and-resume | `uv run python scripts/prove-graphs.py` (needs a model key) |
 | Regenerate `docs/architecture/dependencies.md` | `make sbom` |
 
-Real model calls are capped at 10 per experiment unless the maintainers approves more; everything else runs on the
+Real model calls are capped at 10 per experiment unless more are approved; everything else runs on the
 scripted model in `tests/conftest.py`.
 
 ## Cases and Reviews facade
@@ -285,7 +285,8 @@ A parent's unfinished runs are found by two lookups on `(tenant_id, created_by, 
 person and one for a run under way, so a parent that started hundreds of runs is not reread in full on each change
 (migration 0066). The runs list reads one team's runs through `(tenant_id, team_id, created_at)` and, filtered by status,
 `(tenant_id, team_id, status, created_at)`. Tests: `tests/engine/test_runs_list_indexes.py`, which asks PostgreSQL for
-the list query's plan. A levy notice read below the floor goes to Check the read in Read one levy document and, approved, reaches its case
+the list query's plan. A court order notice read below the floor goes to Check the read in the court order read workflow
+(`Read one levy document`) and, approved, reaches its case
 per debtor through the read's records: a read of several records has no single read's fields for the check to edit
 (`tests/engine/test_levy_definitions.py::test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor`, c-313).
 

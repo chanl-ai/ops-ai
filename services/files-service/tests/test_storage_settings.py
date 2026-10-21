@@ -30,6 +30,7 @@ from ops_identity import Auth, CurrentCaller, CurrentPrincipal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_storage.local import LocalObjectStore
+from ops_store import isolation
 from tests.test_api import sign_in
 
 PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj << /Type /Catalog >> endobj\ntrailer\n%%EOF\n"
@@ -280,13 +281,14 @@ async def test_two_first_saves_at_once_are_one_save_and_one_409(engine: AsyncEng
 
     async def first() -> object:
         try:
-            return await store.save(tenant, base_version=0, document={}, by="sam", at=datetime.now(UTC), detail="first")
+            return await store.save(base_version=0, document={}, by="sam", at=datetime.now(UTC), detail="first")
         except StaleVersionError as e:
             return e
 
-    results = await asyncio.gather(first(), first(), first())
+    with isolation.scope(tenant, "team_security"):
+        results = await asyncio.gather(first(), first(), first())
+        saved = await store.get()
     assert sum(isinstance(r, StaleVersionError) for r in results) == 2, results
-    saved = await store.get(tenant)
     assert saved is not None and saved.version == 1
 
 
@@ -297,9 +299,10 @@ async def test_an_old_style_credential_name_keeps_working_and_new_names_follow_t
 
     # A credential saved before the rule, as on the shared stack.
     sealed = CredentialCipher(KEY).seal(tenant, "bank-s3", {"accessKeyId": "a", "secretAccessKey": "b"})
-    await SettingsStore(engine).put_credential(
-        tenant, "bank-s3", kind="aws_access_key", sealed=sealed, by="sam", at=datetime.now(UTC)
-    )
+    with isolation.scope(tenant, "team_security"):
+        await SettingsStore(engine).put_credential(
+            "bank-s3", kind="aws_access_key", sealed=sealed, by="sam", at=datetime.now(UTC)
+        )
     bucket = f"old-{uuid.uuid4().hex[:8]}"
     s3_client = boto3.client(  # pyright: ignore[reportUnknownMemberType]
         "s3", endpoint_url=moto_endpoint, region_name="us-east-1", aws_access_key_id="a", aws_secret_access_key="b"

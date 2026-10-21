@@ -127,7 +127,7 @@ await withUiStack(
         await page.goto(`${consoleUrl}/workflows/definitions/customer_hold`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.locator('[data-testid="definition-node"][data-node-id="case"]').dblclick({ timeout: 60_000 });
         const shown = (await page.locator('[data-field$="-priority"]').first().innerText({ timeout: 30_000 })).trim();
-        check('6 the editor shows the case priority as a choice', shown === 'high', { shown });
+        check('6 the editor shows the case priority as a choice', shown === 'High', { shown });
       });
     } finally {
       await browser.close();

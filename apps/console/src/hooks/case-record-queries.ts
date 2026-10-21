@@ -1,14 +1,15 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { CaseRecordFilters, CaseRecordPatch } from '@/lib/types/case-records';
 
 const root = ['case-records'] as const;
 
 export const useCaseRecords = (p: { page: number; pageSize: number } & CaseRecordFilters) =>
-  useQuery({ queryKey: [...root, 'list', p], queryFn: () => api.caseRecords.list(p), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: [...root, 'list', p], queryFn: () => api.caseRecords.list(p) });
 export const useCaseRecord = (id: string) => useQuery({ queryKey: [...root, 'one', id], queryFn: () => api.caseRecords.get(id) });
 
 function useCaseWrite<A>(fn: (a: A) => Promise<unknown>) {

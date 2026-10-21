@@ -218,6 +218,22 @@ class AgentRegistry:
             raise NotFound(f"Agent {agent_id} version {version}")
         return dict(r)
 
+    async def named_versions(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], tuple[str, str]]:
+        """Each (agent, version) of `keys` the acting team sees, as that version's name and the agent's slug, in one
+        query; a key the team does not see is left out. A list of publish requests reads its agents this way (c-451)."""
+        if not keys:
+            return {}
+        v, a = registry_agent_versions, registry_agents
+        pairs = sa.or_(*(sa.and_(v.c.agent_id == agent, v.c.version == n) for agent, n in sorted(keys)))
+        q = (
+            sa.select(v.c.agent_id, v.c.version, v.c.spec, a.c.slug)
+            .join(a, a.c.id == v.c.agent_id)
+            .where(pairs, team_visible(a), team_visible(v))
+        )
+        async with self.engine.connect() as c:
+            rows = (await c.execute(q)).mappings().all()
+        return {(str(r["agent_id"]), int(r["version"])): (str(r["spec"]["name"]), str(r["slug"])) for r in rows}
+
     async def published_spec(self, agent_id: str, version: int) -> dict[str, Any] | None:
         """A version's spec when it was published at some point, so a deployment pinned to it keeps serving it after a
         newer version goes live (c-117); None for a draft or an unknown version. Chat and widgets read pins here."""

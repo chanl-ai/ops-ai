@@ -35,5 +35,5 @@ same transaction that spent the old one.
 
 ## Non-vacuous check
 
-Steps 1, 4 and 5 fail with the strategy replaced by none (`.codeloop/evidence/330/uc-394-red-without-strategy.txt`);
+Steps 1, 4 and 5 fail with the strategy replaced by none;
 step 4 would fail with `invalid_grant` on the second refresh if the rotated refresh token were not stored.

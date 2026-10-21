@@ -32,4 +32,4 @@ fifteen minutes lock for fifteen, and three reset links an hour. No model is cal
 ## Non-vacuous check
 
 With the lock check and the reset cap removed, every lockout test in `services/platform-service/tests/test_signin_lockout.py`
-fails (`.codeloop/evidence/196/red-lockout.txt`).
+fails.

@@ -2,7 +2,7 @@
 
 Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api. Card: c-277.
 
-A levy notice gives the bank a date to respond by. The workflow keeps that date itself: a Wait step pauses the run for
+A court order notice gives the bank a date to respond by. The workflow keeps that date itself: a Wait step pauses the run for
 a duration or until a date read from an earlier step, and goes on by `out` when the time has passed. A date already
 past goes on at once; a value that is not a date leaves by `error` with the value named, so a run never waits for ever
 on bad data. A Human review that a person has not decided yet is reminded every N hours: each reminder is a

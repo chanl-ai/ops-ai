@@ -37,8 +37,7 @@ async def test_a_team_sees_only_its_modules_and_is_told_who_owns_the_rest(api: A
     assert "Core Banking Platform" in owners, "seen through the Lending Ops workflow approved for it"
     assert "Payments Operations" not in owners
     r = await api.call("GET", "/mod_payments_hub", team="team_lending")
-    assert r.status_code == 403
-    assert r.json()["error"]["details"]["team"]["id"] == "team_fraud"
+    assert r.status_code == 404, "another team's module answers 404, naming no owner (c-423)"
 
 
 async def test_a_literal_credential_in_a_header_is_refused(api: Api) -> None:

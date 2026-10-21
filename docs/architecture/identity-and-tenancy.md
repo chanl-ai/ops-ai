@@ -1,6 +1,6 @@
 # Identity, trust and tenancy
 
-Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
@@ -45,7 +45,7 @@ reasons are tested ([gateway-approval-token](../services/agents-service/experime
 | Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
 | Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |
 | Checkpoints | One compiled graph serves every tenant: the saver takes the tenant from the same context variable when it opens each transaction. Team in the checkpoint key is `local`; team access is decided by the API before a thread is touched |
-| Teams | For platform callers, another tenant's thread is 404 (the store never returns it), another team's thread in the same tenant is 403 `team_forbidden` with `details.teamId`, the owning team, and thread lists show the selected team's threads only. Dev acts across teams, as it always has: the console sends its selected team while scripts and seeds create threads in `team_all` |
+| Teams | Another team's thread, run, event or review in the same tenant answers 404, as another tenant's does, and lists show the acting team's only: the store reads through `team_visible` and the database holds the five run tables to the transaction's team (`{t}_isolation`, migration 0073, c-429). A reviewer of a write's approving team acts in the thread's team to decide it. The dev header caller acts for every team of its tenant (reason `dev`) |
 | External keys | Unique per `(tenant_id, external_key)`, so one tenant's key neither collides with nor reveals another's |
 | Proven | `tests/store/test_tenancy.py` on PostgreSQL: each tenant counts only its own rows in every table with no tenant clause (turning RLS off on `graph_runs` fails it); a write naming another tenant is refused; one graph run by two tenants stores each checkpoint under its own tenant and B reads nothing of A's. `tests/api/test_platform_identity.py`: 404 across tenants, 403 with the owning team across teams, dev headers 401 in platform mode |
 | Test databases | Every service's test conftest refuses `ops_runtime`, and any PostgreSQL database other than `OPS_TEST_DATABASE_URL`, before collection (`ops_service_kit.testdb`) |

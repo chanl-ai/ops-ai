@@ -89,7 +89,7 @@ def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
         assert f"ADD FILTER PREDICATE {fn}_read({args}) ON dbo.{table}," in body
         assert f"ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{table} AFTER INSERT" in body
         assert f"ADD BLOCK PREDICATE {fn}_write({args}) ON dbo.{table} AFTER UPDATE" in body
-    system = "USER_NAME() = N'ops_runtime_system'"
+    system = f"USER_NAME() = N'{mssql.SYSTEM_USERS[chain][0]}'" if chain in mssql.SYSTEM_USERS else None
     for kind in {isolation_kind(t) for t in marked.values()}:
         read = re.search(rf"FUNCTION ops_security\.{chain}_{kind}_read .*?;", text, re.S)
         write = re.search(rf"FUNCTION ops_security\.{chain}_{kind}_write .*?;", text, re.S)
@@ -99,11 +99,20 @@ def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
         # which columns it updates (the engine_work claim).
         for fn in (read.group(0), write.group(0)):
             assert "SESSION_CONTEXT(N'tenant_id')" in fn and "ops_system" not in fn
-            assert (system in fn) == (chain == "agents")
+            assert (system is not None and system in fn) == (chain in mssql.SYSTEM_USERS)
         if kind == "team":
             # Every team reads the null team; no team transaction writes it.
             assert "@team_id IS NULL" in read.group(0) and "@team_id IS NULL" not in write.group(0)
             assert "SESSION_CONTEXT(N'team_id')" in write.group(0)
+
+
+def test_each_system_principal_is_entered_only_by_its_own_chain(compiled: mssql.Compiled) -> None:
+    grants = compiled.files["grants.sql"]
+    for chain, (user, reads) in mssql.SYSTEM_USERS.items():
+        assert f"CREATE USER {user} WITHOUT LOGIN;" in grants
+        assert re.findall(rf"GRANT IMPERSONATE ON USER::{user} TO (\w+);", grants) == [f"ops_{chain}_runtime"]
+        on = set(re.findall(rf"^GRANT .+? ON dbo\.(\w+)(?: \(.+?\))? TO {user};$", grants, re.M))
+        assert on == set(reads), chain
 
 
 def test_the_system_principal_has_postgresql_s_grants_and_only_agents_enters_it(compiled: mssql.Compiled) -> None:

@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { BulkResult } from '@/lib/types/domain';
 import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource } from '@/lib/types/engine';
@@ -83,7 +84,7 @@ export function useStartEngineRun() {
 
 /** One page of the team's runs; polled, since workers move runs on without the page asking. */
 export const useEngineRuns = (p: EngineRunsParams) =>
-  useQuery({ queryKey: ek.runs(p), queryFn: () => api.engine.runs(p), refetchInterval: 5_000, placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: ek.runs(p), queryFn: () => api.engine.runs(p), refetchInterval: 5_000 });
 
 /** A run's detail, polled while a worker may still be moving it; a run waiting on a person is polled more slowly. */
 export const useEngineRun = (runId: string) =>

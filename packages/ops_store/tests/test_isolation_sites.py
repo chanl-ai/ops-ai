@@ -35,7 +35,6 @@ WIDENINGS: dict[str, set[str]] = {
         "services/agents-service/src/ops_agents/api/app.py",
         "services/agents-service/src/ops_agents/api/engine_seed.py",
     },
-    "THREAD_WORK": {"services/agents-service/src/ops_agents/api/tenant_tasks.py"},
     "ENGINE_PASS": {"services/agents-service/src/ops_agents/api/worker.py"},
     "MEMORY_RETENTION": {"services/agents-service/src/ops_agents/api/memory_retention.py"},
     "MAIL_LISTENER": {
@@ -48,6 +47,12 @@ WIDENINGS: dict[str, set[str]] = {
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
+    "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
+    "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
+    "RECOVER_PENDING": {
+        "services/documents-service/src/ops_documents/store/document_types.py",
+        "services/documents-service/src/ops_documents/store/extractions.py",
+    },
 }
 # `isolation.enter` / `enter_caller` / `scope`: who sets a team scope that no verified principal set for them.
 ENTRIES: dict[str, set[str]] = {
@@ -57,7 +62,11 @@ ENTRIES: dict[str, set[str]] = {
         "services/agents-service/src/ops_agents/api/worker.py",
     },
     "scope": {
+        "packages/ops_store/src/ops_store/outbox.py",
+        "services/documents-service/src/ops_documents/document_types.py",
+        "services/documents-service/src/ops_documents/extraction.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
+        "services/agents-service/src/ops_agents/api/tenant_tasks.py",
         "services/platform-service/src/ops_platform/store/tenancy.py",
     },
 }

@@ -1,6 +1,6 @@
 # Ops AI architecture
 
-Status: current, updated 2026-10-16. The maintainers' decided design is `.codeloop/wiki/concepts/system-overview.md`; ADRs that it does not settle remain options.
+Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 Ops AI is one operational AI platform for regulated enterprises, banks first. Agents and workflows are its two ways
 of running work; both use the same shared services and the data and AI gateways. Builders draw agents and workflows in
@@ -32,7 +32,7 @@ call. This folder describes the system as built and as designed, with the gotcha
 | Make | [make.md](make.md) | Make layout, ports, environment names, daily commands | Operator |
 | Dependencies | [dependencies.md](dependencies.md) | Every Python package in the lock with licence and network behaviour | Operator, approver |
 | Delivery | [delivery.md](delivery.md) | What is proven, what is next, the open decisions | Approver |
-| Decisions | [decisions/](decisions/) | The decision records, each an option unless the maintainers settled it; several are superseded in part by the 2026-10-16 decisions | Approver |
+| Decisions | [decisions/](decisions/) | The decision records, each an option unless it was settled; several are superseded in part by the 2026-10-16 decisions | Approver |
 
 ## What is proven
 

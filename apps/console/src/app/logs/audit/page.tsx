@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { AlertCircle, Download, History, KeyRound, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
+import { Download, History, KeyRound, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -19,7 +19,6 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useDownloadFile, useExportAudit } from '@/hooks/file-queries';
 import { useAudit } from '@/hooks/governance-queries';
@@ -171,18 +170,6 @@ export default function AuditPage() {
         <QueryError what="the audit log" onRetry={() => query.refetch()} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
-          {query.isError && (
-            <Alert variant="destructive">
-              <AlertCircle />
-              <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing the log failed. These are the last results that loaded.
-                <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-                  Try again
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
           <SavedViewTabs
             ariaLabel="Audit views"
             presets={VIEWS.map((v) => ({ id: v.id, label: `${v.label} · ${counts?.[v.id] ?? 0}`, icon: v.icon }))}

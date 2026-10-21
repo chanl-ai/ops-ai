@@ -9,14 +9,13 @@ from typing import Any, cast
 
 from ops_agents.graphs.definition import ROUTE_NODE, WorkflowDefinition
 from ops_checkpointer import LeaseSupersededError
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
+from ops_service_kit.errors import ApiError, Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
 from ..store.events import EventLog
 from ..store.graphs import GraphStore
 from ..store.leases import Heartbeat, Leases
-from ..store.tenancy import current_team
 from .deps import Runtime
 from .event_log import designed_type
 
@@ -82,14 +81,8 @@ async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     """The thread and the graph it runs on: a code graph by name, or its pinned workflow version compiled from JSON."""
     row = await graph_store(rt).thread(thread_id)
     if row is None:
-        raise NotFound("Thread")  # another tenant's thread is not found either: the store never returns it
-    team = current_team()
-    if team is not None and row["team_id"] != team:
-        raise Forbidden(
-            f"This thread belongs to team {row['team_id']}; switch to that team to open it.",
-            code="team_forbidden",
-            details={"teamId": row["team_id"]},
-        )
+        # Another tenant's or team's thread is not found either: the store and the database never return it (c-429).
+        raise NotFound("Thread")
     require_graphs(rt)
     if row["graph"] in rt.graphs:
         return row, rt.graphs[row["graph"]]

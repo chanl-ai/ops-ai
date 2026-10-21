@@ -1,6 +1,6 @@
 # Table columns by kind
 
-Status: proposed, approved in outline by the maintainers (via the orchestrator, 2026-10-18), waiting for the screens' sign-off.
+Status: proposed, approved in outline on 2026-10-18, waiting for the screens' sign-off.
 Proof: `make usecase-test UC=uc-257 LAYER=ui`.
 
 The shared data table sizes each column by what it holds (`apps/console/src/components/data-table-column-kinds.ts`):

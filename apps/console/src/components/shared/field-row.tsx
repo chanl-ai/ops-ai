@@ -5,6 +5,9 @@
  *
  * Matches the Record UX artifact's `.frow` (c3cceac2 §03/§04):
  *   [icon] [UPPERCASE label · 112px, nowrap+truncate] [value · left, truncates] [verified/adornment/✎]
+ * In a box narrower than 28rem (a record rail, a sheet or any panel at phone width) the label sits above the value,
+ * which then has the panel's whole width (c-434): side by side, a 112px label left the value a strip a few
+ * characters wide. Each row measures its own box (a container query), so no caller chooses the layout.
  *
  * One uniform row for EVERY profile field (built-in or custom) on BOTH the
  * customer and company records, so the two surfaces read identically — killing
@@ -26,6 +29,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Check, Pencil, type LucideIcon } from 'lucide-react';
+import { WholeTokens } from '@/components/shared/whole-tokens';
 import { cn } from '@/lib/utils';
 
 /** Uppercase section divider label (e.g. "Main details", "Custom attributes"). */
@@ -58,7 +62,8 @@ interface FieldRowProps {
   emptyHint?: React.ReactNode;
   /** Mono + tabular value (phone, IDs, order numbers). */
   mono?: boolean;
-  /** Let the value wrap instead of trimming to one line: for sentences and lists, where the trimmed part matters. */
+  /** Let the label and value wrap instead of trimming to one line: for sentences and lists, where the trimmed part
+   * matters. A wrapped value breaks between words and keeps a reference (NS-2026-GN-01187) whole. */
   wrap?: boolean;
   /** When set, a hover-revealed pencil opens the record's edit dialog. */
   onEdit?: () => void;
@@ -72,6 +77,8 @@ interface FieldRowProps {
   external?: boolean;
   /** Leading node inside the value slot (e.g. a rep avatar for "Owner"). */
   valueLeading?: React.ReactNode;
+  /** A line under the value, aligned with it in either layout (e.g. the page quote a read came from). */
+  note?: React.ReactNode;
   className?: string;
   testId?: string;
 }
@@ -93,6 +100,7 @@ export function FieldRow({
   href,
   external,
   valueLeading,
+  note,
   className,
   testId,
 }: FieldRowProps) {
@@ -104,23 +112,24 @@ export function FieldRow({
     href && !empty && 'text-primary font-medium',
     empty && 'text-muted-foreground/60'
   );
-  const valueNode = empty ? emptyHint : value;
+  const valueNode = empty ? emptyHint : wrap && typeof value === 'string' ? <WholeTokens text={value} /> : value;
+  const plain = typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
 
   let rendered: React.ReactNode;
   if (href && !empty) {
     rendered = external ? (
-      <a href={href} target="_blank" rel="noreferrer" className={cn(valueClass, 'hover:underline')}>
+      <a href={href} target="_blank" rel="noreferrer" className={cn(valueClass, 'hover:underline')} title={plain}>
         {valueNode}
       </a>
     ) : (
-      <Link href={href} className={cn(valueClass, 'hover:underline')}>
+      <Link href={href} className={cn(valueClass, 'hover:underline')} title={plain}>
         {valueNode}
       </Link>
     );
   } else {
     // The value truncates to one line, so the full text shows on hover.
     rendered = (
-      <span className={valueClass} title={typeof valueNode === 'string' || typeof valueNode === 'number' ? String(valueNode) : undefined}>
+      <span className={valueClass} title={empty ? undefined : plain}>
         {valueNode}
       </span>
     );
@@ -129,41 +138,46 @@ export function FieldRow({
   const hasTrailing = verified || adornment || onEdit;
 
   return (
-    <div
-      className={cn(
-        // Fixed min-height so every row is the SAME height regardless of its
-        // content — a plain value, a mono value, a verified pill, a trailing
-        // adornment or an avatar all center in a uniform 36px row (no more
-        // "some fields taller than others"). Value is single-line (truncate).
-        'group flex min-h-9 items-center gap-2.5 border-t border-border/40 py-1.5 first:border-t-0',
-        className
-      )}
-      data-testid={testId}
-    >
-      {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
-      <span className="w-28 shrink-0 truncate whitespace-nowrap text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      {valueLeading}
-      {rendered}
-      {hasTrailing ? (
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
-          {verified ? (
-            <Check className="size-3.5 text-success" strokeWidth={2.4} aria-label="Verified" />
-          ) : null}
-          {adornment}
-          {onEdit ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              aria-label={`Edit ${label}`}
-              className="rounded opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
-            >
-              <Pencil className="size-3 text-muted-foreground" />
-            </button>
-          ) : null}
+    // The outer box is the container the row measures; borders and padding stay on it so a caller's className still
+    // overrides them. Side by side, every row is the same 36px whatever its content.
+    <div className={cn('@container/field border-t border-border/40 py-1.5 first:border-t-0', className)} data-testid={testId}>
+      <div className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 @md/field:min-h-6 @md/field:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2.5">
+          {Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
+          <span
+            className={cn(
+              'min-w-0 text-[11px] uppercase tracking-wide text-muted-foreground @md/field:w-28 @md/field:shrink-0',
+              wrap ? 'whitespace-normal break-words' : 'truncate whitespace-nowrap'
+            )}
+            title={label}
+          >
+            {label}
+          </span>
         </span>
-      ) : null}
+        <span className={cn('col-span-2 row-start-2 flex min-w-0 items-center gap-2.5 @md/field:col-span-1 @md/field:col-start-2 @md/field:row-start-1', Icon && 'pl-6 @md/field:pl-0')}>
+          {valueLeading}
+          {rendered}
+        </span>
+        {note ? (
+          <span className={cn('col-span-2 row-start-3 min-w-0 @md/field:col-span-1 @md/field:col-start-2 @md/field:row-start-2', Icon && 'pl-6 @md/field:pl-0')}>{note}</span>
+        ) : null}
+        {hasTrailing ? (
+          <span className="col-start-2 row-start-1 flex shrink-0 items-center gap-1.5 justify-self-end pl-1 @md/field:col-start-3">
+            {verified ? <Check className="size-3.5 text-success" strokeWidth={2.4} aria-label="Verified" /> : null}
+            {adornment}
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                aria-label={`Edit ${label}`}
+                className="rounded opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+              >
+                <Pencil className="size-3 text-muted-foreground" />
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -239,3 +239,17 @@ async def test_the_seeded_wire_hold_is_approved_by_two_people_of_fraud_operation
         "approver_team": "team_fraud",
         "step_up": True,
     }
+
+
+async def test_a_tools_policy_reads_its_module_once(api: Api, monkeypatch: Any) -> None:
+    """A review list asks each tool's policy (c-451): access, approval and output come from one read of the module."""
+    reads: list[str] = []
+    real = ModuleStore.get_any
+
+    async def counted(self: ModuleStore, tenant_id: str, module_id: str) -> Any:
+        reads.append(module_id)
+        return await real(self, tenant_id, module_id)
+
+    monkeypatch.setattr(ModuleStore, "get_any", counted)
+    assert (await _policy(api, "update_address"))["approvers"] == 1
+    assert reads == ["mod_core_banking"]

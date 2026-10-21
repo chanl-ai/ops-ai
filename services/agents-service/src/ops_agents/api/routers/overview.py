@@ -13,11 +13,12 @@ from ops_service_kit.http import Envelope
 
 from ...store.cases import CaseStore
 from ...store.tenancy import current_team
-from .. import hitl_facade
+from .. import engine_reviews, hitl_facade
 from ..auth import Principal, principal, teams_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..schemas import Out
+from ..tool_access import one_read_per_tool
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
@@ -45,11 +46,13 @@ class OverviewCounts(Out):
 
 @router.get("", response_model=Envelope[OverviewCounts])
 async def overview(rt: Rt, me: Me) -> JSONResponse:
-    rows = await hitl_facade.all_reviews(rt)
-    open_rows = [r for r in rows if hitl_facade.REVIEW_VIEWS["open"](r)]
-    overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
-    # A review with no SLA sorts last: nothing makes it urgent.
-    urgent = sorted(open_rows, key=lambda r: (r.get("slaMinutes") is None, r.get("slaMinutes") or 0))[:URGENT]
+    with one_read_per_tool():
+        rows = await hitl_facade.all_reviews(rt)
+        open_rows = [r for r in rows if hitl_facade.REVIEW_VIEWS["open"](r)]
+        overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
+        # A review with no SLA sorts last: nothing makes it urgent.
+        urgent = sorted(open_rows, key=lambda r: (r.get("slaMinutes") is None, r.get("slaMinutes") or 0))[:URGENT]
+        urgent = await engine_reviews.expand(rt, urgent)
     team = current_team()
     counts = await CaseStore(rt.db).counts([team] if team else teams_of(me))
     awaiting = len({r["caseId"] for r in open_rows if r.get("caseId")})

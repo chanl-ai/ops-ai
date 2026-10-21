@@ -88,6 +88,11 @@ Runs keep `durability="sync"` because the fence must refuse a stale owner before
 unchanged. Checkpoints are deleted when a run ends; the journal is the record the console reads. A run whose resume
 fails three times goes to failed with the error and a manual step.
 
+A failed run's `error` is a sentence for people that names the step (`plain_failure`, `ops_engine/compiler.py`); the
+exception's text is kept on the failed step's row and in the run's `failed` event as `detail`. A review that cannot
+open, because the write it approves reads nothing from the run, is a failed step like any other. Test:
+`services/agents-service/tests/engine/test_step_failure_message.py`.
+
 ## 5 Scale
 
 | Concern | Design |
@@ -122,6 +127,6 @@ v1 compiler until no open thread pins one.
 | Use case | Proves | Fails when |
 |---|---|---|
 | uc-081 | Basic nodes run through the queue; a worker killed after the tool step leaves the tool called once | the recorded-output lookup is removed |
-| uc-082 | Levy intake in the new types: loop, agent nodes, cases started in continue mode, spam and unknown senders handled | an exit node is unreachable |
+| uc-082 | Court order intake in the new types: loop, agent nodes, cases started in continue mode, spam and unknown senders handled | an exit node is unreachable |
 | uc-083 | Pins, retry, run from a node, replay check; 200 concurrent runs on two workers | the replay check accepts an edited output |
 | uc-084 | An agent node inside a workflow; an agent finds a workflow with tool search and runs it | the workflow is not in the tool directory |

@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api, invitesToCurrentTeam } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { ApiKeyInput, DeliveryFilters, InviteInput, MemberFilters, MemberRole, NotificationSettingsInput, UsageDays, WebhookInput } from '@/lib/types/settings';
@@ -17,13 +18,13 @@ export const sk = {
   lookups: ['settings', 'lookups'] as const,
 };
 
-export const useMembers = (p: ListParams<MemberFilters>) => useQuery({ queryKey: sk.members(p), queryFn: () => api.settings.members.list(p), placeholderData: keepPreviousData });
+export const useMembers = (p: ListParams<MemberFilters>) => usePagedQuery({ queryKey: sk.members(p), queryFn: () => api.settings.members.list(p) });
 export const useNotificationSettings = () => useQuery({ queryKey: sk.notifications, queryFn: api.settings.notifications.get });
-export const useWebhooks = (p: ListParams) => useQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p), placeholderData: keepPreviousData });
+export const useWebhooks = (p: ListParams) => usePagedQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p) });
 export const useWebhookDeliveries = (id: string | null, p: ListParams<DeliveryFilters>) =>
-  useQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id, placeholderData: keepPreviousData });
-export const useApiKeys = (p: ListParams) => useQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p), placeholderData: keepPreviousData });
-export const useUsage = (days: UsageDays) => useQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days), placeholderData: keepPreviousData });
+  usePagedQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id });
+export const useApiKeys = (p: ListParams) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p) });
+export const useUsage = (days: UsageDays) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days) });
 export const useSettingsLookups = () => useQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
 
 function useSettingsWrite<A, R>(fn: (a: A) => Promise<R>) {

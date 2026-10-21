@@ -93,9 +93,16 @@ async def test_a_workflow_agents_service_does_not_have_is_refused(api: Api) -> N
     assert r.status_code == 400 and "Choose a workflow" in r.json()["error"]["message"], r.text
 
 
-async def test_a_workflow_whose_team_has_no_record_here_fails_closed(api: Api) -> None:
+async def test_a_workflow_of_a_team_the_seed_does_not_hold_is_granted_for_that_team(
+    api: Api, engine: AsyncEngine, tenant: str
+) -> None:
+    # A team made on the Teams page is a platform team the dev seed does not list (c-423): the grant names it.
     r = await api.call("POST", "/mod_core_banking/approvals", json=request("orphan_flow"))
-    assert r.status_code == 422 and "team_unknown" in r.json()["error"]["message"], r.text
+    assert r.status_code == 201, r.text
+    stored = await ModuleStore(engine).get_any(tenant, "mod_core_banking")
+    assert stored is not None
+    made = next(a for a in stored["approvals"] if a["id"] == r.json()["data"]["id"])
+    assert made["workflow_team_id"] == "team_unknown", made
 
 
 async def test_a_stopped_agents_service_is_503_never_a_guess(api: Api, agents: FakeAgents) -> None:

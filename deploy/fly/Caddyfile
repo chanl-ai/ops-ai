@@ -11,28 +11,49 @@
 	}
 }
 
+# A request that reaches a service still starting (agents binds its port after its startup, and caddy has no ready
+# gate on it) or restarting is held and its connection retried until the service answers, instead of answering 502
+# (c-451). A connection that failed is retried for any request; one the service received is retried only for a GET.
+(wait_for_upstream) {
+	lb_try_duration 30s
+	lb_try_interval 250ms
+}
+
 :{$OPS_PUBLIC_PORT:8080} {
 	handle_path /api/platform/* {
-		reverse_proxy {$OPS_UPSTREAM_PLATFORM:127.0.0.1:8710}
+		reverse_proxy {$OPS_UPSTREAM_PLATFORM:127.0.0.1:8710} {
+			import wait_for_upstream
+		}
 	}
 	handle_path /api/agents/* {
 		reverse_proxy {$OPS_UPSTREAM_AGENTS:127.0.0.1:8700} {
+			import wait_for_upstream
 			flush_interval -1
 		}
 	}
 	handle_path /api/tools/* {
-		reverse_proxy {$OPS_UPSTREAM_TOOLS:127.0.0.1:8720}
+		reverse_proxy {$OPS_UPSTREAM_TOOLS:127.0.0.1:8720} {
+			import wait_for_upstream
+		}
 	}
 	handle_path /api/kb/* {
-		reverse_proxy {$OPS_UPSTREAM_KB:127.0.0.1:8740}
+		reverse_proxy {$OPS_UPSTREAM_KB:127.0.0.1:8740} {
+			import wait_for_upstream
+		}
 	}
 	handle_path /api/files/* {
-		reverse_proxy {$OPS_UPSTREAM_FILES:127.0.0.1:8750}
+		reverse_proxy {$OPS_UPSTREAM_FILES:127.0.0.1:8750} {
+			import wait_for_upstream
+		}
 	}
 	handle_path /api/documents/* {
-		reverse_proxy {$OPS_UPSTREAM_DOCUMENTS:127.0.0.1:8760}
+		reverse_proxy {$OPS_UPSTREAM_DOCUMENTS:127.0.0.1:8760} {
+			import wait_for_upstream
+		}
 	}
 	handle {
-		reverse_proxy {$OPS_UPSTREAM_CONSOLE:127.0.0.1:3016}
+		reverse_proxy {$OPS_UPSTREAM_CONSOLE:127.0.0.1:3016} {
+			import wait_for_upstream
+		}
 	}
 }

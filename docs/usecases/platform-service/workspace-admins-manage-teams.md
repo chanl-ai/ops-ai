@@ -34,4 +34,4 @@ admin); demo password `northfield-demo`. No model is called.
 ## Non-vacuous check
 
 `Ravi's next token no longer carries it`: with the token claims reading archived teams, the archived team stays in his
-token and the check fails (`.codeloop/evidence/198/`).
+token and the check fails.

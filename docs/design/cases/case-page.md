@@ -6,19 +6,19 @@ Status: current design. The assembled case read is built and proven by
 
 ## The problem
 
-A case is a customer issue that lives for days: a levy on an account, a complaint, a KYC review. The person working it
+A case is a customer issue that lives for days: a court order on an account, a complaint, a KYC review. The person working it
 needs to see what the case is about, what it is waiting on and who, what actions have been drafted, and where the
 source documents are. The case page as first rebuilt was a timeline, a deadline card, a status form and, for some
 cases, a read-only list of fields. It did not answer any of those questions.
 
-![A levy case as first rebuilt: deadlines, a status form and a timeline, no fields](images/before-levy-notice.png)
+![A court order case as first rebuilt: deadlines, a status form and a timeline, no fields](images/before-levy-notice.png)
 
-![A tax levy case as first rebuilt: fields truncated in the rail, the document as plain text](images/before-tax-levy.png)
+![A tax order case as first rebuilt: fields truncated in the rail, the document as plain text](images/before-tax-levy.png)
 
 | What was wrong | Effect |
 |---|---|
 | Every timeline read "Opened the case" and "Added a run wfrun_…", with the raw run id as the actor | The history said nothing a person could use |
-| Nothing said what the case was waiting for | The Human Task holding the levy check was not on the page |
+| Nothing said what the case was waiting for | The Human Task holding the court order check was not on the page |
 | Fields appeared only when the workflow happened to set them | Two of four cases opened showed none |
 | The source document was a file name with no link or viewer | The person could not check a value against its source |
 | The two clocks (first response, resolution), status, priority and owner worked | These survive into the design |
@@ -75,9 +75,9 @@ The layout does not change per use case. A workflow's case type supplies the fie
 team, and which Human Tasks it opens. A new use case needs no console change. The three wireframes below are the same
 layout with three configurations.
 
-### Tax levy
+### Tax order
 
-![A tax levy case: next action in the header, levy fields, the open read check and the drafted acknowledgement](images/tax-levy.png)
+![A tax order case: next action in the header, the order's fields, the open read check and the drafted acknowledgement](images/tax-levy.png)
 
 ### Customer complaint
 

@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api, filesOnService } from '@/lib/api';
 import type { EvidenceExportInput, FileFilters, FilePurpose, FileView, ScanStatus, StorageCredentialInput, StorageSettingsInput, StorageTarget } from '@/lib/types/files';
 import type { AuditFilters, AuditView } from '@/lib/types/governance';
@@ -18,7 +19,7 @@ export const fk = {
   storage: ['files', 'storage'] as const,
 };
 
-export const useFiles = (p: ListParams<FileFilters> & { view: FileView }) => useQuery({ queryKey: fk.list(p), queryFn: () => api.files.list(p), placeholderData: keepPreviousData });
+export const useFiles = (p: ListParams<FileFilters> & { view: FileView }) => usePagedQuery({ queryKey: fk.list(p), queryFn: () => api.files.list(p) });
 /** Polls while a scan is running so the sheet moves from Scanning to its result without a reload. */
 export const useFile = (id: string | null) =>
   useQuery({ queryKey: fk.one(id ?? ''), queryFn: () => api.files.get(id!), enabled: !!id, refetchInterval: (q) => (q.state.data?.scan.status === 'pending' ? 1000 : false) });

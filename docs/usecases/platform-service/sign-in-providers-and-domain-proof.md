@@ -37,5 +37,4 @@ adds the console signed in through platform-service. No model is called.
 ## Non-vacuous check
 
 With `platform_signin_domain` returning unverified domains and the TXT check skipped, the pending domain starts an SSO
-sign-in and a squatted claim blocks the maintainers, and the domain tests fail
-(`.codeloop/evidence/195/red-domain-verification.txt`).
+sign-in and a squatted claim blocks the maintainers, and the domain tests fail.

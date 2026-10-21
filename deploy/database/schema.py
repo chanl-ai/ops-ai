@@ -217,6 +217,29 @@ def build_baseline(dialect: Postgres, checkout: Checkout) -> Baseline:
     return Baseline(final.preamble, final.entries, rows, owner, version_tables, heads, roles, order)
 
 
+def memberships(
+    dialect: Postgres,
+    schema: list[Entry],
+    *,
+    runtime: dict[str, str],
+    tables: dict[str, list[str]],
+    sequences: dict[str, list[str]],
+    roles: set[str],
+) -> dict[str, set[str]]:
+    """Per runtime role, the roles it switches to (SET LOCAL ROLE): every role of `roles` that its own tables and
+    sequences grant to, never another runtime role. roles.sql and grants.sql both grant these."""
+    roles = roles - set(runtime.values())
+    members: dict[str, set[str]] = {}
+    for e in schema:
+        if e.type != "ACL":
+            continue
+        obj = dialect.granted_object(e)
+        for chain, role in runtime.items():
+            if obj in tables.get(chain, []) or obj in sequences.get(chain, []):
+                members.setdefault(role, set()).update(dialect.grantees(e) & roles)
+    return members
+
+
 def write_ddl(dialect: Postgres, checkout: Checkout, out: Path) -> dict[str, Any]:
     b = build_baseline(dialect, checkout)
     out.mkdir(parents=True, exist_ok=True)
@@ -244,16 +267,8 @@ def write_ddl(dialect: Postgres, checkout: Checkout, out: Path) -> dict[str, Any
                     read_only[chain].append(name)
             else:
                 tables[chain].append(name)
-    # A runtime role switches (SET LOCAL ROLE) to the roles its own tables grant to, so it is made a member of those.
-    members: dict[str, set[str]] = {}
-    for e in b.schema:
-        if e.type != "ACL":
-            continue
-        obj = dialect.granted_object(e)
-        for chain in b.order:
-            if obj in tables[chain] or obj in sequences[chain]:
-                members.setdefault(runtime_role(chain), set()).update(dialect.grantees(e) & set(b.roles))
     runtime = {c: runtime_role(c) for c in b.order}
+    members = memberships(dialect, b.schema, runtime=runtime, tables=tables, sequences=sequences, roles=set(b.roles))
     files["roles.sql"] = head + dialect.roles_script(MIGRATOR, runtime, b.roles, members)
     for i, chain in enumerate(b.order, 1):
         mine = [e for e in b.schema if b.owner[e.key] == chain] + [e for e in b.rows.entries if b.owner[e.key] == chain]
@@ -271,7 +286,7 @@ def write_ddl(dialect: Postgres, checkout: Checkout, out: Path) -> dict[str, Any
         + b.rows.preamble
         + "".join(render(e) for e in b.rows.entries)
     )
-    files["grants.sql"] = head + dialect.grants_script(runtime, tables, sequences, read_only)
+    files["grants.sql"] = head + dialect.grants_script(runtime, tables, sequences, read_only, members)
     for name, text in files.items():
         (out / name).write_text(text)
     manifest = {

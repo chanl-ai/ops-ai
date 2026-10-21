@@ -1,7 +1,7 @@
 # Console strategy
 
 Status: current, written 2026-10-10 from a read of `apps/console/src` and `docs/architecture/`; every verdict is a
-proposal until the maintainers confirms it.
+proposal until it is confirmed.
 
 ## The strategy
 

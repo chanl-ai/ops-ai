@@ -43,36 +43,13 @@ async def test_an_edited_platform_module_is_kept(local_catalog: Any, store: Modu
     assert kept is not None and kept["description"] == "Ours", kept
 
 
-class _Teams:
-    """platform-service's workspace teams as the registry reads them (modules.policy.WorkspaceTeams)."""
-
-    def __init__(self, team: str | None) -> None:
-        self.team, self.reads = team, 0
-
-    async def security_team(self, tenant_id: str) -> str | None:
-        del tenant_id  # one workspace per test
-        self.reads += 1
-        return self.team
-
-
-async def test_a_workspace_with_its_own_security_team_owns_its_platform_tools(
+async def test_the_platform_module_belongs_to_no_team_so_every_team_reaches_it(
     local_catalog: Any, store: ModuleStore, tenant: str
 ) -> None:
-    """Tick 36: the module took the install's security team, so a workspace that names its own sent send_reply's
-    approvals to a team that may not be its own."""
-    registry = ToolRegistry(local_catalog, store, workspace_teams=_Teams("team_infosec"))
-    reply = await registry.resolve("send_reply", tenant_id=tenant)
-    assert reply is not None and reply.module is not None and reply.module["team_id"] == "team_infosec", reply
-
-
-async def test_an_unreadable_security_team_writes_no_module_until_it_can_be_read(
-    local_catalog: Any, store: ModuleStore, tenant: str
-) -> None:
-    """Platform-service down: writing the install's team then would keep the wrong owner after it recovers."""
-    down = _Teams(None)
-    registry = ToolRegistry(local_catalog, store, workspace_teams=down)
-    assert await registry.resolve("send_reply", tenant_id=tenant) is None
-    assert await store.get(tenant, PLATFORM_MODULE) is None
-    down.team = "team_infosec"
-    reply = await registry.resolve("send_reply", tenant_id=tenant)
-    assert reply is not None and reply.module is not None and reply.module["team_id"] == "team_infosec", reply
+    """c-433: owned by the workspace Security team, the module was outside every other team once calls are scoped to
+    the calling run's team, so their replies were refused; with no team every team reads and calls it, and a held
+    reply is decided by the calling run's team (its approver team is unset)."""
+    reply = await ToolRegistry(local_catalog, store).resolve("send_reply", tenant_id=tenant)
+    assert reply is not None and reply.module is not None and reply.module["team_id"] is None, reply
+    policy = await ToolRegistry(local_catalog, store).policy_for("send_reply", tenant)
+    assert policy is not None and policy["approver_team"] is None, policy

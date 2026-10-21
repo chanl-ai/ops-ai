@@ -13,8 +13,11 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_files.store.files import metadata, service_outbox
+from ops_files.store.files import ROLE, metadata, service_outbox
+from ops_store import isolation
 from ops_store.outbox import add as add_event
+from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.team_scope import team_visible
 
 read_requests = sa.Table(
     "file_read_requests",
@@ -33,6 +36,7 @@ read_requests = sa.Table(
     sa.Column("run_id", sa.String(64)),
     sa.Column("requested_at", sa.DateTime(timezone=True), nullable=False),
     sa.Index("ix_file_read_requests_file", "tenant_id", "file_id"),
+    info={**TENANT_SCOPED, **team_owned("team")},
 )
 
 EVENT = "file.read_requested"
@@ -45,7 +49,7 @@ class ReadRequestsStore:
     async def request(self, values: Mapping[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         """The request, new with its event, or the one already holding its key."""
         try:
-            async with self.engine.begin() as c:
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
                 await c.execute(sa.insert(read_requests).values(**values, status="queued"))
                 await add_event(
                     c,
@@ -59,18 +63,21 @@ class ReadRequestsStore:
                 )
         except IntegrityError:
             pass
-        found = await self.get(str(values["tenant_id"]), str(values["request_key"]))
+        found = await self.get(str(values["request_key"]))
         assert found is not None
         return found
 
-    async def get(self, tenant: str, key: str) -> dict[str, Any] | None:
-        query = sa.select(read_requests).where(read_requests.c.tenant_id == tenant, read_requests.c.request_key == key)
-        async with self.engine.connect() as c:
+    async def get(self, key: str) -> dict[str, Any] | None:
+        tenant = isolation.tenant()
+        t = read_requests
+        query = sa.select(t).where(t.c.tenant_id == tenant, t.c.request_key == key, team_visible(t))
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             row = (await c.execute(query)).mappings().first()
         return dict(row) if row is not None else None
 
-    async def started(self, tenant: str, key: str, *, status: str, run_id: str | None) -> None:
-        async with self.engine.begin() as c:
+    async def started(self, key: str, *, status: str, run_id: str | None) -> None:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(
                 sa.update(read_requests)
                 .where(read_requests.c.tenant_id == tenant, read_requests.c.request_key == key)

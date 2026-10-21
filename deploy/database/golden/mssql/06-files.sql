@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0010
+-- files-service, stamped at files_0012
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -79,6 +79,7 @@ CREATE TABLE file_versions (
 	uploaded_by VARCHAR(320) NOT NULL, 
 	uploaded_at DATETIMEOFFSET NOT NULL, 
 	[current] BIT NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT file_versions_pkey PRIMARY KEY (file_id, version)
 );
 GO
@@ -92,6 +93,7 @@ CREATE TABLE file_references (
 	href VARCHAR(512) NULL, 
 	added_at DATETIMEOFFSET NOT NULL, 
 	blocked VARCHAR(500) NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT file_references_pkey PRIMARY KEY (file_id, ref_type, ref_id)
 );
 GO
@@ -118,6 +120,7 @@ CREATE TABLE file_legal_holds (
 	released_by VARCHAR(320) NULL, 
 	released_at DATETIMEOFFSET NULL, 
 	release_reason VARCHAR(500) NULL, 
+	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT file_legal_holds_pkey PRIMARY KEY (id)
 );
 GO
@@ -172,10 +175,94 @@ CREATE TABLE storage_settings_audit (
 GO
 CREATE INDEX ix_storage_settings_audit_tenant ON storage_settings_audit (tenant_id, at);
 GO
+IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.files_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_files_system';
+GO
+CREATE FUNCTION ops_security.files_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_files_system';
+GO
+CREATE FUNCTION ops_security.files_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_files_system';
+GO
+CREATE FUNCTION ops_security.files_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_files_system';
+GO
+CREATE SECURITY POLICY ops_security.files_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.files,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.files AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.files AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.files_outbox_tenant
+    ADD FILTER PREDICATE ops_security.files_tenant_read(tenant_id) ON dbo.files_outbox,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.files_outbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.files_outbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_blobs_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_blobs,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_blobs AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_blobs AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_versions_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_versions,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_references_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_references,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_references AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_references AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_idempotency_tenant
+    ADD FILTER PREDICATE ops_security.files_tenant_read(tenant_id) ON dbo.file_idempotency,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.file_idempotency AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.file_idempotency AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_legal_holds_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_legal_holds,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_legal_holds AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_legal_holds AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_read_requests_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_read_requests,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_read_requests AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_read_requests AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.storage_settings_tenant
+    ADD FILTER PREDICATE ops_security.files_tenant_read(tenant_id) ON dbo.storage_settings,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_settings AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_settings AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.storage_credentials_tenant
+    ADD FILTER PREDICATE ops_security.files_tenant_read(tenant_id) ON dbo.storage_credentials,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_credentials AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_credentials AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.storage_settings_audit_tenant
+    ADD FILTER PREDICATE ops_security.files_tenant_read(tenant_id) ON dbo.storage_settings_audit,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_settings_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_settings_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_files (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0010');
+INSERT INTO alembic_version_files (version_num) VALUES ('files_0012');
 GO

@@ -21,6 +21,8 @@ from sqlalchemy.sql.schema import SchemaItem
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
+from ops_store.schema import TEAM_OWNED
+from ops_store.team_scope import acting_team, any_team, team_visible
 
 metadata = sa.MetaData()
 
@@ -32,7 +34,8 @@ tool_modules = sa.Table(
     # Ids are unique within a tenant only: every tenant's dev seed uses the console's ids (mod_core_banking).
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("team_id", sa.String(64), nullable=False),
+    # Null for a workspace-level module every team reads and calls (the platform tools, c-433).
+    sa.Column("team_id", sa.String(64)),
     sa.Column("name", sa.String(120), nullable=False),
     sa.Column("display_name", sa.String(200), nullable=False),
     sa.Column("system", sa.String(200), nullable=False),
@@ -64,6 +67,7 @@ tool_modules = sa.Table(
     sa.Column("updated_at", _TS, nullable=False),
     # Workflows pin a module by name, so a name is unique within a tenant.
     sa.UniqueConstraint("tenant_id", "name", name="ux_tool_modules_name"),
+    info=TEAM_OWNED,
 )
 
 
@@ -299,6 +303,21 @@ class StaleModuleError(RuntimeError):
     """`put` found a newer revision than the one the caller read: someone else changed the module first."""
 
 
+# Why a read crosses teams: another service asks on a run's behalf, and the run's grants and approval token decide.
+RUN_PATHS = "a run's call or grant list is authorized by its grants and approval token (c-433 scopes it)"
+
+
+def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
+    """Modules approved for one of the acting team's workflows: the explicit grant across teams (c-423 Q3)."""
+    team = acting_team()
+    if team is None:
+        return sa.false()
+    a = module_approvals.c
+    return tool_modules.c.id.in_(
+        sa.select(a.module_id).where(a.tenant_id == tenant_id, a.workflow_team_id == team, a.status == "approved")
+    )
+
+
 class ModuleStore:
     # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -332,15 +351,40 @@ class ModuleStore:
         return {i: {**out[i], "egress_hosts": hosts[i]} for i in ids}
 
     async def all(self, tenant_id: str) -> list[Aggregate]:
+        """The modules the acting team reads (c-423): its own, workspace-level ones (no team) and those approved for one
+        of its workflows, which is the explicit grant across teams. Every module with no acting team."""
         async with self.engine.connect() as c:
             q = (
                 tool_modules.select()
-                .where(tool_modules.c.tenant_id == tenant_id)
+                .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
                 .order_by(tool_modules.c.created_at.desc())
             )
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
         return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def all_teams(self, tenant_id: str) -> list[Aggregate]:
+        """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow
+        may be granted, a call's resolution), which the run's grants and its approval token decide, not the caller's
+        team. c-433 scopes those to the grant."""
+        async with self.engine.connect() as c:
+            q = (
+                tool_modules.select()
+                .where(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
+                .order_by(tool_modules.c.created_at.desc())
+            )
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            kids = await self._children(c, tenant_id, [r["id"] for r in rows])
+        return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def names(self, tenant_id: str) -> set[str]:
+        """Every module name in the tenant, in any team: a name is unique per tenant, so the check before a create sees
+        every team's."""
+        q = sa.select(tool_modules.c.name).where(
+            tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, "a module name is unique per tenant")
+        )
+        async with self.engine.connect() as c:
+            return {str(r[0]) for r in await c.execute(q)}
 
     async def secret_readers(self, tenant_id: str) -> list[Aggregate]:
         """Each module's id, display name and baseline with its operations' id, name, path and headers: what the
@@ -348,7 +392,7 @@ class ModuleStore:
         ops = module_operations.c
         async with self.engine.connect() as c:
             q = sa.select(tool_modules.c.id, tool_modules.c.display_name, tool_modules.c.baseline).where(
-                tool_modules.c.tenant_id == tenant_id
+                tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id))
             )
             rows: dict[str, Aggregate] = {
                 r["id"]: {**dict(r), "operations": []} for r in (await c.execute(q)).mappings()
@@ -365,8 +409,25 @@ class ModuleStore:
         return list(rows.values())
 
     async def get(self, tenant_id: str, module_id: str) -> Aggregate | None:
+        """The module when the acting team reads it (as `all`); None otherwise, so its routes answer 404."""
         async with self.engine.connect() as c:
-            q = tool_modules.select().where(tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id)
+            q = tool_modules.select().where(
+                tool_modules.c.tenant_id == tenant_id,
+                tool_modules.c.id == module_id,
+                sa.or_(team_visible(tool_modules), _granted(tenant_id)),
+            )
+            row = (await c.execute(q)).mappings().first()
+            if row is None:
+                return None
+            return {**dict(row), **(await self._children(c, tenant_id, [module_id]))[module_id]}
+
+    async def get_any(self, tenant_id: str, module_id: str) -> Aggregate | None:
+        """The module in any team: for a call's resolution and for a decision agents-service already held to the review
+        rules, both authorized by what they carry rather than by the caller's team."""
+        async with self.engine.connect() as c:
+            q = tool_modules.select().where(
+                tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id, any_team(tool_modules, RUN_PATHS)
+            )
             row = (await c.execute(q)).mappings().first()
             if row is None:
                 return None
@@ -381,7 +442,7 @@ class ModuleStore:
             module_id = (await c.execute(q)).scalar()
         if module_id is None:
             return None
-        agg = await self.get(tenant_id, module_id)
+        agg = await self.get_any(tenant_id, module_id)
         if agg is None:
             return None
         op = next((o for o in served_operations(agg) if o["name"] == name), None)
@@ -491,6 +552,10 @@ class ModuleStore:
             return done.rowcount > 0
 
     async def count(self, tenant_id: str) -> int:
-        q = sa.select(sa.func.count()).select_from(tool_modules).where(tool_modules.c.tenant_id == tenant_id)
+        q = (
+            sa.select(sa.func.count())
+            .select_from(tool_modules)
+            .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+        )
         async with self.engine.connect() as c:
             return int((await c.execute(q)).scalar_one())

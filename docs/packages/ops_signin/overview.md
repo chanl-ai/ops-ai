@@ -22,5 +22,4 @@ Tested against the local fake identity provider only; no real identity provider 
 
 ## Tests
 
-`packages/ops_signin/tests/` (`make verify`). Each refusal row was seen failing with its check removed:
-`.codeloop/evidence/188/t001-red-checks-removed.txt`.
+`packages/ops_signin/tests/` (`make verify`). Each refusal row was seen failing with its check removed.

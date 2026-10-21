@@ -34,5 +34,5 @@ system refuses marks the connection as needing attention.
 
 ## Non-vacuous check
 
-Step 1 fails with the strategy replaced by none (`.codeloop/evidence/330/uc-393-red-without-strategy.txt`), and steps 2
-and 3 fail with the 401 retry removed (`.codeloop/evidence/330/uc-393-red-without-401-retry.txt`).
+Step 1 fails with the strategy replaced by none, and steps 2
+and 3 fail with the 401 retry removed.

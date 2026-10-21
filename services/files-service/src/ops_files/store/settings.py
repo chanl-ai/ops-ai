@@ -17,7 +17,13 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_files.store.files import files, metadata
+from ops_files.store.files import ROLE, files, metadata
+from ops_store import isolation
+from ops_store.schema import TENANT_SCOPED
+from ops_store.team_scope import any_team
+
+# Why the storage settings check reads every team's files: a target any team's files are stored on stays.
+STORAGE_TARGETS = "storage_targets"
 
 storage_settings = sa.Table(
     "storage_settings",
@@ -27,6 +33,8 @@ storage_settings = sa.Table(
     sa.Column("document", sa.Text, nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+    # Workspace-level: the tenant's storage, changed by an admin under can() (c-415).
+    info=TENANT_SCOPED,
 )
 
 storage_credentials = sa.Table(
@@ -39,6 +47,7 @@ storage_credentials = sa.Table(
     sa.Column("sealed", sa.Text, nullable=False),
     sa.Column("set_by", sa.String(320), nullable=False),
     sa.Column("set_at", sa.DateTime(timezone=True), nullable=False),
+    info=TENANT_SCOPED,
 )
 
 storage_settings_audit = sa.Table(
@@ -53,6 +62,7 @@ storage_settings_audit = sa.Table(
     sa.Column("actor", sa.String(320), nullable=False),
     sa.Column("at", sa.DateTime(timezone=True), nullable=False),
     sa.Index("ix_storage_settings_audit_tenant", "tenant_id", "at"),
+    info=TENANT_SCOPED,
 )
 
 
@@ -81,8 +91,9 @@ class SettingsStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def get(self, tenant: str) -> SavedSettings | None:
-        async with self.engine.connect() as c:
+    async def get(self) -> SavedSettings | None:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             row = (
                 (await c.execute(sa.select(storage_settings).where(storage_settings.c.tenant_id == tenant)))
                 .mappings()
@@ -93,12 +104,13 @@ class SettingsStore:
         return SavedSettings(row["version"], json.loads(row["document"]), row["updated_by"], row["updated_at"])
 
     async def save(
-        self, tenant: str, *, base_version: int, document: dict[str, Any], by: str, at: datetime, detail: str
+        self, *, base_version: int, document: dict[str, Any], by: str, at: datetime, detail: str
     ) -> SavedSettings:
         """Writes version `base_version + 1`; `base_version` 0 is the first save. Refused when it is not current."""
+        tenant = isolation.tenant()
         text = json.dumps(document, sort_keys=True)
         try:
-            async with self.engine.begin() as c:
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
                 if base_version == 0:
                     exists = (
                         await c.execute(
@@ -128,30 +140,36 @@ class SettingsStore:
             raise StaleVersionError("another save got there first; reload and save again") from e
         return SavedSettings(base_version + 1, document, by, at)
 
-    async def locations_in_use(self, tenant: str) -> set[tuple[str, str]]:
-        """The (backend, container) pairs the tenant's files are stored in; a save may not drop a target on one."""
-        q = sa.select(files.c.storage_backend, files.c.storage_container).where(files.c.tenant_id == tenant).distinct()
-        async with self.engine.connect() as c:
-            return {(str(r[0]), str(r[1])) for r in await c.execute(q)}
+    async def locations_in_use(self) -> set[tuple[str, str]]:
+        """The (backend, container) pairs the tenant's files are stored in, every team's; a save may not drop a target
+        on one."""
+        with isolation.tenant_wide(STORAGE_TARGETS):
+            tenant = isolation.tenant()
+            where = (files.c.tenant_id == tenant, any_team(files, "a target any team's files are on stays"))
+            q = sa.select(files.c.storage_backend, files.c.storage_container).where(*where).distinct()
+            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+                return {(str(r[0]), str(r[1])) for r in await c.execute(q)}
 
-    async def credentials(self, tenant: str) -> list[CredentialRow]:
+    async def credentials(self) -> list[CredentialRow]:
+        tenant = isolation.tenant()
         q = (
             sa.select(storage_credentials)
             .where(storage_credentials.c.tenant_id == tenant)
             .order_by(storage_credentials.c.name)
         )
-        async with self.engine.connect() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             return [
                 CredentialRow(r["name"], r["kind"], r["sealed"], r["set_by"], r["set_at"])
                 for r in (await c.execute(q)).mappings()
             ]
 
-    async def credential(self, tenant: str, name: str) -> CredentialRow | None:
-        return next((r for r in await self.credentials(tenant) if r.name == name), None)
+    async def credential(self, name: str) -> CredentialRow | None:
+        return next((r for r in await self.credentials() if r.name == name), None)
 
-    async def put_credential(self, tenant: str, name: str, *, kind: str, sealed: str, by: str, at: datetime) -> None:
+    async def put_credential(self, name: str, *, kind: str, sealed: str, by: str, at: datetime) -> None:
         """Sets or replaces a credential: delete then insert in one transaction, so no dialect's upsert is needed."""
-        async with self.engine.begin() as c:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             where = (storage_credentials.c.tenant_id == tenant) & (storage_credentials.c.name == name)
             replaced = (await c.execute(storage_credentials.delete().where(where))).rowcount
             await c.execute(
@@ -170,8 +188,9 @@ class SettingsStore:
                 at=at,
             )
 
-    async def delete_credential(self, tenant: str, name: str, *, by: str, at: datetime) -> bool:
-        async with self.engine.begin() as c:
+    async def delete_credential(self, name: str, *, by: str, at: datetime) -> bool:
+        tenant = isolation.tenant()
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             where = (storage_credentials.c.tenant_id == tenant) & (storage_credentials.c.name == name)
             gone = (await c.execute(storage_credentials.delete().where(where))).rowcount == 1
             if gone:
@@ -186,13 +205,14 @@ class SettingsStore:
                 )
         return gone
 
-    async def audit(self, tenant: str) -> list[dict[str, Any]]:
+    async def audit(self) -> list[dict[str, Any]]:
+        tenant = isolation.tenant()
         q = (
             sa.select(storage_settings_audit)
             .where(storage_settings_audit.c.tenant_id == tenant)
             .order_by(storage_settings_audit.c.id)
         )
-        async with self.engine.connect() as c:
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     @staticmethod

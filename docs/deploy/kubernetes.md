@@ -1,7 +1,6 @@
 # Ops AI on Kubernetes
 
-Status: current. Built and proven on a local kind cluster by c-268 (`deploy/k8s/proof.sh`, evidence
-`.codeloop/evidence/268/kind-proof.txt`); not yet run on a bank's cluster. Files: `deploy/k8s/`.
+Status: current. Built and proven on a local kind cluster by c-268 (`deploy/k8s/proof.sh`); not yet run on a bank's cluster. Files: `deploy/k8s/`.
 
 Kustomize, with `kubectl apply -k` and no other tool: a base with one folder per service, and an overlay per
 environment that picks the images, the origin, the secrets and the database. The images are the same ones compose

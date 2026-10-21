@@ -287,7 +287,9 @@ get_images() {
     pull)
       step "Images: pulling $PREFIX/*:$TAG"
       compose pull --quiet || die "pulling $PREFIX/*:$TAG failed (is version $TAG published? try --version, --build or --offline)"
-      [ "$DB_MODE" = dba ] && { docker pull -q "$PREFIX/db-scripts:$TAG" >/dev/null || die "pulling $PREFIX/db-scripts:$TAG failed"; }
+      if [ "$DB_MODE" = dba ]; then
+        docker pull -q "$PREFIX/db-scripts:$TAG" >/dev/null || die "pulling $PREFIX/db-scripts:$TAG failed"
+      fi
       ;;
     build)
       step "Images: building $PREFIX/*:$TAG from this checkout's HEAD"
@@ -529,7 +531,8 @@ start() {
   compose up -d --wait --wait-timeout 900 $first
   connect_model
   step "Starting: agents, worker, console and proxy"
-  compose up -d --wait --wait-timeout 900
+  # On a small machine a service can miss its first health checks while ten containers start; wait once more.
+  compose up -d --wait --wait-timeout 900 || { say "a service was not healthy yet; waiting once more"; compose up -d --wait --wait-timeout 900; }
 }
 
 finish() {
@@ -729,7 +732,7 @@ upgrade() {
     return
   fi
   to=$TAG
-  step "Rollback: the check failed on $to; back to $from"
+  step "Rollback: $to did not start or failed its check; back to $from"
   setenv OPS_IMAGE_PREFIX "$from_prefix"
   setenv OPS_IMAGE_TAG "$from"
   PREFIX=$from_prefix

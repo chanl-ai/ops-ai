@@ -13,7 +13,7 @@ pressure on that model as the number of workflows grows:
 |---|---|---|
 | The same wording is needed in many agents | The deposit-insurance disclosure, the collections disclosure, the personal data rule, the plain-language tone guide | Each agent holds its own copy. A wording change from Compliance is a hand edit in every agent, and nothing lists which agents hold the old text |
 | Teams start from the same few agent shapes | Email triage, reply drafting, policy Q&A, case summaries | Each team writes the instructions from scratch, so quality depends on who wrote them |
-| Prompt engineering is a skill most ops teams do not have | A servicing lead knows the procedure but not how to phrase it for a model | Instructions miss citation rules, mention tools the agent does not hold, or contradict themselves; the design lessons record each of these (`.codeloop/wiki/concepts/design-lessons.md`, "Prompting and model calls", "Tools, MCP and scoping") |
+| Prompt engineering is a skill most ops teams do not have | A servicing lead knows the procedure but not how to phrase it for a model | Instructions miss citation rules, mention tools the agent does not hold, or contradict themselves; the design lessons record each of these (the design lessons, "Prompting and model calls", "Tools, MCP and scoping") |
 
 The question is whether prompts should leave the agent version and become a subsystem of their own,
 and if so, whether to build it or adopt an external prompt registry.
@@ -90,7 +90,7 @@ Notes on the scores:
 The minimum in the console mock: Agent Studio → Prompt blocks (list, create, block page with versions
 and used-by), Insert block on the agent's Instructions field and in the template wizard, block
 selection in the generator's Compliance step, and the referenced blocks shown under the instructions
-with "Use v_n_" when a newer version exists. Spec: `.codeloop/wiki/concepts/prompts.md`.
+with "Use v_n_" when a newer version exists. Spec: [agent guardrails and skills](../agent-guardrails.md).
 
 ## Consequences
 

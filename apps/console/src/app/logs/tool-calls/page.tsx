@@ -17,8 +17,6 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { useToolCall, useToolCalls } from '@/hooks/governance-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, dateTime, ms, pct, relativeTime } from '@/lib/format';
@@ -140,18 +138,6 @@ export default function ToolCallsPage() {
             <StatCard label="Writes approved by a person" value={stats ? count(stats.writesApprovedByPerson) : undefined} icon={UserCheck} footer={{ text: 'Approval token checked at the gateway', subtext: 'Policy approvals counted separately' }} />
             <StatCard label="Awaiting approval" value={stats ? count(stats.awaitingApproval) : undefined} icon={Clock} footer={{ text: 'Paused until someone decides', subtext: 'Open in Reviews' }} />
           </StatCardGrid>
-
-          {query.isError && (
-            <Alert variant="destructive">
-              <AlertCircle />
-              <AlertDescription className="flex items-center justify-between gap-2">
-                Refreshing the log failed. These are the last results that loaded.
-                <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-                  Try again
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
 
           <DataTableWithViews
             columns={columns}

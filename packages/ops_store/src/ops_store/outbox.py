@@ -23,7 +23,16 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from . import isolation
 from .dialect import claim
+from .schema import system
+
+# An outbox not yet held to its tenant by the database (tools-service's, until c-414); a service that isolates its
+# outbox passes TENANT_SCOPED: the request role then reads and writes its own tenant's events, and the relay reads
+# every tenant's as the service's system role (c-415).
+OUTBOX = system("service event outbox, read by its relay across tenants")
+# Why the relay reads past the tenant: it delivers every tenant's due events.
+RELAY = "outbox_relay"
 
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -35,9 +44,9 @@ KEEP_S = 7 * 86400.0
 PRUNE_EVERY_S = 3600.0
 
 
-def outbox_table(metadata: sa.MetaData, name: str = "service_outbox") -> sa.Table:
-    """The outbox's columns. Read by the relay across tenants, so the table is the service's own, not under the
-    tenant's row-level security."""
+def outbox_table(metadata: sa.MetaData, name: str = "service_outbox", *, info: dict[str, Any] = OUTBOX) -> sa.Table:
+    """The outbox's columns. Read by the relay across tenants through `isolation.system_tx`; `info` is its
+    isolation marking."""
     return sa.Table(
         name,
         metadata,
@@ -55,6 +64,7 @@ def outbox_table(metadata: sa.MetaData, name: str = "service_outbox") -> sa.Tabl
         sa.Column("attempts", sa.Integer, nullable=False, default=0),
         sa.Column("last_error", sa.Text),
         sa.Index(f"ix_{name}_due", "sent_at", "next_at"),
+        info=info,
     )
 
 
@@ -110,10 +120,14 @@ class Relay:
         table: sa.Table,
         send: Send,
         *,
+        role: str | None = None,
         batch: int = 20,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """`role` is the service's system role (BYPASSRLS, granted only its outbox) the relay reads and marks events
+        as; None for an outbox with no policy."""
         self.engine, self.table, self.send, self.batch, self.clock = engine, table, send, batch, clock
+        self.role = role
 
     async def once(self) -> int:
         """Tries every due event once, oldest first; returns how many were delivered. A failure is recorded and the
@@ -124,11 +138,13 @@ class Relay:
         # Two relays never deliver the same batch at once; each takes the rows the other has not locked.
         due = claim(due, t)
         delivered = 0
-        async with self.engine.begin() as conn:
+        async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
             rows = [dict(r) for r in (await conn.execute(due)).mappings()]
             for row in rows:
                 try:
-                    await self.send(wire(row))
+                    # What the send records about the event (a read request's run) is written as its tenant and team.
+                    with isolation.scope(str(row["tenant_id"]), str(row["team_id"])):
+                        await self.send(wire(row))
                 except Exception as e:
                     tries = int(row["attempts"]) + 1
                     await conn.execute(
@@ -155,7 +171,7 @@ class Relay:
         t = self.table
         cutoff = self.clock() - keep_s
         never = sa.and_(t.c.sent_at.is_(None), t.c.next_at.is_(None), t.c.created_at < cutoff)
-        async with self.engine.begin() as conn:
+        async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
             gone = await conn.execute(t.delete().where(sa.or_(t.c.sent_at < cutoff, never)))
         return int(gone.rowcount or 0)
 

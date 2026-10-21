@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { EgressKind } from '@/lib/types/egress';
 import type { ListParams } from '@/lib/types/query';
@@ -9,7 +10,7 @@ import type { ListParams } from '@/lib/types/query';
 const KEY = ['egress'] as const;
 
 export const useEgress = () => useQuery({ queryKey: KEY, queryFn: () => api.egress.list() });
-export const useEgressHosts = (p: ListParams) => useQuery({ queryKey: [...KEY, 'hosts', p], queryFn: () => api.egress.hosts(p), placeholderData: keepPreviousData });
+export const useEgressHosts = (p: ListParams) => usePagedQuery({ queryKey: [...KEY, 'hosts', p], queryFn: () => api.egress.hosts(p) });
 
 export function useAddEgress() {
   const qc = useQueryClient();

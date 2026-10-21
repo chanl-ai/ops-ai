@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.search import contains
+from ops_store.team_scope import team_visible
 
 from .modules import metadata, tool_modules
 
@@ -165,7 +166,7 @@ class ConnectionStore:
         if not ids:
             return {}
         q = sa.select(tool_modules.c.connection_id, tool_modules.c.id, tool_modules.c.display_name).where(
-            tool_modules.c.tenant_id == tenant_id, tool_modules.c.connection_id.in_(ids)
+            tool_modules.c.tenant_id == tenant_id, tool_modules.c.connection_id.in_(ids), team_visible(tool_modules)
         )
         out: dict[str, list[Row]] = {}
         for r in await c.execute(q.order_by(tool_modules.c.display_name)):

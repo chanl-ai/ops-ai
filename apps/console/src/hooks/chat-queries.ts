@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import { IdleTimeout, withIdleTimeout } from '@/lib/api/idle';
 import { modelRefusalText } from '@/lib/model-refusals';
@@ -18,7 +19,7 @@ export const ck = {
 };
 
 export const useChatAgents = () => useQuery({ queryKey: ck.agents, queryFn: api.chat.agents, staleTime: 60_000 });
-export const useChatThreads = (p: ListParams<ChatFilters>) => useQuery({ queryKey: ck.threads(p), queryFn: () => api.chat.threads.list(p), placeholderData: keepPreviousData });
+export const useChatThreads = (p: ListParams<ChatFilters>) => usePagedQuery({ queryKey: ck.threads(p), queryFn: () => api.chat.threads.list(p) });
 /** The rail: the first page, then one more page per `fetchNextPage`, each after the last row's cursor. */
 export const useChatThreadPages = (p: Omit<ChatThreadListParams, 'page' | 'cursor'>) =>
   useInfiniteQuery({
@@ -104,7 +105,6 @@ function clear(threadId: string) {
   turns = rest;
   emit();
 }
-
 
 // The longest a reply may go without any event (text, status, tool) before the page says it failed: tool calls
 // and checks send status events, so only a stalled turn reaches this.

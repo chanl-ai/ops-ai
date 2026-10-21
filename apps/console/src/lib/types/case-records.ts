@@ -11,6 +11,8 @@ export interface CaseRecord {
   status: CaseStatus;
   /** By email. */
   assignee: string | null;
+  /** The assignee by name, joined by the list (GET /v1/cases, c-403); a person the platform cannot name keeps the email. */
+  owner?: { email: string; name: string } | null;
   priority: CasePriority;
   responseDueAt: string;
   resolutionDueAt: string;
@@ -74,7 +76,8 @@ export interface CaseDraftedAction {
   taskId: string;
   label: string;
   kind: 'reply' | 'tool' | (string & {});
-  status: 'pending' | 'approved' | 'rejected' | (string & {});
+  /** `refused`: approved, but the call it sent answered an error (the bank refused the hold). */
+  status: 'pending' | 'approved' | 'refused' | 'rejected' | (string & {});
   approvalsGiven: number;
   approvalsNeeded: number;
   summary: string | null;
@@ -88,7 +91,6 @@ export interface CaseDraftedAction {
 export interface CaseRecordDetail extends CaseRecord {
   events: CaseEvent[];
   caseType?: { id: string; version: number; name: string } | null;
-  owner?: { email: string; name: string } | null;
   team?: { id: string; name: string };
   customer?: { id: string; name: string; href: string } | null;
   sla?: { response: CaseClock; resolution: CaseClock; pausedSince: string | null };
@@ -98,7 +100,7 @@ export interface CaseRecordDetail extends CaseRecord {
   waitingAllHref?: string | null;
   actions?: CaseDraftedAction[];
   links?: {
-    files: { fileId: string; name: string; viewerHref: string }[];
+    files: { fileId: string; name: string | null; viewerHref: string }[];
     runs: { id: string; workflowName: string; state: string; href: string }[];
     emails: { id: string; subject: string; direction: string; at: string; href: string }[];
     cases: { id: string; subject: string; status: string; relation: 'linked' | 'same_customer' | (string & {}); href: string }[];

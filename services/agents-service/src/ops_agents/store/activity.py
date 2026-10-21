@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_engine import default_registry
 from ops_engine.store.tables import engine_definitions, engine_runs, engine_steps, engine_work
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .agent_registry import publish_requests
 from .cases import case_events, cases
@@ -158,6 +159,7 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     else:
         title = agent_name
         where = [sa.not_(sa.func.coalesce(is_chat, False)), t.c.parent_thread_id.is_(None)]
+    where.append(team_visible(t))
     # A chat started from an embedded widget belongs to that widget's channel; one in the console, to its agent.
     w = widget_deployments
     joined = t.outerjoin(w, sa.and_(w.c.tenant_id == t.c.tenant_id, w.c.id == t.c.deployment_id))

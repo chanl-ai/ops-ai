@@ -51,4 +51,4 @@ A console signed in through platform-service, with tools-service beside it. Invi
 and the check fails.
 
 UI layer: with the console's platform adapter not applied (members, invites and audit left on the mock), steps 1 to 6
-fail (`.codeloop/evidence/077/red-adapter-off.txt`).
+fail.

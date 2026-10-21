@@ -1,7 +1,8 @@
 'use client';
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ConditionInput, ConditionStatus, ModelRiskFilters, ModelRiskView, TierChangeInput } from '@/lib/types/model-risk';
 import type { ListParams } from '@/lib/types/query';
@@ -12,9 +13,7 @@ export const mk = {
   options: ['model-risk', 'options'] as const,
 };
 
-const paged = { placeholderData: keepPreviousData };
-
-export const useModelRisk = (p: ListParams<ModelRiskFilters> & { view: ModelRiskView }) => useQuery({ queryKey: mk.list(p), queryFn: () => api.modelRisk.list(p), ...paged });
+export const useModelRisk = (p: ListParams<ModelRiskFilters> & { view: ModelRiskView }) => usePagedQuery({ queryKey: mk.list(p), queryFn: () => api.modelRisk.list(p) });
 export const useModelEntry = (id: string) => useQuery({ queryKey: mk.entry(id), queryFn: () => api.modelRisk.get(id) });
 export const useModelRiskOptions = () => useQuery({ queryKey: mk.options, queryFn: api.modelRisk.options, staleTime: 5 * 60_000 });
 

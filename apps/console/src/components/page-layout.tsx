@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
 import { TitleSwitcher } from '@/components/shared/title-switcher';
+import { WholeTokens } from '@/components/shared/whole-tokens';
 import { usePreview } from '@/hooks/use-preview';
 import {
   BulkSelectionContext,
@@ -182,15 +183,17 @@ export function PageLayout({
           </nav>
         )}
 
-        {/* Header: wraps on narrow viewports; title truncates to avoid overflow */}
+        {/* Header: the title group starts at its own width (its title on one line), so when the title and the actions
+            do not fit on one row the actions wrap under it instead of squeezing the title. The description and badges
+            add nothing to that width ([contain:inline-size]); they fill whatever the title takes. */}
         <div
           className={cn(
-            'flex flex-wrap items-center justify-between gap-x-4 gap-y-3 lg:flex-nowrap',
+            'flex flex-wrap items-center justify-between gap-x-4 gap-y-3',
             headerClassName
           )}
           data-testid="page-header"
         >
-          <div className="flex items-center gap-3 min-w-0 basis-full sm:flex-1 sm:basis-0">
+          <div className="flex items-center gap-3 min-w-0 basis-full sm:flex-1 sm:basis-auto">
             {icon &&
               (backHref ? (
                 <Link
@@ -224,14 +227,15 @@ export function PageLayout({
               {typeof title === 'string' ? (
                 <h2
                   className={cn(
-                    'text-xl font-semibold line-clamp-2 wrap-break-word sm:text-2xl',
+                    // Balanced lines, and a reference in the title (NS-2026-GN-01187) is never split across them.
+                    'text-xl font-semibold line-clamp-2 wrap-break-word text-balance sm:text-2xl',
                     onTitleClick && 'cursor-pointer hover:text-primary transition-colors'
                   )}
                   data-testid="page-title"
                   onClick={onTitleClick}
                   title={switcher ? undefined : title}
                 >
-                  {switcher ? <TitleSwitcher title={title} /> : title}
+                  {switcher ? <TitleSwitcher title={title} /> : <WholeTokens text={title} />}
                 </h2>
               ) : (
                 <div
@@ -243,7 +247,7 @@ export function PageLayout({
               )}
               {description && (
                 <div
-                  className="text-sm text-muted-foreground line-clamp-1 wrap-break-word mt-0.5"
+                  className="text-sm text-muted-foreground line-clamp-1 wrap-break-word mt-0.5 [contain:inline-size]"
                   title={typeof description === 'string' ? description : undefined}
                   data-testid="page-description"
                 >
@@ -252,7 +256,7 @@ export function PageLayout({
               )}
               {(badge || preview) && (
                 <div
-                  className="flex flex-wrap items-center gap-2 gap-y-1 mt-2"
+                  className="flex flex-wrap items-center gap-2 gap-y-1 mt-2 [contain:inline-size]"
                   data-testid="page-badges"
                 >
                   {preview && <PreviewBadge />}

@@ -45,9 +45,11 @@ class Directory:
         return next(t for t in self.teams if t.scope == "all")
 
     def team(self, team_id: str | None) -> Team:
-        """The caller's team; an unknown or missing id falls to the all-scope team, as the console's team context
-        does."""
-        return next((t for t in self.teams if t.id == team_id), self.everyone)
+        """The caller's team: a seeded one, or the platform team the token names, owning no group here (c-423), so a
+        module made in it is stored under its real id. Only a caller with no team falls to the all-scope team."""
+        if not team_id:
+            return self.everyone
+        return next((t for t in self.teams if t.id == team_id), Team(team_id, team_id, (), "owned"))
 
     def team_of_owner(self, owner: str | None) -> Team:
         return next((t for t in self.teams if t.scope == "owned" and owner in t.owner_groups), self.everyone)
@@ -65,7 +67,11 @@ class Directory:
         return groups
 
     def sees_module(self, team: Team, m: Mapping[str, Any]) -> bool:
-        return self.sees(team, self.owners(m))
+        """A team reads its own modules, workspace-level ones (no team) and those approved for one of its workflows,
+        which is the explicit grant across teams (c-423). No scope reaches another team's modules otherwise."""
+        if m.get("team_id") in (team.id, None):
+            return True
+        return any(a.get("workflow_team_id") == team.id and a.get("status") == "approved" for a in m["approvals"])
 
     def guard(self, team: Team, owners: list[str | None], what: str) -> None:
         """403 naming the owning team when the record is outside the caller's team."""
@@ -76,8 +82,8 @@ class Directory:
         raise Forbidden(f"This {what} belongs to {owner.name}.", details={"team": {"id": owner.id, "name": owner.name}})
 
     def owner_group(self, team: Team) -> str | None:
-        """The owner group a record created inside `team` gets; None for the all-scope team."""
-        return None if team.scope == "all" else team.owner_groups[0]
+        """The owner group a record created inside `team` gets; None for the all-scope team and a team with none."""
+        return None if team.scope == "all" or not team.owner_groups else team.owner_groups[0]
 
     def team_by_id(self, team_id: str | None) -> Team | None:
         """The team with this id, or None: unlike `team`, an unknown id is not anyone's, so callers fail closed."""
