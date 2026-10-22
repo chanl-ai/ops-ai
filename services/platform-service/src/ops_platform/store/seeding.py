@@ -86,11 +86,16 @@ async def write_seed(
             )
         for person in data["people"]:
             fields = {"email": person["email"], "name": person["name"], "status": "active"}
+            # A seeded person's address and name belong to the seed file (no route changes them), so a database seeded
+            # before the file changed them signs in with the new ones; their roles and status stay as people set them.
             await c.execute(
                 insert(users)
                 .values(id=person["id"], tenant_id=tenant_id, created_at=now, **fields)
-                .on_conflict_do_nothing(index_elements=[users.c.id])
+                .on_conflict_do_update(
+                    index_elements=[users.c.id], set_={"email": person["email"], "name": person["name"]}
+                )
             )
+            await c.execute(sa.update(members).where(members.c.user_id == person["id"]).values(email=person["email"]))
             for team_id, role in person["teams"].items():
                 fields = {"email": person["email"], "role": role, "status": "active", "updated_at": now}
                 created = await c.execute(

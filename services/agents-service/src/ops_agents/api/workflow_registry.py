@@ -593,7 +593,7 @@ def workflow_view(
         "stepCount": steps,
         "gateCount": gates,
         "runs24h": runs,
-        # Needs decisions per thread joined in, which the review service will own.
+        # A v1 thread keeps no record of reviews it has already had decided, so only open ones can be counted.
         "reviewed24h": 0,
         "openReviews": waiting,
         "status": row["status"],

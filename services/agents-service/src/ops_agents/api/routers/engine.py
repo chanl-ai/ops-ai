@@ -29,6 +29,7 @@ from ops_engine.store import (
     RunStore,
     WorkflowOwnedError,
 )
+from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, ListResult, paged
 from ops_service_kit.ids import now_iso
@@ -427,10 +428,10 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
                 "trigger": trigger,
                 "agentSlugs": [],
                 "stepCount": len(nodes),
-                "gateCount": sum(1 for n in nodes if n.get("type") == "ops.flow.humanReview"),
+                "gateCount": sum(1 for n in nodes if n.get("type") == HUMAN_REVIEW),
                 "runs24h": d["recent"],
-                "reviewed24h": 0,
-                "openReviews": 0,
+                "reviewed24h": d["reviewed"],
+                "openReviews": d["open_reviews"],
                 "status": workflow_status(d, request),
                 "version": d["current_version"] or 0,
                 "updatedAt": d["created_at"],
