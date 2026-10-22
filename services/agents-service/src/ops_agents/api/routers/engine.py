@@ -23,6 +23,8 @@ from ops_engine import default_registry
 from ops_engine.compiler import redacted
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
 from ops_engine.document_types import pinned, unpinned
+from ops_engine.node_types import start_form
+from ops_engine.starts import only_from_workflows
 from ops_engine.store import (
     TERMINAL,
     DefinitionStore,
@@ -38,7 +40,7 @@ from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
 from ...store.tenancy import current_team, current_tenant
-from .. import ai_steps_gate, engine_lifecycle, step_shapes, task_view
+from .. import ai_steps_gate, engine_lifecycle, run_starts, step_shapes, task_view
 from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
@@ -192,6 +194,19 @@ class OpenPublishRequest(Out):
     created_at: str
 
 
+class StartFormView(Out):
+    # The adapter that runs it: email (a test email) or form (the trigger's input schema).
+    kind: str
+    # The start dialog's title and its button.
+    title: str
+    action: str
+    # How a run started this way reads in audit: "test email by <person>".
+    via: str
+    # The form as JSON Schema; `format: "file"` fields upload or pick files.
+    schema_: dict[str, Any] = Field(alias="schema")
+    takes_files: bool
+
+
 class DefinitionView(Out):
     workflow_id: str
     name: str
@@ -207,6 +222,8 @@ class DefinitionView(Out):
     review: OpenPublishRequest | None
     # When the workflow was archived (c-274); None while it is not.
     archived_at: str | None = None
+    # How a person starts it by hand, as its trigger declares (c-466); None for a trigger only its source starts.
+    start_form: StartFormView | None = None
 
 
 def definitions(rt: Runtime) -> DefinitionStore:
@@ -397,6 +414,18 @@ def workflow_status(summary: dict[str, Any], request: dict[str, Any] | None) -> 
     return "in_review" if request is not None else "draft"
 
 
+def start_of(definition: dict[str, Any]) -> dict[str, Any]:
+    """How a definition starts, for the Workflows list and its pickers (c-466): the start form's kind, whether a person
+    starts it by hand (a declared start form, and not only other workflows), and whether that form takes a file."""
+    form = start_form(definition, REGISTRY)
+    by_hand = form is not None and not only_from_workflows(definition)
+    return {
+        "kind": form["kind"] if form else "source",
+        "byHand": by_hand,
+        "takesFiles": by_hand and bool(form and form["takesFiles"]),
+    }
+
+
 async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
     """Each v2 workflow as a row of the Workflows list (schemas.Workflow, `engine` v2), so the list joins both kinds on
     the server: steps are its nodes, gates its human reviews, the trigger its trigger node's type label; its status is
@@ -437,6 +466,7 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
                 "deploymentCount": 0,
                 "kind": "standard",
                 "engine": "v2",
+                "start": start_of(stored),
                 **(
                     {
                         "pendingPublish": {
@@ -551,6 +581,7 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
         "paused": bool(current and current["stage"] == "paused"),
         "review": review,
         "archivedAt": row.get("archived_at"),
+        "startForm": start_form(row["definition"], REGISTRY),
     }
 
 
@@ -861,6 +892,71 @@ def steps_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+async def startable(
+    rt: Runtime, me: Principal, workflow_id: str, version: int | None, mode: Literal["live", "test"]
+) -> dict[str, Any]:
+    """The definition row a run of `mode` starts on, once the caller may start it: any version for a test run (a
+    builder's step), the live one for a live run (a builder, an admin or an API key of the team). Every way to start a
+    run asks here, so they refuse the same callers."""
+    pinned = require_key_reaches(me, "workflow", workflow_id)
+    if pinned is not None and version not in (None, pinned):
+        raise Forbidden(f"This API key starts version {pinned} of {workflow_id} only.", code="key_target")
+    version = version if pinned is None else pinned
+    stored = await definitions(rt).get(workflow_id, version, team=current_team())
+    if stored is None:
+        what = f"version {version} of " if version is not None else ""
+        raise NotFound(f"{what}workflow definition {workflow_id}")
+    if mode == "test":
+        # A test run tries any version, a draft included, which is a builder's step: a builder or admin of the team
+        # that owns the workflow, or of the acting team for one no team owns, which every team runs. An API key never
+        # starts one (require_builder refuses a caller with no role).
+        require_builder(
+            me,
+            area="workflows",
+            team_id=stored.get("team_id") or me.team_id,
+            action="start a test run of",
+            what=f"workflow {workflow_id}",
+        )
+    if mode == "live":
+        # A builder or admin, or an API key of the team (c-122 Q1).
+        require_runs_start(me, team_id=stored.get("team_id"), what=f"workflow {workflow_id}")
+        stored = await live_version(definitions(rt), workflow_id, version, team=current_team())
+    return stored
+
+
+def started_view(run: dict[str, Any], created: bool) -> dict[str, Any]:
+    return {
+        "runId": run["id"],
+        "workflowId": run["workflow_id"],
+        "version": run["version"],
+        "digest": run["digest"],
+        "status": run["status"],
+        "created": created,
+    }
+
+
+class StartInput(WireModel):
+    workflow_id: str
+    # As for POST /v1/runs: the live version when left out, or the latest in test mode.
+    version: int | None = None
+    mode: Literal["live", "test"] = "live"
+    # The start form's values (StartFormView.schema): a test email's from, subject, body and attachments, or a
+    # Request trigger's input.
+    values: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
+@runs_router.post("/start", response_model=Envelope[RunStarted], status_code=202)
+async def start_by_hand(rt: Rt, me: Me, body: StartInput) -> JSONResponse:
+    """Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry
+    the trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the
+    input and steps a mailbox email gets; a form's values become the input. The run records the person and how they
+    started it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger
+    only its source starts, `email_filtered` for a test email the trigger's filters would skip."""
+    stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
+    run = await run_starts.start(rt, me, stored, body.values, body.mode)
+    return ok(started_view(run, True), status=202)
+
+
 @runs_router.post(
     "",
     response_model=Envelope[RunStarted],
@@ -872,29 +968,7 @@ async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse
     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
     one workflow (c-246) starts that one only, on the version it pins when it pins one."""
-    pinned = require_key_reaches(me, "workflow", body.workflow_id)
-    if pinned is not None and body.version not in (None, pinned):
-        raise Forbidden(f"This API key starts version {pinned} of {body.workflow_id} only.", code="key_target")
-    version = body.version if pinned is None else pinned
-    stored = await definitions(rt).get(body.workflow_id, version, team=current_team())
-    if stored is None:
-        what = f"version {version} of " if version is not None else ""
-        raise NotFound(f"{what}workflow definition {body.workflow_id}")
-    if body.mode == "test":
-        # A test run tries any version, a draft included, which is a builder's step: a builder or admin of the team
-        # that owns the workflow, or of the acting team for one no team owns, which every team runs. An API key never
-        # starts one (require_builder refuses a caller with no role).
-        require_builder(
-            me,
-            area="workflows",
-            team_id=stored.get("team_id") or me.team_id,
-            action="start a test run of",
-            what=f"workflow {body.workflow_id}",
-        )
-    if body.mode == "live":
-        # A builder or admin, or an API key of the team (c-122 Q1).
-        require_runs_start(me, team_id=stored.get("team_id"), what=f"workflow {body.workflow_id}")
-        stored = await live_version(definitions(rt), body.workflow_id, version, team=current_team())
+    stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
     run, created = await start_run(
         runs(rt),
         stored,
@@ -904,15 +978,7 @@ async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse
         run_key=body.run_key,
         created_by=started_by(me),
     )
-    data = {
-        "runId": run["id"],
-        "workflowId": run["workflow_id"],
-        "version": run["version"],
-        "digest": run["digest"],
-        "status": run["status"],
-        "created": created,
-    }
-    return ok(data, status=202 if created else 200)
+    return ok(started_view(run, created), status=202 if created else 200)
 
 
 class RunsQuery(BaseModel):

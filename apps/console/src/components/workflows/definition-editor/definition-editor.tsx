@@ -37,7 +37,7 @@ import { connectionId, inPorts, indexTypes, outPorts, repeatsOver, typeKey, uniq
 import { LifecycleActions, type Lifecycle } from './lifecycle';
 import type { StepRef, StepRefs } from './node-form';
 import { PublishDefinitionDialog } from './publish-dialog';
-import { requestInputSchema, type RunMode, StartDefinitionRunDialog } from '@/components/workflows/start-run-dialog';
+import { type RunMode, StartDefinitionRunDialog } from '@/components/workflows/start-run-dialog';
 import { StepList } from './step-list';
 import { StepSheet } from './step-sheet';
 
@@ -51,6 +51,8 @@ export interface DefinitionEditorProps {
   publishing: boolean;
   /** Starts a live run on the live version, or a test run of the latest saved one; the page navigates to it. */
   startRun: (input: Record<string, unknown>, mode: RunMode) => Promise<void>;
+  /** Starts a run from the start form the saved trigger declares (c-466); the page navigates to it. */
+  startByHand?: (values: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Where the saved versions stand: the latest one's stage, the live version, an open publish request. */
   lifecycle: Lifecycle;
   /** Sends the latest saved draft to Reviews. */
@@ -118,7 +120,7 @@ function patchNode(d: EngineDefinition, id: string, patch: Partial<Pick<EngineNo
   return { ...d, nodes, connections };
 }
 
-function EditorInner({ definition: initial, types, validate, publish, publishing, startRun, lifecycle, requestPublish, setPaused, pausing, readOnly = false, frame }: DefinitionEditorProps) {
+function EditorInner({ definition: initial, types, validate, publish, publishing, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, frame }: DefinitionEditorProps) {
   const [def, setDef] = React.useState<EngineDefinition>(() => withPositions(initial));
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -529,7 +531,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
         onChange={(patch) => opened && change((d) => patchNode(d, opened.id, patch, typeOf(opened)))}
         onDelete={() => opened && removeNodes(new Set([opened.id]))}
       />
-      <StartDefinitionRunDialog open={runOpen} onOpenChange={setRunOpen} workflowName={def.name || def.id} latestVersion={lifecycle.version} liveVersion={lifecycle.liveVersion} paused={lifecycle.paused} onStart={startRun} inputSchema={requestInputSchema(def)} />
+      <StartDefinitionRunDialog open={runOpen} onOpenChange={setRunOpen} workflowName={def.name || def.id} latestVersion={lifecycle.version} liveVersion={lifecycle.liveVersion} paused={lifecycle.paused} onStart={startRun} startForm={lifecycle.startForm} onStartForm={startByHand} />
       <PublishDefinitionDialog
         open={publishOpen}
         onOpenChange={setPublishOpen}

@@ -1071,7 +1071,8 @@
           "kind": {
             "enum": [
               "agent",
-              "event"
+              "event",
+              "start"
             ],
             "title": "Kind",
             "type": "string"
@@ -4777,6 +4778,16 @@
             ],
             "title": "Stage",
             "type": "string"
+          },
+          "startForm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartFormView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version": {
             "title": "Version",
@@ -13960,6 +13971,85 @@
         "title": "SsoStepUpInput",
         "type": "object"
       },
+      "StartFormView": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "title": "Schema",
+            "type": "object"
+          },
+          "takesFiles": {
+            "title": "Takesfiles",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "via": {
+            "title": "Via",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "action",
+          "via",
+          "schema",
+          "takesFiles"
+        ],
+        "title": "StartFormView",
+        "type": "object"
+      },
+      "StartInput": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "live",
+            "enum": [
+              "live",
+              "test"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "title": "Values",
+            "type": "object"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId"
+        ],
+        "title": "StartInput",
+        "type": "object"
+      },
       "StatusInput": {
         "additionalProperties": false,
         "properties": {
@@ -16694,6 +16784,16 @@
             "title": "Runs24H",
             "type": "integer"
           },
+          "start": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowStart"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "enum": [
               "live",
@@ -16866,6 +16966,16 @@
           "runs24h": {
             "title": "Runs24H",
             "type": "integer"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowStart"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "enum": [
@@ -17122,6 +17232,30 @@
           "steps"
         ],
         "title": "WorkflowRun",
+        "type": "object"
+      },
+      "WorkflowStart": {
+        "additionalProperties": false,
+        "properties": {
+          "byHand": {
+            "title": "Byhand",
+            "type": "boolean"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "takesFiles": {
+            "title": "Takesfiles",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "byHand",
+          "takesFiles"
+        ],
+        "title": "WorkflowStart",
         "type": "object"
       },
       "WorkflowTestRun": {
@@ -34002,6 +34136,194 @@
         ]
       }
     },
+    "/v1/runs/start": {
+      "post": {
+        "description": "Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry\nthe trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the\ninput and steps a mailbox email gets; a form's values become the input. The run records the person and how they\nstarted it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger\nonly its source starts, `email_filtered` for a test email the trigger's filters would skip.",
+        "operationId": "workflows_start_by_hand",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RunStarted_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Start By Hand",
+        "tags": [
+          "Workflows"
+        ]
+      }
+    },
     "/v1/runs/{run_id}": {
       "get": {
         "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.",
@@ -42054,6 +42376,7 @@
     },
     "/v1/workflows": {
       "get": {
+        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts (c-466).",
         "operationId": "workflows_list_workflows",
         "parameters": [
           {
@@ -42123,6 +42446,26 @@
               ],
               "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startable",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Startable",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "takesFiles",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Takesfiles",
+              "type": "boolean"
             }
           },
           {

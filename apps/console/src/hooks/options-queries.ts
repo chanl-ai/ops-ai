@@ -4,7 +4,7 @@ import * as React from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { OptionsPage, OptionsParams } from '@/lib/types/query';
+import type { OptionsPage, OptionsParams, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
 
 /** One picker's source: a cache key and the `/options` call behind it. */
@@ -19,19 +19,25 @@ export const toolOptions: OptionSource = { key: 'tool-options', fetch: (p) => ap
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */
 export const peopleOptions: OptionSource = { key: 'people-options', fetch: (p) => api.settings.members.options(p) };
-/** The team's workflows, both engines, searched and paged by the workflows list route; a page number is the cursor. */
-export const workflowOptions: OptionSource = {
-  key: 'workflow-options',
+/** The team's workflows (both engines) under `filters`, searched and paged by the workflows list route; a page number is the cursor. */
+const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSource => ({
+  key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await api.workflows.list({ page, pageSize: limit, search: ids?.length ? undefined : search });
+    const res = await api.workflows.list({ page, pageSize: limit, search: ids?.length ? undefined : search, filters });
     const rows = ids?.length ? res.data.filter((w) => ids.includes(w.id)) : res.data;
     return {
       data: rows.map((w) => ({ id: w.id, label: w.name, hint: w.status === 'live' ? null : w.status })),
       nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
     };
   },
-};
+});
+/** Every workflow of the team. */
+export const workflowOptions = workflowsWhere('workflow-options');
+/** Workflows a person may start by hand: those only other workflows start are left out (c-466). */
+export const startableWorkflowOptions = workflowsWhere('workflow-options:startable', { startable: ['true'] });
+/** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
+export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });
 export const guardrailOptions: OptionSource = { key: 'guardrail-options', fetch: (p) => api.guardrails.options(p) };
 /** Widgets, disabled with the reason when a button needs a tool outside `granted` (the draft's tools). */
 export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `widget-options:${[...granted].sort().join(',')}`, fetch: (p) => api.widgets.options(p, granted) });

@@ -297,6 +297,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/workflow-canvas.md` | uc-121: the workflow editor's canvas fills the page with the sidebar collapsed, at a readable zoom, with floating controls, checks and minimap |
 | `usecases/console/edit-steps-in-a-sheet.md` | uc-122: a workflow step and the trigger open in a sheet beside the canvas, and steps are added from a panel with a tab per group and a search |
 | `usecases/console/start-run-form.md` | uc-445: Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file |
+| `usecases/console/start-from-the-trigger.md` | uc-466: Start run draws the trigger's start form; a test email runs as a mailbox email does; Files starts a workflow with a file |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |

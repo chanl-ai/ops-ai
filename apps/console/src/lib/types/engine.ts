@@ -133,6 +133,8 @@ export interface DefinitionView {
   paused: boolean;
   /** The open publish request, if any. */
   review: { id: string; version: number; requestedBy: string; createdAt: string } | null;
+  /** How a person starts it by hand; null for a trigger only its source starts. */
+  startForm?: StartForm | null;
 }
 
 export interface DefinitionPublishRequest {
@@ -146,6 +148,29 @@ export interface EngineRunInput {
   input?: Record<string, unknown>;
   runKey?: string;
   mode?: 'live' | 'test';
+}
+
+/**
+ * How a person starts a workflow by hand, as its trigger declares it (c-466): the dialog's title and button, how a run
+ * started this way reads in audit, and the form as JSON Schema. The console draws any kind from this alone.
+ */
+export interface StartForm {
+  /** The adapter that runs it, such as email (a test email) or form (the trigger's input schema). */
+  kind: string;
+  title: string;
+  action: string;
+  /** How a run started this way reads: "test email", "form". */
+  via: string;
+  schema: Record<string, unknown>;
+  takesFiles: boolean;
+}
+
+/** `POST /v1/runs/start`: the start form's values, run through the same entry the trigger's real source uses. */
+export interface StartWorkflowInput {
+  workflowId: string;
+  version?: number;
+  mode?: 'live' | 'test';
+  values: Record<string, unknown>;
 }
 
 export interface EngineRunStarted {

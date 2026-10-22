@@ -153,6 +153,9 @@ def _graph(raw: dict[str, Any]) -> dict[str, Any]:
     return {"nodes": raw.get("nodes") or [], "edges": raw.get("edges") or []}
 
 
+V1_START: dict[str, Any] = {"kind": "form", "byHand": True, "takesFiles": False}
+
+
 @router.get("", response_model=Envelope[ListResult[Workflow]])
 async def list_workflows(
     *,
@@ -163,9 +166,17 @@ async def list_workflows(
     search: str | None = None,
     sort_by: Annotated[str | None, Query(alias="sortBy")] = None,
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "asc",
+    startable: bool = False,
+    takes_files: Annotated[bool, Query(alias="takesFiles")] = False,
 ) -> JSONResponse:
+    """The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
+    run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
+    `start` says how it starts (c-466)."""
     counts = await counts_24h(rt)
-    rows = [await _view(rt, r["id"], counts) for r in await registry(rt).rows()]
+    # A graph workflow of the earlier engine starts from its input form, with no file field.
+    rows: list[dict[str, Any]] = [
+        {**await _view(rt, r["id"], counts), "start": V1_START} for r in await registry(rt).rows()
+    ]
     # v2 runner definitions join here, so the console lists both kinds from one page of one request.
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     rows += await engine.v2_workflow_rows(rt, since)
@@ -175,6 +186,11 @@ async def list_workflows(
     facets: dict[str, dict[str, int]] = {"status": {}}
     for w in rows:
         facets["status"][w["status"]] = facets["status"].get(w["status"], 0) + 1
+    # startable: what Start run offers; takesFiles: what Files offers to start with a file (c-466).
+    if startable:
+        rows = [w for w in rows if w["start"]["byHand"]]
+    if takes_files:
+        rows = [w for w in rows if w["start"]["takesFiles"]]
     wanted = request.query_params.getlist("status")
     # An archived workflow leaves the list unless asked for; the facet still counts it, so the filter can show it.
     rows = [w for w in rows if w["status"] in wanted] if wanted else [w for w in rows if w["status"] != "archived"]

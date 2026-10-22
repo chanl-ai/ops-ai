@@ -11,7 +11,7 @@ import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
 import { useCanBuild } from '@/hooks/me-queries';
-import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useValidateDefinition } from '@/hooks/engine-queries';
+import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow, useValidateDefinition } from '@/hooks/engine-queries';
 import { ApiError } from '@/lib/api';
 import type { EngineDefinition } from '@/lib/types/engine';
 
@@ -26,6 +26,7 @@ export default function WorkflowDefinitionPage() {
   const { mutateAsync: validateAsync } = useValidateDefinition();
   const { mutateAsync: publishAsync, isPending: publishing } = usePublishDefinition();
   const { mutateAsync: startAsync } = useStartEngineRun();
+  const { mutateAsync: startByFormAsync } = useStartWorkflow();
   const { mutateAsync: requestAsync } = useRequestDefinitionPublish(id);
   const { mutateAsync: pauseAsync, isPending: pausing } = useSetDefinitionPaused(id);
   const requestPublish = React.useCallback((note: string) => requestAsync({ note }), [requestAsync]);
@@ -40,6 +41,13 @@ export default function WorkflowDefinitionPage() {
       router.push(`/workflows/runs/${run.runId}`);
     },
     [startAsync, id, router],
+  );
+  const startByHand = React.useCallback(
+    async (values: Record<string, unknown>, mode: 'live' | 'test') => {
+      const run = await startByFormAsync({ workflowId: id, values, mode });
+      router.push(`/workflows/runs/${run.runId}`);
+    },
+    [startByFormAsync, id, router],
   );
 
   const view = definition.data;
@@ -65,6 +73,7 @@ export default function WorkflowDefinitionPage() {
         publish={publish}
         publishing={publishing}
         startRun={startRun}
+        startByHand={startByHand}
         lifecycle={view}
         requestPublish={requestPublish}
         setPaused={pauseAsync}

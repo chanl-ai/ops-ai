@@ -59,7 +59,7 @@ function createApi(): OpsApi {
     api = { ...api, ...tools, governance: { ...api.governance, toolCalls } };
   }
   if (knowledgeUrl) api = { ...api, ...createKnowledgeOnlyHttp(knowledgeUrl) };
-  if (filesUrl) api = { ...api, files: { ...api.files, ...createFilesServiceHttp(filesUrl, api.files), storage: createStorageHttp(filesUrl) } };
+  if (filesUrl) api = { ...api, files: { ...api.files, ...createFilesServiceHttp(filesUrl), storage: createStorageHttp(filesUrl) } };
   if (documentsUrl) api = { ...api, files: { ...api.files, documentTypes: createDocumentsHttp(documentsUrl), extractions: createExtractionsHttp(documentsUrl) } };
   // No service owns notifications yet: once any area is on a real service, the mock feed is not shown beside it.
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };

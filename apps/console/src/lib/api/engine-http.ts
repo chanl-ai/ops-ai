@@ -18,6 +18,7 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     setPaused: (id, paused) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`),
     options: (source) => get(`/workflows/option-sources?source=${source}`),
     startRun: (input) => send('POST', '/runs', input),
+    startWorkflow: (input) => send('POST', '/runs/start', input),
     runs: async ({ workflowId, status = [], page = 1, pageSize = 25 }) => {
       const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize), ...(workflowId ? { workflowId } : {}) });
       for (const s of status) qs.append('status', s);

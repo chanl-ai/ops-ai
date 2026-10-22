@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { BulkResult } from '@/lib/types/domain';
-import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource } from '@/lib/types/engine';
+import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
 
 const ek = {
   nodeTypes: ['engine', 'node-types'] as const,
@@ -78,6 +78,15 @@ export function useStartEngineRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (i: EngineRunInput) => api.engine.startRun(i),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['engine', 'runs'] }),
+  });
+}
+
+/** Starts a run from its trigger's start form: a test email, a form, whatever kind the trigger declares. */
+export function useStartWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: StartWorkflowInput) => api.engine.startWorkflow(i),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['engine', 'runs'] }),
   });
 }

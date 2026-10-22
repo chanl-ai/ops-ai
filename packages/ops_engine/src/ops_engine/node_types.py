@@ -15,6 +15,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
+from .starts import ONLY_FROM_WORKFLOWS, StartSpec, trigger_node
+
 Effects = Literal["none", "model", "read", "write", "human"]
 Group = Literal["trigger", "data", "ai", "action", "flow", "human"]
 ConnectionType = Literal["main", "model", "tool", "knowledge", "memory"]
@@ -111,6 +113,8 @@ class NodeType:
     # The generated form: {"order": [...], "fields": {name: {"label", "widget", "help"?, "placeholder"?, "source"?,
     # "item"?}}}. `item` is the same shape for the objects of a `list`. Checked against `parameters` on register.
     ui: Mapping[str, Any] = field(default_factory=lambda: {"order": [], "fields": {}})
+    # How a person starts a workflow this trigger begins by hand (starts.py); None for a trigger only its source starts.
+    start: StartSpec | None = None
 
     @property
     def key(self) -> tuple[str, int]:
@@ -332,6 +336,36 @@ def _ai_step(
     )
 
 
+# A test email's form: what the mailbox path reads from a message. The adapter (agents-service `run_starts.py`) turns it
+# into the message the listener would read, attachments included.
+TEST_EMAIL_FORM: Mapping[str, Any] = {
+    "type": "object",
+    "required": ["from"],
+    "properties": {
+        "from": {"type": "string", "format": "email", "title": "From", "examples": ["clerk@county-court.example"]},
+        "subject": {"type": "string", "title": "Subject", "examples": ["Notice of levy, case 2026-CV-1182"]},
+        "body": {
+            "type": "string",
+            "title": "Body",
+            "x-widget": "textarea",
+            "examples": ["Please find the notice attached."],
+        },
+        "attachments": {
+            "type": "array",
+            "title": "Attachments",
+            "description": "Upload files or pick ones already in Files; each reaches the workflow as a mailbox "
+            "attachment would.",
+            "items": {
+                "type": "object",
+                "format": "file",
+                "properties": {"fileId": {"type": "string"}, "name": {"type": "string"}},
+                "required": ["fileId"],
+            },
+        },
+    },
+}
+
+
 BASIC_TYPES: tuple[NodeType, ...] = (
     NodeType(
         id="ops.trigger.request",
@@ -344,11 +378,22 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         outputs=(Port("payload"),),
         parameters={
             "type": "object",
-            "properties": {"inputSchema": {"type": "object", "description": "JSON Schema the payload must match"}},
+            "properties": {
+                "inputSchema": {"type": "object", "description": "JSON Schema the payload must match"},
+                ONLY_FROM_WORKFLOWS: {
+                    "type": "boolean",
+                    "description": "Other workflows start it; Start run and Files do not offer it",
+                },
+            },
         },
         ui=_form(
-            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object"))
+            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+            (
+                ONLY_FROM_WORKFLOWS,
+                _f("Only other workflows start this", "switch", "Start run and Files leave it out of their lists"),
+            ),
         ),
+        start=StartSpec(kind="form", title="Start a run", action="Start run", via="form", form_parameter="inputSchema"),
     ),
     NodeType(
         id="ops.trigger.email",
@@ -365,17 +410,25 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         parameters={
             "type": "object",
             "properties": {
-                "mailbox": {"type": "string", "minLength": 1, "description": "A mailbox the team may watch"},
+                "mailbox": {"type": "string", "description": "A mailbox the team may watch; empty watches none"},
                 "folder": {"type": "string", "default": "inbox", "description": "inbox, or a folder name"},
                 "fromContains": {"type": "string", "description": "Only mail whose sender contains this"},
                 "subjectContains": {"type": "string", "description": "Only mail whose subject contains this"},
                 "hasAttachment": {"type": "boolean", "description": "Only mail with at least one attachment"},
                 "dailyCap": {"type": "integer", "minimum": 1, "description": "Most runs to start in a UTC day"},
             },
-            "required": ["mailbox"],
         },
         ui=_form(
-            ("mailbox", _f("Mailbox", "source", "A team mailbox an admin set up for workflows", source="mailboxes")),
+            (
+                "mailbox",
+                _f(
+                    "Mailbox",
+                    "source",
+                    "A team mailbox an admin set up for workflows; empty reads no mail, and Start run still sends it "
+                    "a test email",
+                    source="mailboxes",
+                ),
+            ),
             ("folder", _f("Folder", "text", "inbox, or the name of another folder", placeholder="inbox")),
             ("fromContains", _f("From contains", "text", "Empty takes mail from anyone", placeholder="@court.example")),
             ("subjectContains", _f("Subject contains", "text", "Empty takes any subject")),
@@ -388,6 +441,9 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "Most runs a day; mail past it is recorded on Activity, not run. Empty: no cap",
                 ),
             ),
+        ),
+        start=StartSpec(
+            kind="email", title="Send a test email", action="Send test email", via="test email", form=TEST_EMAIL_FORM
         ),
     ),
     NodeType(
@@ -810,7 +866,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             # The fields inline, a team's document type whose version holds them (c-236), or Detect (c-249).
             "anyOf": [{"required": ["fields"]}, {"required": ["documentType"]}, {"required": ["detect"]}],
             "properties": {
-                "file": {"description": "The files-service file id: " + _MAPPING},
+                "file": {"format": "file", "description": "The files-service file id: " + _MAPPING},
                 "detect": {
                     "type": "boolean",
                     "description": "Classify the file over the team's document types and read it with the kind found",
@@ -1102,7 +1158,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "type": "object",
             "required": ["file", "read"],
             "properties": {
-                "file": {"description": "The files-service file id: " + _MAPPING},
+                "file": {"format": "file", "description": "The files-service file id: " + _MAPPING},
                 "read": {"description": "The Extract from file step's output: " + _MAPPING},
                 "typeName": {"description": "The document type's name as the list shows it: " + _MAPPING},
                 "checked": {"type": "boolean", "description": "A person checked the fields, so none wait"},
@@ -1133,7 +1189,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         parameters={
             "type": "object",
             "required": ["file"],
-            "properties": {"file": {"description": "The deleted file's id: " + _MAPPING}},
+            "properties": {"file": {"format": "file", "description": "The deleted file's id: " + _MAPPING}},
         },
         ui=_form(("file", _f("File", "mapping", "The deleted file, such as $.input.fileId"))),
     ),
@@ -1369,3 +1425,15 @@ BASIC_TYPES: tuple[NodeType, ...] = (
 
 def default_registry() -> TypeRegistry:
     return TypeRegistry(BASIC_TYPES)
+
+
+def start_form(definition: Mapping[str, Any] | None, registry: TypeRegistry) -> dict[str, Any] | None:
+    """The start form of the definition's trigger, resolved for its parameters: `StartSpec.view`, or None when the
+    trigger declares no start by hand."""
+    node = trigger_node(definition)
+    if node is None:
+        return None
+    t = registry.find(str(node.get("type")), int(node.get("typeVersion") or 1))
+    if t is None or t.start is None:
+        return None
+    return t.start.view(cast(Mapping[str, Any], node.get("parameters") or {}))

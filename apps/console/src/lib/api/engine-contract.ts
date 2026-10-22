@@ -1,4 +1,4 @@
-import type { DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource } from '@/lib/types/engine';
+import type { DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
 import type { ListResult } from '@/lib/types/query';
 
 /** The workflow runner: node types, v2 definitions and runs. */
@@ -21,6 +21,8 @@ export interface EngineApi {
   deleteDefinition(workflowId: string): Promise<void>;
   /** Queues a run; a worker runs it. A live run starts only on the live version (409 otherwise); a test run on any. */
   startRun(input: EngineRunInput): Promise<EngineRunStarted>;
+  /** Starts a run from the start form its trigger declares, through the entry the real source uses; 422 for a trigger with none. */
+  startWorkflow(input: StartWorkflowInput): Promise<EngineRunStarted>;
   /** The team's runs, newest first, a page at a time; `facets.status` counts each status under the other filters. */
   runs(params: EngineRunsParams): Promise<ListResult<EngineRun>>;
   run(runId: string): Promise<EngineRunDetail>;

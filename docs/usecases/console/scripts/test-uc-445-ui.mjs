@@ -31,7 +31,9 @@ async function step(name, body) {
 function copies(agentId) {
   const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
   const seeded = JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).find((w) => w.id === 'mail_document');
-  const { teamId: _team, ...notice } = seeded;
+  const { teamId: _team, ...notice } = structuredClone(seeded);
+  // The seed marks the notice read as started only by the email intake (c-466); this use case starts it by hand.
+  for (const n of notice.nodes) if (n.type === 'ops.trigger.request') delete n.parameters.onlyFromWorkflows;
   return {
     dispute: { ...dispute, id: 'uc445_dispute', name: 'Card dispute intake (uc-445)' },
     notice: { ...notice, id: 'uc445_notice', name: 'Mailed document (uc-445)' },
@@ -61,7 +63,8 @@ async function body(consoleUrl) {
     await page.getByRole('button', { name: /^Sign in/ }).first().click();
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-    const form = page.getByRole('dialog', { name: /Start a run of/ });
+    // Start run: <name> for a trigger with a start form (c-466), Start a run of <name> before it.
+    const form = page.getByRole('dialog', { name: /^Start a run(:| of)/ });
     const shot = async (name) => {
       for (const width of [1280, 400]) {
         await page.setViewportSize({ width, height: 900 });
@@ -94,10 +97,12 @@ async function body(consoleUrl) {
     /** Test run from the open form; the request body the console sent and the run the server stored. */
     const startTest = async () => {
       await form.getByRole('radio', { name: /Test run/ }).click();
-      const started = page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/runs$/.test(r.url()), { timeout: 60_000 });
+      const started = page.waitForResponse((r) => r.request().method() === 'POST' && /\/v1\/runs(\/start)?$/.test(r.url()), { timeout: 60_000 });
       await form.getByTestId('definition-start-run-submit').click();
       const res = await started;
-      const sent = JSON.parse(res.request().postData() ?? '{}');
+      const body = JSON.parse(res.request().postData() ?? '{}');
+      // POST /v1/runs/start sends the form as `values` (c-466); POST /v1/runs sent it as `input`.
+      const sent = { ...body, input: body.values ?? body.input };
       const runId = (await res.json()).data?.runId;
       const run = runId ? (await (await fetch(`${agents}/v1/runs/${runId}`, { headers: J })).json()).data : null;
       return { status: res.status(), sent, run };

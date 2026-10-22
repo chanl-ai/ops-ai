@@ -291,7 +291,8 @@
                 "type": "object"
               }
             }
-          }
+          },
+          "onlyFromWorkflows": true
         },
         "position": {
           "x": 0,
@@ -1042,7 +1043,8 @@
                 "title": "Mailbox it arrived in"
               }
             }
-          }
+          },
+          "onlyFromWorkflows": true
         },
         "position": {
           "x": 0,
@@ -1653,7 +1655,8 @@
             "required": [
               "fileId"
             ]
-          }
+          },
+          "onlyFromWorkflows": true
         },
         "position": {
           "x": 0,

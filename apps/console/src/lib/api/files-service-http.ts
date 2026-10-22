@@ -1,5 +1,3 @@
-import type { FilePurpose } from '@/lib/types/files';
-
 import type { FilesApi } from './files-contract';
 import { ApiError } from './contract';
 import { putToStorage } from './files-http';
@@ -7,37 +5,25 @@ import { createTransport } from './http';
 import { optionsQs } from './options';
 import { fetchWithIdentity, identityHeaders } from './request-identity';
 
-/** Upload purposes whose files a service reads from files-service by id. */
-// A workflow run's files go to files-service too, since the run's steps read them there by id (c-273).
-const ON_FILES_SERVICE = new Set<FilePurpose>(['knowledge_source', 'case_attachment']);
-
 const unavailable = (what: string) => () => Promise.reject(new ApiError(`${what} is not on files-service yet.`, 501));
 
 /**
  * The Files page's calls on files-service (`/v1/files`, c-126): the list with its views, counts and facets, a file
- * with its references and versions, download, delete, legal hold, and the file picker's options. Knowledge uploads go
- * to files-service too (c-159), because kb-service adds a file to a base only by its files-service id; uploads for
- * other purposes stay on `fallback` until their services read from files-service. Retention and evidence export are
- * not offered there yet; the page hides those actions.
+ * with its references and versions, download, delete, legal hold, the file picker's options, and every upload.
+ * Uploads of every purpose go here (c-466): an upload stored anywhere else gets an id that the list, the picker and
+ * every service reading files by id cannot find, and files-service is what reuses a team's file with the same bytes.
+ * Retention and evidence export are not offered there yet; the page hides those actions.
  */
 export function createFilesServiceHttp(
   baseUrl: string,
-  fallback: Pick<FilesApi, 'createUpload' | 'transfer' | 'completeUpload'>,
 ): Pick<FilesApi, 'list' | 'get' | 'setData' | 'readRequests' | 'downloadUrl' | 'versions' | 'references' | 'remove' | 'bulkRemove' | 'setLegalHold' | 'setRetention' | 'exportEvidence' | 'createUpload' | 'transfer' | 'completeUpload' | 'options'> {
   const { get, send, qs } = createTransport(`${baseUrl}/v1`);
   const filesHost = new URL(baseUrl).origin;
-  // Uploads this client started on files-service, so completing one goes back to the service that issued it.
-  const issued = new Set<string>();
   return {
-    createUpload: async (i) => {
-      if (!ON_FILES_SERVICE.has(i.purpose)) return fallback.createUpload(i);
-      const ticket = await send<Awaited<ReturnType<FilesApi['createUpload']>>>('POST', '/files/uploads', i);
-      issued.add(ticket.fileId);
-      return ticket;
-    },
-    transfer: (ticket, body, onProgress) =>
-      issued.has(ticket.fileId) ? putToStorage(ticket, body, onProgress, new URL(ticket.uploadUrl, filesHost).origin === filesHost ? identityHeaders() : {}) : fallback.transfer(ticket, body, onProgress),
-    completeUpload: (id, i) => (issued.has(id) ? send('POST', `/files/uploads/${id}/complete`) : fallback.completeUpload(id, i)),
+    createUpload: (i) => send('POST', '/files/uploads', i),
+    // A local backend's upload link is files-service's own content route, which needs the person's token.
+    transfer: (ticket, body, onProgress) => putToStorage(ticket, body, onProgress, new URL(ticket.uploadUrl, filesHost).origin === filesHost ? identityHeaders() : {}),
+    completeUpload: (id) => send('POST', `/files/uploads/${id}/complete`),
     options: (p) => get(`/files/options?${optionsQs(p)}`),
     list: (p) => get(`/files?${qs(p)}`),
     get: (id) => get(`/files/${id}`),
