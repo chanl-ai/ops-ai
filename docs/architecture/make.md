@@ -54,6 +54,8 @@ Every service Makefile answers these. `make -C services/<x> help` lists them.
 `make -C services/models-service run` and set `OPS_MODELS_URL`. `services/hitl-service` holds only a stub `Makefile`
 and `README.md`; the service was removed on 2026-10-16, and Reviews move into the `ops_hitl` package.
 
+Feedback button: run the ui-feedback collector (`node ~/.claude/skills/ui-feedback/collector.mjs`) before `make up` or the docs `pnpm dev`; development only, a production build never shows it.
+
 ## Naming rules
 
 | Rule | Example |

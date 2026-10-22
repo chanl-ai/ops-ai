@@ -4,7 +4,7 @@
   "private": true,
   "description": "The Ops AI docs site: renders ../../docs and services/*/openapi.json at build time",
   "scripts": {
-    "dev": "next dev -p 3040",
+    "dev": "NEXT_PUBLIC_UI_FEEDBACK=${NEXT_PUBLIC_UI_FEEDBACK:-$(curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0)} next dev -p 3040",
     "build": "node scripts/check-links.mjs && node scripts/export-diagrams.mjs --check && next build",
     "start": "next start -p 3040",
     "check:links": "node scripts/check-links.mjs",

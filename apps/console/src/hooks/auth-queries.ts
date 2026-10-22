@@ -66,6 +66,21 @@ function useAuthWrite<A, R>(fn: (a: A) => Promise<R>, clear = false) {
 
 export const useSignInWithPassword = () => useAuthWrite(({ email, password }: { email: string; password: string }) => authProvider.signInWithPassword(email, password), true);
 export const useSignInWithGoogle = () => useAuthWrite(() => authProvider.signInWithGoogle(), true);
+/** The seeded demo people to offer as one-click sign-ins (c-504). A production build never asks, and the sign-in
+ * service answers only in development. */
+export const useDemoPeople = () =>
+  useQuery({
+    queryKey: ['demo-people'],
+    queryFn: () => authProvider.demoPeople?.() ?? Promise.resolve([]),
+    enabled: process.env.NODE_ENV !== 'production' && !!authProvider.demoPeople,
+    staleTime: Infinity,
+    retry: false,
+  });
+export const useSignInAsDemo = () =>
+  useAuthWrite((email: string) => {
+    if (!authProvider.signInAsDemo) throw new Error('This sign-in adapter has no demo sign-in.');
+    return authProvider.signInAsDemo(email);
+  }, true);
 export const useStartSso = () => useAuthWrite((input: { email?: string; domain?: string; next?: string }) => authProvider.startSso(input));
 export const useCompleteSso = () => useAuthWrite((code: string) => authProvider.completeSso(code), true);
 /** How one email signs in, asked once (the forgot-password page, before it sends). */

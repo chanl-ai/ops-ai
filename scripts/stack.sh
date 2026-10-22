@@ -87,6 +87,8 @@ url_of() {
 # AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
 auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
 console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
+# The Feedback button (c-504) shows only when this machine runs the ui-feedback collector at start.
+ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0; }
 
 # Dev mail (c-187, c-192, c-199, c-229). Team mailboxes are records connected on Channels > Email; the dev stack seeds
 # two (services/agents-service/seed/mailboxes.json), levy@harborpine.example and intake@harborpine.test, both on
@@ -145,7 +147,7 @@ cmd_of() {
     console)
       local dist=.next
       [[ "$STACK" == isolated ]] && dist=.next-isolated
-      echo "env $(console_auth)NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)

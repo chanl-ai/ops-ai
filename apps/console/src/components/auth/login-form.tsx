@@ -2,11 +2,12 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { KeyRound } from 'lucide-react';
+import { ChevronDown, KeyRound } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 
 import { AuthError, AuthFormWrapper, AuthHeading } from './auth-form-wrapper';
@@ -22,12 +23,13 @@ export function LoginForm({
   ssoLabel,
   selfSignup,
   initialEmail = '',
-  demo = null,
+  demoPeople = [],
   pending,
   error,
   onPassword,
   onSso,
   onGoogle,
+  onDemo,
   onEmailChange,
 }: {
   methods: { password: boolean; sso: boolean; google: boolean };
@@ -37,13 +39,14 @@ export function LoginForm({
   ssoLabel?: string;
   selfSignup: boolean;
   initialEmail?: string;
-  /** A one-click demo sign-in; only the mock adapter supplies one. */
-  demo?: { name: string; email: string; password: string } | null;
-  pending: 'password' | 'sso' | 'google' | null;
+  /** One-click sign-ins for the seeded demo people; only development supplies any. */
+  demoPeople?: { name: string; email: string; teams: { team: string; role: string }[] }[];
+  pending: 'password' | 'sso' | 'google' | 'demo' | null;
   error: string | null;
   onPassword: (email: string, password: string) => void;
   onSso: (email: string) => void;
   onGoogle: () => void;
+  onDemo?: (email: string) => void;
   /** Called as the email changes, so the page can ask how that email signs in. */
   onEmailChange?: (email: string) => void;
 }) {
@@ -93,10 +96,23 @@ export function LoginForm({
           <LoadingButton type="submit" className="w-full" isLoading={pending === (ssoMode ? 'sso' : 'password')} loadingText={ssoMode ? 'Opening your sign-in…' : 'Signing in…'} data-testid="login-submit">
             {ssoMode ? 'Continue with SSO' : 'Sign in'}
           </LoadingButton>
-          {demo && (
-            <Button type="button" variant="secondary" className="w-full" onClick={() => onPassword(demo.email, demo.password)} data-testid="login-demo">
-              Sign in as {demo.name} (demo)
-            </Button>
+          {demoPeople.length > 0 && onDemo && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <LoadingButton type="button" variant="outline" className="w-full" isLoading={pending === 'demo'} loadingText="Signing in…" disabled={pending !== null} data-testid="login-demo">
+                  Sign in as a demo person <ChevronDown className="size-4" />
+                </LoadingButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-(--radix-dropdown-menu-trigger-width)">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Development only</DropdownMenuLabel>
+                {demoPeople.map((p) => (
+                  <DropdownMenuItem key={p.email} onSelect={() => onDemo(p.email)} className="flex-col items-start gap-0" data-testid="login-demo-person">
+                    <span className="text-sm">{p.name}</span>
+                    {p.teams.length > 0 && <span className="text-xs text-muted-foreground">{p.teams.map((t) => `${t.role.charAt(0).toUpperCase()}${t.role.slice(1)} · ${t.team}`).join(', ')}</span>}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {(methods.sso && !ssoMode) || methods.google ? (
             <>

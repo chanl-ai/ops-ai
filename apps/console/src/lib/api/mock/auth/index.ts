@@ -2,7 +2,7 @@ import { AuthError, type AuthProvider, type MfaSetup, type Session, type SignInR
 
 import { auditSink } from '../governance';
 import { currentSignInPolicy } from '../sign-in-policy';
-import { ABSOLUTE_SESSION_HOURS, DEFAULT_USER_ID, DEMO_TOTP, type MockUser, USERS } from './seed';
+import { ABSOLUTE_SESSION_HOURS, DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, type MockUser, USERS } from './seed';
 
 const KEY = 'ops-auth';
 
@@ -222,6 +222,8 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       }
       return { status: 'signed_in', session: signIn(u, 'password') };
     },
+    demoPeople: async () => USERS.map((u) => ({ name: u.name, email: u.email, teams: [] })),
+    signInAsDemo: async (email) => api.signInWithPassword(email, DEMO_PASSWORD),
     signInWithGoogle: async () => {
       if (!currentSignInPolicy().methods.google) throw new AuthError('Google sign-in is turned off in this workspace’s sign-in policy.', 'policy');
       throw new AuthError('Google sign-in is on in the policy but has no Google client set up yet.', 'not_configured');

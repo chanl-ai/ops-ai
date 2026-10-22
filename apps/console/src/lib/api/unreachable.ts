@@ -4,6 +4,9 @@
  */
 export function isUnreachable(e: unknown): boolean {
   const status = (e as { status?: number } | null)?.status;
+  // A sign-in refusal is an answer (a wrong password, an empty email) unless the service sent a 5xx; only a call that
+  // got no response at all carries no status.
+  if ((e as Error | null)?.name === 'AuthError') return (status ?? 0) >= 500;
   return !!e && (status === undefined || status >= 500);
 }
 
