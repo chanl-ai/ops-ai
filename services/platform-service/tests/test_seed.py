@@ -74,3 +74,20 @@ async def test_the_everyone_admin_seed_makes_each_person_admin_everywhere_and_of
     assert await james_teams() == teams
     await seed(database_url, PEOPLE, everyone_admin=False)
     assert await james_teams() == teams
+
+
+async def test_a_seeded_persons_new_address_reaches_a_database_seeded_before_it(
+    platform: Platform, database_url: str, tmp_path: Path
+) -> None:
+    # The demo bank's rename moved every seeded address; a database seeded before it signs in with the new one.
+    data = json.loads(PEOPLE.read_text())
+    before = json.loads(PEOPLE.read_text())
+    for person in before["people"]:
+        person["email"] = person["email"].replace("@harborpine.example", "@northfieldbank.com")
+    old = tmp_path / "people-before.json"
+    old.write_text(json.dumps(before))
+    await seed(database_url, old)
+    await seed(database_url, PEOPLE)
+    for person in data["people"]:
+        r = await platform.public.post("/v1/auth/sign-in", json={"email": person["email"], "password": DEMO_PASSWORD})
+        assert r.status_code == 200, (person["email"], r.text)

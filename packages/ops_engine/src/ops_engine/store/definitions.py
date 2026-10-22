@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 from ops_store import Guarantee
 
-from .tables import engine_definitions, engine_runs
+from .tables import engine_definitions, engine_runs, engine_steps
 from .tx import LIVE_WORKFLOWS, Transactions
 
 
@@ -19,6 +19,8 @@ class WorkflowOwnedError(PermissionError):
 
 # The stages that serve the workflow: at most one version is in one of them.
 CURRENT = ("live", "paused")
+# The node type whose step opens a Human Task (node_types.py, executor review.open: the only effects="human" type).
+HUMAN_REVIEW = "ops.flow.humanReview"
 
 
 def _seen_by(team: str | None) -> sa.ColumnElement[bool]:
@@ -195,7 +197,8 @@ class DefinitionStore:
     async def summaries(self, since: str | None = None, *, team: str | None = None) -> list[dict[str, Any]]:
         """Each workflow's latest version (name, version, digest, definition, stage, when and by whom), the version
         that serves it with its stage (`current_version`, `current_stage`; None before the first approval), how many
-        runs it has had on any version, and how many started at or after `since` (an ISO time; none when left out);
+        runs it has had on any version, and how many started at or after `since` (an ISO time; none when left out),
+        how many of those opened a Human Task (`reviewed`), and how many Human Tasks are open now (`open_reviews`);
         the caller filters, sorts and pages."""
         t, r = engine_definitions, engine_runs
         tenant = self.tx.tenant()
@@ -223,6 +226,22 @@ class DefinitionStore:
             .group_by(r.c.workflow_id)
             .subquery()
         )
+        # A Human Task is a journaled step of the Human review node type; a step that failed to open one has status
+        # "error". A task is open while its step waits and its run still does (a cancelled run keeps its row).
+        s = engine_steps
+        reached = sa.case((r.c.created_at >= since, r.c.id)) if since else sa.null()
+        is_open = sa.and_(s.c.status == "waiting", r.c.status == "waiting")
+        humans = (
+            sa.select(
+                r.c.workflow_id,
+                sa.func.count(sa.distinct(reached)).label("reviewed"),
+                sa.func.sum(sa.case((is_open, 1), else_=0)).label("open_reviews"),
+            )
+            .join(s, sa.and_(s.c.run_id == r.c.id, s.c.tenant_id == r.c.tenant_id))
+            .where(r.c.tenant_id == tenant, s.c.node_type == HUMAN_REVIEW, s.c.status != "error")
+            .group_by(r.c.workflow_id)
+            .subquery()
+        )
         q = (
             sa.select(
                 t.c.workflow_id,
@@ -239,15 +258,27 @@ class DefinitionStore:
                 serving.c.current_stage,
                 runs.c.runs,
                 runs.c.recent,
+                humans.c.reviewed,
+                humans.c.open_reviews,
             )
             .join(latest, sa.and_(t.c.workflow_id == latest.c.workflow_id, t.c.version == latest.c.version))
             .outerjoin(serving, serving.c.workflow_id == t.c.workflow_id)
             .outerjoin(runs, runs.c.workflow_id == t.c.workflow_id)
+            .outerjoin(humans, humans.c.workflow_id == t.c.workflow_id)
             .where(t.c.tenant_id == tenant, _seen_by(team))
         )
         async with self.tx.tenant_tx() as c:
             rows = (await c.execute(q)).mappings()
-            return [dict(row) | {"runs": int(row["runs"] or 0), "recent": int(row["recent"] or 0)} for row in rows]
+            return [
+                dict(row)
+                | {
+                    "runs": int(row["runs"] or 0),
+                    "recent": int(row["recent"] or 0),
+                    "reviewed": int(row["reviewed"] or 0),
+                    "open_reviews": int(row["open_reviews"] or 0),
+                }
+                for row in rows
+            ]
 
     async def delete_draft(self, workflow_id: str, *, team: str | None = None) -> str:
         """Removes every version of a workflow that has never run. The versions are locked first, and a run start
