@@ -621,7 +621,11 @@ def definition_of(wf: dict[str, Any], names: dict[str, str], mailbox: str | None
         if isinstance(kind, dict) and kind.get("id") in wf.get("documentTypes", {}):
             params["documentType"] = {**kind, "id": wf["documentTypes"][kind["id"]], "version": 1}
         if node["type"] == "ops.trigger.email":
-            params["mailbox"] = mailbox
+            # With no mailbox the trigger reads no mail; Start run still sends it a test email (c-466).
+            if mailbox:
+                params["mailbox"] = mailbox
+            else:
+                params.pop("mailbox", None)
     return copy
 
 
@@ -643,8 +647,7 @@ def ensure_workflows(
     api = builder("agents")
     for wf in workflows:
         if wf.get("needsMailbox") and not mailbox:
-            say("SKIP", f"workflow {wf['name']}", "no OPS_DEMO_MAILBOX in the env file, so nothing reads email")
-            continue
+            say("NOTE", f"workflow {wf['name']}", "no OPS_DEMO_MAILBOX: reads no mail; Start run sends test emails")
         definition = definition_of(wf, names, mailbox)
         wid = definition["id"]
         found = api.get(f"/v1/workflows/definitions/{wid}")

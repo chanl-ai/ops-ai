@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { DateRange } from 'react-day-picker';
-import { ArrowRight, CalendarClock, Clock, Files, FolderOpen, Scale, ShieldX, Trash2, Unlink, Upload } from 'lucide-react';
+import { ArrowRight, CalendarClock, Clock, Files, FolderOpen, Play, Scale, ShieldX, Trash2, Unlink, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -14,10 +14,12 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { fileIcon, PURPOSE_LABEL, RetentionCell, SCAN_LABEL, ScanText, SENSITIVITY_LABEL, SensitivityBadge } from '@/components/files/file-meta';
 import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
 import { DeleteFilesDialog } from '@/components/shared/delete-files-dialog';
+import type { FileRef } from '@/components/shared/file-refs-field';
 import { FileSheet } from '@/components/shared/file-sheet';
 import { ReadAs } from '@/components/files/read-as';
 import { LegalHoldDialog } from '@/components/shared/legal-hold-dialog';
 import { PageLayout } from '@/components/page-layout';
+import { StartWorkflowRunDialog } from '@/components/workflows/start-run-dialog';
 import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -43,7 +45,7 @@ const VIEW_EMPTY: Record<FileView, string> = {
   expiring: 'No file reaches its delete-after date in the next 30 days.',
 };
 
-function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefined, onDelete: (f: FileRecord) => void): ColumnDef<Row>[] {
+function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefined, onDelete: (f: FileRecord) => void, onStart: (f: FileRecord) => void): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((f) => f.name),
     idColumn<Row>((f) => f.id),
@@ -103,6 +105,7 @@ function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefine
             row={row}
             actions={[
               { label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) },
+              { label: 'Start a workflow with this file', icon: Play, onClick: (r) => onStart(r.original), disabledReason: row.original.scan.status === 'clean' ? undefined : 'Only a file scanned clean can start a workflow' },
               ...(onHold ? [{ label: row.original.legalHold ? 'Release legal hold' : 'Place legal hold', icon: Scale, onClick: (r: { original: FileRecord }) => onHold(r.original) }] : []),
               { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => onDelete(r.original) },
             ]}
@@ -155,7 +158,22 @@ export default function FilesPage() {
   const facets = query.data?.facets ?? {};
   const classes = storage.data?.retentionClasses ?? [];
   const className = (id: string) => classes.find((c) => c.id === id)?.name ?? id;
-  const cols = React.useMemo(() => columns(!onService, canHold ? (f) => setHolding({ rows: [f], hold: !f.legalHold }) : undefined, (f) => setDeleting([f])), [onService, canHold]);
+  // The file a workflow starts with: kept while its start form is open, after the picker closes.
+  const [startFile, setStartFile] = React.useState<FileRef | undefined>();
+  const [startPicking, setStartPicking] = React.useState(false);
+  const cols = React.useMemo(
+    () =>
+      columns(
+        !onService,
+        canHold ? (f) => setHolding({ rows: [f], hold: !f.legalHold }) : undefined,
+        (f) => setDeleting([f]),
+        (f) => {
+          setStartFile({ fileId: f.id, name: f.name });
+          setStartPicking(true);
+        },
+      ),
+    [onService, canHold],
+  );
   const rows: Row[] = React.useMemo(() => rows0.map((f) => ({ ...f, onRowClick: (x: FileRecord) => setActiveId(x.id) })), [rows0, setActiveId]);
   const optionsOf = <K extends string>(key: string, label: (k: K) => string) => Object.keys(facets[key] ?? {}).map((k) => ({ label: label(k as K), value: k, count: facets[key]?.[k] ?? 0 }));
   const index = rows.findIndex((r) => r.id === activeId);
@@ -321,6 +339,7 @@ export default function FilesPage() {
           </Button>
         </p>
       )}
+      <StartWorkflowRunDialog open={startPicking} onOpenChange={setStartPicking} file={startFile} />
       <AddDocumentsDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}

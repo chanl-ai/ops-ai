@@ -219,6 +219,17 @@ export interface Workflow {
   wrapsAgentId?: string;
   /** The wrapped agent's name, filled by the API. */
   wrapsAgentName?: string;
+  /** How it starts, read from its trigger (c-466). */
+  start?: WorkflowStart;
+}
+
+export interface WorkflowStart {
+  /** The start form's kind (`email`, `form`, or a later one), or `source` for a trigger only its source starts. */
+  kind: string;
+  /** Start run and Files offer it: its trigger declares a start form and other workflows are not its only starters. */
+  byHand: boolean;
+  /** Its start form has a file field, so Files offers to start it with a file. */
+  takesFiles: boolean;
 }
 
 export interface WorkflowInput {

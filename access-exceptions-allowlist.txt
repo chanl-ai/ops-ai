@@ -76,6 +76,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
 * conflict credential_in_use 0 state
+* conflict daily_cap 0 state
 * conflict decided_in_reviews 0 state
 * conflict decided_in_workflow 0 state
 * conflict definition_has_runs 0 state

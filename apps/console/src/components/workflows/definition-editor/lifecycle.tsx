@@ -28,7 +28,7 @@ export function StageBadge({ stage, testId }: { stage: DefinitionStage; testId?:
   );
 }
 
-export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review'>;
+export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review' | 'startForm'>;
 
 /**
  * Where the saved versions stand and what can move them: send the latest draft to Reviews, follow an open request,

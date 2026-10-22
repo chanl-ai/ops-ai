@@ -44,7 +44,8 @@ export type ReviewFilters = { risk?: string[]; workflowId?: string[]; kind?: str
 export type ReviewListParams = ListParams<ReviewFilters> & { view: ReviewView };
 
 export type AgentFilters = { availability?: string[]; teamId?: string[] };
-export type WorkflowFilters = { status?: string[] };
+/** `startable`: leave out workflows only other workflows start; `takesFiles`: only workflows a file can start. Both `['true']`. */
+export type WorkflowFilters = { status?: string[]; startable?: string[]; takesFiles?: string[] };
 export type PolicyFilters = { workflowId?: string[] };
 export type RunFilters = { status?: string[] };
 export type DeploymentFilters = { channel?: string[]; environment?: string[]; workflowId?: string[]; status?: string[] };

@@ -29,6 +29,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .node_types import TypeRegistry
+from .starts import file_shape
 
 MAPPING_PREFIX = "$."
 # Between whole-value paths: `$.a ?? $.b` reads the first that is not empty.
@@ -198,6 +199,45 @@ def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[dict[str, An
     return out
 
 
+REQUEST_TRIGGER = "ops.trigger.request"
+# `$.input.<name>` or `$.input.<name>.fileId`: a whole run input a step reads as a file.
+INPUT_FILE_PATH = re.compile(r"^\$\.input\.([A-Za-z0-9_]+)(?:\.fileId)?$")
+
+
+def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
+    """`file_input_unmarked`: a step parameter its type marks `format: "file"` reads a Request trigger's input that the
+    trigger's schema does not declare a file field, so the start form would ask for a file id in a text box (c-466).
+    The rule reads the node types' schemas, never a field's or step's name."""
+    trigger = next((n for n in d.nodes if n.type == REQUEST_TRIGGER), None)
+    if trigger is None:
+        return []
+    schema = cast(dict[str, Any], trigger.parameters.get("inputSchema") or {})
+    props = cast(dict[str, Any], schema.get("properties") or {})
+    out: list[dict[str, Any]] = []
+    for n in d.nodes:
+        t = registry.find(n.type, n.type_version)
+        if t is None:
+            continue
+        for param, spec in cast(dict[str, Any], t.parameters.get("properties") or {}).items():
+            if not isinstance(spec, dict) or cast(dict[str, Any], spec).get("format") != "file":
+                continue
+            for path in mappings(n.parameters.get(param)):
+                found = INPUT_FILE_PATH.match(path.strip())
+                if found is None:
+                    continue
+                name = found.group(1)
+                field = props.get(name)
+                if isinstance(field, dict) and file_shape(cast(dict[str, Any], field)):
+                    continue
+                title = str(cast(dict[str, Any], field).get("title") or name) if isinstance(field, dict) else name
+                msg = (
+                    f"{n.id} reads {title} as a file, so the trigger's input must declare {name} a file field "
+                    '(format "file"); otherwise the start form asks for a file id in a text box.'
+                )
+                out.append(_check(trigger.id, "file_input_unmarked", msg, "inputSchema"))
+    return out
+
+
 def _check(node: str | None, code: str, message: str, field: str | None = None) -> dict[str, Any]:
     return {"node": node, "level": "error", "code": code, "message": message, "field": field}
 
@@ -327,6 +367,7 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, An
             if not d.targets(node_id, port):
                 checks.append(_check(node_id, "unconnected_port", f"Out port {port} of {node_id} leads nowhere."))
     checks.extend(_approval_order(d, known))
+    checks.extend(_unmarked_file_inputs(d, registry))
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         sources = {c.source.node for c in d.connections if c.target.node == n.id}

@@ -72,6 +72,8 @@ export function FileUpload({
   testId,
   types,
   upload,
+  others = [],
+  shown,
 }: {
   purpose: FilePurpose;
   multiple?: boolean;
@@ -90,6 +92,10 @@ export function FileUpload({
   types?: string[];
   /** Sends each file in one request to a service that stores and checks it (chat attachments); yields its id. */
   upload?: (file: File) => Promise<{ fileId: string }>;
+  /** Files attached another way (picked from Files), listed as rows beside the uploads so each file shows once. */
+  others?: { key: string; name: string; status: string; onRemove: () => void }[];
+  /** Which uploads to list; a caller that no longer holds a finished upload leaves it out. All by default. */
+  shown?: (item: UploadItem) => boolean;
 }) {
   const up = useFileUpload({ purpose, team, retentionClass, multiple, upload });
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -127,9 +133,10 @@ export function FileUpload({
     />
   );
 
-  const rows = up.items.length > 0 && (
+  const listed = shown ? up.items.filter(shown) : up.items;
+  const rows = (listed.length > 0 || others.length > 0) && (
     <ul className={cn('divide-y rounded-md border', variant === 'compact' && 'border-0 divide-y-0 flex flex-wrap gap-1.5')} data-testid={testId ? `${testId}-items` : undefined}>
-      {up.items.map((it) => {
+      {listed.map((it) => {
         const Icon = fileIcon(it.name);
         if (variant === 'compact')
           return (
@@ -167,6 +174,23 @@ export function FileUpload({
               </Button>
             )}
             <Button variant="ghost" size="icon" className="size-7" onClick={() => up.remove(it.key)} aria-label={`Remove ${it.name}`}>
+              <X className="size-3.5" />
+            </Button>
+          </li>
+        );
+      })}
+      {others.map((o) => {
+        const Icon = fileIcon(o.name);
+        return (
+          <li key={o.key} className="flex items-center gap-3 px-3 py-2" data-phase="ready">
+            <Icon className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">{o.name}</div>
+              <div className="inline-flex items-center gap-1 text-xs text-success-text">
+                <CheckCircle2 className="size-3" /> {o.status}
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" className="size-7" onClick={o.onRemove} aria-label={`Remove ${o.name}`}>
               <X className="size-3.5" />
             </Button>
           </li>

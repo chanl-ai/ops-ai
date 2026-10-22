@@ -83,6 +83,8 @@ class Runtime:
     team_names: Any = None
     # File display names from files-service (file_names.py); None without a files URL.
     file_names: Any = None
+    # files-service as a test email's attachments are read and stored (run_starts.py, c-466); None without a files URL.
+    start_files: Any = None
     # People's display names from platform-service (people_names.py); None without a platform URL.
     people_names: Any = None
     # API keys from platform-service for the Channels list (key_summaries.py); None without a platform URL.

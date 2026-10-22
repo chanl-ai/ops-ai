@@ -18,7 +18,7 @@ import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from ops_access import can
 from ops_email import CursorRefusedError, EmailFilter, InboundMessage, MailSource, drain
@@ -95,7 +95,8 @@ async def bindable(mailboxes: MailboxStore, row: dict[str, Any], address: str) -
 async def require_binding(mailboxes: MailboxStore, me: Principal, row: dict[str, Any]) -> None:
     """Refuses to take a version live whose email trigger the publisher may not bind. A no-op for other triggers."""
     binding = binding_of(row.get("definition"))
-    if binding is None:
+    if binding is None or not binding.mailbox:
+        # No mailbox named: the trigger reads no mail, so there is nothing to authorise until one is set (c-466).
         return
     mailbox, why = await bindable(mailboxes, row, binding.mailbox)
     if mailbox is None:
@@ -136,6 +137,24 @@ class PollResult:
 
 
 @dataclass(frozen=True)
+class Target:
+    """The workflow version an email starts and the team its run, files and trigger events belong to: the mailbox's
+    team for mail read from a mailbox, the person's team for a test email."""
+
+    row: dict[str, Any]
+    binding: EmailBinding
+    team: str
+
+    @property
+    def tenant(self) -> str:
+        return str(self.row["tenant_id"])
+
+    @property
+    def workflow(self) -> str:
+        return str(self.row["workflow_id"])
+
+
+@dataclass(frozen=True)
 class Bound:
     """A live version's email trigger with the mailbox record it may read."""
 
@@ -150,6 +169,158 @@ class Bound:
     @property
     def workflow(self) -> str:
         return str(self.row["workflow_id"])
+
+    @property
+    def target(self) -> Target:
+        return Target(self.row, self.binding, self.mailbox.team_id)
+
+
+@dataclass(frozen=True)
+class Started:
+    """What `EmailStarts.start` did: the run (None when the daily cap held the message back) and whether this call
+    created it."""
+
+    run: dict[str, Any] | None
+    created: bool
+
+
+class EmailStarts:
+    """One email message to one run: the attachments and the text stored in Files, the closed EMAIL input built, the
+    run started under the message's run key, and a trigger event recorded. The mailbox listener calls it for each new
+    message and the test email composer for the message a person writes (c-466), so both runs get the same input and
+    take the same steps; only who started it differs."""
+
+    def __init__(self, db: AsyncEngine, files: FilesClient) -> None:
+        self.db = db
+        self.files = files
+        self.events = TriggerEvents(db)
+
+    async def start(
+        self,
+        b: Target,
+        msg: InboundMessage,
+        *,
+        mode: Literal["live", "test"] = "live",
+        by: str | None = None,
+        via: str | None = None,
+    ) -> Started:
+        """Stores the attachments in Files, then starts the run. `by` is the person who wrote a test email and `via`
+        what they wrote it in; mail read from a mailbox is started by `trigger:email:<mailbox>`."""
+        key = run_key(msg.fingerprint)
+        runs = RunStore(EngineTransactions(self.db))
+        if (existing := await runs.by_key(b.workflow, key)) is not None:
+            # A redelivery: its run exists, and its attachments are already in Files.
+            await self.record(b, msg, "duplicate", run_id=str(existing["id"]))
+            return Started(existing, False)
+        cap = b.binding.daily_cap
+        # One poller per binding holds its lease, so counting then starting cannot let two runs past the cap.
+        if cap is not None and await self.events.started_since(b.workflow, today()) >= cap:
+            log.info("email_daily_cap", workflow=b.workflow, cap=cap)
+            await self.record(b, msg, "daily_cap", detail={"dailyCap": cap})
+            return Started(None, False)
+        team = b.team
+        sender = by or f"trigger:email:{b.binding.mailbox}"
+        attachments: list[dict[str, Any]] = []
+        # Attachments not stored, with why: the run says what it did not get instead of the pass failing on them.
+        skipped: list[dict[str, Any]] = []
+        for i, a in enumerate(msg.attachments):
+            try:
+                data = a.data()
+            except binascii.Error:
+                log.warning("email_attachment_unreadable", workflow=b.workflow, name=a.name)
+                skipped.append(
+                    {"name": a.name, "reason": "unreadable", "message": "The attachment could not be decoded."}
+                )
+                continue
+            try:
+                stored = await self.files.write(
+                    b.tenant,
+                    team,
+                    data,
+                    name=a.name,
+                    mime=a.mime or "application/octet-stream",
+                    purpose="case_attachment",
+                    uploaded_by=sender,
+                    idempotency_key=f"{key}:{i}",
+                )
+            except FilesRefused as e:
+                if (reason := refusal(e.status)) is None:
+                    raise  # files-service down or this service's token refused: read the message again later
+                log.info("email_attachment_refused", workflow=b.workflow, name=a.name, status=e.status, code=e.code)
+                skipped.append({"name": a.name, "reason": reason, "message": e.message})
+                continue
+            attachments.append(
+                {"fileId": stored.file.id, "name": a.name, "mime": stored.file.mime, "size": stored.file.size}
+            )
+        # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
+        # with places and corrections (c-259); the plain body stays on the input for workflows that use it.
+        body_file: dict[str, Any] | None = None
+        if msg.body and msg.body.strip():
+            try:
+                stored = await self.files.write(
+                    b.tenant,
+                    team,
+                    msg.body.encode("utf-8"),
+                    name=BODY_FILE,
+                    mime="text/plain",
+                    purpose="email_body",
+                    uploaded_by=sender,
+                    idempotency_key=f"{key}:body",
+                )
+            except FilesRefused as e:
+                if (reason := refusal(e.status)) is None:
+                    raise
+                skipped.append({"name": BODY_FILE, "reason": reason, "message": e.message})
+            else:
+                body_file = {
+                    "fileId": stored.file.id,
+                    "name": BODY_FILE,
+                    "mime": stored.file.mime,
+                    "size": stored.file.size,
+                }
+        envelope = {
+            "messageId": msg.key,
+            "from": msg.sender,
+            "subject": msg.subject,
+            "body": msg.body,
+            "receivedAt": msg.received_at,
+            "mailbox": b.binding.mailbox,
+            "folder": b.binding.folder,
+            "attachments": attachments,
+            "bodyFile": body_file,
+            "skipped": skipped,
+        }
+        run, created = await start_run(
+            runs, b.row, team_id=team, mode=mode, input=envelope, run_key=key, created_by=sender, started_via=via
+        )
+        if created:
+            log.info("email_run_started", workflow=b.workflow, run=run["id"], message=msg.key, via=via)
+        await self.record(b, msg, "started" if created else "duplicate", run_id=str(run["id"]))
+        return Started(run, created)
+
+    async def record(
+        self,
+        b: Target,
+        msg: InboundMessage,
+        outcome: Outcome,
+        *,
+        run_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        await self.events.add(
+            TriggerEvent(
+                team_id=b.team,
+                workflow_id=b.workflow,
+                source=f"email:{b.binding.mailbox}",
+                event_key=run_key(msg.fingerprint),
+                sender=msg.sender,
+                subject=msg.subject,
+                received_at=msg.received_at,
+                outcome=outcome,
+                run_id=run_id,
+                detail=detail,
+            )
+        )
 
 
 class EmailTriggers:
@@ -178,6 +349,7 @@ class EmailTriggers:
         self.cursors = PollCursors(db)
         self.events = TriggerEvents(db)
         self.mailboxes = MailboxStore(db)
+        self.starts = EmailStarts(db, files)
 
     async def bindings(self) -> list[Bound]:
         """Every live version's email trigger whose mailbox it may read, in every tenant. A paused mailbox is left
@@ -185,7 +357,7 @@ class EmailTriggers:
         out: list[Bound] = []
         for row in await DefinitionStore(EngineTransactions(self.db)).live_everywhere():
             binding = binding_of(row["definition"])
-            if binding is None:
+            if binding is None or not binding.mailbox:
                 continue
             mailbox, why = await bindable(self.mailboxes, row, binding.mailbox)
             if mailbox is None:
@@ -306,98 +478,20 @@ class EmailTriggers:
         await self.cursors.save(binding_id, PollCursor(b.binding.mailbox, b.binding.folder, cursor))
 
     async def _start(self, b: Bound, msg: InboundMessage) -> str | None:
-        """Stores the attachments in Files, then starts the run. Returns the run id when this call created it."""
-        key = run_key(msg.fingerprint)
-        runs = RunStore(EngineTransactions(self.db))
-        if (existing := await runs.by_key(b.workflow, key)) is not None:
-            # A redelivery: its run exists, and its attachments are already in Files.
-            await self._record(b, msg, "duplicate", run_id=str(existing["id"]))
-            return None
-        cap = b.binding.daily_cap
-        # One poller per binding holds its lease, so counting then starting cannot let two runs past the cap.
-        if cap is not None and await self.events.started_since(b.workflow, today()) >= cap:
-            log.info("email_daily_cap", workflow=b.workflow, cap=cap)
-            await self._record(b, msg, "daily_cap", detail={"dailyCap": cap})
-            return None
-        team = b.mailbox.team_id
-        sender = f"trigger:email:{b.binding.mailbox}"
-        attachments: list[dict[str, Any]] = []
-        # Attachments not stored, with why: the run says what it did not get instead of the pass failing on them.
-        skipped: list[dict[str, Any]] = []
-        for i, a in enumerate(msg.attachments):
-            try:
-                data = a.data()
-            except binascii.Error:
-                log.warning("email_attachment_unreadable", workflow=b.workflow, name=a.name)
-                skipped.append(
-                    {"name": a.name, "reason": "unreadable", "message": "The attachment could not be decoded."}
-                )
-                continue
-            try:
-                stored = await self.files.write(
-                    b.tenant,
-                    team,
-                    data,
-                    name=a.name,
-                    mime=a.mime or "application/octet-stream",
-                    purpose="case_attachment",
-                    uploaded_by=sender,
-                    idempotency_key=f"{key}:{i}",
-                )
-            except FilesRefused as e:
-                if (reason := refusal(e.status)) is None:
-                    raise  # files-service down or this service's token refused: read the message again later
-                log.info("email_attachment_refused", workflow=b.workflow, name=a.name, status=e.status, code=e.code)
-                skipped.append({"name": a.name, "reason": reason, "message": e.message})
-                continue
-            attachments.append(
-                {"fileId": stored.file.id, "name": a.name, "mime": stored.file.mime, "size": stored.file.size}
-            )
-        # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
-        # with places and corrections (c-259); the plain body stays on the input for workflows that use it.
-        body_file: dict[str, Any] | None = None
-        if msg.body and msg.body.strip():
-            try:
-                stored = await self.files.write(
-                    b.tenant,
-                    team,
-                    msg.body.encode("utf-8"),
-                    name=BODY_FILE,
-                    mime="text/plain",
-                    purpose="email_body",
-                    uploaded_by=sender,
-                    idempotency_key=f"{key}:body",
-                )
-            except FilesRefused as e:
-                if (reason := refusal(e.status)) is None:
-                    raise
-                skipped.append({"name": BODY_FILE, "reason": reason, "message": e.message})
-            else:
-                body_file = {
-                    "fileId": stored.file.id,
-                    "name": BODY_FILE,
-                    "mime": stored.file.mime,
-                    "size": stored.file.size,
-                }
-        envelope = {
-            "messageId": msg.key,
-            "from": msg.sender,
-            "subject": msg.subject,
-            "body": msg.body,
-            "receivedAt": msg.received_at,
-            "mailbox": b.binding.mailbox,
-            "folder": b.binding.folder,
-            "attachments": attachments,
-            "bodyFile": body_file,
-            "skipped": skipped,
-        }
-        run, created = await start_run(
-            runs, b.row, team_id=team, mode="live", input=envelope, run_key=key, created_by=sender
-        )
-        if created:
-            log.info("email_run_started", workflow=b.workflow, run=run["id"], message=msg.key)
-        await self._record(b, msg, "started" if created else "duplicate", run_id=str(run["id"]))
-        return str(run["id"]) if created else None
+        """Starts the run for one new message. Returns the run id when this call created it."""
+        started = await self.starts.start(b.target, msg)
+        return str(started.run["id"]) if started.run is not None and started.created else None
+
+    async def _record(
+        self,
+        b: Bound,
+        msg: InboundMessage,
+        outcome: Outcome,
+        *,
+        run_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        await self.starts.record(b.target, msg, outcome, run_id=run_id, detail=detail)
 
     async def _skipped_since_last_read(self, b: Bound) -> None:
         """A row on the workflow's trigger list and on Activity: the mailbox refused where reading had got to, so mail
@@ -418,30 +512,6 @@ class EmailTriggers:
                     "the last read was not read. Reading starts again from now. Check the mailbox for mail that "
                     "needs a run."
                 },
-            )
-        )
-
-    async def _record(
-        self,
-        b: Bound,
-        msg: InboundMessage,
-        outcome: Outcome,
-        *,
-        run_id: str | None = None,
-        detail: dict[str, Any] | None = None,
-    ) -> None:
-        await self.events.add(
-            TriggerEvent(
-                team_id=b.mailbox.team_id,
-                workflow_id=b.workflow,
-                source=f"email:{b.binding.mailbox}",
-                event_key=run_key(msg.fingerprint),
-                sender=msg.sender,
-                subject=msg.subject,
-                received_at=msg.received_at,
-                outcome=outcome,
-                run_id=run_id,
-                detail=detail,
             )
         )
 

@@ -28,6 +28,7 @@ export function EntityPicker({
   testId,
   open: openProp,
   onOpenChange,
+  showChosen = true,
 }: {
   source: OptionSource;
   value: string[];
@@ -42,6 +43,8 @@ export function EntityPicker({
   /** Controlled open state, for a page that opens the picker from elsewhere (the skills toolbar's always-on). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Off when the caller lists the chosen items itself (a file field's one list of attached files). */
+  showChosen?: boolean;
 }) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
@@ -69,7 +72,7 @@ export function EntityPicker({
 
   return (
     <div className="flex flex-col gap-2" data-testid={testId}>
-      {value.length > 0 && (
+      {showChosen && value.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {value.map((id) => {
             const o = known.get(id);

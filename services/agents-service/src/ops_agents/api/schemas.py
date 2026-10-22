@@ -550,6 +550,17 @@ class Workflow(Out):
     kind: Literal["standard", "email_intake"]
     # v1 (a graph on /v1/graphs) or v2 (a runner definition on /v1/workflows/definitions); the list holds both.
     engine: Literal["v1", "v2"] = "v1"
+    # How it starts, from its trigger (c-466); the list sets it on every row.
+    start: WorkflowStart | None = None
+
+
+class WorkflowStart(Out):
+    # The start form's kind (email, form), or "source" for a trigger only its source starts (a service event).
+    kind: str
+    # Start run and Files offer it: its trigger declares a start form and other workflows are not its only starters.
+    by_hand: bool
+    # Its start form has a file field, so Files offers to start it with a file.
+    takes_files: bool
 
 
 class WorkflowDraft(Out):

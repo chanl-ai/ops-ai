@@ -304,6 +304,8 @@ export function createMockApi(): OpsApi {
       deploymentCount: deployments.filter((d) => d.workflowId === w.id).length,
       pendingPublish: pending?.publish ? { reviewId: pending.id, toVersion: pending.publish.toVersion, requestedBy: pending.publish.requestedBy } : undefined,
       wrapsAgentName: 'wrapsAgentId' in w && w.wrapsAgentId ? agents.find((a) => a.id === w.wrapsAgentId)?.name : undefined,
+      // The demo's graph workflows start from a form with no file field.
+      start: { kind: 'form', byHand: true, takesFiles: false },
     };
   };
 
@@ -833,7 +835,10 @@ export function createMockApi(): OpsApi {
     },
 
     workflows: {
-      list: (p) => respond((m) => list(teamWorkflows().map(workflowRow), p, { text: (w) => `${w.name} ${w.trigger}`, value: field, facetKeys: ['status'] }, m)),
+      list: (p) =>
+        respond((m) =>
+          list(teamWorkflows().map(workflowRow), p, { text: (w) => `${w.name} ${w.trigger}`, value: (w, k) => (k === 'startable' ? String(!!w.start?.byHand) : k === 'takesFiles' ? String(!!w.start?.takesFiles) : field(w, k)), facetKeys: ['status'] }, m),
+        ),
       get: (wid) =>
         respond((m): WorkflowDetail => {
           const w = m === 'empty' ? undefined : workflows.find((x) => x.id === wid);

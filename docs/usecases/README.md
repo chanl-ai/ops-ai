@@ -231,3 +231,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-404 | console | The console says when its services are out of reach, when a session has ended and when a linked task is gone | ui | current |
 | uc-450 | console | The demo team shows each case and workflow once, and Dispute Desk finds a seeded dispute's charge at the bank | ui | current |
 | uc-445 | console | Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file | ui | passing |
+| uc-466 | console | Start run draws the trigger's start form: a test email runs as a mailbox email does and reaches a Human Task; Files starts a workflow with a file; sub-workflows are not offered; a re-upload under another purpose reuses the file | ui | passing |

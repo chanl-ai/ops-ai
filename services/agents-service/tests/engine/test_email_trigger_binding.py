@@ -189,3 +189,18 @@ async def test_the_mailbox_picker_offers_the_acting_teams_mailboxes_only(
     assert [(o["value"], o["description"]) for o in r.json()["data"]] == [
         ("levy@bank.example", "levy@bank.example · IMAP")
     ]
+
+
+async def test_an_email_trigger_naming_no_mailbox_publishes_and_binds_nothing(
+    stack: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    """c-466: with no mailbox set the trigger reads no mail, so publishing authorises nothing; Start run still sends it
+    a test email. One naming a mailbox keeps the rule above."""
+    c, _ = stack
+    for wid, mailbox in (("notices_no_mail", ""), ("notices_unset", None)):
+        d = email_workflow(wid, "x")
+        params = d["nodes"][0]["parameters"]
+        params.pop("mailbox") if mailbox is None else params.update(mailbox=mailbox)
+        await save(c, d, editor())
+        r = await publish(c, wid, editor())
+        assert r.status_code == 201, (wid, r.text)

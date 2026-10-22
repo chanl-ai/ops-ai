@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from ops_engine import default_registry
+
 from ..store.actor_names import ActorNames
 from .deps import Runtime
 from .key_summaries import PlatformKeySummaries
@@ -16,12 +18,15 @@ from .people_names import PlatformPeopleNames
 from .schemas import Out
 
 EMAIL_TRIGGER = "trigger:email:"
+# How each kind of start by hand reads, from the trigger types that declare one: {"email": "test email", ...}.
+START_VIA = {t.start.kind: t.start.via for t in default_registry().all() if t.start is not None}
 CHILD_RUN = "run:"
 
 
 class AgentRef(Out):
-    # agent: the agent a person asked through; event: the service event that carried a person's request (c-258).
-    kind: Literal["agent", "event"]
+    # agent: the agent a person asked through; event: the service event that carried a person's request (c-258);
+    # start: the start form a person filled by hand, named as its trigger names it ("test email", "form"; c-466).
+    kind: Literal["agent", "event", "start"]
     id: str
     name: str
 
@@ -59,7 +64,7 @@ def event_name(source_and_event: str) -> str:
 
 
 def parse(raw: str) -> Parsed:
-    for marker, kind in ((" via agent:", "agent"), (" via event:", "event")):
+    for marker, kind in ((" via agent:", "agent"), (" via event:", "event"), (" via start:", "start")):
         who, found, via = raw.partition(marker)
         if found:
             return Parsed("person", who, (kind, via))
@@ -105,7 +110,13 @@ async def actors(rt: Runtime, raws: Iterable[str]) -> dict[str, dict[str, Any]]:
             view["name"] = event_name(p.id)
         if p.via:
             kind, via_id = p.via
-            named = names.get(("agent", via_id), via_id) if kind == "agent" else event_name(via_id)
+            named = (
+                names.get(("agent", via_id), via_id)
+                if kind == "agent"
+                else START_VIA.get(via_id, via_id)
+                if kind == "start"
+                else event_name(via_id)
+            )
             view["via"] = {"kind": kind, "id": via_id, "name": named}
         out[raw] = view
     return out

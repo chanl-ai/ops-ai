@@ -329,6 +329,10 @@ def create_app(
         if settings.files_url:
             files = FilesClient.from_settings(settings, service="agents", scopes=["files:view"])
             rt.file_names = FilesServiceNames(files)
+            # A test email's attachments are read back and stored as the mailbox listener stores them.
+            rt.start_files = FilesClient.from_settings(
+                settings, service="agents", scopes=["files:view", "files:create"]
+            )
         rt.knowledge_bases = knowledge
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)
