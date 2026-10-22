@@ -48,6 +48,13 @@ export interface StepUp {
   expiresAt: string;
 }
 
+/** A seeded demo person a development sign-in page offers as one click; the password stays on the server. */
+export interface DemoPerson {
+  name: string;
+  email: string;
+  teams: { team: string; role: string }[];
+}
+
 /** Password accounts only. `code` is the authenticator code, required when the person has enrolled one. */
 export type ReauthInput = { method: 'password'; password: string; code?: string };
 
@@ -60,6 +67,10 @@ export interface AuthProvider {
   /** Called with the new session (or null) after every sign-in, sign-out and expiry. Returns an unsubscribe. */
   onSessionChange(listener: (session: Session | null) => void): () => void;
   signInWithPassword(email: string, password: string): Promise<SignInResult>;
+  /** The seeded demo people, when the sign-in service runs in development; empty anywhere else. */
+  demoPeople?(): Promise<DemoPerson[]>;
+  /** Signs in as one of `demoPeople()`; the sign-in service applies the demo password. */
+  signInAsDemo?(email: string): Promise<SignInResult>;
   signInWithGoogle(): Promise<SignInResult>;
   /** What the typed email's workspace allows, so the sign-in page shows only those methods. Needs no session. */
   signInOptions(email: string): Promise<SignInOptions>;
@@ -102,10 +113,13 @@ export type AuthErrorCode = 'invalid_credentials' | 'invalid_code' | 'invalid_to
 // node --test file imports this module.
 export class AuthError extends Error {
   readonly code: AuthErrorCode;
-  constructor(message: string, code: AuthErrorCode) {
+  /** The sign-in service's HTTP status when it answered; unset when the refusal came from the console itself. */
+  readonly status?: number;
+  constructor(message: string, code: AuthErrorCode, status?: number) {
     super(message);
     this.name = 'AuthError';
     this.code = code;
+    this.status = status;
   }
 }
 

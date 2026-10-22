@@ -4,6 +4,8 @@ introspection behind the service token and is bound to a port the public host ne
 # No `from __future__ import annotations`: routes declare dependencies on functions local to each factory, and
 # FastAPI resolves string annotations against module globals, where those names do not exist.
 
+import json
+from pathlib import Path as FilePath
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs
 
@@ -16,7 +18,7 @@ from fastapi.routing import APIRoute
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_identity import ServiceAuth, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
-from ops_service_kit.errors import Forbidden, Unauthorized, ValidationFailed
+from ops_service_kit.errors import Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -66,6 +68,8 @@ from .schemas import (
     AuditPage,
     BulkOut,
     DeleteIn,
+    DevPerson,
+    DevSignInIn,
     ForgotIn,
     Health,
     HoldersOut,
@@ -128,6 +132,37 @@ def _bearer(authorization: Annotated[str | None, Header()] = None) -> str:
     return token
 
 
+def _seeded_people(seed: FilePath) -> list[dict[str, Any]]:
+    """The seed's people as the dev sign-in page lists them: name, email and each team's name with the role."""
+    data = json.loads(seed.read_text())
+    names = {t["id"]: t["name"] for t in data.get("teams", [])}
+    return [
+        {
+            "name": p["name"],
+            "email": p["email"],
+            "teams": [{"team": names.get(team, team), "role": role} for team, role in p.get("teams", {}).items()],
+        }
+        for p in data.get("people", [])
+    ]
+
+
+def _dev_sign_in(app: FastAPI, auth: Auth, demo_password: str, people: list[dict[str, Any]]) -> None:
+    """One-click sign-in for the seeded demo people (c-504). Mounted only in dev, where the seeded people share the
+    demo password: elsewhere both routes do not exist. The password is applied here and never sent to the browser,
+    and only a seeded email can be signed in this way."""
+    seeded = {p["email"].lower() for p in people}
+
+    @app.get("/v1/auth/dev-people", tags=["platform"], response_model=Envelope[list[DevPerson]], responses=ERRORS)
+    async def dev_people() -> Any:  # pyright: ignore[reportUnusedFunction]
+        return ok(people)
+
+    @app.post("/v1/auth/dev-sign-in", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    async def dev_sign_in(body: DevSignInIn) -> Any:  # pyright: ignore[reportUnusedFunction]
+        if body.email.lower() not in seeded:
+            raise NotFound("A seeded demo person with that email")
+        return ok(_issued(await auth.sign_in(body.email, demo_password, request_id=new_id("req"))))
+
+
 def _issued(i: Issued) -> dict[str, Any]:
     return {"token": i.token, "refreshToken": i.refresh_token, "expiresAt": i.expires_at, "principal": i.principal}
 
@@ -138,6 +173,7 @@ def create_public_app(
     *,
     demo_password: str | None,
     audiences: list[str],
+    dev_people: FilePath | None = None,
     cors_origins: list[str] | None = None,
     token_ttl_s: int = 900,
     step_up_ttl_s: int = STEP_UP_TTL_S,
@@ -207,6 +243,9 @@ def create_public_app(
     @app.post("/v1/auth/sign-in", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sign_in(body: SignIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(_issued(await auth.sign_in(body.email, body.password, request_id=new_id("req"))))
+
+    if demo_password is not None and dev_people is not None:
+        _dev_sign_in(app, auth, demo_password, _seeded_people(dev_people))
 
     @app.get("/v1/auth/session", tags=["platform"], response_model=Envelope[Principal], responses=ERRORS)
     async def session(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]

@@ -2,7 +2,7 @@ import type { MemberRole } from '@/lib/types/settings';
 
 import type { SignedInIdentity } from '@/lib/api/request-identity';
 
-import { AuthError, type AuthMethod, type AuthProvider, type ReauthInput, type Session, type SignInOptions, type SignInResult, type StepUp, type WorkspaceRole } from '../provider.ts';
+import { AuthError, type AuthMethod, type AuthProvider, type DemoPerson, type ReauthInput, type Session, type SignInOptions, type SignInResult, type StepUp, type WorkspaceRole } from '../provider.ts';
 
 /** platform-service's caller, as GET /v1/auth/session and the sign-in response return it. */
 interface Principal {
@@ -155,8 +155,8 @@ export function createPlatformProvider(baseUrl: string): AuthProvider & { identi
     });
     if (res.status === 204) return null;
     const body = await res.json().catch(() => null);
-    if (res.status === 401) throw new AuthError(body?.error?.message ?? 'Sign-in failed. Check the email and password.', 'invalid_credentials');
-    if (!res.ok) throw new AuthError(body?.error?.message ?? `Sign-in service answered ${res.status}.`, 'policy');
+    if (res.status === 401) throw new AuthError(body?.error?.message ?? 'Sign-in failed. Check the email and password.', 'invalid_credentials', 401);
+    if (!res.ok) throw new AuthError(body?.error?.message ?? `Sign-in service answered ${res.status}.`, 'policy', res.status);
     return (body?.data ?? null) as T | null;
   }
 
@@ -259,7 +259,23 @@ export function createPlatformProvider(baseUrl: string): AuthProvider & { identi
       return () => listeners.delete(listener);
     },
     async signInWithPassword(email, password): Promise<SignInResult> {
-      const issued = await call<Issued>('/v1/auth/sign-in', { method: 'POST', body: JSON.stringify({ email: email.trim(), password }) });
+      // platform-service answers every 401 with "Sign in again."; on this form a 401 means the email and password.
+      const issued = await call<Issued>('/v1/auth/sign-in', { method: 'POST', body: JSON.stringify({ email: email.trim(), password }) }).catch((e: unknown) => {
+        throw e instanceof AuthError && e.status === 401 ? new AuthError('Sign-in failed. Check the email and password.', 'invalid_credentials', 401) : e;
+      });
+      if (!issued) throw new AuthError('The sign-in service returned no session.', 'policy');
+      checked = true;
+      return { status: 'signed_in', session: toSession(keep(issued)) };
+    },
+    async demoPeople(): Promise<DemoPerson[]> {
+      // The routes exist only on a development platform-service; anywhere else the 404 means there are none.
+      return (await call<DemoPerson[]>('/v1/auth/dev-people').catch((e: unknown) => {
+        if (e instanceof AuthError && e.status === 404) return [];
+        throw e;
+      })) ?? [];
+    },
+    async signInAsDemo(email): Promise<SignInResult> {
+      const issued = await call<Issued>('/v1/auth/dev-sign-in', { method: 'POST', body: JSON.stringify({ email }) });
       if (!issued) throw new AuthError('The sign-in service returned no session.', 'policy');
       checked = true;
       return { status: 'signed_in', session: toSession(keep(issued)) };

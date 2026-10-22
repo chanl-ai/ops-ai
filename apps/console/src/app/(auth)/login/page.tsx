@@ -4,9 +4,8 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { LoginForm } from '@/components/auth/login-form';
-import { demoAccount } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useSignInOptions, useSignInPolicy, useSignInWithGoogle, useSignInWithPassword, useStartSso } from '@/hooks/auth-queries';
+import { useDemoPeople, useSignInAsDemo, useSignInOptions, useSignInPolicy, useSignInWithGoogle, useSignInWithPassword, useStartSso } from '@/hooks/auth-queries';
 import { safeNext } from '@/lib/auth/next-path';
 import type { SignInResult } from '@/lib/auth';
 import { isUnreachable, UNREACHABLE } from '@/lib/api/unreachable';
@@ -19,18 +18,20 @@ export default function LoginPage() {
   const password = useSignInWithPassword();
   const google = useSignInWithGoogle();
   const sso = useStartSso();
+  const demoPeople = useDemoPeople();
+  const asDemo = useSignInAsDemo();
   const [typed, setTyped] = React.useState(params.get('email') ?? '');
   // What the typed email's workspace allows, from its domain; before an email is typed, the workspace policy's.
   const options = useSignInOptions(typed);
   const [error, setError] = React.useState<string | null>(null);
-  const [pending, setPending] = React.useState<'password' | 'sso' | 'google' | null>(null);
+  const [pending, setPending] = React.useState<'password' | 'sso' | 'google' | 'demo' | null>(null);
 
   const after = (r: SignInResult) => {
     if (r.status === 'mfa_required') return router.push(`/mfa/verify?next=${encodeURIComponent(next)}&challenge=${r.challengeId}&email=${encodeURIComponent(r.email)}`);
     // Policy may still require enrolment; the app shell sends an unenrolled session to /mfa/setup.
     router.replace(next);
   };
-  const run = async (kind: 'password' | 'sso' | 'google', fn: () => Promise<void>) => {
+  const run = async (kind: 'password' | 'sso' | 'google' | 'demo', fn: () => Promise<void>) => {
     setError(null);
     setPending(kind);
     try {
@@ -54,7 +55,8 @@ export default function LoginPage() {
       onEmailChange={setTyped}
       selfSignup={!!p?.selfSignup}
       initialEmail={params.get('email') ?? ''}
-      demo={demoAccount()}
+      demoPeople={demoPeople.data ?? []}
+      onDemo={(email) => run('demo', async () => after(await asDemo.mutateAsync(email)))}
       pending={pending}
       error={error ?? (policy.isError || options.isError ? 'Sign-in options could not be loaded. Password sign-in still works.' : null)}
       onPassword={(email, pw) => run('password', async () => after(await password.mutateAsync({ email, password: pw })))}

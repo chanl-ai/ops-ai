@@ -626,3 +626,20 @@ class PolicyOut(Out):
     effect: str
     kind: Literal["bool", "floor", "days", "hours", "publish_modes"]
     title: str
+
+
+class DevSignInIn(In):
+    email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+$")
+
+
+class DevTeamRole(Out):
+    team: str
+    role: str
+
+
+class DevPerson(Out):
+    """A seeded demo person the dev sign-in page offers; never the password."""
+
+    name: str
+    email: str
+    teams: list[DevTeamRole]

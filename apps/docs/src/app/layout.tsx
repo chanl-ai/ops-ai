@@ -6,6 +6,9 @@ import type { ReactNode } from 'react';
 
 import { BRAND } from '@/components/brand';
 
+// The console's Feedback button; the two apps share no package, so docs imports the console's file.
+import { UiFeedback } from '../../../console/src/components/shared/ui-feedback';
+
 import logo from '../../../../docs/media/logo-light.svg';
 
 export const metadata: Metadata = {
@@ -20,6 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         {/* Search reads the index built ahead, from under the /docs base path. */}
         <RootProvider search={{ options: { type: 'static', api: '/docs/api/search' } }}>{children}</RootProvider>
+        <UiFeedback enabled={process.env.NEXT_PUBLIC_UI_FEEDBACK} />
       </body>
     </html>
   );

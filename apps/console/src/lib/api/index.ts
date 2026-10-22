@@ -201,3 +201,6 @@ export const brand = {
   name: process.env.NEXT_PUBLIC_BRAND_NAME || undefined,
   logo: process.env.NEXT_PUBLIC_BRAND_LOGO || undefined,
 };
+
+/** The Feedback button in development (c-504): `1` when `make up` found the ui-feedback collector running. */
+export const uiFeedback = process.env.NEXT_PUBLIC_UI_FEEDBACK;
