@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Pause, Play, Rocket } from 'lucide-react';
 
+import { LockedReason } from '@/components/shared/locked-reason';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
@@ -40,9 +41,12 @@ export function LifecycleActions({
   onPublish,
   onSetPaused,
   pausing,
+  canPublish = true,
 }: {
   lifecycle: Lifecycle;
   dirty: boolean;
+  /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent (c-150). */
+  canPublish?: boolean;
   onPublish: () => void;
   onSetPaused: (paused: boolean) => Promise<unknown>;
   pausing: boolean;
@@ -72,11 +76,14 @@ export function LifecycleActions({
           <Link href={`/reviews?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
         </Button>
       ) : (
-        stage === 'draft' && (
+        stage === 'draft' &&
+        (!canPublish ? (
+          <LockedReason area="workflows" action="publish" label="Publish…" />
+        ) : (
           <Button type="button" variant="outline" onClick={onPublish} disabled={dirty} title={dirty ? 'Save the version first' : undefined} data-testid="definition-publish">
             <Rocket /> Publish…
           </Button>
-        )
+        ))
       )}
       <DialogShell
         open={confirm !== null}

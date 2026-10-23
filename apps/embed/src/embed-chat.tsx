@@ -130,6 +130,7 @@ export function EmbedChat({ agentName, suggestions, person, error, canSignIn, th
             streaming={isLive && streaming && !!m.content}
             phaseLabel={isLive && streaming && !m.content ? 'Thinking…' : undefined}
             readOnly={isLive}
+            cardsReadOnly
             onOpenDocument={() => undefined}
             onCopy={(text) => void navigator.clipboard.writeText(text)}
             onReply={streaming ? undefined : (text) => void send(text)}

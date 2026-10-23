@@ -36,7 +36,9 @@ from ops_service_kit.errors import Unprocessable
 from tests.engine.test_email_trigger import MAILBOX, NOTICE, PDF, TEAM, FakeFiles, connect, mail
 from tests.engine.test_worker import CountingTools, drain, worker
 
-CLERK = Principal(name="Clerk", email="clerk.tester@harborpine.example", team_id=TEAM, tenant_id="local")
+CLERK = Principal(
+    name="Clerk", email="clerk.tester@harborpine.example", team_id=TEAM, tenant_id="local", team_ids=(TEAM,), dev=True
+)
 
 
 def intake(mailbox: str) -> WorkflowDefinition:

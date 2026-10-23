@@ -1,12 +1,27 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, setCurrentTeamId, teamStore } from '@/lib/api';
+import { api } from '@/lib/api';
+import { setCurrentTeamId, teamStore } from '@/lib/api/team-context';
 import type { TeamInput, TeamRef } from '@/lib/types/team';
 
+import { useSessionQuery } from './team-query';
+
 const TEAMS_KEY = ['teams'] as const;
+const teamsQuery = { queryKey: TEAMS_KEY, queryFn: () => api.teams.list(), staleTime: 5 * 60_000 };
+
+/**
+ * Whether requests may go out for the current team: the person's teams have loaded and the current team is one of
+ * them. Until then a team remembered in the tab, or the console default, may be one they do not hold, and its requests
+ * would answer 404 or 403 (c-505). The shell's gate (app-shell.tsx) picks a team they hold when the current one is not.
+ */
+export function useTeamReady(): boolean {
+  const teamId = React.useSyncExternalStore(teamStore.subscribe, teamStore.get, teamStore.getServer);
+  const teams = useSessionQuery(teamsQuery);
+  return !!teams.data?.some((t) => t.id === teamId);
+}
 
 /**
  * The team the user is working as, the teams they can switch to, and the switch itself. Every API call carries
@@ -15,7 +30,7 @@ const TEAMS_KEY = ['teams'] as const;
 export function useTeam() {
   const qc = useQueryClient();
   const teamId = React.useSyncExternalStore(teamStore.subscribe, teamStore.get, teamStore.getServer);
-  const teams = useQuery({ queryKey: TEAMS_KEY, queryFn: api.teams.list, staleTime: 5 * 60_000 });
+  const teams = useSessionQuery(teamsQuery);
   const team = teams.data?.find((t) => t.id === teamId) ?? teams.data?.[0];
 
   const switchTeam = React.useCallback(

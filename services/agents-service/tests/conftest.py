@@ -142,6 +142,9 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if (action := _ACTION.search(text)) and action.group(1) in tools:
         pairs = [p.split(": ", 1) for p in action.group(2).split(", ") if ": " in p]
         return ModelResponse(parts=[ToolCallPart(action.group(1), {k.strip(): v.strip() for k, v in pairs})])
+    # The chat home's first start (c-469): the team's default agent lists the person's Human Tasks.
+    if "what needs me" in text.lower() and "my_human_tasks" in tools:
+        return ModelResponse(parts=[ToolCallPart("my_human_tasks", {"which": "mine"})])
     # "call <tool> <json>" calls any tool the turn was granted with those arguments: how a use case drives a registry
     # operation by name without a provider.
     if (call := _CALL.search(text)) and call.group(1) in tools:

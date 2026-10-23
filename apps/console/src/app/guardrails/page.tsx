@@ -231,7 +231,7 @@ export default function GuardrailsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={4} />
       ) : query.isError && !query.data ? (
-        <QueryError what="guardrails" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="guardrails" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

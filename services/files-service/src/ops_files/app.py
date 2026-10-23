@@ -4,13 +4,14 @@
 (`/v1/files`), and, on the same routes, server writes, reads, references and scan results for services holding the
 `files` scope each needs (c-168).
 
-Design: .codeloop/wiki/concepts/files-service-design.md (API table); rules: .codeloop/wiki/concepts/files.md 5 and 6.
+Design, API table and rules: docs/services/files-service/overview.md.
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -68,6 +69,7 @@ from ops_files.settings import (
 from ops_files.store import StaleVersionError, reachable
 from ops_files.tenant_files import HoldRefusedError, TenantFiles, Who
 from ops_identity import Auth, CurrentCaller, CurrentPrincipal, CurrentService, install_auth
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
@@ -81,6 +83,8 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.settings import Settings
 from ops_storage.base import ObjectLockedError, content_disposition
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 
 _TEAM = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
@@ -340,6 +344,11 @@ def create_files_app(
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
         return {"status": "ok"}
+
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        return {"processes": background_report(await LOCAL_BEATS.read(), "files", time.time())}
 
     public = APIRouter(prefix="/v1/files", tags=["files"], responses=errors)
 

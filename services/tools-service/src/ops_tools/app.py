@@ -16,10 +16,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ops_access import can
 from ops_identity import Auth, CurrentService, Principal, install_auth
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Forbidden, NotFound, ServiceUnavailable
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 
 from .auth import Authenticator
 from .egress import EgressPolicy, egress_client
@@ -247,6 +250,11 @@ def create_gateway_app(
         if await opa.loaded_policy_hash() != expected:
             return JSONResponse({"status": "policy_drift"}, status_code=503)
         return {"status": "ok"}
+
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        return {"processes": background_report(await LOCAL_BEATS.read(), "tools", time.time())}
 
     @app.post(
         "/v1/secrets/values", tags=["secrets"], response_model=Envelope[SecretValues], responses=error_responses()

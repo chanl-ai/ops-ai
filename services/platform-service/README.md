@@ -6,4 +6,4 @@ The identity issuer. It owns tenants, teams, users, members, sessions, invites, 
 the only service that mints tokens. Tokens are signed with Ed25519 and the public keys are published as JWKS, so every
 other service verifies callers locally. It is not a gateway: requests go to each service directly.
 
-Overview and operations: `docs/services/platform-service/overview.md`. Spec: `.codeloop/wiki/concepts/platform-service.md`.
+Overview, design and operations: `docs/services/platform-service/overview.md`.

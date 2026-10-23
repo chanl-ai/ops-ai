@@ -134,9 +134,8 @@ async def test_the_case_says_what_it_waits_on_until_the_task_is_decided(stack: S
     assert decided.status_code == 200, decided.text
     after = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
     assert (after["waiting"], after["nextAction"]) == ([], None), after["waiting"]
-    assert (
-        "Added a run" in [a["text"] for a in after["activity"]["recent"]]
-        and after["activity"]["allHref"] == f"/activity?case={case_id}"
+    assert "Added a run" not in [x["text"] for x in after["feed"]["lines"]] and any(
+        x["href"] == f"/workflows/runs/{run}" for x in after["feed"]["lines"]
     )
 
 
@@ -379,3 +378,69 @@ async def test_the_cases_list_names_each_owner_as_the_case_page_does(stack: Stac
     row = next(r for r in listed if r["id"] == case_id)
     assert row["owner"] == {"email": "james@harborpine.example", "name": "James Richardson"}, row
     assert row["owner"] == data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))["owner"]
+
+
+async def _deadline_case(s: Stack, respond_by: Any) -> str:
+    """A case of a team type whose deadline is its "Respond by" date field."""
+    c, rt = s
+    fields = [{"key": "respondBy", "label": "Respond by", "type": "date"}, {"key": "note", "label": "Note"}]
+    made = await c.post(
+        "/v1/case-types",
+        json={"id": "court_notice", "name": "Court notice", "fields": fields, "deadline": "respondBy"},
+        headers=BUILDER,
+    )
+    if made.status_code == 201:
+        data(await c.post("/v1/case-types/court_notice/publish", json={"version": 1}, headers=BUILDER))
+    with tenant_scope(TENANT):
+        opened = await CaseStore(rt.db).open(
+            team_id="team_ops", subject="Court notice", priority="high", by="james@harborpine.example",
+            fields={"respondBy": respond_by}, type_id="court_notice", type_version=1,
+        )  # fmt: skip
+    return str(opened.case["id"])
+
+
+async def test_a_deadline_must_name_a_date_field(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    fields = [{"key": "respondBy", "label": "Respond by", "type": "date"}, {"key": "note", "label": "Note"}]
+    bad = await c.post(
+        "/v1/case-types", json={"id": "bad_notice", "name": "x", "fields": fields, "deadline": "note"}, headers=BUILDER
+    )
+    assert (bad.status_code, bad.json()["error"]["code"]) == (422, "deadline_field"), bad.text
+    good = await c.post(
+        "/v1/case-types",
+        json={"id": "good_notice", "name": "x", "fields": fields, "deadline": "respondBy"},
+        headers=BUILDER,
+    )
+    assert good.status_code == 201, good.text
+
+
+async def test_the_deadline_field_is_the_timer_until_the_case_is_resolved(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    case = await _deadline_case(stack, "2099-10-28")
+    timer = data(await c.get(f"/v1/cases/{case}", headers=BUILDER))["timer"]
+    assert (timer["label"], timer["dueAt"][:10], timer["state"]) == ("Respond by", "2099-10-28", "running"), timer
+    assert (
+        await c.patch(f"/v1/cases/{case}", json={"status": "waiting_on_customer"}, headers=BUILDER)
+    ).status_code == 200
+    assert data(await c.get(f"/v1/cases/{case}", headers=BUILDER))["timer"]["state"] == "running", "never paused"
+    assert (await c.patch(f"/v1/cases/{case}", json={"status": "resolved"}, headers=BUILDER)).status_code == 200
+    assert data(await c.get(f"/v1/cases/{case}", headers=BUILDER))["timer"]["state"] == "met"
+    # A deadline as a document writes it, the way a read fills the field.
+    written = data(await c.get(f"/v1/cases/{await _deadline_case(stack, 'October 27, 2099')}", headers=BUILDER))[
+        "timer"
+    ]
+    assert (written["label"], written["dueAt"][:10], written["state"]) == ("Respond by", "2099-10-27", "running"), (
+        written
+    )
+    late = await _deadline_case(stack, "2001-01-01")
+    assert data(await c.get(f"/v1/cases/{late}", headers=BUILDER))["timer"]["state"] == "breached"
+
+
+async def test_an_empty_or_unreadable_deadline_falls_back_to_the_resolution_clock(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    for value in ("", "next week", None):
+        case = await _deadline_case(stack, value)
+        page = data(await c.get(f"/v1/cases/{case}", headers=BUILDER))
+        assert (
+            page["timer"]["label"] == "Resolution" and page["timer"]["dueAt"] == page["sla"]["resolution"]["dueAt"]
+        ), page["timer"]

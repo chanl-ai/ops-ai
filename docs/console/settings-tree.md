@@ -1,6 +1,6 @@
 # Settings tree mock
 
-Status: current (design mock for card c-178; nothing in it is stored, and no live page or route has moved).
+Status: historical. The `/preview/settings` mock this page describes was deleted with every console preview page (c-517, 2026-10-22). The approved design, its screens and the S01 to S43 map are kept at the planning repo `docs/plans/ops-ai/settings-design.html`; the live tree is `src/lib/settings-tree.ts`.
 
 The settings standard was adopted from the UX review of 2026-10-17
 and asked for a mock before anything moves. `/preview/settings` draws the proposed tree on sample data. It runs on a

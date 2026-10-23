@@ -129,7 +129,7 @@ export default function ToolCallsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={10} />
       ) : query.isError && !query.data ? (
-        <QueryError what="tool calls" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="tool calls" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={4}>

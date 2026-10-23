@@ -91,6 +91,7 @@ from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..memory import extract_memories, extractor_for, save_memories
+from ..ops_tools import ensure_ops_assistant, fill_cards
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
 from .agents import changeable
 
@@ -314,11 +315,15 @@ async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSON
 
 
 async def _team_default(rt: Runtime, me: Principal) -> AgentDefinition:
-    """The live default agent of the caller's team, for a chat started without naming one."""
+    """The live default agent of the caller's team, for a chat started without naming one. A team that has set none
+    gets its own Ops Assistant on this first chat, set as its default (c-469), so a first chat is never refused; a team
+    admin can change the default afterwards."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
-    agent = rt.catalog.agent(agent_id) if agent_id else None
+    if agent_id is None:
+        return await ensure_ops_assistant(rt, me.team_id)
+    agent = rt.catalog.agent(agent_id)
     if agent is None:
-        why = "has no default agent yet" if agent_id is None else "default agent is not live"
+        why = "default agent is not live"
         raise Conflict(
             f"This team {why}, so pick an agent; a team admin sets the default in General settings.",
             code="no_default_agent",
@@ -406,6 +411,8 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):
             w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
+    # Ops cards are drawn from their records as this reader sees them now (c-469).
+    await fill_cards(rt, me, messages)
     return ok(thread_view(rt, row, messages).wire())
 
 

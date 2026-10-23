@@ -1,14 +1,17 @@
 'use client';
 
 import { useReactFlow } from '@xyflow/react';
-import { Maximize, Minimize, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import { LayoutGrid, Maximize, Minimize, ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { wholeFit } from '@/components/workflows/definition-editor/canvas-view';
 
-/** Zoom, fit and (when the page offers it) fullscreen, floating over a canvas. `onFit` replaces the default fit. */
-export function CanvasControls({ isFullscreen, onToggleFullscreen, onFit }: { isFullscreen?: boolean; onToggleFullscreen?: () => void; onFit?: () => void }) {
+/**
+ * Zoom, fit, and (when the page offers them) Tidy up and fullscreen, floating over a canvas. `onFit` replaces the
+ * default fit; `onTidy` shows Tidy up beside Fit to view (the editor, never a read-only or run canvas).
+ */
+export function CanvasControls({ isFullscreen, onToggleFullscreen, onFit, onTidy }: { isFullscreen?: boolean; onToggleFullscreen?: () => void; onFit?: () => void; onTidy?: () => void }) {
   const flow = useReactFlow();
   const { zoomIn, zoomOut } = flow;
   return (
@@ -23,6 +26,11 @@ export function CanvasControls({ isFullscreen, onToggleFullscreen, onFit }: { is
       <Button type="button" variant="ghost" size="icon" className="size-7" aria-label="Fit to view" title="Fit to view" onClick={() => (onFit ? onFit() : wholeFit(flow))}>
         <ScanSearch className="text-muted-foreground" />
       </Button>
+      {onTidy && (
+        <Button type="button" variant="ghost" size="icon" className="size-7" aria-label="Tidy up" title="Tidy up (T)" onClick={onTidy} data-testid="canvas-tidy">
+          <LayoutGrid className="text-muted-foreground" />
+        </Button>
+      )}
       {onToggleFullscreen && (
         <>
           <Separator orientation="vertical" className="mx-0.5 !h-4" />

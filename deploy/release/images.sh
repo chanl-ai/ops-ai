@@ -43,7 +43,7 @@ for t in $TARGETS; do
   echo "images: $PREFIX/$t:$VERSION ($PLATFORMS, ${OUTPUT#--})"
   # shellcheck disable=SC2086
   docker buildx build -q --platform "$PLATFORMS" $OUTPUT -f "$WORK/deploy/fly/Dockerfile" --target "$t" \
-    --build-arg OPS_COMMIT="$SHA" \
+    --build-arg OPS_COMMIT="$SHA" --build-arg OPS_VERSION="v$VERSION" \
     --label org.opencontainers.image.title="Ops AI $t" --label org.opencontainers.image.vendor="Elemente" \
     --label org.opencontainers.image.version="$VERSION" --label org.opencontainers.image.revision="$SHA" \
     --label org.opencontainers.image.source="$SOURCE" --label org.opencontainers.image.licenses=Apache-2.0 \

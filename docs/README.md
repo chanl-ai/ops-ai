@@ -105,7 +105,9 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/tool-lifecycle.md` | A tool from connect to import, review, access, grant, call, write approval and display; built versus target; the per-operation approval policy |
 | `architecture/workflow-runner.md` | Workflow runner: LangGraph with a step journal, Postgres queue and workers; the ops_engine split from agents through ports; resilience, scale, console, versioning, proof |
 | `architecture/channels-and-deployments.md` | Deployments, the adapter contract, identity and keys per channel, busy-thread input, the mailbox adapter |
+| `architecture/chat-widgets.md` | Widgets an agent shows in chat: templates it fills, layouts it composes from a catalogue, overrides, buttons that need a tool |
 | `architecture/identity-and-tenancy.md` | Sign-in seam, delegation, process principals, tools gateway, row-level security, prototype shortcuts |
+| `architecture/roles-and-permissions.md` | Who may do what: the roles grid, team policies, decided questions and the exceptions register |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
@@ -146,6 +148,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
 | `deploy/compose.md` | Ops AI on Docker Compose against the bank's PostgreSQL: the images, what runs, the facts that shape it, running from a clean clone, connecting a model, secrets as files, upgrade, back up and logs |
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
+| `deploy/demo-mailbox.md` | The staging demo mailbox notices@ops.mails.run: the Stalwart mail server on Fly, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
@@ -211,7 +214,6 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
 | `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of c-048 on the shared stack |
-| `usecases/console/channels-preview.md` | uc-165: James connects a Gmail mailbox with a secret added from the field, tests it, and a workflow trigger picks it; the mailbox page then lists the workflow |
 | `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
 | `usecases/console/import-to-governed-call.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
@@ -265,6 +267,9 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/human-task-page.md` | uc-234: a Human Task opens as its own page, with the question, the document beside the read values, Details folded and the decision in a footer row below the body |
 | `usecases/console/access-roles-and-checks.md` | uc-267: an admin reads Access › Roles and a built-in role's grid read-only, a member's access beyond their team role on Members, and a person's effective access with the role behind each action |
 | `usecases/console/demo-team-shows-each-once.md` | uc-450: on staging the demo team's Open cases and run picker show each record once, and Dispute Desk finds Marcus Bell's Coastal Air charge at the bank |
+| `usecases/console/pages-wait-for-the-team.md` | uc-505: a sign-in straight to a case loads for the person's own team, and a record in another team says not found, or in another team, with a switch |
+| `usecases/console/whats-new.md` | uc-510: What's new in the sidebar lists what changed in plain words, with Coming next, and its dot clears once opened |
+| `usecases/console/chat-home.md` | uc-469: an approver lands on Chat's home, asks what needs them, approves a task from its card, and sees the run move on |
 | `usecases/console/every-page-has-the-header.md` | uc-264: every sidebar route and one record of each kind render the shared page header; the runtime half of check-standards rule 12 |
 | `usecases/console/services-unreachable.md` | uc-404: a link to a missing task says so; a session ended elsewhere goes back to sign-in keeping the page; with the run's platform-service stopped, one shell screen says the services are out of reach, with Try again |
 | `usecases/console/case-page-assembled.md` | uc-256: a case opened by a configured workflow shows its header and next action, fields in the case type's order, the task it waits on, the drafted action, linked records and recent activity from one case request; approved, the action reads approved |
@@ -289,7 +294,6 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |
 | `usecases/console/secrets-in-one-place.md` | uc-107: Settings > Secrets lists the operations each secret serves, a rotation reaches them all, a delete in use is refused, and a team scope is enforced by the gateway |
 | `usecases/console/sample-data-pages-say-so.md` | uc-125: a page the mock stores shows "Sample data, changes aren't saved" and cannot be saved, while a live setting keeps its value after a reload |
-| `usecases/console/settings-tree-mock.md` | uc-126: the proposed settings tree at /preview/settings: one set of cards, Find, role locks, and dialogs that are the same forms as the pages |
 | `usecases/console/layout-rules-sweep.md` | uc-127: fields lighter than the page, the widget definition splits with a handle, tab labels fit, and record lists start with select-all and an id column |
 | `usecases/console/settings-tree-live.md` | uc-152: settings has its own sidebar with Find, and each moved page answers at its new route while the old route redirects |
 | `usecases/console/policies-page.md` | uc-170: Govern > Policies lists the workspace policies from platform-service; a Security admin saves one, a builder is refused in the server's words |
@@ -298,6 +302,11 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/edit-steps-in-a-sheet.md` | uc-122: a workflow step and the trigger open in a sheet beside the canvas, and steps are added from a panel with a tab per group and a search |
 | `usecases/console/start-run-form.md` | uc-445: Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file |
 | `usecases/console/start-from-the-trigger.md` | uc-466: Start run draws the trigger's start form; a test email runs as a mailbox email does; Files starts a workflow with a file |
+| `usecases/console/follow-an-email-run.md` | uc-477: an email-started run's page tells the email, the read beside the document and a row per run it started with its case and Human Task |
+| `usecases/console/case-story.md` | uc-500: a case says what is left, how its work began and what happened, for a card dispute, a notice by email and a case opened by hand |
+| `usecases/console/steps-in-sentences.md` | uc-508: Activity, a Human Task, the case list and the run page read a hold's steps in sentences, by name, with the outcome in words |
+| `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
+| `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop (preview part for the maintainers' walk) |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |

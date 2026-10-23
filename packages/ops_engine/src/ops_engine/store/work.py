@@ -69,6 +69,18 @@ class WorkQueue:
             ).one()
         return Work(int(row.id), row.tenant_id, row.run_id, row.kind, row.payload, int(row.attempts), row.claimed_by)
 
+    async def due(self) -> int:
+        """How many rows wait to be claimed now, for the workflow worker's heartbeat (c-516)."""
+        w = engine_work
+        async with self.tx.system_tx(CLAIM_WORK) as c:
+            now = db_now(c)
+            q = (
+                sa.select(sa.func.count())
+                .select_from(w)
+                .where(w.c.status == "queued", w.c.available_at <= now, w.c.build == self.build)
+            )
+            return int((await c.execute(q)).scalar_one() or 0)
+
     async def renew(self, work: Work) -> bool:
         """Extends this worker's claim; False when it has lapsed and another worker took the row."""
         w = engine_work

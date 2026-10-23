@@ -10,6 +10,7 @@ their token names and need the matching `documents:<action>` scope."""
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -61,9 +62,12 @@ from ops_documents.models import (
 from ops_documents.store import DocumentTypesStore, ExtractionsStore, LayoutsStore, NameTakenError
 from ops_documents.store.metadata import reachable
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, error_body, error_responses, install_error_handlers, ok, paged
 from ops_service_kit.settings import Settings
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 
 
 class Health(BaseModel):
@@ -203,6 +207,11 @@ def create_documents_app(
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
         return {"status": "ok"}
+
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        return {"processes": background_report(await LOCAL_BEATS.read(), "documents", time.time())}
 
     def found(value: Any, what: str) -> Any:
         if value is None:

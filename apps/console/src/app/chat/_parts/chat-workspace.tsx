@@ -8,6 +8,7 @@ import { Archive, ArchiveRestore, Bot, Brain, Link2, MessageSquareDashed, Messag
 import { toast } from 'sonner';
 
 import { ChatLayout } from '@/components/chat/chat-layout';
+import { ChatHome } from './chat-home';
 import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
 import { ThreadSettingsButton } from '@/components/chat/thread-settings';
 import { MemorySheet } from '@/components/memory/memory-sheet';
@@ -166,11 +167,16 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           onWidgetAction={actions.onWidgetAction}
         />
       ) : (
-        <NewChat
+        <ChatHome
           agents={agents}
-          kbsFor={kbsFor}
+          me={me}
           initialAgentId={searchParams.get('agent') ?? undefined}
-          onOpenRail={() => setRailOpen(true)}
+          header={
+            <>
+              <RailButton onClick={() => setRailOpen(true)} />
+              <span className="px-1 text-sm font-semibold">New chat</span>
+            </>
+          }
           creating={create.isPending}
           onStart={async (agentId, kbIds, text, attachments) => {
             try {
@@ -217,113 +223,6 @@ function RailButton({ onClick }: { onClick: () => void }) {
     <Button variant="outline" size="sm" className="lg:hidden" onClick={onClick}>
       <MessagesSquare className="size-4" /> <span className="sr-only sm:not-sr-only">Chats</span>
     </Button>
-  );
-}
-
-function NewChat({
-  agents,
-  kbsFor,
-  initialAgentId,
-  onOpenRail,
-  creating,
-  onStart,
-}: {
-  agents: ReturnType<typeof useChatAgents>;
-  /** The knowledge bases to offer for an agent: its own when the chat service names them, else the Knowledge list. */
-  kbsFor: (agentId?: string) => KbOption[];
-  initialAgentId?: string;
-  onOpenRail: () => void;
-  creating: boolean;
-  onStart: (agentId: string, kbIds: string[], text: string, attachments: ChatAttachment[]) => void;
-}) {
-  const list = agents.data ?? [];
-  const [agentId, setAgentId] = React.useState<string | undefined>(initialAgentId);
-  // The team's default agent is picked for the person (c-174); the picker stays to choose another.
-  const defaultId = useDefaultAgent().data?.agentId;
-  const agent: ChatAgent | undefined = list.find((a) => a.id === agentId) ?? list.find((a) => a.id === defaultId) ?? list[0];
-  const [kbIds, setKbIds] = React.useState<string[] | null>(null);
-  const chosenKbs = kbIds ?? agent?.defaultKbIds ?? [];
-  const kbs = kbsFor(agent?.id);
-
-  return (
-    <>
-      <header className="flex min-h-12 items-center gap-2 border-b px-3 py-2">
-        <RailButton onClick={onOpenRail} />
-        <span className="px-1 text-sm font-semibold">New chat</span>
-      </header>
-      {agents.isPending ? (
-        <div className="mx-auto w-full max-w-2xl space-y-4 p-6">
-          <Skeleton className="mx-auto h-7 w-64" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : agents.isError ? (
-        <div className="p-6">
-          <QueryError what="agents" onRetry={() => agents.refetch()} retrying={agents.isFetching} />
-        </div>
-      ) : !agent ? (
-        <div className="flex flex-1 items-center justify-center p-6">
-          <EmptyState icon={Bot} title="No live agents to chat with" description="Chat uses an agent’s published version. Publish an agent, or ask its owner to, and it appears here." action={{ label: 'Open agents', href: '/agents' }} />
-        </div>
-      ) : (
-        <>
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-4 py-8">
-            <div className="space-y-1 text-center">
-              <h2 className="text-xl font-semibold tracking-tight">What do you need?</h2>
-              <p className="max-w-md text-sm text-muted-foreground">The agent answers from the knowledge bases below, looks up live data through its tools, and drafts actions for you to approve.</p>
-            </div>
-            <div className="flex w-full max-w-xl flex-col gap-3">
-              <Select
-                value={agent.id}
-                onValueChange={(v) => {
-                  setAgentId(v);
-                  setKbIds(null);
-                }}
-              >
-                <SelectTrigger className="h-auto w-full py-2" aria-label="Agent">
-                  <SelectValue>
-                    <span className="flex items-center gap-2 text-left">
-                      <Bot className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">
-                          {agent.name} <span className="font-normal text-muted-foreground">· v{agent.version}</span>
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">{agent.role}</span>
-                      </span>
-                    </span>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {list.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      <span className="flex flex-col">
-                        <span>
-                          {a.name} <span className="text-muted-foreground">· v{a.version}</span>
-                          {a.id === defaultId && <span className="text-muted-foreground"> · Default</span>}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{a.role}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <KbChips kbs={kbs} value={chosenKbs} onChange={setKbIds} agentName={agent?.name} />
-            </div>
-            <div className="flex max-w-2xl flex-wrap justify-center gap-2">
-              {agent.suggestions.map((s) => (
-                <Button key={s} variant="outline" size="sm" className="h-auto py-1.5 text-left font-normal whitespace-normal" disabled={creating} onClick={() => onStart(agent.id, chosenKbs, s, [])}>
-                  {s}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="mx-auto w-full max-w-3xl p-3">
-            <Composer autoFocus placeholder={`Message ${agent.name}…`} streaming={creating} onStop={() => undefined} onSend={(text, files) => onStart(agent.id, chosenKbs, text, files)} />
-            <p className="mt-1.5 hidden text-center text-[11px] text-muted-foreground sm:block">Enter to send, Shift+Enter for a new line. Actions the agent drafts wait for your approval.</p>
-          </div>
-        </>
-      )}
-    </>
   );
 }
 

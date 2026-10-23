@@ -119,6 +119,10 @@ RowFill = Callable[[str, str | None], dict[str, Any]]
 SUITE = "isolation_suite"
 
 
+# PostgreSQL's SQLSTATE for a statement the role holds no grant for.
+INSUFFICIENT_PRIVILEGE = "42501"
+
+
 async def isolation_suite(
     engine: AsyncEngine, tables: Sequence[sa.Table], *, role: str, fill: Mapping[str, RowFill] | None = None
 ) -> list[str]:
@@ -127,8 +131,9 @@ async def isolation_suite(
     row-level security (as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role) and read back
     as `role`
     with raw SQL and no WHERE clause, so only the policy can filter: for a team table (T1, A), (T1, B), (T1, no team
-    where the column allows it) and (T2, A); for a tenant table one row of each tenant. `fill` builds a row's other
-    columns a table's types cannot give (a foreign key), over the values the suite makes from its types."""
+    where the column allows it, which no team reads, c-507) and (T2, A); for a tenant table one row of each tenant.
+    `fill` builds a row's other columns a table's types cannot give (a foreign key), over the values the suite makes
+    from its types."""
     t1, t2, a, b = (f"{p}_{secrets.token_hex(3)}" for p in ("iso_t1", "iso_t2", "iso_a", "iso_b"))
     failures: list[str] = []
     for table in tables:
@@ -185,8 +190,14 @@ async def _isolation_checks(
         return False
 
     async def changed(where: sa.ColumnElement[bool]) -> int:
-        async with isolated_tx(engine, role=role) as c:
-            return (await c.execute(table.update().where(where).values({tenant.name: tenant}))).rowcount
+        try:
+            async with isolated_tx(engine, role=role) as c:
+                return (await c.execute(table.update().where(where).values({tenant.name: tenant}))).rowcount
+        except DBAPIError as e:
+            # An append-only table (no UPDATE granted to `role`) changes no row of any team; any other error fails.
+            if getattr(e.orig, "sqlstate", None) == INSUFFICIENT_PRIVILEGE:
+                return 0
+            raise
 
     mine = [r for r in await _all(engine, table, tenant, team) if r[0] == t1]
     if team is None:
@@ -201,9 +212,9 @@ async def _isolation_checks(
                 out.append(f"a tenant transaction updated {n} of another tenant's rows")
         return out
     with scope(t1, a):
-        want = [r for r in mine if r[1] in (a, None)]
+        want = [r for r in mine if r[1] == a]
         if (got := await seen()) != want:
-            out.append(f"team {a} read {got}, expected its rows and the null-team rows {want}")
+            out.append(f"team {a} read {got}, expected only its own rows {want}")
         if not await refused({**make(t1, b), tenant.name: t1, team.name: b}):
             out.append("a team transaction wrote another team's row")
         if team.nullable and not await refused({**make(t1, None), tenant.name: t1, team.name: None}):

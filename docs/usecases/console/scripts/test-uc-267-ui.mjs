@@ -3,11 +3,11 @@
 // an admin of the Platform team and Admin in every team (a workspace admin), so her access is more than her team
 // role says.
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = join(ROOT, '.codeloop/evidence/150/screens');
+const SHOTS = evidenceDir('150', 'screens');
 
 async function step(name, body) {
   try {
@@ -29,7 +29,10 @@ await withUiStack(
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByLabel('Email').fill('w.kamau@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
-      await page.getByRole('button', { name: /^Sign in/ }).first().click();
+      await page
+        .getByRole('button', { name: /^Sign in/ })
+        .first()
+        .click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       const shoot = async (name) => {
         for (const width of [1280, 400]) {
@@ -72,7 +75,11 @@ await withUiStack(
         await page.waitForTimeout(500);
         const inline = ravi.locator('[data-testid^="member-role-inline-"]');
         // Scrolled to the table's far end, as a person reaching Status would: the pinned name, and the role in it, stay.
-        await page.locator('table').first().locator('xpath=..').evaluate((el) => el.scrollTo(el.scrollWidth, 0));
+        await page
+          .locator('table')
+          .first()
+          .locator('xpath=..')
+          .evaluate((el) => el.scrollTo(el.scrollWidth, 0));
         await page.waitForTimeout(300);
         const box = await inline.boundingBox();
         const phone = (await inline.innerText()).replace(/\s+/g, ' ');
@@ -85,12 +92,25 @@ await withUiStack(
       });
 
       await step('3 A person opens on their effective access: every team and the team, each action with the role that grants it', async () => {
-        await page.getByRole('row', { name: /Wanjiru Kamau/ }).locator('td').nth(3).click();
+        await page
+          .getByRole('row', { name: /Wanjiru Kamau/ })
+          .locator('td')
+          .nth(3)
+          .click();
         await page.waitForURL(/\/access\/people\/[^/]+$/);
         const title = (await page.getByTestId('page-title').innerText()).trim();
         const every = page.getByTestId('grants-workspace');
-        const wide = await every.waitFor({ timeout: 30_000 }).then(async () => (await every.innerText()).replace(/\s+/g, ' '), () => '');
-        const teamSection = (await page.locator('[data-testid^="grants-team_platform"]').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+        const wide = await every.waitFor({ timeout: 30_000 }).then(
+          async () => (await every.innerText()).replace(/\s+/g, ' '),
+          () => '',
+        );
+        const teamSection = (
+          await page
+            .locator('[data-testid^="grants-team_platform"]')
+            .first()
+            .innerText()
+            .catch(() => '')
+        ).replace(/\s+/g, ' ');
         await shoot('access-person');
         check(
           '3 A person opens on their effective access: every team and the team, each action with the role that grants it',
@@ -99,7 +119,7 @@ await withUiStack(
         );
       });
 
-      await step('4 Check access answers by the services\' own check: allowed with the role, then refused by the separation-of-duties policy', async () => {
+      await step("4 Check access answers by the services' own check: allowed with the role, then refused by the separation-of-duties policy", async () => {
         // Wanjiru acts in Operations, where Maya Okafor is a Reviewer.
         await page.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const switcher = page.getByRole('button', { name: /^Team: (?!loading).*\. Switch team$/ }).first();
@@ -108,8 +128,22 @@ await withUiStack(
         const items = (await page.getByRole('menuitem').allInnerTexts()).map((t) => t.split('\n')[0].trim());
         await page.getByRole('menuitem').nth(items.indexOf('Operations')).click();
         const maya = page.getByRole('row', { name: /Maya Okafor/ });
-        if (!(await maya.waitFor({ timeout: 30_000 }).then(() => true, () => false)))
-          throw new Error(`no Maya row after switching; menu ${JSON.stringify(items)}; rows ${(await page.locator('tbody').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200)}`);
+        if (
+          !(await maya.waitFor({ timeout: 30_000 }).then(
+            () => true,
+            () => false,
+          ))
+        )
+          throw new Error(
+            `no Maya row after switching; menu ${JSON.stringify(items)}; rows ${(
+              await page
+                .locator('tbody')
+                .innerText()
+                .catch(() => '')
+            )
+              .replace(/\s+/g, ' ')
+              .slice(0, 200)}`,
+          );
         await maya.locator('td').nth(3).click();
         await page.waitForURL(/\/access\/people\/[^/]+$/);
         // Shots are taken while the dialog is open, with its answer on screen.
@@ -121,7 +155,13 @@ await withUiStack(
           await dialog.getByTestId('check-run').click();
           await sent;
           const result = dialog.getByTestId('check-result');
-          if (!(await result.waitFor({ timeout: 20_000 }).then(() => true, () => false))) throw new Error(`no result: ${(await dialog.innerText()).replace(/\s+/g, ' ').slice(0, 300)}`);
+          if (
+            !(await result.waitFor({ timeout: 20_000 }).then(
+              () => true,
+              () => false,
+            ))
+          )
+            throw new Error(`no result: ${(await dialog.innerText()).replace(/\s+/g, ' ').slice(0, 300)}`);
           const out = { allowed: await result.getAttribute('data-allowed'), said: (await result.innerText()).replace(/\s+/g, ' ') };
           if (shotName) {
             for (const width of [1280, 400]) {
@@ -136,11 +176,23 @@ await withUiStack(
         };
         const before = await ask('access-check');
         // The workspace stops a requester deciding their own request; the same check now refuses for that reason.
-        const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'w.kamau@harborpine.example', password: 'northfield-demo' }) })).json()).data.token;
-        const off = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/requesterMayDecide`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: false }) });
+        const token = (
+          await (
+            await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: 'w.kamau@harborpine.example', password: 'northfield-demo' }),
+            })
+          ).json()
+        ).data.token;
+        const off = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/requesterMayDecide`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: false }),
+        });
         const after = await ask();
         check(
-          '4 Check access answers by the services\' own check: allowed with the role, then refused by the separation-of-duties policy',
+          "4 Check access answers by the services' own check: allowed with the role, then refused by the separation-of-duties policy",
           before.allowed === 'true' && /Reviewer/.test(before.said) && off.status === 200 && after.allowed === 'false' && /someone else has to decide/.test(after.said),
           { before, policy: off.status, after },
         );
@@ -148,8 +200,21 @@ await withUiStack(
 
       await step('5 A button the person may not use is shown locked, and its ⓘ says why and who can grant it', async () => {
         // James, a Builder of Operations, drafts an agent; Maya, a Reviewer there, opens it.
-        const tokenOf = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
-        const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenOf('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Locked publish desk', role: 'Answers balance questions' }) });
+        const tokenOf = async (email) =>
+          (
+            await (
+              await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: 'northfield-demo' }),
+              })
+            ).json()
+          ).data.token;
+        const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${await tokenOf('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Locked publish desk', role: 'Answers balance questions' }),
+        });
         const agent = (await made.json()).data;
         if (made.status >= 300) throw new Error(`setup: creating the agent answered ${made.status}`);
         const maya = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
@@ -157,13 +222,28 @@ await withUiStack(
         await maya.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await maya.getByLabel('Email').fill('m.okafor@harborpine.example');
         await maya.getByLabel('Password').fill('northfield-demo');
-        await maya.getByRole('button', { name: /^Sign in/ }).first().click();
+        await maya
+          .getByRole('button', { name: /^Sign in/ })
+          .first()
+          .click();
         await maya.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
         await maya.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const locked = maya.getByTestId('locked-agents-publish');
-        if (!(await locked.waitFor({ timeout: 45_000 }).then(() => true, () => false))) {
-          const header = (await maya.getByTestId('page-header').innerText().catch(() => '')).replace(/\s+/g, ' ');
-          const detail = await (await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents/${agent.id}`, { headers: { Authorization: `Bearer ${await tokenOf('m.okafor@harborpine.example')}`, 'X-Team-Id': 'team_ops' } })).json();
+        if (
+          !(await locked.waitFor({ timeout: 45_000 }).then(
+            () => true,
+            () => false,
+          ))
+        ) {
+          const header = (
+            await maya
+              .getByTestId('page-header')
+              .innerText()
+              .catch(() => '')
+          ).replace(/\s+/g, ' ');
+          const detail = await (
+            await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents/${agent.id}`, { headers: { Authorization: `Bearer ${await tokenOf('m.okafor@harborpine.example')}`, 'X-Team-Id': 'team_ops' } })
+          ).json();
           throw new Error(`no locked Publish; header: ${header.slice(0, 200)}; canPublish ${detail.data?.canPublish}; versions ${JSON.stringify((detail.data?.versions ?? []).map((v) => v.state))}`);
         }
         const disabled = await locked.isDisabled();
@@ -181,8 +261,18 @@ await withUiStack(
           await maya.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
           await maya.waitForTimeout(400);
           await maya.getByTestId('locked-why').focus();
-          const open = await maya.locator('[data-testid="locked-why-text"][data-state$="open"]').first().waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false);
-          if (!open) throw new Error(`tooltip closed at ${width}: trigger ${await maya.getByTestId('locked-why').getAttribute('data-state')}; tips ${JSON.stringify(await maya.locator('[data-testid="locked-why-text"]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-state'), getComputedStyle(e).visibility, e.getBoundingClientRect().width])))}; focused ${await maya.evaluate(() => document.activeElement?.getAttribute('data-testid'))}`);
+          const open = await maya
+            .locator('[data-testid="locked-why-text"][data-state$="open"]')
+            .first()
+            .waitFor({ state: 'visible', timeout: 8_000 })
+            .then(
+              () => true,
+              () => false,
+            );
+          if (!open)
+            throw new Error(
+              `tooltip closed at ${width}: trigger ${await maya.getByTestId('locked-why').getAttribute('data-state')}; tips ${JSON.stringify(await maya.locator('[data-testid="locked-why-text"]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-state'), getComputedStyle(e).visibility, e.getBoundingClientRect().width])))}; focused ${await maya.evaluate(() => document.activeElement?.getAttribute('data-testid'))}`,
+            );
           await maya.waitForTimeout(400);
           await maya.screenshot({ path: join(SHOTS, `locked-why-${width}.png`) });
         }
@@ -191,6 +281,45 @@ await withUiStack(
           disabled && /Publish on Agents/.test(said) && /the Admin and Builder roles have it/.test(said) && /Ask /.test(said),
           { disabled, said },
         );
+      });
+
+      await step('6 A draft workflow the person may not publish shows Publish locked, with the same reason', async () => {
+        // James saves a workflow draft in Operations; Maya, a Reviewer there, opens it.
+        const tokenOf = async (email) =>
+          (
+            await (
+              await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: 'northfield-demo' }),
+              })
+            ).json()
+          ).data.token;
+        const yaml = readFileSync(join(ROOT, 'services/agents-service/tests/fixtures/engine/basic.yaml'), 'utf8').replace('id: refund_check', 'id: uc267_locked_publish');
+        const headers = { Authorization: `Bearer ${await tokenOf('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+        const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/workflows/definitions`, { method: 'POST', headers, body: JSON.stringify({ yaml }) });
+        if (made.status >= 300) throw new Error(`setup: saving the workflow answered ${made.status} ${(await made.text()).slice(0, 200)}`);
+        const maya = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+        maya.on('pageerror', (e) => errors.push(e.message));
+        await maya.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await maya.getByLabel('Email').fill('m.okafor@harborpine.example');
+        await maya.getByLabel('Password').fill('northfield-demo');
+        await maya
+          .getByRole('button', { name: /^Sign in/ })
+          .first()
+          .click();
+        await maya.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+        await maya.goto(`${consoleUrl}/workflows/definitions/uc267_locked_publish`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const locked = maya.getByTestId('locked-workflows-publish');
+        await locked.waitFor({ timeout: 45_000 });
+        const disabled = await locked.isDisabled();
+        await maya.getByTestId('locked-why').focus();
+        const tip = maya.getByTestId('locked-why-text').first();
+        await tip.waitFor({ timeout: 15_000 });
+        for (let i = 0; i < 20 && !/have it|has it/.test(await tip.innerText()); i++) await maya.waitForTimeout(500);
+        const said = (await tip.innerText()).replace(/\s+/g, ' ');
+        await maya.screenshot({ path: join(SHOTS, 'locked-workflow-publish-1280.png') });
+        check('6 A draft workflow the person may not publish shows Publish locked, with the same reason', disabled && /Publish on Workflows/.test(said) && /Ask /.test(said), { disabled, said });
       });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

@@ -37,7 +37,6 @@ SEED = "seed"  # the dev seed writes records of every team into the local tenant
 ENGINE_PASS = "engine_pass"  # the workflow worker runs one claimed run's pass
 MEMORY_RETENTION = "memory_retention"  # the retention sweep expires one tenant's memories
 MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound mailboxes
-USAGE_COUNTS = "usage_counts"  # knowledge usage counts every team's agents citing a base and names only the caller's
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
@@ -58,7 +57,6 @@ __all__ = [
     "SYSTEM_ROLE",
     "TENANT_ROLE",
     "TESTS",
-    "USAGE_COUNTS",
     "NoTenantError",
     "current_team",
     "current_tenant",

@@ -18,7 +18,7 @@ import { relativeTime } from '@/lib/format';
 import type { ActivityKind, ActivityRow, ActivityStatus } from '@/lib/types/activity';
 import { cn } from '@/lib/utils';
 
-const KIND: Record<ActivityKind, string> = { workflow_run: 'Workflow run', agent_run: 'Agent run', chat: 'Chat', email: 'Email received', decision: 'Human Task decision', tool_call: 'Tool call', case: 'Case', reminder: 'Reminder', system_workflow: 'Shipped workflow update' };
+const KIND: Record<ActivityKind, string> = { workflow_run: 'Workflow run', agent_run: 'Agent run', chat: 'Chat', email: 'Email received', decision: 'Human Task decision', tool_call: 'Tool call', case: 'Case', reminder: 'Reminder', system_workflow: 'Shipped workflow update', background: 'Background job' };
 const STATUS: Record<ActivityStatus, string> = { running: 'Running', waiting: 'Waiting on a person', done: 'Done', failed: 'Failed', skipped: 'Skipped' };
 const TONE: Record<ActivityStatus, string> = { running: '', waiting: 'border-warning/40 bg-warning/10 text-warning-text', done: 'border-success/40 bg-success/10 text-success-text', failed: 'border-destructive/40 bg-destructive/10 text-destructive', skipped: 'text-muted-foreground' };
 
@@ -57,8 +57,8 @@ const COLUMNS: ColumnDef<Row>[] = [
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => (
-      <Badge variant="outline" className={cn('font-normal capitalize', TONE[row.original.status])} data-testid="activity-status">
-        {row.original.outcome.replace(/_/g, ' ')}
+      <Badge variant="outline" className={cn('font-normal', TONE[row.original.status])} data-testid="activity-status">
+        {row.original.outcomeText ?? row.original.outcome}
       </Badge>
     ),
   },
@@ -96,7 +96,7 @@ export default function ActivityPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="activity" onRetry={() => query.refetch()} retrying={query.isFetching} testId="activity-error" />
+        <QueryError what="activity" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="activity-error" />
       ) : (
         <div className="flex flex-col gap-4">
           {source && (

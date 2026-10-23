@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, FlaskConical, MoreHorizontal, Pause, Play, Rocket, SearchX, Send, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bot, FlaskConical, MoreHorizontal, Pause, Play, Rocket, Send, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -69,7 +69,6 @@ import {
 import { useCanSetDefaultAgent, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
-import { ApiError } from '@/lib/api';
 import { relativeTime } from '@/lib/format';
 import { useTeam } from '@/hooks/use-team';
 import { teamLabel } from '@/components/shared/team-name';
@@ -79,7 +78,7 @@ import { SplitView } from '@/components/shared/setting/split-view';
 const TABS = ['settings', 'evals', 'channels'] as const;
 type Tab = (typeof TABS)[number];
 
-function AgentErrorState({ notFound, onRetry, retrying, error }: { notFound: boolean; onRetry: () => void; retrying: boolean; error: unknown }) {
+function AgentErrorState({ onRetry, retrying, error }: { onRetry: () => void; retrying: boolean; error: unknown }) {
   return (
     <div className="flex flex-col gap-6 px-6 py-6 lg:px-8">
       <Button variant="ghost" size="sm" className="self-start" asChild>
@@ -87,11 +86,7 @@ function AgentErrorState({ notFound, onRetry, retrying, error }: { notFound: boo
           <ArrowLeft className="size-4" /> Agents
         </a>
       </Button>
-      {notFound ? (
-        <EmptyState icon={SearchX} title="Agent not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to agents', href: '/agents' }} />
-      ) : (
-        <QueryError what="this agent" onRetry={onRetry} retrying={retrying} error={error} />
-      )}
+      <QueryError what="this agent" onRetry={onRetry} retrying={retrying} error={error} back={{ label: 'Back to agents', href: '/agents' }} />
     </div>
   );
 }
@@ -108,7 +103,7 @@ export default function AgentPage() {
   const query = useAgent(id);
   if (query.isPending) return <RecordSkeleton railSide="right" />;
   if (query.isError)
-    return <AgentErrorState notFound={query.error instanceof ApiError && query.error.status === 404} onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />;
+    return <AgentErrorState onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />;
   return <AgentSettingsPage key={`${query.data.id}-${query.data.version}`} agent={query.data} />;
 }
 
@@ -365,7 +360,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 <div className="flex min-w-0 flex-col gap-4">
           <ReadOnlyNotice noun="agents" canEdit={agent.canEdit} teamId={agent.teamId} teamName={agent.teamName} />
           <BuilderFieldset canEdit={agent.canEdit}>
-          <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} />
+          <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} />
           <InstructionsSection draft={draft} set={set} toolbar={assist.toolbar} footer={assist.footer} textareaRef={assist.textareaRef} />
           <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
           <KnowledgeSection draft={draft} set={set} />

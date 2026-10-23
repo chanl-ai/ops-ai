@@ -85,7 +85,7 @@ function toSession(s: Stored): Session {
 }
 
 /**
- * Email and password sign-in against platform-service, the only token issuer (.codeloop/wiki/concepts/platform-service.md). Keeps
+ * Email and password sign-in against platform-service, the only token issuer (docs/services/platform-service/overview.md). Keeps
  * the 15-minute access token and the refresh token in local storage, shared by every tab, refreshes ahead of expiry, and
  * hands the access token and its teams to the API transport through `identity()`; `renew()` refreshes after a service's
  * 401. A refresh token works once (platform-service ends the session if one is spent twice), so a refresh runs under a
@@ -224,7 +224,7 @@ export function createPlatformProvider(baseUrl: string): AuthProvider & { identi
 
   return {
     name: 'platform',
-    // MFA enrolment moves to platform-service in its MFA slice (.codeloop/wiki/concepts/platform-service.md); until then it has none.
+    // MFA enrolment moves to platform-service in its MFA slice (docs/services/platform-service/overview.md); until then it has none.
     enrolsMfa: false,
     identity: () => {
       const s = read();

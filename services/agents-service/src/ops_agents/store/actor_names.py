@@ -10,10 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .agent_registry import registry_agent_versions, registry_agents
 from .mailboxes import mailboxes
 from .tenancy import current_tenant, tenant_tx
+
+# What a run of a workflow version with no name is called where people read it: never its id (c-508).
+UNNAMED_WORKFLOW = "a workflow run"
 
 
 class ActorNames:
@@ -29,7 +33,7 @@ class ActorNames:
             if addresses:
                 m = mailboxes
                 q = sa.select(m.c.address, m.c.name).where(
-                    m.c.tenant_id == current_tenant(), m.c.address.in_(addresses)
+                    m.c.tenant_id == current_tenant(), m.c.address.in_(addresses), team_visible(m)
                 )
                 names |= {("trigger", str(a)): str(n) for a, n in (await c.execute(q)).all()}
             if run_ids:
@@ -41,7 +45,7 @@ class ActorNames:
                     ),
                 )
                 q = (
-                    sa.select(r.c.id, sa.func.coalesce(d.c.name, r.c.workflow_id))
+                    sa.select(r.c.id, sa.func.coalesce(sa.func.nullif(d.c.name, ""), sa.literal(UNNAMED_WORKFLOW)))
                     .select_from(named)
                     .where(r.c.tenant_id == current_tenant(), r.c.id.in_(run_ids))
                 )

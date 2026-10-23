@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { ApprovalRequestInput, BlankModuleInput, HttpOperationInput, GrantView, ImportOperationsInput, ModuleDetailsPatch, ModuleFilters, ModuleInput, ModuleSource, ModuleTestInput, ModuleView, OperationPatch } from '@/lib/types/tool-modules';
+import { useTeamQuery } from './team-query';
 
 /** Module keys start with 'modules'; module writes also refresh 'tools' (agent grants read operations) and 'agent'. */
 export const mk = {
@@ -15,8 +16,8 @@ export const mk = {
 };
 
 export const useToolModules = (p: ListParams<ModuleFilters> & { view: ModuleView }) => usePagedQuery({ queryKey: mk.list(p), queryFn: () => api.toolModules.list(p) });
-export const useToolModule = (id: string) => useQuery({ queryKey: mk.one(id), queryFn: () => api.toolModules.get(id) });
-export const useModuleActivity = (id: string, enabled = true) => useQuery({ queryKey: mk.activity(id), queryFn: () => api.toolModules.activity(id), enabled });
+export const useToolModule = (id: string) => useTeamQuery({ queryKey: mk.one(id), queryFn: () => api.toolModules.get(id) });
+export const useModuleActivity = (id: string, enabled = true) => useTeamQuery({ queryKey: mk.activity(id), queryFn: () => api.toolModules.activity(id), enabled });
 
 function useModuleWrite<A, R>(fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();

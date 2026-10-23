@@ -3,9 +3,9 @@
 Status: current. These screens were approved on 2026-10-18. The real Channels pages
 are built to match them; a difference is a defect unless a new version is approved here.
 
-Approved build: console at `2214c5a1`, routes under `/preview/channels` on sample data
-(`apps/console/src/app/preview/channels`). Card c-242. The walk that
-checks them is uc-165 (`docs/usecases/console/channels-preview.md`).
+Approved build: console at `2214c5a1`, routes under `/preview/channels` on sample data, since deleted with every
+console preview page (c-517); the screenshots below are the approved record. Card c-242. The real pages are walked
+by uc-142 (`docs/usecases/console/channels-real.md`) and uc-199 (`docs/usecases/agents-service/connect-a-mailbox.md`).
 
 | Screen | Route | 1280 px | 400 px |
 |---|---|---|---|

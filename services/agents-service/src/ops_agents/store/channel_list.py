@@ -36,8 +36,8 @@ def _iso(at: datetime) -> str:
     return at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def _in(column: sa.ColumnElement[Any], teams: tuple[str, ...] | None) -> sa.ColumnElement[bool]:
-    return sa.true() if teams is None else column.in_(teams)
+def _in(column: sa.ColumnElement[Any], teams: tuple[str, ...]) -> sa.ColumnElement[bool]:
+    return column.in_(teams)
 
 
 @dataclass
@@ -172,9 +172,7 @@ class ChannelList:
             )
         return out
 
-    async def rows(
-        self, teams: tuple[str, ...] | None, *, now: datetime | None = None, retired: bool = False
-    ) -> Listed:
+    async def rows(self, teams: tuple[str, ...], *, now: datetime | None = None, retired: bool = False) -> Listed:
         """`retired` keeps retired chat channels in the list, for an agent's embed table; Channels leaves them out."""
         at = now or datetime.now(UTC)
         day, week = _iso(at - timedelta(days=1)), _iso(at - timedelta(days=7))
@@ -221,7 +219,7 @@ class ChannelList:
                     sa.func.count().filter(e.c.recorded_at >= week),
                     sa.func.max(e.c.recorded_at),
                 )
-                .where(e.c.tenant_id == tenant)
+                .where(e.c.tenant_id == tenant, team_visible(e))
                 .group_by(e.c.source)
             )
             for source, n_day, n_week, last in (await c.execute(q)).all():
@@ -231,6 +229,8 @@ class ChannelList:
                 sa.select(r.c.created_by, sa.func.count())
                 .where(
                     r.c.tenant_id == tenant,
+                    team_visible(r),
+                    _in(r.c.team_id, teams),
                     r.c.created_by.like("trigger:email:%"),
                     r.c.status == "failed",
                     r.c.created_at >= day,

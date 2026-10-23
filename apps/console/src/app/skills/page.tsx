@@ -259,7 +259,7 @@ export default function SkillsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="skills" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="skills" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <SavedViewTabs

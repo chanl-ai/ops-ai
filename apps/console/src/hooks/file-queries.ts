@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, filesOnService } from '@/lib/api';
 import type { EvidenceExportInput, FileFilters, FilePurpose, FileView, ScanStatus, StorageCredentialInput, StorageSettingsInput, StorageTarget } from '@/lib/types/files';
 import type { AuditFilters, AuditView } from '@/lib/types/governance';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 /** True when Files runs on files-service, which does not set retention or export evidence yet. */
 export const useFilesOnService = () => filesOnService;
@@ -22,9 +23,9 @@ export const fk = {
 export const useFiles = (p: ListParams<FileFilters> & { view: FileView }) => usePagedQuery({ queryKey: fk.list(p), queryFn: () => api.files.list(p) });
 /** Polls while a scan is running so the sheet moves from Scanning to its result without a reload. */
 export const useFile = (id: string | null) =>
-  useQuery({ queryKey: fk.one(id ?? ''), queryFn: () => api.files.get(id!), enabled: !!id, refetchInterval: (q) => (q.state.data?.scan.status === 'pending' ? 1000 : false) });
-export const useUploadLimits = () => useQuery({ queryKey: fk.limits, queryFn: api.files.limits, staleTime: 60_000 });
-export const useStorageSettings = (enabled = true) => useQuery({ queryKey: fk.storage, queryFn: api.files.storage.get, enabled });
+  useTeamQuery({ queryKey: fk.one(id ?? ''), queryFn: () => api.files.get(id!), enabled: !!id, refetchInterval: (q) => (q.state.data?.scan.status === 'pending' ? 1000 : false) });
+export const useUploadLimits = () => useTeamQuery({ queryKey: fk.limits, queryFn: api.files.limits, staleTime: 60_000 });
+export const useStorageSettings = (enabled = true) => useTeamQuery({ queryKey: fk.storage, queryFn: api.files.storage.get, enabled });
 
 /** File writes show on the Files page, on whatever references the file, and in the audit log. */
 function useFileWrite<A, R>(fn: (a: A) => Promise<R>) {
@@ -54,7 +55,7 @@ export const useExportEvidence = () => useFileWrite((i: EvidenceExportInput) => 
 export const useExportAudit = () => useFileWrite((p: ListParams<AuditFilters> & { view: AuditView }) => api.files.exportAudit(p));
 export const useSaveStorage = () => useFileWrite((i: StorageSettingsInput) => api.files.storage.update(i));
 export const useTestStorage = () => useMutation({ mutationFn: (target: StorageTarget) => api.files.storage.test(target) });
-export const useStorageCredentials = () => useQuery({ queryKey: [...fk.storage, 'credentials'], queryFn: api.files.storage.credentials.list });
+export const useStorageCredentials = () => useTeamQuery({ queryKey: [...fk.storage, 'credentials'], queryFn: api.files.storage.credentials.list });
 export const useSetStorageCredential = () => useFileWrite((i: { name: string; input: StorageCredentialInput }) => api.files.storage.credentials.set(i.name, i.input));
 export const useRemoveStorageCredential = () => useFileWrite((name: string) => api.files.storage.credentials.remove(name));
 

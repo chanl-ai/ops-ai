@@ -4,7 +4,7 @@ Status: current.
 
 | Rule | Detail |
 |---|---|
-| Read first | `.codeloop/wiki/concepts/builder-best-practices.md` before starting any card; `CONTRIBUTING.md`, then `apps/console/CLAUDE.md` before changing console code |
+| Read first | `CONTRIBUTING.md`; `apps/console/CLAUDE.md` before changing console code; `docs/README.md` for the design behind a change |
 | Verify | Run `pnpm verify` from the repo root before reporting work as done; it must pass |
 | Fixtures | Demo data lives only in `apps/console/src/lib/api/mock/`. Never put fixtures in types, hooks, components or pages |
 | Data flow | Pages read data through hooks; hooks call the API contract; components take props only |

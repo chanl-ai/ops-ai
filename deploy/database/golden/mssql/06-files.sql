@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0012
+-- files-service, stamped at files_0013
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -187,7 +187,7 @@ SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VAR
 GO
 CREATE FUNCTION ops_security.files_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_files_system';
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_files_system';
 GO
 CREATE FUNCTION ops_security.files_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
@@ -264,5 +264,5 @@ CREATE TABLE alembic_version_files (
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0012');
+INSERT INTO alembic_version_files (version_num) VALUES ('files_0013');
 GO

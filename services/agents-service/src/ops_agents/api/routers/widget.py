@@ -190,7 +190,7 @@ async def list_deployments(
     rt: Rt, me: Me, agent_id: Annotated[str | None, Query(alias="agentId")] = None
 ) -> JSONResponse:
     """The team's widget deployments, newest first; `agentId` keeps one agent's."""
-    rows = await _store(rt).for_team(None if me.team_ids is None else me.team_id or None)
+    rows = await _store(rt).for_team(me.team_id)
     rows = [r for r in rows if agent_id is None or r["agent_id"] == agent_id]
     usage = await _usage(rt, rows)
     return ok([_view(r, usage[r["id"]]) for r in rows])
@@ -215,7 +215,7 @@ async def _usage(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, dict[str,
 
 async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> dict[str, Any]:
     row = await _store(rt).get(deployment_id)
-    if row is None or (me.team_ids is not None and row["team_id"] not in me.team_ids):
+    if row is None or row["team_id"] not in me.team_ids:
         raise NotFound("Widget deployment")
     return row
 

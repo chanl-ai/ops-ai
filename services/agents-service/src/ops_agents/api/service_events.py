@@ -18,7 +18,9 @@ from ops_engine.definition import WorkflowDefinition, parse, validate
 from ops_engine.store import DefinitionStore, RunStore, WorkflowOwnedError
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import background
 
+from ..store.background import BackgroundJobs, heartbeats
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.service_events import ServiceEvents, attempts_of, listeners
 from ..store.tenancy import current_tenant
@@ -187,6 +189,29 @@ async def emit(
     )
 
 
+_beats: dict[int, background.Beat] = {}
+
+# The events that start the shipped event workflows, as a person reads them in Activity.
+_EVENT_WORDS = {
+    "tool_access.requested": "a tool access request",
+    "file.read_requested": "a file to read",
+    "file.deleted": "a deleted file",
+    "extraction.corrected": "corrected read values",
+    "task.requested": "a task opened through the API",
+}
+
+
+def plain_event(name: str) -> str:
+    return _EVENT_WORDS.get(name, "an event")
+
+
+def event_beat(db: AsyncEngine) -> background.Beat:
+    """The event workflows' heartbeat in this process (c-516): one per database, as the API and worker both deliver."""
+    if id(db) not in _beats:
+        _beats[id(db)] = background.Beat("event_workflows", heartbeats(db))
+    return _beats[id(db)]
+
+
 async def deliver(
     db: AsyncEngine,
     handler: str | None,
@@ -200,7 +225,30 @@ async def deliver(
 ) -> dict[str, Any]:
     """`emit` without first publishing the shipped event workflows, for the engine worker, which has no Runtime: a
     tenant gets them on its first event through the API, and until then the event is recorded unhandled."""
+    try:
+        out = await _deliver(
+            db, handler, name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload
+        )
+    except Exception as e:
+        await event_beat(db).failed(e)
+        raise
+    await event_beat(db).ok(len(out["run_ids"]))
+    return out
+
+
+async def _deliver(
+    db: AsyncEngine,
+    handler: str | None,
+    *,
+    name: str,
+    key: str,
+    team_id: str,
+    source: str,
+    actor: str | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     events = ServiceEvents(db)
+    jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
@@ -227,6 +275,15 @@ async def deliver(
         )
         run_ids.append(str(run["id"]))
         attempts = max(attempts, n)
+        title = str(stored.get("name") or stored["workflow_id"])
+        # An account-level notice has no team, so no team's Activity shows it; the Background page counts it.
+        if event["team_id"]:
+            await jobs.record(
+                "event_workflows",
+                f"Ran {title} for {plain_event(name)}",
+                "done",
+                team_id=str(event["team_id"]),
+            )
     status = "started" if run_ids else "unhandled"
     if not run_ids:
         log.warning("service_event_unhandled", event_name=name, key=key, source=source)

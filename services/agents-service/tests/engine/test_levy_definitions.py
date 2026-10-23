@@ -101,12 +101,15 @@ async def test_a_matched_debtor_waits_for_hold_or_flag_on_the_first_account_for_
     assert bank.calls == ["search_customers", "list_accounts"]
 
 
-async def test_a_debtor_found_by_name_alone_ends_not_matched_with_the_candidates() -> None:
+async def test_a_debtor_found_by_name_alone_waits_for_a_person_to_find_the_customer_or_close_it() -> None:
+    """c-477: a debtor who matches no customer gets a No customer matched case and a Human Task, not a silent end."""
     record = {"name": "Marcus Bell", "address": "9 Other Road, Toronto", "ssn_last4": "0000", "amount": 10.0}
-    interrupts, values, bank = await run(record | {"case_no": "X"})
-    assert not interrupts and bank.calls == ["search_customers"]
-    ended = values[channel("not_matched")]["out"]
-    assert ended["outcome"] == "not_matched" and ended["output"]["candidates"] == [MARCUS]
+    interrupts, _, bank = await run(record | {"case_no": "X"})
+    assert bank.calls == ["search_customers"]
+    [paused] = interrupts
+    assert paused.value["title"] == "Find the customer or close as not ours"
+    assert [o["name"] for o in paused.value["options"]] == ["found", "not_ours"]
+    assert paused.value["draft"]["candidates"] == [MARCUS] and paused.value["draft"]["caseId"] == "case_1"
 
 
 async def test_each_debtor_opens_a_case_naming_the_debtor_the_court_case_and_the_matched_customer() -> None:
@@ -125,7 +128,11 @@ async def test_each_debtor_opens_a_case_naming_the_debtor_the_court_case_and_the
     ]
     assert paused.value["draft"]["caseId"] == "case_1"
     assert unmatched.opened == [
-        {"subject": "Levy notice: Jordan Whitfield (X-9)", "priority": "high", "customerName": "Jordan Whitfield"}
+        {
+            "subject": "No customer matched: Jordan Whitfield (X-9)",
+            "priority": "high",
+            "customerName": "Jordan Whitfield",
+        }
     ]
 
 

@@ -24,7 +24,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SplitView } from '@/components/shared/setting/split-view';
 import { cn } from '@/lib/utils';
 
-/** header (PageLayout) + [rail · main] with a drag handle between them. Rail stacks its cards; below 1024px they stack. */
+/** header (PageLayout) + [rail · main] with a drag handle between them. Rail stacks its cards; below 1024px the columns
+ * stack with the main column first, so a phone opens on the record's content (c-500), the rail after it. */
 export function RecordLayout({
   rail,
   children,
@@ -36,7 +37,7 @@ export function RecordLayout({
 }) {
   return (
     <div className={className}>
-      <SplitView id="record-layout" bare defaultLeft={27} leftMin="20" rightMin="40" left={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} right={<div className="min-w-0">{children}</div>} />
+      <SplitView id="record-layout" bare rightFirstWhenStacked defaultLeft={27} leftMin="20" rightMin="40" left={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} right={<div className="min-w-0">{children}</div>} />
     </div>
   );
 }

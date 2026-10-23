@@ -1,5 +1,8 @@
 import type { ChatWidget, ToolCall } from '@/lib/types/chat';
 
+/** A tool's name as the API words it for a widget footer (agents-service call_label's fallback). */
+const toolLabel = (tool: string) => tool.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
 /**
  * Canned agent turns. A turn calls tools (each result may carry MCP App widgets), then writes text. Turns with
  * `ground` instead answer from the thread's knowledge bases through the knowledge query API.
@@ -57,6 +60,7 @@ function slaTurn(sla: QueueSla[]): TurnPlan {
             title: 'Open cases by queue',
             app: 'Case engine',
             tool: 'sla_report',
+            toolLabel: toolLabel('sla_report'),
             asOf,
             href: '/cases',
             columns: [
@@ -75,6 +79,7 @@ function slaTurn(sla: QueueSla[]): TurnPlan {
             title: 'Breaching and due within the hour',
             app: 'Case engine',
             tool: 'sla_report',
+            toolLabel: toolLabel('sla_report'),
             asOf,
             xKey: 'queue',
             yLabel: 'Cases',
@@ -116,6 +121,7 @@ function disputeTurn(reviewers: string): TurnPlan {
             status: 'Pending review',
             app: 'Core banking',
             tool: 'get_transactions',
+            toolLabel: toolLabel('get_transactions'),
             asOf,
             href: '/reviews?review=REV-3020',
             fields: [
@@ -144,6 +150,7 @@ function disputeTurn(reviewers: string): TurnPlan {
             title: 'Provisional credit',
             app: 'Core banking',
             tool: 'issue_provisional_credit',
+            toolLabel: toolLabel('issue_provisional_credit'),
             asOf,
             reviewId: 'REV-3020',
             action: 'Issue a provisional credit and open a chargeback',
@@ -181,6 +188,7 @@ function kycTurn(): TurnPlan {
             status: 'KYC overdue',
             app: 'CRM',
             tool: 'lookup_customer',
+            toolLabel: toolLabel('lookup_customer'),
             asOf,
             fields: [
               { label: 'Last KYC refresh', value: '18 April 2023' },
@@ -195,6 +203,7 @@ function kycTurn(): TurnPlan {
             title: 'KYC refresh request',
             app: 'Case engine',
             tool: 'open_case',
+            toolLabel: toolLabel('open_case'),
             asOf,
             description: 'Opens a case in the KYC refresh queue. The SLA starts when you submit.',
             submitLabel: 'Open request',
@@ -231,6 +240,7 @@ function metricsTurn(): TurnPlan {
             title: 'Last 7 days',
             app: 'Case engine',
             tool: 'case_metrics',
+            toolLabel: toolLabel('case_metrics'),
             asOf,
             metrics: [
               { label: 'Cases opened', value: '1,284', delta: '+6% vs prior week', tone: 'neutral' },
@@ -246,6 +256,7 @@ function metricsTurn(): TurnPlan {
             title: 'Cases opened and drafted per day',
             app: 'Case engine',
             tool: 'case_metrics',
+            toolLabel: toolLabel('case_metrics'),
             asOf,
             xKey: 'day',
             yLabel: 'Cases',

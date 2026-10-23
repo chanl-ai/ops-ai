@@ -5,7 +5,6 @@ import { Mail } from 'lucide-react';
 
 import { MailboxSettingsForm, MailboxStatus, MailboxWorkflows } from '@/components/channels/mailbox-panels';
 import { PageLayout } from '@/components/page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { useMailbox } from '@/hooks/channels-queries';
@@ -18,11 +17,7 @@ export default function MailboxPage({ params }: { params: Promise<{ id: string }
   if (mailbox.isError && !mailbox.data)
     return (
       <PageLayout icon={Mail} title="Mailbox" description="Channels › Email" backHref="/channels/email">
-        {(mailbox.error as { status?: number })?.status === 404 ? (
-          <EmptyState icon={Mail} title="Mailbox not found" description="No mailbox of this team has that id." action={{ label: 'Back to mailboxes', href: '/channels/email' }} />
-        ) : (
-          <QueryError what="the mailbox" onRetry={() => void mailbox.refetch()} />
-        )}
+        <QueryError what="the mailbox" onRetry={() => void mailbox.refetch()} error={mailbox.error} back={{ label: 'Back to mailboxes', href: '/channels/email' }} />
       </PageLayout>
     );
   const m = mailbox.data!;

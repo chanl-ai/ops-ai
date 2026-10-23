@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import operator
 import re
 from collections.abc import Awaitable, Callable, Mapping
@@ -130,7 +131,15 @@ def lookup(path: str, scope: Mapping[str, Any]) -> Any:
 
 
 def _text(value: Any) -> str:
-    return "" if value is None else str(value)
+    """A value filled into text, which people read (a Human Task's title, a case's subject or note). A decimal number
+    gets thousands separators and, when it has at most two places, both of them (2140.55 is "2,140.55", 1240.0 is
+    "1,240.00"); integers and strings are left as they are, so years, counts and ids never gain commas. A whole-value
+    path keeps its type and never comes here."""
+    if value is None:
+        return ""
+    if isinstance(value, float) and math.isfinite(value):
+        return f"{value:,.2f}" if round(value, 2) == value else f"{value:,}"
+    return str(value)
 
 
 def resolve(value: Any, scope: Mapping[str, Any]) -> Any:
@@ -631,6 +640,35 @@ async def documents_purge(call: NodeCall) -> Outcome:
     return Outcome("ok", await call.ports.documents.purge(call.run_id, str(call.params.get("file") or "")))
 
 
+# An id as a value (`fil_0f3a9c21`, `wfrun_edc46ea9518e`): never a child's label.
+_ID_VALUE = re.compile(r"^[a-z]+_[A-Za-z0-9]{8,}$")
+
+
+def _first_text(value: Any) -> str | None:
+    """The first text in a value that is not an id, depth first in its own order."""
+    if isinstance(value, str):
+        return value.strip() or None if not _ID_VALUE.match(value) else None
+    if isinstance(value, Mapping):
+        for v in cast(Mapping[str, Any], value).values():
+            if (found := _first_text(v)) is not None:
+                return found
+    if isinstance(value, list):
+        for v in cast(list[Any], value):
+            if (found := _first_text(v)) is not None:
+                return found
+    return None
+
+
+def child_label(template: Any, scope: Mapping[str, Any], item: Any, looping: bool) -> str | None:
+    """What a started child is about, for the run page (c-477): the step's `label` read for this item, else the item's
+    first text that is not an id; None for a step that starts one child with no label."""
+    if isinstance(template, str) and template.strip():
+        text = str(resolve(template, scope)).strip()
+        if text:
+            return text
+    return _first_text(item) if looping else None
+
+
 async def workflow_start(call: NodeCall) -> Outcome:
     """Start workflow: one child, or one per item of `forEach`, each keyed by this run, step, iteration and item so a
     retried or re-run step finds its children instead of starting more. A refusal stops at the item it refused, with
@@ -652,6 +690,10 @@ async def workflow_start(call: NodeCall) -> Outcome:
             return Outcome("error", {"error": message, "code": "too_many_items"})
         items = cast(list[Any], listed)
     prefix = f"{call.run_id}:{call.node.id}:{call.iteration}:"
+    labels = [
+        child_label(call.node.parameters.get("label"), {**call.scope, "item": item, "index": i}, item, looping)
+        for i, item in enumerate(items)
+    ]
 
     async def start(index: int, item: Any) -> StartedRun:
         scope = {**call.scope, "item": item, "index": index} if looping else call.scope
@@ -665,9 +707,12 @@ async def workflow_start(call: NodeCall) -> Outcome:
                 child = await start(index, item)
             except RunRefusedError as e:
                 return Outcome("error", {"error": str(e), "code": e.code, "runs": started})
-            started.append({"index": index, "runId": child.run_id, "created": child.created})
+            started.append(
+                {"index": index, "runId": child.run_id, "created": child.created}
+                | ({"label": labels[index]} if labels[index] else {})
+            )
         return Outcome("started", {"workflowId": workflow, "count": len(started), "runs": started})
-    return await _wait_for_children(call, workflow, items, start, prefix)
+    return await _wait_for_children(call, workflow, items, start, prefix, labels=labels)
 
 
 ENDED = ("succeeded", "failed", "cancelled")
@@ -675,7 +720,9 @@ ENDED = ("succeeded", "failed", "cancelled")
 CHILD_OUTPUT_MAX_BYTES = 64 * 1024
 
 
-def _collected(workflow: str, children: list[dict[str, Any]], total: int) -> dict[str, Any]:
+def _collected(
+    workflow: str, children: list[dict[str, Any]], total: int, labels: list[str | None] | None = None
+) -> dict[str, Any]:
     """The children that ended, in item order, with a count by outcome; an output over the size cap is left out."""
     rows: list[dict[str, Any]] = []
     counts: dict[str, int] = {}
@@ -685,7 +732,9 @@ def _collected(workflow: str, children: list[dict[str, Any]], total: int) -> dic
         output = c.get("output")
         big = len(json.dumps(output, default=str)) > CHILD_OUTPUT_MAX_BYTES
         outcome = str(c.get("outcome") or c["status"])
-        rows.append({"index": c["index"], "runId": c["runId"], "outcome": outcome, "output": None if big else output})
+        row = {"index": c["index"], "runId": c["runId"], "outcome": outcome, "output": None if big else output}
+        label = labels[int(c["index"])] if labels and 0 <= int(c["index"]) < len(labels) else None
+        rows.append(row | ({"label": label} if label else {}))
         counts[outcome] = counts.get(outcome, 0) + 1
     return {"workflowId": workflow, "count": total, "children": rows, "counts": counts}
 
@@ -696,6 +745,8 @@ async def _wait_for_children(
     items: list[Any],
     start: Callable[[int, Any], Awaitable[StartedRun]],
     prefix: str,
+    *,
+    labels: list[str | None],
 ) -> Outcome:
     """Run workflow with Wait for them (c-263): start up to `batchSize` children, pause, and on each resume (a child
     ended, or the step's timeout fell due) read them all in one call, start more, and go on by `done` once every child
@@ -721,14 +772,14 @@ async def _wait_for_children(
             try:
                 await start(index, item)
             except RunRefusedError as e:
-                so_far = _collected(workflow, await with_outputs(), len(items))["children"]
+                so_far = _collected(workflow, await with_outputs(), len(items), labels)["children"]
                 return Outcome("error", {"error": str(e), "code": e.code, "runs": so_far})
             begun.add(index)
             unfinished += 1
         if len(begun) == len(items) and unfinished == 0:
-            return Outcome("done", _collected(workflow, await with_outputs(), len(items)))
+            return Outcome("done", _collected(workflow, await with_outputs(), len(items), labels))
         if isinstance(resumed, dict) and cast(dict[str, Any], resumed).get("timeout"):
-            out = _collected(workflow, await with_outputs(), len(items))
+            out = _collected(workflow, await with_outputs(), len(items), labels)
             ended = {c["index"] for c in out["children"]}
             waiting = [c["runId"] for c in children if c["index"] not in ended]
             return Outcome("timeout", out | {"waiting": waiting, "notStarted": len(items) - len(begun)})

@@ -16,6 +16,8 @@ export type DefinitionNodeData = {
   typeLabel: string;
   /** "for each <list> from <step>" on a step that repeats over a list; absent on one that runs once. */
   repeats?: string | null;
+  /** The whole repeat line when `repeats` is shortened to fit; shown on hover. */
+  repeatsFull?: string | null;
   group: string | null;
   inputs: DrawnPort[];
   outputs: DrawnPort[];
@@ -24,6 +26,10 @@ export type DefinitionNodeData = {
   hasWarning?: boolean;
   /** The node's type id; an End step is drawn as an outcome. */
   typeId?: string;
+  /** The height the layout gave this step (layout/node-size.ts); uc-486 checks the drawn step against it. */
+  layoutHeight?: number;
+  /** One or two lines for the title, as the layout counted them (layout/node-size.ts `titleLines`). */
+  titleLines?: 1 | 2;
   /** On a run's canvas (c-097): what this node's step did; absent in the editor. */
   run?: RunMark;
 };
@@ -74,8 +80,9 @@ export const DefinitionNode = memo(function DefinitionNode({ data, selected }: N
       data-node-id={data.nodeId}
       data-error={broken ? 'true' : undefined}
       data-run={data.run}
+      data-layout-height={data.layoutHeight}
       className={cn(
-        'w-60 rounded-xl border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md',
+        'relative w-72 rounded-xl border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md',
         trigger && 'border-2 border-dashed border-primary/50',
         broken && 'border-2 border-destructive',
         data.run && RUN_MARK[data.run].className,
@@ -89,10 +96,12 @@ export const DefinitionNode = memo(function DefinitionNode({ data, selected }: N
           <Icon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{data.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{data.typeLabel}</p>
+          <p className={cn('text-base font-medium', data.titleLines === 2 ? 'line-clamp-2 h-12' : 'truncate')} title={data.title} data-testid="node-title">
+            {data.title}
+          </p>
+          <p className="truncate text-sm text-muted-foreground">{data.typeLabel}</p>
           {data.repeats && (
-            <p className="flex items-center gap-1 truncate text-xs text-primary" data-testid="node-repeats" title={data.repeats}>
+            <p className="flex items-center gap-1 truncate text-sm text-primary" data-testid="node-repeats" title={data.repeatsFull ?? data.repeats ?? undefined}>
               <Repeat className="size-3 shrink-0" aria-hidden /> {data.repeats}
             </p>
           )}
@@ -119,7 +128,7 @@ export const DefinitionNode = memo(function DefinitionNode({ data, selected }: N
             const input = data.inputs[i];
             const output = data.outputs[i];
             return (
-              <div key={i} className="relative flex min-h-5 items-center justify-between gap-2 px-3 text-xs">
+              <div key={i} className="relative flex min-h-5 items-center justify-between gap-2 px-3 text-sm">
                 {input ? (
                   <>
                     <Handle type="target" position={Position.Left} id={input.name} data-port={input.name} className={HANDLE} />
@@ -147,11 +156,11 @@ function RunBadge({ mark }: { mark: RunMark }) {
   const m = RUN_MARK[mark];
   const Icon = m.icon;
   return (
-    <div className="flex items-center justify-between border-b px-3 py-1">
-      <Badge variant="outline" className={cn('gap-1 font-normal', m.badge)} data-testid="run-mark">
-        <Icon className={cn('size-3', mark === 'running' && 'animate-spin')} /> {m.label}
-      </Badge>
-    </div>
+    // On the card's top edge rather than a row of its own: the step keeps the height the layout gave it, so a run's
+    // marks never close the gap between two steps of a column that lines are routed through.
+    <Badge variant="outline" className={cn('absolute -top-2.5 left-3 z-10 gap-1 bg-card font-normal', m.badge)} data-testid="run-mark">
+      <Icon className={cn('size-3', mark === 'running' && 'animate-spin')} /> {m.label}
+    </Badge>
   );
 }
 

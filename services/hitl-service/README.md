@@ -7,5 +7,4 @@ Status: stub folder, 2026-10-16. There is no hitl-service. Reviews, Cases and wo
 `ops_hitl` will hold Cases, queues, SLA display, the Reviews queue, decisions and the approval tokens people issue
 (ADR-0005). It records SLA outcomes the runner decides from the pinned plan, and resumes runs after a decision.
 
-Design: `docs/architecture/service-map.md`; `.codeloop/wiki/concepts/reviews-and-cases.md`. Specs:
-`.codeloop/wiki/concepts/agent-builder.md`, `.codeloop/wiki/concepts/assurance-evals-and-release.md`.
+Design: `docs/architecture/service-map.md` and `docs/architecture/human-in-the-loop.md`.

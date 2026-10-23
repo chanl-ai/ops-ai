@@ -59,7 +59,7 @@ export default function SignInSettingsPage() {
       );
     }
     if (forbidden) return <EmptyState icon={KeyRound} title="Sign-in is set by the Security team" description={(providers.error as Error).message} testId="sign-in-no-access" />;
-    if (providers.isError) return <QueryError what="the sign-in providers" onRetry={() => providers.refetch()} retrying={providers.isFetching} />;
+    if (providers.isError) return <QueryError what="the sign-in providers" onRetry={() => providers.refetch()} error={providers.error} retrying={providers.isFetching} />;
     const rows = providers.data ?? [];
     return (
       <div className="flex flex-col gap-4" data-testid="sign-in-settings">

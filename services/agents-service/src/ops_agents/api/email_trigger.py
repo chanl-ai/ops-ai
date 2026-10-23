@@ -26,8 +26,9 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.logging import get_logger
-from ops_store import isolation
+from ops_store import background, isolation
 
+from ..store.background import BackgroundJobs
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.leases import LeaseHeldError, Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
@@ -191,6 +192,8 @@ class EmailStarts:
     take the same steps; only who started it differs."""
 
     def __init__(self, db: AsyncEngine, files: FilesClient) -> None:
+        # The mail listener's job log (c-516), set by the listener; a test email from a person logs none.
+        self.jobs: BackgroundJobs | None = None
         self.db = db
         self.files = files
         self.events = TriggerEvents(db)
@@ -295,6 +298,10 @@ class EmailStarts:
         )
         if created:
             log.info("email_run_started", workflow=b.workflow, run=run["id"], message=msg.key, via=via)
+            if self.jobs is not None:
+                name = str(b.row.get("name") or "a workflow")
+                summary = f"Started {name} from a new email"
+                await self.jobs.record("mail_listener", summary, "done", team_id=team)
         await self.record(b, msg, "started" if created else "duplicate", run_id=str(run["id"]))
         return Started(run, created)
 
@@ -349,6 +356,8 @@ class EmailTriggers:
         self.cursors = PollCursors(db)
         self.events = TriggerEvents(db)
         self.mailboxes = MailboxStore(db)
+        # The mail listener's heartbeat (c-516); the worker sets it and the job log on `starts`, tests leave them off.
+        self.beat: background.Beat | None = None
         self.starts = EmailStarts(db, files)
 
     async def bindings(self) -> list[Bound]:
@@ -388,7 +397,15 @@ class EmailTriggers:
         idlers: dict[str, asyncio.Task[None]] = {}
         try:
             while not stop.is_set():
-                await self.poll_all()
+                try:
+                    results = await self.poll_all()
+                    if self.beat is not None:
+                        done = sum(len(r.started) for r in results)
+                        await self.beat.ok(done, waiting=len(results), next_in=every)
+                except Exception as e:  # The bindings could not be read; the next pass tries again.
+                    log.exception("email_bindings_failed", error=type(e).__name__)
+                    if self.beat is not None:
+                        await self.beat.failed(e, next_in=every)
                 live: set[str] = set()
                 for b in await self.bindings():
                     if not is_idle(self.source(b)):

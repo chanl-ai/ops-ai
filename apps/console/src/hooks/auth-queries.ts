@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 
 import { authProvider, isExpired, type ReauthInput, type Session } from '@/lib/auth';
 
 import { useLookups } from './queries';
+import { useSessionQuery } from './team-query';
 
 export type SessionStatus = 'loading' | 'signed_in' | 'signed_out' | 'expired';
 
@@ -31,7 +32,7 @@ export function useSession(): { session: Session | null; status: SessionStatus }
 }
 
 /** What the workspace allows at sign-in (methods, SSO domains, MFA, session length). Policy comes from the API, not the adapter. */
-export const useSignInPolicy = () => useQuery({ queryKey: ['sign-in-policy'], queryFn: () => api.signInPolicy.get(), staleTime: 5 * 60_000 });
+export const useSignInPolicy = () => useSessionQuery({ queryKey: ['sign-in-policy'], queryFn: () => api.signInPolicy.get(), staleTime: 5 * 60_000 });
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -43,7 +44,7 @@ export function useSignInOptions(email: string) {
   const deferred = React.useDeferredValue(email.trim().toLowerCase());
   const valid = EMAIL.test(deferred);
   const domain = valid ? deferred.split('@')[1] : '';
-  return useQuery({
+  return useSessionQuery({
     queryKey: ['sign-in-options', domain],
     queryFn: () => authProvider.signInOptions(deferred),
     enabled: valid,
@@ -69,7 +70,7 @@ export const useSignInWithGoogle = () => useAuthWrite(() => authProvider.signInW
 /** The seeded demo people to offer as one-click sign-ins (c-504). A production build never asks, and the sign-in
  * service answers only in development. */
 export const useDemoPeople = () =>
-  useQuery({
+  useSessionQuery({
     queryKey: ['demo-people'],
     queryFn: () => authProvider.demoPeople?.() ?? Promise.resolve([]),
     enabled: process.env.NODE_ENV !== 'production' && !!authProvider.demoPeople,

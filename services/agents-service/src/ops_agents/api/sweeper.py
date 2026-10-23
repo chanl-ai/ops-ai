@@ -9,6 +9,7 @@ its first checkpoint has nothing to continue, so it is restarted with the input 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from typing import Any
 
 from langgraph.types import Command
@@ -16,7 +17,10 @@ from langgraph.types import Command
 from ops_engine.store import RUN_PREFIX
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import background
+from ops_store.background import HeartbeatStore
 
+from ..store.background import BackgroundJobs
 from ..store.leases import LeaseHeldError
 from .deps import Runtime
 from .email_trigger import POLL_LEASE_PREFIX
@@ -64,7 +68,7 @@ async def recover(
     return run_id
 
 
-async def sweep_once(rt: Runtime) -> list[str]:
+async def sweep_once(rt: Runtime, jobs: BackgroundJobs | None = None) -> list[str]:
     require_graphs(rt)
     assert rt.leases is not None
     recovered: list[str] = []
@@ -77,8 +81,11 @@ async def sweep_once(rt: Runtime) -> list[str]:
             if run := await as_thread_tenant(
                 rt,
                 lease.thread_id,
-                lambda lease=lease: recover(
-                    rt, lease.thread_id, lease.run_id, dead_owner=lease.owner, dead_generation=lease.generation
+                lambda lease=lease: logged(
+                    jobs,
+                    recover(
+                        rt, lease.thread_id, lease.run_id, dead_owner=lease.owner, dead_generation=lease.generation
+                    ),
                 ),
             ):
                 recovered.append(run)
@@ -87,10 +94,23 @@ async def sweep_once(rt: Runtime) -> list[str]:
     return recovered
 
 
-async def sweep_forever(rt: Runtime, interval: float) -> None:
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            await sweep_once(rt)
-        except Exception as e:
-            log.exception("sweep_failed", error=type(e).__name__)
+async def logged(jobs: BackgroundJobs | None, recovering: Awaitable[str | None]) -> str | None:
+    """Recovers inside the thread's team and logs the job there, so the team sees it in Activity."""
+    run = await recovering
+    if run and jobs is not None:
+        await jobs.record("sweeper", "Picked up a run whose worker stopped, and ran it to its end", "done")
+    return run
+
+
+async def sweep_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, jobs: BackgroundJobs) -> None:
+    """The sweeper, a listed background process: a failed sweep is retried and shows in its heartbeat."""
+    assert rt.leases is not None
+    leases = rt.leases
+
+    async def once() -> int:
+        return len(await sweep_once(rt, jobs))
+
+    async def waiting() -> int:
+        return sum(1 for x in await leases.expired() if not x.thread_id.startswith((RUN_PREFIX, POLL_LEASE_PREFIX)))
+
+    await background.run("sweeper", once, stop=asyncio.Event(), store=beats, every_s=interval, waiting=waiting)

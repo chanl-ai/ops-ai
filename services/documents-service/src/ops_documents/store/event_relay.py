@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import SYSTEM_ROLE
 from ops_identity import ServiceClient
+from ops_store import background
 from ops_store.outbox import Relay, Send
 
 
@@ -26,5 +27,7 @@ def sender(agents: ServiceClient) -> Send:
 
 
 async def keep_relaying(engine: AsyncEngine, agents: ServiceClient) -> None:
-    """Until the server stops, which cancels the task."""
-    await Relay(engine, service_outbox, sender(agents), role=SYSTEM_ROLE).run(asyncio.Event())
+    """Until the server stops, which cancels the task; a failed pass is retried and shows in /health/background."""
+    await Relay(engine, service_outbox, sender(agents), role=SYSTEM_ROLE).run(
+        asyncio.Event(), key="documents_relay", store=background.LOCAL
+    )

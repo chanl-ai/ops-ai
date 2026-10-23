@@ -21,42 +21,6 @@
         "title": "ActionField",
         "type": "object"
       },
-      "ActivityLine": {
-        "additionalProperties": false,
-        "properties": {
-          "actorName": {
-            "title": "Actorname",
-            "type": "string"
-          },
-          "at": {
-            "title": "At",
-            "type": "string"
-          },
-          "href": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Href"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "at",
-          "actorName",
-          "text",
-          "href"
-        ],
-        "title": "ActivityLine",
-        "type": "object"
-      },
       "ActivityRow": {
         "additionalProperties": false,
         "properties": {
@@ -81,7 +45,8 @@
               "tool_call",
               "case",
               "system_workflow",
-              "reminder"
+              "reminder",
+              "background"
             ],
             "title": "Kind",
             "type": "string"
@@ -96,6 +61,17 @@
               }
             ],
             "title": "Outcome"
+          },
+          "outcomeText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcometext"
           },
           "ref": {
             "$ref": "#/components/schemas/Ref"
@@ -1722,6 +1698,234 @@
         "title": "AttachableSkill",
         "type": "object"
       },
+      "BackgroundHealthOut": {
+        "additionalProperties": false,
+        "properties": {
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/BackgroundProcessOut"
+            },
+            "title": "Processes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "processes"
+        ],
+        "title": "BackgroundHealthOut",
+        "type": "object"
+      },
+      "BackgroundJobOut": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "process": {
+            "title": "Process",
+            "type": "string"
+          },
+          "processTitle": {
+            "title": "Processtitle",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
+            "type": "string"
+          },
+          "teamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teamname"
+          }
+        },
+        "required": [
+          "id",
+          "process",
+          "processTitle",
+          "summary",
+          "outcome",
+          "teamId",
+          "teamName",
+          "at"
+        ],
+        "title": "BackgroundJobOut",
+        "type": "object"
+      },
+      "BackgroundOut": {
+        "additionalProperties": false,
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/BackgroundJobOut"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/BackgroundProcessOut"
+            },
+            "title": "Processes",
+            "type": "array"
+          },
+          "unreachable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unreachable",
+            "type": "array"
+          }
+        },
+        "required": [
+          "processes",
+          "jobs",
+          "unreachable"
+        ],
+        "title": "BackgroundOut",
+        "type": "object"
+      },
+      "BackgroundProcessOut": {
+        "additionalProperties": false,
+        "properties": {
+          "does": {
+            "title": "Does",
+            "type": "string"
+          },
+          "doneHour": {
+            "title": "Donehour",
+            "type": "integer"
+          },
+          "everySeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Everyseconds"
+          },
+          "instances": {
+            "title": "Instances",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastErrorAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterrorat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "nextRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrunat"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "late",
+              "stopped",
+              "not_reported"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting"
+          }
+        },
+        "required": [
+          "key",
+          "service",
+          "title",
+          "does",
+          "everySeconds",
+          "state",
+          "instances",
+          "lastRunAt",
+          "nextRunAt",
+          "doneHour",
+          "waiting",
+          "lastError",
+          "lastErrorAt"
+        ],
+        "title": "BackgroundProcessOut",
+        "type": "object"
+      },
       "BlockedBy": {
         "additionalProperties": false,
         "properties": {
@@ -2233,6 +2437,28 @@
         "title": "CaseEventView",
         "type": "object"
       },
+      "CaseFeed": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StoryLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "more": {
+            "title": "More",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lines",
+          "more"
+        ],
+        "title": "CaseFeed",
+        "type": "object"
+      },
       "CaseField": {
         "additionalProperties": false,
         "properties": {
@@ -2418,6 +2644,50 @@
         "title": "CaseLink",
         "type": "object"
       },
+      "CaseOrigin": {
+        "additionalProperties": false,
+        "description": "How the case's work began (c-500): email, request (a form or an API call), event, other, or person (opened by\nhand, with no run).",
+        "properties": {
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runid"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "runId",
+          "href"
+        ],
+        "title": "CaseOrigin",
+        "type": "object"
+      },
       "CasePage": {
         "additionalProperties": false,
         "properties": {
@@ -2427,9 +2697,6 @@
             },
             "title": "Actions",
             "type": "array"
-          },
-          "activity": {
-            "$ref": "#/components/schemas/RecentActivity"
           },
           "assignee": {
             "anyOf": [
@@ -2499,6 +2766,9 @@
             "title": "Events",
             "type": "array"
           },
+          "feed": {
+            "$ref": "#/components/schemas/CaseFeed"
+          },
           "fields": {
             "anyOf": [
               {
@@ -2527,6 +2797,9 @@
                 "type": "null"
               }
             ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/CaseOrigin"
           },
           "owner": {
             "anyOf": [
@@ -2639,6 +2912,9 @@
             "title": "Teamid",
             "type": "string"
           },
+          "timer": {
+            "$ref": "#/components/schemas/CaseTimer"
+          },
           "typedFields": {
             "items": {
               "$ref": "#/components/schemas/TypedField"
@@ -2660,6 +2936,9 @@
           "waitingAllHref": {
             "title": "Waitingallhref",
             "type": "string"
+          },
+          "whatsLeft": {
+            "$ref": "#/components/schemas/WhatsLeft"
           },
           "workflow": {
             "anyOf": [
@@ -2704,8 +2983,11 @@
           "actions",
           "links",
           "workflow",
-          "activity",
-          "permissions"
+          "permissions",
+          "timer",
+          "whatsLeft",
+          "origin",
+          "feed"
         ],
         "title": "CasePage",
         "type": "object"
@@ -3356,6 +3638,42 @@
           "durationMs"
         ],
         "title": "CaseStep",
+        "type": "object"
+      },
+      "CaseTimer": {
+        "additionalProperties": false,
+        "properties": {
+          "dueAt": {
+            "title": "Dueat",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "leftS": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lefts"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "dueAt",
+          "state",
+          "leftS"
+        ],
+        "title": "CaseTimer",
         "type": "object"
       },
       "CaseTypeDetail": {
@@ -5428,6 +5746,25 @@
           "data"
         ],
         "title": "Envelope[Approval]",
+        "type": "object"
+      },
+      "Envelope_BackgroundOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BackgroundOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[BackgroundOut]",
         "type": "object"
       },
       "Envelope_BulkResult_": {
@@ -8587,6 +8924,47 @@
         "title": "KnowledgeUsage",
         "type": "object"
       },
+      "LeftItem": {
+        "additionalProperties": false,
+        "properties": {
+          "dueAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dueat"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "who",
+          "what",
+          "dueAt",
+          "href"
+        ],
+        "title": "LeftItem",
+        "type": "object"
+      },
       "LinkIn": {
         "additionalProperties": false,
         "properties": {
@@ -11122,33 +11500,6 @@
         "title": "ReadRecord",
         "type": "object"
       },
-      "RecentActivity": {
-        "additionalProperties": false,
-        "properties": {
-          "allHref": {
-            "title": "Allhref",
-            "type": "string"
-          },
-          "recent": {
-            "items": {
-              "$ref": "#/components/schemas/ActivityLine"
-            },
-            "title": "Recent",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "recent",
-          "total",
-          "allHref"
-        ],
-        "title": "RecentActivity",
-        "type": "object"
-      },
       "Ref": {
         "additionalProperties": false,
         "properties": {
@@ -11164,7 +11515,8 @@
               "review",
               "email",
               "case",
-              "workflow"
+              "workflow",
+              "process"
             ],
             "title": "Kind",
             "type": "string"
@@ -12069,6 +12421,17 @@
             ],
             "title": "Outcome"
           },
+          "outcomeText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcometext"
+          },
           "output": {
             "title": "Output"
           },
@@ -12102,6 +12465,16 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStory"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "updatedAt": {
             "title": "Updatedat",
@@ -12472,6 +12845,17 @@
             ],
             "title": "Outcome"
           },
+          "outcomeText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcometext"
+          },
           "output": {
             "title": "Output"
           },
@@ -12639,6 +13023,55 @@
           "durationMs"
         ],
         "title": "RunStep",
+        "type": "object"
+      },
+      "RunStory": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/StoryChild"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "childrenMore": {
+            "title": "Childrenmore",
+            "type": "integer"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryEmail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StoryLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "reads": {
+            "items": {
+              "$ref": "#/components/schemas/StoryRead"
+            },
+            "title": "Reads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "email",
+          "reads",
+          "children",
+          "childrenMore",
+          "lines"
+        ],
+        "title": "RunStory",
         "type": "object"
       },
       "RunWaiting": {
@@ -13943,7 +14376,8 @@
               "workflow",
               "agent",
               "channel",
-              "case"
+              "case",
+              "process"
             ],
             "title": "Type",
             "type": "string"
@@ -14189,6 +14623,425 @@
           "expiresAt"
         ],
         "title": "StepUpToken",
+        "type": "object"
+      },
+      "StoryAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "title": "Fileid",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "fileId",
+          "name",
+          "type",
+          "size"
+        ],
+        "title": "StoryAttachment",
+        "type": "object"
+      },
+      "StoryBodyFile": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "title": "Fileid",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileId",
+          "name"
+        ],
+        "title": "StoryBodyFile",
+        "type": "object"
+      },
+      "StoryCase": {
+        "additionalProperties": false,
+        "properties": {
+          "caseId": {
+            "title": "Caseid",
+            "type": "string"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/StoryFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "caseId",
+          "subject",
+          "customer",
+          "facts"
+        ],
+        "title": "StoryCase",
+        "type": "object"
+      },
+      "StoryChild": {
+        "additionalProperties": false,
+        "description": "A run a step started, as a person reads it: what it was about, where it is now, its case and Human Task.",
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCase"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "ending": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ending"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "nodeId": {
+            "title": "Nodeid",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stepName": {
+            "title": "Stepname",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/StoryTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "workflowName": {
+            "title": "Workflowname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "nodeId",
+          "index",
+          "workflowName",
+          "stepName",
+          "label",
+          "status",
+          "outcome",
+          "ending",
+          "state",
+          "cases",
+          "tasks"
+        ],
+        "title": "StoryChild",
+        "type": "object"
+      },
+      "StoryEmail": {
+        "additionalProperties": false,
+        "description": "The email a run began with (its trigger is Email received), from its input (ops_engine shapes.EMAIL).",
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/StoryAttachment"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "bodyFile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryBodyFile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "mailbox": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mailbox"
+          },
+          "receivedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receivedat"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/StorySkipped"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "subject",
+          "receivedAt",
+          "body",
+          "mailbox",
+          "attachments",
+          "skipped",
+          "bodyFile"
+        ],
+        "title": "StoryEmail",
+        "type": "object"
+      },
+      "StoryFact": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "StoryFact",
+        "type": "object"
+      },
+      "StoryLine": {
+        "additionalProperties": false,
+        "description": "One thing a run did, as a sentence a person reads (c-500); the case feed is made of the same lines.",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "source",
+          "actor",
+          "text",
+          "href"
+        ],
+        "title": "StoryLine",
+        "type": "object"
+      },
+      "StoryRead": {
+        "additionalProperties": false,
+        "description": "An Extract from file step's read, as the read check draws it.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nodeId": {
+            "title": "Nodeid",
+            "type": "string"
+          },
+          "read": {
+            "$ref": "#/components/schemas/DocumentRead"
+          }
+        },
+        "required": [
+          "nodeId",
+          "name",
+          "read"
+        ],
+        "title": "StoryRead",
+        "type": "object"
+      },
+      "StorySkipped": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "title": "StorySkipped",
+        "type": "object"
+      },
+      "StoryTask": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "reviewId": {
+            "title": "Reviewid",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewId",
+          "title",
+          "open",
+          "decision",
+          "state"
+        ],
+        "title": "StoryTask",
         "type": "object"
       },
       "TaskAction": {
@@ -16359,6 +17212,28 @@
         "title": "WaitingTask",
         "type": "object"
       },
+      "WhatsLeft": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeftItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "resolvable": {
+            "title": "Resolvable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "resolvable"
+        ],
+        "title": "WhatsLeft",
+        "type": "object"
+      },
       "Where": {
         "additionalProperties": false,
         "properties": {
@@ -17569,6 +18444,18 @@
       "ops_agents__api__routers__case_types__Definition": {
         "additionalProperties": false,
         "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
           "description": {
             "default": "",
             "maxLength": 2000,
@@ -17609,6 +18496,18 @@
                 "type": "null"
               }
             ]
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
           },
           "description": {
             "anyOf": [
@@ -18146,6 +19045,117 @@
         "summary": "Health",
         "tags": [
           "Health"
+        ]
+      }
+    },
+    "/health/background": {
+      "get": {
+        "operationId": "background_health_background",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackgroundHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Health Background",
+        "tags": [
+          "Background"
         ]
       }
     },
@@ -20050,7 +21060,8 @@
                   "tool_call",
                   "case",
                   "system_workflow",
-                  "reminder"
+                  "reminder",
+                  "background"
                 ],
                 "type": "string"
               },
@@ -24333,6 +25344,183 @@
         "summary": "Sso Step Up",
         "tags": [
           "Auth"
+        ]
+      }
+    },
+    "/v1/background": {
+      "get": {
+        "operationId": "background_background_processes",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BackgroundOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Background Processes",
+        "tags": [
+          "Background"
         ]
       }
     },

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0012
+-- documents-service, stamped at documents_0013
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -179,7 +179,7 @@ SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VAR
 GO
 CREATE FUNCTION ops_security.documents_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_documents_system';
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_documents_system';
 GO
 CREATE FUNCTION ops_security.documents_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
@@ -244,5 +244,5 @@ CREATE TABLE alembic_version_documents (
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0012');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0013');
 GO

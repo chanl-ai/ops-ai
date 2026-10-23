@@ -55,7 +55,7 @@ export default function GeneralSettingsPage() {
         {current.isPending || agents.isPending ? (
           <Skeleton className="h-9 w-72" />
         ) : current.isError || agents.isError ? (
-          <QueryError what="the default agent" onRetry={() => (current.refetch(), agents.refetch())} retrying={current.isFetching || agents.isFetching} />
+          <QueryError what="the default agent" onRetry={() => (current.refetch(), agents.refetch())} error={current.error ?? agents.error} retrying={current.isFetching || agents.isFetching} />
         ) : (
           <FormField
             id="default-agent"

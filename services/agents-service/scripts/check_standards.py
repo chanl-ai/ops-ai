@@ -62,6 +62,7 @@ LOGGING = KIT / "logging.py"
 # /widget/v1.js answers 410 Gone (retired by c-224); /embed/v1.js is the loader a page loads: no key, no data.
 PUBLIC_ROUTES = {
     "/health",
+    "/health/background",
     "/healthz",
     "/readyz",
     "/v1/openapi.json",

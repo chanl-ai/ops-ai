@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-22",
+  "title": "What's new moves to a button and shows the version",
+  "description": "What's new is now a round button in the bottom-right corner of every page. Its list ends with the version of the console you are using, so you can tell which release you are on.",
+  "tag": "improved",
+  "cards": [
+    "c-510"
+  ]
+}

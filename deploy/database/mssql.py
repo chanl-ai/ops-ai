@@ -60,6 +60,9 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "engine_work": (("SELECT", "UPDATE"), ()),
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
+    # Every background process writes its heartbeat; the Background page reads every team's jobs (c-516).
+    "background_heartbeats": (("SELECT", "INSERT", "UPDATE", "DELETE"), ()),
+    "background_jobs": (("SELECT",), ()),
 }
 Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as

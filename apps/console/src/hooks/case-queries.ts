@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ActionDecision, CaseFilters, CaseView, EmailWorkflowConfig, RunRowFilters, RunView, SampleMailInput, StartRunInput } from '@/lib/types/cases';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 /** Every case key starts with 'cases', so one invalidation refreshes the list, the record and the view counts. */
 export const ck = {
@@ -20,15 +21,15 @@ export const ck = {
 
 export const useCases = (p: ListParams<CaseFilters> & { view: CaseView }) =>
   usePagedQuery({ queryKey: ck.list(p), queryFn: () => api.cases.list(p) });
-export const useCase = (id: string) => useQuery({ queryKey: ck.one(id), queryFn: () => api.cases.get(id) });
+export const useCase = (id: string) => useTeamQuery({ queryKey: ck.one(id), queryFn: () => api.cases.get(id) });
 /** Runs across every workflow for the Cases page. */
 export const useCaseRuns = (p: ListParams<RunRowFilters> & { view: RunView }) =>
   usePagedQuery({ queryKey: ck.runs(p), queryFn: () => api.cases.runs(p) });
 /** One run by id, for a `?run=` link to a run that is not on the current page. */
-export const useCaseRun = (id: string | null) => useQuery({ queryKey: ck.run(id ?? ''), queryFn: () => api.cases.run(id!), enabled: !!id });
+export const useCaseRun = (id: string | null) => useTeamQuery({ queryKey: ck.run(id ?? ''), queryFn: () => api.cases.run(id!), enabled: !!id });
 /** A run's thread state, read beside its row while its sheet or review is open. */
-export const useRunState = (id: string | null) => useQuery({ queryKey: ck.runState(id ?? ''), queryFn: () => api.cases.runState(id!), enabled: !!id });
-export const useCaseQueues = () => useQuery({ queryKey: ck.queues, queryFn: api.cases.queues, staleTime: 60_000 });
+export const useRunState = (id: string | null) => useTeamQuery({ queryKey: ck.runState(id ?? ''), queryFn: () => api.cases.runState(id!), enabled: !!id });
+export const useCaseQueues = () => useTeamQuery({ queryKey: ck.queues, queryFn: api.cases.queues, staleTime: 60_000 });
 
 /** Case writes change the Overview counts too. */
 function useWrite<A, R>(fn: (a: A) => Promise<R>) {
@@ -42,7 +43,7 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>) {
 export const useSetCaseField = (id: string) => useWrite(({ key, value }: { key: string; value: string }) => api.cases.setField(id, key, value));
 export const useAssignCases = () => useWrite(({ ids, assignee }: { ids: string[]; assignee: string }) => api.cases.assign(ids, assignee));
 /** Workflows the Start run dialog offers, fetched while it is open. */
-export const useStartableWorkflows = (enabled: boolean) => useQuery({ queryKey: ck.startable, queryFn: api.cases.startable, enabled, staleTime: 60_000 });
+export const useStartableWorkflows = (enabled: boolean) => useTeamQuery({ queryKey: ck.startable, queryFn: api.cases.startable, enabled, staleTime: 60_000 });
 /** Starts a workflow run; resolves with its Cases row once the run stops. */
 export const useStartRun = () => useWrite((input: StartRunInput) => api.cases.startRun(input));
 export const useAssignRuns = () => useWrite(({ ids, assignee }: { ids: string[]; assignee: string }) => api.cases.assignRuns(ids, assignee));

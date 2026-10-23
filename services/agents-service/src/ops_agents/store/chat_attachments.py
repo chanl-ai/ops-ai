@@ -11,7 +11,8 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
@@ -30,7 +31,7 @@ chat_attachments = sa.Table(
     sa.Column("pages", sa.JSON, nullable=False),
     sa.Column("truncated", sa.Boolean, nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -51,6 +52,7 @@ class ChatAttachments:
             chat_attachments.c.tenant_id == current_tenant(),
             chat_attachments.c.owner_email == owner_email,
             chat_attachments.c.team_id == team_id,
+            team_visible(chat_attachments),
         )
         async with tenant_tx(self.engine) as c:
             return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}

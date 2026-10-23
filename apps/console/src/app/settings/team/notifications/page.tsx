@@ -56,7 +56,7 @@ export default function NotificationsPage() {
       {query.isPending ? (
         <NotificationsSkeleton />
       ) : query.isError && !s ? (
-        <QueryError what="notification settings" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="notification settings" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : s && draft ? (
         <form className="flex flex-col gap-4" onKeyDown={holdEnter} onSubmit={(e) => (e.preventDefault(), dirty && submit())}>
           <Alert>

@@ -127,18 +127,17 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   const facts = pairsOf(regions.facts?.facts);
   const unsaid = facts.filter((f) => !inQuestion(f.value));
   if (unsaid.length) decide.push({ type: 'entity', title: task.type.name, fields: unsaid });
-  const call = regions.write_preview?.call as Data | undefined;
-  if (call) {
-    const input = (call.input && typeof call.input === 'object' ? call.input : call) as Data;
+  // The write's fields as the operation labels them, worded by the API (write_preview.fields, c-508).
+  const described = Array.isArray(regions.write_preview?.fields) ? (regions.write_preview!.fields as Data[]) : [];
+  if (described.length) {
     // A value the facts or the question already show (account, amount, reason) is said once: matched by its label, or
     // by its value with number formatting set aside (2000 is the facts' 2,000.00).
     const plainNumber = (v: unknown) => String(v ?? '').replace(/,/g, '').replace(/\.0+$/, '');
-    const labelOf = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
     const saidLabels = new Set(facts.map((f) => f.label.toLowerCase()));
     const saidValues = new Set(facts.map((f) => plainNumber(f.value)));
-    const changes = Object.entries(input)
-      .filter(([k, v]) => k !== 'tool' && !saidLabels.has(labelOf(k).toLowerCase()) && !saidValues.has(plainNumber(v)) && !inQuestion(v))
-      .map(([k, v]) => ({ label: labelOf(k), value: typeof v === 'number' ? v : String(v ?? '') }));
+    const changes = described
+      .map((f) => ({ label: text(f.label), value: text(f.value) }))
+      .filter((f) => f.label && !saidLabels.has(f.label.toLowerCase()) && !saidValues.has(plainNumber(f.value)) && !inQuestion(f.value));
     if (changes.length) decide.push({ type: 'confirm', title: 'What it changes', details: changes, confirm: { label: 'Approve', reply: '' }, actionsOff: true });
   }
   // The review's own read, when the server still sends it, carries what correcting and confirming need (records,

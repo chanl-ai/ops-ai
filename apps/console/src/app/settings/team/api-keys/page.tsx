@@ -114,7 +114,7 @@ export default function ApiKeysPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={5} />
       ) : query.isError && !query.data ? (
-        <QueryError what="API keys" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="API keys" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

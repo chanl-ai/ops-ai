@@ -82,6 +82,7 @@ TITLES: dict[str, Any] = {
 }
 RUN: dict[str, Any] = {
     "id": "wfrun_doc",
+    "team_id": "team_ops",
     "workflow_id": "mail_document",
     "version": 3,
     "updated_at": "now",
@@ -219,7 +220,7 @@ class Cases:
         on = {"wfrun_a": "case_7", "wfrun_other": "case_9"}
         return {r: on[r] for r in run_ids if r in on}
 
-    async def get(self, case_id: str, _teams: list[str] | None) -> dict[str, Any]:
+    async def get(self, case_id: str, _teams: list[str]) -> dict[str, Any]:
         return {"id": case_id, "subject": "Levy notice: Ana Example (NS-2026-GN-09999)"}
 
 

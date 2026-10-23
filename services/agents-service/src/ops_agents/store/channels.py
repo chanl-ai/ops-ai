@@ -10,7 +10,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from ops_service_kit.errors import Conflict
 from ops_store import Guarantee
+from ops_store.schema import TEAM_OWNED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
@@ -34,6 +36,7 @@ deployments = sa.Table(
     sa.Column("budget", sa.JSON(), nullable=True),
     # The team that owns the deployment; empty when none does, which only an admin changes (c-115).
     sa.Column("team_id", sa.String(64), nullable=False, server_default=""),
+    info=TEAM_OWNED,
 )
 
 channel_messages = sa.Table(
@@ -108,6 +111,8 @@ class ChannelStore:
         return (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(table)
 
     async def put_deployment(self, d: Deployment, now: str) -> None:
+        """Creates the deployment, or changes it when `d.team_id` owns it. An id is unique in the tenant, so one
+        another team holds is refused rather than written over, without naming that team."""
         values = {
             "graph": d.graph,
             "channel": d.channel,
@@ -119,21 +124,24 @@ class ChannelStore:
         stmt = (
             self._insert(deployments)
             .values(id=d.id, created_at=now, **values)
-            .on_conflict_do_update(index_elements=["id"], set_=values)
+            .on_conflict_do_update(index_elements=["id"], set_=values, where=deployments.c.team_id == d.team_id)
         )
         async with self.engine.begin() as c:
-            await c.execute(stmt)
+            if (await c.execute(stmt)).rowcount != 1:
+                raise Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
 
     async def deployment(self, deployment_id: str) -> Deployment | None:
         async with self.engine.connect() as c:
-            r = (await c.execute(deployments.select().where(deployments.c.id == deployment_id))).mappings().first()
+            q = deployments.select().where(deployments.c.id == deployment_id, team_visible(deployments))
+            r = (await c.execute(q)).mappings().first()
         if r is None:
             return None
         return Deployment(r["id"], r["graph"], r["channel"], r["paused"], r["multitask"], r["budget"], r["team_id"])
 
     async def set_paused(self, deployment_id: str, paused: bool) -> bool:
         async with self.engine.begin() as c:
-            res = await c.execute(deployments.update().where(deployments.c.id == deployment_id).values(paused=paused))
+            mine = sa.and_(deployments.c.id == deployment_id, team_visible(deployments))
+            res = await c.execute(deployments.update().where(mine).values(paused=paused))
             return res.rowcount == 1
 
     # ── the message ledger ──

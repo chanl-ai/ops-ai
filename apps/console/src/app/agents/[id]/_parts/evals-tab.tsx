@@ -237,7 +237,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         {latest.isPending ? (
           <Skeleton className="h-40 w-full rounded-lg" />
         ) : latest.isError ? (
-          <QueryError what="the latest eval run" onRetry={() => latest.refetch()} retrying={latest.isFetching} />
+          <QueryError what="the latest eval run" onRetry={() => latest.refetch()} error={latest.error} retrying={latest.isFetching} />
         ) : !latest.data ? (
           <EmptyState icon={FlaskConical} title="No eval runs yet" description="Run evals to test this agent against its test set and the platform's injection, leakage and refusal sets." action={{ label: 'Run evals', onClick: start }} />
         ) : (
@@ -263,7 +263,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             ))}
           </div>
         ) : suites.isError ? (
-          <QueryError what="eval suites" onRetry={() => suites.refetch()} retrying={suites.isFetching} />
+          <QueryError what="eval suites" onRetry={() => suites.refetch()} error={suites.error} retrying={suites.isFetching} />
         ) : (
           <EvalSuiteGrid suites={suites.data} />
         )}
@@ -279,7 +279,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             ))}
           </div>
         ) : cases.isError && !cases.data ? (
-          <QueryError what="eval cases" onRetry={() => cases.refetch()} retrying={cases.isFetching} />
+          <QueryError what="eval cases" onRetry={() => cases.refetch()} error={cases.error} retrying={cases.isFetching} />
         ) : (
           <DataTableWithViews
             columns={caseCols}
@@ -314,7 +314,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
         {runs.isPending ? (
           <Skeleton className="mt-4 h-40 w-full" />
         ) : runs.isError && !runs.data ? (
-          <QueryError what="eval run history" onRetry={() => runs.refetch()} retrying={runs.isFetching} />
+          <QueryError what="eval run history" onRetry={() => runs.refetch()} error={runs.error} retrying={runs.isFetching} />
         ) : (
           <DataTableWithViews
             columns={runColumns}
@@ -365,7 +365,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             <Skeleton className="h-48 w-full" />
           </div>
         ) : openRun.isError ? (
-          <QueryError what="this eval run" onRetry={() => openRun.refetch()} retrying={openRun.isFetching} />
+          <QueryError what="this eval run" onRetry={() => openRun.refetch()} error={openRun.error} retrying={openRun.isFetching} />
         ) : (
           <div className="flex flex-col gap-4">
             <EvalRunSummary run={openRun.data} />

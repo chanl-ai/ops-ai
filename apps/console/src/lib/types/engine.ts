@@ -1,3 +1,5 @@
+import type { DocumentRead } from '@/lib/types/domain';
+
 // The workflow runner (agents-service /v1/workflows/node-types, /v1/workflows/definitions, /v1/runs): v2 definitions
 // built from registered node types, and runs recorded step by step. v1 workflows stay in domain.ts.
 
@@ -204,6 +206,8 @@ export interface EngineRun {
   mode: string;
   status: string;
   outcome: string | null;
+  /** The outcome as people read it ("Documents read"), worded by the API; `outcome` stays the key. */
+  outcomeText?: string | null;
   error: string | null;
   input: Record<string, unknown> | null;
   output: unknown;
@@ -249,4 +253,93 @@ export interface EngineRunDetail extends EngineRun {
   files?: { id: string; name: string | null }[];
   /** Each Human Task decided in the run: who (named), when, why, and the task it was made on. */
   decisions?: { nodeId: string; iteration: number; reviewId: string; action: string; reason: string | null; by: { kind: string; id: string; name: string } | null; at: string | null }[];
+  /** The run told from its steps' output shapes (c-477): the email it began with, what it read, and the runs it started. */
+  story?: RunStory;
+}
+
+/** The email a run began with, when its input has the Email received shape (ops_engine shapes.EMAIL). */
+export interface RunEmail {
+  from: string;
+  subject: string;
+  receivedAt: string | null;
+  /** Attachments the mailbox did not store, each with the reason in words ("The attachment could not be decoded."). */
+  skipped: { name: string; message: string }[];
+  /** The stored copy of the text, when the trigger kept one. */
+  bodyFile: { fileId: string; name: string } | null;
+  /** The email's text as it arrived. */
+  body: string;
+  mailbox: string | null;
+  attachments: { fileId: string; name: string; type: string | null; size: number | null }[];
+}
+
+/** A document-read step's result, as the read check draws it. */
+export interface RunRead {
+  nodeId: string;
+  /** The step's name in the workflow. */
+  name: string;
+  read: DocumentRead;
+}
+
+/** A Human Task a run opened: open while it waits on a person. */
+export interface RunTask {
+  reviewId: string;
+  /** The step's name, which is how Human Tasks titles it. */
+  title: string;
+  open: boolean;
+  /** The decision once made, as the option's label reads ("Hold", "Not ours"); null while open. */
+  decision: string | null;
+  /** In words, from the API: "Hold or flag · waiting for Maya Okafor", "Hold or flag: Hold by Maya Okafor". */
+  state: string;
+}
+
+/** The case a run opened, as its reader may see it: its subject, customer and its own fields in words. */
+export interface RunCase {
+  caseId: string;
+  subject: string;
+  customer: string | null;
+  facts: { label: string; value: string }[];
+}
+
+/** One run a step started, as a person reads it: what it was about, where it is now, and what it opened. */
+export interface RunStoryChild {
+  runId: string;
+  nodeId: string;
+  index: number;
+  workflowName: string;
+  /** The name of the step that started it. */
+  stepName: string;
+  /** What the run was about: the step's per-item label, else the item's first text that is not an id (never an index). */
+  label: string;
+  status: EngineRun['status'];
+  outcome: string | null;
+  /** The name of the End step it finished on; null until it succeeds. */
+  ending: string | null;
+  /** Where it is now in words, from the API: the End step's name, "Waiting for a person", "Failed at <step>". */
+  state: string;
+  cases: RunCase[];
+  tasks: RunTask[];
+}
+
+export type StorySource = 'person' | 'automation' | 'email';
+
+/** One thing a run did, as a sentence a person reads (agents-service run_story.lines); a case's feed is these too. */
+export interface StoryLine {
+  at: string | null;
+  source: StorySource;
+  /** A person's or key's name, an email's sender, or the workflow's name for automation. */
+  actor: string;
+  text: string;
+  /** The run, file, case or Human Task the line is about. */
+  href: string | null;
+}
+
+export interface RunStory {
+  email: RunEmail | null;
+  reads: RunRead[];
+  /** One level: the runs this run's steps started; what each of those read or started is on its own page. */
+  children: RunStoryChild[];
+  /** Runs past the first 50 a step started, counted and not listed. */
+  childrenMore: number;
+  /** What the run did, oldest first. */
+  lines: StoryLine[];
 }

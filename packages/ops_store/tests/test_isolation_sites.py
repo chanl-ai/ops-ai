@@ -41,7 +41,6 @@ WIDENINGS: dict[str, set[str]] = {
         "services/agents-service/src/ops_agents/api/email_trigger.py",
         "services/agents-service/src/ops_agents/store/mailboxes.py",
     },
-    "USAGE_COUNTS": {"services/agents-service/src/ops_agents/api/routers/knowledge_usage.py"},
     "CLAIM_THREAD": {"services/agents-service/src/ops_agents/store/graphs.py"},
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
@@ -49,6 +48,9 @@ WIDENINGS: dict[str, set[str]] = {
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
+    # c-516: heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
+    "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
+    "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},
     "RECOVER_PENDING": {
         "services/documents-service/src/ops_documents/store/document_types.py",
         "services/documents-service/src/ops_documents/store/extractions.py",

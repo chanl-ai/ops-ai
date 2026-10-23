@@ -1,0 +1,3110 @@
+[
+  {
+    "description": "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input. A case of another team, or none, takes the error port.",
+    "effects": "write",
+    "executor": "case.add",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.action.addToCase",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Add to case",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Added",
+        "name": "added"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "caseId": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "minLength": 1,
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "description": "Values the case keeps by name, such as what was read from a document",
+          "maxProperties": 50,
+          "type": "object"
+        },
+        "note": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "caseId"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "caseId": {
+          "help": "The case's id, e.g. `$.nodes.<step>.out.caseId`",
+          "label": "Case",
+          "widget": "mapping"
+        },
+        "fields": {
+          "help": "Values added to the case's own; a name it has takes the new value",
+          "label": "Fields",
+          "widget": "mappings"
+        },
+        "note": {
+          "help": "Shown on the case's timeline beside the run",
+          "label": "Note",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "caseId",
+        "note",
+        "fields",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Opens a case for a customer issue in this run's team, with the run as its first entry. Keyed by this run and step, so a retry finds the case instead of opening another; `caseId` is on the step's output.",
+    "effects": "write",
+    "executor": "case.open",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.action.openCase",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Open case",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Opened",
+        "name": "opened"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "assignee": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        },
+        "caseType": {
+          "maxLength": 64,
+          "type": "string"
+        },
+        "customerId": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        },
+        "customerName": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        },
+        "fields": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "description": "Values the case keeps by name, such as what was read from a document",
+          "maxProperties": 50,
+          "type": "object"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "urgent"
+              ]
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
+          ],
+          "default": "normal"
+        },
+        "subject": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "minLength": 1,
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "assignee": {
+          "help": "A person's email; empty leaves it with the team",
+          "label": "Assignee",
+          "widget": "mapping"
+        },
+        "caseType": {
+          "help": "Which fields the case shows, and in what order",
+          "label": "Case type",
+          "widget": "text"
+        },
+        "customerId": {
+          "help": "The customer's id in the bank's system",
+          "label": "Customer id",
+          "widget": "mapping"
+        },
+        "customerName": {
+          "label": "Customer name",
+          "widget": "mapping"
+        },
+        "fields": {
+          "help": "Values the case keeps by name, such as what was read",
+          "label": "Fields",
+          "widget": "mappings"
+        },
+        "priority": {
+          "help": "Sets the deadlines",
+          "label": "Priority",
+          "widget": "select"
+        },
+        "subject": {
+          "help": "What the issue is, in a line",
+          "label": "Subject",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "subject",
+        "priority",
+        "customerId",
+        "customerName",
+        "assignee",
+        "caseType",
+        "fields",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Calls a registry operation through the tool gateway with mapped inputs. Its effects are the operation's access class at run time; an operation the registry does not know counts as a write.",
+    "effects": "write",
+    "executor": "gateway.call",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.action.tool",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Call a tool",
+    "optionalOutputs": [
+      {
+        "parameter": "onTimeout",
+        "port": "timeout",
+        "value": "port"
+      }
+    ],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Refused",
+        "name": "refused"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "approvalToken": {
+          "description": "A token minted elsewhere for this call: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "approvedBy": {
+          "description": "The review node whose decision approves this write; its call and token are sent",
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "type": "object"
+        },
+        "onTimeout": {
+          "default": "error",
+          "description": "When the system does not answer in time: the error port, or a timeout port",
+          "enum": [
+            "error",
+            "port"
+          ]
+        },
+        "operation": {
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 1,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "approvalToken": {
+          "help": "Only for a token minted outside this workflow",
+          "label": "Approval token",
+          "widget": "mapping"
+        },
+        "approvedBy": {
+          "help": "A review step whose Approve authorises this write",
+          "label": "Approved by",
+          "source": "steps",
+          "widget": "source"
+        },
+        "input": {
+          "help": "The operation's arguments",
+          "label": "Input",
+          "widget": "mappings"
+        },
+        "onTimeout": {
+          "help": "The error port, or a Timeout port of its own",
+          "label": "When it does not answer",
+          "widget": "select"
+        },
+        "operation": {
+          "help": "A registry operation the tool gateway calls",
+          "label": "Operation",
+          "source": "tools",
+          "widget": "source"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "operation",
+        "input",
+        "approvedBy",
+        "approvalToken",
+        "timeoutSeconds",
+        "onTimeout"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Starts another workflow of the team, once or once for each item of a list, in this run's mode; each child is keyed by this run, step and item, so a retry never starts a second. In the input, `$.item` reads the item and `$.index` its position. With Wait for them on, the run pauses until every child has ended and goes on by `done` with each child's outcome and output in item order.",
+    "effects": "write",
+    "executor": "workflow.start",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.action.workflow",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Start workflow",
+    "optionalOutputs": [
+      {
+        "parameter": "wait",
+        "port": "done",
+        "value": true
+      },
+      {
+        "parameter": "timeoutHours",
+        "port": "timeout",
+        "value": "*"
+      }
+    ],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Started",
+        "name": "started"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [
+      {
+        "parameter": "wait",
+        "port": "started",
+        "value": true
+      }
+    ],
+    "parameters": {
+      "properties": {
+        "batchSize": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "forEach": {
+          "description": "A path to a list; one child starts per item. Empty starts one."
+        },
+        "input": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`, or `$.item.<field>` and `$.index`"
+          },
+          "type": "object"
+        },
+        "label": {
+          "description": "Text naming what each child is about; `{$.item...}` reads its item",
+          "type": "string"
+        },
+        "maxItems": {
+          "default": 50,
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeoutHours": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "wait": {
+          "default": false,
+          "type": "boolean"
+        },
+        "workflow": {
+          "description": "The workflow's id",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "batchSize": {
+          "help": "With Wait for them: most unfinished at once; empty for all",
+          "label": "At a time",
+          "widget": "number"
+        },
+        "forEach": {
+          "help": "A list from an earlier step; empty starts one child",
+          "label": "For each",
+          "widget": "mapping"
+        },
+        "input": {
+          "help": "The child's input; `$.item` is the current item",
+          "label": "Input",
+          "widget": "mappings"
+        },
+        "label": {
+          "help": "What each child is about, e.g. {$.item.name}; the item's first text when empty",
+          "label": "Label",
+          "widget": "text"
+        },
+        "maxItems": {
+          "help": "Most children one step starts; 50 when empty",
+          "label": "Limit",
+          "widget": "number"
+        },
+        "timeoutHours": {
+          "help": "With Wait for them: hours before taking the timeout way",
+          "label": "Give up after",
+          "widget": "number"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        },
+        "wait": {
+          "help": "Pause until every child has ended, then go on with their results",
+          "label": "Wait for them",
+          "widget": "switch"
+        },
+        "workflow": {
+          "help": "The workflow each child runs",
+          "label": "Workflow",
+          "source": "workflows",
+          "widget": "source"
+        }
+      },
+      "order": [
+        "workflow",
+        "forEach",
+        "input",
+        "label",
+        "maxItems",
+        "wait",
+        "batchSize",
+        "timeoutHours",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Runs a published agent's turn on the step's prompt and mapped input, with the agent's own tools and knowledge; with an output schema its answer must match it, or the step takes the error port.",
+    "effects": "model",
+    "executor": "kernel.turn",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.agent",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Agent",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "agent": {
+          "description": "The published agent's id",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "input": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "type": "object"
+        },
+        "maxToolCalls": {
+          "description": "At most this many tool calls in the step's turn, within the agent's own limit",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "description": "A model alias the agent allows, for this step only; the agent's own when empty",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "outputSchema": {
+          "description": "JSON Schema the answer must match",
+          "type": "object"
+        },
+        "prompt": {
+          "description": "What the agent is asked to do",
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "agent"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 120.0,
+    "ui": {
+      "fields": {
+        "agent": {
+          "help": "A published agent",
+          "label": "Agent",
+          "source": "agents",
+          "widget": "source"
+        },
+        "input": {
+          "help": "Values the agent reads",
+          "label": "Input",
+          "widget": "mappings"
+        },
+        "maxToolCalls": {
+          "help": "At most this many in the step, within the agent's own limit",
+          "label": "Tool calls",
+          "widget": "number"
+        },
+        "model": {
+          "help": "A model the agent allows, for this step only; empty uses the agent's",
+          "label": "Model",
+          "widget": "text"
+        },
+        "outputSchema": {
+          "help": "JSON Schema the answer must match; empty takes any answer",
+          "label": "Answer schema",
+          "widget": "json"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "widget": "textarea"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "agent",
+        "prompt",
+        "input",
+        "outputSchema",
+        "model",
+        "maxToolCalls",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Puts the text in one of the step's categories and leaves by that category's port; below the confidence floor, or when nothing fits, it leaves by otherwise. No saved agent, no tools.",
+    "effects": "model",
+    "executor": "ai.prompt",
+    "extraOutputs": [
+      "otherwise",
+      "error"
+    ],
+    "group": "ai",
+    "id": "ops.ai.classify",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Classify",
+    "optionalOutputs": [],
+    "outputs": [],
+    "outputsFrom": "categories",
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "categories": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "not": {
+                  "enum": [
+                    "otherwise",
+                    "error"
+                  ]
+                },
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "instructions": {
+          "description": "Anything the model should know or do besides the step's job",
+          "type": "string"
+        },
+        "minConfidence": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "model": {
+          "description": "A model alias for this step; the workspace's when empty",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "text": {
+          "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "categories"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 60.0,
+    "ui": {
+      "fields": {
+        "categories": {
+          "help": "Each is an out port; describe what belongs in it",
+          "label": "Categories",
+          "widget": "options"
+        },
+        "instructions": {
+          "help": "Anything the model should know or do besides the step's job",
+          "label": "Instructions",
+          "widget": "textarea"
+        },
+        "minConfidence": {
+          "help": "Below it the step leaves by otherwise; 0.6 when empty",
+          "label": "Confidence floor",
+          "widget": "number"
+        },
+        "model": {
+          "help": "A model alias for this step; empty uses the workspace's",
+          "label": "Model",
+          "widget": "text"
+        },
+        "text": {
+          "help": "What the model reads, e.g. $.input.body",
+          "label": "Text",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "text",
+        "categories",
+        "minConfidence",
+        "instructions",
+        "model",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Writes a draft (a reply, a note) from the text and the instructions. It sends nothing: a later step or a person does. No saved agent, no tools.",
+    "effects": "model",
+    "executor": "ai.prompt",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.draft",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Draft",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "instructions": {
+          "description": "Anything the model should know or do besides the step's job",
+          "type": "string"
+        },
+        "model": {
+          "description": "A model alias for this step; the workspace's when empty",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "text": {
+          "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "instructions"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 60.0,
+    "ui": {
+      "fields": {
+        "instructions": {
+          "help": "Anything the model should know or do besides the step's job",
+          "label": "Instructions",
+          "widget": "textarea"
+        },
+        "model": {
+          "help": "A model alias for this step; empty uses the workspace's",
+          "label": "Model",
+          "widget": "text"
+        },
+        "text": {
+          "help": "What the model reads, e.g. $.input.body",
+          "label": "Text",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "text",
+        "instructions",
+        "model",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Reads a file from files-service into the fields you define; each field gets a confidence from checks on its quote, page and value, never the model's own, and the run takes the review port when any field is below its threshold or the workspace floor. With Several records, it reads one record per thing the document names, each scored the same way.",
+    "effects": "model",
+    "executor": "ai.extract",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.extract",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Extract from file",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Review",
+        "name": "review"
+      },
+      {
+        "connection": "main",
+        "label": "Unreadable",
+        "name": "unreadable"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "anyOf": [
+        {
+          "required": [
+            "fields"
+          ]
+        },
+        {
+          "required": [
+            "documentType"
+          ]
+        },
+        {
+          "required": [
+            "detect"
+          ]
+        }
+      ],
+      "properties": {
+        "detect": {
+          "description": "Classify the file over the team's document types and read it with the kind found",
+          "type": "boolean"
+        },
+        "documentType": {
+          "additionalProperties": false,
+          "description": "A team's document type, or paths into the run naming one; saving the workflow pins a named type's newest version when none",
+          "properties": {
+            "id": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^\\$\\.",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        "fields": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "alwaysReview": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "key": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "options": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "reviewBelow": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "number",
+                  "money",
+                  "date",
+                  "enum"
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "type"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "file": {
+          "description": "The files-service file id: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "format": "file"
+        },
+        "many": {
+          "description": "One record per thing the document names, as `records`",
+          "type": "boolean"
+        },
+        "ocr": {
+          "type": "boolean"
+        },
+        "reviewBelow": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 120.0,
+    "ui": {
+      "fields": {
+        "detect": {
+          "help": "Read with the document type the file is; unsure goes to review",
+          "label": "Detect the kind",
+          "widget": "switch"
+        },
+        "documentType": {
+          "help": "{id, version}: the version is pinned when the workflow is saved",
+          "label": "Document type",
+          "widget": "json"
+        },
+        "fields": {
+          "help": "Each field: key, label, type, required, reviewBelow, alwaysReview",
+          "label": "Fields",
+          "widget": "json"
+        },
+        "file": {
+          "help": "The uploaded file's id",
+          "label": "File",
+          "widget": "mapping"
+        },
+        "many": {
+          "help": "The document names several (debtors, line items): one record each",
+          "label": "Several records",
+          "widget": "switch"
+        },
+        "ocr": {
+          "help": "Off by default; OCR'd fields score lower",
+          "label": "Read scans with OCR",
+          "widget": "switch"
+        },
+        "reviewBelow": {
+          "help": "Fields under this confidence go to a person",
+          "label": "Review below",
+          "widget": "number"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "file",
+        "detect",
+        "documentType",
+        "fields",
+        "reviewBelow",
+        "many",
+        "ocr",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Reads fields from text (an email body, a note): a document type's fields, or fields of its own. A field the text does not state is null, never a guess. No saved agent, no tools.",
+    "effects": "model",
+    "executor": "ai.prompt",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.extractText",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Extract from text",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "documentType": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        },
+        "fields": {
+          "items": {
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "instructions": {
+          "description": "Anything the model should know or do besides the step's job",
+          "type": "string"
+        },
+        "model": {
+          "description": "A model alias for this step; the workspace's when empty",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "text": {
+          "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 60.0,
+    "ui": {
+      "fields": {
+        "documentType": {
+          "help": "{\"id\": ...}: its fields; its newest version when none",
+          "label": "Document type",
+          "widget": "json"
+        },
+        "fields": {
+          "help": "Fields of its own, as a document type declares them",
+          "label": "Fields",
+          "widget": "json"
+        },
+        "instructions": {
+          "help": "Anything the model should know or do besides the step's job",
+          "label": "Instructions",
+          "widget": "textarea"
+        },
+        "model": {
+          "help": "A model alias for this step; empty uses the workspace's",
+          "label": "Model",
+          "widget": "text"
+        },
+        "text": {
+          "help": "What the model reads, e.g. $.input.body",
+          "label": "Text",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "text",
+        "documentType",
+        "fields",
+        "instructions",
+        "model",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Summarises the text, keeping names, amounts and dates as written. No saved agent, no tools.",
+    "effects": "model",
+    "executor": "ai.prompt",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.summarise",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Summarise",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "instructions": {
+          "description": "Anything the model should know or do besides the step's job",
+          "type": "string"
+        },
+        "maxWords": {
+          "default": 120,
+          "maximum": 1000,
+          "minimum": 10,
+          "type": "integer"
+        },
+        "model": {
+          "description": "A model alias for this step; the workspace's when empty",
+          "minLength": 1,
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "text": {
+          "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 2,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 60.0,
+    "ui": {
+      "fields": {
+        "instructions": {
+          "help": "Anything the model should know or do besides the step's job",
+          "label": "Instructions",
+          "widget": "textarea"
+        },
+        "maxWords": {
+          "help": "120 when empty",
+          "label": "Words at most",
+          "widget": "number"
+        },
+        "model": {
+          "help": "A model alias for this step; empty uses the workspace's",
+          "label": "Model",
+          "widget": "text"
+        },
+        "text": {
+          "help": "What the model reads, e.g. $.input.body",
+          "label": "Text",
+          "widget": "mapping"
+        },
+        "timeoutSeconds": {
+          "help": "Per attempt; the type's default when empty",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "text",
+        "maxWords",
+        "instructions",
+        "model",
+        "timeoutSeconds"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Merges the same fields from several sources by a precedence per field, keeps which source each value came from, and lists the fields the sources disagree on instead of picking silently. No model.",
+    "effects": "none",
+    "executor": "data.combine",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.combine",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Combine facts",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "fields": {
+          "items": {
+            "properties": {
+              "field": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "from": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "number",
+                  "money",
+                  "date"
+                ]
+              }
+            },
+            "required": [
+              "field"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "values": {
+                "description": "An object of fields: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              }
+            },
+            "required": [
+              "name",
+              "values"
+            ],
+            "type": "object"
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "fields": {
+          "help": "A field that should trust another source first, or is a number or money",
+          "item": {
+            "fields": {
+              "field": {
+                "label": "Field",
+                "widget": "text"
+              },
+              "from": {
+                "label": "Sources in order",
+                "widget": "json"
+              },
+              "type": {
+                "label": "Type",
+                "widget": "select"
+              }
+            },
+            "order": [
+              "field",
+              "from",
+              "type"
+            ]
+          },
+          "label": "Fields",
+          "widget": "list"
+        },
+        "sources": {
+          "help": "In order of trust: a field takes the first source that has it",
+          "item": {
+            "fields": {
+              "name": {
+                "label": "Name",
+                "widget": "text"
+              },
+              "values": {
+                "label": "Fields",
+                "widget": "mapping"
+              }
+            },
+            "order": [
+              "name",
+              "values"
+            ]
+          },
+          "label": "Sources",
+          "widget": "list"
+        }
+      },
+      "order": [
+        "sources",
+        "fields"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Works out new values from the step's values with formulas, such as min(levy.amount, balance) or business_days(levy.served, 20), evaluated in the tool gateway's sandbox; no model.",
+    "effects": "none",
+    "executor": "data.compute",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.compute",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Calculate",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "expressions": {
+          "additionalProperties": {
+            "description": "A formula over the values by name, e.g. min(levy.amount, balance)",
+            "maxLength": 2000,
+            "minLength": 1,
+            "not": {
+              "pattern": "\\$\\."
+            },
+            "type": "string"
+          },
+          "maxProperties": 50,
+          "minProperties": 1,
+          "type": "object"
+        },
+        "values": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "expressions"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "expressions": {
+          "help": "Each result's name and its formula over the values, e.g. min(levy.amount, balance); later formulas can use earlier results. Functions: min, max, abs, round, floor, ceil, sum, len, business_days(date, n), add_days(date, n), days_between(a, b)",
+          "label": "Formulas",
+          "widget": "mappings"
+        },
+        "values": {
+          "help": "The data the formulas read, each by a name: a path to the input or a step",
+          "label": "Values",
+          "widget": "mappings"
+        }
+      },
+      "order": [
+        "values",
+        "expressions"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Finds the candidates that match a record by rules on their fields: every All rule and, when any are given, at least one Any rule. Text is compared without case or extra spaces, an empty value never matches, and Overlaps needs one value inside the other at the minimum length.",
+    "effects": "none",
+    "executor": "data.match",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.match",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Match",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Matched",
+        "name": "matched"
+      },
+      {
+        "connection": "main",
+        "label": "None",
+        "name": "none"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "all": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "left": {
+                "description": "The record's field",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^\\$\\."
+                },
+                "type": "string"
+              },
+              "minLength": {
+                "description": "Overlaps: the shorter value's least length",
+                "minimum": 1,
+                "type": "integer"
+              },
+              "op": {
+                "enum": [
+                  "equals",
+                  "overlaps"
+                ]
+              },
+              "right": {
+                "description": "The candidate's field",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^\\$\\."
+                },
+                "type": "string"
+              }
+            },
+            "required": [
+              "left",
+              "op",
+              "right"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "any": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "left": {
+                "description": "The record's field",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^\\$\\."
+                },
+                "type": "string"
+              },
+              "minLength": {
+                "description": "Overlaps: the shorter value's least length",
+                "minimum": 1,
+                "type": "integer"
+              },
+              "op": {
+                "enum": [
+                  "equals",
+                  "overlaps"
+                ]
+              },
+              "right": {
+                "description": "The candidate's field",
+                "minLength": 1,
+                "not": {
+                  "pattern": "^\\$\\."
+                },
+                "type": "string"
+              }
+            },
+            "required": [
+              "left",
+              "op",
+              "right"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "candidates": {
+          "description": "The list it is matched against: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "item": {
+          "description": "The record to match: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "required": [
+        "item",
+        "candidates",
+        "all"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "all": {
+          "help": "Every rule must hold",
+          "item": {
+            "fields": {
+              "left": {
+                "label": "Record field",
+                "widget": "text"
+              },
+              "minLength": {
+                "label": "Least length",
+                "widget": "number"
+              },
+              "op": {
+                "label": "Is",
+                "widget": "select"
+              },
+              "right": {
+                "label": "Candidate field",
+                "widget": "text"
+              }
+            },
+            "order": [
+              "left",
+              "op",
+              "right",
+              "minLength"
+            ]
+          },
+          "label": "All of",
+          "widget": "list"
+        },
+        "any": {
+          "help": "At least one must hold, when any are given",
+          "item": {
+            "fields": {
+              "left": {
+                "label": "Record field",
+                "widget": "text"
+              },
+              "minLength": {
+                "label": "Least length",
+                "widget": "number"
+              },
+              "op": {
+                "label": "Is",
+                "widget": "select"
+              },
+              "right": {
+                "label": "Candidate field",
+                "widget": "text"
+              }
+            },
+            "order": [
+              "left",
+              "op",
+              "right",
+              "minLength"
+            ]
+          },
+          "label": "Any of",
+          "widget": "list"
+        },
+        "candidates": {
+          "help": "A list from an earlier step",
+          "label": "Candidates",
+          "widget": "mapping"
+        },
+        "item": {
+          "help": "The record to match",
+          "label": "Record",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "item",
+        "candidates",
+        "all",
+        "any"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Maps and renames values from the input and earlier nodes; no model.",
+    "effects": "none",
+    "executor": "data.set",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.set",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Set fields",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "values": {
+          "help": "Each field's value: text, a number, or a path to the input or an earlier step",
+          "label": "Fields",
+          "widget": "mappings"
+        }
+      },
+      "order": [
+        "values"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Removes the extractions and document type samples documents-service holds for a file that was deleted. Repeating it removes nothing more.",
+    "effects": "write",
+    "executor": "documents.purge",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.documents.purge",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Purge what was read from a file",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "file": {
+          "description": "The deleted file's id: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "format": "file"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "file": {
+          "help": "The deleted file, such as $.input.fileId",
+          "label": "File",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "file"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Records on the file what an Extract from file step read: the document type and version, template or model, how many fields wait for a person, and the extraction. The files list shows and filters it. Writes as the run's team; a file the team cannot see is an error.",
+    "effects": "write",
+    "executor": "files.setData",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.files.setData",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Save data on file",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "checked": {
+          "description": "A person checked the fields, so none wait",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "The files-service file id: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "format": "file"
+        },
+        "read": {
+          "description": "The Extract from file step's output: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "typeName": {
+          "description": "The document type's name as the list shows it: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "required": [
+        "file",
+        "read"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "checked": {
+          "help": "No fields wait once a person checked them",
+          "label": "Checked by a person",
+          "widget": "switch"
+        },
+        "file": {
+          "help": "The file the read came from",
+          "label": "File",
+          "widget": "mapping"
+        },
+        "read": {
+          "help": "The Extract from file step's output, such as $.nodes.read.out",
+          "label": "Read",
+          "widget": "mapping"
+        },
+        "typeName": {
+          "help": "The document type's name as the files list shows it",
+          "label": "Type name",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "file",
+        "read",
+        "typeName",
+        "checked"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Ends the run with a named outcome.",
+    "effects": "none",
+    "executor": "flow.end",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.end",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "End",
+    "optionalOutputs": [],
+    "outputs": [],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "outcome": {
+          "default": "done",
+          "type": "string"
+        },
+        "output": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "result": {
+          "default": "succeeded",
+          "enum": [
+            "succeeded",
+            "failed"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "outcome": {
+          "help": "The name the run ends with",
+          "label": "Outcome",
+          "widget": "text"
+        },
+        "output": {
+          "help": "The run's result: a value or a path to an earlier step's output",
+          "label": "Output",
+          "widget": "mapping"
+        },
+        "result": {
+          "help": "Failed marks the run as failed. Succeeded is the default",
+          "label": "Counts as",
+          "widget": "select"
+        }
+      },
+      "order": [
+        "outcome",
+        "result",
+        "output"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Pauses for a person in Reviews; each option is an out port. Approve and Reject are the defaults.",
+    "effects": "human",
+    "executor": "review.open",
+    "extraOutputs": [],
+    "group": "human",
+    "id": "ops.flow.humanReview",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Human review",
+    "optionalOutputs": [
+      {
+        "parameter": "onTimeout",
+        "port": "timeout",
+        "value": "expire"
+      }
+    ],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Approve",
+        "name": "approve"
+      },
+      {
+        "connection": "main",
+        "label": "Reject",
+        "name": "reject"
+      }
+    ],
+    "outputsFrom": "options",
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "approves": {
+          "description": "The tool node whose write Approve authorises",
+          "not": {
+            "pattern": "^\\$\\."
+          },
+          "type": "string"
+        },
+        "editable": {
+          "description": "What the reviewer may correct: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        },
+        "notDecidedBy": {
+          "description": "Emails who may not decide it: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "onTimeout": {
+          "default": "wait",
+          "description": "Past the deadline: wait (shown overdue) or expire (leave on the timeout port)",
+          "enum": [
+            "wait",
+            "expire"
+          ]
+        },
+        "options": {
+          "items": {
+            "oneOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "properties": {
+                  "call": {
+                    "properties": {
+                      "node": {
+                        "not": {
+                          "pattern": "^\\$\\."
+                        },
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "node"
+                    ],
+                    "type": "object"
+                  },
+                  "inputs": {
+                    "items": {
+                      "properties": {
+                        "enum": {
+                          "type": "array"
+                        },
+                        "maximum": {
+                          "type": "number"
+                        },
+                        "minimum": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "type": {
+                          "enum": [
+                            "string",
+                            "number",
+                            "integer",
+                            "boolean"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "params": {
+          "description": "The task type's params, each a value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
+          ]
+        },
+        "remindEveryHours": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "requestedBy": {
+          "description": "Emails who asked for it: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "slaHours": {
+          "description": "Hours a person has to decide; the workspace's review deadline when empty",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "summary": {
+          "description": "What the reviewer reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "taskType": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "not": {
+                    "pattern": "^\\$\\."
+                  },
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 1,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "approves": {
+          "help": "The tool step whose write Approve authorises",
+          "label": "Approves",
+          "source": "steps",
+          "widget": "source"
+        },
+        "editable": {
+          "help": "A value the reviewer may correct, read on as `edited`",
+          "label": "Editable",
+          "widget": "mapping"
+        },
+        "notDecidedBy": {
+          "help": "Who may not decide it, e.g. who saved what it approves",
+          "label": "Not decided by",
+          "widget": "mapping"
+        },
+        "onTimeout": {
+          "help": "Wait shows it overdue; Expire leaves on a Timeout port",
+          "label": "Past the deadline",
+          "widget": "select"
+        },
+        "options": {
+          "help": "Each option is an out port; Approve and Reject when empty",
+          "label": "Options",
+          "widget": "options"
+        },
+        "params": {
+          "help": "The values the task type's params read, each a value or a path",
+          "label": "Task values",
+          "widget": "json"
+        },
+        "remindEveryHours": {
+          "help": "While it waits; empty for no reminder",
+          "label": "Remind every (hours)",
+          "widget": "number"
+        },
+        "requestedBy": {
+          "help": "Who asked for it; they decide only if the workspace allows",
+          "label": "Requested by",
+          "widget": "mapping"
+        },
+        "slaHours": {
+          "help": "Empty: the workspace's review deadline",
+          "label": "Deadline (hours)",
+          "widget": "number"
+        },
+        "summary": {
+          "help": "What the reviewer reads",
+          "label": "Summary",
+          "widget": "mapping"
+        },
+        "taskType": {
+          "help": "{\"id\": ...}: the task screen; its newest version when none is named",
+          "label": "Task type",
+          "widget": "json"
+        },
+        "title": {
+          "label": "Title",
+          "widget": "text"
+        }
+      },
+      "order": [
+        "title",
+        "summary",
+        "editable",
+        "slaHours",
+        "notDecidedBy",
+        "requestedBy",
+        "onTimeout",
+        "remindEveryHours",
+        "options",
+        "approves",
+        "taskType",
+        "params"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Routes by rules over any earlier node's output.",
+    "effects": "none",
+    "executor": "flow.if",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.if",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "If",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "True",
+        "name": "true"
+      },
+      {
+        "connection": "main",
+        "label": "False",
+        "name": "false"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "combine": {
+          "default": "all",
+          "enum": [
+            "all",
+            "any"
+          ]
+        },
+        "conditions": {
+          "items": {
+            "properties": {
+              "left": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "contains",
+                  "exists",
+                  "empty"
+                ]
+              },
+              "right": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              }
+            },
+            "required": [
+              "left",
+              "op"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "conditions"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "combine": {
+          "label": "Combine",
+          "widget": "select"
+        },
+        "conditions": {
+          "help": "Compared in order; True when all (or any) hold",
+          "item": {
+            "fields": {
+              "left": {
+                "label": "Value",
+                "widget": "mapping"
+              },
+              "op": {
+                "label": "Is",
+                "widget": "select"
+              },
+              "right": {
+                "label": "Compared with",
+                "widget": "mapping"
+              }
+            },
+            "order": [
+              "left",
+              "op",
+              "right"
+            ]
+          },
+          "label": "Conditions",
+          "widget": "list"
+        }
+      },
+      "order": [
+        "conditions",
+        "combine"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Waits for the branches connected to it, then goes on once with each branch's last step output under that step's id; a branch an earlier If or Switch sent elsewhere is null. It waits for every step of the run that can still run, not only its own branches.",
+    "effects": "none",
+    "executor": "flow.join",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.join",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Join",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "waitFor": {
+          "default": "all",
+          "enum": [
+            "all"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "waitFor": {
+          "help": "Every branch that will arrive; a branch an If or Switch sent elsewhere is null. It waits for every step of the run that can still run, not only its own branches.",
+          "label": "Waits for",
+          "widget": "select"
+        }
+      },
+      "order": [
+        "waitFor"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Several named ways out, each a set of rules over earlier steps' output; the first way whose rules hold wins, and otherwise takes the rest. No model and no code.",
+    "effects": "none",
+    "executor": "flow.switch",
+    "extraOutputs": [
+      "otherwise"
+    ],
+    "group": "flow",
+    "id": "ops.flow.switch",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Switch",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Otherwise",
+        "name": "otherwise"
+      }
+    ],
+    "outputsFrom": "cases",
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "cases": {
+          "items": {
+            "properties": {
+              "combine": {
+                "default": "all",
+                "enum": [
+                  "all",
+                  "any"
+                ]
+              },
+              "conditions": {
+                "items": {
+                  "properties": {
+                    "left": {
+                      "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+                    },
+                    "op": {
+                      "enum": [
+                        "eq",
+                        "ne",
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "contains",
+                        "exists",
+                        "empty"
+                      ]
+                    },
+                    "right": {
+                      "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "op"
+                  ],
+                  "type": "object"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "label": {
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "not": {
+                  "const": "otherwise"
+                },
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "conditions"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "cases"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "cases": {
+          "help": "Checked top to bottom; the first whose rules hold wins, and otherwise takes the rest",
+          "item": {
+            "fields": {
+              "combine": {
+                "label": "Combine",
+                "widget": "select"
+              },
+              "conditions": {
+                "item": {
+                  "fields": {
+                    "left": {
+                      "label": "Value",
+                      "widget": "mapping"
+                    },
+                    "op": {
+                      "label": "Is",
+                      "widget": "select"
+                    },
+                    "right": {
+                      "label": "Compared with",
+                      "widget": "mapping"
+                    }
+                  },
+                  "order": [
+                    "left",
+                    "op",
+                    "right"
+                  ]
+                },
+                "label": "Rules",
+                "widget": "list"
+              },
+              "label": {
+                "label": "Label",
+                "widget": "text"
+              },
+              "name": {
+                "label": "Name",
+                "widget": "text"
+              }
+            },
+            "order": [
+              "name",
+              "label",
+              "conditions",
+              "combine"
+            ]
+          },
+          "label": "Ways out",
+          "widget": "list"
+        }
+      },
+      "order": [
+        "cases"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Pauses the run for a number of seconds, or until a date or date and time read from an earlier step, then goes on by `out`. A date already past goes on at once; a value that is not a date leaves by `error` with the value named. A date with no time is midnight UTC, a time with no offset is UTC.",
+    "effects": "none",
+    "executor": "flow.wait",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.wait",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Wait",
+    "optionalOutputs": [
+      {
+        "parameter": "mode",
+        "port": "error",
+        "value": "until"
+      }
+    ],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "else": {
+        "required": [
+          "seconds"
+        ]
+      },
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "until"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "properties": {
+        "mode": {
+          "default": "duration",
+          "enum": [
+            "duration",
+            "until"
+          ]
+        },
+        "seconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "until": {
+          "description": "An ISO date or date and time: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "then": {
+        "required": [
+          "until"
+        ]
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "mode": {
+          "help": "For a duration, or until a date",
+          "label": "Wait",
+          "widget": "select"
+        },
+        "seconds": {
+          "help": "With a duration: how long the run pauses",
+          "label": "For (seconds)",
+          "widget": "number"
+        },
+        "until": {
+          "help": "With until: a date such as a response date from an earlier step",
+          "label": "Until",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "mode",
+        "seconds",
+        "until"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Starts a run when an email arrives in a watched mailbox folder and matches the filters; the run's input is the email, with each attachment stored in Files first.",
+    "effects": "none",
+    "executor": "trigger.payload",
+    "extraOutputs": [],
+    "group": "trigger",
+    "id": "ops.trigger.email",
+    "inputs": [],
+    "label": "Email received",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Payload",
+        "name": "payload"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "dailyCap": {
+          "description": "Most runs to start in a UTC day",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "folder": {
+          "default": "inbox",
+          "description": "inbox, or a folder name",
+          "type": "string"
+        },
+        "fromContains": {
+          "description": "Only mail whose sender contains this",
+          "type": "string"
+        },
+        "hasAttachment": {
+          "description": "Only mail with at least one attachment",
+          "type": "boolean"
+        },
+        "mailbox": {
+          "description": "A mailbox the team may watch; empty watches none",
+          "type": "string"
+        },
+        "subjectContains": {
+          "description": "Only mail whose subject contains this",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "dailyCap": {
+          "help": "Most runs a day; mail past it is recorded on Activity, not run. Empty: no cap",
+          "label": "Daily cap",
+          "widget": "number"
+        },
+        "folder": {
+          "help": "inbox, or the name of another folder",
+          "label": "Folder",
+          "placeholder": "inbox",
+          "widget": "text"
+        },
+        "fromContains": {
+          "help": "Empty takes mail from anyone",
+          "label": "From contains",
+          "placeholder": "@court.example",
+          "widget": "text"
+        },
+        "hasAttachment": {
+          "help": "Skip mail with no attachment",
+          "label": "Has an attachment",
+          "widget": "switch"
+        },
+        "mailbox": {
+          "help": "A team mailbox an admin set up for workflows; empty reads no mail, and Start run still sends it a test email",
+          "label": "Mailbox",
+          "source": "mailboxes",
+          "widget": "source"
+        },
+        "subjectContains": {
+          "help": "Empty takes any subject",
+          "label": "Subject contains",
+          "widget": "text"
+        }
+      },
+      "order": [
+        "mailbox",
+        "folder",
+        "fromContains",
+        "subjectContains",
+        "hasAttachment",
+        "dailyCap"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's input is the event's payload. Only a system workflow, which the platform maintains, is started by one.",
+    "effects": "none",
+    "executor": "trigger.payload",
+    "extraOutputs": [],
+    "group": "trigger",
+    "id": "ops.trigger.event",
+    "inputs": [],
+    "label": "Service event",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Payload",
+        "name": "payload"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "event": {
+          "description": "The event's name, such as file.deleted",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "event": {
+          "help": "The event's name, such as file.deleted",
+          "label": "Event",
+          "placeholder": "file.deleted",
+          "widget": "text"
+        }
+      },
+      "order": [
+        "event"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Starts a run from an authenticated API call or a system event; the run's input is the payload.",
+    "effects": "none",
+    "executor": "trigger.payload",
+    "extraOutputs": [],
+    "group": "trigger",
+    "id": "ops.trigger.request",
+    "inputs": [],
+    "label": "Request",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Payload",
+        "name": "payload"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "inputSchema": {
+          "description": "JSON Schema the payload must match",
+          "type": "object"
+        },
+        "onlyFromWorkflows": {
+          "description": "Other workflows start it; Start run and Files do not offer it",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "inputSchema": {
+          "help": "JSON Schema the payload must match; empty accepts any object",
+          "label": "Input schema",
+          "widget": "json"
+        },
+        "onlyFromWorkflows": {
+          "help": "Start run and Files leave it out of their lists",
+          "label": "Only other workflows start this",
+          "widget": "switch"
+        }
+      },
+      "order": [
+        "inputSchema",
+        "onlyFromWorkflows"
+      ]
+    },
+    "version": 1
+  }
+]

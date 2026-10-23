@@ -10,7 +10,8 @@ from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
-from ops_store import isolation
+from ops_store import background, isolation
+from ops_store.background import HeartbeatStore
 
 from ..store.memories import Memories
 from ..store.tenancy import MEMORY_RETENTION
@@ -73,10 +74,13 @@ async def expire_memories(rt: Runtime, policy: RetentionPolicy, now: datetime | 
     return deleted
 
 
-async def expire_forever(rt: Runtime, policy: RetentionPolicy, interval: float = INTERVAL_SECONDS) -> None:
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            await expire_memories(rt, policy)
-        except Exception as e:
-            log.exception("memory_retention_failed", error=type(e).__name__)
+async def expire_forever(
+    rt: Runtime, policy: RetentionPolicy, *, beats: HeartbeatStore, interval: float = INTERVAL_SECONDS
+) -> None:
+    """Memory clean-up, a listed background process: a failed pass is retried and shows in its heartbeat. The first
+    pass waits one interval, as before, so a restart loop never runs it again and again."""
+
+    async def once() -> int:
+        return await expire_memories(rt, policy)
+
+    await background.run("memory_cleanup", once, stop=asyncio.Event(), store=beats, every_s=interval, first_in=interval)

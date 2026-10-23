@@ -305,6 +305,8 @@ async def test_a_hold_over_the_balance_shows_the_422_and_waits_for_a_new_decisio
         "status": 422,
         "code": "upstream_error",
         "message": "hold of 9000.00 exceeds the available balance of 2140.55",
+        # The call in words for the page (c-500), from the decision that carried it, never the tool's name.
+        "action": "Hold 9,000 on CHQ-1001",
     }
     assert state["values"].get("hold") is None and "status" not in state["values"]
     assert state["interrupt"]["payload"]["error"]["status"] == 422, "the review shows the bank's answer"

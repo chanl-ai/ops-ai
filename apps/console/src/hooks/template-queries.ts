@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { CreateFromTemplateInput, TemplateFilters, TemplateSubmissionInput } from '@/lib/types/templates';
+import { useTeamQuery } from './team-query';
 
 /** Template keys start with 'templates'; creating an agent from one also refreshes agents and evals. */
 export const tk = {
@@ -14,7 +15,7 @@ export const tk = {
 };
 
 export const useTemplates = (p: ListParams<TemplateFilters>, enabled = true) => usePagedQuery({ queryKey: tk.list(p), queryFn: () => api.templates.list(p), enabled });
-export const useTemplate = (id: string | null) => useQuery({ queryKey: tk.one(id ?? ''), queryFn: () => api.templates.get(id!), enabled: !!id });
+export const useTemplate = (id: string | null) => useTeamQuery({ queryKey: tk.one(id ?? ''), queryFn: () => api.templates.get(id!), enabled: !!id });
 
 export function useCreateFromTemplate() {
   const qc = useQueryClient();

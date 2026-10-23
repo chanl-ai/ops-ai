@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { AlertTriangle, ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 import { ConnectMailbox } from '@/components/channels/connect-mailbox';
+import { MailboxStatusDot } from '@/components/channels/mailbox-panels';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { FormField } from '@/components/shared/form-field';
 import { KeyValues, Section } from '@/components/shared/surface';
@@ -13,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useMailboxes } from '@/hooks/channels-queries';
 import type { DefinitionCheck, EngineNode, EngineNodeType } from '@/lib/types/engine';
 
 import { groupLook } from './definition-node';
@@ -131,8 +134,28 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
   const [connecting, setConnecting] = React.useState(false);
   const mailbox = typeof parameters.mailbox === 'string' && parameters.mailbox ? parameters.mailbox : 'the mailbox you choose below';
   const folder = typeof parameters.folder === 'string' && parameters.folder ? parameters.folder : 'inbox';
+  // The picked mailbox as Channels shows it: its state and a way to open it, and a warning when it reads no mail.
+  const mailboxes = useMailboxes();
+  const picked = typeof parameters.mailbox === 'string' ? mailboxes.data?.find((m) => m.address === parameters.mailbox) : undefined;
   return (
     <>
+      {picked && (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm" data-testid="trigger-picked-mailbox">
+          <span className="min-w-0 truncate font-medium">{picked.name || picked.address}</span>
+          <MailboxStatusDot mailbox={picked} />
+          <span className="text-muted-foreground">Reads {picked.folder}</span>
+          <Link href={`/channels/email/${picked.id}`} className="ml-auto underline underline-offset-2">
+            Open
+          </Link>
+        </div>
+      )}
+      {picked?.paused && (
+        <Alert data-testid="trigger-mailbox-paused">
+          <AlertTriangle />
+          <AlertTitle>This mailbox is paused</AlertTitle>
+          <AlertDescription>No mail is read and no run starts until it is resumed on its Channels page.</AlertDescription>
+        </Alert>
+      )}
       <div data-testid="trigger-how-it-starts">
         <Section title="How it starts" description="Every run of this workflow begins here.">
           <KeyValues

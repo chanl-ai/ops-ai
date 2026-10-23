@@ -2,10 +2,14 @@
 
 Status: current.
 
+This page is for anyone changing Ops AI: how to run it, the checks a change must pass, and the standards the code and
+docs follow. To run the stack first, follow the Quick start in `README.md`.
+
 ## Before you start
 
 | Change | Read |
 |---|---|
+| Anything | `README.md` (Quick start), then `docs/README.md` for where each design lives |
 | Console code | `apps/console/CLAUDE.md` (layers, components, states, copy) and `docs/console/page-plan.md` |
 | A spec or decision | `docs/README.md`, `docs/background/problem-statement.md`, `docs/architecture/overview.md` and the ADRs |
 | Backend design | `docs/architecture/README.md`, then `docs/architecture/service-map.md` |
@@ -32,18 +36,6 @@ clone.
 Before calling a console change done, open every changed route in a browser and check it renders
 without console errors, including the `?mock=slow`, `?mock=error` and `?mock=empty` states.
 
-## Agent tooling
-
-The codeloop store in `.codeloop/` is tracked: the wiki, card specs, evidence and the board. Only its runtime state
-(`.codeloop/state/`) is gitignored. codeloop also writes its
-protocol between `<!-- codeloop:start -->` markers in `AGENTS.md` and `CLAUDE.md`; a clean filter strips that block
-when either file is staged, so it never reaches a commit. Set the filter once per clone:
-
-```bash
-git config filter.strip-codeloop.clean "perl -0pe 's/\\n*<!-- codeloop:start -->.*?<!-- codeloop:end -->\\n?/\\n/s'"
-git config filter.strip-codeloop.smudge cat
-```
-
 ## Commit messages
 
 Conventional commits: `type(scope): subject`.
@@ -59,8 +51,8 @@ Conventional commits: `type(scope): subject`.
 
 ### Every spec has this shape
 
-Specs live in the codeloop wiki at `.codeloop/wiki/concepts/`, one `topic.md` per spec; the spec number lives in the
-title.
+Specs live under `docs/design/<area>/` and `docs/architecture/`, one topic-named file per spec; a spec number, where
+there is one, lives in the title.
 
 1. Status line and a one-paragraph summary.
 2. Scope: in, out, and later phases.
@@ -95,8 +87,7 @@ title.
 
 Full documentation lives only under `docs/`, in a folder that maps to a part of the repo. A code folder carries a
 short `README.md` (at most 40 lines: what it is, how to run it, links into `docs/`) and, where agents need different
-rules, a `CLAUDE.md`. `node scripts/check-docs.mjs` enforces this. Specs are the exception: they live in the codeloop
-wiki at `.codeloop/wiki/concepts/`.
+rules, a `CLAUDE.md`. `node scripts/check-docs.mjs` enforces this.
 
 | Folder | Holds |
 |---|---|
@@ -125,5 +116,5 @@ the backend: one test per failure mode, and each new test is seen failing once b
 | Config | Settings are read once, from the environment, by `ops_service_kit.settings`; a bad value stops the process at start. No `.env` files |
 | Fixtures | Only under a service's `tests/fixtures/` |
 | Routes | Every route is authenticated, except health and the OpenAPI document |
-| Model calls in tests | Scripted model only; real calls are capped at 10 per experiment unless the owner approves more |
+| Model calls in tests | Scripted model only; real calls are capped at 10 per experiment unless a maintainer approves more |
 | Gate | `make verify` before every commit |

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import type {
@@ -9,6 +9,7 @@ import type {
   DocumentTypeTestRun,
   DocumentTypeVersionInput,
 } from "@/lib/types/document-types";
+import { teamKey, useTeamQuery } from "./team-query";
 
 export const dtk = {
   list: ["document-types", "list"] as const,
@@ -23,12 +24,12 @@ export const dtk = {
 };
 
 export const useDocumentTypes = () =>
-  useQuery({
+  useTeamQuery({
     queryKey: dtk.list,
     queryFn: () => api.files.documentTypes.list(),
   });
 export const useDocumentType = (id: string) =>
-  useQuery({
+  useTeamQuery({
     queryKey: dtk.one(id),
     queryFn: () => api.files.documentTypes.get(id),
     enabled: !!id,
@@ -83,7 +84,7 @@ export const useTestEstimate = (
   version: number,
   enabled: boolean,
 ) =>
-  useQuery({
+  useTeamQuery({
     queryKey: dtk.estimate(id, version),
     queryFn: () => api.files.documentTypes.estimate(id, version),
     enabled: enabled && !!id && version > 0,
@@ -94,10 +95,10 @@ export const useTestEstimate = (
 /** The newest test started in this session for each version of a type. */
 export function useSessionTests(id: string) {
   const qc = useQueryClient();
-  return useQuery({
+  return useTeamQuery({
     queryKey: dtk.sessionTests(id),
     // Nothing to fetch: a broad invalidation (a team switch) refetches it, which must keep the ids already held.
-    queryFn: () => qc.getQueryData<Record<number, string>>(dtk.sessionTests(id)) ?? {},
+    queryFn: () => qc.getQueryData<Record<number, string>>(teamKey(dtk.sessionTests(id))) ?? {},
     initialData: {} as Record<number, string>,
     staleTime: Infinity,
     gcTime: Infinity,
@@ -112,10 +113,10 @@ export function useStartTest() {
       api.files.documentTypes.startTest(id, version),
     onSuccess: (run) => {
       qc.setQueryData<Record<number, string>>(
-        dtk.sessionTests(run.typeId),
+        teamKey(dtk.sessionTests(run.typeId)),
         (prev) => ({ ...prev, [run.version]: run.id }),
       );
-      qc.setQueryData(dtk.test(run.typeId, run.id), run);
+      qc.setQueryData(teamKey(dtk.test(run.typeId, run.id)), run);
     },
   });
 }
@@ -125,7 +126,7 @@ const settled = (run?: DocumentTypeTestRun) =>
 
 /** Polls every 2 seconds while the test is queued or running. */
 export const useTestRun = (id: string, testId: string | undefined) =>
-  useQuery({
+  useTeamQuery({
     queryKey: dtk.test(id, testId ?? ""),
     queryFn: () => api.files.documentTypes.test(id, testId!),
     enabled: !!testId,

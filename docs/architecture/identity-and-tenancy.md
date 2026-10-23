@@ -1,10 +1,45 @@
 # Identity, trust and tenancy
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, updated 2026-10-22: the team is the workspace, and that rule overrides anything below or in another doc that lets data cross teams. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
 
 Every run acts for someone. Detail: [ADR-0005](decisions/identity-and-entitlement.md) (workflow identities,
 delegation, approval tokens), [ADR-0013](decisions/auth-provider-seam.md) and
 [sign-in library](../packages/ops_signin/overview.md) (human sign-in, step-up).
+
+## The team is the workspace
+
+A team in Ops AI is what a workspace is in other products: the one boundary for data. The rule:
+
+| Rule | What it means |
+|---|---|
+| Every record belongs to exactly one team | Every agent, workflow, run, case, Human Task, file, document, knowledge base, tool module, mailbox, secret, task type and document type has a `team_id` that is never empty |
+| A person belongs to one or more teams | Membership and a role per team. The console and every request act in one selected team at a time; switching team changes everything the person sees |
+| Nothing crosses teams | No team reads, counts, decides, approves or uses another team's records. Another team's record answers 404, the same as one that does not exist |
+| Approval stays in the run's team | A step a policy reserves for a person is decided by someone with the right role in the run's team. A tool policy names a role, never another team |
+| Sharing is installing a copy | Ready-made tools, agents, workflows, task types and document types live in a catalog. A team installs one, which makes a copy in that team; later changes to the catalog entry reach the team only when it updates its copy |
+| The tenant holds people, not work | The tenant (one per deployment by default) holds people, teams, memberships, sign-in policy and the catalog. It holds no work records |
+| Background work acts in the record's team | A loop that claims work across teams (the worker, the mail listener, timers) reads only what it needs to find the record's team, then does the work in that team. It never returns another team's data to a person |
+
+Other workspace products work the same way: every request carries one workspace, every query filters on it, and a
+template is copied into a workspace rather than referenced across.
+
+### Where the code still crosses teams
+
+Each line is removed or changed by the team boundary card; the boundary lock fails on any new one.
+
+| Crossing | Where | Change |
+|---|---|---|
+| Records with no team are readable by every team | `packages/ops_store/src/ops_store/schema.py:333` (`@team_id IS NULL` in the read policy) | Team column `NOT NULL` on every team-owned table; the read policy drops the null branch |
+| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`, c-423), the no-team Platform tools module (c-433) | Each team installs its own modules; a workflow uses only its team's modules |
+| A tool's approver is the module's owning team | `services/agents-service/src/ops_agents/api/routers/reviews.py:83`, `registry.approval_policy` (`op.approver_team or module.team_id`) | The approver is a role in the run's team; `approver_team` is removed |
+| A workflow may use another team's task type | `services/agents-service/src/ops_agents/store/task_types.py:3` | Task and document types are installed per team from the catalog |
+| A knowledge base counts other teams' agents | `services/kb-service/src/ops_kb/service.py:154`, `routers/knowledge_usage.py:52` | Counts the team's own agents only |
+| Case reads with no team filter | `services/agents-service/src/ops_agents/store/cases.py:171` (`teams=None`) | Every read names the acting team |
+| The dev header acts for every team | `ops_identity` dev mode (reason `dev`) | The dev caller selects one team like everyone else |
+
+`isolation.tenant_wide` stays for background loops that claim across teams and seed data (13 sites, listed in
+`packages/ops_store/tests/test_isolation_sites.py`); each must hand the work to the record's team, and none may return
+data to a request.
 
 ## Decisions
 
@@ -45,7 +80,7 @@ reasons are tested ([gateway-approval-token](../services/agents-service/experime
 | Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
 | Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |
 | Checkpoints | One compiled graph serves every tenant: the saver takes the tenant from the same context variable when it opens each transaction. Team in the checkpoint key is `local`; team access is decided by the API before a thread is touched |
-| Teams | Another team's thread, run, event or review in the same tenant answers 404, as another tenant's does, and lists show the acting team's only: the store reads through `team_visible` and the database holds the five run tables to the transaction's team (`{t}_isolation`, migration 0073, c-429). A reviewer of a write's approving team acts in the thread's team to decide it. The dev header caller acts for every team of its tenant (reason `dev`) |
+| Teams | Another team's thread, run, event or review in the same tenant answers 404, as another tenant's does, and lists show the acting team's only: the store reads through `team_visible` and the database holds the five run tables to the transaction's team (`{t}_isolation`, migration 0073, c-429). The reviewer is a person in the thread's own team. The dev header caller acts for every team of its tenant (reason `dev`) |
 | External keys | Unique per `(tenant_id, external_key)`, so one tenant's key neither collides with nor reveals another's |
 | Proven | `tests/store/test_tenancy.py` on PostgreSQL: each tenant counts only its own rows in every table with no tenant clause (turning RLS off on `graph_runs` fails it); a write naming another tenant is refused; one graph run by two tenants stores each checkpoint under its own tenant and B reads nothing of A's. `tests/api/test_platform_identity.py`: 404 across tenants, 403 with the owning team across teams, dev headers 401 in platform mode |
 | Test databases | Every service's test conftest refuses `ops_runtime`, and any PostgreSQL database other than `OPS_TEST_DATABASE_URL`, before collection (`ops_service_kit.testdb`) |

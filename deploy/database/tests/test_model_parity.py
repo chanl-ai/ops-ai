@@ -33,12 +33,6 @@ LAGGING: dict[str, set[str]] = {
     # tools migration 0026 gave the outbox's attempts a database default that files' and documents' outboxes lack, and
     # ops_store.outbox_table is one shape for all three; a migration makes them one.
     "tools": {"default service_outbox.attempts only in the database"},
-    # Team-owned and tenant-scoped since c-407, still under their hand-written tenant policy; c-412's migration replaces
-    # it with the generated team policy (c-410).
-    "agents": {
-        "isolation case_types is marked team-isolated, the database isolates it by tenant",
-        "isolation task_types is marked team-isolated, the database isolates it by tenant",
-    },
 }
 
 

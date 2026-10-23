@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { useCurrentPerson } from '@/hooks/auth-queries';
@@ -8,6 +8,7 @@ import { useTeam } from '@/hooks/use-team';
 import { api } from '@/lib/api';
 import type { ConnectInput, ConnectionSetupPatch, DraftConnectInput, IntegrationFilters, IntegrationView } from '@/lib/types/integrations';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 export const ik = {
   list: (p: unknown) => ['integrations', 'list', p] as const,
@@ -18,11 +19,11 @@ export const ik = {
 };
 
 export const useIntegrations = (p: ListParams<IntegrationFilters> & { view: IntegrationView }) => usePagedQuery({ queryKey: ik.list(p), queryFn: () => api.integrations.list(p) });
-export const useIntegration = (id: string) => useQuery({ queryKey: ik.one(id), queryFn: () => api.integrations.get(id) });
-export const useIntegrationOptions = (enabled = true) => useQuery({ queryKey: ik.options, queryFn: api.integrations.options, enabled });
-export const useIntegrationCatalog = (enabled = true) => useQuery({ queryKey: ik.catalog, queryFn: api.integrations.catalog, enabled, staleTime: 60_000 });
+export const useIntegration = (id: string) => useTeamQuery({ queryKey: ik.one(id), queryFn: () => api.integrations.get(id) });
+export const useIntegrationOptions = (enabled = true) => useTeamQuery({ queryKey: ik.options, queryFn: api.integrations.options, enabled });
+export const useIntegrationCatalog = (enabled = true) => useTeamQuery({ queryKey: ik.catalog, queryFn: api.integrations.catalog, enabled, staleTime: 60_000 });
 /** What a revoke would stop, asked of the API when the confirm opens. */
-export const useRevokeImpact = (ids: string[]) => useQuery({ queryKey: ik.impact(ids), queryFn: () => api.integrations.impact(ids), enabled: ids.length > 0 });
+export const useRevokeImpact = (ids: string[]) => useTeamQuery({ queryKey: ik.impact(ids), queryFn: () => api.integrations.impact(ids), enabled: ids.length > 0 });
 
 /** Connection changes show on sources, tool modules, mailboxes and the audit log, so writes refresh them too. */
 function useIntegrationWrite<A, R>(fn: (a: A) => Promise<R>) {

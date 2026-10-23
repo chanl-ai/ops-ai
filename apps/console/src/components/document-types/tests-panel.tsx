@@ -61,7 +61,7 @@ export function TestsPanel({
   version: DocumentTypeVersion;
 }) {
   const sessionTests = useSessionTests(type.id);
-  const testId = sessionTests.data[version.version];
+  const testId = sessionTests.data?.[version.version];
   const run = useTestRun(type.id, testId);
   const [open, setOpen] = React.useState(false);
   const busy = run.data?.status === "queued" || run.data?.status === "running";

@@ -23,6 +23,7 @@ from langgraph.types import Command
 
 from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.logging import get_logger
+from ops_store import background
 
 from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, technical
 from .definition import parse
@@ -109,8 +110,9 @@ def ending(values: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class Worker:
-    def __init__(self, host: WorkerHost) -> None:
-        self.host = host
+    def __init__(self, host: WorkerHost, beat: background.Beat | None = None) -> None:
+        """`beat` is the workflow worker's heartbeat (c-516), written from this loop's own scope, never a pass's."""
+        self.host, self.beat = host, beat
         self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl)
         self.runs = RunStore(host.tx)
         self.definitions = DefinitionStore(host.tx)
@@ -125,7 +127,13 @@ class Worker:
                 work = await self.queue.claim()
             except Exception as e:  # A database blip must not end the worker; the next poll tries again.
                 log.exception("engine_claim_failed", error=type(e).__name__)
+                if self.beat is not None:
+                    await self.beat.failed(e, next_in=poll)
                 work = None
+            else:
+                if work is None and self.beat is not None:
+                    waiting = await self._due() if self.beat.write_due() else None
+                    await self.beat.ok(0, waiting=waiting, next_in=poll)
             if work is None:
                 slots.release()
                 with suppress(TimeoutError):
@@ -139,12 +147,21 @@ class Worker:
                     log.exception("engine_process_failed", work=w.id, error=type(e).__name__)
                 finally:
                     slots.release()
+                # The pass ran in its own task under the run's team; this task is still the loop's scope.
+                if self.beat is not None:
+                    await self.beat.ok(1, next_in=poll)
 
             task = asyncio.create_task(one())
             tasks.add(task)
             task.add_done_callback(tasks.discard)
         for t in list(tasks):
             t.cancel()
+
+    async def _due(self) -> int | None:
+        try:
+            return await self.queue.due()
+        except Exception:  # A count the heartbeat cannot read is left out; it is not fatal.
+            return None
 
     async def work_once(self) -> bool:
         """Claims and processes one row; False when there was none. For tests and one-shot runs."""

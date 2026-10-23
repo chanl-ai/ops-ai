@@ -40,7 +40,7 @@ export default function AccountPage() {
           <Skeleton className="h-40 w-full" />
         </div>
       ) : query.isError && !p ? (
-        <QueryError what="your account" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="your account" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : p ? (
         <div className="flex max-w-2xl flex-col gap-4" data-testid="account-profile">
           <SampleData>

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import fnmatch
+import json
 import os
 import re
 import signal
@@ -33,6 +34,7 @@ import threading
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -283,7 +285,26 @@ def check(config: HostConfig) -> int:
             state = "running" if ok else "not running"
         down += not ok
         print(f"{'ok  ' if ok else 'DOWN'} {spec.name}: {state}")
+        if url and ok:
+            down += _background(spec.name, url)
     return 1 if down else 0
+
+
+def _background(name: str, url: str) -> int:
+    """The process's background processes from its /health/background (c-516), one line each; late or stopped counts
+    as down, as `make health` reads it locally. A service with no such route has none."""
+    parts = urllib.parse.urlsplit(url)
+    try:
+        with urllib.request.urlopen(f"{parts.scheme}://{parts.netloc}/health/background", timeout=5) as resp:
+            processes = json.loads(resp.read())["processes"]
+    except (urllib.error.URLError, OSError, ValueError, KeyError):
+        return 0
+    down = 0
+    for p in processes:
+        bad = p["state"] in ("late", "stopped")
+        down += bad
+        print(f"{'DOWN' if bad else 'ok  '} {name} background {p['key']}: {p['state'].replace('_', ' ')}")
+    return down
 
 
 def main(argv: list[str]) -> int:

@@ -130,8 +130,11 @@ async def test_a_team_workflow_built_like_the_handler_grants_nothing(
         "id": f"wf_grants_{uuid4().hex[:6]}",
         "nodes": [{**n, "type": "ops.trigger.request", "parameters": {}} if n["id"] == "start" else n for n in nodes],
     }
-    assert (await client.post("/v1/workflows/definitions", json={"definition": copy})).status_code in (200, 201)
-    assert (await client.post(f"/v1/workflows/definitions/{copy['id']}/publish-requests", json={})).status_code == 201
+    # Saved in a team, as every workflow is: its typed steps are checked against that team's task types.
+    saved = await client.post("/v1/workflows/definitions", json={"definition": copy}, headers=TEAM)
+    assert saved.status_code in (200, 201), saved.text
+    asked = await client.post(f"/v1/workflows/definitions/{copy['id']}/publish-requests", json={}, headers=TEAM)
+    assert asked.status_code == 201, asked.text
     start = {"workflowId": copy["id"], "input": payload("apr_forged")}
     run_id = str((await client.post("/v1/runs", json=start, headers=STARTER)).json()["data"]["runId"])
     assert (await finish(worker, client, run_id))["status"] == "waiting"

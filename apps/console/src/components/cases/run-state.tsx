@@ -38,7 +38,7 @@ function ToolError({ error }: { error: ToolFailure }) {
     <Alert variant="destructive" data-testid="run-tool-error">
       <AlertCircle />
       <AlertDescription>
-        {error.tool} was refused{error.status ? ` (${error.status})` : ''}: {error.message} The run waits for a new decision; nothing retried the call.
+        {error.action} was refused{error.status ? ` (${error.status})` : ''}: {error.message} The run waits for a new decision; nothing retried the call.
       </AlertDescription>
     </Alert>
   );

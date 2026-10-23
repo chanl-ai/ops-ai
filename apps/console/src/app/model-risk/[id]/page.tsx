@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Activity, AlertTriangle, Bot, ClipboardCheck, FileCheck2, Gauge, ListChecks, Plus, Route, Scale, SearchX, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, ClipboardCheck, FileCheck2, Gauge, ListChecks, Plus, Route, Scale, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
@@ -13,7 +13,6 @@ import { ConditionBadge, FINDING_STATUS_LABEL, SeverityBadge, TYPE_LABEL, Valida
 import { OverrideRateChart, PassRateChart } from '@/components/model-risk/monitoring-charts';
 import { PageLayout } from '@/components/page-layout';
 import { toastBulk } from '@/components/shared/bulk';
-import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { DisabledReason } from '@/components/shared/disabled-reason';
 import { QueryError } from '@/components/shared/query-states';
@@ -29,7 +28,6 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useLookups } from '@/hooks/queries';
 import { useAddCondition, useChangeTier, useModelEntry, useRequestValidation, useSetConditionStatus, useSetNextReview } from '@/hooks/model-risk-queries';
-import { ApiError } from '@/lib/api';
 import { dateOnly, pct, relativeTime, shortDate, shortId } from '@/lib/format';
 import type { ModelCondition, ModelEntryDetail } from '@/lib/types/model-risk';
 
@@ -57,11 +55,7 @@ export default function ModelEntryPage() {
   if (query.isError)
     return (
       <PageLayout icon={Scale} title="Model" backHref="/model-risk">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Model not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to model risk', href: '/model-risk' }} />
-        ) : (
-          <QueryError what="this model" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this model" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to model risk', href: '/model-risk' }} />
       </PageLayout>
     );
   return <ModelEntryView entry={query.data} />;

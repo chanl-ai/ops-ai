@@ -12,5 +12,6 @@ export function createActivityHttp(get: Get): ActivityApi {
       for (const s of source ?? []) q.append('source', s);
       return get(`/activity?${q}`);
     },
+    background: () => get('/background'),
   };
 }

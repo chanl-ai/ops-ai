@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
@@ -40,7 +41,7 @@ trigger_events = sa.Table(
     sa.Column("detail", sa.Text(), nullable=False),
     sa.Column("recorded_at", sa.String(32), nullable=False),
     sa.Index("ix_trigger_events_workflow", "tenant_id", "workflow_id", "recorded_at"),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -99,7 +100,12 @@ class TriggerEvents:
     ) -> tuple[list[dict[str, Any]], int]:
         """The workflow's events in `team_id`, newest first, with the total."""
         t = trigger_events
-        where = (t.c.tenant_id == current_tenant(), t.c.team_id == team_id, t.c.workflow_id == workflow_id)
+        where = (
+            t.c.tenant_id == current_tenant(),
+            t.c.team_id == team_id,
+            t.c.workflow_id == workflow_id,
+            team_visible(t),
+        )
         q = sa.select(t).where(*where).order_by(t.c.recorded_at.desc(), t.c.id.desc())
         async with tenant_tx(self.engine) as c:
             total = int((await c.execute(sa.select(sa.func.count()).select_from(t).where(*where))).scalar_one())

@@ -1,0 +1,9 @@
+#!/bin/sh
+# ops-ai changelog gate, plus the message gate. A message keeps to a subject and three short lines (scripts/commit-message-check.mjs). Runs codeloop's commit-msg hook first (scripts/install-hooks.sh keeps it as
+# commit-msg.codeloop), so its Feature: trailer is there to read, then refuses a feat or fix that changes apps/ or
+# services/ for a card with no changelog entry (scripts/changelog-check.mjs). Fix the entry; do not bypass with --no-verify.
+d=$(git rev-parse --git-dir) || exit 1
+if [ -x "$d/hooks/commit-msg.codeloop" ]; then "$d/hooks/commit-msg.codeloop" "$1" || exit $?; fi
+root=$(git rev-parse --show-toplevel)
+node "$root/scripts/commit-message-check.mjs" --commit "$1" || exit 1
+exec node "$root/scripts/changelog-check.mjs" --commit "$1"

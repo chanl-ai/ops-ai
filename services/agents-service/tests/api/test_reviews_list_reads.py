@@ -51,7 +51,7 @@ def _reads(statements: list[str]) -> dict[str, int]:
 async def test_typed_tasks_on_the_reviews_list_read_their_types_assists_and_cases_once(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
     with tenant_scope(TENANT):
-        await seeded_store(rt.db)  # once per process and tenant, before any list is counted
+        await seeded_store(rt.db, "team_ops")  # once per process and team, before any list is counted
     counts: list[dict[str, int]] = []
     for n in (1, 5):
         await typed_waiting(stack, await typed_case(stack, customer=f"C-ack{n}"), n)
@@ -107,7 +107,7 @@ async def test_old_reviews_on_the_reviews_list_read_their_runs_steps_once(stack:
     """Tick 34: legacy_tasks read a run's steps for each old review on the list (legacy_tasks.py:71)."""
     c, rt = stack
     with tenant_scope(TENANT):
-        await seeded_store(rt.db)
+        await seeded_store(rt.db, "team_ops")
     counts: list[dict[str, int]] = []
     for n in (1, 5):
         await old_waiting(stack, uuid4().hex[:6], n)

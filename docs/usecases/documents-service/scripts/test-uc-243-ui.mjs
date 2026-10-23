@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const documents = `http://127.0.0.1:${DOCUMENTS_PORT}`;
@@ -12,7 +12,7 @@ const JAMES = 'j.richardson@harborpine.example';
 const TYPE = 'restraining_notice';
 const FIXTURES = join(ROOT, 'services/documents-service/tests/fixtures/restraining');
 const SAMPLE = 'TEST003.pdf';
-const SHOTS = join(ROOT, '.codeloop/evidence/243/screens');
+const SHOTS = evidenceDir('243', 'screens');
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const data = async (r) => {
   const body = await r.json().catch(() => ({}));

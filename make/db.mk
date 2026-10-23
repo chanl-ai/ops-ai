@@ -25,7 +25,7 @@ db-reset: ## The same as make reset-db (kept so old commands work)
 
 migrate: ## Apply every service's own migration chain to head (agents, tools, models, kb, platform, files, documents)
 	@# A service still running older code breaks when newer migrations change its tables under it.
-	@$(STACK) check-fresh || { echo "migrate refused: a running service is older than its code; run make up"; exit 1; }
+	@$(STACK) check-fresh || { echo "migrate refused: a running service is older than its code or the last migration; run make up"; exit 1; }
 	$(MAKE) -C $(SVC_DIR_agents) migrate
 	$(MAKE) -C $(SVC_DIR_tools) migrate
 	$(MAKE) -C $(SVC_DIR_models) migrate
@@ -33,6 +33,8 @@ migrate: ## Apply every service's own migration chain to head (agents, tools, mo
 	$(MAKE) -C services/platform-service migrate
 	$(MAKE) -C services/files-service migrate
 	$(MAKE) -C services/documents-service migrate
+	@# Every process started before a migration landed is stale from here (stack.sh note-migrations, fb-16aa519c).
+	@$(STACK) note-migrations
 
 migration: ## New Alembic revision: make migration NAME="add case table"
 	@test -n "$(NAME)" || { echo 'usage: make migration NAME="what it changes"'; exit 2; }

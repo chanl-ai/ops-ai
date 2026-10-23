@@ -1,4 +1,4 @@
-"""Widget layouts (c-082, `.codeloop/wiki/concepts/chat-widgets.md`): a tree of catalogue primitives the console draws
+"""Widget layouts (c-082, `docs/architecture/chat-widgets.md`): a tree of catalogue primitives the console draws
 in chat, either composed by the model or filled from a builder's published widget template.
 
 Nothing outside the catalogue can be emitted. Every tree is rebuilt here from closed per-primitive field lists before a

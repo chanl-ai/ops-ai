@@ -89,6 +89,9 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tisoap/react-flow-smart-edge':
+        specifier: 5.0.0
+        version: 5.0.0(@xyflow/react@12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@xyflow/react':
         specifier: ^12.10.2
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -107,6 +110,9 @@ importers:
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
+      elkjs:
+        specifier: 0.11.1
+        version: 0.11.1
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.3.0)
@@ -1922,6 +1928,13 @@ packages:
   '@tanstack/table-core@8.21.3':
     resolution: {integrity: sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==}
     engines: {node: '>=12'}
+
+  '@tisoap/react-flow-smart-edge@5.0.0':
+    resolution: {integrity: sha512-/Y9LQ76i+Ba3BAOzaXELIlslhPE7/X/vs/5lwl/yZD2cLIfEkBCIjumPnuUMDUECu7uGPQb+OiGV2YcugJ1Hrw==}
+    peerDependencies:
+      '@xyflow/react': '>=12'
+      react: '>=18'
+      react-dom: '>=18'
 
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==}
@@ -4952,6 +4965,12 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
 
   '@tanstack/table-core@8.21.3': {}
+
+  '@tisoap/react-flow-smart-edge@5.0.0(@xyflow/react@12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+    dependencies:
+      '@xyflow/react': 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   '@types/d3-array@3.2.2': {}
 

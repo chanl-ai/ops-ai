@@ -107,7 +107,7 @@ export default function RunsPage() {
       ) : query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="runs" onRetry={() => query.refetch()} retrying={query.isFetching} testId="cases-error" />
+        <QueryError what="runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="cases-error" />
       ) : (
         <div className="flex flex-col gap-4">
           <SavedViewTabs

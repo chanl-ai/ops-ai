@@ -17,6 +17,7 @@ import type { ChatMessage, MessageFeedback, WidgetAction } from '@/lib/types/cha
 import { isLayoutPart } from '@/lib/types/widgets';
 
 import { CitationPopover, SourcesList } from './citation-popover';
+import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
@@ -105,8 +106,11 @@ export function AssistantMessage({
   budgetCard,
   byline,
   onOpenMemory,
+  cardsReadOnly,
 }: {
   message: ChatMessage;
+  /** Draws Ops cards with Open and no buttons: the embedded chat, whose widget API serves no record routes (c-469). */
+  cardsReadOnly?: boolean;
   /** Set while the reply is in flight and nothing has been written yet. */
   phaseLabel?: string;
   streaming?: boolean;
@@ -145,7 +149,10 @@ export function AssistantMessage({
           {byline}
         </span>
       )}
-      {message.toolCalls?.map((c) => <ToolCallCard key={c.id} call={c} />)}
+      {message.toolCalls?.map((c) => {
+        const cards = opsCards(c);
+        return cards ? <OpsCallCards key={c.id} call={c} cards={cards} readOnly={cardsReadOnly} /> : <ToolCallCard key={c.id} call={c} />;
+      })}
       {message.widgets?.map((w) => (
         <ChatWidgetView key={w.id} widget={w} onAction={readOnly || !onWidgetAction ? undefined : (a) => onWidgetAction(w.id, a)} />
       ))}

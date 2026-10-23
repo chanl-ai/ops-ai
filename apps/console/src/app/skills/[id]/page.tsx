@@ -3,14 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Archive, BookOpen, Copy, Download, Inbox, MoreHorizontal, SearchX, Send, Sparkles, Trash2, Wrench } from 'lucide-react';
+import { Archive, BookOpen, Copy, Download, Inbox, MoreHorizontal, Send, Sparkles, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { openLink } from '@/components/files/file-actions';
 import { PageLayout } from '@/components/page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DisabledReason } from '@/components/shared/disabled-reason';
-import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { SKILL_LOADING_LABEL } from '@/components/skills/skill-loading';
 import { QueryError } from '@/components/shared/query-states';
@@ -29,7 +28,6 @@ import { useDownloadFile } from '@/hooks/file-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useDeleteSkill, useDeprecateSkill, useDuplicateSkill, useExportSkills, useRequestSkillReview, useSkill } from '@/hooks/skill-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { SkillDetail } from '@/lib/types/skills';
 
@@ -50,11 +48,7 @@ export default function SkillPage() {
   if (query.isError)
     return (
       <PageLayout icon={Sparkles} title="Skill" backHref="/skills">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Skill not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to skills', href: '/skills' }} />
-        ) : (
-          <QueryError what="this skill" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this skill" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to skills', href: '/skills' }} />
       </PageLayout>
     );
   return <SkillView skill={query.data} />;

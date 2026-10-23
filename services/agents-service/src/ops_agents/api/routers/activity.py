@@ -4,7 +4,7 @@ pages. The rows are joined by the store (store/activity.py); this router decides
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -14,13 +14,16 @@ from ops_access import can
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, ListResult, paged
 
-from ...store.activity import KINDS, Activity, Filters, Scope
+from ...case_wording import entry
+from ...store.activity import Activity, Filters, Scope
 from ...store.cases import CaseNotFound, CaseStore
 from ...store.tenancy import current_team
 from ..actors import ActorView, actors
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..review_text import describe_calls
+from ..run_story import words
 from ..schemas import Out
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -30,7 +33,16 @@ router = APIRouter(prefix="/v1/activity")
 
 # The area each kind is read under; a chat is read under the chat rule (`_chat_teams`).
 KindName = Literal[
-    "workflow_run", "agent_run", "chat", "email", "decision", "tool_call", "case", "system_workflow", "reminder"
+    "workflow_run",
+    "agent_run",
+    "chat",
+    "email",
+    "decision",
+    "tool_call",
+    "case",
+    "system_workflow",
+    "reminder",
+    "background",
 ]
 StatusName = Literal["running", "waiting", "done", "failed", "skipped"]
 AREA = {
@@ -43,12 +55,14 @@ AREA = {
     "system_workflow": "workflows",
     # A reminder on a waiting review (c-277): read where the caller may view the run team's reviews.
     "reminder": "reviews",
+    # A background process's job for the team (c-516): read where the caller may view workflows.
+    "background": "workflows",
 }
 SOURCE_TYPES = ("workflow", "agent", "channel", "case")
 
 
 class Source(Out):
-    type: Literal["workflow", "agent", "channel", "case"]
+    type: Literal["workflow", "agent", "channel", "case", "process"]
     id: str
     name: str
 
@@ -56,7 +70,8 @@ class Source(Out):
 class Ref(Out):
     # run: a workflow run; thread: an agent run; chat: a chat thread; review: a Human Task; email: a received email
     # that started no run; case: a case; workflow: a workflow definition.
-    kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow"]
+    # process: a background process's job, which opens nothing (c-516).
+    kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
     id: str
 
 
@@ -68,6 +83,8 @@ class ActivityRow(Out):
     status: StatusName
     # The source's own word: succeeded, cancelled, duplicate, filtered, daily_cap, approved, rejected...
     outcome: str | None
+    # The outcome as people read it ("Daily cap"), run_story.words over `outcome` (c-508); `outcome` stays the key.
+    outcome_text: str | None = None
     team_id: str | None
     source: Source
     actor: ActorView
@@ -99,10 +116,8 @@ def _may(me: Principal, area: str, action: str, team: str) -> str | None:
         return None
 
 
-def _teams(me: Principal, team: str | None) -> tuple[str, ...] | None:
-    """The teams asked about: None for a dev caller, which reads across teams."""
-    if me.team_ids is None:
-        return None
+def _teams(me: Principal, team: str | None) -> tuple[str, ...]:
+    """The teams asked about: the one named or acted in, or with `all` every team the person belongs to."""
     if team == "all":
         return me.team_ids
     chosen = team or current_team() or me.team_id
@@ -113,9 +128,7 @@ def _teams(me: Principal, team: str | None) -> tuple[str, ...] | None:
 
 def scope_of(me: Principal, team: str | None) -> Scope:
     asked = _teams(me, team)
-    if asked is None:
-        return Scope(teams=dict.fromkeys(KINDS), owner=me.email, chat_all=None)
-    teams: dict[str, tuple[str, ...] | None] = {
+    teams: dict[str, tuple[str, ...]] = {
         kind: tuple(t for t in asked if _may(me, area, "view", t)) for kind, area in AREA.items()
     }
     # chat.view is `own` for every built-in role while chatThreadsOwnerOnly is on (its default); `all` only with it off.
@@ -136,28 +149,57 @@ def _sources(raw: list[str]) -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
-def row_view(r: dict[str, Any], who: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _actor(r: dict[str, Any], who: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if r["kind"] == "email":
+        return {"kind": "sender", "id": r["actor"], "name": r["actor"]}
+    if r["kind"] == "background":
+        # The process did it; named as the Background page names it.
+        return {"kind": "event", "id": r["actor"], "name": r["source_name"] or ""}
+    return who.get(str(r["actor"] or "")) or {"kind": "person", "id": "", "name": ""}
+
+
+def row_view(r: dict[str, Any], who: dict[str, dict[str, Any]], titles: dict[str, str] | None = None) -> dict[str, Any]:
     return {
         "id": f"{r['kind']}:{r['row_id']}",
         "kind": r["kind"],
-        "title": r["title"],
+        "title": (titles or {}).get(f"{r['kind']}:{r['row_id']}") or r["title"],
         "status": r["status"],
         "outcome": r["outcome"],
+        "outcomeText": words(str(r["outcome"])) if r["outcome"] else None,
         "teamId": r["team_id"],
         "source": {"type": r["source_type"], "id": r["source_id"] or "", "name": r["source_name"] or ""},
-        "actor": who.get(str(r["actor"] or "")) or {"kind": "person", "id": "", "name": ""}
-        if r["kind"] != "email"
-        else {"kind": "sender", "id": r["actor"], "name": r["actor"]},
+        "actor": _actor(r, who),
         "at": r["at"],
         "ref": {"kind": r["ref_kind"], "id": r["ref_id"]},
     }
+
+
+async def call_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Each tool-call row's title as the run page words the same call (c-508): the calls read in two queries and
+    described with one tool directory read, never the tool's own name."""
+    calls = await Activity(rt.db).calls(rows)
+    told = await describe_calls(rt, calls)
+    return {f"tool_call:{k}": str(v["sentence"]) for k, v in told.items()}
+
+
+async def case_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Each case row's title in the words the case page's feed uses (case_wording), its events read in one query."""
+    ids = [str(r["row_id"]) for r in rows if r["kind"] == "case"]
+    events = await CaseStore(rt.db).events_by_id(ids)
+    out: dict[str, str] = {}
+    for event_id, e in events.items():
+        # The Activity table shows who did it in its own column, so the sentence starts with the verb.
+        said = entry(str(e["kind"]), cast(dict[str, Any], e["detail"]))
+        if said:
+            out[f"case:{event_id}"] = said
+    return out
 
 
 async def _case(rt: Runtime, scope: Scope, case_id: str) -> tuple[str, str]:
     """The case and its team, when the caller may view cases in that team; another team's case is not found."""
     try:
         teams = scope.teams.get("case", ())
-        row = await CaseStore(rt.db).get(case_id, None if teams is None else list(teams))
+        row = await CaseStore(rt.db).get(case_id, list(teams))
     except CaseNotFound:
         raise NotFound(f"Case {case_id}") from None
     return case_id, str(row["team_id"])
@@ -180,5 +222,6 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
     )
     found = await Activity(rt.db).page(scope, filters, page=q.page, page_size=q.pageSize)
     who = await actors(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] != "email"])
-    listed = paged([row_view(r, who) for r in found.rows], found.total, q.page, q.pageSize)
+    titles = await case_titles(rt, found.rows) | await call_titles(rt, found.rows)
+    listed = paged([row_view(r, who, titles) for r in found.rows], found.total, q.page, q.pageSize)
     return ok(listed | {"facets": {"kind": found.by_kind, "status": found.by_status}})

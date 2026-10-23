@@ -20,6 +20,7 @@ An admin answers access questions on screen: what a role allows, what a person c
 | 3 | She opens her row | Her page lists In every team (from Admin) and In Platform (from Admin) |
 | 4 | In Operations she opens Maya Okafor, checks Reviews › Decide asked for by Maya; the workspace then turns Requester may decide off and she checks again | Allowed, granted by Reviewer; then Not allowed: "You asked for this, so someone else has to decide it." |
 | 5 | James drafts an agent; Maya Okafor, a Reviewer, opens it and hovers the ⓘ beside Request publish | The button is disabled; the ⓘ says it needs Publish on Agents, which roles grant it, and who to ask |
+| 6 | James saves a workflow draft; Maya opens it and focuses the ⓘ beside Publish | Publish is disabled, not missing; the ⓘ says it needs Publish on Workflows and who to ask |
 
 ## Acceptance layers
 

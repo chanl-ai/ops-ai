@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Ops AI is an open design for an operational AI platform for enterprises, plus working code that shows it. The console
 (`apps/console/`) is a Next.js app for a fictional bank, Harbor & Pine Bank: what agents did, what is waiting on a
 person, and the configuration behind both. It runs against an in-memory mock API that the backend services in
-`services/` replace one area at a time. Read `.codeloop/wiki/concepts/builder-best-practices.md` before starting any card. Read `AGENTS.md` and `CONTRIBUTING.md` before changing anything; console
-rules are in `apps/console/CLAUDE.md`.
+`services/` replace one area at a time. Read `AGENTS.md` and `CONTRIBUTING.md` before changing anything; console rules
+are in `apps/console/CLAUDE.md`, and the design docs start at `docs/README.md`.
 
 ## Four rules every change follows
 
@@ -14,10 +14,10 @@ The owner set these, and a review refuses a change that breaks one, even when a 
 
 | Rule | What it means here |
 |---|---|
-| One of each thing (DRY) | One API per resource, one component per pattern, one helper per rule, one source per fact. Before writing something, find the existing one and use or extend it (`.codeloop/wiki/rulebook/review-checklist.md` §1). |
+| One of each thing (DRY) | One API per resource, one component per pattern, one helper per rule, one source per fact. Before writing something, find the existing one and use or extend it. |
 | No hard coding | Who may do what is decided only by `can()` over the roles grid and team policies, with open defaults: never a check on a role name, an owner, an id prefix or a flag in code. Agents, workflows, tools, skills, guardrails and document types are database records seeded from files, never definitions in code. Settings come from the settings class, and states, kinds and limits are named constants or settings, not literal strings scattered through code. |
 | Use cases are configuration | Ops AI must serve thousands of use cases like the levy example. A use case is workflows, document types, agents, tools and settings a builder configures, never a code path, a screen or a field written for one use case. Screens and nodes are generic and read what to show from the step's settings and data; levy is one worked example among several in tests and docs. |
-| Design in layers | Inside a service: domain, then app, then adapters, then api, each depending only inward. Across the product: services, then API, then SDK, then console and CLI as thin peers. Subsystems never call each other to act; workflows compose them (`service-boundaries.md`). |
+| Design in layers | Inside a service: domain, then app, then adapters, then api, each depending only inward. Across the product: services, then API, then SDK, then console and CLI as thin peers. Subsystems never call each other to act; workflows compose them (`docs/architecture/service-map.md`). |
 
 ## Service map
 
@@ -29,7 +29,7 @@ name.
 |---|---|---|---|
 | `platform-service` | Govern: Access, Audit log, Settings | Sign-in, sessions, tenancy, teams, roles, invites, API keys, audit. The only issuer of identity tokens; other services verify them locally through `packages/ops_identity`. Routes nothing | Prototype |
 | `agents-service` | Agents, Workflows, Deployments, Skills, Chat, Assurance | Definitions, versions, publish and release gate, evals, channels, and execution: agent kernel, threads, runs, leases, timers. Runs as `api` and `worker` processes | Prototype |
-| `ops_hitl` (package, planned) | Work: Cases, Reviews | Cases, queues, SLA display, Reviews, decisions, approval tokens; a shared package in the service host, owned by neither agents nor workflows | Planned; Reviews live in agents-service today (`.codeloop/wiki/concepts/reviews-and-cases.md`) |
+| `ops_hitl` (package, planned) | Work: Cases, Reviews | Cases, queues, SLA display, Reviews, decisions, approval tokens; a shared package in the service host, owned by neither agents nor workflows | Planned; Reviews live in agents-service today (`docs/architecture/human-in-the-loop.md`) |
 | `tools-service` | Data Hub: Tools, Connections; tool-call Activity | Tool egress: tool modules, credentials, OPA policy, approval-token checks, call log | Prototype |
 | `models-service` | AI gateway (planned in `docs/plan/ai-gateway-console.md`) | Model egress: aliases, provider keys, per-identity keys and budgets, failover | Not started |
 | `kb-service` | Data Hub: Knowledge bases, Wiki | Sources, ingestion, indexing, retrieval, citations | Not started; library in `packages/ops_ingest` |

@@ -29,5 +29,12 @@ export function readableFit(flow: Pick<ReactFlowInstance, 'getNodes' | 'setViewp
   const zoom = READABLE_ZOOM;
   const start = nodes.find((n) => n.id === startId) ?? nodes.reduce((a, n) => (n.position.x < a.position.x ? n : a));
   const h = start.measured?.height ?? 80;
-  void flow.setViewport({ x: PAD - start.position.x * zoom, y: height / 2 - (start.position.y + h / 2) * zoom, zoom });
+  // Centred top to bottom on the steps that are in view at this zoom, from the trigger to the right edge, so steps
+  // further right that sit higher or lower do not push the visible rows low with empty canvas above. When those steps
+  // are taller than the canvas, it is centred on the trigger.
+  const right = start.position.x + (width - PAD) / zoom;
+  const seen = nodes.filter((n) => n.position.x < right);
+  const v = getNodesBounds(seen.length ? seen : nodes);
+  const y = v.height * zoom <= height - 16 ? (height - v.height * zoom) / 2 - v.y * zoom : height / 2 - (start.position.y + h / 2) * zoom;
+  void flow.setViewport({ x: PAD - start.position.x * zoom, y, zoom });
 }

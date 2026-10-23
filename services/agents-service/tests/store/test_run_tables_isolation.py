@@ -1,7 +1,8 @@
-"""The database holds the five run tables to the caller's team (c-429, migration 0073), with raw SQL and no WHERE clause
-as ops_runtime_tenant, by failure mode: a team transaction reading or writing another team's thread, run, event,
-decision or approval; a tenant-wide one reading another tenant's; and a table whose generated policy is dropped, which
-must fail the suite naming it. On the PostgreSQL test database migrated to head."""
+"""The database holds the run tables to the caller's team (c-429, migration 0073; workflow runs and cases, c-507, 0076),
+with raw SQL and no WHERE clause as ops_runtime_tenant, by failure mode: a team transaction reading or writing another
+team's thread, run, event, decision, approval, workflow run or case; a tenant-wide one reading another tenant's; and a
+table whose generated policy is dropped, which must fail the suite naming it. On the PostgreSQL test database migrated
+to head."""
 
 from __future__ import annotations
 
@@ -12,15 +13,17 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agents.store.cases import cases
 from ops_agents.store.events import thread_events
 from ops_agents.store.graphs import graph_runs, graph_threads
 from ops_agents.store.reviews import review_approvals, review_decisions
 from ops_agents.store.tenancy import TENANT_ROLE
+from ops_engine.store.tables import engine_runs
 from ops_service_kit.ids import new_id, now_iso
 from ops_store.conformance import isolation_suite
 from ops_store.schema import isolation_ddl
 
-TABLES = (graph_threads, graph_runs, thread_events, review_decisions, review_approvals)
+TABLES = (graph_threads, graph_runs, thread_events, review_decisions, review_approvals, engine_runs, cases)
 PARENT = "gth_isolation_suite_parent"
 
 

@@ -16,7 +16,8 @@ cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
    it is read by OCR, every field falls below the floor, and a "Check the debtors read" Human Task comes before any case.
 3. Show the result. Sign in at <http://localhost:3016> as m.okafor@harborpine.example (password `northfield-demo`):
    Cases (one high-priority case per debtor, `Levy notice: <name> (<court case>)`), Workflows > Runs (the run URL is
-   printed last), Human Tasks (one `Levy notice` task per matched debtor), Files (the PDF)
+   printed last), Human Tasks (one `Levy notice` task per matched debtor and one `Find the customer or close as not ours` per debtor who
+   matches no customer, whose case reads `No customer matched: <name> (<court case>)`), Files (the PDF)
    and the reply at <http://localhost:8025>.
 4. A FAIL on `stack` names what is down; run `make up` again and `make logs SVC=<name>` for the service.
 
@@ -162,7 +163,7 @@ Gmail (IMAP and SMTP with an app password):
 | 3 | Harbor & Pine Operations, Channels > Email > Connect a mailbox | Gmail; a name; your address; App password `OWNER_MAILBOX_PASSWORD`; Send replies with SMTP, from your address, SMTP password `OWNER_MAILBOX_PASSWORD`. Test connection shows your newest subject; then Connect mailbox |
 | 4 | A terminal in the ops-ai repo | `mailbox_demo.py levy` as in "Set a team up", with `--mailbox <your address>`: it makes `Levy notices by email` (`levy_mail_intake_a0877a1d`) on your mailbox and publishes it through the second person |
 | 5 | Another mail account | Email `levy_notice.pdf` to your address. Within a minute: a run in Workflows > Runs and the PDF in Files |
-| 6 | Human Tasks | Each matched debtor's "Hold or flag": Hold, with the amount (up to what the account has free). Then "Send the acknowledgement": Approve. The reply reaches the account you sent from |
+| 6 | Human Tasks | Each matched debtor's "Hold or flag": Hold, with the amount (up to what the account has free). Each unmatched debtor's "Find the customer or close as not ours": Customer found or Not ours. Then "Send the acknowledgement": Approve. The reply reaches the account you sent from |
 
 Microsoft 365 (Microsoft Graph with an app registration; Exchange Online refuses basic sign-in over IMAP and SMTP, so an
 app password does not work there). The Graph mailbox is tested against a stand-in only and has not run against a real

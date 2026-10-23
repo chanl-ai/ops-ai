@@ -135,7 +135,6 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-122 | console | A builder edits steps in a side sheet and adds them from a tabbed panel | ui | passing |
 | uc-123 | console | Run and review controls show only to roles that can use them | ui | passing |
 | uc-125 | console | A page on sample data says so and cannot be saved, while a live setting persists | ui | passing |
-| uc-126 | console | The proposed settings tree is a mock a reviewer can walk: one set of cards, Find, locks, dialogs that are the same forms as the pages | ui | passing |
 | uc-127 | console | The live console's fields are lighter than the page, widget columns resize, tab labels fit, record lists select and show ids | ui | passing |
 | uc-152 | console | The live settings follow the approved tree: a settings sidebar with Find, and moved pages that old routes redirect to | ui | passing |
 | uc-170 | console | Govern > Policies lists the workspace's policies from platform-service, a Security admin saves one, a builder is told he cannot see them | ui | passing |
@@ -169,7 +168,6 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-218 | platform-service | A person invited as a reviewer decides a builder's publish request and edits no agent | api, ui | passing |
 | uc-219 | platform-service | A person invited as an admin invites, changes a role that reaches the next token and removes a member, only in their team, never the last admin | api, ui | passing |
 | uc-220 | platform-service | A person invited as a Security team admin sets sign-in providers and policies, another team's admin cannot, and the right moves with the security team | api, ui | passing |
-| uc-165 | console | The channels mock connects a mailbox with a secret from Secrets, tests it, and a workflow trigger picks it | ui | passing |
 | uc-150 | agents-service | An email with a PDF in a watched mailbox starts one workflow run, with the PDF in Files; a redelivery starts none | api | passing |
 | uc-151 | console | A builder sets up Email received on the canvas: team mailbox, folder and filters | ui | passing |
 | uc-192 | agents-service | An email with a PDF in an IMAP mailbox (GreenMail) starts one workflow run through tools-service, the password a Secrets-page secret | api | passing |
@@ -232,3 +230,11 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-450 | console | The demo team shows each case and workflow once, and Dispute Desk finds a seeded dispute's charge at the bank | ui | current |
 | uc-445 | console | Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file | ui | passing |
 | uc-466 | console | Start run draws the trigger's start form: a test email runs as a mailbox email does and reaches a Human Task; Files starts a workflow with a file; sub-workflows are not offered; a re-upload under another purpose reuses the file | ui | passing |
+| uc-469 | console | A person lands on Chat's home in the Focus layout, asks what needs them, approves a Human Task from its card and sees the run move on | ui | passing |
+| uc-477 | console | An email-started run's page tells the email, the read beside the document and a row per run it started, named, with its case and Human Task; an unmatched debtor gets a No customer matched case and task | ui | passing |
+| uc-500 | console | A case says what is left, on whom and by when, how its work began (form, email or by hand), one timer, and one feed of what happened in the run page's sentences | ui | passing |
+| uc-508 | console | Activity, a Human Task's write preview, the case list's first response and the run page read a step in the API's words: no tool, node or workflow id, the outcome in words | ui | passing |
+| uc-517 | console | The console has no preview mock pages: an agent's ID to copy, an allowed host added in place from a tool, and every former preview route answers 404 but human-tasks | ui | passing |
+| uc-486 | console | Workflow steps are laid out with gaps and port order and lines go around steps, re-routed when a step is dropped, in the preview, the step editor (Tidy up and Undo) and a run's canvas | ui | passing |
+| uc-505 | console | Pages wait for the person's team after sign-in: a remembered team they do not hold gives way to theirs, and a record in another team says not found, or in another team, with a switch | ui | passing |
+| uc-510 | console | What's new lists the changelog newest first in plain words with a Coming next tab, and its unread dot clears once opened | ui | passing |

@@ -1,6 +1,6 @@
 """The node type registry: what each kind of node is, read by the editor, the validator and the runner alike.
 
-A type is a definition the platform ships (.codeloop/wiki/concepts/workflow-nodes.md): a namespaced id and an
+A type is a definition the platform ships (docs/design/workflows/workflow-nodes.md): a namespaced id and an
 integer version, a group, input and output ports with their connection type, parameters as JSON Schema, the form the
 console generates for them (`ui`), an effects class, a retry default and the executor that runs it. A workflow's node
 is an instance that pins one type version.
@@ -1228,12 +1228,20 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "batchSize": {"type": "integer", "minimum": 1, "maximum": MAX_ITEMS},
                 "timeoutHours": {"type": "number", "exclusiveMinimum": 0},
                 "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+                "label": {
+                    "type": "string",
+                    "description": "Text naming what each child is about; `{$.item...}` reads its item",
+                },
             },
         },
         ui=_form(
             ("workflow", _f("Workflow", "source", "The workflow each child runs", source="workflows")),
             ("forEach", _f("For each", "mapping", "A list from an earlier step; empty starts one child")),
             ("input", _f("Input", "mappings", "The child's input; `$.item` is the current item")),
+            (
+                "label",
+                _f("Label", "text", "What each child is about, e.g. {$.item.name}; the item's first text when empty"),
+            ),
             ("maxItems", _f("Limit", "number", f"Most children one step starts; {DEFAULT_MAX_ITEMS} when empty")),
             ("wait", _f("Wait for them", "switch", "Pause until every child has ended, then go on with their results")),
             (

@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .tenancy import RETENTION_TENANTS, current_tenant, system_tx, tenant_tx
@@ -35,7 +36,7 @@ agent_memories = sa.Table(
     # Set when a newer value for the same key replaced it; kept for the record, never loaded.
     sa.Column("superseded_at", sa.String(32)),
     sa.Index("ix_agent_memories_owner", "tenant_id", "person", "agent_id"),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 memory_audit = sa.Table(
@@ -51,6 +52,11 @@ memory_audit = sa.Table(
     sa.Column("at", sa.String(32), nullable=False),
     info=TENANT_SCOPED,
 )
+
+
+# Background process (docs/architecture/identity-and-tenancy.md, "The team is the workspace"): the workspace retention
+# policy deletes every team's old memories of a tenant.
+RETENTION = "background process: memory retention reads every team's memories of its tenant"
 
 
 class Memories:
@@ -109,7 +115,7 @@ class Memories:
         m = agent_memories
         q = (
             sa.select(m)
-            .where(*self._mine(person, agent_id), m.c.superseded_at.is_(None))
+            .where(*self._mine(person, agent_id), team_visible(m), m.c.superseded_at.is_(None))
             .order_by(m.c.created_at.desc())
             .limit(limit)
         )
@@ -125,7 +131,7 @@ class Memories:
         ]
         q = (
             sa.select(m)
-            .where(*self._mine(person, agent_id), m.c.superseded_at.is_(None), *conds)
+            .where(*self._mine(person, agent_id), team_visible(m), m.c.superseded_at.is_(None), *conds)
             .order_by(m.c.created_at.desc())
             .limit(limit)
         )
@@ -143,7 +149,11 @@ class Memories:
     async def get(self, person: str, memory_id: str) -> dict[str, Any] | None:
         m = agent_memories
         async with tenant_tx(self.engine) as c:
-            r = (await c.execute(sa.select(m).where(*self._mine(person, None), m.c.id == memory_id))).mappings().first()
+            r = (
+                (await c.execute(sa.select(m).where(*self._mine(person, None), team_visible(m), m.c.id == memory_id)))
+                .mappings()
+                .first()
+            )
         return dict(r) if r else None
 
     async def forget(
@@ -190,7 +200,7 @@ class Memories:
         m = agent_memories
         async with tenant_tx(self.engine) as c:
             q = sa.select(m.c.id, m.c.agent_id, m.c.person).where(
-                m.c.tenant_id == current_tenant(), m.c.created_at < before
+                m.c.tenant_id == current_tenant(), m.c.created_at < before, any_team(m, RETENTION)
             )
             rows = (await c.execute(q)).all()
             if not rows:
@@ -218,7 +228,8 @@ class Memories:
         """Every tenant holding a memory, read past row-level security: the retention loop starts before it knows a
         tenant and then works each one under its own (tests/store/test_tenancy.py holds the list of callers)."""
         async with system_tx(self.engine, RETENTION_TENANTS) as c:
-            return list((await c.execute(sa.select(agent_memories.c.tenant_id).distinct())).scalars())
+            q = sa.select(agent_memories.c.tenant_id).where(any_team(agent_memories, RETENTION)).distinct()
+            return list((await c.execute(q)).scalars())
 
     async def audit(self, person: str, action: str, *, actor: str, agent_id: str, memory_id: str | None = None) -> None:
         async with tenant_tx(self.engine) as c:

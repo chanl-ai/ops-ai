@@ -38,7 +38,10 @@ pnpm install --offline --silent >/dev/null 2>&1 || pnpm install --prefer-offline
 uv sync --frozen --quiet  # the export has no .venv; the lock as committed, as make install does
 db="${OPS_TEST_DATABASE_URL_HEAD:-postgresql+asyncpg://ops:ops@localhost:$pg_port/$db_name}"
 echo "verify-head: export of $head ready in ${SECONDS}s"
-if [ -n "${VERIFY_SINCE:-}" ]; then
+if [ -n "${VERIFY_RUN:-}" ]; then
+  # Another check on the same export, such as the QA runner's nightly ui use cases (qa-watch.sh): its command as given.
+  OPS_TEST_DATABASE_URL="$db" bash -c "$VERIFY_RUN"
+elif [ -n "${VERIFY_SINCE:-}" ]; then
   # Per-cycle mode: only what the changes since VERIFY_SINCE can affect (scripts/verify-changed.sh).
   git -C "$root" diff --name-only "$VERIFY_SINCE" "$head" > "$tmp/.changed-paths"
   OPS_TEST_DATABASE_URL="$db" scripts/verify-changed.sh "$tmp/.changed-paths"

@@ -639,11 +639,11 @@ def walk(demo: Demo, a: argparse.Namespace) -> int:
             continue
         c = got.json()["data"]
         opened.append(f"{case_id} {c['subject']} [{c.get('customerId') or 'no customer'}]")
-        if r.get("outcome") == "not_matched" and not c.get("customerId"):
+        if not c.get("customerId"):
             unmatched.append(f"{case_id} {c['subject']}")
     ids["cases"] = [o.split(" ", 1)[0] for o in opened]
     step(len(opened) == len(levy) == len(records) > 0, "case per debtor", "; ".join(opened) or "none")
-    step(bool(unmatched), "unmatched debtor's own case", "; ".join(unmatched) or "no debtor ended not_matched")
+    step(bool(unmatched), "unmatched debtor's own case", "; ".join(unmatched) or "no debtor's case without a customer")
 
     # Each matched debtor waits on a "Levy notice" Human Task: a person holds what the notice asks for, up to what the
     # account has free, and the hold is placed at the bank.

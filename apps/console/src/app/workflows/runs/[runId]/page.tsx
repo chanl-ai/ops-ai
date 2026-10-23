@@ -10,16 +10,18 @@ import { FieldRow } from '@/components/shared/field-row';
 import { MiddleTruncate } from '@/components/shared/setting/middle-truncate';
 import { CopyIconButton, CopyId } from '@/components/shared/setting/copy-field';
 import { AttributeCard, RecordLayout } from '@/components/shared/record-layout';
-import { JsonBlock } from '@/components/shared/json-block';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
+import { ReadableValue } from '@/components/shared/readable-value';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RunCanvas } from '@/components/workflows/run-canvas';
+import { RunStoryView } from '@/components/workflows/run-story';
+import { StoryFeed } from '@/components/workflows/story-feed';
 import { StartedBy } from '@/components/workflows/started-by';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StepSheet } from '@/components/workflows/run-journal/step-sheet';
@@ -62,11 +64,12 @@ export default function EngineRunPage() {
     );
 
   const step = open === null ? null : (run.steps[open] ?? null);
+  const told = !!run.story && (!!run.story.email || run.story.reads.length > 0 || run.story.children.length > 0);
   return (
     <PageLayout
       icon={Workflow}
       title={definition.data?.name ?? run.workflowId}
-      description={`Run ${run.id} on version ${run.version} · started ${relativeTime(run.createdAt)}`}
+      description={`Version ${run.version} · started ${relativeTime(run.createdAt)}`}
       badge={<RunStatus status={run.status} testId="run-status" />}
       backHref="/workflows/runs"
       actions={
@@ -83,14 +86,14 @@ export default function EngineRunPage() {
           <AttributeCard title="Run" icon={Workflow} testId="run-attributes">
             {(
               [
-                ['Outcome', run.outcome ?? '—'],
+                ['Outcome', run.outcomeText ?? '—'],
                 ['Mode', run.mode],
                 [
                   'Definition',
                   // The rail is narrow, so a long id shows in full on hover and copies in one click.
                   <span key="d" className="flex min-w-0 items-center gap-1">
                     <Link href={`/workflows/definitions/${encodeURIComponent(run.workflowId)}`} className="truncate underline underline-offset-2" title={`${run.workflowId} v${run.version}`}>
-                      {`${run.workflowId} v${run.version}`}
+                      {`${run.workflowName ?? run.workflowId} v${run.version}`}
                     </Link>
                     <CopyIconButton value={run.workflowId} label="workflow id" />
                   </span>,
@@ -122,9 +125,10 @@ export default function EngineRunPage() {
               </Alert>
             )}
             {run.result && (
-              <Section title="Result" description={run.result.name ? `Ended at ${run.result.name} with outcome ${run.result.outcome}` : `Outcome ${run.result.outcome}`}>
+              <Section title="Result" description={run.result.name ? `Ended at ${run.result.name}: ${run.outcomeText ?? run.result.outcome}` : (run.outcomeText ?? run.result.outcome)}>
                 <div data-testid="run-result" data-outcome={run.result.outcome}>
-                  <JsonBlock value={run.result.output ?? null} />
+                  {/* The story below tells what the run did; the result's own fields stay behind Raw. */}
+                  <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} />
                 </div>
               </Section>
             )}
@@ -147,6 +151,8 @@ export default function EngineRunPage() {
                 <AlertDescription>Its own steps are done. It finishes when the last run it started ends. The list of runs it started shows where each one is.</AlertDescription>
               </Alert>
             )}
+            {!!run.story?.lines?.length && <StoryFeed title="What happened" description="Each step of this run, oldest first." lines={run.story.lines} testId="run-story-feed" />}
+            {run.story && <RunStoryView story={run.story} />}
             <Section title="Graph" description="The workflow as this run met it: what passed, failed or was skipped, and the paths it took. Click a step for its input and output.">
               {definition.isError || nodeTypes.isError ? (
                 <QueryError
@@ -154,6 +160,7 @@ export default function EngineRunPage() {
                   testId="run-graph-error"
                   onRetry={() => (definition.isError ? definition.refetch() : nodeTypes.refetch())}
                   retrying={definition.isFetching || nodeTypes.isFetching}
+                  error={definition.error ?? nodeTypes.error}
                 />
               ) : definition.data && nodeTypes.data ? (
                 <RunCanvas definition={definition.data.definition} types={nodeTypes.data} steps={run.steps} runStatus={run.status} onOpenStep={setOpen} />
@@ -182,27 +189,12 @@ export default function EngineRunPage() {
                 </Rows>
               </Section>
             )}
-            {!!run.children?.length && (
-              <Section title={`Runs it started · ${run.children.length}`} description="One per item for a step that runs for each item of a list, with where each is now." flush>
-                <Rows testId="run-children">
-                  {run.children.map((c) => (
-                    <Row
-                      key={c.runId}
-                      href={`/workflows/runs/${encodeURIComponent(c.runId)}`}
-                      title={`${nodeName(c.nodeId)} · item ${c.index + 1}`}
-                      description={c.outcome ? words(c.outcome) : undefined}
-                      trailing={<RunStatus status={c.status} testId={`run-child-${c.index}`} />}
-                    />
-                  ))}
-                </Rows>
-              </Section>
-            )}
             <div className="grid gap-4 lg:grid-cols-2">
               <Section title="Input">
-                <JsonBlock value={run.input ?? {}} />
+                <ReadableValue value={run.input ?? {}} testId="run-input" />
               </Section>
               <Section title="Output" description="What the End step returned">
-                <JsonBlock value={run.output ?? null} />
+                <ReadableValue value={run.output ?? null} testId="run-output" />
               </Section>
             </div>
           </div>

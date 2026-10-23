@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { SearchHit } from '@/lib/types/search';
+import { useTeamQuery } from './team-query';
 
 const DEBOUNCE_MS = 200;
 
@@ -22,7 +23,7 @@ export function useSearch(input: string, enabled: boolean) {
   return { ...query, q, settling };
 }
 
-export const useRecentSearches = (enabled: boolean) => useQuery({ queryKey: ['search', 'recent'], queryFn: api.search.recent, enabled });
+export const useRecentSearches = (enabled: boolean) => useTeamQuery({ queryKey: ['search', 'recent'], queryFn: api.search.recent, enabled });
 
 export function useVisitSearchHit() {
   const qc = useQueryClient();

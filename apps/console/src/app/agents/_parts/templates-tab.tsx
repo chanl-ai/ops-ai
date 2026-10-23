@@ -75,7 +75,7 @@ export function TemplatesTab({ onUse }: { onUse: (templateId: string) => void })
   const current = rows[index];
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={6} />;
-  if (query.isError && !query.data) return <QueryError what="templates" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError && !query.data) return <QueryError what="templates" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   return (
     <>
@@ -125,7 +125,7 @@ export function TemplatesTab({ onUse }: { onUse: (templateId: string) => void })
             <Skeleton className="h-24" />
           </div>
         ) : detail.isError ? (
-          <QueryError what="this template" onRetry={() => detail.refetch()} retrying={detail.isFetching} />
+          <QueryError what="this template" onRetry={() => detail.refetch()} error={detail.error} retrying={detail.isFetching} />
         ) : (
           <div className="flex flex-col gap-4">
             <TemplatePreview template={detail.data} />

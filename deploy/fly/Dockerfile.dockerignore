@@ -6,6 +6,8 @@
 !pyproject.toml
 !uv.lock
 !apps/console
+!changelog
+!roadmap.json
 !apps/embed/package.json
 !packages
 !services

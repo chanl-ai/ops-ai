@@ -22,7 +22,27 @@ function useWide(): boolean {
  * Two columns with a drag handle, a minimum on each side and a remembered split (this browser only; the page works
  * when storage is unavailable).
  */
-export function SplitView({ id, left, right, leftMin = '25', rightMin = '25', defaultLeft = 50, bare }: { id: string; left: React.ReactNode; right: React.ReactNode; leftMin?: string; rightMin?: string; defaultLeft?: number; /** Page columns: no border or padding, panels as tall as their content; the preview keeps its own sticky. */ bare?: boolean }) {
+export function SplitView({
+  id,
+  left,
+  right,
+  leftMin = '25',
+  rightMin = '25',
+  defaultLeft = 50,
+  bare,
+  rightFirstWhenStacked,
+}: {
+  id: string;
+  left: React.ReactNode;
+  right: React.ReactNode;
+  leftMin?: string;
+  rightMin?: string;
+  defaultLeft?: number;
+  /** Page columns: no border or padding, panels as tall as their content; the preview keeps its own sticky. */
+  bare?: boolean;
+  /** Stacked on a narrow screen, the right column comes first: a record's main content before its side rail. */
+  rightFirstWhenStacked?: boolean;
+}) {
   const [layout, setLayout] = React.useState<{ [k: string]: number } | undefined>();
   const [ready, setReady] = React.useState(false);
   const wide = useWide();
@@ -37,7 +57,18 @@ export function SplitView({ id, left, right, leftMin = '25', rightMin = '25', de
   }, [id]);
   if (!ready) return null;
   // Below the large breakpoint a side-by-side split has no room, so the columns stack.
-  if (!wide) return <div className="flex flex-col gap-4">{left}{right}</div>;
+  if (!wide)
+    return rightFirstWhenStacked ? (
+      <div className="flex flex-col gap-4">
+        {right}
+        {left}
+      </div>
+    ) : (
+      <div className="flex flex-col gap-4">
+        {left}
+        {right}
+      </div>
+    );
   return (
     <ResizablePanelGroup
       orientation="horizontal"

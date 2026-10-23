@@ -71,7 +71,7 @@ async def test_an_open_task_keeps_its_version_when_the_type_moves_on(engine: Asy
     tenant = f"t-{uuid4().hex[:8]}"
     tx = EngineTransactions(engine)
     with tenant_scope(tenant):
-        types = await seeded_store(engine)
+        types = await seeded_store(engine, "team_a")
         await types.create(
             "bank_change",
             _bank_change("Change the bank account for {vendor}?"),

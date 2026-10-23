@@ -71,7 +71,7 @@ export type WidgetPart = {
   [S in WidgetShape]: { type: 'widget'; id: string; shape: S; data: ShapeData[S]; hint?: WidgetHint; schema?: unknown };
 }[WidgetShape];
 
-// ── Layouts (c-082, .codeloop/wiki/concepts/chat-widgets.md) ──
+// ── Layouts (c-082, docs/architecture/chat-widgets.md) ──
 // A tree of catalogue primitives the kernel checked before sending (ops_agent_kernel.layout): filled from one of the
 // agent's widget templates (`template` names it) or composed by the model. Nothing outside these node types can arrive.
 

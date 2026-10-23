@@ -1,6 +1,6 @@
 # 49 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
-# the line of the Exceptions register in .codeloop/wiki/concepts/roles-and-permissions.md that records the decision.
+# the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
 # trailer (delivery-rubric.md). Policy lines marked `open` pin each open default, so a new policy is classified once.
 apps/console/src/components/access/members-panel.tsx role-name admin 1 E20
@@ -80,6 +80,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict decided_in_reviews 0 state
 * conflict decided_in_workflow 0 state
 * conflict definition_has_runs 0 state
+* conflict deployment_id_taken 0 state
 * conflict deployment_paused 0 state
 * conflict digest_mismatch 0 state
 * conflict domain_taken 0 state

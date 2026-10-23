@@ -2,7 +2,7 @@ import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/t
 import type { WidgetTemplate, WidgetTemplateInput } from '@/lib/types/widgets';
 
 /**
- * Widget templates an agent pins and fills in chat (c-082, `.codeloop/wiki/concepts/chat-widgets.md`), served by
+ * Widget templates an agent pins and fills in chat (c-082, `docs/architecture/chat-widgets.md`), served by
  * agents-service `/v1/widgets`: the seeded platform library plus the caller's team's widgets. A widget from the seeded
  * library cannot be edited (409).
  */

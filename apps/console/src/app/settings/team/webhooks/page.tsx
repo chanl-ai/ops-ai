@@ -115,7 +115,7 @@ export default function WebhooksPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={5} />
       ) : query.isError && !query.data ? (
-        <QueryError what="webhooks" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="webhooks" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

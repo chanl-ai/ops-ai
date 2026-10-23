@@ -134,7 +134,7 @@ export default function GatePoliciesPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={7} />
       ) : query.isError && !query.data ? (
-        <QueryError what="gate policies" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="gate policies" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronDown, Play, RefreshCw, SearchX, Trash2 } from 'lucide-react';
+import { ChevronDown, Play, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { KbDot, KbHealthBadge } from '@/components/knowledge/knowledge-meta';
@@ -10,7 +10,6 @@ import { KbOverview } from '@/components/knowledge/kb-overview';
 import { retireBase } from '@/components/knowledge/retire-base';
 import { PageLayout } from '@/components/page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
-import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { Button } from '@/components/ui/button';
@@ -21,7 +20,6 @@ import { useDeleteKb, useKnowledgeBase, useRefreshKb, useRetryKbFailed } from '@
 import { useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { count, relativeTime } from '@/lib/format';
 
 import { KbDocumentsTab } from '../_parts/kb-documents-tab';
@@ -58,11 +56,7 @@ export default function KnowledgeBasePage() {
   if (query.isError)
     return (
       <PageLayout title="Knowledge base" backHref="/knowledge">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Knowledge base not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to knowledge bases', href: '/knowledge' }} />
-        ) : (
-          <QueryError what="this knowledge base" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this knowledge base" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to knowledge bases', href: '/knowledge' }} />
       </PageLayout>
     );
 

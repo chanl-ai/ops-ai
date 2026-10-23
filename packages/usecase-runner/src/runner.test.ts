@@ -203,3 +203,20 @@ test('explicit use-case ports and database win, are never dropped, and a chosen 
   assert.ok(ports.every(Boolean) && new Set(ports).size === PORT_VARS.length, JSON.stringify(ports));
   assert.ok(PORT_VARS.includes('OPS_USECASE_KB_PORT') && PORT_VARS.includes('OPS_USECASE_FAKE_OPENAI_PORT') && PORT_VARS.includes('OPS_USECASE_FILES_PORT'));
 });
+
+test("a console build is keyed on What's new: a changed entry or roadmap item makes a new build (c-510)", async () => {
+  const { buildKey } = await import('./console-build.ts');
+  const root = mkdtempSync(join(tmpdir(), 'console-key-'));
+  const app = join(root, 'apps', 'console');
+  mkdirSync(join(app, 'src'), { recursive: true });
+  mkdirSync(join(root, 'changelog'));
+  writeFileSync(join(app, 'src', 'page.tsx'), 'x');
+  writeFileSync(join(root, 'changelog', 'a.json'), '{"title":"A"}');
+  writeFileSync(join(root, 'roadmap.json'), '[]');
+  const before = buildKey(app, {});
+  writeFileSync(join(root, 'changelog', 'a.json'), '{"title":"B"}');
+  const entryChanged = buildKey(app, {});
+  writeFileSync(join(root, 'roadmap.json'), '[{"title":"Next"}]');
+  assert.notEqual(entryChanged, before);
+  assert.notEqual(buildKey(app, {}), entryChanged);
+});

@@ -27,7 +27,7 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 async def test_saves_at_once_after_a_publish_leave_one_draft(
     engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = TaskTypeStore(engine)
+    store = TaskTypeStore(engine, "team_ops")
     read = TaskTypeStore._row  # pyright: ignore[reportPrivateUsage]
 
     async def slow_read(self: TaskTypeStore, c: Any, type_id: str, **kw: Any) -> dict[str, Any]:

@@ -11,7 +11,15 @@ SCOPE = {"input": {"record": {"name": "Marcus Bell", "case_no": "NS-1", "amount"
 
 def test_paths_in_braces_are_filled_in_and_the_rest_is_kept() -> None:
     text = "Levy notice: {$.input.record.name} ({$.input.record.case_no}), {$.input.record.amount}"
-    assert resolve(text, SCOPE) == "Levy notice: Marcus Bell (NS-1), 3250.0"
+    assert resolve(text, SCOPE) == "Levy notice: Marcus Bell (NS-1), 3,250.00"
+
+
+def test_a_decimal_in_a_text_reads_as_people_write_it_and_an_integer_is_left_alone() -> None:
+    """A Human Task asked "Hold 2140.55 on Marcus Bell" while the step after it said 2,140.55; a year or a count filled
+    into the same text must not gain a comma."""
+    scope = {"input": {"hold": 2140.55, "share": 0.125, "year": 2026, "count": 12000}, "nodes": {}}
+    text = "Hold {$.input.hold}, share {$.input.share}, tax year {$.input.year}, {$.input.count} items"
+    assert resolve(text, scope) == "Hold 2,140.55, share 0.125, tax year 2026, 12000 items"
 
 
 def test_a_missing_value_reads_as_empty_text() -> None:

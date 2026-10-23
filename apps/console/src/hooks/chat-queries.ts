@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
@@ -9,6 +9,7 @@ import { IdleTimeout, withIdleTimeout } from '@/lib/api/idle';
 import { modelRefusalText } from '@/lib/model-refusals';
 import type { BudgetAnswer, ChatFilters, ChatMessage, ChatThreadListParams, ChatThreadInput, ChatThreadPatch, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { ListParams } from '@/lib/types/query';
+import { teamKey, useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
 /** Every chat key starts with 'chat', so one invalidation refreshes the rail, the table and the open thread. */
 export const ck = {
@@ -18,18 +19,18 @@ export const ck = {
   thread: (id: string) => ['chat', 'thread', id] as const,
 };
 
-export const useChatAgents = () => useQuery({ queryKey: ck.agents, queryFn: api.chat.agents, staleTime: 60_000 });
+export const useChatAgents = () => useTeamQuery({ queryKey: ck.agents, queryFn: api.chat.agents, staleTime: 60_000 });
 export const useChatThreads = (p: ListParams<ChatFilters>) => usePagedQuery({ queryKey: ck.threads(p), queryFn: () => api.chat.threads.list(p) });
 /** The rail: the first page, then one more page per `fetchNextPage`, each after the last row's cursor. */
 export const useChatThreadPages = (p: Omit<ChatThreadListParams, 'page' | 'cursor'>) =>
-  useInfiniteQuery({
+  useTeamInfiniteQuery({
     queryKey: ck.rail(p),
     queryFn: ({ pageParam }) => api.chat.threads.list({ ...p, page: 1, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor,
     placeholderData: keepPreviousData,
   });
-export const useChatThread = (id: string | undefined) => useQuery({ queryKey: ck.thread(id ?? ''), queryFn: () => api.chat.threads.get(id!), enabled: !!id });
+export const useChatThread = (id: string | undefined) => useTeamQuery({ queryKey: ck.thread(id ?? ''), queryFn: () => api.chat.threads.get(id!), enabled: !!id });
 
 function useWrite<A, R>(fn: (a: A) => Promise<R>, alsoRoots: string[] = []) {
   const qc = useQueryClient();
@@ -167,7 +168,7 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
     // Dropped mid-reply: keep the server's copy if it stored one, otherwise offer to send again.
     patch(threadId, (t) => ({ ...t, streaming: false }));
     await qc.invalidateQueries({ queryKey: ['chat'] });
-    const stored = qc.getQueryData<{ messages?: { id: string }[] }>(ck.thread(threadId))?.messages?.some((m) => m.id === messageId);
+    const stored = qc.getQueryData<{ messages?: { id: string }[] }>(teamKey(ck.thread(threadId)))?.messages?.some((m) => m.id === messageId);
     if (!stored) {
       patch(threadId, (t) => ({ ...t, failed: { message: 'The connection dropped before the reply finished. Nothing was lost on your side; send it again.', input } }));
       return;
@@ -213,7 +214,7 @@ export function useSendMessage() {
 }
 
 /** The agent the team's new chats start on (c-174). */
-export const useDefaultAgent = () => useQuery({ queryKey: ['chat', 'default-agent'], queryFn: api.chat.defaultAgent.get, staleTime: 60_000 });
+export const useDefaultAgent = () => useTeamQuery({ queryKey: ['chat', 'default-agent'], queryFn: api.chat.defaultAgent.get, staleTime: 60_000 });
 /** Whether agents-service lets the person change the default: the console offers the control only then. */
 export const useCanSetDefaultAgent = () => useDefaultAgent().data?.canChange === true;
 /** A team admin's: new chats start on `agentId` from now on. */

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Ban, Cable, ChevronDown, KeyRound, LogIn, RefreshCw, SearchX, ShieldCheck } from 'lucide-react';
+import { Ban, Cable, ChevronDown, KeyRound, LogIn, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { vaultProblem } from '@/components/integrations/connect-dialog';
@@ -12,7 +12,6 @@ import { RevokeDialog } from '@/components/integrations/revoke-dialog';
 import { ScopePicker } from '@/components/integrations/scope-picker';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -27,7 +26,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useCheckIntegration, useIntegration, useReconnectIntegration, useRequestScopes, useRevokeIntegrations, useRotateIntegration } from '@/hooks/integration-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { plural, shortDate } from '@/lib/format';
 import type { IntegrationDetail } from '@/lib/types/integrations';
 
@@ -45,11 +43,7 @@ export default function IntegrationPage() {
   if (query.isError)
     return (
       <PageLayout icon={Cable} title="Integration" backHref="/integrations">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Integration not found" description="It may have been removed, or the link is wrong." action={{ label: 'Back to integrations', href: '/integrations' }} />
-        ) : (
-          <QueryError what="this integration" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this integration" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to integrations', href: '/integrations' }} />
       </PageLayout>
     );
   return <IntegrationView i={query.data} />;

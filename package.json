@@ -7,9 +7,9 @@
     "dev:runtime": "pnpm --filter @ops-ai/console dev:runtime",
     "build": "pnpm --filter @ops-ai/console build",
     "typecheck": "pnpm --filter @ops-ai/console typecheck",
-    "verify": "pnpm --filter @ops-ai/console verify && node scripts/check-docs.mjs",
+    "verify": "pnpm --filter @ops-ai/console verify && node scripts/check-docs.mjs && node scripts/check-public-paths.mjs --self-test && node scripts/check-public-paths.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "prepare": "cp .githooks/pre-commit .git/hooks/pre-commit 2>/dev/null && chmod +x .git/hooks/pre-commit || true"
+    "prepare": "sh scripts/install-hooks.sh 2>/dev/null || true"
   },
   "license": "Apache-2.0",
   "devDependencies": {

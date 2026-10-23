@@ -23,33 +23,45 @@ from ops_engine.store.tables import engine_runs
 from tests.engine.test_worker import engine  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 FULL_SORT = re.compile(r"(?<!Incremental )Sort  \(")
-PARENT = "wfrun_parent"
 # The parent index sought by parent and status, not scanned under a filter.
 SEEK = re.compile(r"ix_engine_runs_parent_status.*\n\s*Index Cond: .*created_by.*status")
 
 
-async def crowded(tx: EngineTransactions) -> None:
-    """The shape the indexes are for, with the table's statistics read: in team_a a parent's 100 finished runs and 100
-    runs waiting on a person; in team_b 100 runs under way. With few waiting or running rows any index is as cheap as
-    another, so the plan would not show which one the query needs."""
-    kinds = [("team_a", "succeeded", f"run:{PARENT}"), ("team_b", "running", "b@x"), ("team_a", "waiting", "b@x")]
+def parent_id() -> str:
+    """A parent run id of this test's own. One id shared by every test and every run of the suite became one of the
+    commonest values in created_by on a database that keeps its rows, and the planner then priced the parent index
+    like any other; a fresh id is as rare as a real parent's."""
+    return f"wfrun_{uuid4().hex[:12]}"
+
+
+async def crowded(tx: EngineTransactions, parent: str) -> None:
+    """The shape the indexes are for, with the table's statistics read: in team_a a parent's 100 finished runs, 100
+    runs waiting on a person and 100 under way that other people started; in team_b as many under way. With few
+    unfinished rows in the parent's own team, the team and status index is as cheap as the parent's, so the plan would
+    not show which one the query needs."""
+    kinds = [
+        ("team_a", "succeeded", f"run:{parent}"),
+        ("team_a", "running", "b@x"),
+        ("team_a", "waiting", "b@x"),
+        ("team_b", "running", "b@x"),
+    ]
     at = "2026-10-19T00:00:00+00:00"
     rows = [
         {
             "id": f"wfrun_{uuid4().hex[:12]}",
             "tenant_id": tx.tenant(),
-            "team_id": kinds[i % 3][0],
+            "team_id": kinds[i % 4][0],
             "workflow_id": "wf",
             "version": 1,
             "digest": "d",
             "run_key": f"k{i}",
             "mode": "live",
-            "status": kinds[i % 3][1],
-            "created_by": kinds[i % 3][2],
+            "status": kinds[i % 4][1],
+            "created_by": kinds[i % 4][2],
             "created_at": f"2026-10-19T00:{i // 60:02d}:{i % 60:02d}+00:00",
             "updated_at": at,
         }
-        for i in range(300)
+        for i in range(400)
     ]
     async with tx.tenant_tx() as c:
         await c.execute(engine_runs.insert(), rows)
@@ -92,8 +104,9 @@ async def test_one_teams_page_of_runs_reads_an_index_in_order_with_or_without_a_
     recorded: list[tuple[str, Any]],
 ) -> None:
     tx = EngineTransactions(engine)
+    parent = parent_id()
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
-        await crowded(tx)
+        await crowded(tx, parent)
         recorded.clear()
         await RunStore(tx).page(team_id="team_a")
         await RunStore(tx).page(team_id="team_a", statuses=["waiting"])
@@ -108,9 +121,10 @@ async def test_a_parent_reads_running_or_waiting_from_its_unfinished_runs_among_
 ) -> None:
     tx = EngineTransactions(engine)
     store = RunStore(tx)
+    parent = parent_id()
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
-        await crowded(tx)
-        mine = engine_runs.c.created_by == f"run:{PARENT}"
+        await crowded(tx, parent)
+        mine = engine_runs.c.created_by == f"run:{parent}"
         answers: list[str | None] = []
         for status in (None, "queued", "waiting"):
             async with tx.tenant_tx() as c:
@@ -118,7 +132,7 @@ async def test_a_parent_reads_running_or_waiting_from_its_unfinished_runs_among_
                     one = sa.select(engine_runs.c.id).where(mine, engine_runs.c.status == "succeeded").limit(1)
                     pick = engine_runs.c.id == one.scalar_subquery()
                     await c.execute(engine_runs.update().where(pick).values(status=status))
-                answers.append(await store._children_left(c, PARENT))  # pyright: ignore[reportPrivateUsage]
+                answers.append(await store._children_left(c, parent))  # pyright: ignore[reportPrivateUsage]
     assert answers == [None, "running", "waiting"]
 
 
@@ -130,10 +144,11 @@ async def test_a_run_ending_asks_its_parent_index_not_every_sibling(
     the parent and status: a plan that only scans the index and filters reads the parent's runs on every child's end,
     so a parent of n runs costs n squared to finish."""
     tx = EngineTransactions(engine)
+    parent = parent_id()
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
-        await crowded(tx)
+        await crowded(tx, parent)
         recorded.clear()
         async with tx.tenant_tx() as c:
-            await RunStore(tx)._children_left(c, PARENT)  # pyright: ignore[reportPrivateUsage]
+            await RunStore(tx)._children_left(c, parent)  # pyright: ignore[reportPrivateUsage]
         asked = await plans(tx, [s for s in recorded if "EXISTS" in s[0].upper()])
     assert len(asked) == 2 and all(SEEK.search(p) for p in asked), asked

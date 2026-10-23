@@ -63,7 +63,7 @@ export default function InvitePage() {
       return invite.error instanceof ApiError && invite.error.status === 404 ? (
         <EmptyState icon={SearchX} title="This invitation link is not valid" description="Check the link in the email, or ask the person who invited you to send a new one." action={{ label: 'Go to sign in', href: '/login' }} testId="invite-not-found" />
       ) : (
-        <QueryError what="the invitation" onRetry={() => invite.refetch()} retrying={invite.isFetching} />
+        <QueryError what="the invitation" onRetry={() => invite.refetch()} error={invite.error} retrying={invite.isFetching} />
       );
     const i = invite.data;
     if (i.state === 'expired')

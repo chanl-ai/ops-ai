@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee, isolation
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 
 from .base import metadata
@@ -55,7 +55,7 @@ mailboxes = sa.Table(
     sa.Column("updated_at", sa.String(32), nullable=False),
     # A workflow names its mailbox by address, so one tenant has one mailbox per address.
     sa.UniqueConstraint("tenant_id", "address", name="uq_mailboxes_tenant_address"),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 

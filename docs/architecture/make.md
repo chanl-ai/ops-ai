@@ -54,6 +54,8 @@ Every service Makefile answers these. `make -C services/<x> help` lists them.
 `make -C services/models-service run` and set `OPS_MODELS_URL`. `services/hitl-service` holds only a stub `Makefile`
 and `README.md`; the service was removed on 2026-10-16, and Reviews move into the `ops_hitl` package.
 
+A Python service (and the worker) is stale when its process started before the last commit to its code or before the last migration landed: `make migrate` records each chain's revision in `.run/db-heads` and touches `.run/migrated-at` when one moved, and `make up` stops stale processes before and after migrating, then starts them.
+
 Feedback button: run the ui-feedback collector (`node ~/.claude/skills/ui-feedback/collector.mjs`) before `make up` or the docs `pnpm dev`; development only, a production build never shows it.
 
 ## Naming rules

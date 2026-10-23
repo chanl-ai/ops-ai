@@ -1,12 +1,12 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0009
+-- kb-service, stamped at kb_0010
 -- not on SQL Server yet: kb_chunks.tsv (TSVECTOR)
 -- not on SQL Server yet: index ix_kb_chunks_tsv
 CREATE TABLE kb_bases (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	slug VARCHAR(200) NOT NULL, 
 	description VARCHAR(max) NOT NULL, 
@@ -27,7 +27,7 @@ GO
 CREATE TABLE kb_sources (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	type VARCHAR(32) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	collection VARCHAR(120) NOT NULL, 
@@ -160,5 +160,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0009');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0010');
 GO

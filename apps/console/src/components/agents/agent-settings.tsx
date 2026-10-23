@@ -6,6 +6,7 @@ import { ArrowUpRight, BookOpen, LayoutTemplate, Plus, Wrench } from 'lucide-rea
 
 import { CHANNEL_ICON } from '@/components/agents/agent-card';
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
+import { CopyField } from '@/components/shared/setting/copy-field';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
@@ -112,7 +113,7 @@ type Set = <K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => void;
 
 /** `models` are the aliases publish accepts; an agent saved on any other alias still shows it, marked, so it can be changed. */
 /** `channels` are the ones the runtime serves (`Agent.controls`); no other is offered. */
-export function IdentitySection({ draft, set, teamId, models, errors, channels }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[] }) {
+export function IdentitySection({ draft, set, teamId, models, errors, channels, agentId }: { draft: AgentDraft; set: Set; teamId: string | null; models: ModelAlias[]; errors: Partial<Record<'name' | 'role', string>>; channels: Channel[]; /** Shown to copy for the API and the CLI; absent before the agent is saved. */ agentId?: string }) {
   const { teams } = useTeam();
   return (
     <SettingsSection title="Identity" description="Reviewers see the name and job on every run this agent pauses.">
@@ -123,6 +124,11 @@ export function IdentitySection({ draft, set, teamId, models, errors, channels }
         <FormField id="ag-owner" label="Owning team" hint="The team that created the agent. It cannot be moved to another team.">
           <Input id="ag-owner" value={teamLabel(teamId, teams)} readOnly disabled className="bg-card" />
         </FormField>
+        {agentId && (
+          <FormField id="ag-id" label="Agent ID" hint="How the API, the CLI and a workflow's agent step name this agent." className="md:col-span-2">
+            <CopyField id="ag-id" value={agentId} label="agent ID" />
+          </FormField>
+        )}
         <FormField id="ag-role" label="Job" error={errors.role} className="md:col-span-2">
           <Input id="ag-role" value={draft.role} onChange={(e) => set('role', e.target.value)} className="bg-card" aria-invalid={!!errors.role} />
         </FormField>

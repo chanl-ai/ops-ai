@@ -20,6 +20,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import cache
 from typing import Any, Protocol, cast
 
 import httpx
@@ -42,7 +43,7 @@ from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
-from ops_store import isolation
+from ops_store import background, isolation
 
 log = get_logger("ops_documents.extraction")
 
@@ -416,6 +417,12 @@ def answer_of(row: ExtractionRow) -> dict[str, Any]:
     return out
 
 
+@cache
+def reading() -> background.Beat:
+    """The document reading process's heartbeat in this process, shared by extractions and type tests."""
+    return background.Beat("document_reading", background.LOCAL)
+
+
 @dataclass
 class Extractor:
     files: Files
@@ -738,9 +745,15 @@ class Extractor:
         task.add_done_callback(self._tasks.discard)
 
     async def _background(self, row: ExtractionRow) -> None:
-        """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them."""
+        """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them.
+        Each finished read counts on the document reading process's heartbeat."""
         with isolation.scope(row.tenant_id, row.team):
-            await self._read(row)
+            try:
+                await self._read(row)
+            except Exception as e:
+                await reading().failed(e)
+                raise
+        await reading().ok(1, waiting=max(0, len(self._tasks) - 1))
 
     async def _read(self, row: ExtractionRow) -> None:
         try:

@@ -187,7 +187,7 @@ export default function WorkflowsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : query.isError && !query.data ? (
-        <QueryError what="workflows" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="workflows" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={columns}

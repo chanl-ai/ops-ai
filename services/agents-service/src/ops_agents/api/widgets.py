@@ -1,4 +1,4 @@
-"""Widget templates (c-082, `.codeloop/wiki/concepts/chat-widgets.md`): checking what a builder saves, the views the
+"""Widget templates (c-082, `docs/architecture/chat-widgets.md`): checking what a builder saves, the views the
 console reads, and the publish an approved review runs. The seeded library (seed/widgets.json, in the catalogue) is
 served beside the registry's widgets as published, platform-wide templates; the registry's are scoped to the team
 that made them.
@@ -115,12 +115,12 @@ async def seeded_widgets(rt: Runtime) -> list[dict[str, Any]]:
     return sorted(out, key=lambda w: str(w["name"]))
 
 
-async def listed(rt: Runtime, teams: list[str] | None) -> list[dict[str, Any]]:
-    """The seeded library's latest versions, then the registry's widgets in the caller's teams (all teams for a caller
-    with no team list, the dev caller), newest version each, by name."""
+async def listed(rt: Runtime, teams: list[str]) -> list[dict[str, Any]]:
+    """The seeded library's latest versions, then the registry's widgets in the caller's teams, newest version each,
+    by name."""
     out = await seeded_widgets(rt)
     for row in await widgets(rt).rows():
-        if teams is None or row["team_id"] in teams:
+        if row["team_id"] in teams:
             out.append(await view(rt, row["id"]))
     return sorted(out, key=lambda w: str(w["name"]))
 

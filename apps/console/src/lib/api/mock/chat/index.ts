@@ -12,6 +12,9 @@ import { bulk, id, list, mode, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { GENERAL_SUGGESTIONS, SUGGESTIONS, planTurn, type QueueSla, type TurnPlan } from './scripts';
 
+/** A tool's name as the API words it for a widget footer (agents-service call_label's fallback). */
+const toolLabel = (tool: string) => tool.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
 const ALL = { page: 1, pageSize: 100 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
@@ -475,6 +478,7 @@ export function createChatMock(deps: Deps): ChatApi {
             status: RUN_STATE[s.run.status],
             app: 'Workflows',
             tool: s.toolName,
+            toolLabel: toolLabel(s.toolName),
             asOf,
             fields: [
               { label: 'Started by', value: (s.run.trigger ?? '').replace(/^Started by /, '') },
@@ -491,6 +495,7 @@ export function createChatMock(deps: Deps): ChatApi {
               title: s.review.policy.name,
               app: 'Workflows',
               tool: s.toolName,
+              toolLabel: toolLabel(s.toolName),
               asOf,
               reviewId: s.review.id,
               action: `Let ${s.run.id} continue`,

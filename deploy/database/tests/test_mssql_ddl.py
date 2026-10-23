@@ -101,8 +101,8 @@ def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
             assert "SESSION_CONTEXT(N'tenant_id')" in fn and "ops_system" not in fn
             assert (system is not None and system in fn) == (chain in mssql.SYSTEM_USERS)
         if kind == "team":
-            # Every team reads the null team; no team transaction writes it.
-            assert "@team_id IS NULL" in read.group(0) and "@team_id IS NULL" not in write.group(0)
+            # No team reads or writes a row with no team (c-507).
+            assert "@team_id IS NULL" not in read.group(0) and "@team_id IS NULL" not in write.group(0)
             assert "SESSION_CONTEXT(N'team_id')" in write.group(0)
 
 

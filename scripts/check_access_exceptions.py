@@ -1,7 +1,7 @@
 """Fails on access decisions taken outside `can()` that the access register does not record (CLAUDE.md rule 2).
 
 Who may do what is decided by `ops_access.can` over the roles grid and Govern > Policies, with open defaults
-(`.codeloop/wiki/concepts/roles-and-permissions.md`). This script finds the code shapes that decide access some other
+(`docs/architecture/roles-and-permissions.md`). This script finds the code shapes that decide access some other
 way and compares them with `access-exceptions-allowlist.txt`, where each line names its row in that page's
 "Exceptions register". It reads source text only: no imports, no database, no model.
 
@@ -46,8 +46,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST = ROOT / "access-exceptions-allowlist.txt"
 POLICIES = ROOT / "packages/ops_access/src/ops_access/policies.py"
-REGISTER = ".codeloop/wiki/concepts/roles-and-permissions.md#exceptions-register"
-REGISTER_PAGE = ROOT / ".codeloop/wiki/concepts/roles-and-permissions.md"
+REGISTER = "docs/architecture/roles-and-permissions.md#exceptions-register"
+REGISTER_PAGE = ROOT / "docs/architecture/roles-and-permissions.md"
 # The commit that began the list with the exceptions already in the code; lines added after it need the trailer.
 LIST_BEGAN = "67f10685"
 TRAILER = "Standards-exception:"

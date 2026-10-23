@@ -1,4 +1,4 @@
-"""present with an agent's widgets and composed layouts (c-082, `.codeloop/wiki/concepts/chat-widgets.md`), by
+"""present with an agent's widgets and composed layouts (c-082, `docs/architecture/chat-widgets.md`), by
 failure mode: a widget outside the agent's list, data that misses its template's fields, a layout from an agent that
 may not compose, a layout with something outside the catalogue (an event handler, an image, an unknown primitive), a
 layout past the size limits, and more widgets in one answer than the agent allows."""

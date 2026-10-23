@@ -223,7 +223,7 @@ export default function KnowledgeBasesPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : query.isError && !query.data ? (
-        <QueryError what="knowledge bases" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="knowledge bases" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

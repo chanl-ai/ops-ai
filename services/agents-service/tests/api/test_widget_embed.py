@@ -299,7 +299,8 @@ async def test_only_a_person_of_the_deployments_team_signs_in_from_the_page(clie
     url = f"/v1/widget/{dep['id']}/session"
     outsider = await client.post(url, headers={**who("usr_f", "approver", "team_fraud"), "Origin": INTRANET})
     key = await client.post(url, headers={**OPS_KEY, "Origin": INTRANET})
-    assert outsider.status_code == 403 and outsider.json()["error"]["code"] == "team_forbidden"
+    # Another team's embed is not found, with no owner named (c-507).
+    assert outsider.status_code == 404 and "team_" not in outsider.text, outsider.text
     assert key.status_code == 403 and key.json()["error"]["code"] == "api_key_refused"
 
 

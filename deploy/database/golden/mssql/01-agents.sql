@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0073_run_tables_team
+-- agents-service, stamped at 0081_background_jobs_at_text
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -50,11 +50,7 @@ CREATE INDEX ix_engine_runs_team_created ON engine_runs (tenant_id, team_id, cre
 GO
 CREATE INDEX ix_engine_runs_team_status_created ON engine_runs (tenant_id, team_id, status, created_at);
 GO
-CREATE INDEX ix_engine_runs_tenant_id ON engine_runs (tenant_id);
-GO
 CREATE INDEX ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at);
-GO
-CREATE INDEX ix_engine_runs_workflow_id ON engine_runs (workflow_id);
 GO
 CREATE TABLE engine_steps (
 	run_id VARCHAR(64) NOT NULL, 
@@ -141,6 +137,33 @@ GO
 CREATE INDEX ix_registry_publish_requests_subject ON registry_publish_requests (kind, subject_id);
 GO
 CREATE INDEX ix_registry_publish_requests_tenant_id ON registry_publish_requests (tenant_id);
+GO
+CREATE TABLE background_heartbeats (
+	process VARCHAR(64) NOT NULL, 
+	instance VARCHAR(200) NOT NULL, 
+	started_at FLOAT NOT NULL, 
+	last_run_at FLOAT NULL, 
+	last_ok_at FLOAT NULL, 
+	next_run_at FLOAT NULL, 
+	done_hour INTEGER NOT NULL DEFAULT '0', 
+	waiting INTEGER NULL, 
+	last_error VARCHAR(2000) NULL, 
+	last_error_at FLOAT NULL, 
+	CONSTRAINT background_heartbeats_pkey PRIMARY KEY (process, instance)
+);
+GO
+CREATE TABLE background_jobs (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	process VARCHAR(64) NOT NULL, 
+	summary VARCHAR(500) NOT NULL, 
+	outcome VARCHAR(16) NOT NULL, 
+	at VARCHAR(32) NOT NULL DEFAULT '', 
+	CONSTRAINT background_jobs_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_background_jobs_at ON background_jobs (tenant_id, at);
 GO
 CREATE TABLE cases (
 	id VARCHAR(64) NOT NULL, 
@@ -381,8 +404,8 @@ CREATE INDEX ix_widget_deployments_tenant_id ON widget_deployments (tenant_id);
 GO
 CREATE TABLE case_types (
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NULL, 
 	origin VARCHAR(16) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	description VARCHAR(max) NOT NULL, 
@@ -393,11 +416,12 @@ CREATE TABLE case_types (
 	created_by VARCHAR(320) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	updated_by VARCHAR(320) NOT NULL, 
-	CONSTRAINT case_types_pkey PRIMARY KEY (tenant_id, id)
+	CONSTRAINT case_types_pkey PRIMARY KEY (tenant_id, team_id, id)
 );
 GO
 CREATE TABLE case_type_versions (
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	type_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	record NVARCHAR(max) NOT NULL, 
@@ -405,7 +429,7 @@ CREATE TABLE case_type_versions (
 	saved_by VARCHAR(320) NOT NULL, 
 	published_at VARCHAR(32) NULL, 
 	published_by VARCHAR(320) NULL, 
-	CONSTRAINT case_type_versions_pkey PRIMARY KEY (tenant_id, type_id, version)
+	CONSTRAINT case_type_versions_pkey PRIMARY KEY (tenant_id, team_id, type_id, version)
 );
 GO
 CREATE TABLE poll_cursors (
@@ -616,8 +640,8 @@ CREATE TABLE task_assists (
 GO
 CREATE TABLE task_types (
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NULL, 
 	origin VARCHAR(16) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	description VARCHAR(max) NOT NULL, 
@@ -628,11 +652,12 @@ CREATE TABLE task_types (
 	created_by VARCHAR(320) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	updated_by VARCHAR(320) NOT NULL, 
-	CONSTRAINT task_types_pkey PRIMARY KEY (tenant_id, id)
+	CONSTRAINT task_types_pkey PRIMARY KEY (tenant_id, team_id, id)
 );
 GO
 CREATE TABLE task_type_versions (
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	type_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	record NVARCHAR(max) NOT NULL, 
@@ -640,7 +665,7 @@ CREATE TABLE task_type_versions (
 	saved_by VARCHAR(320) NOT NULL, 
 	published_at VARCHAR(32) NULL, 
 	published_by VARCHAR(320) NULL, 
-	CONSTRAINT task_type_versions_pkey PRIMARY KEY (tenant_id, type_id, version)
+	CONSTRAINT task_type_versions_pkey PRIMARY KEY (tenant_id, team_id, type_id, version)
 );
 GO
 CREATE TABLE team_default_agents (
@@ -862,7 +887,7 @@ SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VAR
 GO
 CREATE FUNCTION ops_security.agents_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id IS NULL OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_runtime_system';
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_runtime_system';
 GO
 CREATE FUNCTION ops_security.agents_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
@@ -874,10 +899,10 @@ CREATE SECURITY POLICY ops_security.engine_definitions_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_definitions AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.engine_runs_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.engine_runs,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_runs AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_runs AFTER UPDATE
+CREATE SECURITY POLICY ops_security.engine_runs_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.engine_runs,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_runs AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_runs AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.engine_steps_tenant
@@ -898,10 +923,16 @@ CREATE SECURITY POLICY ops_security.registry_publish_requests_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_publish_requests AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.cases_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.cases,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.cases AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.cases AFTER UPDATE
+CREATE SECURITY POLICY ops_security.background_jobs_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.background_jobs,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.background_jobs AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.background_jobs AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.cases_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.cases,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.cases AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.cases AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.case_events_tenant
@@ -922,10 +953,10 @@ CREATE SECURITY POLICY ops_security.graph_threads_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.mailboxes_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.mailboxes,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.mailboxes AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.mailboxes AFTER UPDATE
+CREATE SECURITY POLICY ops_security.mailboxes_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.mailboxes,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.mailboxes AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.mailboxes AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.review_decisions_isolation
@@ -946,16 +977,16 @@ CREATE SECURITY POLICY ops_security.service_events_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.service_events AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.trigger_events_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.trigger_events,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.trigger_events AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.trigger_events AFTER UPDATE
+CREATE SECURITY POLICY ops_security.trigger_events_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.trigger_events,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.widget_deployments_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_deployments,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_deployments AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_deployments AFTER UPDATE
+CREATE SECURITY POLICY ops_security.widget_deployments_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.widget_deployments,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.case_types_isolation
@@ -964,10 +995,10 @@ CREATE SECURITY POLICY ops_security.case_types_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.case_types AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.case_type_versions_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.case_type_versions,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.case_type_versions AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.case_type_versions AFTER UPDATE
+CREATE SECURITY POLICY ops_security.case_type_versions_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.case_type_versions,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.case_type_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.case_type_versions AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.poll_cursors_tenant
@@ -976,22 +1007,22 @@ CREATE SECURITY POLICY ops_security.poll_cursors_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.poll_cursors AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.chat_attachments_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.chat_attachments,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.chat_attachments AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.chat_attachments AFTER UPDATE
+CREATE SECURITY POLICY ops_security.chat_attachments_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_attachments,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_attachments AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_attachments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.chat_search_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.chat_search,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.chat_search AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.chat_search AFTER UPDATE
+CREATE SECURITY POLICY ops_security.chat_search_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_search,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.agent_memories_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agent_memories,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_memories AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_memories AFTER UPDATE
+CREATE SECURITY POLICY ops_security.agent_memories_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_memories,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.memory_audit_tenant
@@ -1018,16 +1049,16 @@ CREATE SECURITY POLICY ops_security.task_types_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.task_types AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.task_type_versions_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.task_type_versions,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_type_versions AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.task_type_versions AFTER UPDATE
+CREATE SECURITY POLICY ops_security.task_type_versions_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.task_type_versions,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.task_type_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.task_type_versions AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.team_default_agents_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.team_default_agents,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.team_default_agents AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.team_default_agents AFTER UPDATE
+CREATE SECURITY POLICY ops_security.team_default_agents_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.team_default_agents,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.team_default_agents AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.team_default_agents AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.widget_mint_keys_tenant
@@ -1053,5 +1084,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0073_run_tables_team');
+INSERT INTO alembic_version (version_num) VALUES ('0081_background_jobs_at_text');
 GO

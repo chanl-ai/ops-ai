@@ -77,9 +77,9 @@ class Extractor(Protocol):
 
 
 def person_of(me: Principal) -> str:
-    """The id memories are keyed by: the token's subject. The dev header caller (no teams) carries the one dev user's
-    subject whoever it names, so it is keyed by the email it names instead, or every dev person would share memories."""
-    return me.email if me.team_ids is None else (me.sub or me.email)
+    """The id memories are keyed by: the token's subject. The dev header caller carries the one dev user's subject
+    whoever it names, so it is keyed by the email it names instead, or every dev person would share memories."""
+    return me.email if me.dev else (me.sub or me.email)
 
 
 def _key(raw: Any) -> str | None:

@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
+import { teamKey } from '@/hooks/team-query';
 import { api } from '@/lib/api';
 import type { ConnectAudience, ConnectRange, ConnectSettingsInput } from '@/lib/types/connect';
 
@@ -21,7 +22,7 @@ export const useSetExposed = () => useConnectWrite(({ workflowId, audience, expo
 /** Fetches the workspace MCP URL on demand, for the ⌘K action, from the same cache the Connect page uses. */
 export function useConnectUrl() {
   const qc = useQueryClient();
-  return () => qc.fetchQuery({ queryKey: ck.overview({ range: '7d' }), queryFn: () => api.connect.get({ range: '7d' }) }).then((o) => o.url);
+  return () => qc.fetchQuery({ queryKey: teamKey(ck.overview({ range: '7d' })), queryFn: () => api.connect.get({ range: '7d' }) }).then((o) => o.url);
 }
 export const useRecordCopy = () => useConnectWrite(() => api.connect.recordCopy(), ['connect']);
 export const useSaveConnectSettings = () => useConnectWrite((i: ConnectSettingsInput) => api.connect.saveSettings(i), ['connect']);

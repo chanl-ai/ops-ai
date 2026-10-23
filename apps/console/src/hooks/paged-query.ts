@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { hashKey, keepPreviousData, type QueryKey, useQuery, type UseQueryOptions, type UseQueryResult } from '@tanstack/react-query';
+import { hashKey, keepPreviousData, type QueryKey, type UseQueryOptions, type UseQueryResult } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useTeamQuery } from './team-query';
 
 /**
  * A list that pages, filters or refreshes on the server (docs/console/standards.md, Designed states, Partial). The
@@ -12,9 +13,9 @@ import { toast } from 'sonner';
  * as React Query reports them; a page's `isError && !data` gate then shows its error only when nothing ever loaded.
  */
 export function usePagedQuery<TQueryFnData, TError = Error, TData = TQueryFnData, TQueryKey extends QueryKey = QueryKey>(
-  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey> & { enabled?: boolean },
 ): UseQueryResult<TData, TError> {
-  const query = useQuery({ ...options, placeholderData: keepPreviousData as never });
+  const query = useTeamQuery({ ...options, placeholderData: keepPreviousData as never });
   const kept = React.useRef<TData | undefined>(undefined);
   if (query.data !== undefined) kept.current = query.data;
   const { isError, errorUpdatedAt, refetch } = query;

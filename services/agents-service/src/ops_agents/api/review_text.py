@@ -6,6 +6,7 @@ same functions word every workflow's review, so nothing here knows one use case.
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from typing import Any, cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
@@ -48,28 +49,92 @@ def shown(value: Any, *, money: bool, currency: str | None) -> str:
     return "" if value is None else str(value)
 
 
-async def _operation(rt: Runtime, tool: str) -> tuple[dict[str, Any], str]:
-    """The operation's input schema and description from the tool directory, or the catalog's; empty when neither
-    knows the tool."""
+# Each operation the tool directory lists, by name: its input schema and description.
+Operations = dict[str, tuple[dict[str, Any], str]]
+_UNREAD: Any = object()
+
+
+# The directory as this request already read it, keyed by the runtime; None outside a request (a worker, a test that
+# calls a describer directly), where every call reads it.
+_READ: ContextVar[dict[int, Operations | None] | None] = ContextVar("tool_directory_read", default=None)
+
+
+class OneDirectoryRead:
+    """ASGI middleware: a request reads the tool directory at most once, its streamed body included, however many
+    calls its page or stream words (Human Tasks lists, chat widgets, Activity). Plain ASGI rather than
+    BaseHTTPMiddleware, whose streamed body runs after the request's context has closed."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        token = _READ.set({})
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _READ.reset(token)
+
+
+async def operations(rt: Runtime) -> Operations | None:
+    """The tool directory's operations, read at most once per request (OneDirectoryRead) for every call it words;
+    None when the registry is down."""
+    seen = _READ.get()
+    if seen is not None and id(rt) in seen:
+        return seen[id(rt)]
     try:
-        for op in await rt.directory().operations():
-            if op.name == tool:
-                return dict(op.input_schema or {}), str(op.description or "")
+        found: Operations | None = {
+            op.name: (dict(op.input_schema or {}), str(op.description or ""))
+            for op in await rt.directory().operations()
+        }
     except (ServiceCallError, ServiceUnreachable):
-        pass  # the registry is down: the catalog's schema, or the call's own keys, word it instead of failing the list
+        found = None
+    if seen is not None:
+        seen[id(rt)] = found
+    return found
+
+
+def _operation(rt: Runtime, tool: str, ops: Operations | None) -> tuple[dict[str, Any], str]:
+    """The operation's input schema and description from the tool directory, or the catalog's; empty when neither
+    knows the tool. With the registry down the catalog's schema, or the call's own keys, word it instead of failing."""
+    if ops and tool in ops:
+        return ops[tool]
     d = rt.catalog.tool(tool)
     return (dict(d.input_schema), d.description) if d else ({}, "")
 
 
+def call_label(catalog: Any, call: dict[str, Any]) -> str:
+    """The call's action in words, short ("Hold 2,140.55 on CHQ-2219", "Look up accounts"): the catalogue's approval
+    action filled from the call, else the operation's name made readable. Needs no directory read, so a chat widget
+    words its call as describe_call's `label` does."""
+    tool = str(call.get("tool") or "")
+    args = cast(dict[str, Any], call.get("input") or {})
+    values = {_norm(k): shown(v, money=False, currency=None) for k, v in args.items()}
+    template = (d := catalog.tool(tool)) and d.approval
+    if template:
+        filled = _PLACEHOLDER.sub(lambda m: values.get(_norm(m.group(1)), m.group(0)), template.action)
+        if not _PLACEHOLDER.search(filled):
+            return filled
+    return humanize(tool) if tool else "Run the step"
+
+
+async def describe_calls(rt: Runtime, calls: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Each call in words (describe_call), keyed as given, with the tool directory read once for all of them."""
+    ops = await operations(rt) if calls else None
+    return {k: await describe_call(rt, c, currency=None, money_key=None, ops=ops) for k, c in calls.items()}
+
+
 async def describe_call(
-    rt: Runtime, call: dict[str, Any], *, currency: str | None, money_key: str | None
+    rt: Runtime, call: dict[str, Any], *, currency: str | None, money_key: str | None, ops: Any = _UNREAD
 ) -> dict[str, Any]:
     """One call in words: `label` (the action, short), `sentence` (the action with its values), `consequence`, and
     `fields` [{label, value}]. `money_key` is the input the review reads as its amount (typed_fields), shown with the
-    account's currency."""
+    account's currency. `ops` is the directory already read (describe_calls); unread, it is read for this call."""
     tool = str(call.get("tool") or "")
     args = cast(dict[str, Any], call.get("input") or {})
-    schema, description = await _operation(rt, tool)
+    schema, description = _operation(rt, tool, await operations(rt) if ops is _UNREAD else ops)
     props = cast(dict[str, Any], schema.get("properties") or {})
     titles = {
         _norm(k): str(cast(dict[str, Any], p).get("title") or humanize(k))
@@ -87,7 +152,9 @@ async def describe_call(
     # The operation's own description says what running it does; its first sentence is enough.
     said = description.strip().split(". ")[0].rstrip(".")
     template = (d := rt.catalog.tool(tool)) and d.approval
-    if template:
+    # A call missing a value its template names (a failed call, a list row) reads as the plain wording below rather
+    # than with "{amount}" left in it.
+    if template and not _PLACEHOLDER.search(fill(template.action) + fill(template.title)):
         fields = [{"label": label, "value": fill(value)} for label, value in template.fields]
         return {
             "label": fill(template.action),
@@ -96,14 +163,22 @@ async def describe_call(
             "consequence": template.consequence or (f"{said}." if said else None),
             "fields": fields,
         }
+    # An object in the input (a webhook's payload) is data the call carries, read in the step's details; flattened into
+    # the sentence it reads as a run of ids and keys.
     fields = [
         {"label": titles.get(_norm(k), humanize(k)), "value": values[_norm(k)]}
-        for k in args
-        if values.get(_norm(k)) and not _MACHINE_ID.match(values[_norm(k)])
+        for k, v in args.items()
+        if values.get(_norm(k)) and not _MACHINE_ID.match(values[_norm(k)]) and not _object(v)
     ]
     label = humanize(tool) if tool else "Run the step"
     sentence = f"{label}: " + ", ".join(f"{f['label'].lower()} {f['value']}" for f in fields) if fields else label
     return {"label": label, "sentence": sentence, "consequence": f"{said}." if said else None, "fields": fields}
+
+
+def _object(value: Any) -> bool:
+    return isinstance(value, dict) or (
+        isinstance(value, list) and any(isinstance(v, dict) for v in cast(list[Any], value))
+    )
 
 
 def question(*, options: list[str], first: dict[str, Any] | None, customer: str, title: str) -> str:

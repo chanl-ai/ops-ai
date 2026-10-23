@@ -4,13 +4,13 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 // Priya runs Operations, so she can decide its Human Tasks; James, a Builder, builds and starts the workflow.
 const PRIYA = 'p.shah@harborpine.example';
-const SHOTS = join(ROOT, '.codeloop/evidence/292/screens');
+const SHOTS = evidenceDir('292', 'screens');
 const DEFINITION = `
 schemaVersion: 2
 id: uc256_fee_dispute

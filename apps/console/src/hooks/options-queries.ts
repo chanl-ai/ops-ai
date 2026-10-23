@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { OptionsPage, OptionsParams, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
+import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
 /** One picker's source: a cache key and the `/options` call behind it. */
 export interface OptionSource {
@@ -51,7 +52,7 @@ export function useOptionSearch(source: OptionSource, search: string, enabled: b
     const t = setTimeout(() => setDebounced(search), 200);
     return () => clearTimeout(t);
   }, [search]);
-  return useInfiniteQuery({
+  return useTeamInfiniteQuery({
     queryKey: [source.key, 'search', debounced, limit],
     queryFn: ({ pageParam }) => source.fetch({ search: debounced, cursor: pageParam, limit }),
     initialPageParam: null as string | null,
@@ -64,7 +65,7 @@ export function useOptionSearch(source: OptionSource, search: string, enabled: b
 /** Labels for stored ids, asked of the service by id rather than found in a list the browser loaded. */
 export function useOptionLabels(source: OptionSource, ids: string[]) {
   const sorted = [...ids].sort();
-  return useQuery({
+  return useTeamQuery({
     queryKey: [source.key, 'labels', sorted],
     queryFn: () => source.fetch({ ids: sorted, limit: Math.max(sorted.length, 1) }),
     enabled: sorted.length > 0,

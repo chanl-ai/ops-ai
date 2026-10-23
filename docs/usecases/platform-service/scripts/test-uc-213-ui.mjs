@@ -6,9 +6,9 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { IDP_PORT, PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { IDP_PORT, PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = join(ROOT, '.codeloop/evidence/195');
+const SHOTS = evidenceDir('195');
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const CERT = `-----BEGIN CERTIFICATE-----${'A'.repeat(120)}-----END CERTIFICATE-----`;

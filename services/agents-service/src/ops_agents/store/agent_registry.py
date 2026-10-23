@@ -273,6 +273,15 @@ class AgentRegistry:
             slug, n = f"{base}-{n}", n + 1
         return slug
 
+    async def create_if_absent(self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str) -> bool:
+        """`create` for an agent whose id is fixed (a team's Ops Assistant, c-469): False when a row of that id, or one
+        racing it for the same slug, is already there, so two first chats at once leave one agent."""
+        try:
+            await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True)
+        except IntegrityError:
+            return False
+        return True
+
     async def create(
         self,
         spec: dict[str, Any],

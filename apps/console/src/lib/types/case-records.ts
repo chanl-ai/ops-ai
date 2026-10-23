@@ -1,3 +1,5 @@
+import type { StoryLine } from './engine';
+
 /** A team's customer issue (agents-service `/v1/cases`, c-128): who it is for, who works it, and its two deadlines. */
 export type CaseStatus = 'open' | 'waiting_on_customer' | 'waiting_on_us' | 'resolved' | 'closed';
 export type CasePriority = 'low' | 'normal' | 'high' | 'urgent';
@@ -94,7 +96,6 @@ export interface CaseRecordDetail extends CaseRecord {
   team?: { id: string; name: string };
   customer?: { id: string; name: string; href: string } | null;
   sla?: { response: CaseClock; resolution: CaseClock; pausedSince: string | null };
-  nextAction?: { kind: string; label: string; owner: string | null; dueAt: string | null; href: string } | null;
   typedFields?: CaseTypedField[];
   waiting?: CaseWaitingTask[];
   waitingAllHref?: string | null;
@@ -107,7 +108,14 @@ export interface CaseRecordDetail extends CaseRecord {
     allHrefs: { runs: string; emails: string; cases: string | null };
   };
   workflow?: { id: string; name: string; href: string } | null;
-  activity?: { recent: { at: string; actorName: string; text: string; href: string | null }[]; total: number; allHref: string };
+  /** The case's one timer (c-500): its type's deadline field, else the resolution clock. */
+  timer?: { label: string; dueAt: string; state: CaseClock['state']; leftS: number | null };
+  /** What is left: open Human Tasks and refused actions, who and by when; `resolvable` when nothing is. */
+  whatsLeft?: { items: { kind: 'task' | 'action'; who: string; what: string; dueAt: string | null; href: string }[]; resolvable: boolean };
+  /** How the case's work began: the first run of the chain that opened it, or who opened it by hand. */
+  origin?: { kind: string; text: string; runId: string | null; href: string | null };
+  /** Everything that happened to the case, newest first, in the run story's sentences. */
+  feed?: { lines: StoryLine[]; more: number };
   permissions?: { assign: boolean; changeStatus: boolean; close: boolean; note: boolean };
 }
 

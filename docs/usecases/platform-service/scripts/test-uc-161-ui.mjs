@@ -5,12 +5,12 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, finish, proveDomains, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, evidenceDir, finish, proveDomains, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const TELLER = `new.teller@${zone}`;
-const SHOTS = join(ROOT, '.codeloop/evidence/188');
+const SHOTS = evidenceDir('188');
 
 async function call(method, path, body, token, team) {
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(team ? { 'X-Team-Id': team } : {}) };

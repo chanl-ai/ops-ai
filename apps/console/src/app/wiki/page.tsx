@@ -72,7 +72,7 @@ export default function WikiPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="the Wiki" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the Wiki" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <SavedViewTabs

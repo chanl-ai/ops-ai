@@ -10,7 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
@@ -33,7 +34,7 @@ widget_deployments = sa.Table(
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -50,14 +51,18 @@ class WidgetDeployments:
 
     async def get(self, deployment_id: str) -> dict[str, Any] | None:
         q = widget_deployments.select().where(
-            widget_deployments.c.id == deployment_id, widget_deployments.c.tenant_id == current_tenant()
+            widget_deployments.c.id == deployment_id,
+            widget_deployments.c.tenant_id == current_tenant(),
+            team_visible(widget_deployments),
         )
         async with tenant_tx(self.engine) as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r is not None else None
 
     async def for_team(self, team_id: str | None) -> list[dict[str, Any]]:
-        q = widget_deployments.select().where(widget_deployments.c.tenant_id == current_tenant())
+        q = widget_deployments.select().where(
+            widget_deployments.c.tenant_id == current_tenant(), team_visible(widget_deployments)
+        )
         if team_id is not None:
             q = q.where(widget_deployments.c.team_id == team_id)
         async with tenant_tx(self.engine) as c:

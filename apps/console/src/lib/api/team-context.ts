@@ -23,6 +23,11 @@ export function currentTeamId(): string {
   return chosenTeamId() ?? ownTeam() ?? DEFAULT_TEAM_ID;
 }
 
+/** The signed-in person's own team (their token's first), or null under the mock sign-in or before sign-in. */
+export function ownTeamId(): string | null {
+  return ownTeam();
+}
+
 /** The team the person picked in this tab, or null when none was picked and the default stands. */
 export function chosenTeamId(): string | null {
   if (typeof window === 'undefined') return null;

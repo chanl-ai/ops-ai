@@ -27,10 +27,11 @@ from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings, require_keys
-from ops_store import isolation
+from ops_store import background, isolation
 from ops_store.isolation import Isolation
 from ops_store.schema_version import require_current_schema
 
+from ..store.background import BackgroundJobs, heartbeats
 from ..store.cases import CaseStore
 from ..store.engine import AsyncEngine, EngineTransactions, connect
 from ..store.events import EventLog
@@ -166,7 +167,10 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             agents=agents is not None,
             poll=settings.engine_poll_seconds,
         )
-        await Worker(host).run_forever(stop, settings.engine_poll_seconds)
+        # The workflow worker is a listed background process (c-516): its heartbeat is written from this loop.
+        await Worker(host, background.Beat("workflow_worker", heartbeats(db))).run_forever(
+            stop, settings.engine_poll_seconds
+        )
     log.info("engine_worker_stopped", owner=owner)
 
 
@@ -198,13 +202,15 @@ def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: Async
     def sources(mailbox: MailboxRow, folder: str) -> MailSource:
         return mailbox_source(settings, mailbox, folder, mail)
 
-    return EmailTriggers(
+    triggers = EmailTriggers(
         db,
         sources,
         files,
         Leases(db, owner=owner, ttl=settings.lease_ttl_seconds),
         idle_seconds=settings.email_idle_seconds,
     )
+    triggers.beat, triggers.starts.jobs = background.Beat("mail_listener", heartbeats(db)), BackgroundJobs(db)
+    return triggers
 
 
 def main() -> None:

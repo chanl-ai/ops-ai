@@ -7,7 +7,7 @@ team copies it to change it. A case pins the version it was opened with."""
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -45,6 +45,9 @@ class Definition(WireModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     fields: list[CaseField] = Field(max_length=50)
+    # The key of one of the type's date fields whose value is the case's deadline, its main timer (c-500): a court
+    # notice's date to respond by, read from the notice. None: the case's resolution clock.
+    deadline: str | None = Field(default=None, max_length=64)
 
 
 class TypeRef(WireModel):
@@ -59,6 +62,7 @@ class TypeIn(WireModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     fields: list[CaseField] | None = Field(default=None, max_length=50)
+    deadline: str | None = Field(default=None, max_length=64)
 
 
 class PublishIn(WireModel):
@@ -79,6 +83,14 @@ class CaseTypeDetail(CaseTypeView):
 
 def _checked(content: dict[str, Any]) -> dict[str, Any]:
     specs_of(content.get("fields") or [])
+    deadline = content.get("deadline")
+    if deadline is not None:
+        fields = cast(list[dict[str, Any]], content.get("fields") or [])
+        dates = {str(f.get("key")) for f in fields if f.get("type") == "date"}
+        if deadline not in dates:
+            raise Unprocessable(
+                f"deadline must name one of this type's date fields; {deadline} is not one.", code="deadline_field"
+            )
     return content
 
 
