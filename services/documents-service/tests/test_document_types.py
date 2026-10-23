@@ -271,7 +271,10 @@ async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_a
         again = {"value": "INV-2208"}
         fixed = data(await c.patch(f"/v1/documents/extractions/{newer['id']}/fields/invoice", json=again, headers=OPS))
     async with engine.connect() as conn:
-        rows = (await conn.execute(sa.select(service_outbox).where(service_outbox.c.tenant_id == s.tenant))).mappings()
+        o = service_outbox
+        rows = (
+            await conn.execute(sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.corrected"))
+        ).mappings()
         events: list[dict[str, Any]] = [dict(r) for r in rows]
     assert fixed["needsReview"] == [] and fixed["fields"]["amount"]["needsReview"] is False, fixed
     # Two corrections in a row send one event, the last, after the settle time; the first is superseded unsent, and is

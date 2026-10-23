@@ -235,6 +235,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-500 | console | A case says what is left, on whom and by when, how its work began (form, email or by hand), one timer, and one feed of what happened in the run page's sentences | ui | passing |
 | uc-508 | console | Activity, a Human Task's write preview, the case list's first response and the run page read a step in the API's words: no tool, node or workflow id, the outcome in words | ui | passing |
 | uc-517 | console | The console has no preview mock pages: an agent's ID to copy, an allowed host added in place from a tool, and every former preview route answers 404 but human-tasks | ui | passing |
+| uc-525 | console | A workflow waits for long-running work: Extract from file parks on a long read and resumes on extraction.finished, a Wait for step resumes on its signed callback or times out by its own port | ui | failing |
 | uc-486 | console | Workflow steps are laid out with gaps and port order and lines go around steps, re-routed when a step is dropped, in the preview, the step editor (Tidy up and Undo) and a run's canvas | ui | passing |
 | uc-505 | console | Pages wait for the person's team after sign-in: a remembered team they do not hold gives way to theirs, and a record in another team says not found, or in another team, with a switch | ui | passing |
 | uc-510 | console | What's new lists the changelog newest first in plain words with a Coming next tab, and its unread dot clears once opened | ui | passing |
