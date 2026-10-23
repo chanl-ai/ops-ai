@@ -506,7 +506,7 @@ def _background_jobs(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
         j.c.at.label("at"),
         sa.literal("process").label("ref_kind"),
         j.c.process.label("ref_id"),
-    ).where(j.c.tenant_id == current_tenant(), _in_teams(j.c.team_id, teams))
+    ).where(j.c.tenant_id == current_tenant(), _in_teams(j.c.team_id, teams), team_visible(j))
 
 
 def _on_case(a: sa.Subquery, case_id: str, team: str) -> sa.ColumnElement[bool]:

@@ -309,6 +309,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/case-story.md` | uc-500: a case says what is left, how its work began and what happened, for a card dispute, a notice by email and a case opened by hand |
 | `usecases/console/steps-in-sentences.md` | uc-508: Activity, a Human Task, the case list and the run page read a hold's steps in sentences, by name, with the outcome in words |
 | `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
+| `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
 | `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop (preview part for the maintainers' walk) |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |

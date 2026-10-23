@@ -14,7 +14,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -77,6 +77,9 @@ service_outbox = outbox_table(metadata, "documents_outbox", info=TENANT_SCOPED)
 # A correction's event waits this long before it is sent, and a newer correction of the same extraction replaces it, so
 # a person correcting several fields in a row starts one Save data run with the final read, not one per field.
 CORRECTION_SETTLE_SECONDS = 5.0
+# Reported from the transaction that ends every read (done, unreadable, failed), keyed by the extraction id: a workflow
+# step that parked on a long read resumes on it (c-525).
+FINISHED_EVENT = "extraction.finished"
 SUPERSEDED = "superseded by a newer correction"
 
 extraction_corrections = sa.Table(
@@ -240,6 +243,26 @@ class ExtractionsStore:
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
                 .values(**values)
             )
+            e = extractions
+            q = sa.select(e.c.team, e.c.file_id, e.c.type_id, e.c.asked_by).where(
+                e.c.tenant_id == tenant, e.c.id == extraction_id
+            )
+            row = (await c.execute(q)).first()
+            if row is not None:
+                review = cast(list[Any], (result or {}).get("needsReview") or [])
+                payload = {
+                    "extractionId": extraction_id,
+                    "fileId": row.file_id,
+                    "status": status,
+                    "outcome": outcome,
+                    "documentType": row.type_id,
+                    "needsReview": len(review),
+                    "errorCode": error_code,
+                }
+                await add(
+                    c, service_outbox, tenant_id=tenant, team_id=row.team, name=FINISHED_EVENT,
+                    key=extraction_id, payload=payload, actor=row.asked_by,
+                )  # fmt: skip
 
     async def tokens_per_call(self, type_id: str | None, *, last: int = 20) -> tuple[float, float] | None:
         """The mean input and output tokens of the tenant's last `last` measured extractions, of one document type when

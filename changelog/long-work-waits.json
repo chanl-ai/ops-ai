@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Workflows wait for long files and slow systems",
+  "description": "A step that reads a long file or waits for another system now pauses without blocking other work, carries on as soon as the result is ready, and takes its own Timeout way if the result never comes.",
+  "tag": "new",
+  "cards": [
+    "c-525"
+  ]
+}

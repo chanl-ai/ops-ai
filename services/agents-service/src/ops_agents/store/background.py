@@ -16,6 +16,7 @@ from ops_service_kit.logging import get_logger
 from ops_store import Guarantee
 from ops_store.background import BY_KEY, DbHeartbeats, heartbeats_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .tenancy import SYSTEM_ROLE, current_team, current_tenant, system_tx, tenant_tx
@@ -103,13 +104,14 @@ class BackgroundJobs:
             await c.execute(t.insert().values(**row))
             self._written += 1
             if self._written % PRUNE_EVERY == 0:
-                keep = sa.select(t.c.id).where(t.c.process == process).order_by(t.c.at.desc()).limit(KEEP_PER_PROCESS)
+                keep = sa.select(t.c.id).where(t.c.process == process, team_visible(t))
+                keep = keep.order_by(t.c.at.desc()).limit(KEEP_PER_PROCESS)
                 await c.execute(t.delete().where(t.c.process == process, t.c.id.not_in(keep.scalar_subquery())))
 
     async def visible(self, *, limit: int = 50, before: str | None = None) -> list[Job]:
         """The newest jobs the current context may read: the caller's teams, held by the database."""
         t = background_jobs
-        q = sa.select(t).order_by(t.c.at.desc()).limit(limit)
+        q = sa.select(t).where(team_visible(t)).order_by(t.c.at.desc()).limit(limit)
         if before is not None:
             q = q.where(t.c.at < before)
         async with tenant_tx(self.engine) as c:
@@ -118,6 +120,7 @@ class BackgroundJobs:
     async def latest_everywhere(self, tenant_id: str, *, limit: int = 50) -> list[Job]:
         """Every team's newest jobs in one tenant, for an account admin's Background page."""
         t = background_jobs
-        q = sa.select(t).where(t.c.tenant_id == tenant_id).order_by(t.c.at.desc()).limit(limit)
+        everyone = any_team(t, "an account admin's Background page lists every team's jobs")
+        q = sa.select(t).where(t.c.tenant_id == tenant_id, everyone).order_by(t.c.at.desc()).limit(limit)
         async with system_tx(self.engine, BACKGROUND_PAGE) as c:
             return [Job(**dict(r)) for r in (await c.execute(q)).mappings()]

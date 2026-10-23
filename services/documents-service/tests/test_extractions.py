@@ -12,11 +12,14 @@ import json
 from typing import Any
 
 import httpx
+import sqlalchemy as sa
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents import extraction
 from ops_documents.extraction import ModelsService
+from ops_documents.store.extractions import service_outbox
 from ops_extract.floor import FloorUnreadError
 from ops_identity import dev_service_signer, mint_service_token
 
@@ -231,3 +234,39 @@ async def test_a_pdf_fields_value_carries_its_box_on_the_page_and_an_invented_on
     [box] = amount["boxes"]
     assert box["page"] == 1 and box["x"] > 72 / LETTER[0] + 0.05 and abs(box["y"] - (116 - 10) / LETTER[1]) < 0.01, box
     assert amount["blocks"] and "boxes" not in invoice, body
+
+
+async def test_every_end_of_a_read_reports_extraction_finished_once_with_its_outcome(
+    make: Make, engine: AsyncEngine, monkeypatch: Any
+) -> None:
+    """A workflow step parked on a long read resumes on extraction.finished (c-525), so a read that ends without it
+    leaves the run waiting until its time limit. One event per extraction, keyed by its id, for done, failed and
+    unreadable alike, written in the transaction that ends the read."""
+    monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is read in the background
+    s = make(Models(), Floor())
+    async with s.client as c, s.app.router.lifespan_context(s.app):
+        done = (await extract(c, await s.stored(NOTICE))).json()["data"]
+        await s.extractor.drain()
+        failing = make(_DownModels(), Floor())
+        failing.files.files, failing.files.blobs = s.files.files, s.files.blobs
+    async with failing.client as c2, failing.app.router.lifespan_context(failing.app):
+        failed = (await extract(c2, await failing.stored(b"Another notice, read by a model that is down\n"))).json()[
+            "data"
+        ]
+        await failing.extractor.drain()
+    async with engine.connect() as conn:
+        o = service_outbox
+        q = sa.select(o.c.event_key, o.c.team_id, o.c.payload).where(
+            o.c.tenant_id == s.tenant, o.c.name == "extraction.finished"
+        )
+        rows = {r.event_key: r for r in (await conn.execute(q)).all()}
+    assert set(rows) == {done["id"], failed["id"]}, rows
+    assert rows[done["id"]].payload["status"] == "done" and rows[done["id"]].payload["fileId"] == done["fileId"], rows
+    assert rows[failed["id"]].payload["status"] == "failed", rows
+
+
+class _DownModels(Models):
+    """A model that is out of reach on every call."""
+
+    async def structured(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("model down")
