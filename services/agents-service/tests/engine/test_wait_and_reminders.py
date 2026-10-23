@@ -72,7 +72,7 @@ async def start(db: AsyncEngine, tenant: str, d: WorkflowDefinition) -> str:
         await RunStore(tx).create(
             {
                 "id": run_id,
-                "team_id": "team_ops",
+                "team_id": "team_a",
                 "workflow_id": d.id,
                 "version": version,
                 "digest": d.digest(),
@@ -145,7 +145,7 @@ async def test_a_reminder_repeats_while_the_review_waits_and_stops_once_it_is_de
         assert (await run_of(engine, tenant, run_id))["status"] == "waiting", "a reminder never ends the wait"
     with tenant_scope(tenant):
         rows = await Activity(engine).page(
-            Scope(teams={"reminder": ("team_ops",)}, owner="m@x"), Filters(), page=1, page_size=10
+            Scope(teams={"reminder": ("team_a",)}, owner="m@x"), Filters(), page=1, page_size=10
         )
     assert [(r["kind"], r["status"], r["ref_id"]) for r in rows.rows] == [("reminder", "waiting", run_id)] * 2
     assert rows.rows[0]["title"].startswith("Reminder: Check the levy, waiting "), rows.rows[0]["title"]

@@ -13,6 +13,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_steps TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_work TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agents TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_publish_requests TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_jobs TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.cases TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.case_events TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_leases TO ops_agents_runtime;
@@ -70,6 +72,8 @@ GRANT SELECT ON dbo.review_approvals TO ops_runtime_system;
 GRANT SELECT ON dbo.engine_definitions TO ops_runtime_system;
 GRANT SELECT, UPDATE ON dbo.engine_work TO ops_runtime_system;
 GRANT SELECT ON dbo.agent_memories (tenant_id) TO ops_runtime_system;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_runtime_system;
+GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT IMPERSONATE ON USER::ops_runtime_system TO ops_agents_runtime;
 GO
 -- tools-service

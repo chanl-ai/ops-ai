@@ -3,14 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { Archive, ArchiveRestore, MoreHorizontal, SearchX, Send, ShieldBan, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, MoreHorizontal, Send, ShieldBan, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { GuardrailFields, guardrailErrors, keptScopes, type GuardrailDraft, type GuardrailErrors } from '@/components/guardrails/guardrail-fields';
 import { PageLayout } from '@/components/page-layout';
 import { BuilderFieldset, ReadOnlyNotice } from '@/components/shared/builder-only';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
-import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -29,7 +28,6 @@ import { useDeleteGuardrail, useRequestGuardrailPublish, useSetGuardrailStatus, 
 import { useCanBuild } from '@/hooks/me-queries';
 import { useGuardrail } from '@/hooks/queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { relativeTime } from '@/lib/format';
 import type { Guardrail } from '@/lib/types/domain';
 
@@ -44,11 +42,7 @@ export default function GuardrailPage() {
   if (query.isError)
     return (
       <PageLayout icon={ShieldBan} title="Guardrail" backHref="/guardrails">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Guardrail not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to guardrails', href: '/guardrails' }} />
-        ) : (
-          <QueryError what="this guardrail" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this guardrail" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to guardrails', href: '/guardrails' }} />
       </PageLayout>
     );
   // Keyed by version, so the form reloads from the saved version after a save.

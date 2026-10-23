@@ -1,12 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { EvalCaseFilters, EvalCaseInput, EvalRunFilters, SaveTurnInput } from '@/lib/types/evals';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 /** Eval keys sit under the agent's key, so saving the agent (which starts a run) refreshes them too. */
 export const ek = {
@@ -19,12 +20,12 @@ export const ek = {
   options: (agentId: string) => ['agent', agentId, 'evals', 'options'] as const,
 };
 
-export const useEvalSuites = (agentId: string) => useQuery({ queryKey: ek.suites(agentId), queryFn: () => api.evals.suites(agentId) });
+export const useEvalSuites = (agentId: string) => useTeamQuery({ queryKey: ek.suites(agentId), queryFn: () => api.evals.suites(agentId) });
 export const useEvalCases = (agentId: string, p: ListParams<EvalCaseFilters>) => usePagedQuery({ queryKey: ek.cases(agentId, p), queryFn: () => api.evals.cases(agentId, p) });
 export const useEvalRuns = (agentId: string, p: ListParams<EvalRunFilters>) => usePagedQuery({ queryKey: ek.runs(agentId, p), queryFn: () => api.evals.runs(agentId, p) });
 export const useEvalRun = (runId: string | null) =>
-  useQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId, refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
-export const useEvalOptions = (agentId: string) => useQuery({ queryKey: ek.options(agentId), queryFn: () => api.evals.options(agentId), staleTime: 60_000 });
+  useTeamQuery({ queryKey: ek.run(runId ?? ''), queryFn: () => api.evals.getRun(runId!), enabled: !!runId, refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
+export const useEvalOptions = (agentId: string) => useTeamQuery({ queryKey: ek.options(agentId), queryFn: () => api.evals.options(agentId), staleTime: 60_000 });
 
 /**
  * The newest run, polled while it runs. When it completes, everything else on the Evals tab (suites, case
@@ -32,7 +33,7 @@ export const useEvalOptions = (agentId: string) => useQuery({ queryKey: ek.optio
  */
 export function useLatestEvalRun(agentId: string) {
   const qc = useQueryClient();
-  const query = useQuery({ queryKey: ek.latest(agentId), queryFn: () => api.evals.latest(agentId), refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
+  const query = useTeamQuery({ queryKey: ek.latest(agentId), queryFn: () => api.evals.latest(agentId), refetchInterval: (q) => (q.state.data?.status === 'running' ? 1000 : false) });
   const status = query.data?.status;
   const prev = React.useRef(status);
   React.useEffect(() => {

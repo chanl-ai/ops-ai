@@ -27,11 +27,18 @@ function hashDir(dir: string, into: ReturnType<typeof createHash>): void {
   }
 }
 
-/** The key of a build: the console's sources and config, the Next version and the stack's shape. A clean tree hashes the same as its commit. */
-function buildKey(appDir: string, shape: Record<string, string>): string {
+/**
+ * The key of a build: the console's sources and config, What's new and Coming next (the repo's changelog/ and
+ * roadmap.json, which next.config.ts reads into the build), the Next version and the stack's shape. A clean tree hashes
+ * the same as its commit.
+ */
+export function buildKey(appDir: string, shape: Record<string, string>): string {
   const h = createHash('sha1');
   for (const part of ['src', 'public']) if (existsSync(join(appDir, part))) hashDir(join(appDir, part), h);
   for (const f of ['next.config.ts', 'package.json', 'postcss.config.mjs', 'tsconfig.json', 'components.json']) if (existsSync(join(appDir, f))) h.update(readFileSync(join(appDir, f)));
+  const repoRoot = join(appDir, '..', '..');
+  if (existsSync(join(repoRoot, 'changelog'))) hashDir(join(repoRoot, 'changelog'), h);
+  if (existsSync(join(repoRoot, 'roadmap.json'))) h.update(readFileSync(join(repoRoot, 'roadmap.json')));
   h.update(JSON.stringify(shape));
   return h.digest('hex').slice(0, 12);
 }

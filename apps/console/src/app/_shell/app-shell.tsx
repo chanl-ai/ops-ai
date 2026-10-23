@@ -2,9 +2,10 @@
 
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Clock, CloudOff } from 'lucide-react';
+import { Clock, CloudOff, Users } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { WhatsNew } from '@/components/shared/whats-new';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 import { AuthFormWrapper, AuthHeading } from '@/components/auth/auth-form-wrapper';
@@ -14,11 +15,12 @@ import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { SiteHeader } from '@/components/site-header';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamReady } from '@/hooks/use-team';
+import { currentTeamId, ownTeamId, setCurrentTeamId } from '@/lib/api';
 import { isUnreachable } from '@/lib/api/unreachable';
 import { authProvider } from '@/lib/auth';
 import { isAuthPath } from '@/lib/auth/next-path';
-import { PREVIEW_TREE } from '@/lib/settings-preview';
+import { teamToUse } from '@/lib/session-gate';
 import { inSettings, LIVE_TREE } from '@/lib/settings-tree';
 
 import { HeaderNotifications } from './header-notifications';
@@ -61,9 +63,18 @@ function Guarded({ children }: { children: React.ReactNode }) {
   const needsMfa = authProvider.enrolsMfa && status === 'signed_in' && session?.authMethod === 'password' && !!policy.data?.mfaRequired && !session.mfaEnrolled;
   // The person's teams are the first thing every page needs. A 401 there, after the token was renewed once, means the
   // session is over; a 5xx or no answer at all means the services are down, which one shell state says for every page.
-  const { error: teamsError } = useTeam();
+  const { error: teamsError, teams, isPending: teamsPending } = useTeam();
   const teamsStatus = (teamsError as { status?: number } | null)?.status;
   const unreachable = isUnreachable(teamsError);
+  // Pages render, and team queries run (hooks/team-query.ts), only once the current team is one the person holds. A team
+  // remembered in this tab from an earlier sign-in, or the console default, gives way to their own team or their first.
+  const teamReady = useTeamReady();
+  const teamIds = teams.map((t) => t.id).join(',');
+  React.useEffect(() => {
+    if (status !== 'signed_in' || teamReady || !teamIds) return;
+    const pick = teamToUse(currentTeamId(), ownTeamId(), teamIds.split(','));
+    if (pick) setCurrentTeamId(pick);
+  }, [status, teamReady, teamIds]);
   React.useEffect(() => {
     if (status === 'signed_out' || teamsStatus === 401) router.replace(`/login?next=${encodeURIComponent(here)}`);
     if (needsMfa) router.replace(`/mfa/setup?next=${encodeURIComponent(here)}`);
@@ -72,10 +83,12 @@ function Guarded({ children }: { children: React.ReactNode }) {
   if (status === 'expired') return <SessionExpired name={session?.user.name} next={here} />;
   if (status === 'signed_in' && unreachable) return <ServicesUnavailable />;
   if (status !== 'signed_in' || needsMfa) return <Loading />;
+  if (!teamsPending && !teamsError && teams.length === 0) return <NoTeam />;
+  if (!teamReady) return <Loading />;
   return (
     <SidebarProvider style={{ '--header-height': 'calc(var(--spacing) * 14)', '--sidebar-width': '14rem' } as React.CSSProperties}>
-      {/* Inside settings (and the /preview/settings mock) the app sidebar is replaced by the settings sidebar. */}
-      {pathname.startsWith('/preview/settings') ? <SettingsSidebar variant="inset" tree={PREVIEW_TREE} /> : inSettings(pathname) ? <SettingsSidebar variant="inset" tree={LIVE_TREE} /> : <AppSidebar variant="inset" />}
+      {/* Inside settings the app sidebar is replaced by the settings sidebar. */}
+      {inSettings(pathname) ? <SettingsSidebar variant="inset" tree={LIVE_TREE} /> : <AppSidebar variant="inset" />}
       <SidebarInset className="h-[calc(100svh-1rem)] min-w-0 overflow-hidden">
         <SiteHeader
           actions={
@@ -89,6 +102,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
           <ClientGate fallback={<Loading />}>{children}</ClientGate>
         </div>
       </SidebarInset>
+      <WhatsNew />
     </SidebarProvider>
   );
 }
@@ -115,6 +129,21 @@ export function ServicesUnavailable() {
             >
               Try again
             </LoadingButton>
+          </div>
+        </AuthFormWrapper>
+      </div>
+    </div>
+  );
+}
+
+/** Signed in, but in no team yet: every page's data belongs to a team, so nothing behind this can load. */
+function NoTeam() {
+  return (
+    <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <AuthFormWrapper showPanel={false}>
+          <div className="flex flex-col gap-6" data-testid="no-team">
+            <AuthHeading icon={<Users className="size-6" />} title="You aren’t in a team yet" description="Everything in Ops AI belongs to a team. Ask a workspace admin to add you to one, then sign in again." />
           </div>
         </AuthFormWrapper>
       </div>

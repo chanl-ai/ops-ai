@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { ReadRequestInput } from '@/lib/types/files';
+import { useTeamQuery } from './team-query';
 
 export const ek = {
   byFile: (fileId: string) => ['extractions', 'file', fileId] as const,
@@ -15,7 +16,7 @@ const running = (status: string | undefined) => status === 'queued' || status ==
 
 /** The file's extractions, newest first; polls while the newest is still running. */
 export const useFileExtractions = (fileId: string) =>
-  useQuery({
+  useTeamQuery({
     queryKey: ek.byFile(fileId),
     queryFn: () => api.files.extractions.byFile(fileId),
     refetchInterval: (q) => (running(q.state.data?.data[0]?.status) ? 1500 : false),
@@ -65,7 +66,7 @@ export function useStartExtraction() {
  * memory. Each signed link issued is audited, so this asks for one per page visit.
  */
 export function useFilePreviewUrl(fileId: string, enabled: boolean) {
-  const link = useQuery({ queryKey: ['files', 'preview-link', fileId], queryFn: () => api.files.downloadUrl(fileId), enabled, staleTime: Infinity, gcTime: 0, retry: false });
+  const link = useTeamQuery({ queryKey: ['files', 'preview-link', fileId], queryFn: () => api.files.downloadUrl(fileId), enabled, staleTime: Infinity, gcTime: 0, retry: false });
   const [state, setState] = React.useState<{ url: string | null; error: string | null }>({ url: null, error: null });
   const signed = link.data?.url;
   React.useEffect(() => {

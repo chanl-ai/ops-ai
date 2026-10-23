@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const TAG = Math.random().toString(36).slice(2, 6);
 const HOST = `ledger-${TAG}.example.com`;
@@ -50,7 +50,7 @@ await withUiStack(
       check('Enter in Add secret lists the secret', (await page.getByRole('cell', { name: SECRET }).count()) === 1 && writes.includes('/v1/secrets'), writes);
 
       check('no page errors', errors.length === 0, errors);
-      const dir = join(ROOT, '.codeloop/evidence/113');
+      const dir = evidenceDir('113');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'uc-110-tools-posts.json'), `${JSON.stringify(writes, null, 2)}\n`);
     } finally {

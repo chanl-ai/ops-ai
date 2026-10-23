@@ -16,7 +16,7 @@ const words = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0,
  * grant it and who in the team can give roles, from the same check the services run (GET /v1/me/why). The reason is
  * read only when the control is locked.
  */
-export function LockedReason({ area, action, label }: { area: string; action: string; label: string }) {
+export function LockedReason({ area, action, label, size = 'default' }: { area: string; action: string; label: string; size?: 'default' | 'sm' }) {
   const why = useWhy(area, action, true);
   const w = why.data;
   const what = `${actionLabel(action)} on ${areaLabel(area)}`;
@@ -27,7 +27,7 @@ export function LockedReason({ area, action, label }: { area: string; action: st
       : `Needs ${what}${w.roles.length ? `; the ${words(w.roles.map((r) => r.name))} ${w.roles.length === 1 ? 'role has' : 'roles have'} it` : ''}.${w.askable.length ? ` Ask ${words(w.askable.slice(0, 3))}.` : ''}`;
   return (
     <span className="flex items-center gap-1.5">
-      <Button disabled data-testid={`locked-${area}-${action}`}>
+      <Button size={size} disabled data-testid={`locked-${area}-${action}`}>
         {label}
       </Button>
       <Tooltip>

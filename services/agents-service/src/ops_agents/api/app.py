@@ -42,6 +42,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.database import Database, open_database
 
+from ..store.background import BackgroundJobs, heartbeats
 from ..store.channels import ChannelStore, Deployment
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
@@ -62,12 +63,15 @@ from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
 from .model_aliases import HttpModelAliases, StaticModelAliases
 from .model_ledger import LedgerModel, LedgerSource
+from .ops_tools import OpsReads
 from .people_names import PlatformPeopleNames
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
+from .review_text import OneDirectoryRead
 from .routers import (
     activity,
     agents,
+    background,
     case_records,
     cases,
     channel_list,
@@ -359,6 +363,7 @@ def create_app(
                     workflows=ChildRuns(rt),
                     agents=AgentCalls(rt),
                     memory=MemoryReads(rt),
+                    ops=OpsReads(rt),
                     tools=directory,
                 )
                 rt.graphs = build_graphs(deps, saver)
@@ -372,10 +377,14 @@ def create_app(
                 )
                 rt.agent_graph = lambda agent_id: agent_wrapper.build(deps, saver, agent_id=agent_id)
                 rt.graph_deps = deps
-                sweeper = asyncio.create_task(sweep_forever(rt, settings.sweep_interval_seconds))
+                # Listed background processes (c-516): each writes its heartbeat and logs its jobs in the job's team.
+                beats, jobs = heartbeats(db), BackgroundJobs(db)
+                sweeper = asyncio.create_task(
+                    sweep_forever(rt, settings.sweep_interval_seconds, beats=beats, jobs=jobs)
+                )
                 stack.callback(sweeper.cancel)
                 if settings.timer_poll_seconds > 0 and db.dialect.name == "postgresql":
-                    poller = asyncio.create_task(poll_forever(rt, settings.timer_poll_seconds))
+                    poller = asyncio.create_task(poll_forever(rt, settings.timer_poll_seconds, beats=beats, jobs=jobs))
                     stack.callback(poller.cancel)
                 if settings.platform_url:
                     # Memory retention (c-206): the workspace policy lives in platform-service.
@@ -383,7 +392,7 @@ def create_app(
                     stack.push_async_callback(platform_http.aclose)
                     # A process without a signing key still starts, and the read keeps memories when it cannot sign.
                     retention = PlatformRetention(service_client(settings, platform_http, "platform"))
-                    expiry = asyncio.create_task(expire_forever(rt, retention))
+                    expiry = asyncio.create_task(expire_forever(rt, retention, beats=beats))
                     stack.callback(expiry.cancel)
             # Without a seed directory (outside dev, unless one is named) nothing is seeded; the registries still load
             # and serve what is published.
@@ -433,6 +442,8 @@ def create_app(
     )
     # Outside the console's CORS: the widget routes answer for each deployment's own origins (c-117).
     app.add_middleware(embed_routes.WidgetCors)
+    # One tool directory read per request, however many calls its page words (c-508).
+    app.add_middleware(OneDirectoryRead)
     install_error_handlers(app)
 
     def mount(router: APIRouter, tag: str, **kw: Any) -> None:
@@ -477,6 +488,7 @@ def create_app(
     mount(task_routes.router, "Reviews")
     mount(ai_step_routes.router, "Workflows")
     mount(activity.router, "Activity")
+    mount(background.router, "Background")
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")
     mount(service_events.router, "Workflows")

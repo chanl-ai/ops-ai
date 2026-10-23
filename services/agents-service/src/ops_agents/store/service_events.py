@@ -14,6 +14,7 @@ from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.schema import TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
@@ -131,6 +132,7 @@ async def attempts_of(engine: AsyncEngine, workflow_id: str, run_key: str) -> li
     r = engine_runs
     q = sa.select(r.c.id, r.c.run_key, r.c.status, r.c.created_at).where(
         r.c.tenant_id == current_tenant(),
+        team_visible(r),
         r.c.workflow_id == workflow_id,
         sa.or_(r.c.run_key == run_key, r.c.run_key.startswith(f"{run_key}:", autoescape=True)),
     )

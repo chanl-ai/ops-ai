@@ -52,7 +52,7 @@ function WidgetFrame({ widget, actions, children }: { widget: ChatWidget; action
       <footer className="flex flex-wrap gap-x-2 border-t bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
         <span>{widget.app}</span>
         <span>·</span>
-        <span className="font-mono">{widget.tool}</span>
+        <span>{widget.toolLabel}</span>
         <span>·</span>
         <span>Data as of {relativeTime(widget.asOf)}</span>
       </footer>

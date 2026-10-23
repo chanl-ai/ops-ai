@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, invitesToCurrentTeam } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
 import type { ApiKeyInput, DeliveryFilters, InviteInput, MemberFilters, MemberRole, NotificationSettingsInput, UsageDays, WebhookInput } from '@/lib/types/settings';
+import { useTeamQuery } from './team-query';
 
 /** Every settings key starts with 'settings'; writes also refresh the audit log ('logs'). */
 export const sk = {
@@ -19,13 +20,13 @@ export const sk = {
 };
 
 export const useMembers = (p: ListParams<MemberFilters>) => usePagedQuery({ queryKey: sk.members(p), queryFn: () => api.settings.members.list(p) });
-export const useNotificationSettings = () => useQuery({ queryKey: sk.notifications, queryFn: api.settings.notifications.get });
+export const useNotificationSettings = () => useTeamQuery({ queryKey: sk.notifications, queryFn: api.settings.notifications.get });
 export const useWebhooks = (p: ListParams) => usePagedQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p) });
 export const useWebhookDeliveries = (id: string | null, p: ListParams<DeliveryFilters>) =>
   usePagedQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id });
 export const useApiKeys = (p: ListParams) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p) });
 export const useUsage = (days: UsageDays) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days) });
-export const useSettingsLookups = () => useQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
+export const useSettingsLookups = () => useTeamQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
 
 function useSettingsWrite<A, R>(fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();

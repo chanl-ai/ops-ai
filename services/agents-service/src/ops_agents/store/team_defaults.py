@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
@@ -24,7 +25,7 @@ team_default_agents = sa.Table(
     sa.Column("agent_id", sa.String(64), nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -38,7 +39,9 @@ class TeamDefaults:
     async def agent(self, team_id: str) -> str | None:
         """The team's default agent id, or None before one is set."""
         async with tenant_tx(self.engine) as c:
-            q = sa.select(team_default_agents.c.agent_id).where(team_default_agents.c.team_id == team_id)
+            q = sa.select(team_default_agents.c.agent_id).where(
+                team_default_agents.c.team_id == team_id, team_visible(team_default_agents)
+            )
             return (await c.execute(q)).scalar()
 
     async def set_agent(self, team_id: str, agent_id: str, *, by: str) -> None:

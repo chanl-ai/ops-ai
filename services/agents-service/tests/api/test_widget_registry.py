@@ -96,7 +96,7 @@ async def test_another_teams_widget_is_not_listed(tmp_path: Path) -> None:
     async with _app(tmp_path) as (c, app):
         _data(await c.post("/v1/widgets", json=LIMIT_CARD), 201)
         rt: Runtime = app.state.runtime
-        mine = [w["widgetId"] for w in await listed(rt, None)]
+        mine = [w["widgetId"] for w in await listed(rt, ["team_ops"])]
         theirs = [w["widgetId"] for w in await listed(rt, ["team_lending"])]
         assert "wire-limit-card" in mine and "wire-limit-card" not in theirs
         assert "hold-review" in theirs, "the seeded library is platform-wide"
@@ -143,9 +143,9 @@ async def test_the_store_answers_at_most_one_page(tmp_path: Path) -> None:
         for i in range(5):
             _data(await c.post("/v1/widgets", json={**LIMIT_CARD, "name": f"Limit card {i}"}), 201)
         reg = widgets(app.state.runtime)
-        rows = await reg.page(None, "limit card", offset=1, limit=2)
+        rows = await reg.page(["team_ops"], "limit card", offset=1, limit=2)
         assert [r["name"] for r in rows] == ["Limit card 1", "Limit card 2"]
-        assert await reg.count(None, "limit card") == 5 and await reg.count(["team_lending"], "limit card") == 0
+        assert await reg.count(["team_ops"], "limit card") == 5 and await reg.count(["team_lending"], "limit card") == 0
 
 
 async def test_wildcards_in_the_search_match_only_themselves(tmp_path: Path) -> None:

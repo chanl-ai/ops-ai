@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { SearchX, UserCheck } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -11,7 +11,6 @@ import { isOpen } from '@/components/reviews/review-columns';
 import { ReviewDecisionForm } from '@/components/reviews/review-detail';
 import { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { PageLayout } from '@/components/page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { TaskPage } from '@/components/tasks/task-page';
@@ -53,11 +52,7 @@ export default function TaskRoute() {
   if (review.isError || !r)
     return (
       <PageLayout icon={UserCheck} title="Human Task" backHref="/reviews">
-        {(review.error as { status?: number } | null)?.status === 404 ? (
-          <EmptyState icon={SearchX} title="Task not found" description="It may have been decided and closed, or it belongs to another team." action={{ label: 'Back to Human Tasks', href: '/reviews' }} />
-        ) : (
-          <QueryError what="this task" onRetry={() => review.refetch()} retrying={review.isFetching} error={review.error} testId="task-error" />
-        )}
+        <QueryError what="this task" onRetry={() => review.refetch()} retrying={review.isFetching} error={review.error} testId="task-error" back={{ label: 'Back to Human Tasks', href: '/reviews' }} />
       </PageLayout>
     );
 

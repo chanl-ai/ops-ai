@@ -34,6 +34,16 @@ const isRail = (text, m) => /(^|\s)shrink-0(\s|$)/.test(classesAround(text, m.in
 const baselinePath = join(root, 'scripts/palette-baseline.json');
 const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
 const counts = {};
+// Rule 18: an identifier drawn as JSX text (`{step.nodeId}`, `{c.operation}`, `{error.tool}`), or the operation badge.
+const SELF_WORDED = /(?<![=\w$])\{\s*[\w.?]+\.(?:nodeId|operation|tool)\s*\}|<OperationBadge\b/g;
+const SELF_WORDED_OK = new Set([
+  'components/workflows/run-journal/step-sheet.tsx',
+  'app/logs/tool-calls/page.tsx',
+  'components/logs/tool-call-sheet.tsx',
+  'components/tools/executions-table.tsx',
+  'components/tools/versions-panel.tsx',
+  'app/settings/security/secrets/page.tsx',
+]);
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const report = (f, index, rule) => violations.push(`${f.rel}:${lineOf(f.text, index)}  ${rule}`);
 
@@ -63,6 +73,13 @@ for (const f of files) {
   // 4. Only the API entry reads env. proxy.ts also reads the server-side switch that lets a use-case run open /dev and /preview.
   if (f.rel !== 'src/lib/api/index.ts' && f.rel !== 'src/proxy.ts') {
     for (const m of text.matchAll(/process\.env\.(?!NODE_ENV)/g)) report(f, m.index, 'reads process.env outside src/lib/api/index.ts');
+  }
+
+  // 17. Reads go through hooks/team-query.ts (c-505): a raw React Query read neither waits for the person's team nor
+  //     keys its answer by team, so it can ask for a team they do not hold or show one team's data in another.
+  if (f.rel !== 'src/hooks/team-query.ts') {
+    for (const m of text.matchAll(/import\s*\{[^}]*\b(useQuery|useInfiniteQuery|useQueries|useSuspenseQuery|useSuspenseInfiniteQuery|useSuspenseQueries)\b[^}]*\}\s*from\s*['"]@tanstack\/react-query['"]/g))
+      report(f, m.index, `imports ${m[1]} from @tanstack/react-query (use useTeamQuery, useTeamInfiniteQuery or useSessionQuery from @/hooks/team-query)`);
   }
 
   if (isUi(f)) continue;
@@ -107,6 +124,25 @@ for (const f of files) {
     const first = hits.sort((a, b) => a.index - b.index)[0];
     report(f, first.index, `${hits.length} raw palette classes or fixed px widths, ${allowed} allowed (use the success, warning and destructive tokens and fluid widths)`);
   } else if (hits.length < allowed) notes.push(`${f.rel}: ${hits.length} of ${allowed} allowed; run with --write-baseline to lock the drop in`);
+
+  // 18. Steps are worded once, by the API (agents-service run_story.lines, c-500): a page that tells people what a run
+  //     did draws those lines (StoryFeed) and never prints a step's node id, its operation or a call's tool name as
+  //     text. Builder and audit views show what was built or called, by path. Its reach is console TSX only; rule 19
+  //     covers task files that word a call's input keys.
+  if (/^src\/(app|components)\/.*\.tsx$/.test(f.rel) && !SELF_WORDED_OK.has(f.rel.slice(4))) {
+    for (const m of text.matchAll(SELF_WORDED)) report(f, m.index, 'prints a step or tool name itself (draw the API\'s story lines through StoryFeed)');
+  }
+
+  // 19. A Human Task never words a call's input keys itself (c-508): the API sends each write's fields as the operation
+  //     labels them (write_preview.fields from describe_call). A camelCase-splitting humaniser in a task file is that
+  //     wording done in the browser.
+  if (/^src\/components\/tasks\/.*\.tsx?$/.test(f.rel)) {
+    for (const m of text.matchAll(/\.replace\(\/\(\[a-z\]\)\(\[A-Z\]\)\/g/g)) report(f, m.index, "words a call's input keys itself (draw the API's write_preview.fields)");
+  }
+
+  // 20. No mock pages in the console (c-517): a design mock is HTML in the docs (:3009), never a console route, so what
+  //     is reviewed is what ships. human-tasks stays until the owner picks its layout.
+  if (/^src\/app\/preview\//.test(f.rel) && !/^src\/app\/preview\/human-tasks\//.test(f.rel)) report(f, 0, 'is a preview page (draw design mocks as HTML in the docs; ship the real page)');
 
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');

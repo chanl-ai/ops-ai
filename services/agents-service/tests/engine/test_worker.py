@@ -1,6 +1,6 @@
 """The runner through its queue on PostgreSQL, by failure mode: a run that runs without a worker or is lost without
-one, a review decision that does not resume it, a second decision that resumes it twice, two workers on one row, and
-a dead worker's row never picked up again."""
+one, a review decision that does not resume it, a second decision that resumes it twice, two workers on one row, a
+dead worker's row never picked up again, and a pass that writes as another team than its run's."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.api import engine_reviews
 from ops_agents.api.auth import Principal
 from ops_agents.api.engine_host import RunEvents, RunReviews, ThreadLeases
+from ops_agents.api.worker import engine_pass, enter_run
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.leases import Leases
@@ -29,9 +30,10 @@ from ops_engine.ports import Access, EnginePorts, ToolResult
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.ids import new_id
+from ops_store import isolation
 
-# The dev header caller, which decides for any team.
-M = Principal(name="m@x", email="m@x", team_id="team_ops", tenant_id="local")
+# The dev caller in team_a, the team the engine tests run their workflows in: it decides only that team's reviews.
+M = Principal(name="m@x", email="m@x", team_id="team_a", tenant_id="local", team_ids=("team_a",), dev=True)
 
 BASIC = parse((Path(__file__).parents[1] / "fixtures" / "engine" / "basic.yaml").read_text())
 
@@ -74,6 +76,8 @@ def worker(engine: AsyncEngine, tools: CountingTools, saver: InMemorySaver, *, t
         checkpointer=saver,
         run_scope=tenant_scope,
         owner=owner,
+        # Each pass in its run's team, as the service's worker does: a typed step reads its team's task types.
+        enter_run=enter_run,
     )
     return Worker(host)
 
@@ -274,3 +278,62 @@ async def test_a_write_in_doubt_past_the_retry_cap_fails_the_run(engine: AsyncEn
         run = await RunStore(EngineTransactions(engine)).get(run_id) or {}
     assert run["status"] == "failed" and "doubt" in str(run["error"]), run
     assert not [k for k in tools.calls if k.startswith(run_id)], "never re-sent"
+
+
+class TeamTools(CountingTools):
+    """Notes the team each tool call acts as: its service token names that team to tools-service."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.teams: list[str | None] = []
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.teams.append(isolation.team())
+        return await super().call(operation, input, key, generation, token)
+
+
+class TeamEvents(RunEvents):
+    """The real event log, noting the team each append's transaction acts as."""
+
+    def __init__(self, log_: EventLog) -> None:
+        super().__init__(log_)
+        self.teams: list[str | None] = []
+
+    async def append(
+        self, run_id: str, team_id: str, type_: str, node: str | None, data: Any, *, generation: int | None = None
+    ) -> None:
+        self.teams.append(isolation.team())
+        await super().append(run_id, team_id, type_, node, data, generation=generation)
+
+
+async def test_a_pass_acts_as_its_runs_team_whatever_team_the_claiming_loop_holds(engine: AsyncEngine) -> None:
+    """A run of team_a claimed by a loop whose context names team_other: the pass enters team_a before its first
+    event and tool call (enter_run), as the database's team policy requires of a team-owned write. Without it the pass
+    acts for no team, and a worker whose transactions did not name the run's team failed its first event on the
+    policy (fb-16aa519c)."""
+    tenant, tools, saver = f"t-{uuid4().hex[:8]}", TeamTools(), InMemorySaver()
+    run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
+    owner = f"test-{uuid4().hex[:6]}"
+    events = TeamEvents(EventLog(engine))
+    host = WorkerHost(
+        tx=EngineTransactions(engine),
+        registry=default_registry(),
+        ports=EnginePorts(tools=tools, reviews=RunReviews()),
+        leases=ThreadLeases(Leases(engine, owner=owner, ttl=6.0)),
+        events=events,
+        checkpointer=saver,
+        run_scope=engine_pass,
+        owner=owner,
+        enter_run=enter_run,
+    )
+    with isolation.scope(tenant, "team_other"):
+        await drain(Worker(host))
+    with tenant_scope(tenant):
+        run = await RunStore(EngineTransactions(engine)).get(run_id) or {}
+        written = await EventLog(engine).run_events(run_id, run_id, 0)
+    assert run["status"] == "waiting"
+    assert events.teams and set(events.teams) == {"team_a"}, events.teams
+    assert tools.teams == ["team_a"]
+    assert written and written[0]["type"] == "started"

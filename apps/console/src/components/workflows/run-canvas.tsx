@@ -4,7 +4,10 @@ import * as React from 'react';
 import { Background, BackgroundVariant, type Edge, Panel, ReactFlow, ReactFlowProvider, useNodesInitialized, useNodesState, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { connectionId, indexTypes, inPorts, outPorts, repeatsOver, typeKey, withPositions } from '@/components/workflows/definition-editor/graph';
+import { connectionId, definitionNodeData, indexTypes, typeKey } from '@/components/workflows/definition-editor/graph';
+import { RoutedLines, routedEdgeTypes } from '@/components/workflows/definition-editor/routed-edge';
+import { useLayout } from '@/components/workflows/layout/use-layout';
+import { Skeleton } from '@/components/ui/skeleton';
 import { type DefinitionFlowNode, definitionNodeTypes, type RunMark } from '@/components/workflows/definition-editor/definition-node';
 import { CanvasControls } from '@/components/workflows/canvas-controls';
 import { MIN_ZOOM, readableFit } from '@/components/workflows/definition-editor/canvas-view';
@@ -42,8 +45,9 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
     steps.forEach((s, i) => m.set(s.nodeId, i));
     return m;
   }, [steps]);
-  // The editor's layout, so a definition the server stored unplaced (every node at 0,0) is drawn as the editor draws it.
-  const laid = React.useMemo(() => withPositions(definition), [definition]);
+  // The editor's layout (layout/use-layout.ts), so a definition with unplaced steps is drawn as the editor draws it.
+  const placed = useLayout(definition, types);
+  const laid = placed ?? definition;
 
   const built = React.useMemo<DefinitionFlowNode[]>(
     () =>
@@ -56,19 +60,7 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
           position: n.position ?? { x: 0, y: 0 },
           draggable: false,
           connectable: false,
-          data: {
-            nodeId: n.id,
-            title: n.name || t?.label || n.id,
-            typeLabel: t ? t.label : `${n.type} · version ${n.typeVersion}`,
-            repeats: repeatsOver(n.parameters, definition.nodes),
-            group: t?.group ?? null,
-            inputs: t ? inPorts(t) : [],
-            outputs: t ? outPorts(t, n.parameters) : [],
-            unknown: !t,
-            hasError: false,
-            typeId: n.type,
-            run: runMark(index === undefined ? undefined : steps[index], runStatus),
-          },
+          data: { ...definitionNodeData(n, t, definition.nodes), run: runMark(index === undefined ? undefined : steps[index], runStatus) },
         };
       }),
     [laid, typeIndex, lastStep, steps, runStatus, definition.nodes],
@@ -92,7 +84,7 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
       sourceHandle: c.from.port,
       target: c.to.node,
       targetHandle: c.to.port,
-      type: 'smoothstep',
+      type: 'routed',
       animated: taken && runStatus === 'running',
       style: taken ? { strokeWidth: 2.5, stroke: 'var(--primary)' } : { opacity: 0.35, strokeDasharray: '4 4' },
       data: { taken },
@@ -107,18 +99,21 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
   const triggerId = laid.nodes.find((n) => typeIndex.get(typeKey(n.type, n.typeVersion))?.group === 'trigger')?.id;
   const fitted = React.useRef(false);
   React.useEffect(() => {
-    if (measured && !fitted.current) {
+    if (measured && placed && !fitted.current) {
       fitted.current = true;
       readableFit(flow, canvasRef.current, triggerId);
     }
-  }, [measured, flow, triggerId]);
+  }, [measured, placed, flow, triggerId]);
 
+  if (!placed) return <Skeleton className="h-112 rounded-lg" data-testid="run-canvas-loading" />;
   return (
     <div ref={canvasRef} className="h-112 overflow-hidden rounded-lg border" data-testid="run-canvas">
+      <RoutedLines nodes={nodes}>
       <ReactFlow<DefinitionFlowNode, Edge>
         nodes={nodes}
         edges={edges}
         nodeTypes={definitionNodeTypes}
+        edgeTypes={routedEdgeTypes}
         onNodesChange={onNodesChange}
         nodesDraggable={false}
         nodesConnectable={false}
@@ -138,6 +133,7 @@ function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasPr
           <CanvasControls />
         </Panel>
       </ReactFlow>
+      </RoutedLines>
     </div>
   );
 }

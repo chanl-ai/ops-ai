@@ -335,7 +335,7 @@ await withUiStack(
       check(
         '11 the Activity tab shows actor, decision and outcome for each call',
         // The person who asked is not on the row yet: the caller is the verified agents service until the runner signs
-        // a run context naming the user (.codeloop/wiki/concepts/data-and-ai-gateways.md 4.3, planned).
+        // a run context naming the user (the data gateway's run context, planned).
         !!write && /m\.okafor@harborpinebank\.com/.test(text) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
         { row: text.replace(/\s+/g, ' ').slice(0, 300), runLink, thread, approval: write?.approval, subject: write?.subject, actor: write?.actor },
       );

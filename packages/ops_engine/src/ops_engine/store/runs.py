@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_work
@@ -92,6 +93,7 @@ class RunStore:
     async def by_key(self, workflow_id: str, run_key: str) -> dict[str, Any] | None:
         q = engine_runs.select().where(
             engine_runs.c.tenant_id == self.tx.tenant(),
+            team_visible(engine_runs),
             engine_runs.c.workflow_id == workflow_id,
             engine_runs.c.run_key == run_key,
         )
@@ -100,7 +102,9 @@ class RunStore:
         return dict(row) if row else None
 
     async def get(self, run_id: str) -> dict[str, Any] | None:
-        q = engine_runs.select().where(engine_runs.c.id == run_id, engine_runs.c.tenant_id == self.tx.tenant())
+        q = engine_runs.select().where(
+            engine_runs.c.id == run_id, engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)
+        )
         async with self.tx.tenant_tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
@@ -109,14 +113,16 @@ class RunStore:
         """The tenant's runs among `run_ids`, in one query (a step's started children, up to its item limit)."""
         if not run_ids:
             return []
-        q = engine_runs.select().where(engine_runs.c.id.in_(run_ids), engine_runs.c.tenant_id == self.tx.tenant())
+        q = engine_runs.select().where(
+            engine_runs.c.id.in_(run_ids), engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)
+        )
         async with self.tx.tenant_tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def list(
         self, *, workflow_id: str | None = None, status: str | None = None, team_id: str | None = None, limit: int = 200
     ) -> list[dict[str, Any]]:
-        q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant())
+        q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs))
         if workflow_id:
             q = q.where(engine_runs.c.workflow_id == workflow_id)
         if status:
@@ -139,7 +145,7 @@ class RunStore:
         """One page of runs, newest first, each with `workflow_name`, plus the total that matches and the count per
         status. The status counts leave the status filter out, so a filter chip shows how many runs choosing it would
         list."""
-        base = [engine_runs.c.tenant_id == self.tx.tenant()]
+        base = [engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)]
         if workflow_id:
             base.append(engine_runs.c.workflow_id == workflow_id)
         if team_id:
@@ -190,7 +196,9 @@ class RunStore:
         at = now_iso()
         async with self.tx.tenant_tx() as c:
             await self.tx.check_fence(c, run_id, generation)
-            mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), r.c.status != "cancelled")
+            mine = sa.and_(
+                r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status != "cancelled"
+            )
             await c.execute(sa.select(r.c.id).where(mine).with_for_update())
             status = "failed" if failed else (await self._children_left(c, run_id) or "succeeded")
             done = status in TERMINAL
@@ -222,7 +230,7 @@ class RunStore:
             at = now_iso()
             wake: tuple[str, str, str | None] | None = None
             async with self.tx.tenant_tx() as c:
-                mine = sa.and_(r.c.id == parent_id, r.c.tenant_id == self.tx.tenant())
+                mine = sa.and_(r.c.id == parent_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
                 query = sa.select(r.c.status, r.c.outcome, r.c.waiting).where(mine).with_for_update()
                 found = (await c.execute(query)).first()
                 if found is None or found.status in TERMINAL:
@@ -233,7 +241,7 @@ class RunStore:
                     if waits.get("kind") != "children":
                         return
                     child = str(here["id"])
-                    mine_child = sa.and_(r.c.id == child, r.c.tenant_id == self.tx.tenant())
+                    mine_child = sa.and_(r.c.id == child, r.c.tenant_id == self.tx.tenant(), team_visible(r))
                     now = await c.scalar(sa.select(r.c.status).where(mine_child))
                     # The pause it wakes, by interrupt id: a wake for one pass of the step never resumes a later one.
                     pause = cast(str | None, waiting.get("interruptId"))
@@ -262,6 +270,7 @@ class RunStore:
         columns = [r.c.id, r.c.status, r.c.outcome, r.c.run_key, *([r.c.output] if outputs else [])]
         q = sa.select(*columns).where(
             r.c.tenant_id == self.tx.tenant(),
+            team_visible(r),
             r.c.created_by == f"{CHILD_PREFIX}{parent_run_id}",
             r.c.run_key.startswith(key_prefix, autoescape=True),
         )
@@ -283,7 +292,7 @@ class RunStore:
         """waiting when a run this one started waits on a person, running when one is otherwise unfinished. Each is
         an EXISTS on (tenant_id, created_by, status), so a parent with many runs is not reread on every change."""
         r = engine_runs
-        mine = sa.and_(r.c.tenant_id == self.tx.tenant(), r.c.created_by == f"{CHILD_PREFIX}{run_id}")
+        mine = sa.and_(r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.created_by == f"{CHILD_PREFIX}{run_id}")
         for status, among in (("waiting", ["waiting"]), ("running", ["queued", "running"])):
             if await c.scalar(sa.select(sa.exists().where(mine, r.c.status.in_(among)))):
                 return status
@@ -297,7 +306,7 @@ class RunStore:
         at = now_iso()
         r, w = engine_runs, engine_work
         async with self.tx.tenant_tx() as c:
-            mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant())
+            mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
             found = (await c.execute(sa.select(r.c.status).where(mine).with_for_update())).first()
             if found is None:
                 return None, False

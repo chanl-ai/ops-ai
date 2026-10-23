@@ -10,7 +10,7 @@ union inside one transaction. Which teams a kind is read in is decided by the ca
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -18,9 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_engine import default_registry
 from ops_engine.store.tables import engine_definitions, engine_runs, engine_steps, engine_work
 from ops_store import Guarantee
+from ops_store.background import PROCESSES
 from ops_store.team_scope import team_visible
 
 from .agent_registry import publish_requests
+from .background import background_jobs
 from .cases import case_events, cases
 from .events import thread_events
 from .graphs import graph_threads
@@ -32,7 +34,16 @@ from .trigger_events import trigger_events
 from .widget_deployments import widget_deployments
 
 Kind = Literal[
-    "workflow_run", "agent_run", "chat", "email", "decision", "tool_call", "case", "system_workflow", "reminder"
+    "workflow_run",
+    "agent_run",
+    "chat",
+    "email",
+    "decision",
+    "tool_call",
+    "case",
+    "system_workflow",
+    "reminder",
+    "background",
 ]
 KINDS: tuple[Kind, ...] = (
     "workflow_run",
@@ -44,15 +55,17 @@ KINDS: tuple[Kind, ...] = (
     "case",
     "system_workflow",
     "reminder",
+    "background",
 )
-# A case entry as a sentence, by its kind (store/cases.py EventKind). A `decision` entry is left out: the decision is
-# already its own row, read from what the decide route queued.
+# A case entry by its kind alone (store/cases.py EventKind), for search and sort; the Activity route words each row
+# from its detail with case_wording, as the case page does. A `decision` entry is left out: the decision is already
+# its own row, read from what the decide route queued.
 CASE_ENTRY = {
     "opened": "Opened the case",
     "run": "Added a run",
     "chat": "Added a chat",
     "note": "Added a note",
-    "field": "Changed its fields",
+    "field": "Changed a field",
     "link": "Linked another case",
 }
 STATUSES = ("running", "waiting", "done", "failed", "skipped")
@@ -64,12 +77,12 @@ NEW_CHAT = "New chat"
 
 @dataclass(frozen=True)
 class Scope:
-    """Where the caller may read each kind. `teams[kind]` None means every team (a dev caller); a kind missing reads
-    nothing. A chat is read in `chat_all` teams whoever started it and in the others only when `owner` started it."""
+    """Where the caller may read each kind, by team; a kind missing reads nothing. A chat is read in `chat_all` teams
+    whoever started it and in the others only when `owner` started it."""
 
-    teams: dict[str, tuple[str, ...] | None]
+    teams: dict[str, tuple[str, ...]]
     owner: str
-    chat_all: tuple[str, ...] | None = ()
+    chat_all: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -92,8 +105,8 @@ class Page:
     by_status: dict[str, int] = field(default_factory=dict[str, int])
 
 
-def _in_teams(column: sa.ColumnElement[Any], teams: tuple[str, ...] | None) -> sa.ColumnElement[bool]:
-    return sa.true() if teams is None else column.in_(teams)
+def _in_teams(column: sa.ColumnElement[Any], teams: tuple[str, ...]) -> sa.ColumnElement[bool]:
+    return column.in_(teams)
 
 
 def _starter(r: sa.Table) -> sa.ColumnElement[Any]:
@@ -101,7 +114,7 @@ def _starter(r: sa.Table) -> sa.ColumnElement[Any]:
     return sa.case((r.c.started_via.is_not(None), r.c.created_by + " via " + r.c.started_via), else_=r.c.created_by)
 
 
-def _workflow_runs(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _workflow_runs(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     r, d = engine_runs, engine_definitions
     named = r.outerjoin(
         d, sa.and_(d.c.tenant_id == r.c.tenant_id, d.c.workflow_id == r.c.workflow_id, d.c.version == r.c.version)
@@ -151,10 +164,7 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     if kind == "chat":
         title = sa.func.coalesce(meta["title"].as_string(), NEW_CHAT)
         own = meta["ownerEmail"].as_string() == scope.owner
-        if scope.chat_all is None:
-            readable: sa.ColumnElement[bool] = sa.true()
-        else:
-            readable = sa.or_(t.c.team_id.in_(scope.chat_all), own)
+        readable = sa.or_(t.c.team_id.in_(scope.chat_all), own)
         where = [is_chat, shown, readable]
     else:
         title = agent_name
@@ -162,7 +172,7 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     where.append(team_visible(t))
     # A chat started from an embedded widget belongs to that widget's channel; one in the console, to its agent.
     w = widget_deployments
-    joined = t.outerjoin(w, sa.and_(w.c.tenant_id == t.c.tenant_id, w.c.id == t.c.deployment_id))
+    joined = t.outerjoin(w, sa.and_(w.c.tenant_id == t.c.tenant_id, w.c.id == t.c.deployment_id, team_visible(w)))
     from_widget = t.c.deployment_id.is_not(None)
     return (
         sa.select(
@@ -185,11 +195,11 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
             t.c.id.label("ref_id"),
         )
         .select_from(joined)
-        .where(t.c.tenant_id == current_tenant(), _in_teams(t.c.team_id, scope.teams.get(kind)), *where)
+        .where(t.c.tenant_id == current_tenant(), _in_teams(t.c.team_id, scope.teams.get(kind, ())), *where)
     )
 
 
-def _emails(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _emails(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """An email names its channel by the mailbox record's id and name; by its address when the record is gone."""
     e, m = trigger_events, mailboxes
     address = sa.func.substr(e.c.source, len("email:") + 1)
@@ -215,7 +225,7 @@ def _emails(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
     )
 
 
-def _workflow_decisions(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _workflow_decisions(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """A person's decision on a workflow's Human Task: the resume work row it queued for the run."""
     w, r, d = engine_work, engine_runs, engine_definitions
     joined = w.join(r, sa.and_(r.c.tenant_id == w.c.tenant_id, r.c.id == w.c.run_id)).outerjoin(
@@ -250,7 +260,7 @@ def _workflow_decisions(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, 
     )
 
 
-def _agent_decisions(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _agent_decisions(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """A person's decision on an agent's approval (a v1 review), on the thread that asked for it."""
     v, t = review_decisions, graph_threads
     joined = v.outerjoin(t, sa.and_(t.c.tenant_id == v.c.tenant_id, t.c.id == v.c.thread_id))
@@ -289,7 +299,7 @@ def _thread_tool_calls(scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     chat_teams, agent_teams = scope.teams.get("chat", ()), scope.teams.get("agent_run", ())
     chat_ok = sa.and_(
         _in_teams(t.c.team_id, chat_teams),
-        sa.true() if scope.chat_all is None else sa.or_(t.c.team_id.in_(scope.chat_all), own),
+        sa.or_(t.c.team_id.in_(scope.chat_all), own),
     )
     visible = sa.or_(sa.and_(is_chat, chat_ok), sa.and_(sa.not_(is_chat), _in_teams(t.c.team_id, agent_teams)))
     status = e.c.data["status"].as_string()
@@ -325,7 +335,7 @@ def _thread_tool_calls(scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     )
 
 
-def _workflow_tool_calls(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _workflow_tool_calls(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """A tool a workflow's step called: one row per attempt, since each attempt reached the tool gateway."""
     s, r = engine_steps, engine_runs
     joined = s.join(r, sa.and_(r.c.tenant_id == s.c.tenant_id, r.c.id == s.c.run_id))
@@ -356,7 +366,7 @@ def _workflow_tool_calls(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any,
     )
 
 
-def _case_entries(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _case_entries(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """What was done on a case: opened, a run or chat added, a note, a field changed, a case linked."""
     e, k = case_events, cases
     joined = e.join(k, sa.and_(k.c.tenant_id == e.c.tenant_id, k.c.id == e.c.case_id))
@@ -387,7 +397,7 @@ SYSTEM_UPDATED = "system_workflow.updated"
 SYSTEM_UPDATE_AVAILABLE = "system_workflow.update_available"
 
 
-def _system_workflows(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _system_workflows(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """A shipped system workflow moved to a new version, or one a person published differs from a newer shipped one.
     A system workflow belongs to no team, so a caller sees these where they may view workflows in any team asked
     about. An update's status is its publish request's now, not the one recorded when it was opened: a review decided
@@ -432,7 +442,7 @@ def _system_workflows(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ..
         .where(
             e.c.tenant_id == current_tenant(),
             e.c.name.in_((SYSTEM_UPDATED, SYSTEM_UPDATE_AVAILABLE)),
-            sa.true() if teams is None or teams else sa.false(),
+            sa.true() if teams else sa.false(),
         )
     )
 
@@ -441,7 +451,7 @@ def _system_workflows(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ..
 REMINDER = "task.reminder"
 
 
-def _reminders(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
+def _reminders(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """Each reminder on a waiting review: the step's title and the hours it had waited, waiting while the run still
     waits and done once it has moved on, in the run's team."""
     e, r = service_events, engine_runs
@@ -478,6 +488,27 @@ def _reminders(teams: tuple[str, ...] | None) -> sa.Select[*tuple[Any, ...]]:
     )
 
 
+def _background_jobs(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
+    """What a background process did for the team (c-516): its own sentence, under the process's name."""
+    j = background_jobs
+    title = sa.case(*((j.c.process == p.key, p.title) for p in PROCESSES), else_=j.c.process)
+    return sa.select(
+        sa.literal("background").label("kind"),
+        j.c.id.label("row_id"),
+        j.c.summary.label("title"),
+        sa.case((j.c.outcome == "failed", "failed"), else_="done").label("status"),
+        j.c.outcome.label("outcome"),
+        j.c.team_id.label("team_id"),
+        sa.literal("process").label("source_type"),
+        j.c.process.label("source_id"),
+        title.label("source_name"),
+        (sa.literal("background/") + j.c.process).label("actor"),
+        j.c.at.label("at"),
+        sa.literal("process").label("ref_kind"),
+        j.c.process.label("ref_id"),
+    ).where(j.c.tenant_id == current_tenant(), _in_teams(j.c.team_id, teams))
+
+
 def _on_case(a: sa.Subquery, case_id: str, team: str) -> sa.ColumnElement[bool]:
     """The case's own entries, and every row whose run or chat the case links, in the case's team only."""
     linked = sa.select(case_events.c.ref).where(
@@ -512,6 +543,8 @@ def union(scope: Scope) -> sa.Subquery:
         parts.append(_system_workflows(scope.teams["system_workflow"]))
     if "reminder" in scope.teams:
         parts.append(_reminders(scope.teams["reminder"]))
+    if "background" in scope.teams:
+        parts.append(_background_jobs(scope.teams["background"]))
     if not parts:
         parts.append(_workflow_runs(()))  # reads nothing, but keeps the query's shape
     return sa.union_all(*parts).subquery("activity")
@@ -522,6 +555,45 @@ class Activity:
 
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
+
+    async def calls(self, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """The call behind each tool-call row of a page, `{tool, input}` keyed by the row's id: a workflow step's
+        journaled input and a chat tool's event data, read in one query each, so the page words them without a read
+        per row. The rows were already read in the caller's scope; these reads only follow their ids."""
+        steps: list[tuple[str, str, int, int]] = []
+        events: list[str] = []
+        for r in rows:
+            if r["kind"] != "tool_call":
+                continue
+            rid = str(r["row_id"])
+            if r["source_type"] == "workflow":
+                head, iteration, attempt = rid.rsplit(":", 2)
+                run_id, _, node = head.partition(":")
+                steps.append((run_id, node, int(iteration), int(attempt)))
+            else:
+                events.append(rid)
+        out: dict[str, dict[str, Any]] = {}
+        async with tenant_tx(self.engine) as c:
+            if steps:
+                s = engine_steps
+                key = sa.tuple_(s.c.run_id, s.c.node_id, s.c.iteration, s.c.attempt)
+                q = sa.select(s.c.run_id, s.c.node_id, s.c.iteration, s.c.attempt, s.c.input).where(
+                    s.c.tenant_id == current_tenant(), key.in_(steps)
+                )
+                for run_id, node, iteration, attempt, given in (await c.execute(q)).all():
+                    g = cast(dict[str, Any], given) if isinstance(given, dict) else {}
+                    call: dict[str, Any] = {"tool": str(g.get("operation") or node), "input": g.get("input") or {}}
+                    out[f"{run_id}:{node}:{iteration}:{attempt}"] = call
+            if events:
+                e = thread_events
+                # The row ids came from the caller's page, but an event id read on its own crosses teams.
+                q = sa.select(e.c.id, e.c.data).where(
+                    e.c.tenant_id == current_tenant(), e.c.id.in_(events), team_visible(e)
+                )
+                for event_id, data in (await c.execute(q)).all():
+                    d = cast(dict[str, Any], data) if isinstance(data, dict) else {}
+                    out[str(event_id)] = {"tool": str(d.get("tool") or "tool"), "input": d.get("input") or {}}
+        return out
 
     async def page(self, scope: Scope, filters: Filters, *, page: int, page_size: int) -> Page:
         a = union(scope)

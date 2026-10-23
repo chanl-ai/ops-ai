@@ -59,6 +59,7 @@ from ..store.tenancy import current_team
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .event_log import designed_type
+from .review_text import call_label
 from .runs import graph_store
 
 CHAT_GRAPH = "agent_wrapper"
@@ -129,6 +130,7 @@ class AssistantBuilder:
             title=fill(tpl.title, values) if tpl else str(p.get("tool")),
             app=str(p.get("server") or ""),
             tool=str(p.get("tool")),
+            tool_label=call_label(self.catalog, {"tool": p.get("tool"), "input": p.get("input")}),
             as_of=now_iso(),
             review_id=str(p.get("review_id")),
             action=str(p.get("action") or ""),
@@ -190,7 +192,14 @@ class AssistantBuilder:
                     out.append(PartEvent(part=part))
                 elif view and _d(data).get("status") == "ok":
                     widget = RecordWidget.model_validate(
-                        {**_d(view), "id": f"wg_{call.id}", "app": call.server, "tool": call.name, "as_of": m.at}
+                        {
+                            **_d(view),
+                            "id": f"wg_{call.id}",
+                            "app": call.server,
+                            "tool": call.name,
+                            "tool_label": call_label(self.catalog, {"tool": call.name, "input": call.input}),
+                            "as_of": m.at,
+                        }
                     )
                     m.widgets = [*(m.widgets or []), widget]
                     out.append(WidgetEvent(widget=widget))

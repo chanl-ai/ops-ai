@@ -54,7 +54,7 @@ const columns: ColumnDef<Row>[] = [
     meta: { kind: 'description' },
     cell: ({ row }) =>
       row.original.outcome ? (
-        <span data-testid={`run-outcome-${row.original.id}`}>{row.original.outcome.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase())}</span>
+        <span data-testid={`run-outcome-${row.original.id}`}>{row.original.outcomeText ?? row.original.outcome}</span>
       ) : row.original.error ? (
         <span className="text-destructive" title={row.original.error} data-testid={`run-outcome-${row.original.id}`}>
           {row.original.error}
@@ -85,7 +85,7 @@ export function RunnerRuns() {
   const workflowOptions = (workflows?.data ?? []).filter((w) => w.engine === 'v2').map((w) => ({ label: w.name, value: w.id }));
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
-  if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} retrying={query.isFetching} testId="runner-runs-error" />;
+  if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="runner-runs-error" />;
   return (
     <div className="flex flex-col gap-4" data-testid="runner-runs">
       {query.isError && (

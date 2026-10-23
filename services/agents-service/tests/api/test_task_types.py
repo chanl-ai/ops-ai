@@ -46,7 +46,7 @@ async def test_seeded_types_are_listed_and_changed_only_by_an_admin(c: AsyncClie
     record = ok(await c.get("/v1/task-types/write_approval", headers=VIEWER))["versions"][0]["record"]
     res = await c.put("/v1/task-types/write_approval/draft", json=record, headers=BUILDER)
     assert res.status_code == 403 and res.json()["error"]["code"] == "system_record", res.text
-    assert seed["teamId"] is None
+    assert seed["teamId"] == "team_ops", "each team holds its own copy of a seeded type"
     # A system record as any other (register E05, tick 30): admins change it, decided by can(), not by its origin.
     ok(await c.put("/v1/task-types/write_approval/draft", json=record, headers=ADMIN))
 
@@ -139,7 +139,7 @@ async def test_a_newer_seed_version_reaches_a_tenant_that_has_the_old_one() -> N
         await conn.run_sync(metadata.create_all)
     seed = next(s for s in tt.seeds() if s["id"] == "generic_decision")
     with tenant_scope("t1"):
-        store = TaskTypeStore(db)
+        store = TaskTypeStore(db, "team_ops")
         await store.ensure_seeds([{**seed, "version": 1}])
         await store.ensure_seeds([{**seed, "version": 2, "name": "Decision v2"}])
         assert (await store.published("generic_decision"))[0] == 2

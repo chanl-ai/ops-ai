@@ -136,7 +136,7 @@ export default function ReviewsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="the review queue" onRetry={() => query.refetch()} retrying={query.isFetching} testId="reviews-error" />
+        <QueryError what="the review queue" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="reviews-error" />
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={4}>

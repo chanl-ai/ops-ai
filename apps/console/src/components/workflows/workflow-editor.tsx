@@ -28,6 +28,7 @@ import { type GraphIssue, graphIssues } from './graph-checks';
 import { diffGraphs } from './graph-diff';
 import { EmailConfigContext } from './email-config-context';
 import { RequestPublishDialog } from './request-publish-dialog';
+import { LockedReason } from '@/components/shared/locked-reason';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { announcePublish } from '@/components/shared/publish-result';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -575,7 +576,10 @@ function EditorInner({ workflow, reviewerGroups, slaOptions, agents, toolOptions
             <Button size="sm" variant="outline" className="border-warning/50 text-warning-text" asChild>
               <Link href={`/reviews?review=${workflow.pendingPublish.reviewId}`}>Awaiting approval · v{workflow.pendingPublish.toVersion}</Link>
             </Button>
-          ) : readOnly || canPublish === false ? null : (
+          ) : canPublish === false && (!readOnly || workflow.status === 'draft') ? (
+            // Someone who may not publish a draft sees why and who can, rather than no Publish at all, as on an agent (c-150).
+            <LockedReason area="workflows" action="publish" label="Publish…" size="sm" />
+          ) : readOnly ? null : (
             <Button
               size="sm"
               disabled={!dirty && workflow.status !== 'draft'}

@@ -31,6 +31,8 @@ interface WidgetBase {
   app: string;
   /** The tool call whose result the widget renders. */
   tool: string;
+  /** The tool's action in words (agents-service call_label, c-508); the footer shows this, never `tool`. */
+  toolLabel: string;
   /** When the data was read from the system of record. */
   asOf: string;
 }

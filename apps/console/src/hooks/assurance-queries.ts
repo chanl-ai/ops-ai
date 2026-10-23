@@ -1,10 +1,11 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { AssuranceFilters, AssuranceTab } from '@/lib/types/assurance';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 export const ak = {
   list: (p: unknown) => ['assurance', 'list', p] as const,
@@ -15,7 +16,7 @@ export const ak = {
  * paging within a tab but not across tabs, because another tab's rows have a different shape.
  */
 export const useAssurance = <K extends AssuranceTab>(p: ListParams<AssuranceFilters> & { tab: K }) =>
-  useQuery({
+  useTeamQuery({
     queryKey: ak.list(p),
     queryFn: () => api.assurance.list(p),
     placeholderData: (prev, prevQuery) => ((prevQuery?.queryKey[2] as { tab?: string } | undefined)?.tab === p.tab ? prev : undefined),

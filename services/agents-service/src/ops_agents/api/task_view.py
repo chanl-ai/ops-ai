@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from ops_engine.store import RunStore
+from ops_store.team_scope import acting_team
 
 from .. import task_types as tt
 from ..store.cases import CaseStore
@@ -16,7 +17,7 @@ from ..store.task_assists import TaskAssistStore
 from ..store.task_types import TaskTypeNotFound
 from . import task_assist
 from .deps import Runtime
-from .review_text import shown
+from .review_text import describe_call, shown
 from .task_type_seeds import task_type_store
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$")
@@ -42,16 +43,17 @@ class TaskReads:
 
     def __init__(self, rt: Runtime, runs: list[dict[str, Any]], step_ids: list[str]) -> None:
         self.rt, self.runs, self.step_ids = rt, runs, step_ids
-        self._types: dict[tuple[str, int | None], tuple[int, dict[str, Any]] | TaskTypeNotFound] = {}
+        self._types: dict[tuple[str | None, str, int | None], tuple[int, dict[str, Any]] | TaskTypeNotFound] = {}
         self._assists: dict[str, tuple[dict[str, Any], str]] | None = None
         self._cases: dict[str, list[dict[str, Any]]] | None = None
         self._steps: dict[str, list[dict[str, Any]]] = {}
 
-    async def published(self, type_id: str, version: int | None) -> tuple[int, dict[str, Any]]:
-        key = (type_id, version)
+    async def published(self, type_id: str, version: int | None, team: str | None = None) -> tuple[int, dict[str, Any]]:
+        """A task type as the team of the run it serves reads it (`team`), or as the acting team."""
+        key = (team, type_id, version)
         if key not in self._types:
             try:
-                self._types[key] = await (await task_type_store(self.rt)).published(type_id, version)
+                self._types[key] = await (await task_type_store(self.rt, team)).published(type_id, version)
             except TaskTypeNotFound as e:
                 self._types[key] = e
         found = self._types[key]
@@ -92,7 +94,7 @@ async def typed_task(
     step = str(payload.get("step_id") or "")
     reads = reads or TaskReads(rt, [run] if run is not None else [], [step])
     try:
-        n, record = await reads.published(type_id, version)
+        n, record = await reads.published(type_id, version, str(run["team_id"]) if run is not None else None)
     except TaskTypeNotFound as e:
         # Listed with the reason rather than dropped, as a review whose options cannot be read is.
         missing = {"field": "taskType", "severity": "error", "message": str(e)}
@@ -106,6 +108,13 @@ async def typed_task(
         # A type that shows cases gets the ones its run and child runs opened, not a value the step had to pass.
         params = {**params, "cases": await reads.cases(run)}
     bound = tt.bind(record, params, worded)
+    # A write's preview in the operation's own words (c-508): its fields and sentence from the one describer, which the
+    # Human Task page draws instead of naming the call's input keys itself.
+    for region in cast(list[dict[str, Any]], bound["regions"]):
+        call = cast(dict[str, Any], region.get("data") or {}).get("call")
+        if region["region"] == "write_preview" and isinstance(call, dict) and cast(dict[str, Any], call).get("tool"):
+            told = await describe_call(rt, cast(dict[str, Any], call), currency=None, money_key=None)
+            region["data"] = region["data"] | {"fields": told["fields"], "sentence": told["sentence"]}
     # Task assist (c-302), when the team had it on as the step paused: after the question, before the evidence.
     if helped := task_assist.region(
         task_assist.settled(await reads.assist(step), datetime.now(UTC)),
@@ -123,8 +132,11 @@ async def step_warnings(rt: Runtime, definition: dict[str, Any]) -> list[dict[st
     """What a saved workflow's typed review steps leave out (c-288): a task type that is not published, or a required
     param the step does not set. Warnings only: the owner's rule is that a missing setting never refuses a save, and
     the task shows the param's fallback line. A param set to a path is taken as set; its value is checked at the
-    pause."""
+    pause. Types are read in the acting team; a caller acting for every team (the dev header caller) holds no one
+    team's types, so its saves are not checked."""
     out: list[dict[str, Any]] = []
+    if acting_team() is None:
+        return out
     for node in cast(list[dict[str, Any]], definition.get("nodes") or []):
         params = cast(dict[str, Any], node.get("parameters") or {})
         ref = params.get("taskType")

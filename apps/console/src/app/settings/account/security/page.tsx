@@ -77,7 +77,7 @@ export default function AccountSecurityPage() {
           <Skeleton className="h-56 w-full" />
         </div>
       ) : failed ? (
-        <QueryError what="your security settings" onRetry={() => (profile.refetch(), devices.refetch(), sessions.refetch())} retrying={profile.isFetching || devices.isFetching || sessions.isFetching} />
+        <QueryError what="your security settings" onRetry={() => (profile.refetch(), devices.refetch(), sessions.refetch())} error={profile.error ?? devices.error ?? sessions.error} retrying={profile.isFetching || devices.isFetching || sessions.isFetching} />
       ) : (
         <div className="flex flex-col gap-4" data-testid="account-security">
           <SampleData>

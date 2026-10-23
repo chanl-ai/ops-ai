@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Plus, X } from 'lucide-react';
 
+import { EgressHostNotice } from '@/components/settings/egress-host-notice';
 import { FormField } from '@/components/shared/form-field';
 import { SecretPicker } from '@/components/shared/secret-picker';
 import { Button } from '@/components/ui/button';
@@ -77,6 +78,7 @@ export function HttpOperationBuilder({ value, onChange, errors, callOnly }: { va
           <Input id="http-url" value={value.url} onChange={(e) => set('url', e.target.value)} placeholder="e.g. https://deposits.api.example.internal/v1/accounts/{accountId}/statements" className="min-w-0 flex-1 rounded-l-none font-mono text-sm" aria-invalid={!!errors?.url} />
         </div>
       </FormField>
+      <EgressHostNotice url={value.url} />
       {(params.path.length > 0 || params.body.length > 0) && (
         <div className="overflow-hidden rounded-md border">
           <Table>

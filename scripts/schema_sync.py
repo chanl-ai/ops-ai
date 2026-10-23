@@ -7,6 +7,7 @@ the chain named and the fix, because migrating it would be guessing.
 
   uv run python scripts/schema_sync.py <database url>           # 0: every chain at or behind its head; 4: one ahead
   uv run python scripts/schema_sync.py <database url> --reset   # drop and recreate the database, empty (make reset-db)
+  uv run python scripts/schema_sync.py <database url> --recorded  # each chain's recorded revision, one line each
 
 Each service keeps its own chain and version table in the one database. The reset drops the whole database rather
 than one service's objects: the chains share roles, policies and functions, and their DDL runs in order only from an
@@ -102,6 +103,10 @@ def main() -> int:
         asyncio.run(reset(url))
         return 0
     db = asyncio.run(recorded(url))
+    if "--recorded" in sys.argv[2:]:
+        # What `stack.sh note-migrations` compares from one migrate to the next.
+        print("\n".join(f"{table}={db[table] or '-'}" for _, _, table in CHAINS))
+        return 0
     ahead = 0
     for service, directory, table in CHAINS:
         head, have = code_head(directory), db[table]

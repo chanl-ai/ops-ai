@@ -4,9 +4,9 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = join(ROOT, '.codeloop/evidence/198');
+const SHOTS = evidenceDir('198');
 
 async function signIn(page, consoleUrl, email) {
   await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

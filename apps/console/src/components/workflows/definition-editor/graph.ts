@@ -1,5 +1,8 @@
 import type { EngineConnection, EngineDefinition, EngineNode, EngineNodeType, EnginePort, PortRule } from '@/lib/types/engine';
 
+import type { DefinitionNodeData } from './definition-node';
+import { definitionNodeSize, titleLines } from '../layout/node-size.ts';
+
 /** A port as the canvas draws it: the handle id is `name`, the text is `label`. */
 export interface DrawnPort {
   name: string;
@@ -73,9 +76,22 @@ export function outPorts(type: EngineNodeType, parameters: Record<string, unknow
   return ports.filter((p) => !dropped.has(p.name));
 }
 
+/** The singular of a plain English plural field name (`debtors` → `debtor`), or null when it is not one. */
+function singular(field: string): string | null {
+  const words = field.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
+  if (/ies$/.test(words)) return words.replace(/ies$/, 'y');
+  if (/(ch|sh|x|ss)es$/.test(words)) return words.replace(/es$/, '');
+  if (/[^s]s$/.test(words)) return words.replace(/s$/, '');
+  return null;
+}
+
+// Output fields that are the engine's names for "the list it read", not words a person would use.
+const ENGINE_LISTS = new Set(['records', 'edited', 'items', 'results', 'rows']);
+
 /**
- * A step that repeats over a list (any type whose `forEach` parameter is set) says so on the canvas: "for each records
- * from Read the file", the list's field and the step it comes from, by name. Nothing for a step that runs once.
+ * A step that repeats over a list (any type whose `forEach` parameter is set) says so on the canvas in short words that
+ * fit one line: "For each attachment", "For each item from Read the file", "For each debtor in the input". Nothing for
+ * a step that runs once.
  */
 export function repeatsOver(parameters: Record<string, unknown> | undefined, nodes: EngineNode[]): string | null {
   const raw = parameters?.forEach;
@@ -84,12 +100,55 @@ export function repeatsOver(parameters: Record<string, unknown> | undefined, nod
   const path = raw.split('??')[0].trim();
   const m = /^\$\.nodes\.([^.]+)\.out(?:\.(.+))?$/.exec(path);
   if (m) {
-    // The step's name says where the list comes from; its output field (`edited`, `records`) is engine detail.
+    const field = m[2]?.split('.').pop() ?? '';
+    const one = ENGINE_LISTS.has(field) ? null : singular(field);
+    if (one) return `For each ${one}`;
     const from = nodes.find((n) => n.id === m[1]);
-    return `for each item from ${from?.name || m[1]}`;
+    return `For each item from ${from?.name || m[1]}`;
   }
   const input = /^\$\.input\.(.+)$/.exec(path);
-  return `for each ${input ? `${input[1].split('.').pop()} in the input` : 'item of a list'}`;
+  if (input) return `For each ${singular(input[1].split('.').pop() ?? '') ?? 'item'} in the input`;
+  return 'For each item of a list';
+}
+
+/** The most characters of the repeat line drawn on a step; a longer one is shortened, with the whole on hover. */
+export const REPEAT_LINE_MAX = 26;
+
+/**
+ * The repeat line as a step draws it on one line: the whole of it when it fits, else only what is repeated over ("For
+ * each attachment in the input" becomes "For each attachment"). Counted in characters, like the title's lines.
+ */
+export function repeatsLine(full: string): string {
+  if (full.length <= REPEAT_LINE_MAX) return full;
+  return full.replace(/ (in the input|from .+|of a list)$/, '');
+}
+
+/** What a step is called on the canvas: its name, else its type's label, else its id. */
+export const stepTitle = (n: EngineNode, t: EngineNodeType | undefined) => n.name || t?.label || n.id;
+
+/**
+ * What a canvas draws on a step, from the step and its type alone: the editor, the run canvas and the layout preview
+ * build their nodes from it, each adding its own checks or run mark.
+ */
+export function definitionNodeData(n: EngineNode, t: EngineNodeType | undefined, nodes: EngineNode[]): DefinitionNodeData {
+  return {
+    nodeId: n.id,
+    title: stepTitle(n, t),
+    titleLines: titleLines(stepTitle(n, t)),
+    typeLabel: t ? t.label : `${n.type} · version ${n.typeVersion}`,
+    repeats: (() => {
+      const full = repeatsOver(n.parameters, nodes);
+      return full && repeatsLine(full);
+    })(),
+    repeatsFull: repeatsOver(n.parameters, nodes),
+    group: t?.group ?? null,
+    inputs: t ? inPorts(t) : [],
+    outputs: t ? outPorts(t, n.parameters) : [],
+    unknown: !t,
+    hasError: false,
+    typeId: n.type,
+    layoutHeight: definitionNodeSize(n, t, nodes).height,
+  };
 }
 
 export const connectionId = (c: EngineConnection) => `${c.from.node}:${c.from.port}->${c.to.node}:${c.to.port}`;
@@ -102,53 +161,4 @@ export function uniqueNodeId(typeId: string, nodes: EngineNode[]): string {
   let i = 2;
   while (taken.has(`${base}_${i}`)) i++;
   return `${base}_${i}`;
-}
-
-// Wider and taller than a drawn node (about 360 by 170 px), so laid-out nodes never overlap.
-const COL = 440;
-const ROW = 220;
-
-/**
- * Positions for nodes the definition does not place: left to right by longest path from a node with no incoming
- * connection, stacked within a column in definition order. A cycle is cut where it is first re-entered.
- */
-export function layeredPositions(def: EngineDefinition): Record<string, { x: number; y: number }> {
-  const ids = def.nodes.map((n) => n.id);
-  const incoming = new Map(ids.map((id) => [id, [] as string[]]));
-  for (const c of def.connections) incoming.get(c.to.node)?.push(c.from.node);
-  const depth = new Map<string, number>();
-  const visiting = new Set<string>();
-  const depthOf = (id: string): number => {
-    const known = depth.get(id);
-    if (known !== undefined) return known;
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
-    const parents = (incoming.get(id) ?? []).filter((p) => incoming.has(p));
-    const d = parents.length ? Math.max(...parents.map(depthOf)) + 1 : 0;
-    visiting.delete(id);
-    depth.set(id, d);
-    return d;
-  };
-  const rows = new Map<number, number>();
-  const out: Record<string, { x: number; y: number }> = {};
-  for (const id of ids) {
-    const d = depthOf(id);
-    const r = rows.get(d) ?? 0;
-    rows.set(d, r + 1);
-    out[id] = { x: d * COL, y: r * ROW };
-  }
-  return out;
-}
-
-/**
- * Fills in a position for every node the definition does not place, so moving one never moves the rest. The server
- * stores a missing position as {x: 0, y: 0}, so a definition whose nodes all share one position was never placed and
- * is laid out whole.
- */
-export function withPositions(def: EngineDefinition): EngineDefinition {
-  const at = (n: EngineNode) => (n.position ? `${n.position.x},${n.position.y}` : '');
-  const unplaced = def.nodes.length > 1 && new Set(def.nodes.map(at)).size === 1;
-  if (!unplaced && def.nodes.every((n) => n.position)) return def;
-  const laid = layeredPositions(def);
-  return { ...def, nodes: def.nodes.map((n) => (n.position && !unplaced ? n : { ...n, position: laid[n.id] })) };
 }

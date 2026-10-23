@@ -143,13 +143,13 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
     return await workflow_registry(rt).owner_team(subject)
 
 
-async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_teams: list[str] | None) -> None:
+async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_teams: list[str]) -> None:
     """A reviewer or admin of the owning team decides a publish (c-122 Q3); one no team owns, a reviewer or admin of
     any team."""
     team = await subject_team(rt, req)
     if team is not None:
         require_reviews_decide(approver_teams, team, f"the publish of {req['subject_id']}")
-    elif approver_teams is not None and not approver_teams:
+    elif not approver_teams:
         require_reviews_decide(approver_teams, "any team", f"the publish of {req['subject_id']}")
 
 

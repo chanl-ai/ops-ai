@@ -1,14 +1,15 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 const KEY = ['secrets'] as const;
 
-export const useSecrets = () => useQuery({ queryKey: KEY, queryFn: () => api.secrets.list() });
+export const useSecrets = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.secrets.list() });
 export const useSecretsPage = (p: ListParams) => usePagedQuery({ queryKey: [...KEY, 'page', p], queryFn: () => api.secrets.page(p) });
 
 function useSecretMutation<I>(fn: (i: I) => Promise<unknown>) {

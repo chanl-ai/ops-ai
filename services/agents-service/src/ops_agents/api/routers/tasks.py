@@ -108,7 +108,7 @@ async def create_task(
     repeated with the same Idempotency-Key, by the same caller, answers with the task the first one opened."""
     team = _team(me)
     can(caller_of(me), "workflows", "run", team=team, what="a task")
-    version, record = await (await task_type_store(rt)).published(body.type, body.version)
+    version, record = await (await task_type_store(rt, team)).published(body.type, body.version)
     issues = tt.check_params(record, body.params)
     wrong = [i for i in issues if i["severity"] == "error"]
     if wrong:

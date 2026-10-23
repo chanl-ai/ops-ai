@@ -78,7 +78,7 @@ export function SourceHistoryTab({ source, onSync }: { source: SourceDetail; onS
   );
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={6} />;
-  if (query.isError && !query.data) return <QueryError what="sync runs" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError && !query.data) return <QueryError what="sync runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   const startRun = (opts: { full?: boolean; retry?: boolean }, done: string) =>
     sync.mutate({ id: source.id, opts }, { onSuccess: (r) => (toast.success(done), setRun(r.id)), onError: (e) => toast.error('Couldn’t start the run', { description: e.message }) });

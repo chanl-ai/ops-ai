@@ -23,6 +23,9 @@ COPY apps/embed/package.json apps/embed/
 COPY packages/usecase-runner/package.json packages/usecase-runner/
 RUN pnpm install --frozen-lockfile --filter @ops-ai/console...
 COPY apps/console apps/console
+# What's new and Coming next, read by next.config.ts into the build.
+COPY changelog changelog
+COPY roadmap.json roadmap.json
 ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=3072
 
 # Fly's console: service URLs baked for the one public origin it serves, every area through Caddy on that origin;
@@ -39,6 +42,9 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
     NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=${OPS_PUBLIC_ORIGIN}/api/kb \
     NEXT_PUBLIC_OPS_FILES_API_URL=${OPS_PUBLIC_ORIGIN}/api/files \
     NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=${OPS_PUBLIC_ORIGIN}/api/documents
+# The version What's new shows (next.config.ts): the build has no .git, so stg_deploy.sh passes the tag and commit.
+ARG OPS_VERSION=
+ARG OPS_COMMIT=
 RUN pnpm --filter @ops-ai/console exec next build
 
 # The portable console: every URL variable the console reads is set to its placeholder (console-build.ts), so the
@@ -54,6 +60,8 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
     NEXT_PUBLIC_OPS_FILES_API_URL=http://ph-next-public-ops-files-api-url.invalid \
     NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://ph-next-public-ops-documents-api-url.invalid \
     OPS_CONSOLE_STANDALONE=1
+ARG OPS_VERSION=
+ARG OPS_COMMIT=
 RUN pnpm --filter @ops-ai/console exec next build
 
 FROM node:22-bookworm-slim AS console

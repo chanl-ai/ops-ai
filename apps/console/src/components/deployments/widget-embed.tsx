@@ -246,7 +246,7 @@ export function WidgetEmbeds({
       {list.isPending ? (
         <Skeleton className="m-4 h-16" />
       ) : list.isError ? (
-        <QueryError what="embeds" onRetry={() => list.refetch()} retrying={list.isFetching} />
+        <QueryError what="embeds" onRetry={() => list.refetch()} error={list.error} retrying={list.isFetching} />
       ) : !list.data.length ? (
         <p className="p-4 text-sm text-muted-foreground">No embeds yet.</p>
       ) : (

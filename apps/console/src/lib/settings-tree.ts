@@ -1,7 +1,8 @@
 import { Bell, ChartColumn, Globe, HardDrive, KeyRound, KeySquare, LogIn, ShieldCheck, SlidersHorizontal, Webhook, type LucideIcon } from 'lucide-react';
 
 /**
- * The settings tree the owner approved (card c-178, mock at /preview/settings): one home per scope. Pages move here one
+ * The settings tree the owner approved (card c-178; the design is the planning repo docs/plans/ops-ai/settings-design.html):
+ * one home per scope. Pages move here one
  * at a time; an entry whose page has not moved yet points at its current route. Team pages live under /settings/team,
  * workspace pages under /settings/workspace, and Govern pages stay where Govern keeps them.
  */
@@ -65,7 +66,7 @@ export function findInSettings(query: string): FoundSetting[] {
   return all.filter((h) => q.split(/\s+/).every((w) => h.hay.includes(w))).slice(0, 12);
 }
 
-/** What the settings sidebar draws: the live tree and the /preview/settings mock both build one of these. */
+/** What the settings sidebar draws. */
 export interface SidebarItem {
   id: string;
   label: string;
@@ -78,8 +79,6 @@ export interface SidebarTree {
   groups: { label: string; items: SidebarItem[] }[];
   personal: { id: string; label: string; href: string }[];
   find: (query: string) => FoundSetting[];
-  /** The mock draws pages for a chosen role; the live tree never does. */
-  roleSwitch?: boolean;
 }
 
 function itemsOf(group: SettingsGroup): SidebarItem[] {

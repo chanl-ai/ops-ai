@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
 from ..journal import RunCancelledError, StepRow, StepStatus
 from .clock import now_iso
@@ -58,7 +59,9 @@ class SqlJournal:
             # is recorded when it ends, or does not begin.
             run = engine_runs
             status = (
-                await c.execute(sa.select(run.c.status).where(run.c.id == row.run_id).with_for_update(read=True))
+                await c.execute(
+                    sa.select(run.c.status).where(run.c.id == row.run_id, team_visible(run)).with_for_update(read=True)
+                )
             ).scalar()
             if status == "cancelled":
                 raise RunCancelledError(f"run {row.run_id} was cancelled before {row.node_id} began")

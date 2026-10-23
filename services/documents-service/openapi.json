@@ -1,6 +1,145 @@
 {
   "components": {
     "schemas": {
+      "BackgroundHealthOut": {
+        "additionalProperties": false,
+        "properties": {
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/BackgroundProcessOut"
+            },
+            "title": "Processes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "processes"
+        ],
+        "title": "BackgroundHealthOut",
+        "type": "object"
+      },
+      "BackgroundProcessOut": {
+        "additionalProperties": false,
+        "properties": {
+          "does": {
+            "title": "Does",
+            "type": "string"
+          },
+          "doneHour": {
+            "title": "Donehour",
+            "type": "integer"
+          },
+          "everySeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Everyseconds"
+          },
+          "instances": {
+            "title": "Instances",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastErrorAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterrorat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "nextRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrunat"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "late",
+              "stopped",
+              "not_reported"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting"
+          }
+        },
+        "required": [
+          "key",
+          "service",
+          "title",
+          "does",
+          "everySeconds",
+          "state",
+          "instances",
+          "lastRunAt",
+          "nextRunAt",
+          "doneHour",
+          "waiting",
+          "lastError",
+          "lastErrorAt"
+        ],
+        "title": "BackgroundProcessOut",
+        "type": "object"
+      },
       "Classification": {
         "additionalProperties": false,
         "description": "Which of the team's document types a file is (c-249): the model's choice and how sure it is, or none.\n`needsReview` when none fits or the confidence is under the floor.",
@@ -2122,6 +2261,28 @@
           }
         },
         "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/background": {
+      "get": {
+        "description": "This service's background processes and their state; counts and error types only, no record's data.",
+        "operationId": "health_background_health_background_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackgroundHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Background",
         "tags": [
           "health"
         ]

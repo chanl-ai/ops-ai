@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { ConditionInput, ConditionStatus, ModelRiskFilters, ModelRiskView, TierChangeInput } from '@/lib/types/model-risk';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 export const mk = {
   list: (p: unknown) => ['model-risk', 'list', p] as const,
@@ -14,8 +15,8 @@ export const mk = {
 };
 
 export const useModelRisk = (p: ListParams<ModelRiskFilters> & { view: ModelRiskView }) => usePagedQuery({ queryKey: mk.list(p), queryFn: () => api.modelRisk.list(p) });
-export const useModelEntry = (id: string) => useQuery({ queryKey: mk.entry(id), queryFn: () => api.modelRisk.get(id) });
-export const useModelRiskOptions = () => useQuery({ queryKey: mk.options, queryFn: api.modelRisk.options, staleTime: 5 * 60_000 });
+export const useModelEntry = (id: string) => useTeamQuery({ queryKey: mk.entry(id), queryFn: () => api.modelRisk.get(id) });
+export const useModelRiskOptions = () => useTeamQuery({ queryKey: mk.options, queryFn: api.modelRisk.options, staleTime: 5 * 60_000 });
 
 /** Model risk writes can open reviews and always write the audit log, so those refresh too. */
 function useModelRiskWrite<A, R>(fn: (a: A) => Promise<R>) {

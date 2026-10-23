@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-21",
+  "title": "Workflows are laid out clearly",
+  "description": "Steps on the workflow canvas keep their gaps and order, lines go around steps, long names wrap instead of being cut off, and Tidy up lays a workflow out again.",
+  "tag": "improved",
+  "cards": [
+    "c-486"
+  ]
+}

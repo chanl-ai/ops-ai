@@ -116,7 +116,7 @@ export default function TeamsPage() {
     if (editor.isPending) return <PageSkeleton statCards={0} tableRows={4} />;
     if (!canView) return <EmptyState icon={Users} title="Teams are managed by workspace admins" description="Ask a workspace admin to create, rename or archive a team. Your own team’s people are under Members and roles." testId="teams-no-access" />;
     if (query.isPending) return <PageSkeleton statCards={0} tableRows={4} />;
-    if (query.isError && !query.data) return <QueryError what="teams" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+    if (query.isError && !query.data) return <QueryError what="teams" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
     return (
       <DataTableWithViews
         columns={cols}

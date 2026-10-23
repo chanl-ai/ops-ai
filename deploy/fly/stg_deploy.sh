@@ -36,8 +36,10 @@ started=$(date +%s)
 begin=$started
 
 if [ "${SKIP_BUILD:-0}" != 1 ]; then
+  # What's new shows the release tag on a tagged commit, else the commit (next.config.ts); the archive has no .git.
+  tag=$(git -C "$root" describe --tags --exact-match --match 'v*' "$sha" 2>/dev/null || true)
   fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --remote-only --build-only --push \
-    --image-label "$sha"
+    --image-label "$sha" --build-arg OPS_VERSION="$tag" --build-arg OPS_COMMIT="$sha"
   step build
 fi
 

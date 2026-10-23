@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-22",
+  "title": "A run says what it did in plain sentences",
+  "description": "Each run tells its steps as short sentences, so you can follow what happened without reading raw data.",
+  "tag": "improved",
+  "cards": [
+    "c-500"
+  ]
+}

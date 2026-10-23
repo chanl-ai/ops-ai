@@ -38,7 +38,7 @@ class RunCases:
         type_version: int | None = None
         if type_id:
             try:
-                type_version, _ = await (await seeded_case_types(self.cases.engine)).published(type_id)
+                type_version, _ = await (await seeded_case_types(self.cases.engine, team)).published(type_id)
             except CaseTypeNotFound as e:
                 raise CaseTypeNotFoundError(type_id) from e
         opened = await self.cases.open(

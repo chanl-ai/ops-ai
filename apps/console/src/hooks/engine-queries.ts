@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { BulkResult } from '@/lib/types/domain';
 import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
+import { useTeamQuery } from './team-query';
 
 const ek = {
   nodeTypes: ['engine', 'node-types'] as const,
@@ -18,11 +19,11 @@ const ek = {
 /** A run stops changing once it succeeds, fails or is cancelled (ops_engine.store.runs.TERMINAL). */
 export const TERMINAL_RUN = ['succeeded', 'failed', 'cancelled'];
 
-export const useNodeTypes = () => useQuery({ queryKey: ek.nodeTypes, queryFn: () => api.engine.nodeTypes(), staleTime: 5 * 60_000 });
+export const useNodeTypes = () => useTeamQuery({ queryKey: ek.nodeTypes, queryFn: () => api.engine.nodeTypes(), staleTime: 5 * 60_000 });
 
 /** The latest version, or the one a run is pinned to. */
 export const useDefinition = (workflowId: string, version?: number) =>
-  useQuery({ queryKey: ek.definition(workflowId, version), queryFn: () => api.engine.definition(workflowId, version), retry: false, enabled: !!workflowId });
+  useTeamQuery({ queryKey: ek.definition(workflowId, version), queryFn: () => api.engine.definition(workflowId, version), retry: false, enabled: !!workflowId });
 
 /** The server's checks for the definition on screen; nothing is saved. */
 export const useValidateDefinition = () => useMutation({ mutationFn: (d: EngineDefinition) => api.engine.validate(d) });
@@ -59,7 +60,7 @@ export function useSetDefinitionPaused(workflowId: string) {
 
 /** Choices for a node form field; `steps` is the definition on screen, so it is never fetched. */
 export const useEngineOptions = (source: OptionSource | undefined) =>
-  useQuery({
+  useTeamQuery({
     queryKey: ek.options(source ?? 'none'),
     queryFn: () => api.engine.options(source as Exclude<OptionSource, 'steps'>),
     enabled: !!source && source !== 'steps',
@@ -97,7 +98,7 @@ export const useEngineRuns = (p: EngineRunsParams) =>
 
 /** A run's detail, polled while a worker may still be moving it; a run waiting on a person is polled more slowly. */
 export const useEngineRun = (runId: string) =>
-  useQuery({
+  useTeamQuery({
     queryKey: ek.run(runId),
     queryFn: () => api.engine.run(runId),
     refetchInterval: (q) => {

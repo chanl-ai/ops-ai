@@ -31,8 +31,8 @@ class Principal:
     # From the verified token or key, or "local" in dev; never from a header, body or path (I1).
     tenant_id: str
     sub: str = ""
-    # The teams the person belongs to; None for the dev principal, which acts across teams.
-    team_ids: tuple[str, ...] | None = None
+    # The teams the person belongs to; for the dev header caller, the one team its request names (c-507).
+    team_ids: tuple[str, ...] = ()
     # The person's role in team_id from their membership (e.g. admin); None for dev callers and keys.
     role: str | None = None
     # Team to role for every team the person belongs to, from the token; a review is decided by the role in the team
@@ -43,6 +43,8 @@ class Principal:
     # The verified caller as ops_identity resolved it, which `ops_access.can` decides on; None for a Principal built in
     # code, which `caller_of` rebuilds from the fields above.
     identity: Caller | None = None
+    # The dev header caller (dev mode, no roles): every permission, in the one team its request names.
+    dev: bool = False
 
 
 async def principal(p: CurrentPrincipal) -> Principal:
@@ -74,24 +76,28 @@ def _principal(p: Caller) -> Principal:
         team_id=p.team_id or "",
         tenant_id=p.tenant_id,
         sub=p.sub,
-        # The teams a person approves for. A person platform-service signed in with the dev password also has
-        # auth_method "dev" but carries roles; they approve only for their own teams. Only the dev header caller,
-        # which has no roles, approves for any.
-        team_ids=None if p.auth_method == "dev" and not p.roles else tuple(p.team_ids),
+        # A person platform-service signed in with the dev password also has auth_method "dev" but carries roles and
+        # their own teams; only the dev header caller has no roles, and it acts in the team its request names.
+        team_ids=((p.team_id,) if p.team_id else ()) if _dev(p) else tuple(p.team_ids),
         role=p.role,
         roles=dict(p.roles),
         is_key=p.auth_method == "api_key",
         identity=p,
+        dev=_dev(p),
     )
+
+
+def _dev(p: Caller) -> bool:
+    return p.auth_method == "dev" and not p.roles
 
 
 def caller_of(me: Principal) -> Caller:
     """What `ops_access.can` decides on: the verified principal, or one rebuilt from the fields of a Principal made in
-    code (no teams: the dev header caller, which acts across teams)."""
+    code."""
     if me.identity is not None:
         return me.identity
     roles = dict(me.roles) or ({me.team_id: me.role} if me.role and me.team_id else {})
-    method = "dev" if me.team_ids is None else "api_key" if me.is_key else "session"
+    method = "dev" if me.dev else "api_key" if me.is_key else "session"
     return Caller(
         kind="api_key" if me.is_key else "person",
         sub=me.sub,
@@ -99,7 +105,7 @@ def caller_of(me: Principal) -> Caller:
         name=me.name,
         tenant_id=me.tenant_id,
         team_id=me.team_id or None,
-        team_ids=list(me.team_ids or ()),
+        team_ids=list(me.team_ids),
         roles={} if method == "dev" else roles,
         scopes=[],
         auth_method=method,
@@ -167,16 +173,16 @@ def verify_platform_step_up(rt: Runtime, subject: str, token: str) -> None:
         raise TokenError("too_old", f"The step-up is older than {STEP_UP_TTL_S // 60} minutes; re-authenticate.")
 
 
-def teams_of(me: Principal) -> list[str] | None:
-    """The teams a person belongs to, in any role; None for the dev principal, which acts across teams."""
-    return None if me.team_ids is None else list(me.team_ids)
+def teams_of(me: Principal) -> list[str]:
+    """The teams a person belongs to, in any role; the dev header caller's is the team it acts in."""
+    return list(me.team_ids)
 
 
-def review_teams(me: Principal) -> list[str] | None:
-    """The teams whose reviews a person decides (`reviews.decide` held there). None for the dev header caller, which
-    acts across teams; an API key decides for none."""
-    if me.team_ids is None:
-        return None
+def review_teams(me: Principal) -> list[str]:
+    """The teams whose reviews a person decides (`reviews.decide` held there); the dev header caller decides in the
+    team it acts in, an API key in none."""
+    if me.dev:
+        return list(me.team_ids)
     who = caller_of(me)
     return [t for t in me.team_ids if not me.is_key and _held(who, "reviews", "decide", t)]
 
@@ -188,11 +194,11 @@ def _held(who: Caller, area: str, action: str, team: str) -> Scope | None:
         return None
 
 
-def require_reviews_decide(approver_teams: list[str] | None, team_id: str, what: str) -> None:
+def require_reviews_decide(approver_teams: list[str], team_id: str, what: str) -> None:
     """reviews.decide in the team that reviews it: `approver_teams` is `review_teams`, the teams where `can` grants it,
     from whatever team the request acts in. Separation of duties and step-up are checked where the decision is
     recorded."""
-    if approver_teams is None or team_id in approver_teams:
+    if team_id in approver_teams:
         return
     raise Forbidden(
         f"Only a reviewer or admin of {team_id} decides {what}.",

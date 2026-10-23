@@ -126,10 +126,8 @@ def _read_in(draft: Any) -> dict[str, Any] | None:
     if not isinstance(draft, dict):
         return None
     for value in cast(dict[str, Any], draft).values():
-        if isinstance(value, dict):
-            v = cast(dict[str, Any], value)
-            if "fileId" in v and isinstance(v.get("schema"), list) and ("records" in v or "fields" in v):
-                return v
+        if is_read(value):
+            return cast(dict[str, Any], value)
     return None
 
 
@@ -213,13 +211,11 @@ def _is_box(b: dict[str, Any]) -> bool:
     return isinstance(b.get("page"), int) and all(isinstance(b.get(k), (int, float)) for k in ("x", "y", "w", "h"))
 
 
-def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | None) -> dict[str, Any] | None:
-    """A document read as Human Tasks shows it: the file, the floor, each field's label, and per record each field's
-    value, confidence and page quote; with whether the step takes a correction and, once decided, the corrected
-    values it was approved with."""
-    read = _read_in(draft)
-    if read is None:
-        return None
+def read_view(read: dict[str, Any], file_name: str | None, edited: Any) -> dict[str, Any]:
+    """An Extract from file result as people read it, wherever it is shown (Human Tasks, a run's page): the file, the
+    floor, each field's label, and per record each field's value, confidence and page quote, with the corrected values a
+    person approved it with (`edited`, the whole records list) or None. Nothing takes a correction here; the caller says
+    whether its step does (`editable`)."""
     rows: list[Any] = []
     if "records" in read:
         rows = cast(list[Any], read.get("records") or [])
@@ -237,15 +233,9 @@ def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | 
                 "fields": {str(k): _field(v) for k, v in scored.items()},
             }
         )
-    combined = _combined_in(draft)
-    # Several sources side by side only for a one-record read: Combine facts merges one set of fields.
-    sources = _by_source(records[0], combined) if combined is not None and len(records) == 1 else []
-    edited = (resume or {}).get("edited")
-    # Workflows name the file under `document` (the levy flows) or `file` (system extract); either is the file name.
-    name = cast(dict[str, Any], draft).get("document") or cast(dict[str, Any], draft).get("file")
     return {
         "fileId": str(read["fileId"]),
-        "fileName": str(name) if isinstance(name, str) and name else None,
+        "fileName": file_name or None,
         "floor": _number(read.get("floor")),
         "schema": [
             {
@@ -255,18 +245,43 @@ def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | 
                 "required": bool(f.get("required")),
                 "keyField": f.get("keyField") is True,
             }
-            for f in (cast(dict[str, Any], x) for x in cast(list[Any], read["schema"]) if isinstance(x, dict))
+            for f in (cast(dict[str, Any], x) for x in cast(list[Any], read.get("schema") or []) if isinstance(x, dict))
         ],
         "records": records,
-        "sources": sources,
-        "editable": isinstance(payload.get("editable"), dict),
+        "sources": [],
+        "editable": False,
         "corrected": [dict(cast(dict[str, Any], r).get("values") or {}) for r in cast(list[Any], edited)]
         if isinstance(edited, list)
         else None,
     }
 
 
-async def reply_preview(rt: Runtime, draft: Any, call: dict[str, Any]) -> dict[str, Any] | None:
+def is_read(value: Any) -> bool:
+    """Whether a value is an Extract from file result: its file, the type's field schema, and records or fields."""
+    if not isinstance(value, dict):
+        return False
+    v = cast(dict[str, Any], value)
+    return "fileId" in v and isinstance(v.get("schema"), list) and ("records" in v or "fields" in v)
+
+
+def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A document read as Human Tasks shows it (read_view), with whether the step takes a correction and, for a
+    one-record read a Combine facts step weighed, each source's value."""
+    read = _read_in(draft)
+    if read is None:
+        return None
+    # Workflows name the file under `document` (the levy flows) or `file` (system extract); either is the file name.
+    name = cast(dict[str, Any], draft).get("document") or cast(dict[str, Any], draft).get("file")
+    view = read_view(read, str(name) if isinstance(name, str) and name else None, (resume or {}).get("edited"))
+    combined = _combined_in(draft)
+    # Several sources side by side only for a one-record read: Combine facts merges one set of fields.
+    if combined is not None and len(view["records"]) == 1:
+        view["sources"] = _by_source(view["records"][0], combined)
+    view["editable"] = isinstance(payload.get("editable"), dict)
+    return view
+
+
+async def reply_preview(rt: Runtime, team: str, draft: Any, call: dict[str, Any]) -> dict[str, Any] | None:
     """The reply a review approves (its send_reply call) as it will leave, with the cases the summary's started runs
     are on; a run that has not opened its case yet has none."""
     if call.get("tool") != "send_reply":
@@ -279,12 +294,12 @@ async def reply_preview(rt: Runtime, draft: Any, call: dict[str, Any]) -> dict[s
     runs = [r for r in rows if r.get("runId")]
     store = CaseStore(rt.db)
     on_case = await store.cases_of_runs([str(r["runId"]) for r in runs])
-    # Each case by its subject, so the reviewer reads who it is about rather than an id. Any team: the reviewer already
-    # sees the run that opened it.
+    # Each case by its subject, so the reviewer reads who it is about rather than an id; the run's child runs and the
+    # cases they opened are in the run's team.
     subjects: dict[str, str] = {}
     for case_id in {c for c in on_case.values() if c}:
         with contextlib.suppress(CaseNotFound):
-            subjects[case_id] = str((await store.get(case_id, None)).get("subject") or "")
+            subjects[case_id] = str((await store.get(case_id, [team])).get("subject") or "")
     return {
         "to": str(args.get("to") or ""),
         "mailbox": str(args["mailbox"]) if args.get("mailbox") else None,
@@ -502,7 +517,7 @@ async def view(
     if read is not None:
         out["customer"], out["proposal"] = _read_line(read)
         out["read"] = read
-    if calls and (reply := await reply_preview(rt, draft, calls[0])) is not None:
+    if calls and (reply := await reply_preview(rt, str(run["team_id"]), draft, calls[0])) is not None:
         out["reply"] = reply
     if decided is not None:
         resume = cast(dict[str, Any], decided.get("resume") or {})
@@ -784,7 +799,7 @@ async def decide(
     if paused.get("taskType"):
         rest = dict(inputs or {})
         confirmed = rest.pop("confirmed", None)
-        action = await _typed_action(rt, paused, str(resume.get("option") or DEFAULT_DECISIONS[decision]))
+        action = await _typed_action(rt, run, paused, str(resume.get("option") or DEFAULT_DECISIONS[decision]))
         if action.get("requires"):
             _check_requirement(str(action["requires"]), paused, confirmed)
             resume["confirmed"] = confirmed
@@ -865,10 +880,12 @@ async def _approve_call(
     return {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": found}
 
 
-async def _typed_action(rt: Runtime, paused: dict[str, Any], port: str) -> dict[str, Any]:
-    """The task type's action that leads to `port`, from the type version the step names; empty when it has none."""
+async def _typed_action(rt: Runtime, run: dict[str, Any], paused: dict[str, Any], port: str) -> dict[str, Any]:
+    """The task type's action that leads to `port`, from the type version the step names in the run's team; empty when
+    it has none."""
     ref = cast(dict[str, Any], paused["taskType"])
-    _, record = await (await task_type_store(rt)).published(str(ref["id"]), cast(int | None, ref.get("version")))
+    types = await task_type_store(rt, str(run["team_id"]))
+    _, record = await types.published(str(ref["id"]), cast(int | None, ref.get("version")))
     actions = cast(list[dict[str, Any]], record.get("actions") or [])
     none: dict[str, Any] = {}
     return next((a for a in actions if a.get("port") == port), none)

@@ -101,6 +101,8 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/widgets', served: Boolean(registryUrl) },
   // Activity is agents-service's one list (/v1/activity).
   { prefix: '/activity', served: Boolean(registryUrl) },
+  // Background processes are agents-service's /v1/background (c-516).
+  { prefix: '/logs/background', served: Boolean(registryUrl) },
   { prefix: '/tools', served: Boolean(toolsUrl) },
   { prefix: '/logs/tool-calls', served: Boolean(toolsUrl) },
   { prefix: '/settings/egress', served: Boolean(toolsUrl) },
@@ -147,6 +149,14 @@ export const policiesOnService = onPlatform || Boolean(baseUrl);
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */
 export const filesOnService = Boolean(filesUrl) && !baseUrl;
+/** What's new and Coming next as the build read them (next.config.ts, c-510); lib/changelog.ts parses them. */
+export const changelogSource = process.env.OPS_CHANGELOG ?? '[]';
+export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
+// The commit this console was built from and its release tag, if it has one (next.config.ts; lib/version.ts words them).
+export const buildTag = process.env.NEXT_PUBLIC_OPS_VERSION;
+export const buildCommit = process.env.NEXT_PUBLIC_OPS_COMMIT;
+/** Every console call is answered for a team, so its queries wait for one (hooks/team-query.ts); the embed has none. */
+export const queriesNeedTeam = true;
 /** Invitations on platform-service go to the team in the request header and take no team of their own. */
 export const invitesToCurrentTeam = onPlatform;
 
@@ -193,7 +203,7 @@ function createAuthProvider(): AuthProvider {
 export const authProvider: AuthProvider = createAuthProvider();
 
 export { ApiError, type Lookups, type OpsApi } from './contract';
-export { currentTeamId, DEFAULT_TEAM_ID, setCurrentTeamId, teamStore } from './team-context';
+export { currentTeamId, DEFAULT_TEAM_ID, ownTeamId, setCurrentTeamId, teamStore } from './team-context';
 
 /** A demo can show another organisation's name and mark without a code change: both come from the console's own
  * env (gitignored .env.local), never from the repo. Unset, the workspace's own name and the team icon are shown. */

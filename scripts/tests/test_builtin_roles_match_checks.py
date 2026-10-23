@@ -114,7 +114,7 @@ def nobody(_: Principal) -> Scope | None:
 
 
 # agents-service: definition writes (c-115) and the delete of a shared skill or guardrail. c-147's evidence
-# (.codeloop/evidence/147/red-grid.txt) holds the comparison with the role checks c-148 and c-149 replaced.
+# (card c-147's red-grid.txt) holds the comparison with the role checks c-148 and c-149 replaced.
 def agents_builder(area: str, action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
         me = run(agents_principal(p))

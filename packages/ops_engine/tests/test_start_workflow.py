@@ -164,3 +164,28 @@ def test_item_paths_pass_in_a_loop_input_and_are_refused_anywhere_else() -> None
     no_loop = {"workflow": "case", "input": {"name": "$.item.name"}}
     checks = validate(definition(no_loop), default_registry())
     assert [(c["node"], c["code"]) for c in checks] == [("open", "item_outside_loop")]
+
+
+async def test_each_child_is_labelled_by_the_steps_label_for_its_item() -> None:
+    """c-477: a run page names each child by what it was about, never by its index."""
+    runs = FakeRuns()
+    g = build(PER_PERSON | {"label": "{$.item.name} for {$.input.letter}"}, runs, MemoryJournal(), InMemorySaver())
+    await g.ainvoke({"input": PERSONS}, config("p10"), durability="sync")
+    assert [r["label"] for r in (await out_of(g, "p10"))["out"]["runs"]] == ["Ana for L-1", "Bo for L-1", "Cy for L-1"]
+
+
+async def test_with_no_label_a_child_is_named_by_its_items_first_text_that_is_not_an_id() -> None:
+    runs = FakeRuns()
+    items = {"files": [{"fileId": "fil_0123456789abcdef", "name": "notice.pdf", "size": 10}, {"fileId": "fil_x"}, 7]}
+    start = {"workflow": "case", "forEach": "$.input.files", "input": {"fileId": "$.item.fileId"}}
+    g = build(start, runs, MemoryJournal(), InMemorySaver())
+    await g.ainvoke({"input": items}, config("p11"), durability="sync")
+    listed = (await out_of(g, "p11"))["out"]["runs"]
+    assert [r.get("label") for r in listed] == ["notice.pdf", "fil_x", None]
+
+
+def test_a_label_may_read_the_item_and_only_in_a_loop() -> None:
+    # `$.item.code` is read by the label alone, so the input's own paths do not let it through.
+    assert validate(definition(PER_PERSON | {"label": "{$.item.code}"}), default_registry()) == []
+    checks = validate(definition({"workflow": "case", "label": "{$.item.code}"}), default_registry())
+    assert [(c["node"], c["code"]) for c in checks] == [("open", "item_outside_loop")]

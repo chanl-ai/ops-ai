@@ -278,6 +278,8 @@ export interface ChildThread {
 /** A tool call that failed, as the tool step recorded it: the system's own status and message. */
 export interface ToolFailure {
   tool: string;
+  /** The call in words, as the API describes it (describe_call's label); the page never words the tool itself. */
+  action: string;
   status?: number | null;
   code?: string | null;
   message: string;

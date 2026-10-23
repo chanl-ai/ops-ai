@@ -18,8 +18,8 @@ export const REPO = 'chanl-ai/ops-ai';
 // The commit a GitHub link points at: the deployed commit on Vercel, otherwise main.
 export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT_REF || 'main';
 
-// Folders that exist in a working copy but never in the public repository (.codeloop/ is the private board,
-// evidence/ and shape/ are stripped from snapshots); a link into one is a broken link.
+// Folders that exist in a working copy but never in the public repository (the maintainers' board and the evidence and
+// shape folders are stripped from snapshots); a link into one is a broken link.
 const NOT_PUBLIC = ['.codeloop', 'evidence', 'shape', 'triage', 'dist'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', '__pycache__', '.pytest_cache', '.turbo']);
 // Folders of docs/ the site does not show: docs/plan/ (delivery plans) and docs/media/ (README screenshots).
@@ -64,9 +64,25 @@ function headingSlugs(markdown) {
   return slugs;
 }
 
+const anchorCache = new Map();
+
+/**
+ * A page's heading anchors, re-read whenever the file's mtime changes. The index below is built once per process, so a
+ * dev server that outlives an edit would otherwise check links against the page as it was at start.
+ */
+export function pageAnchors(repoPath) {
+  const file = path.join(repoRoot(), repoPath);
+  const mtime = fs.statSync(file).mtimeMs;
+  const hit = anchorCache.get(repoPath);
+  if (hit?.mtime === mtime) return hit.anchors;
+  const anchors = headingSlugs(fs.readFileSync(file, 'utf8'));
+  anchorCache.set(repoPath, { mtime, anchors });
+  return anchors;
+}
+
 let index;
 
-/** { root, files: Set, dirs: Set, pages: { 'docs/x.md': { url, anchors } }, order: ['architecture/overview.md', ...] } */
+/** { root, files: Set, dirs: Set, pages: { 'docs/x.md': { url } }, order: ['architecture/overview.md', ...] } */
 export function repoIndex() {
   if (index) return index;
   const root = repoRoot();
@@ -80,7 +96,7 @@ export function repoIndex() {
   const pages = {};
   for (const f of list) {
     if (!isSitePage(f)) continue;
-    pages[f] = { url: pageUrl(f), anchors: headingSlugs(fs.readFileSync(path.join(root, f), 'utf8')) };
+    pages[f] = { url: pageUrl(f) };
   }
   const readme = fs.readFileSync(path.join(root, 'docs/README.md'), 'utf8');
   const order = [];

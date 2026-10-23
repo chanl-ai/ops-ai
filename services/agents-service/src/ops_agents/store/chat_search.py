@@ -11,7 +11,8 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import current_team, current_tenant, tenant_tx
@@ -30,7 +31,7 @@ chat_search = sa.Table(
     sa.Column("preview", sa.String(400), nullable=False),
     sa.Column("questions", sa.Text, nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -56,7 +57,7 @@ async def indexed_ids(engine: AsyncEngine, thread_ids: list[str]) -> set[str]:
     if not thread_ids:
         return set()
     q = sa.select(chat_search.c.thread_id).where(
-        chat_search.c.thread_id.in_(thread_ids), chat_search.c.tenant_id == current_tenant()
+        chat_search.c.thread_id.in_(thread_ids), chat_search.c.tenant_id == current_tenant(), team_visible(chat_search)
     )
     async with tenant_tx(engine) as c:
         return {str(i) for i in (await c.execute(q)).scalars()}
@@ -74,7 +75,9 @@ def matching_query(search: str) -> sa.Select[tuple[str]]:
             chat_search.c.questions,
         )
     ]
-    q = sa.select(chat_search.c.thread_id).where(chat_search.c.tenant_id == current_tenant(), sa.or_(*has))
+    q = sa.select(chat_search.c.thread_id).where(
+        chat_search.c.tenant_id == current_tenant(), team_visible(chat_search), sa.or_(*has)
+    )
     if (team := current_team()) is not None:
         q = q.where(chat_search.c.team_id == team)
     return q

@@ -290,7 +290,7 @@ export function GenerateSkillDialog({
 
   const body = () => {
     if (options.isPending) return <Skeleton className="h-64 w-full" />;
-    if (options.isError || !opts) return <QueryError what="what a skill can start from" onRetry={() => options.refetch()} retrying={options.isFetching} />;
+    if (options.isError || !opts) return <QueryError what="what a skill can start from" onRetry={() => options.refetch()} error={options.error} retrying={options.isFetching} />;
 
     if (step === 1)
       return (

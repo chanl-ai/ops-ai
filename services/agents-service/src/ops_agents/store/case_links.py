@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_store import Guarantee
+from ops_store.team_scope import team_visible
 
+from .actor_names import UNNAMED_WORKFLOW
 from .cases import case_events, cases
 from .tenancy import current_tenant, tenant_tx
 from .trigger_events import trigger_events
@@ -35,7 +37,10 @@ class CaseLinks:
         )
         linked = sa.select(e.c.ref).where(e.c.tenant_id == current_tenant(), e.c.case_id == case_id, e.c.kind == "run")
         q = (
-            sa.select(*r.c, sa.func.coalesce(d.c.name, r.c.workflow_id).label("workflow_name"))
+            sa.select(
+                *r.c,
+                sa.func.coalesce(sa.func.nullif(d.c.name, ""), sa.literal(UNNAMED_WORKFLOW)).label("workflow_name"),
+            )
             .select_from(named)
             .where(r.c.tenant_id == current_tenant(), r.c.team_id == team_id, r.c.id.in_(linked))
             .order_by(r.c.created_at.desc(), r.c.id)
@@ -51,7 +56,7 @@ class CaseLinks:
         t = trigger_events
         q = (
             sa.select(t.c.id, t.c.subject, t.c.sender, t.c.recorded_at, t.c.run_id)
-            .where(t.c.tenant_id == current_tenant(), t.c.run_id.in_(run_ids))
+            .where(t.c.tenant_id == current_tenant(), t.c.run_id.in_(run_ids), team_visible(t))
             .order_by(t.c.recorded_at.desc(), t.c.id)
             .limit(EMAILS_CAP)
         )

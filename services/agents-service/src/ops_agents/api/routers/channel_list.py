@@ -203,9 +203,7 @@ def _counts(c: Any) -> dict[str, Any]:
     }
 
 
-async def rows_of(
-    rt: Runtime, me: Principal, teams: tuple[str, ...] | None, *, retired: bool = False
-) -> list[dict[str, Any]]:
+async def rows_of(rt: Runtime, me: Principal, teams: tuple[str, ...], *, retired: bool = False) -> list[dict[str, Any]]:
     now = datetime.now(UTC)
     listed = await ChannelList(rt.db).rows(teams, now=now, retired=retired)
     keys_of = await WidgetKeys(rt.db).active_counts([str(w["id"]) for w in listed.chat])
@@ -269,7 +267,7 @@ async def rows_of(
         )
     keys = cast(list[dict[str, Any]] | None, await rt.key_summaries.list() if rt.key_summaries is not None else None)
     # A revoked key starts nothing and is kept only for the audit trail, so it is no channel.
-    mine = [k for k in keys or [] if k["status"] != "revoked" and (teams is None or k["teamId"] in teams)]
+    mine = [k for k in keys or [] if k["status"] != "revoked" and k["teamId"] in teams]
     for k in await ChannelList(rt.db).api_rows(mine, now=now):
         target = k["target"]
         serves = None
@@ -338,7 +336,7 @@ async def list_channels(rt: Rt, me: Me, q: Annotated[ChannelsQuery, Query()]) ->
     by type, health and a search over name and detail. `facets` count by type and health under the other filters;
     `kinds` describes every channel type, built or not, over the caller's whole list."""
     asked = _teams(me, q.team)
-    teams = asked if asked is None else tuple(t for t in asked if _may(me, "view", t))
+    teams = tuple(t for t in asked if _may(me, "view", t))
     rows = await rows_of(rt, me, teams, retired=q.includeRetired)
     # Kinds describe the live channels; a retired embed serves nothing.
     kinds = kinds_of([r for r in rows if not _retired(r)])
@@ -478,7 +476,7 @@ def _versions(rows: list[dict[str, Any]], latest: int | None) -> list[dict[str, 
 async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
     """Where the agent serves: the chat channels on it, pinned or on Latest, and the live workflow steps that run it."""
     asked = _teams(me, "all")
-    teams = asked if asked is None else tuple(t for t in asked if _may(me, "view", t))
+    teams = tuple(t for t in asked if _may(me, "view", t))
     latest = await ChannelList(rt.db).published_version(agent_id)
     if latest is NOT_FOUND:
         raise NotFound(f"Agent {agent_id}")
@@ -492,10 +490,10 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
 async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     """Where the workflow serves: the email channels whose trigger it is, and the live steps that start it."""
     asked = _teams(me, "all")
-    teams = asked if asked is None else tuple(t for t in asked if _may(me, "view", t))
+    teams = tuple(t for t in asked if _may(me, "view", t))
     live = await ChannelList(rt.db).live_definitions()
     mine = next((d for d in live if d["workflow_id"] == workflow_id), None)
-    if mine is None or (teams is not None and mine["team_id"] not in teams):
+    if mine is None or mine["team_id"] not in teams:
         raise NotFound(f"Live workflow {workflow_id}")
     latest = int(mine["version"])
     listed = await ChannelList(rt.db).rows(teams)
@@ -543,7 +541,7 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
     if channel_id.startswith("wd_"):
         store = WidgetDeployments(rt.db)
         row = await store.get(channel_id)
-        if row is None or (me.team_ids is not None and row["team_id"] not in me.team_ids):
+        if row is None or row["team_id"] not in me.team_ids:
             raise NotFound(f"Channel {channel_id}")
         require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
         if row.get("retired_at"):
@@ -582,7 +580,7 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
     elif channel_id.startswith("mbx_"):
         boxes = MailboxStore(rt.db)
         found = await boxes.get(channel_id)
-        if found is None or (me.team_ids is not None and found.team_id not in me.team_ids):
+        if found is None or found.team_id not in me.team_ids:
             raise NotFound(f"Channel {channel_id}")
         require_builder(me, area="deployments", team_id=found.team_id, action="edit", what=WHAT)
         if body.serves is not None:
@@ -605,7 +603,7 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
         )
     else:
         raise NotFound(f"Channel {channel_id}")
-    row_now = next((r for r in await rows_of(rt, me, None) if r["id"] == channel_id), None)
+    row_now = next((r for r in await rows_of(rt, me, me.team_ids) if r["id"] == channel_id), None)
     if row_now is None:
         raise NotFound(f"Channel {channel_id}")
     return ok(row_now)
@@ -619,7 +617,7 @@ async def retire_channel(rt: Rt, me: Me, channel_id: str) -> JSONResponse:
         raise Conflict("Only a chat channel is retired here.", code="channel_managed_elsewhere")
     store = WidgetDeployments(rt.db)
     row = await store.get(channel_id)
-    if row is None or (me.team_ids is not None and row["team_id"] not in me.team_ids):
+    if row is None or row["team_id"] not in me.team_ids:
         raise NotFound(f"Channel {channel_id}")
     require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
     at = now_iso()

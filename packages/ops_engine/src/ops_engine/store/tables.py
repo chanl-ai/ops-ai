@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 metadata = sa.MetaData()
 
@@ -57,9 +57,11 @@ engine_runs = sa.Table(
     "engine_runs",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
+    # No single-column index on tenant or workflow: every index below leads with tenant_id, and a lone tenant or
+    # workflow index let the planner read a tenant's runs and sort them instead of the team's index in order (c-507).
+    sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
-    sa.Column("workflow_id", sa.String(64), nullable=False, index=True),
+    sa.Column("workflow_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     # The caller's key for what started the run; a repeated key returns the first run.
@@ -88,7 +90,7 @@ engine_runs = sa.Table(
     sa.Index("ix_engine_runs_workflow_created", "tenant_id", "workflow_id", "created_at"),
     # The waiting or unfinished runs a run started, looked up on each child's status change to settle the parent.
     sa.Index("ix_engine_runs_parent_status", "tenant_id", "created_by", "status"),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 # The step journal: one row per node attempt (journal.py).

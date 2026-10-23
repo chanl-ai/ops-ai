@@ -7,10 +7,7 @@ import { ArrowLeft, Search } from 'lucide-react';
 
 import { Kbd } from '@/components/ui/kbd';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import type { SidebarTree } from '@/lib/settings-tree';
-import { VIEWER_ROLES, setViewerRole, useViewerRole, type ViewerRole } from '@/lib/settings-preview-store';
 
 /**
  * Replaces the app sidebar while a person is in settings: a back arrow, a Find box (press F) that searches every
@@ -20,7 +17,6 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
   const pathname = usePathname();
   const [query, setQuery] = React.useState('');
   const find = React.useRef<HTMLInputElement>(null);
-  const { role } = useViewerRole();
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -128,25 +124,6 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-        {tree.roleSwitch && (
-        <div className="flex flex-col gap-1.5 px-2 pb-1">
-          <Label htmlFor="viewer-role" className="text-xs text-muted-foreground">
-            Drawn for the role
-          </Label>
-          <Select value={role} onValueChange={(v) => setViewerRole(v as ViewerRole)}>
-            <SelectTrigger id="viewer-role" size="sm" className="w-full bg-card" data-testid="viewer-role">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {VIEWER_ROLES.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        )}
       </SidebarFooter>
     </Sidebar>
   );

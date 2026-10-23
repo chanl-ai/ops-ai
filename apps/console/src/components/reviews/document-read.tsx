@@ -322,6 +322,7 @@ export function DocumentReadSection({
   onEdit,
   confirmed,
   onConfirm,
+  onOpenSource,
 }: {
   read: DocumentRead;
   open: boolean;
@@ -330,6 +331,8 @@ export function DocumentReadSection({
   /** Key-field confirmations; without `onConfirm` (a decided review, or no one to decide) no Confirm is offered. */
   confirmed?: ReadConfirmed;
   onConfirm?: (record: number, key: string) => void;
+  /** Shows where a field was read on the document beside the table; without it the source is text. */
+  onOpenSource?: (record: number, key: string) => void;
 }) {
   const editing = open && read.editable;
   const record = (i: number) => (
@@ -343,6 +346,7 @@ export function DocumentReadSection({
       onEdit={(key, text) => onEdit(i, key, text)}
       confirmed={confirmed?.[i]}
       onConfirm={open && onConfirm ? (key) => onConfirm(i, key) : undefined}
+      onOpenSource={onOpenSource ? (key) => onOpenSource(i, key) : undefined}
     />
   );
   const doubtful = read.records.reduce((n, r) => n + Object.values(r.fields).filter((f) => f.needsReview && !f.corrected).length, 0);

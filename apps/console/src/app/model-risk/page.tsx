@@ -152,7 +152,7 @@ export default function ModelRiskPage() {
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="the model inventory" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the model inventory" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={4}>

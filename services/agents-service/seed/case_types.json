@@ -1,7 +1,7 @@
 [
   {
     "id": "restraining_notice",
-    "version": 1,
+    "version": 2,
     "name": "Restraining notice",
     "description": "A court's restraining notice on a debtor's accounts.",
     "fields": [
@@ -46,11 +46,12 @@
         "label": "Notice file",
         "type": "file"
       }
-    ]
+    ],
+    "deadline": "respondBy"
   },
   {
     "id": "tax_levy",
-    "version": 1,
+    "version": 2,
     "name": "Tax levy",
     "description": "A tax authority's levy on a taxpayer's accounts.",
     "fields": [
@@ -100,7 +101,8 @@
         "label": "Levy file",
         "type": "file"
       }
-    ]
+    ],
+    "deadline": "respondBy"
   },
   {
     "id": "account_hold",

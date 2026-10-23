@@ -8,6 +8,7 @@ from alembic import context
 from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_agents.store import background as _background  # noqa: F401 - registers the background process tables
 from ops_agents.store import channels as _channels  # noqa: F401 - registers the channel tables
 from ops_agents.store import events as _events  # noqa: F401 - registers thread_events
 from ops_agents.store import guardrails as _guardrails  # noqa: F401 - registers the guardrail tables

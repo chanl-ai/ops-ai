@@ -1,7 +1,6 @@
 /**
- * Sample documents for the Human Tasks mock, drawn by .codeloop/evidence/460/make-documents.py:
- * each a one-page PDF as a data URL, with the box of every field read from it.
- * Regenerate with that script; do not edit by hand.
+ * Sample documents for the Human Tasks mock, drawn once with reportlab (card c-460): each a one-page PDF as a data URL,
+ * with the box of every field read from it. Generated data; do not edit by hand.
  */
 import type { ViewerBox } from '@/components/shared/document-viewer';
 

@@ -9,7 +9,7 @@ delete a small object) and is refused naming the purpose when the probe fails, s
 Files keep the backend and container they were stored in; a save may not drop a target that still holds files.
 
 Credentials are kept by name in `storage_credentials`, sealed with the service's secrets key; nothing here returns a
-credential's value. Design: .codeloop/wiki/concepts/files-service-design.md; card c-100.
+credential's value. Design: docs/services/files-service/overview.md; card c-100.
 """
 
 from __future__ import annotations

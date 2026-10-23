@@ -194,7 +194,7 @@ export default function ConversationsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="conversations" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="conversations" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

@@ -1,5 +1,6 @@
 'use client';
 
+import type * as React from 'react';
 import { type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -18,6 +19,8 @@ interface EmptyStateProps {
   action?: EmptyStateAction;
   secondaryAction?: EmptyStateAction;
   testId?: string;
+  /** A control that is not a plain button, such as a menu, placed after the actions. */
+  children?: React.ReactNode;
 }
 
 function ActionButton({
@@ -48,6 +51,7 @@ export function EmptyState({
   action,
   secondaryAction,
   testId,
+  children,
 }: EmptyStateProps) {
   return (
     <div
@@ -61,10 +65,11 @@ export function EmptyState({
       <p className="text-muted-foreground text-center text-sm max-w-sm mb-5 whitespace-normal wrap-break-word">
         {description}
       </p>
-      {(action || secondaryAction) && (
+      {(action || secondaryAction || children) && (
         <div className="flex items-center gap-3">
           {action && <ActionButton action={action} />}
           {secondaryAction && <ActionButton action={secondaryAction} variant="outline" />}
+          {children}
         </div>
       )}
     </div>

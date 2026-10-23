@@ -20,7 +20,7 @@ from ops_service_kit.errors import NotFound
 from ops_store import isolation
 
 # The dev header caller, which decides for any team.
-B = Principal(name="b@x", email="b@x", team_id="team_ops", tenant_id="local")
+B = Principal(name="b@x", email="b@x", team_id="team_ops", tenant_id="local", team_ids=("team_ops",), dev=True)
 
 
 @pytest.fixture

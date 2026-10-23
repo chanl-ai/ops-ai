@@ -6,11 +6,11 @@
 // 3 in Files the notice's menu starts a workflow with the file, offering only the intake, whose test email opens with
 // the notice attached; 5 uploading the same PDF again under Chat attachment reuses the stored file. UC466_ONLY takes
 // step numbers as a pattern: 5 runs step 5 alone (its red run without the upload fix), '1|2|3' skips step 5.
-// Screenshots go to .codeloop/evidence/466/uc/.
+// Screenshots go to evidenceDir('466', 'uc').
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -20,7 +20,7 @@ const PDF = join(ROOT, 'services/agents-service/tests/fixtures/mailbox/levy_noti
 const SEED = Object.fromEntries(JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).map((w) => [w.id, w]));
 // The run input an Email received trigger gives every run (ops_engine shapes.EMAIL).
 const EMAIL_KEYS = ['attachments', 'body', 'bodyFile', 'folder', 'from', 'mailbox', 'messageId', 'receivedAt', 'skipped', 'subject'];
-const SHOTS = join(ROOT, '.codeloop/evidence/466/uc');
+const SHOTS = evidenceDir('466', 'uc');
 const ONLY = process.env.UC466_ONLY;
 
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;

@@ -6,7 +6,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -93,7 +93,7 @@ await withUiStack(
       );
 
       // The card's evidence: the check at desktop and phone width.
-      const shots = join(ROOT, '.codeloop/evidence/169');
+      const shots = evidenceDir('169');
       mkdirSync(shots, { recursive: true });
       await page.getByTestId('review-sheet').screenshot({ path: join(shots, 'read-check-1280.png') });
       await page.setViewportSize({ width: 400, height: 900 });
@@ -232,13 +232,13 @@ await withUiStack(
       // The canvas draws after the run's lists, so wait for its line before reading it.
       await page.getByTestId('node-repeats').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
       const repeats = await page.getByTestId('node-repeats').allInnerTexts();
-      const eachShots = join(ROOT, '.codeloop/evidence/306');
+      const eachShots = evidenceDir('306');
       mkdirSync(eachShots, { recursive: true });
       if (childrenShown) await page.getByTestId('run-children').screenshot({ path: join(eachShots, 'run-children-1280.png') });
       await page.locator('[data-testid="node-repeats"]').first().screenshot({ path: join(eachShots, 'node-repeats-1280.png') });
       check(
         '4d the run lists the levy case it started for the debtor with its status, and the canvas says the step runs for each debtor read',
-        childrenShown && childLinks.some((h) => h === `/workflows/runs/${encodeURIComponent(levy.id)}` || h === `/workflows/runs/${levy.id}`) && childStatus.length > 0 && repeats.some((t) => /^for each \w+ from /.test(t.trim())),
+        childrenShown && childLinks.some((h) => h === `/workflows/runs/${encodeURIComponent(levy.id)}` || h === `/workflows/runs/${levy.id}`) && childStatus.length > 0 && repeats.some((t) => /^for each \w+ from /i.test(t.trim())),
         { childLinks, childStatus, repeats },
       );
 

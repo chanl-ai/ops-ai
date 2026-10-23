@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
@@ -19,6 +19,7 @@ import type {
   SkillTestCaseInput,
   SkillView,
 } from '@/lib/types/skills';
+import { useTeamQuery } from './team-query';
 
 /** Every skill key starts with 'skills'; an agent's skills sit under the agent key so attaching refreshes the agent. */
 export const sk = {
@@ -32,13 +33,13 @@ export const sk = {
 };
 
 export const useSkills = (p: ListParams<SkillFilters> & { view: SkillView }) => usePagedQuery({ queryKey: sk.list(p), queryFn: () => api.skills.list(p) });
-export const useSkill = (id: string) => useQuery({ queryKey: sk.one(id), queryFn: () => api.skills.get(id) });
-export const useSkillOptions = () => useQuery({ queryKey: sk.options, queryFn: api.skills.options, staleTime: 60_000 });
-export const useSkillGenerateOptions = (enabled: boolean) => useQuery({ queryKey: sk.generateOptions, queryFn: api.skills.generateOptions, enabled, staleTime: 30_000 });
-export const useSkillImportPreview = (fileId: string | undefined) => useQuery({ queryKey: sk.importPreview(fileId ?? ''), queryFn: () => api.skills.previewImport(fileId!), enabled: !!fileId, retry: false });
+export const useSkill = (id: string) => useTeamQuery({ queryKey: sk.one(id), queryFn: () => api.skills.get(id) });
+export const useSkillOptions = () => useTeamQuery({ queryKey: sk.options, queryFn: api.skills.options, staleTime: 60_000 });
+export const useSkillGenerateOptions = (enabled: boolean) => useTeamQuery({ queryKey: sk.generateOptions, queryFn: api.skills.generateOptions, enabled, staleTime: 30_000 });
+export const useSkillImportPreview = (fileId: string | undefined) => useTeamQuery({ queryKey: sk.importPreview(fileId ?? ''), queryFn: () => api.skills.previewImport(fileId!), enabled: !!fileId, retry: false });
 /** Skills a new agent could pin; `scope` is null until the wizard knows the owner, tools and knowledge bases. */
 export const useSkillCandidates = (scope: SkillCandidateScope | null) => usePagedQuery({ queryKey: sk.candidates(scope), queryFn: () => api.skills.candidates(scope!), enabled: !!scope });
-export const useAgentSkills = (agentId: string) => useQuery({ queryKey: sk.agent(agentId), queryFn: () => api.skills.agents.get(agentId) });
+export const useAgentSkills = (agentId: string) => useTeamQuery({ queryKey: sk.agent(agentId), queryFn: () => api.skills.agents.get(agentId) });
 
 /** Skill writes can open reviews, change agents and always write the audit log, so those refresh too. */
 function useSkillWrite<A, R>(fn: (a: A) => Promise<R>, also: string[] = []) {

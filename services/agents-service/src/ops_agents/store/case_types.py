@@ -8,7 +8,7 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 from .base import metadata
 from .typed_records import RecordNotFound, VersionedRecords, head_columns, version_columns
@@ -18,7 +18,7 @@ case_type_versions = sa.Table(
     "case_type_versions",
     metadata,
     *version_columns(),
-    info={**TENANT_SCOPED, **team_owned_via("case_types", "type_id")},
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -30,7 +30,7 @@ class CaseTypeNotFound(RecordNotFound):
 class CaseTypeStore(VersionedRecords):
     head = case_types
     versions = case_type_versions
-    record_keys = ("name", "description", "fields")
+    record_keys = ("name", "description", "fields", "deadline")
     noun = "case type"
     taken_code = "case_type_taken"
     not_found = CaseTypeNotFound

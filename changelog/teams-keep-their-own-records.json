@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-22",
+  "title": "Each team keeps its own records",
+  "description": "Every team now has its own copy of the general task and case types, and one team never sees or depends on another team's records. A new team gets the general types the first time someone in it opens a list.",
+  "tag": "improved",
+  "cards": [
+    "c-507"
+  ]
+}

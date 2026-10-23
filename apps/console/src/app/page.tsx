@@ -31,7 +31,7 @@ export default function OverviewPage() {
       {query.isPending ? (
         <PageSkeleton statCards={2} tableRows={6} />
       ) : query.isError || !o ? (
-        <QueryError what="the overview" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the overview" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={2}>

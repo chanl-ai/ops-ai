@@ -60,6 +60,8 @@ class GraphDeps:
     agents: AgentRunner | None = None
     # What the agent remembers about the turn's person (c-124): their profile and search_memory; None remembers nothing.
     memory: MemoryRunner | None = None
+    # The Ops tools for the team's default agent (c-469); None offers none.
+    ops: OpsRunner | None = None
 
 
 async def needs_step_up(deps: GraphDeps, tool: str) -> bool:
@@ -124,6 +126,34 @@ class WorkflowTools:
 
 AGENT_TOOL_PREFIX = "agent__"
 MEMORY_TOOL = "search_memory"
+# The Ops tools (c-469): the team default agent's reads of the person's cases, Human Tasks, runs and workflows.
+OPS_SERVER = "ops"
+
+
+class OpsRunner(Protocol):
+    """The API side of the Ops tools (api/ops_tools.py), so this layer does not import the API."""
+
+    async def offers(self, agent_id: str) -> list[ToolGrant]:
+        """The Ops tools when `agent_id` is its team's default agent and the turn has a person; none otherwise."""
+        ...
+
+    async def run(self, tool: str, arguments: dict[str, Any]) -> ToolOutcome: ...
+
+
+@dataclass(frozen=True)
+class OpsTools:
+    """The kernel's tool port with the Ops tools routed to their runner; every other tool goes to `inner`."""
+
+    inner: ToolExecutor
+    runner: OpsRunner
+    names: frozenset[str]
+
+    async def execute(
+        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+    ) -> ToolOutcome:
+        if tool not in self.names:
+            return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
+        return await self.runner.run(tool, arguments)
 
 
 class MemoryRunner(Protocol):
@@ -206,6 +236,9 @@ async def ports_with_workflows(
         ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents)), [*offers, *specialists]
     if deps.memory is not None and agent_id and (search := await deps.memory.offers(agent_id)):
         ports, offers = replace(ports, tools=MemoryTools(ports.tools, deps.memory)), [*offers, *search]
+    if deps.ops is not None and agent_id and (reads := await deps.ops.offers(agent_id)):
+        names = frozenset(g.name for g in reads)
+        ports, offers = replace(ports, tools=OpsTools(ports.tools, deps.ops, names)), [*offers, *reads]
     return ports, offers
 
 

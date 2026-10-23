@@ -21,6 +21,7 @@ import type {
 import type { ConnectionActivity, ConnectionRef, Dependant } from '@/lib/types/integrations';
 
 import { ApiError, type Lookups, type OpsApi } from '../contract';
+import { sampleBackground } from './background';
 import { createCasesMock } from './cases';
 import { createChatMock } from './chat';
 import { createKnowledgeMock } from './knowledge';
@@ -1161,6 +1162,7 @@ export function createMockApi(): OpsApi {
     // Activity is agents-service's one list (/v1/activity); the mock has none.
     activity: {
       list: ({ page, pageSize }) => respond(() => ({ data: [], pagination: { page, pageSize, total: 0, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} })),
+      background: () => respond(() => sampleBackground()),
     },
     // Widget deployments mint sessions in agents-service; the mock lists none and refuses writes.
     widgetDeployments: {

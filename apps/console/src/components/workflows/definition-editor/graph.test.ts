@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { EngineNode, EngineNodeType } from '../../../lib/types/engine.ts';
-import { outPorts, repeatsOver } from './graph.ts';
+import { outPorts, repeatsLine, repeatsOver } from './graph.ts';
 
 // ops.flow.humanReview as GET /v1/engine/node-types lists it.
 const review = {
@@ -70,10 +70,20 @@ test('an option already named timeout is drawn once', () => {
 
 test('a step that repeats over a list names the step it comes from, never its output field; a step that runs once says nothing', () => {
   const nodes = [{ id: 'read', name: 'Read the file' }] as EngineNode[];
-  assert.equal(repeatsOver({ forEach: '$.nodes.read.out.records' }, nodes), 'for each item from Read the file');
-  assert.equal(repeatsOver({ forEach: '$.input.debtors' }, nodes), 'for each debtors in the input');
+  assert.equal(repeatsOver({ forEach: '$.nodes.read.out.records' }, nodes), 'For each item from Read the file');
+  assert.equal(repeatsOver({ forEach: '$.input.debtors' }, nodes), 'For each debtor in the input');
+  assert.equal(repeatsOver({ forEach: '$.nodes.read.out.attachments' }, nodes), 'For each attachment');
+  assert.equal(repeatsOver({ forEach: '$.input.policies' }, nodes), 'For each policy in the input');
+  assert.equal(repeatsOver({ forEach: '$.input.boxes' }, nodes), 'For each box in the input');
+  assert.equal(repeatsOver({ forEach: '$.input.data' }, nodes), 'For each item in the input');
   // A fallback reads the first list; nothing of the path syntax reaches the canvas.
-  assert.equal(repeatsOver({ forEach: '$.nodes.read.out.edited ?? $.nodes.read.out.records' }, nodes), 'for each item from Read the file');
+  assert.equal(repeatsOver({ forEach: '$.nodes.read.out.edited ?? $.nodes.read.out.records' }, nodes), 'For each item from Read the file');
   assert.equal(repeatsOver({ forEach: '' }, nodes), null);
   assert.equal(repeatsOver({ workflow: 'levy_case' }, nodes), null);
+});
+
+test('a repeat line too long for a step keeps what it repeats over, so it is never cut off', () => {
+  assert.equal(repeatsLine('For each attachment in the input'), 'For each attachment');
+  assert.equal(repeatsLine('For each item from Check the read'), 'For each item');
+  assert.equal(repeatsLine('For each item from Read'), 'For each item from Read');
 });

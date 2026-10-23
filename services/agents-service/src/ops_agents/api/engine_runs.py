@@ -72,6 +72,26 @@ async def start_run(
 MAX_CHILD_DEPTH = 5
 
 
+async def runs_above(runs: RunStore, run: dict[str, Any]) -> list[dict[str, Any]]:
+    """The runs that started `run`, nearest first, walking `created_by` up to MAX_CHILD_DEPTH. The walk stops at a
+    parent that is gone or belongs to another team: for this run that parent does not exist (identity-and-tenancy.md,
+    "The team is the workspace"). The one walk of a run's starters; every reader that climbs the chain uses it."""
+    above: list[dict[str, Any]] = []
+    here = run
+    while len(above) < MAX_CHILD_DEPTH and str(here.get("created_by") or "").startswith(CHILD_PREFIX):
+        parent = await runs.get(str(here["created_by"])[len(CHILD_PREFIX) :])
+        if parent is None or parent.get("team_id") != run.get("team_id"):
+            break
+        above.append(parent)
+        here = parent
+    return above
+
+
+async def first_run(runs: RunStore, run: dict[str, Any]) -> dict[str, Any]:
+    """The run whose trigger began `run`'s work: the top of `runs_above`, or `run` itself."""
+    return (await runs_above(runs, run) or [run])[-1]
+
+
 def child_run_key(key: str) -> str:
     """The child's run key from the step's key (parent run, step, iteration, item); hashed when it would not fit the
     column."""
@@ -129,11 +149,5 @@ class WorkflowStarts:
         return await self.runs.children(parent_run_id, f"child:{key_prefix}", outputs=outputs)
 
     async def depth(self, run: dict[str, Any]) -> int:
-        """How many runs started this one, walking `created_by` up to the limit."""
-        depth, here = 0, run
-        while depth < MAX_CHILD_DEPTH and str(here.get("created_by") or "").startswith(CHILD_PREFIX):
-            above = await self.runs.get(str(here["created_by"])[len(CHILD_PREFIX) :])
-            if above is None:
-                break
-            depth, here = depth + 1, above
-        return depth
+        """How many runs started this one, up to the limit."""
+        return len(await runs_above(self.runs, run))

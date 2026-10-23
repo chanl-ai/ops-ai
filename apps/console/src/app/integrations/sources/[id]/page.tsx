@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, SearchX, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
+import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { SensitivityBadge, SourceStatusBadge, SourceTypeIcon, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
@@ -12,7 +12,6 @@ import { PageLayout } from '@/components/page-layout';
 import { SourceOverview } from '@/components/sources/source-overview';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
@@ -24,7 +23,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { strategyMeta } from '@/components/sources/ingest-meta';
 import { useDeleteSource, usePauseSource, useSource, useSyncSource } from '@/hooks/knowledge-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { count, plural } from '@/lib/format';
 import type { SyncOptions } from '@/lib/types/knowledge';
 import type { IngestStrategy } from '@/lib/types/knowledge-ingest';
@@ -60,11 +58,7 @@ export default function SourcePage() {
   if (query.isError)
     return (
       <PageLayout title="Source" backHref="/integrations">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Source not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to sources', href: '/sources' }} />
-        ) : (
-          <QueryError what="this source" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this source" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to sources', href: '/sources' }} />
       </PageLayout>
     );
 

@@ -1,1 +1,1 @@
-"""platform-service: who is calling and for which tenant and team (.codeloop/wiki/concepts/platform-service.md)."""
+"""platform-service: who is calling and for which tenant and team (docs/services/platform-service/overview.md)."""

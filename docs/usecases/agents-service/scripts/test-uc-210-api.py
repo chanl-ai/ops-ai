@@ -280,15 +280,20 @@ def main() -> None:
             marcus, priya = case_for(api, "Marcus Bell"), case_for(api, "Priya Natarajan")
             check(
                 "3 Marcus (name and address) and Priya (name and last four) wait for a review; "
-                "Jordan, found by name alone, ends not_matched",
+                "Jordan, found by name alone, waits on Find the customer or close as not ours (c-477)",
                 marcus["status"] == "waiting"
                 and priya["status"] == "waiting"
-                and jordan["outcome"] == "not_matched"
-                and [c["id"] for c in jordan["output"]["candidates"]] == ["CUS-1003"],
+                and jordan["status"] == "waiting"
+                and (jordan.get("waiting") or {}).get("node") == "find"
+                and [
+                    c["id"]
+                    for c in ((jordan["waiting"].get("payload") or {}).get("draft") or {}).get("candidates") or []
+                ]
+                == ["CUS-1003"],
                 {
                     "marcus": marcus["status"],
                     "priya": priya["status"],
-                    "jordan": (jordan["status"], jordan["outcome"], jordan["output"]),
+                    "jordan": (jordan["status"], jordan.get("waiting")),
                 },
             )
 

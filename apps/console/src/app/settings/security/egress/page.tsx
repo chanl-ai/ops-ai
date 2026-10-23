@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { EGRESS_COPY, EgressAddDialog } from '@/components/settings/egress-add-dialog';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -28,10 +29,6 @@ import { shortDate } from '@/lib/format';
 import type { EgressKind, ListedHost, ListedRange } from '@/lib/types/egress';
 import { useCan } from '@/hooks/me-queries';
 
-const COPY = {
-  host: { noun: 'host', label: 'Host', placeholder: 'e.g. api.bank.example', hint: 'A DNS name. Tool calls go to it over https on 443 only.' },
-  range: { noun: 'private range', label: 'Range', placeholder: 'e.g. 10.20.0.0/16', hint: 'A listed host may resolve into this range. Loopback, link-local and cloud metadata can never be listed.' },
-} as const;
 
 const added = (by: string, at: string) => (
   <div className="min-w-32">
@@ -90,55 +87,6 @@ function actions<T>(onRemove: (row: T) => void): ColumnDef<T> {
   };
 }
 
-function AddDialog({ kind, onOpenChange }: { kind: EgressKind | null; onOpenChange: (open: boolean) => void }) {
-  const add = useAddEgress();
-  const [value, setValue] = React.useState('');
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string>();
-  React.useEffect(() => {
-    if (kind) (setValue(''), setNote(''), setError(undefined));
-  }, [kind]);
-  const copy = COPY[kind ?? 'host'];
-  const submit = async () => {
-    if (!value.trim()) return setError(`Enter a ${copy.noun}.`);
-    try {
-      const r = await add.mutateAsync({ kind: kind!, value: value.trim(), note });
-      toast.success(r.changed ? `Listed ${r.value}` : `${r.value} was already listed`);
-      onOpenChange(false);
-    } catch (e) {
-      // The service names why a value can never be listed (400); show that, not a generic failure.
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <DialogShell
-      open={!!kind}
-      onSubmit={submit}
-      onOpenChange={onOpenChange}
-      title={`Add a ${copy.noun}`}
-      description="Every change is audited."
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <LoadingButton type="submit" isLoading={add.isPending} loadingText="Adding…" data-testid="egress-add-submit">
-            Add {copy.noun}
-          </LoadingButton>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <FormField id="egress-value" label={copy.label} error={error} hint={copy.hint}>
-          <Input id="egress-value" value={value} aria-invalid={!!error} onChange={(e) => (setValue(e.target.value), setError(undefined))} placeholder={copy.placeholder} className="font-mono text-sm" />
-        </FormField>
-        <FormField id="egress-note" label="Note" optional hint="Why this is listed, for whoever reviews the list next.">
-          <Input id="egress-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Core banking statements API" />
-        </FormField>
-      </div>
-    </DialogShell>
-  );
-}
 
 export default function EgressPage() {
   const query = useEgress();
@@ -179,7 +127,7 @@ export default function EgressPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={4} />
       ) : query.isError && !query.data ? (
-        <QueryError what="the egress allow-list" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the egress allow-list" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <>
           <section className="flex flex-col gap-2" data-testid="egress-hosts">
@@ -187,7 +135,7 @@ export default function EgressPage() {
             {hostPage.isPending ? (
               <PageSkeleton statCards={0} tableRows={4} />
             ) : hostPage.isError && !hostPage.data ? (
-              <QueryError what="the host list" onRetry={() => hostPage.refetch()} retrying={hostPage.isFetching} />
+              <QueryError what="the host list" onRetry={() => hostPage.refetch()} error={hostPage.error} retrying={hostPage.isFetching} />
             ) : (
               <DataTableWithViews
                 columns={hosts}
@@ -226,11 +174,11 @@ export default function EgressPage() {
         </>
       )}
 
-      <AddDialog kind={adding} onOpenChange={(o) => !o && setAdding(null)} />
+      <EgressAddDialog kind={adding} onOpenChange={(o) => !o && setAdding(null)} />
       <DeleteDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
-        entityType={removing ? COPY[removing.kind].noun : 'entry'}
+        entityType={removing ? EGRESS_COPY[removing.kind].noun : 'entry'}
         verb="Remove"
         entityName={removing?.value}
         description="Tool calls and discovery to it are refused from now on."

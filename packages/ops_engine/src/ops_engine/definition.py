@@ -146,10 +146,11 @@ LOOP_ROOTS = ("item", "index")
 
 
 def _loop_paths_outside(parameters: dict[str, Any]) -> list[str]:
-    """`$.item` and `$.index` paths a step uses where no item is: anywhere but the `input` of a step that sets
-    `forEach`. They would read as nothing at run time."""
+    """`$.item` and `$.index` paths a step uses where no item is: anywhere but the `input` and `label` of a step that
+    sets `forEach`. They would read as nothing at run time."""
     looping = parameters.get("forEach") not in (None, "")
-    allowed: set[str] = set(mappings(parameters.get("input") or {})) if looping else set()
+    per_item: dict[str, Any] = {"input": parameters.get("input") or {}, "label": parameters.get("label") or ""}
+    allowed: set[str] = set(mappings(per_item)) if looping else set()
     return [
         p for p in mappings(parameters) if p[len(MAPPING_PREFIX) :].split(".")[0] in LOOP_ROOTS and p not in allowed
     ]

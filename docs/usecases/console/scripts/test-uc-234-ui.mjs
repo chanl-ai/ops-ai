@@ -4,7 +4,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -355,13 +355,13 @@ await withUiStack(
         const agreesElsewhere = await page.getByTestId('read-differs-0-court').count();
         await page.screenshot({ path: join(SHOTS, 'task-read-sources-1280.png') });
         // c-261's screen evidence: the same check at 1280 and 400.
-        mkdirSync(join(ROOT, '.codeloop/evidence/261/screens'), { recursive: true });
-        await page.screenshot({ path: join(ROOT, '.codeloop/evidence/261/screens/read-sources-1280.png') });
+        mkdirSync(evidenceDir('261', 'screens'), { recursive: true });
+        await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-1280.png') });
         await page.setViewportSize({ width: 400, height: 800 });
         // On a phone the sources sit in the Decide pane.
         await page.getByTestId('task-pane-decide').click();
         await page.waitForTimeout(400);
-        await page.screenshot({ path: join(ROOT, '.codeloop/evidence/261/screens/read-sources-400.png') });
+        await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-400.png') });
         await page.setViewportSize({ width: 1280, height: 800 });
         check(
           '9 a read combined with a second source shows each source in its own column and marks where they differ',

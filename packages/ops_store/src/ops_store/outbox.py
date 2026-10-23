@@ -17,13 +17,12 @@ import asyncio
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from . import isolation
+from . import background, isolation
 from .dialect import claim
 from .schema import system
 
@@ -175,13 +174,32 @@ class Relay:
             gone = await conn.execute(t.delete().where(sa.or_(t.c.sent_at < cutoff, never)))
         return int(gone.rowcount or 0)
 
-    async def run(self, stop: asyncio.Event, *, every_s: float = 2.0) -> None:
-        """Delivers until `stop` is set, waking every `every_s` seconds, and prunes once every PRUNE_EVERY_S."""
+    async def waiting(self) -> int:
+        """How many events are not yet sent and not given up on, for the relay's heartbeat."""
+        t = self.table
+        async with isolation.system_tx(self.engine, RELAY, role=self.role) as conn:
+            count = await conn.scalar(
+                sa.select(sa.func.count()).select_from(t).where(t.c.sent_at.is_(None), t.c.next_at.is_not(None))
+            )
+        return int(count or 0)
+
+    async def run(
+        self,
+        stop: asyncio.Event,
+        *,
+        key: str,
+        store: background.HeartbeatStore,
+        every_s: float = 2.0,
+    ) -> None:
+        """Delivers until `stop` is set, waking every `every_s` seconds, and prunes once every PRUNE_EVERY_S, as the
+        listed background process `key`: a failed pass is retried with a growing wait and shows in its heartbeat."""
         pruned = float("-inf")
-        while not stop.is_set():
+
+        async def once() -> int:
+            nonlocal pruned
             if self.clock() - pruned >= PRUNE_EVERY_S:
                 await self.prune()
                 pruned = self.clock()
-            await self.once()
-            with suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=every_s)
+            return await self.once()
+
+        await background.run(key, once, stop=stop, store=store, every_s=every_s, waiting=self.waiting)

@@ -1,7 +1,7 @@
 # kb-service
 
 Department knowledge bases, their file sources, and passages cited by page and section, on :8740. The designed
-surface is `.codeloop/wiki/concepts/knowledge.md`; what is built is in `docs/services/kb-service/overview.md`.
+surface and what is built are in `docs/services/kb-service/overview.md`.
 
 ```
 make db-up                    # from the repo root: the compose PostgreSQL

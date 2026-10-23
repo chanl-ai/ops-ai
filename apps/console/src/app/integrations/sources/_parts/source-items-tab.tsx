@@ -103,7 +103,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
   );
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
-  if (query.isError && !query.data) return <QueryError what="items" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError && !query.data) return <QueryError what="items" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   const mimes = Object.keys(facets.mime ?? {}).sort();
   const classes = Object.keys(facets.errorClass ?? {}).filter((c) => c !== 'none') as ErrorClass[];

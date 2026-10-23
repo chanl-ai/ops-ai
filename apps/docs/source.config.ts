@@ -17,6 +17,12 @@ export const docs = defineDocs({
 export default defineConfig({
   mdxOptions: {
     // remarkOpsAi runs before Fumadocs' defaults, so it wraps images before remarkImage turns them into imports.
-    remarkPlugins: (defaults) => [remarkOpsAi, ...defaults],
+    // In dev a broken link warns instead of throwing: turbopack caches a loader's result by the page's own content, so
+    // a throw caused by another page's edit stays cached across restarts and every route answers 500 until .next is
+    // deleted. The build still throws, and so does `pnpm check:links`.
+    remarkPlugins: (defaults) => [
+      [remarkOpsAi, process.env.NODE_ENV === 'development' ? { throwOnError: false, warn: true } : {}],
+      ...defaults,
+    ],
   },
 });

@@ -22,8 +22,8 @@ from alembic.migration import MigrationContext
 TENANT_KEY = "tenant_scoped"
 TENANT_SCOPED: dict[str, Any] = {TENANT_KEY: True}
 # A team's work or asset: every read names the caller's team through `ops_store.team_scope.team_visible` (c-407), and
-# `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. A null team is a workspace-level
-# platform resource every team reads, never a way to share one team's data.
+# `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. Every row has a team (c-507): the
+# database policy reads only the acting team's rows, and nothing is shared across teams.
 TEAM_KEY = "team_owned"
 # A table whose rows belong to a team-owned parent (an agent's versions): read through the parent's team.
 TEAM_VIA_KEY = "team_owned_via"
@@ -181,9 +181,10 @@ def team_column(table: sa.Table) -> sa.Column[Any]:
     return table.c[name]
 
 
-def _pg_predicates(table: sa.Table, kind: IsolationKind) -> tuple[str, str]:
+def _pg_predicates(table: sa.Table, kind: IsolationKind, *, reads_no_team: bool = False) -> tuple[str, str]:
     """The read (USING) and write (WITH CHECK) conditions of the table's one policy. Each setting is read in a scalar
-    subquery, which PostgreSQL evaluates once per statement (an InitPlan) instead of once per row."""
+    subquery, which PostgreSQL evaluates once per statement (an InitPlan) instead of once per row. `reads_no_team` is
+    the policy before c-507, which also read rows with no team; only a downgrade past c-507 asks for it."""
 
     def setting(name: str) -> str:
         return f"(SELECT current_setting('{name}', true))"
@@ -194,10 +195,13 @@ def _pg_predicates(table: sa.Table, kind: IsolationKind) -> tuple[str, str]:
     team = team_column(table).name
     wide = f"{setting('app.scope')} = 'tenant'"
     own = f"{team} = {setting('app.team_id')}"
-    return f"{tenant} AND ({wide} OR {team} IS NULL OR {own})", f"{tenant} AND ({wide} OR {own})"
+    no_team = f" OR {team} IS NULL" if reads_no_team else ""
+    return f"{tenant} AND ({wide}{no_team} OR {own})", f"{tenant} AND ({wide} OR {own})"
 
 
-def isolation_ddl(table: sa.Table, dialect: str, *, kind: IsolationKind | None = None, chain: str = "") -> list[str]:
+def isolation_ddl(
+    table: sa.Table, dialect: str, *, kind: IsolationKind | None = None, chain: str = "", reads_no_team: bool = False
+) -> list[str]:
     """The statements that make the database isolate `table` as its markings say (or as `kind` says, for a migration's
     downgrade), each runnable on its own and safe to repeat. PostgreSQL: forced row-level security and one policy,
     `{t}_isolation` (team) or `{t}_tenant`, replacing the other, since permissive policies OR together. SQL Server: one
@@ -209,7 +213,7 @@ def isolation_ddl(table: sa.Table, dialect: str, *, kind: IsolationKind | None =
     t = table.name
     name, other = (f"{t}_isolation", f"{t}_tenant") if kind == "team" else (f"{t}_tenant", f"{t}_isolation")
     if dialect == "postgresql":
-        read, write = _pg_predicates(table, kind)
+        read, write = _pg_predicates(table, kind, reads_no_team=reads_no_team)
         return [
             f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY",
             f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY",
@@ -274,7 +278,7 @@ def security_ddl(
     chain: str, tables: Iterable[sa.Table], *, column_type: Callable[[sa.Column[Any]], str], system_user: str | None
 ) -> list[str]:
     """SQL Server, for the baseline: the chain's schema, its predicate functions for each kind its tables use, then each
-    table's policy. Reads see the context's tenant (and, for a team table, the context's team, the null team, or every
+    table's policy. Reads see the context's tenant (and, for a team table, the context's team, or every
     team in a tenant-wide scope); writes must be the context's tenant (and team, unless tenant-wide). `system_user` (the
     agents chain's) passes both: its grants limit what it reads and which columns it updates. Nothing a login can set
     opens another tenant's rows; a missing tenant matches no row."""
@@ -300,8 +304,39 @@ def mssql_predicates_ddl(
     ]
 
 
+def mssql_team_predicates_reissue_ddl(
+    chain: str,
+    team_tables: Sequence[sa.Table],
+    *,
+    column_type: Callable[[sa.Column[Any]], str],
+    system_user: str | None,
+    reads_no_team: bool = False,
+) -> list[str]:
+    """SQL Server, for a migration that changes the team predicate's text (c-507): the functions are schema-bound to
+    every policy that uses them, so each of the chain's team tables loses its policy, the team functions are dropped
+    and created again, and each policy comes back. `team_tables` must be every team table of the chain at that
+    revision, or the drop is refused by a policy still bound to the function."""
+    fn = f"{MSSQL_SECURITY}.{chain}_team"
+    out = [
+        f"IF OBJECT_ID(N'{MSSQL_SECURITY}.{t.name}_isolation', N'SP') IS NOT NULL "
+        f"DROP SECURITY POLICY {MSSQL_SECURITY}.{t.name}_isolation"
+        for t in team_tables
+    ]
+    out += [f"IF OBJECT_ID(N'{fn}_{part}', N'IF') IS NOT NULL DROP FUNCTION {fn}_{part}" for part in ("read", "write")]
+    functions = _mssql_functions(chain, list(team_tables), column_type, system_user, reads_no_team=reads_no_team)
+    out += [f"EXEC (N'{create.replace(chr(39), chr(39) * 2)}')" for _name, create in functions]
+    for t in team_tables:
+        out += isolation_ddl(t, "mssql", kind="team", chain=chain)
+    return out
+
+
 def _mssql_functions(
-    chain: str, marked: list[sa.Table], column_type: Callable[[sa.Column[Any]], str], system_user: str | None
+    chain: str,
+    marked: list[sa.Table],
+    column_type: Callable[[sa.Column[Any]], str],
+    system_user: str | None,
+    *,
+    reads_no_team: bool = False,
 ) -> list[tuple[str, str]]:
     """(name, CREATE FUNCTION) for the read and write predicate of each kind `marked` uses."""
     system = f" OR USER_NAME() = N'{system_user}'" if system_user else ""
@@ -330,7 +365,8 @@ def _mssql_functions(
             ctx_team = f"CAST(SESSION_CONTEXT(N'team_id') AS {team_type})"
             wide = "CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant'"
             params = f"@tenant_id {tenant_type}, @team_id {team_type}"
-            read = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id IS NULL OR @team_id = {ctx_team})"
+            no_team = " OR @team_id IS NULL" if reads_no_team else ""
+            read = f"@tenant_id = {ctx_tenant} AND ({wide}{no_team} OR @team_id = {ctx_team})"
             write = f"@tenant_id = {ctx_tenant} AND ({wide} OR @team_id = {ctx_team})"
         out += [
             (

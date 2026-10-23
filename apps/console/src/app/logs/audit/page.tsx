@@ -167,7 +167,7 @@ export default function AuditPage() {
       ) : query.isError && !query.data && query.error instanceof ApiError && query.error.code === 'admin_required' ? (
         <EmptyState icon={ShieldCheck} title="Only a team admin reads the audit log" description="Ask an admin of this team for what you need, or for the admin role." testId="audit-admin-only" />
       ) : query.isError && !query.data ? (
-        <QueryError what="the audit log" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the audit log" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
           <SavedViewTabs

@@ -31,6 +31,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..runs import graph_store
 from ..schemas import Out
+from .engine import StoryLine
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("cases"))]  # noqa: UP040
@@ -247,24 +248,53 @@ class WorkflowRef(NamedRef):
     href: str
 
 
-class ActivityLine(Out):
-    at: str
-    actor_name: str
-    text: str
-    href: str | None
-
-
-class RecentActivity(Out):
-    recent: list[ActivityLine]
-    total: int
-    all_href: str
-
-
 class CasePermissions(Out):
     assign: bool
     change_status: bool
     close: bool
     note: bool
+
+
+class CaseTimer(Out):
+    # The case type's deadline field's label, or "Resolution".
+    label: str
+    due_at: str
+    # running, breached or met; paused only for the resolution clock.
+    state: str
+    left_s: int | None
+
+
+class LeftItem(Out):
+    # task: an open Human Task; action: an approved action the bank's system refused, waiting for a new decision.
+    kind: str
+    # A person's name, else the deciding team's name.
+    who: str
+    what: str
+    due_at: str | None
+    href: str
+
+
+class WhatsLeft(Out):
+    items: list[LeftItem]
+    # Nothing left, no linked run still working, not resolved or closed, and the caller may change the status.
+    resolvable: bool
+
+
+class CaseOrigin(Out):
+    """How the case's work began (c-500): email, request (a form or an API call), event, other, or person (opened by
+    hand, with no run)."""
+
+    kind: str
+    text: str
+    run_id: str | None
+    href: str | None
+
+
+class CaseFeed(Out):
+    # Newest first, the run page's lines for each linked run and the case's own timeline worded alike.
+    lines: list[StoryLine]
+    # Lines past the first 200, counted and not sent.
+    more: int
 
 
 class CasePage(CaseDetail):
@@ -280,8 +310,11 @@ class CasePage(CaseDetail):
     actions: list[DraftedAction]
     links: Links
     workflow: WorkflowRef | None
-    activity: RecentActivity
     permissions: CasePermissions
+    timer: CaseTimer
+    whats_left: WhatsLeft
+    origin: CaseOrigin
+    feed: CaseFeed
 
 
 def _team(me: Principal) -> str:

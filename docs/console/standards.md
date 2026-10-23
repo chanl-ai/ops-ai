@@ -51,6 +51,12 @@ composer and message renderers live in `components/chat`. `check-standards` rule
 `apps/console/scripts/reuse-baseline.json`; the list only shrinks, because a listed file that is fixed fails until
 `--write-baseline` takes it off, and that mode never adds one.
 
+Data is read through `hooks/team-query.ts`: `useTeamQuery` and `useTeamInfiniteQuery` for anything a team owns, which
+wait until the person's team is resolved and end their key with the team, and `useSessionQuery` for what the shell needs
+before a team is chosen (the person's teams, who they are, sign-in). A write to the cache uses `teamKey(...)`.
+`check-standards` rule 17 fails an import of `useQuery`, `useInfiniteQuery` or `useQueries` from React Query anywhere
+else, with no baseline.
+
 ## Layout primitives
 
 | Surface | Primitive | Where | The rule |

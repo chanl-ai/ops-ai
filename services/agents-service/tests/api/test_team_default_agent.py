@@ -108,8 +108,9 @@ async def test_only_a_team_admin_sets_the_default(stack: Stack) -> None:
 
 async def test_a_chat_without_an_agent_starts_only_on_a_live_default_of_the_team(stack: Stack) -> None:
     c, rt = stack
-    r = await c.post("/v1/chat/threads", json={"kbIds": []}, headers=VIEWER)
-    assert r.status_code == 409 and r.json()["error"]["code"] == "no_default_agent", r.text
+    # A team that has set no default gets its own Ops Assistant on the first chat (c-469), rather than a refusal.
+    assert (await start(c, VIEWER))["agentId"] == "ag_ops_team_ops"
+    assert (await c.get(URL, headers=VIEWER)).json()["data"]["agentId"] == "ag_ops_team_ops"
     gone = await c.put(URL, json={"agentId": "ag_missing"}, headers=ADMIN)
     assert gone.status_code == 422 and gone.json()["error"]["code"] == "agent_not_live", gone.text
     await move(rt, "ag_fraud", "team_fraud")

@@ -23,6 +23,7 @@ from ops_agents.store.tenancy import current_tenant
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, ServiceClient, dev_service_signer, service_verifiers
 from ops_service_kit.settings import Settings
+from tests.api.test_engine_definitions import basic
 from tests.api.test_graph_versions import definition as graph_definition
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, introspect, jwks
@@ -320,3 +321,43 @@ async def test_a_process_with_no_signing_key_reads_no_policy_and_so_reviews() ->
         reader = PlatformPolicies(service_client(settings, http, "platform"))
         with pytest.raises(PolicyUnread):
             await reader.value("publishReview")
+
+
+# c-486: Tidy up moves steps. A position lives inside each node, so without the workflows rule a move reads as a change
+# to `nodes` and opens a review; a real change made alongside a move must still read as major.
+def _moved(d: dict[str, Any], dy: float) -> dict[str, Any]:
+    return d | {"nodes": [n | {"position": {"x": i * 336.0, "y": dy}} for i, n in enumerate(d["nodes"])]}
+
+
+def test_a_workflow_change_that_only_moves_steps_is_minor() -> None:
+    placed = _moved(basic(), 0)
+    assert not is_major("workflows", placed, _moved(placed, 120))
+    changed = _moved(placed, 120)
+    changed["nodes"][1] = changed["nodes"][1] | {"parameters": {"values": {"customer": "$.input.other"}}}
+    assert is_major("workflows", placed, changed)
+    assert is_major("workflows", None, placed)
+    # The rule is the workflows area's: an agent's nodes-like field is not stripped.
+    assert is_major("agents", {"nodes": [{"position": 1}]}, {"nodes": [{"position": 2}]})
+
+
+async def test_publishing_a_tidied_workflow_needs_no_review_and_a_real_change_still_does(client: AsyncClient) -> None:
+    placed = _moved(basic() | {"id": "tidy_a", "name": "Tidy A"}, 0)
+    await set_mode(client, "workflows", "never")
+    _data(await client.post("/v1/workflows/definitions", json={"definition": placed}, headers=BUILDER), 201)
+    first = _data(await client.post("/v1/workflows/definitions/tidy_a/publish-requests", json={}, headers=BUILDER), 201)
+    assert first["status"] == "approved", first
+    await set_mode(client, "workflows", "major")
+    _data(
+        await client.post("/v1/workflows/definitions", json={"definition": _moved(placed, 160)}, headers=BUILDER), 201
+    )
+    moved = _data(await client.post("/v1/workflows/definitions/tidy_a/publish-requests", json={}, headers=BUILDER), 201)
+    assert (moved["status"], moved["publish"]["majorChange"], moved["publish"]["reviewReason"]) == (
+        "approved",
+        False,
+        "minor_change",
+    ), moved
+    edited = _moved(placed, 320)
+    edited["nodes"][1] = edited["nodes"][1] | {"parameters": {"values": {"customer": "$.input.other"}}}
+    _data(await client.post("/v1/workflows/definitions", json={"definition": edited}, headers=BUILDER), 201)
+    held = _data(await client.post("/v1/workflows/definitions/tidy_a/publish-requests", json={}, headers=BUILDER), 201)
+    assert (held["status"], held["publish"]["majorChange"]) == ("pending", True), held

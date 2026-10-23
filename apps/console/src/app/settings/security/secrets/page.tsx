@@ -207,7 +207,7 @@ export default function SecretsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={4} />
       ) : query.isError && !query.data ? (
-        <QueryError what="secrets" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="secrets" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}
@@ -282,7 +282,7 @@ function StorageCredentials() {
         </div>
       ) : creds.isError ? (
         <div className="p-4">
-          <QueryError what="storage credentials" onRetry={() => creds.refetch()} retrying={creds.isFetching} />
+          <QueryError what="storage credentials" onRetry={() => creds.refetch()} error={creds.error} retrying={creds.isFetching} />
         </div>
       ) : !creds.data?.length ? (
         <p className="p-4 text-sm text-muted-foreground">No storage credentials. Uploads use the storage the platform was set up with.</p>

@@ -1,15 +1,16 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { MemberRole } from '@/lib/types/settings';
 
 import { useSession } from './auth-queries';
 import { useTeam } from './use-team';
+import { useSessionQuery, useTeamQuery } from './team-query';
 
 /** The person's roles from platform-service (GET /v1/me); disabled off platform sign-in, where `teams.me` is absent. */
-export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api.teams.me!(), enabled: !!api.teams.me, staleTime: 60_000 });
+export const useMe = () => useSessionQuery({ queryKey: ['me'], queryFn: () => api.teams.me!(), enabled: !!api.teams.me, staleTime: 60_000 });
 
 /**
  * The person's role in the team the console acts in. Platform sign-in reads it from /v1/me; the mock and dev sign-ins
@@ -26,7 +27,7 @@ export function useTeamRole(): MemberRole | undefined {
 
 /** What `can()` grants the person in each team and in every team (GET /v1/me/permissions); off platform sign-in, absent. */
 export const useMyPermissions = () =>
-  useQuery({
+  useSessionQuery({
     queryKey: ['me', 'permissions'],
     queryFn: () => api.teams.permissions!(),
     enabled: !!api.teams.permissions,
@@ -47,15 +48,15 @@ export function useCanInWorkspace(area: string, action: string): boolean | undef
 }
 
 /** The workspace's roles, one role with its grid, and a person's grants (c-150); disabled off platform sign-in. */
-export const useRoles = () => useQuery({ queryKey: ['access', 'roles'], queryFn: () => api.teams.roles!(), enabled: !!api.teams.roles });
-export const useRole = (id: string) => useQuery({ queryKey: ['access', 'role', id], queryFn: () => api.teams.role!(id), enabled: !!api.teams.role && !!id });
+export const useRoles = () => useTeamQuery({ queryKey: ['access', 'roles'], queryFn: () => api.teams.roles!(), enabled: !!api.teams.roles });
+export const useRole = (id: string) => useTeamQuery({ queryKey: ['access', 'role', id], queryFn: () => api.teams.role!(id), enabled: !!api.teams.role && !!id });
 export const usePersonPermissions = (id: string) =>
-  useQuery({ queryKey: ['access', 'person', id], queryFn: () => api.teams.personPermissions!(id), enabled: !!api.teams.personPermissions && !!id });
+  useTeamQuery({ queryKey: ['access', 'person', id], queryFn: () => api.teams.personPermissions!(id), enabled: !!api.teams.personPermissions && !!id });
 
 /** Why the signed-in person may not take `area.action` here, read only for a control that is locked. */
 export function useWhy(area: string, action: string, enabled: boolean) {
   const { teamId } = useTeam();
-  return useQuery({ queryKey: ['access', 'why', teamId, area, action], queryFn: () => api.teams.why!(area, action), enabled: enabled && !!api.teams.why, staleTime: 60_000 });
+  return useTeamQuery({ queryKey: ['access', 'why', teamId, area, action], queryFn: () => api.teams.why!(area, action), enabled: enabled && !!api.teams.why, staleTime: 60_000 });
 }
 
 /** Runs one access check (c-150); a mutation, as each check is written to the audit log. */
@@ -89,7 +90,7 @@ export function useCan(area: string, action: string): boolean | undefined {
 /** Who holds `area.action` in `forTeam` (a record's team), else the current team. */
 export function useHolders(area: string, action: string, enabled: boolean, forTeam?: string) {
   const { team, teamId } = useTeam();
-  return useQuery({
+  return useTeamQuery({
     queryKey: ['holders', forTeam ?? team?.id ?? teamId, area, action],
     queryFn: () => api.teams.holders!(area, action, forTeam),
     enabled: enabled && !!api.teams.holders,
@@ -112,7 +113,7 @@ export function useCanBuild(area = 'agents'): boolean {
  */
 export function useWorkspaceIdentity(): { workspace: string; environment?: string; user: { name: string; email: string } } | undefined {
   const me = useMe();
-  const lookups = useQuery({ queryKey: ['lookups'], queryFn: api.lookups.get, staleTime: 5 * 60_000, enabled: !api.teams.me });
+  const lookups = useTeamQuery({ queryKey: ['lookups'], queryFn: api.lookups.get, staleTime: 5 * 60_000, enabled: !api.teams.me });
   if (api.teams.me) return me.data ? { workspace: me.data.tenantName ?? me.data.tenantId, user: { name: me.data.user.name, email: me.data.user.email } } : undefined;
   return lookups.data ? { workspace: lookups.data.workspace.name, environment: lookups.data.workspace.environment, user: lookups.data.currentUser } : undefined;
 }

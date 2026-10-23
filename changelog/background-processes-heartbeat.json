@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "See every background process on Govern > Background",
+  "description": "Account admins see each background process, whether it is running, late or stopped, and what it did for which team. Each team sees its own background jobs in Activity, and a process that hits an error tries again by itself.",
+  "tag": "new",
+  "cards": [
+    "c-516"
+  ]
+}

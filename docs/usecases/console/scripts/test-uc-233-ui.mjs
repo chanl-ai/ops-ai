@@ -3,7 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -80,17 +80,17 @@ await withUiStack(
         // A field without a schema title is named in words, never by its camelCase key.
         const labels = (await dialog.locator('label').allInnerTexts()).map((t) => t.trim()).filter(Boolean);
         // c-273's screen evidence: the run form with its Files field at 1280 and 400.
-        mkdirSync(join(ROOT, '.codeloop/evidence/273/screens'), { recursive: true });
+        mkdirSync(evidenceDir('273', 'screens'), { recursive: true });
         // At the review widths once the dialog has settled, then the same input as JSON.
         for (const width of [1280, 400]) {
           await page.setViewportSize({ width, height: 800 });
           await page.waitForTimeout(600);
-          await page.screenshot({ path: join(ROOT, `.codeloop/evidence/273/screens/run-form-${width}.png`) });
+          await page.screenshot({ path: join(evidenceDir('273', 'screens'), `run-form-${width}.png`) });
         }
         await page.setViewportSize({ width: 1280, height: 800 });
         await dialog.getByTestId('run-input-json-tab').click();
         await page.waitForTimeout(400);
-        await page.screenshot({ path: join(ROOT, '.codeloop/evidence/273/screens/run-form-json-1280.png') });
+        await page.screenshot({ path: join(evidenceDir('273', 'screens'), 'run-form-json-1280.png') });
         await dialog.getByTestId('run-input-form-tab').click();
         await page.setViewportSize({ width: 1440, height: 1000 });
         check('1b every input is labelled in words, with no camelCase key', labels.length > 0 && labels.every((t) => !/[a-z][A-Z]/.test(t)), { labels });

@@ -40,7 +40,7 @@ export default function UsagePage() {
       {query.isPending ? (
         <PageSkeleton statCards={4} showToolbar={false} tableRows={6} />
       ) : query.isError && !r ? (
-        <QueryError what="usage" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="usage" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : r && r.byWorkflow.length === 0 ? (
         <EmptyState icon={ChartColumn} title="No usage in this period" description="Usage appears once a workflow in this team runs. Model cost and tool calls are counted per run." />
       ) : r ? (

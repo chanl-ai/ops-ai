@@ -4,7 +4,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ROOT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { ROOT, TOOLS_PORT, approveToolReview, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const JSONH = { 'Content-Type': 'application/json' };
@@ -12,7 +12,7 @@ const SECURITY = { ...JSONH, 'X-Dev-User': 'Nadia Petrov' };
 const HOST = 'statements.bank.test';
 const TAG = Math.random().toString(36).slice(2, 6);
 const OP = `get_statement_${TAG}`;
-const SHOTS = join(ROOT, 'evidence/027');
+const SHOTS = evidenceDir('027');
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const api = async (method, path, body, headers = JSONH) => {

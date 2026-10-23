@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 from .base import metadata
 from .typed_records import SEED, TEAM, RecordNotFound, VersionedRecords, head_columns, version_columns
@@ -22,7 +22,7 @@ task_type_versions = sa.Table(
     "task_type_versions",
     metadata,
     *version_columns(),
-    info={**TENANT_SCOPED, **team_owned_via("task_types", "type_id")},
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 _RECORD_KEYS = ("name", "description", "params", "regions", "actions", "defaults")

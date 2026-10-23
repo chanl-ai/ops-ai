@@ -22,7 +22,7 @@ import path from 'node:path';
 import { toString as mdToString } from 'mdast-util-to-string';
 import { SKIP, visit } from 'unist-util-visit';
 
-import { githubUrl, isSitePage, repoIndex } from './repo.mjs';
+import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
 
 const BADGE = /^(not built|built|partial|planned)(?=$|[\s,.;:)])[\s,.;:)-]*/i;
 const STATUS_WORDS =
@@ -34,10 +34,11 @@ const ALERTS = { NOTE: 'info', TIP: 'info', IMPORTANT: 'info', WARNING: 'warn', 
 export function resolveRepoPath(repoPath, hash = '', line) {
   const idx = repoIndex();
   const p = repoPath.replace(/\/$/, '');
-  const page = idx.pages[p] ?? idx.pages[`${p}/README.md`];
+  const key = idx.pages[p] ? p : `${p}/README.md`;
+  const page = idx.pages[key];
   if (page) {
     const anchor = decodeURIComponent(hash.slice(1));
-    if (anchor && !page.anchors.includes(anchor)) return { broken: `no heading #${anchor} in ${p}` };
+    if (anchor && !pageAnchors(key).includes(anchor)) return { broken: `no heading #${anchor} in ${p}` };
     return { url: page.url + hash };
   }
   if (p.startsWith('docs/') && p.endsWith('.html') && idx.files.has(p)) return { url: `/files/${p.slice(5)}${hash}` };
@@ -137,8 +138,8 @@ function listToCards(list) {
 }
 
 /**
- * @param {{ throwOnError?: boolean }} [options] throwOnError: throw on a broken link (the build) or only record it on
- *   file.data.opsAi (the link check)
+ * @param {{ throwOnError?: boolean, warn?: boolean }} [options] throwOnError: throw on a broken link (the build) or
+ *   only record it on file.data.opsAi (the link check); warn: also print it, for the dev server
  */
 export function remarkOpsAi(options = {}) {
   const throwOnError = options.throwOnError ?? true;
@@ -149,7 +150,7 @@ export function remarkOpsAi(options = {}) {
     const source = path.relative(idx.root, path.resolve(file.path)).split(path.sep).join('/');
     if (!isSitePage(source)) return;
     const dir = path.posix.dirname(source);
-    const ownAnchors = idx.pages[source]?.anchors ?? [];
+    const ownAnchors = pageAnchors(source);
     const errors = [];
     const at = (url) => `${source} -> ${url}`;
 
@@ -304,8 +305,9 @@ export function remarkOpsAi(options = {}) {
     });
 
     file.data.opsAi = { source, errors };
-    if (throwOnError && errors.length) {
-      throw new Error(`ops-ai docs: ${errors.length} broken link(s)\n  ${errors.join('\n  ')}`);
-    }
+    if (!errors.length) return;
+    const message = `ops-ai docs: ${errors.length} broken link(s)\n  ${errors.join('\n  ')}`;
+    if (throwOnError) throw new Error(message);
+    if (options.warn) console.warn(message);
   };
 }

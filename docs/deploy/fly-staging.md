@@ -107,6 +107,32 @@ non-zero on any failure:
 Build to every process up: about 2 minutes 20 seconds; with the walk, 4 minutes 33 seconds. The per-service deploy
 took about 21 minutes across 14 apps.
 
+### On every merge
+
+Staging runs main. Every push to main of the public chanl-ai/ops-ai repository is tagged (`make release-tag`) and then
+deployed here with `make stg-deploy REF=<that commit>` by `.github/workflows/release-tag.yml`, one deploy at a time.
+
+| To | Do |
+|---|---|
+| Put another commit on staging | Run the workflow by hand (Actions, release-tag, Run workflow) with that commit, tag or branch |
+| Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still tagged but not deployed |
+| Go back to main | Clear `STAGING_HOLD` and run the workflow by hand with `main`, or wait for the next merge |
+
+The deploy job needs three repository secrets and is skipped with a notice while any is missing:
+
+| Secret | Value |
+|---|---|
+| `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>-one` (build, deploy, ssh) and `<your-app>-db` (the grants proxy) |
+| `STAGING_DB_URL` | The contents of `~/.config/ops-ai/staging-db-url.txt` |
+| `STAGING_ADMIN_ENV` | The contents of `~/.config/ops-ai/staging-admin.env` |
+
+```
+fly tokens create deploy -a <your-app>-one -n "github ops-ai staging" -x 8760h
+fly tokens create deploy -a <your-app>-db -n "github ops-ai staging grants" -x 8760h
+```
+
+Not yet run on GitHub: the comma-joined token and `fly ssh console` with a deploy token are checked on the first run.
+
 ## Idle, cold boot and memory
 
 | Measure | Value | How |

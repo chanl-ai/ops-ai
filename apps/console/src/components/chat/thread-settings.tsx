@@ -107,7 +107,7 @@ function ThreadSettingsSheet({ threadId, open, onOpenChange }: { threadId: strin
     >
       {settings.isPending || !draft || !limits ? (
         settings.isError ? (
-          <QueryError what="thread settings" onRetry={() => settings.refetch()} retrying={settings.isFetching} />
+          <QueryError what="thread settings" onRetry={() => settings.refetch()} error={settings.error} retrying={settings.isFetching} />
         ) : (
           <div className="space-y-4">
             <Skeleton className="h-9 w-full" />

@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-22",
+  "title": "Every page says a step the same way",
+  "description": "Activity, Human Tasks, chat cards and the run page describe each step in plain words, name workflows instead of showing their ids, and show amounts as you would write them. A case now records its first response when someone first works on it.",
+  "tag": "improved",
+  "cards": [
+    "c-508"
+  ]
+}

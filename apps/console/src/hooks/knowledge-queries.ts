@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
@@ -18,6 +18,7 @@ import type {
   SyncOptions,
 } from '@/lib/types/knowledge';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 /** Every knowledge key starts with 'knowledge', so one invalidation refreshes lists, records and counts. */
 export const kk = {
@@ -40,7 +41,7 @@ const pollWhile = (running: boolean) => (running ? POLL_MS : false);
 export const useKnowledgeBases = (p: ListParams<KbFilters>) =>
   usePagedQuery({ queryKey: kk.kbs(p), queryFn: () => api.knowledge.kbs.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((k) => k.indexing)) });
 export const useKnowledgeBase = (id: string) =>
-  useQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing) });
+  useTeamQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing) });
 export const useAddPage = (id: string) => useWrite((i: { title: string; text: string }) => api.knowledge.kbs.addPage(id, i));
 export const useAddDocuments = (id: string) => useWrite((fileIds: string[]) => api.knowledge.kbs.addDocuments(id, fileIds), ['files']);
 export const useKbDocuments = (id: string, p: ListParams<DocumentFilters>, polling = false) =>
@@ -48,7 +49,7 @@ export const useKbDocuments = (id: string, p: ListParams<DocumentFilters>, polli
 export const useSourcesList = (p: ListParams<SourceFilters>) =>
   usePagedQuery({ queryKey: kk.sources(p), queryFn: () => api.knowledge.sources.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((s) => s.running)) });
 export const useSource = (id: string) =>
-  useQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
+  useTeamQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
 export const useSourceItems = (id: string, p: ListParams<ItemFilters>, polling = false) =>
   usePagedQuery({
     queryKey: kk.items(id, p),
@@ -58,10 +59,10 @@ export const useSourceItems = (id: string, p: ListParams<ItemFilters>, polling =
 export const useSourceRuns = (id: string, p: ListParams<RunFilters>) =>
   usePagedQuery({ queryKey: kk.runs(id, p), queryFn: () => api.knowledge.sources.runs(id, p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((r) => r.status === 'running')) });
 export const useSyncRun = (id: string | null) =>
-  useQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
+  useTeamQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
 export const useItem = (id: string | null) =>
-  useQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
-export const useKnowledgeLookups = () => useQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
+  useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
+export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */
 function useWrite<A, R>(fn: (a: A) => Promise<R>, alsoRoots: string[] = []) {

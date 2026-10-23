@@ -1,4 +1,4 @@
-"""Widget templates as versioned attachments (c-082, `.codeloop/wiki/concepts/chat-widgets.md`): a builder lays one out
+"""Widget templates as versioned attachments (c-082, `docs/architecture/chat-widgets.md`): a builder lays one out
 from the catalogue, it publishes through a review decided by someone other than whoever saved it, and agents pin it by
 `{widgetId, version}`. Versions are immutable once published; a draft is edited in place until it is requested.
 Publish requests are the registry's (`registry_publish_requests`, kind `widget`).
@@ -87,9 +87,9 @@ class WidgetRegistry:
                 ).mappings()
             ]
 
-    async def page(self, teams: list[str] | None, search: str, offset: int, limit: int) -> list[dict[str, Any]]:
-        """One page of the widgets in `teams` (every team when None) whose name contains `search`, by name; LIMIT and
-        OFFSET run in the query."""
+    async def page(self, teams: list[str], search: str, offset: int, limit: int) -> list[dict[str, Any]]:
+        """One page of the widgets in `teams` whose name contains `search`, by name; LIMIT and OFFSET run in the
+        query."""
         q = (
             sa.select(registry_widgets)
             .where(self._matches(teams, search), team_visible(registry_widgets))
@@ -99,12 +99,12 @@ class WidgetRegistry:
             return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
 
     async def pinnable(
-        self, teams: list[str] | None, search: str, offset: int, limit: int, ids: list[str] | None = None
+        self, teams: list[str], search: str, offset: int, limit: int, ids: list[str] | None = None
     ) -> list[dict[str, Any]]:
         """Widgets an agent may newly pin (published, not retired) in `teams`, by name, searched and limited in the
         query; `ids` returns exactly those in `teams`, so a pin already held keeps its label."""
         t = registry_widgets.c
-        scope = sa.true() if teams is None else t.team_id.in_(teams)
+        scope = t.team_id.in_(teams)
         if ids is not None:
             q = sa.select(registry_widgets).where(scope, t.id.in_(ids), team_visible(registry_widgets))
         else:
@@ -118,7 +118,7 @@ class WidgetRegistry:
         async with self.engine.connect() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def count(self, teams: list[str] | None, search: str) -> int:
+    async def count(self, teams: list[str], search: str) -> int:
         q = (
             sa.select(sa.func.count())
             .select_from(registry_widgets)
@@ -128,9 +128,8 @@ class WidgetRegistry:
             return int((await c.execute(q)).scalar_one())
 
     @staticmethod
-    def _matches(teams: list[str] | None, search: str) -> sa.ColumnElement[bool]:
-        named = contains(registry_widgets.c.name, search)
-        return named if teams is None else sa.and_(named, registry_widgets.c.team_id.in_(teams))
+    def _matches(teams: list[str], search: str) -> sa.ColumnElement[bool]:
+        return sa.and_(contains(registry_widgets.c.name, search), registry_widgets.c.team_id.in_(teams))
 
     async def owner_team(self, widget_id: str) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the

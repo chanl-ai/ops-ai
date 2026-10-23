@@ -183,7 +183,12 @@ async def test_a_tool_call_in_a_private_chat_lists_for_its_owner_only(stack: Sta
         thread_id=thread, team_id="team_ops", run_id=None, type_="tool_end", node="agent", data=call
     )
     [row] = (await activity(c, VIEWER, kind="tool_call"))["data"]
-    assert (row["title"], row["status"], row["ref"]) == ("list_accounts", "done", {"kind": "chat", "id": thread})
+    # Worded as the run page words a call (c-508), never the tool's name.
+    assert (row["title"], row["status"], row["ref"]) == (
+        "List accounts: customer id CUS-1002",
+        "done",
+        {"kind": "chat", "id": thread},
+    )
     assert (await activity(c, reader(None), kind="tool_call"))["data"] == []
 
 
@@ -209,7 +214,7 @@ async def test_a_workflows_tool_step_lists_as_a_tool_call(stack: Stack) -> None:
             )
     [row] = (await activity(c, BUILDER, kind="tool_call"))["data"]
     assert (row["title"], row["status"], row["source"]["id"], row["ref"]) == (
-        "place_hold",
+        "Place hold",
         "running",
         "ops_check",
         {"kind": "run", "id": run},
@@ -233,7 +238,11 @@ async def test_a_cases_activity_is_its_own_entries_and_what_its_linked_run_did(s
     found = await activity(c, BUILDER, case=case["id"])
     rows = found["data"]
     assert {r["kind"] for r in rows} == {"case", "workflow_run", "decision"}, rows
-    assert {r["title"] for r in rows if r["kind"] == "case"} == {"Opened the case", "Added a run", "Added a note"}
+    assert {r["title"] for r in rows if r["kind"] == "case"} == {
+        "Opened this case",
+        "Added a run",
+        "Added a note: Called the court",
+    }
     assert {r["ref"]["id"] for r in rows if r["kind"] != "case"} == {linked}, "only the linked run's rows"
     assert unlinked not in {r["ref"]["id"] for r in rows}
     assert found["facets"]["kind"] == {"case": 3, "workflow_run": 1, "decision": 1}, found["facets"]

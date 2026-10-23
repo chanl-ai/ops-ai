@@ -260,6 +260,10 @@ class ChildRuns:
             return e
         return None
 
+    async def refused_for_person(self, workflow: str, team: str | None) -> ApiError | None:
+        """Why the turn's person may not start `workflow`, or None when they may: the Ops tools' check (c-469)."""
+        return await self._refused_for_person(workflow, team, None)
+
     async def _published(self, workflow: str) -> tuple[int, str] | None:
         """The registry's published version of `workflow` and its digest; None when it is not a registry workflow or is
         paused, deleted or never published."""

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.api.app import create_app
 from ops_agents.api.engine_host import RunEvents, RunReviews, ThreadLeases
+from ops_agents.api.worker import enter_run
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.leases import Leases
@@ -126,6 +127,8 @@ def worker(engine: AsyncEngine, tools: Any, *, ttl: float = 6.0) -> Worker:
         checkpointer=InMemorySaver(),
         run_scope=tenant_scope,
         owner=owner,
+        # Each pass in its run's team, as the service's worker does: a typed step reads its team's task types.
+        enter_run=enter_run,
     )
     return Worker(host)
 

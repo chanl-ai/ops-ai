@@ -3,8 +3,6 @@
     "src/app/document-types/[id]/page.tsx",
     "src/app/model-risk/[id]/page.tsx",
     "src/app/page.tsx",
-    "src/app/preview/settings/page.tsx",
-    "src/app/preview/settings/tool/page.tsx",
     "src/app/settings/team/notifications/page.tsx",
     "src/app/settings/workspace/storage/page.tsx",
     "src/app/skills/[id]/_parts/activity-tab.tsx",

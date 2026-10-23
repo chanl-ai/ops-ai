@@ -302,7 +302,7 @@
         "expect": "waiting"
       },
       "Jordan Whitfield": {
-        "expect": "succeeded/not_matched"
+        "expect": "waiting"
       }
     },
     "ackBy": "admin",

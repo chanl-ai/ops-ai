@@ -60,7 +60,7 @@ export function WorkflowRuns({ workflowId }: { workflowId: string }) {
   const facets = query.data?.facets ?? {};
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
-  if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   return (
     <>

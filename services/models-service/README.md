@@ -13,4 +13,4 @@ Whether an alias reaches a real or a fake model is decided by its provider conne
 `https://api.openai.com/v1` and back. Steps: `docs/services/models-service/overview.md`, "Real or fake model, by
 connection".
 
-Design: `docs/architecture/service-map.md`. Spec: `.codeloop/wiki/concepts/data-and-ai-gateways.md` 4.8, 5.8–5.10.
+Design: `docs/architecture/service-map.md` and `docs/services/models-service/overview.md`.

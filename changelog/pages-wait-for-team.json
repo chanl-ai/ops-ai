@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-22",
+  "title": "Pages open for your own team after sign-in",
+  "description": "A link opened straight after sign-in now loads for a team you belong to. A record in another team says so and offers to switch.",
+  "tag": "fix",
+  "cards": [
+    "c-505"
+  ]
+}

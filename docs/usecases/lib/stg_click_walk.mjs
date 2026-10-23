@@ -29,6 +29,8 @@ async function report(label) {
   errors = [];
 }
 
+// The shell renders only once the person's team is known (the session gate), so wait for the sidebar before reading it.
+await page.locator('[data-sidebar="sidebar"] a[href^="/"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
 const links = await page.locator('[data-sidebar="sidebar"] a[href^="/"], nav a[href^="/"]').evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute('href')))]);
 for (const href of links) {
   await page.locator(`[data-sidebar="sidebar"] a[href="${href}"]`).first().click({ timeout: 10_000 });

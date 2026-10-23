@@ -3,8 +3,7 @@ names, details with attached sources, and lists paged and filtered on the server
 
 Fields this slice does not run yet (access settings, precedence, automation, schedules) are served with the values a
 new knowledge base or source starts with, so the console's pages render without a mock;
-.codeloop/wiki/concepts/knowledge.md section 6 is the designed surface and docs/services/kb-service/overview.md says
-which part is built.
+docs/services/kb-service/overview.md gives the designed surface and says which part is built.
 """
 
 from __future__ import annotations

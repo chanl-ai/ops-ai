@@ -20,10 +20,12 @@ import '@xyflow/react/dist/style.css';
 import { AlertTriangle, CheckCircle2, Keyboard, Play, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { LockedReason } from '@/components/shared/locked-reason';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/api/contract';
@@ -33,7 +35,10 @@ import { CanvasControls } from '../canvas-controls';
 import { MIN_ZOOM, readableFit, wholeFit } from './canvas-view';
 import { ChecksPanel } from './checks-panel';
 import { type DefinitionFlowNode, definitionNodeTypes } from './definition-node';
-import { connectionId, inPorts, indexTypes, outPorts, repeatsOver, typeKey, uniqueNodeId, withPositions } from './graph';
+import { connectionId, definitionNodeData, inPorts, indexTypes, outPorts, typeKey, uniqueNodeId } from './graph';
+import { RoutedLines, routedEdgeTypes } from './routed-edge';
+import { useLayout } from '../layout/use-layout';
+import { applyLayout, layoutDefinition } from '../layout/definition-layout';
 import { LifecycleActions, type Lifecycle } from './lifecycle';
 import type { StepRef, StepRefs } from './node-form';
 import { PublishDefinitionDialog } from './publish-dialog';
@@ -61,6 +66,8 @@ export interface DefinitionEditorProps {
   pausing: boolean;
   /** For a person who may not change the workflow: the graph shows, with no palette, editing, save, publish or pause. */
   readOnly?: boolean;
+  /** Whether the person may publish workflows; false shows Publish locked with the reason, read-only or not. */
+  canPublish?: boolean;
   /**
    * Lays out the editor's actions (lifecycle, Test run, Save version) and its canvas, so the page can put the actions
    * in its own header. Without it the actions sit in a row above the canvas.
@@ -74,6 +81,8 @@ const SHORTCUTS: [string, string][] = [
   ['Remove the selected step', 'Delete'],
   ['Go to the trigger', 'S'],
   ['Fit the workflow', '1'],
+  ['Tidy up the steps', 'T'],
+  ['Undo Tidy up', '⌘Z / Ctrl+Z'],
   ['Reset the zoom', '0'],
   ['Zoom in or out', '+ / −'],
   ['Fullscreen', 'F'],
@@ -120,8 +129,18 @@ function patchNode(d: EngineDefinition, id: string, patch: Partial<Pick<EngineNo
   return { ...d, nodes, connections };
 }
 
-function EditorInner({ definition: initial, types, validate, publish, publishing, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, frame }: DefinitionEditorProps) {
-  const [def, setDef] = React.useState<EngineDefinition>(() => withPositions(initial));
+/**
+ * The editor opens on a definition with every step placed (layout/use-layout.ts): at once when the definition places
+ * them, after the skeleton when some are laid out first. Positions filled in on open are not a change.
+ */
+function EditorInner(props: DefinitionEditorProps) {
+  const placed = useLayout(props.definition, props.types);
+  if (!placed) return <Skeleton className="min-h-[28rem] flex-1 rounded-xl" data-testid="definition-canvas-loading" />;
+  return <EditorBody {...props} definition={placed} />;
+}
+
+function EditorBody({ definition: initial, types, validate, publish, publishing, startRun, startByHand, lifecycle, requestPublish, setPaused, pausing, readOnly = false, canPublish, frame }: DefinitionEditorProps) {
+  const [def, setDef] = React.useState<EngineDefinition>(initial);
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   // The step whose sheet is open; clicking another step while it is open moves the sheet there.
@@ -140,7 +159,11 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
   const typeIndex = React.useMemo(() => indexTypes(types), [types]);
   const typeOf = React.useCallback((n: EngineNode) => typeIndex.get(typeKey(n.type, n.typeVersion)), [typeIndex]);
 
+  // Tidy up keeps the positions it replaced and whether the workflow was changed before, so Undo puts every step back
+  // and, when that matches the last saved version, leaves the workflow unchanged. Any other change ends the Undo.
+  const tidyUndo = React.useRef<{ positions: Map<string, EngineNode['position']>; wasDirty: boolean } | null>(null);
   const change = React.useCallback((next: (d: EngineDefinition) => EngineDefinition) => {
+    tidyUndo.current = null;
     setDef(next);
     setDirty(true);
   }, []);
@@ -207,23 +230,11 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
           type: 'definition' as const,
           position: n.position ?? old?.position ?? { x: 0, y: 0 },
           selected: n.id === selectedId,
-          data: {
-            nodeId: n.id,
-            title: n.name || t?.label || n.id,
-            typeLabel: t ? t.label : `${n.type} · version ${n.typeVersion}`,
-            repeats: repeatsOver(n.parameters, def.nodes),
-            group: t?.group ?? null,
-            inputs: t ? inPorts(t) : [],
-            outputs: t ? outPorts(t, n.parameters) : [],
-            unknown: !t,
-            hasError: errorNodes.has(n.id),
-            hasWarning: warnNodes.has(n.id),
-            typeId: n.type,
-          },
+          data: { ...definitionNodeData(n, t, def.nodes), hasError: errorNodes.has(n.id), hasWarning: warnNodes.has(n.id) },
         };
       });
     });
-  }, [def.nodes, typeOf, selectedId, errorNodes, setNodes]);
+  }, [def.nodes, typeOf, selectedId, errorNodes, warnNodes, setNodes]);
 
   React.useEffect(() => {
     setEdges((prev) => {
@@ -232,7 +243,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
         .filter((c) => ports.get(c.from.node)?.outputs.has(c.from.port) && ports.get(c.to.node)?.inputs.has(c.to.port))
         .map((c) => {
           const id = connectionId(c);
-          return { id, source: c.from.node, sourceHandle: c.from.port, target: c.to.node, targetHandle: c.to.port, type: 'smoothstep', selected: selected.has(id) };
+          return { id, source: c.from.node, sourceHandle: c.from.port, target: c.to.node, targetHandle: c.to.port, type: 'routed', selected: selected.has(id) };
         });
     });
   }, [def.connections, ports, setEdges]);
@@ -323,6 +334,26 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
   const triggerId = React.useMemo(() => def.nodes.find((n) => typeOf(n)?.group === 'trigger')?.id, [def.nodes, typeOf]);
   const fit = React.useCallback(() => wholeFit(flow), [flow]);
 
+  // After a Tidy up or its Undo the view fits again once React Flow has the new positions.
+  const refit = React.useCallback(() => window.setTimeout(() => readableFit(flow, canvasRef.current, triggerId), 50), [flow, triggerId]);
+  const undoTidy = React.useCallback(() => {
+    const kept = tidyUndo.current;
+    if (!kept) return;
+    tidyUndo.current = null;
+    setDef((d) => ({ ...d, nodes: d.nodes.map((n) => (kept.positions.has(n.id) ? { ...n, position: kept.positions.get(n.id) } : n)) }));
+    setDirty(kept.wasDirty);
+    refit();
+  }, [refit]);
+  const tidy = React.useCallback(async () => {
+    if (readOnly || def.nodes.length === 0) return;
+    const kept = { positions: new Map(def.nodes.map((n) => [n.id, n.position])), wasDirty: dirty };
+    const layout = await layoutDefinition(def, types);
+    change((d) => applyLayout(d, layout));
+    tidyUndo.current = kept;
+    refit();
+    toast('Steps tidied', { action: { label: 'Undo', onClick: undoTidy } });
+  }, [readOnly, def, dirty, types, change, refit, undoTidy]);
+
   // The first view waits for React Flow to measure the nodes; fitting before that sees zero-sized nodes.
   const measured = useNodesInitialized();
   const fitted = React.useRef(false);
@@ -335,6 +366,11 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z' && tidyUndo.current && !typing(e)) {
+        e.preventDefault();
+        undoTidy();
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // The open sheet closes itself on Escape (it is the top layer); with no sheet open, Escape leaves fullscreen.
       if (e.key === 'Escape') {
@@ -350,6 +386,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
       else if (key === '-' || key === '_') void flow.zoomOut();
       else if (key === 's' && triggerId) selectNode(triggerId);
       else if (key === 'n' && !readOnly) setPaletteOpen(true);
+      else if (key === 't' && !readOnly) void tidy();
       else if (key === 'enter' && selectedId) setSheetId(selectedId);
       else return;
       e.preventDefault();
@@ -379,7 +416,9 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
 
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {!readOnly && <LifecycleActions lifecycle={lifecycle} dirty={dirty} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} />}
+      {!readOnly && <LifecycleActions lifecycle={lifecycle} dirty={dirty} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+      {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it (c-150). */}
+      {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
       {/* Starting any run is a builder's or admin's step (runs/start, c-122); the server refuses the rest, so the
           button shows only to them. */}
       {!readOnly && (
@@ -402,10 +441,12 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
       data-testid="definition-canvas"
       data-fullscreen={fullscreen ? 'true' : undefined}
     >
+      <RoutedLines nodes={nodes}>
       <ReactFlow<DefinitionFlowNode, Edge>
         nodes={nodes}
         edges={edges}
         nodeTypes={definitionNodeTypes}
+        edgeTypes={routedEdgeTypes}
         onNodesChange={applyNodeChanges}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
@@ -420,7 +461,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
           setSheetId(n.id);
         }}
         onPaneClick={() => setSelectedId(null)}
-        defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } }}
+        defaultEdgeOptions={{ type: 'routed', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } }}
         minZoom={MIN_ZOOM}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
@@ -465,7 +506,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
                 </Rows>
               </PopoverContent>
             </Popover>
-            <CanvasControls isFullscreen={fullscreen} onToggleFullscreen={() => setFullscreen((f) => !f)} onFit={fit} />
+            <CanvasControls isFullscreen={fullscreen} onToggleFullscreen={() => setFullscreen((f) => !f)} onFit={fit} onTidy={readOnly ? undefined : () => void tidy()} />
           </div>
         </Panel>
         <Panel position="bottom-left">
@@ -505,6 +546,7 @@ function EditorInner({ definition: initial, types, validate, publish, publishing
           />
         )}
       </ReactFlow>
+      </RoutedLines>
     </div>
   );
 

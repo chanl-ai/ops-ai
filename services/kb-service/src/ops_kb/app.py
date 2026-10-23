@@ -1,6 +1,6 @@
 """kb-service's FastAPI app: department knowledge bases, their file sources, and passages cited by page and section
-(c-056; the designed surface is .codeloop/wiki/concepts/knowledge.md section 6, at the paths apps/console's
-knowledge-http.ts calls)."""
+(c-056; the surface is in docs/services/kb-service/overview.md, at the paths apps/console's knowledge-http.ts
+calls)."""
 
 from __future__ import annotations
 

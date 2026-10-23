@@ -388,15 +388,19 @@ async def test_channel_writes_need_a_builder_of_the_owning_team(
         ("POST", f"/v1/threads/{tid}/inbox", {"kind": "customer_reply", "messageKey": "m1", "payload": {}}),
     ]
     problems: list[str] = []
-    for who, code in ((VIEWER, "role_required"), (REVIEWER, "role_required"), (OTHER_TEAM, "team_forbidden")):
+    for who, code in ((VIEWER, "role_required"), (REVIEWER, "role_required")):
         for method, path, body in writes:
-            if who is OTHER_TEAM and path.endswith("/inbox"):
-                continue  # a thread of another team is refused by its team check before any role (R6)
             r = await c.request(method, path, json=body, headers=who)
             got = r.json()["error"]["code"] if r.status_code == 403 else None
             if r.status_code != 403 or got != code:
                 problems.append(f"{method} {path} as {code}: {r.status_code} {r.text[:120]}")
     assert not problems, "\n".join(problems)
+    # Another team does not see the deployment (c-507): its id is taken, and a pause finds nothing.
+    taken = await c.post("/v1/deployments", json={**dep, "paused": True}, headers=OTHER_TEAM)
+    assert taken.status_code == 409 and taken.json()["error"]["code"] == "deployment_id_taken", taken.text
+    assert "team_" not in taken.text, "the owning team is not named"
+    paused = await c.patch("/v1/deployments/dep_c115", json={"paused": True}, headers=OTHER_TEAM)
+    assert paused.status_code == 404, paused.text
     # The control: the owning builder's change and pause go through; the inbox passes the role check and fails later
     # on this stack (a thread waiting on nothing).
     assert (await c.post("/v1/deployments", json=dep, headers=BUILDER)).status_code == 201

@@ -3,7 +3,7 @@
 // console dev server whose chat points at it, so a browser test never reaches a model provider or another session's
 // console.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -15,6 +15,16 @@ export { chromium } from 'playwright';
 
 /** The tree the runner was invoked from (OPS_USECASE_ROOT, set by the runner), else the one this package sits in. */
 export const ROOT = process.env.OPS_USECASE_ROOT ?? resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
+/**
+ * Where a use case keeps its screenshots and logs for a card (`card` is its number, `parts` any subfolder), not created
+ * here. OPS_EVIDENCE_DIR when set; else the maintainers' card store when this checkout has one, so a card's proof sits
+ * with the card; else a folder under the system temp directory.
+ */
+export function evidenceDir(card: string, ...parts: string[]): string {
+  const store = join(ROOT, '.codeloop', 'evidence');
+  const base = process.env.OPS_EVIDENCE_DIR ?? (existsSync(store) ? store : join(tmpdir(), 'ops-ai-evidence'));
+  return join(base, card, ...parts);
+}
 export const AGENTS_PORT = Number(process.env.OPS_USECASE_AGENTS_PORT ?? 8790);
 export const CONSOLE_PORT = Number(process.env.OPS_USECASE_CONSOLE_PORT ?? 3018);
 /** The embed app (apps/embed, c-158), started when a use case asks for `embed`. */

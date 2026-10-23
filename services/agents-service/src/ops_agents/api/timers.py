@@ -27,7 +27,10 @@ from langgraph.types import Command
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import background
+from ops_store.background import HeartbeatStore
 
+from ..store.background import BackgroundJobs
 from ..store.leases import LeaseHeldError
 from ..store.timers import TimerStore, Wanted, key_of
 from .deps import Runtime
@@ -308,8 +311,8 @@ class TimerPoller:
     """The PostgreSQL scheduler: finds due timers and calls `fire` for each. It holds no lock and decides nothing;
     two pollers calling `fire` on one timer get one `fired` and one `busy` or `duplicate`."""
 
-    def __init__(self, rt: Runtime, *, after_accept: Hook | None = None) -> None:
-        self.rt = rt
+    def __init__(self, rt: Runtime, *, after_accept: Hook | None = None, jobs: BackgroundJobs | None = None) -> None:
+        self.rt, self.jobs = rt, jobs
         # Tests only: runs after the resume is journaled and before the graph runs, to kill the fire there.
         self.after_accept = after_accept
 
@@ -320,20 +323,29 @@ class TimerPoller:
             result = await as_thread_tenant(
                 self.rt,
                 thread_id,
-                lambda thread_id=thread_id, timer_id=timer_id: fire(
-                    self.rt, thread_id, timer_id, after_accept=self.after_accept
-                ),
+                lambda thread_id=thread_id, timer_id=timer_id: self._fire(thread_id, timer_id),
             )
             if result is not None and result.status == "fired":
                 fired.append(result.timer_id)
         return fired
 
+    async def _fire(self, thread_id: str, timer_id: str) -> FireResult:
+        """Fires inside the thread's team and logs the job there, so the team sees it in Activity."""
+        result = await fire(self.rt, thread_id, timer_id, after_accept=self.after_accept)
+        if result.status == "fired" and self.jobs is not None:
+            await self.jobs.record("timer_poller", "Woke a run that was waiting for a time or a reminder", "done")
+        return result
 
-async def poll_forever(rt: Runtime, interval: float) -> None:
-    poller = TimerPoller(rt)
-    while True:
-        try:
-            await poller.poll_once()
-        except Exception as e:  # A bad timer must not stop the poller; it stays due and is retried next time.
-            log.exception("timer_poll_failed", error=type(e).__name__)
-        await asyncio.sleep(interval)
+
+async def poll_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, jobs: BackgroundJobs) -> None:
+    """The timer poller, a listed background process: a failed poll is retried and shows in its heartbeat. A bad timer
+    stays due and is tried again on the next pass."""
+    poller = TimerPoller(rt, jobs=jobs)
+
+    async def once() -> int:
+        return len(await poller.poll_once())
+
+    async def waiting() -> int:
+        return len(await store_of(rt).due(1000))
+
+    await background.run("timer_poller", once, stop=asyncio.Event(), store=beats, every_s=interval, waiting=waiting)

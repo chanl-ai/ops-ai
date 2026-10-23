@@ -81,8 +81,23 @@ class Decision:
 def is_major(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> bool:
     if old is None or area == "guardrails":
         return True
+    if area == "workflows":
+        old, new = _unplaced(old), _unplaced(new)
     changed = {k for k in old.keys() | new.keys() if old.get(k) != new.get(k)}
     return bool(changed & ALWAYS_MAJOR) or bool(changed - MINOR_FIELDS[area])
+
+
+def _unplaced(doc: dict[str, Any]) -> dict[str, Any]:
+    """A workflow with each node's canvas position dropped. Positions sit inside `nodes`, so a top-level diff would read
+    moving a step (Tidy up, c-486) as a change to the steps; moving steps alone is minor."""
+    nodes = doc.get("nodes")
+    if not isinstance(nodes, list):
+        return doc
+    kept = [
+        {k: v for k, v in cast(dict[str, Any], n).items() if k != "position"} if isinstance(n, dict) else n
+        for n in cast(list[Any], nodes)
+    ]
+    return doc | {"nodes": kept}
 
 
 def is_security_change(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> bool:

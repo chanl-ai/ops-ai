@@ -25,7 +25,7 @@ import httpx
 
 from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalise
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
-from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, request_of
+from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, reading, request_of
 from ops_documents.files import Files, Who
 from ops_documents.store.document_types import DocumentTypesStore, NameTakenError
 from ops_documents.store.extractions import ExtractionRow
@@ -569,7 +569,12 @@ class DocumentTypes:
     async def _as_owner(self, test: dict[str, Any]) -> None:
         """The run as the test's own tenant and team: a restart picks tests up with no request behind them."""
         with isolation.scope(str(test["tenant_id"]), str(test["team"])):
-            await self._run(test)
+            try:
+                await self._run(test)
+            except Exception as e:
+                await reading().failed(e)
+                raise
+        await reading().ok(1, waiting=max(0, len(self._tasks) - 1))
 
     async def _run(self, test: dict[str, Any]) -> None:
         tenant, test_id = str(test["tenant_id"]), str(test["id"])

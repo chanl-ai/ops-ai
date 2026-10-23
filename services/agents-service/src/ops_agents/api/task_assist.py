@@ -97,7 +97,7 @@ class TaskAssist:
         if not ref or not step_id or not await self.on(team):
             return None
         try:
-            _, record = await (await seeded_store(self.db)).published(
+            _, record = await (await seeded_store(self.db, team)).published(
                 str(ref["id"]), cast(int | None, ref.get("version"))
             )
         except TaskTypeNotFound:

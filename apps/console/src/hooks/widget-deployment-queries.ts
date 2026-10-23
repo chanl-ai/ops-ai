@@ -1,14 +1,15 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { WidgetDeploymentInput, WidgetDeploymentPatch } from '@/lib/types/widget-deployments';
+import { useTeamQuery } from './team-query';
 
 const key = (agentId: string) => ['widget-deployments', agentId] as const;
 
 /** One agent's widget deployments, newest first, filtered by the service. */
-export const useWidgetDeployments = (agentId: string) => useQuery({ queryKey: key(agentId), queryFn: () => api.widgetDeployments.list(agentId) });
+export const useWidgetDeployments = (agentId: string) => useTeamQuery({ queryKey: key(agentId), queryFn: () => api.widgetDeployments.list(agentId) });
 
 export function useCreateWidgetDeployment() {
   const qc = useQueryClient();
@@ -29,7 +30,7 @@ const keysKey = (id: string) => ['widget-deployments', 'keys', id] as const;
 
 /** One deployment's mint keys, fetched fresh each time its keys dialog opens: the bank's server uses them meanwhile. */
 export const useWidgetMintKeys = (id: string | undefined) =>
-  useQuery({ queryKey: keysKey(id ?? ''), queryFn: () => api.widgetDeployments.keys(id ?? ''), enabled: !!id, refetchOnMount: 'always' });
+  useTeamQuery({ queryKey: keysKey(id ?? ''), queryFn: () => api.widgetDeployments.keys(id ?? ''), enabled: !!id, refetchOnMount: 'always' });
 
 export function useCreateWidgetMintKey() {
   const qc = useQueryClient();

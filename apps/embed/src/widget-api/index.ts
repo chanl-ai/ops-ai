@@ -92,6 +92,8 @@ export const api = new Proxy({ chat } as Partial<OpsApi>, {
 export { ApiError, type OpsApi } from '@/lib/api/contract';
 // Values the console's shared hooks read from `@/lib/api`; the embed has no files service and no teams.
 export const filesOnService = false;
+/** Widget calls carry the widget session, not a team, so the console's team queries run without waiting for one. */
+export const queriesNeedTeam = false;
 /** The bank page brands the widget itself; the console's demo brand never applies here. */
 export const brand: { name?: string; logo?: string } = {};
 

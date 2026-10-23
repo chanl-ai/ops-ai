@@ -3,12 +3,12 @@
 // list: choosing one opens its form, labels come from the schema's titles, the card type is a choice and the notice's
 // file is uploaded or picked from Files. The copies are read from the committed files at run time, so the run tests
 // the schemas the demo ships. OPS_UC445_SHARED=1 drives the local shared stack (console :3016) instead of a private
-// one and saves its screenshots under .codeloop/evidence/445/<OPS_UC445_PHASE, default after>/.
+// one and saves its screenshots under evidenceDir('445', <OPS_UC445_PHASE, default after>).
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const SHARED = process.env.OPS_UC445_SHARED === '1';
 const agents = `http://127.0.0.1:${SHARED ? 8700 : AGENTS_PORT}`;
@@ -16,7 +16,7 @@ const platform = `http://127.0.0.1:${SHARED ? 8710 : PLATFORM_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 const PDF = join(ROOT, 'services/documents-service/tests/fixtures/restraining/TEST012.pdf');
 // Screenshots are the card's evidence only from the shared stack; a private run keeps them in its own temp folder.
-const SHOTS = SHARED ? join(ROOT, '.codeloop/evidence/445', process.env.OPS_UC445_PHASE ?? 'after') : mkdtempSync(join(tmpdir(), 'uc445-'));
+const SHOTS = SHARED ? evidenceDir('445', process.env.OPS_UC445_PHASE ?? 'after') : mkdtempSync(join(tmpdir(), 'uc445-'));
 const tokenFor = async (email) => (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
 async function step(name, body) {

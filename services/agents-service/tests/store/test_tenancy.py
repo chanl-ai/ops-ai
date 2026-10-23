@@ -128,7 +128,8 @@ def test_only_the_two_loops_reach_past_rls() -> None:
             if isinstance(node, ast.Name) and node.id == "system_tx":
                 system_users.add(path.relative_to(SRC).as_posix())
     assert callers == {"api/tenant_tasks.py"}
-    assert system_users == {"store/graphs.py", "store/engine.py", "store/memories.py"}
+    # store/background.py: the Background page, a central background process's view, reads every team's jobs (c-516).
+    assert system_users == {"store/graphs.py", "store/engine.py", "store/memories.py", "store/background.py"}
     # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}
     assert tenants_users == {"api/memory_retention.py"}

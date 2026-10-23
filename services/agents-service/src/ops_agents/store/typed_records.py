@@ -1,13 +1,16 @@
-"""Typed records kept as versions (task types, c-288; case types, c-291), per tenant.
+"""Typed records kept as versions (task types, c-288; case types, c-291), per team.
 
-A type is seeded (shipped in a seed file, owned by no team: a system record every team reads and an admin may change,
-and a team copies one to make its own) or a team's own, which only that team reads, edits or publishes (c-407). A save
+Every type belongs to one team, keyed (tenant, team, id) so each team holds its own `write_approval` (c-507): a seeded
+type is the team's copy of a seed file entry, made on its first read; a team's own type only that team reads, edits or
+publishes (c-407). Every call needs an acting team, since an id alone names one type per team. A save
 edits the newest version while it is a draft, or opens the next one on top of a published version; a published version
 never changes, so whatever pinned it (a task, a case) keeps reading what it was made with.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
@@ -17,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
-from ops_store.team_scope import team_visible
+from ops_store.team_scope import acting_as, acting_team, team_visible
 
 from .tenancy import current_tenant, tenant_tx
 
@@ -29,9 +32,8 @@ def head_columns() -> list[sa.Column[Any]]:
     """A kind's type table: the type with its newest and newest published version."""
     return [
         sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
+        sa.Column("team_id", sa.String(64), primary_key=True),
         sa.Column("id", sa.String(64), primary_key=True),
-        # None for a seeded type, which no team edits.
-        sa.Column("team_id", sa.String(64)),
         sa.Column("origin", sa.String(16), nullable=False),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=False, default=""),
@@ -51,6 +53,7 @@ def version_columns() -> list[sa.Column[Any]]:
     """A kind's version table: every saved version of a type."""
     return [
         sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
+        sa.Column("team_id", sa.String(64), primary_key=True),
         sa.Column("type_id", sa.String(64), primary_key=True),
         sa.Column("version", sa.Integer, primary_key=True),
         # The record's content and its name and description as they were at this version.
@@ -81,27 +84,44 @@ class VersionedRecords:
     # A type id and a version number are unique keys; a save writes its version and moves the type in one transaction.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, team: str | None = None) -> None:
+        """`team`: the team whose types this store reads, for a caller serving another team's record (a run's task,
+        a case); without it, the acting team."""
         self.engine = engine
+        self.team = team
+
+    @contextmanager
+    def _in_team(self) -> Generator[str]:
+        with acting_as(self.team or acting_team()):
+            team = acting_team()
+            if team is None:
+                raise RuntimeError("typed records are per team; name the team or set the acting team")
+            yield team
+
+    @asynccontextmanager
+    async def _tx(self) -> AsyncGenerator[tuple[AsyncConnection, str]]:
+        """A transaction in the store's team: the one named, or the acting team."""
+        with self._in_team() as team:
+            async with tenant_tx(self.engine) as c:
+                yield c, team
 
     def record_of(self, content: dict[str, Any]) -> dict[str, Any]:
         return {k: content[k] for k in self.record_keys if k in content}
 
     async def ensure_seeds(self, seeds: list[dict[str, Any]]) -> None:
-        """Each seed at its file version, published and owned by no team; a seed whose file version is newer than the
-        tenant's opens that version. Team types are never touched."""
+        """Each seed in the acting team at its file version, published; a seed whose file version is newer than the
+        team's opens that version. The team's own types are never touched."""
         at = now_iso()
-        async with tenant_tx(self.engine) as c:
-            have = {
-                str(r["id"]): r
-                for r in (await c.execute(sa.select(self.head).where(self.head.c.origin == SEED))).mappings()
-            }
+        async with self._tx() as (c, team):
+            q = sa.select(self.head).where(self.head.c.origin == SEED, team_visible(self.head))
+            have = {str(r["id"]): r for r in (await c.execute(q)).mappings()}
             for s in seeds:
                 v = int(s["version"])
                 row = have.get(str(s["id"]))
                 if row is not None and int(row["version"]) >= v:
                     continue
                 version = {
+                    "team_id": team,
                     "type_id": s["id"],
                     "version": v,
                     "record": self.record_of(s),
@@ -113,7 +133,7 @@ class VersionedRecords:
                     await c.execute(
                         self.head.insert().values(
                             id=s["id"],
-                            team_id=None,
+                            team_id=team,
                             origin=SEED,
                             version=v,
                             published_version=v,
@@ -127,13 +147,13 @@ class VersionedRecords:
                 else:
                     await c.execute(
                         self.head.update()
-                        .where(self.head.c.id == s["id"])
+                        .where(self.head.c.id == s["id"], self.head.c.team_id == team)
                         .values(version=v, published_version=v, name=s["name"], updated_at=at, updated_by=SEED)
                     )
                 await c.execute(self.versions.insert().values(**version, published_at=at, published_by=SEED))
 
     async def rows(self) -> list[dict[str, Any]]:
-        async with tenant_tx(self.engine) as c:
+        async with self._tx() as (c, _team):
             q = sa.select(self.head).where(team_visible(self.head)).order_by(self.head.c.origin, self.head.c.name)
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
@@ -146,7 +166,7 @@ class VersionedRecords:
 
     async def get(self, type_id: str) -> dict[str, Any]:
         """The type with its versions, newest first."""
-        async with tenant_tx(self.engine) as c:
+        async with self._tx() as (c, _team):
             row = await self._row(c, type_id)
             q = (
                 sa.select(self.versions)
@@ -158,7 +178,7 @@ class VersionedRecords:
 
     async def published(self, type_id: str, version: int | None = None) -> tuple[int, dict[str, Any]]:
         """(version, record) of a published version: the one named, or the newest when None."""
-        async with tenant_tx(self.engine) as c:
+        async with self._tx() as (c, _team):
             row = await self._row(c, type_id)
             n = version if version is not None else row["published_version"]
             if n is None:
@@ -179,7 +199,9 @@ class VersionedRecords:
     ) -> None:
         at = now_iso()
         try:
-            async with tenant_tx(self.engine) as c:
+            async with self._tx() as (c, team):
+                if team_id != team:
+                    raise RuntimeError("a type is created in the store's team")
                 await c.execute(
                     self.head.insert().values(
                         id=type_id,
@@ -198,7 +220,12 @@ class VersionedRecords:
                 )
                 await c.execute(
                     self.versions.insert().values(
-                        type_id=type_id, version=1, record=self.record_of(content), saved_at=at, saved_by=by
+                        team_id=team_id,
+                        type_id=type_id,
+                        version=1,
+                        record=self.record_of(content),
+                        saved_at=at,
+                        saved_by=by,
                     )
                 )
         except IntegrityError as e:
@@ -206,24 +233,29 @@ class VersionedRecords:
 
     async def save_draft(self, type_id: str, content: dict[str, Any], *, by: str) -> int:
         at = now_iso()
-        async with tenant_tx(self.engine) as c:
+        async with self._tx() as (c, _team):
             # Locked so two saves or publishes at once take turns instead of both reading the same version.
             row = await self._row(c, type_id, lock=True)
+            team = str(row["team_id"])
             n = int(row["version"])
             newest_published = row["published_version"] == n
             values = {"record": self.record_of(content), "saved_at": at, "saved_by": by}
             if newest_published:
                 n += 1
-                await c.execute(self.versions.insert().values(type_id=type_id, version=n, **values))
+                await c.execute(self.versions.insert().values(team_id=team, type_id=type_id, version=n, **values))
             else:
                 await c.execute(
                     self.versions.update()
-                    .where(self.versions.c.type_id == type_id, self.versions.c.version == n)
+                    .where(
+                        self.versions.c.team_id == team,
+                        self.versions.c.type_id == type_id,
+                        self.versions.c.version == n,
+                    )
                     .values(**values)
                 )
             await c.execute(
                 self.head.update()
-                .where(self.head.c.id == type_id)
+                .where(self.head.c.team_id == team, self.head.c.id == type_id)
                 .values(
                     version=n,
                     name=content["name"],
@@ -236,20 +268,25 @@ class VersionedRecords:
 
     async def publish(self, type_id: str, version: int, *, by: str) -> None:
         at = now_iso()
-        async with tenant_tx(self.engine) as c:
+        async with self._tx() as (c, _team):
             # Locked so two saves or publishes at once take turns instead of both reading the same version.
             row = await self._row(c, type_id, lock=True)
             if version != row["version"] or row["published_version"] == version:
                 raise Conflict(
                     f"v{version} is not the newest draft of {type_id} (v{row['version']}).", code="not_newest_draft"
                 )
+            team = str(row["team_id"])
             await c.execute(
                 self.versions.update()
-                .where(self.versions.c.type_id == type_id, self.versions.c.version == version)
+                .where(
+                    self.versions.c.team_id == team,
+                    self.versions.c.type_id == type_id,
+                    self.versions.c.version == version,
+                )
                 .values(published_at=at, published_by=by)
             )
             await c.execute(
                 self.head.update()
-                .where(self.head.c.id == type_id)
+                .where(self.head.c.team_id == team, self.head.c.id == type_id)
                 .values(published_version=version, updated_at=at, updated_by=by)
             )

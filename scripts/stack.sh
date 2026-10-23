@@ -3,7 +3,7 @@
 # console with chat on the agents service.
 # Each runs in the background with its log in $OPS_LOG_DIR/<svc>.log and its pid in $OPS_RUN_DIR/<svc>.pid. Ports and
 # directories come from make/env.mk (ISOLATED=1 shifts them); run through make, under your secrets manager.
-# Usage: scripts/stack.sh up|down|restart|health|start <svc>|stop <svc>|logs <svc>|stop-stale|check-fresh|stop-for-reset
+# Usage: scripts/stack.sh up|down|restart|health|start <svc>|stop <svc>|logs <svc>|stop-stale|check-fresh|note-migrations|stop-for-reset
 set -euo pipefail
 # Job control puts each background service in its own process group, so `down` stops its children (uv, node) too.
 set -m
@@ -244,18 +244,48 @@ age_of() {
 }
 
 # The last commit that changed what a Python service runs: its own directory (code and migrations) or packages/.
-code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents) echo services/agents-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; esac; }
+code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; esac; }
 # shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
 code_commit() { git log -1 --format="$2" -- $(code_dirs "$1"); }
 
-# A service is stale when its process started before the last commit to its code: it runs older code, and that
-# commit's migrations can change the tables under it (forced RLS on the run tables broke chat this way).
+# A service is stale when its process started before the last commit to its code, or before the last migration
+# landed on the database: it runs older code, or code that met the tables before they changed (forced RLS on the run
+# tables broke chat this way, and a worker up since before the team policies failed a run's first event, fb-16aa519c).
 stale() {
-  local pid age
+  local pid age started
   pid=$(serving_pid "$1") || return 1
   [[ -n "$pid" ]] || return 1
   age=$(age_of "$pid") || return 1
-  (($(date +%s) - age < $(code_commit "$1" %ct)))
+  started=$(($(date +%s) - age))
+  ((started < $(code_commit "$1" %ct))) && return 0
+  [[ -f "$RUN_DIR/migrated-at" ]] && ((started < $(mtime_of "$RUN_DIR/migrated-at")))
+}
+
+# Why a stale service is stale, for the messages below.
+stale_why() {
+  local pid age
+  pid=$(serving_pid "$1") && age=$(age_of "$pid") || return 0
+  if (($(date +%s) - age < $(code_commit "$1" %ct))); then
+    echo "older than $(code_commit "$1" %h), which changed its code"
+  else
+    echo "older than the last migration (make migrate, $(date -r "$(mtime_of "$RUN_DIR/migrated-at")" +%H:%M 2>/dev/null || date -d "@$(mtime_of "$RUN_DIR/migrated-at")" +%H:%M))"
+  fi
+}
+
+# Run after every migrate: each chain's recorded revision, kept in $RUN_DIR/db-heads. When any differs from the last
+# record, migrations landed, and $RUN_DIR/migrated-at marks when; every process started before it is stale.
+note_migrations() {
+  local now was file="$RUN_DIR/db-heads"
+  now=$(uv run --quiet python scripts/schema_sync.py "${OPS_DATABASE_URL:?}" --recorded 2>/dev/null) || {
+    echo "note-migrations: could not read the chains' revisions; staleness by migration is not updated" >&2
+    return 0
+  }
+  was=$(cat "$file" 2>/dev/null || true)
+  if [[ -n "$was" && "$was" != "$now" ]]; then
+    touch "$RUN_DIR/migrated-at"
+    echo "migrations landed; every service started before now is stale and make up restarts it"
+  fi
+  printf '%s\n' "$now" >"$file"
 }
 
 # The dev mail and bank fakes are reached at this machine's private address, which changes with the network (a
@@ -281,10 +311,10 @@ stop_stale() {
   for svc in "${PY_SERVICES[@]}"; do
     stale "$svc" || continue
     if alive "$svc"; then
-      echo "$svc: started before $(code_commit "$svc" %h) changed its code; restarting"
+      echo "$svc: $(stale_why "$svc"); restarting"
       stop "$svc"
     else
-      echo "$svc: :$(port_of "$svc") is served by pid $(serving_pid "$svc"), older than $(code_commit "$svc" %h) and not started by make up; stop it" >&2
+      echo "$svc: :$(port_of "$svc") is served by pid $(serving_pid "$svc"), $(stale_why "$svc"), and not started by make up; stop it" >&2
     fi
   done
 }
@@ -293,7 +323,7 @@ check_fresh() {
   local failed=0
   for svc in "${PY_SERVICES[@]}"; do
     if stale "$svc"; then
-      echo "$svc (pid $(serving_pid "$svc"), :$(port_of "$svc")) runs code older than $(code_commit "$svc" %h)" >&2
+      echo "$svc (pid $(serving_pid "$svc"), :$(port_of "$svc")) is $(stale_why "$svc")" >&2
       failed=1
     fi
   done
@@ -353,6 +383,35 @@ docker_disk() {
   fi
 }
 
+# The background processes each service reports at /health/background (c-516): one row per process, its state and how
+# long since its last pass. Late or stopped fails the command, so a stuck worker or relay shows here as on Govern >
+# Background; not reported (an event-run process that has had nothing to do yet) does not.
+background_rows() {
+  local svc body bad=0
+  printf '  %-8s %-18s %-14s %s\n' PROCESS KEY STATE "LAST RUN"
+  for svc in agents files documents tools; do
+    [[ " ${SERVICES[*]} " == *" $svc "* ]] || continue
+    body=$(curl -s --max-time 5 "http://127.0.0.1:$(port_of "$svc")/health/background" || true)
+    python3 - "$svc" "$body" <<'PY' || bad=1
+import json, sys, time
+svc, body = sys.argv[1], sys.argv[2]
+try:
+    processes = json.loads(body)["processes"]
+except (ValueError, KeyError, TypeError):
+    print(f"  {svc:<8} {'-':<18} {'DOWN':<14} no /health/background answer")
+    sys.exit(1)
+failed = False
+for p in processes:
+    ago = f"{int(time.time() - p['lastRunAt'])} s ago" if p.get("lastRunAt") else "never"
+    state = p["state"].replace("_", " ")
+    print(f"  {svc:<8} {p['key']:<18} {state:<14} {ago}" + (f" ({p['lastError']})" if p.get("lastError") else ""))
+    failed = failed or p["state"] in ("late", "stopped")
+sys.exit(1 if failed else 0)
+PY
+  done
+  return $bad
+}
+
 health() {
   local failed=0 only=${1:-} code state pid
   echo "  stack: $STACK"
@@ -368,6 +427,7 @@ health() {
     fi
   done
   if alive worker; then row worker - - "running" "$(owner_of worker "")"; elif [[ "$STACK" == shared && -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
+  [[ -z "$only" ]] && { background_rows || failed=1; }
   if [[ "$STACK" == shared && -z "$only" ]]; then
     for svc in "${FAKES[@]}"; do
       if [[ -n "$(url_of "$svc")" ]]; then
@@ -433,6 +493,7 @@ case "${1:-}" in
   # The command a service starts with, for checks such as scripts/tests/test_stack_service_urls.py.
   cmd) known "${2:-}"; cmd_of "$2" ;;
   stop-stale) stop_stale ;;
+  note-migrations) note_migrations ;;
   check-fresh) check_fresh ;;
   stop-for-reset) stop_for_reset ;;
   *) echo "usage: scripts/stack.sh up|down|restart [svc]|health [svc]|start <svc>|stop <svc>|logs <svc>" >&2; exit 2 ;;

@@ -24,19 +24,10 @@ TEAM_COLUMNS = {"team_id", "team"}
 # table is marked; the test fails on a name that is marked or gone, so the list only shrinks.
 NOT_YET_MARKED = {
     # agents-service: work records, scoped by the acting team passed in, or by thread
-    "cases",
-    "chat_attachments",
-    "chat_search",
-    "mailboxes",
-    "agent_memories",
+    # background process: the update notices of the account-level event workflows have no team
     "service_events",
-    "team_default_agents",
-    "trigger_events",
-    "widget_deployments",
-    "deployments",
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
-    "engine_runs",
     # tools-service
     "connections",
     "send_policies",

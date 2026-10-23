@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
-import { useCanBuild } from '@/hooks/me-queries';
+import { useCan, useCanBuild } from '@/hooks/me-queries';
 import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow, useValidateDefinition } from '@/hooks/engine-queries';
 import { ApiError } from '@/lib/api';
 import type { EngineDefinition } from '@/lib/types/engine';
@@ -23,6 +23,7 @@ export default function WorkflowDefinitionPage() {
   const definition = useDefinition(id);
   const nodeTypes = useNodeTypes();
   const canBuild = useCanBuild();
+  const canPublish = useCan('workflows', 'publish');
   const { mutateAsync: validateAsync } = useValidateDefinition();
   const { mutateAsync: publishAsync, isPending: publishing } = usePublishDefinition();
   const { mutateAsync: startAsync } = useStartEngineRun();
@@ -79,6 +80,7 @@ export default function WorkflowDefinitionPage() {
         setPaused={pauseAsync}
         pausing={pausing}
         readOnly={!canBuild}
+        canPublish={canPublish}
         frame={({ actions, canvas }) => (
           <PageLayout {...header} actions={actions}>
             {canvas}

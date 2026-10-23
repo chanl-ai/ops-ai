@@ -26,6 +26,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.activity` | `Activity` | none | none |
 | agents-service | `ops_agents.store.actor_names` | `ActorNames` | none | none |
 | agents-service | `ops_agents.store.agent_registry` | `AgentRegistry` | CAS, TRANSACTION | `registry_agent_versions`, `registry_agents`, `registry_publish_requests` |
+| agents-service | `ops_agents.store.background` | `BackgroundJobs` | RLS, TRANSACTION | `background_heartbeats`, `background_jobs` |
 | agents-service | `ops_agents.store.case_links` | `CaseLinks` | none | none |
 | agents-service | `ops_agents.store.case_types` | `CaseTypeStore` | CAS, TRANSACTION | `case_type_versions`, `case_types` |
 | agents-service | `ops_agents.store.cases` | `CaseStore` | TRANSACTION | `case_events`, `cases` |

@@ -128,7 +128,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
   );
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
-  if (query.isError && !query.data) return <QueryError what="documents" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError && !query.data) return <QueryError what="documents" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   return (
     <>

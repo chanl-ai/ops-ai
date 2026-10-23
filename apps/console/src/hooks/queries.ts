@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, brand } from '@/lib/api';
@@ -21,6 +21,7 @@ import type {
   WorkflowSettingsInput,
 } from '@/lib/types/domain';
 import type { AgentFilters, DeploymentFilters, ListParams, PolicyFilters, ReviewListParams, RunFilters, ToolFilters, WorkflowFilters } from '@/lib/types/query';
+import { teamKey, useTeamQuery } from './team-query';
 
 export const qk = {
   overview: ['overview'] as const,
@@ -38,32 +39,32 @@ export const qk = {
   workflowVersions: (id: string) => ['workflow', id, 'versions'] as const,
 };
 
-export const useOverview = () => useQuery({ queryKey: qk.overview, queryFn: api.overview.get });
+export const useOverview = () => useTeamQuery({ queryKey: qk.overview, queryFn: api.overview.get });
 /** The demo brand from the console's env, when one is set. */
 export const useBrand = () => brand;
 
-export const useLookups = () => useQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
+export const useLookups = () => useTeamQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
 
 export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...opts });
-export const useAgent = (id: string) => useQuery({ queryKey: qk.agent(id), queryFn: () => api.agents.get(id) });
+export const useAgent = (id: string) => useTeamQuery({ queryKey: qk.agent(id), queryFn: () => api.agents.get(id) });
 export const useWorkflows = (p: ListParams<WorkflowFilters>) => usePagedQuery({ queryKey: qk.workflows(p), queryFn: () => api.workflows.list(p) });
-export const useWorkflow = (id: string) => useQuery({ queryKey: qk.workflow(id), queryFn: () => api.workflows.get(id) });
+export const useWorkflow = (id: string) => useTeamQuery({ queryKey: qk.workflow(id), queryFn: () => api.workflows.get(id) });
 // While a typed task's AI assist is still being written (its region says pending: true), the task is read again every
 // 2 s. The server drops the region once an assist runs past its limit, which ends the polling.
 export const useReview = (id: string | null) =>
-  useQuery({
+  useTeamQuery({
     queryKey: ['reviews', 'one', id],
     queryFn: () => api.reviews.get(id!),
     enabled: !!id,
     refetchInterval: (q) => (q.state.data?.task?.regions.some((r) => r.region === 'assist' && (r.data as { pending?: unknown } | null)?.pending === true) ? 2000 : false),
   });
 /** The task's place in the open queue ("5 of 24") and its neighbours, from the server. */
-export const useReviewPlace = (id: string | null) => useQuery({ queryKey: ['reviews', 'place', id], queryFn: () => api.reviews.place(id!), enabled: !!id });
+export const useReviewPlace = (id: string | null) => useTeamQuery({ queryKey: ['reviews', 'place', id], queryFn: () => api.reviews.place(id!), enabled: !!id });
 export const useReviewByRunKey = (runKey: string | null) =>
-  useQuery({ queryKey: ['reviews', 'run-key', runKey], queryFn: () => api.reviews.byRunKey(runKey!), enabled: !!runKey });
+  useTeamQuery({ queryKey: ['reviews', 'run-key', runKey], queryFn: () => api.reviews.byRunKey(runKey!), enabled: !!runKey });
 export const useReviews = (p: ReviewListParams) => usePagedQuery({ queryKey: qk.reviews(p), queryFn: () => api.reviews.list(p) });
 /** The sidebar badge reads the same list endpoint and view count as the Reviews page, so the two never disagree. */
-export const useOpenReviewCount = () => useQuery({ queryKey: ['reviews', 'open-count'], queryFn: () => api.reviews.list({ view: 'open', page: 1, pageSize: 1 }), select: (r) => r.viewCounts.open });
+export const useOpenReviewCount = () => useTeamQuery({ queryKey: ['reviews', 'open-count'], queryFn: () => api.reviews.list({ view: 'open', page: 1, pageSize: 1 }), select: (r) => r.viewCounts.open });
 export const usePolicies = (p: ListParams<PolicyFilters>) => usePagedQuery({ queryKey: qk.policies(p), queryFn: () => api.policies.list(p) });
 export const useTools = (p: ListParams<ToolFilters>) => usePagedQuery({ queryKey: qk.tools(p), queryFn: () => api.tools.list(p) });
 
@@ -80,23 +81,23 @@ export const useCreateAgent = () => useWrite((i: AgentInput) => api.agents.creat
 export const useUpdateAgent = (id: string) =>
   useWrite((p: AgentPatch) => api.agents.update(id, p), ['agents', 'agent', 'tools', 'kbs']);
 export const useDeleteAgent = () => useWrite((id: string) => api.agents.remove(id), ['agents', 'overview']);
-export const useAgentVersions = (id: string) => useQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
-export const useAgentRuns = (id: string) => useQuery({ queryKey: qk.agentRuns(id), queryFn: () => api.agents.runs(id) });
+export const useAgentVersions = (id: string) => useTeamQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
+export const useAgentRuns = (id: string) => useTeamQuery({ queryKey: qk.agentRuns(id), queryFn: () => api.agents.runs(id) });
 export const useRestoreAgent = (id: string) => useWrite((v: number) => api.agents.restore(id, v), ['agents', 'agent']);
 /** Opens an `agent_publish` review, so Reviews, Overview and Assurance refresh too. */
 export const useRequestAgentPublish = (id: string) =>
   useWrite(({ version, note }: { version: number; note: string }) => api.agents.requestPublish(id, version, note), ['agents', 'agent', 'reviews', 'overview', 'assurance', 'notifications']);
 /** Asked when the publish dialog opens, so it says whether the publish waits for review before anyone presses it. */
 export const useAgentPublishPreview = (id: string, version: number, enabled: boolean) =>
-  useQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
+  useTeamQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
 export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.agents.setPaused(id, paused), ['agents', 'agent', 'overview']);
 /** The tools an agent may be granted; the catalogue changes only with the runtime. */
-export const useModelAliases = () => useQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000 });
-export const useGuardrails = () => useQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
+export const useModelAliases = () => useTeamQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000 });
+export const useGuardrails = () => useTeamQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
 // Under the same key as the whole list, so the guardrail writes' invalidation refreshes the page too.
 export const useGuardrailsPage = (p: ListParams) => usePagedQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p) });
-export const useGuardrail = (id: string) => useQuery({ queryKey: ['agent-guardrails', 'one', id], queryFn: () => api.guardrails.get(id) });
-export const useGrantableTools = () => useQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
+export const useGuardrail = (id: string) => useTeamQuery({ queryKey: ['agent-guardrails', 'one', id], queryFn: () => api.guardrails.get(id) });
+export const useGrantableTools = () => useTeamQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
 export const useBulkUpdateAgents = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { paused?: boolean; owner?: string } }) => api.agents.bulkUpdate!(ids, patch), ['agents', 'agent', 'overview']);
 export const useBulkDeleteAgents = () => useWrite((ids: string[]) => api.agents.bulkRemove!(ids), ['agents', 'overview', 'tools']);
@@ -104,7 +105,7 @@ export const useBulkDeleteAgents = () => useWrite((ids: string[]) => api.agents.
 export const agentsBulkSupported = !!api.agents.bulkUpdate && !!api.agents.bulkRemove;
 
 /** The fields and operators a branch may route on; they change only with the runtime, so they are fetched once. */
-export const useRouteFields = () => useQuery({ queryKey: ['workflow-route-fields'], queryFn: () => api.workflows.routeFields(), staleTime: Infinity });
+export const useRouteFields = () => useTeamQuery({ queryKey: ['workflow-route-fields'], queryFn: () => api.workflows.routeFields(), staleTime: Infinity });
 /** One test run of the draft on a sample case; writes nothing, so nothing is invalidated. */
 export const useTestWorkflow = (id: string) => useMutation({ mutationFn: (graph?: WorkflowGraph) => api.workflows.test(id, { graph }) });
 export const useCreateWorkflow = () => useWrite((i: WorkflowInput) => api.workflows.create(i), ['workflows', 'lookups']);
@@ -115,10 +116,10 @@ export const useSaveDraft = (id: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (graph: WorkflowGraph | null) => api.workflows.saveDraft(id, graph),
-    onSuccess: (draft) => qc.setQueryData(qk.workflow(id), (w: WorkflowDetail | undefined) => (w ? { ...w, draft: draft ?? undefined } : w)),
+    onSuccess: (draft) => qc.setQueryData(teamKey(qk.workflow(id)), (w: WorkflowDetail | undefined) => (w ? { ...w, draft: draft ?? undefined } : w)),
   });
 };
-export const useLastValidation = (id: string) => useQuery({ queryKey: ['workflow', id, 'validation'], queryFn: () => api.workflows.lastValidation(id) });
+export const useLastValidation = (id: string) => useTeamQuery({ queryKey: ['workflow', id, 'validation'], queryFn: () => api.workflows.lastValidation(id) });
 export const useRequestPublish = (id: string) =>
   useWrite((i: { graph: WorkflowGraph; note: string; validationRunId?: string; checksFailing: number }) => api.workflows.requestPublish(id, i), ['workflows', 'workflow', 'reviews', 'overview']);
 
@@ -132,7 +133,7 @@ export const useBulkUpdateDeployments = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { status?: 'active' | 'paused'; toLatest?: boolean } }) => api.deployments.bulkUpdate(ids, patch), ['deployments']);
 export const useBulkDeleteDeployments = () => useWrite((ids: string[]) => api.deployments.bulkRemove(ids), ['deployments', 'workflows', 'workflow']);
 
-export const useTests = (workflowId: string) => useQuery({ queryKey: ['workflow', workflowId, 'tests'], queryFn: () => api.tests.list(workflowId) });
+export const useTests = (workflowId: string) => useTeamQuery({ queryKey: ['workflow', workflowId, 'tests'], queryFn: () => api.tests.list(workflowId) });
 export const useCreateTest = (workflowId: string) => useWrite((i: TestCaseInput) => api.tests.create(workflowId, i), ['workflow']);
 export const useImportTests = (workflowId: string) => useWrite(({ rows, fileId }: { rows: TestCaseInput[]; fileId?: string }) => api.tests.importRows(workflowId, rows, fileId), ['workflow', 'files']);
 export const useTestFromRun = () => useWrite((runId: string) => api.tests.fromRun(runId), ['workflow']);
@@ -143,7 +144,7 @@ export const useDeleteWorkflow = () => useWrite((id: string) => api.workflows.re
 export const useRestoreWorkflow = (id: string) => useWrite((v: number) => api.workflows.restore(id, v), ['workflows', 'workflow']);
 export const useWorkflowRuns = (id: string, p: ListParams<RunFilters>) =>
   usePagedQuery({ queryKey: qk.workflowRuns(id, p), queryFn: () => api.workflows.runs(id, p) });
-export const useWorkflowVersions = (id: string) => useQuery({ queryKey: qk.workflowVersions(id), queryFn: () => api.workflows.versions(id) });
+export const useWorkflowVersions = (id: string) => useTeamQuery({ queryKey: qk.workflowVersions(id), queryFn: () => api.workflows.versions(id) });
 export const useBulkUpdateWorkflows = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { status?: LifecycleStatus; owner?: string } }) => api.workflows.bulkUpdate!(ids, patch), ['workflows', 'overview']);
 /** Whether the workflows backend has bulk routes; the list hides its bulk actions when it does not. */

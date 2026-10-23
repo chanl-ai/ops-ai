@@ -16,7 +16,7 @@ export default async function Layout({ children, params }: { children: ReactNode
         tree={source.pageTree}
         nav={{ title: <Brand />, url: '/' }}
         githubUrl="https://github.com/chanl-ai/ops-ai"
-        sidebar={{ collapsible: false, banner: <RailSections /> }}
+        sidebar={{ collapsible: false, banner: <RailSections key="rail-sections" /> }}
       >
         {children}
       </DocsLayout>

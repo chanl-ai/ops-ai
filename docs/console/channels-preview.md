@@ -1,6 +1,8 @@
 # Channels mock
 
-Status: current (design mock; nothing in it is stored, and no live page or route reads it).
+Status: historical. The mock was deleted with every console preview page (c-517, 2026-10-22); the real pages are under
+`/channels`, walked by uc-142 (`docs/usecases/console/channels-real.md`) and uc-199
+(`docs/usecases/agents-service/connect-a-mailbox.md`). What follows describes the mock as it was.
 
 This design answers a request for a workspace Channels app and for how a workflow's Email received trigger reaches a connected
 mailbox. `/preview/channels` draws both on sample data, on a development server only (`src/proxy.ts` answers 404

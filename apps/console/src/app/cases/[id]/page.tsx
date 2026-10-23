@@ -3,14 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowRight, ChevronDown, Clock, FileText, Link2, ListChecks, Mail, SlidersHorizontal, UserCheck } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock, FileText, Link2, ListChecks, Mail, PlayCircle, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CASE_PRIORITY, CASE_STATUS, Deadline, PRIORITY_OPTIONS, STATUS_OPTIONS } from '@/components/cases/case-record-columns';
 import { CaseFields } from '@/components/cases/case-fields';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -25,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Textarea } from '@/components/ui/textarea';
+import { StoryFeed } from '@/components/workflows/story-feed';
 import { useAddCaseNote, useCaseRecord, useChangeCaseRecord } from '@/hooks/case-record-queries';
 import { useMe } from '@/hooks/me-queries';
 import { relativeTime } from '@/lib/format';
@@ -78,7 +78,8 @@ export default function CasePage() {
   const customer = c.customer?.name ?? c.customerName ?? c.customerId;
   const paused = !!(c.sla?.pausedSince ?? c.pausedSince);
   const fields = c.typedFields ?? [];
-  const waiting = c.waiting ?? [];
+  const left = c.whatsLeft;
+  const resolve = () => save({ status: 'resolved' }, 'The case is resolved');
   const actions = c.actions ?? [];
   const links = c.links;
 
@@ -115,11 +116,18 @@ export default function CasePage() {
           <Badge variant="outline" className="font-normal" data-testid="case-priority-badge">
             {CASE_PRIORITY[c.priority]}
           </Badge>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            First response <ClockState clock={c.sla?.response ?? { state: c.respondedAt ? 'met' : 'running', dueAt: c.responseDueAt, leftS: c.responseLeftS, metAt: c.respondedAt }} paused={paused} testId="case-response" />
-          </span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            Resolution <ClockState clock={c.sla?.resolution ?? { state: 'running', dueAt: c.resolutionDueAt, leftS: c.resolutionLeftS, metAt: null }} paused={paused} testId="case-resolution" />
+          {/* One timer (c-500): the case type's deadline field, else the resolution clock; first response stays in Details. */}
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="case-timer">
+            {c.timer?.label ?? 'Resolution'}{' '}
+            <ClockState
+              clock={
+                c.timer
+                  ? { state: c.timer.state, dueAt: c.timer.dueAt, leftS: c.timer.leftS, metAt: null }
+                  : (c.sla?.resolution ?? { state: 'running', dueAt: c.resolutionDueAt, leftS: c.resolutionLeftS, metAt: null })
+              }
+              paused={c.timer ? c.timer.state === 'paused' : paused}
+              testId="case-resolution"
+            />
           </span>
         </>
       }
@@ -140,15 +148,25 @@ export default function CasePage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-48">
                 <DropdownMenuLabel className="text-xs text-muted-foreground">Status</DropdownMenuLabel>
-                {STATUS_OPTIONS.filter((o) => may.close || (o.value !== 'closed' && o.value !== 'resolved') || o.value === c.status).map((o) => (
-                  <DropdownMenuItem key={o.value} disabled={o.value === c.status} onSelect={() => save({ status: o.value as CaseStatus }, `Status is ${o.label}`)} data-testid={`case-status-${o.value}`}>
+                {STATUS_OPTIONS.filter((o) => may.close || o.value !== 'closed' || o.value === c.status).map((o) => (
+                  <DropdownMenuItem
+                    key={o.value}
+                    disabled={o.value === c.status}
+                    onSelect={() => save({ status: o.value as CaseStatus }, `Status is ${o.label}`)}
+                    data-testid={`case-status-${o.value}`}
+                  >
                     {o.label}
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel className="text-xs text-muted-foreground">Priority</DropdownMenuLabel>
                 {PRIORITY_OPTIONS.map((o) => (
-                  <DropdownMenuItem key={o.value} disabled={o.value === c.priority} onSelect={() => save({ priority: o.value as CasePriority }, `Priority is ${o.label}`)} data-testid={`case-priority-${o.value}`}>
+                  <DropdownMenuItem
+                    key={o.value}
+                    disabled={o.value === c.priority}
+                    onSelect={() => save({ priority: o.value as CasePriority }, `Priority is ${o.label}`)}
+                    data-testid={`case-priority-${o.value}`}
+                  >
                     {o.label}
                   </DropdownMenuItem>
                 ))}
@@ -193,7 +211,14 @@ export default function CasePage() {
                 ))}
                 {!links.cases.length && <FieldRow label="Other cases" value="None" />}
                 {links.cases.map((k) => (
-                  <FieldRow key={k.id} label={k.relation === 'same_customer' ? 'Same customer' : 'Linked case'} value={`${k.subject} · ${CASE_STATUS[k.status as CaseStatus] ?? k.status}`} href={k.href} wrap testId="case-link-case" />
+                  <FieldRow
+                    key={k.id}
+                    label={k.relation === 'same_customer' ? 'Same customer' : 'Linked case'}
+                    value={`${k.subject} · ${CASE_STATUS[k.status as CaseStatus] ?? k.status}`}
+                    href={k.href}
+                    wrap
+                    testId="case-link-case"
+                  />
                 ))}
                 <div className="flex flex-wrap gap-x-3 pt-2">
                   <AllLink href={links.runs.length ? links.allHrefs.runs : null} label="All runs" />
@@ -222,24 +247,66 @@ export default function CasePage() {
         }
       >
         <div className="flex flex-col gap-4">
-          {c.nextAction && (
-            <Item variant="outline" className="bg-card" data-testid="case-next">
-              <ItemMedia variant="icon">
-                <ArrowRight />
-              </ItemMedia>
-              <ItemContent>
-                <ItemTitle>Next: {c.nextAction.label}</ItemTitle>
-                <ItemDescription>{[c.nextAction.owner, c.nextAction.dueAt ? `due ${relativeTime(c.nextAction.dueAt)}` : null].filter(Boolean).join(' · ') || 'No one assigned yet'}</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={c.nextAction.href} data-testid="case-next-action">
-                    Open
-                  </Link>
-                </Button>
-              </ItemActions>
-            </Item>
-          )}
+          <ItemGroup className="gap-2">
+            {left && (
+              <Item variant="outline" size="sm" className="bg-card" data-testid="case-whats-left">
+                <ItemMedia variant="icon">{left.items.length ? <ListChecks /> : <CheckCircle2 />}</ItemMedia>
+                <ItemContent>
+                  {left.items.length ? (
+                    <>
+                      <ItemTitle>What&apos;s left: waiting on {[...new Set(left.items.map((x) => x.who))].join(', ')}</ItemTitle>
+                      {left.items.map((x) => (
+                        <ItemDescription key={x.href} className="line-clamp-none">
+                          <Link href={x.href} className="underline-offset-4 hover:underline">
+                            {x.what}
+                          </Link>
+                          {x.dueAt ? ` · by ${relativeTime(x.dueAt)}` : ''}
+                        </ItemDescription>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <ItemTitle>Nothing is left on this case</ItemTitle>
+                      <ItemDescription className="line-clamp-none">
+                        {left.resolvable
+                          ? 'Every task is decided and no automation is still running.'
+                          : c.status === 'resolved' || c.status === 'closed'
+                            ? `The case is ${CASE_STATUS[c.status].toLowerCase()}.`
+                            : 'Automation is still working on it.'}
+                      </ItemDescription>
+                    </>
+                  )}
+                </ItemContent>
+                {left.resolvable && (
+                  <ItemActions>
+                    <LoadingButton size="sm" isLoading={change.isPending} onClick={resolve} data-testid="case-resolve">
+                      Resolve
+                    </LoadingButton>
+                  </ItemActions>
+                )}
+              </Item>
+            )}
+            {c.origin && (
+              <Item variant="muted" size="sm" data-testid="case-origin">
+                <ItemMedia variant="icon">
+                  <PlayCircle />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>How this case started</ItemTitle>
+                  <ItemDescription className="line-clamp-none">{c.origin.text}</ItemDescription>
+                </ItemContent>
+                {c.origin.href && (
+                  <ItemActions>
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={c.origin.href} data-testid="case-origin-run">
+                        See the run
+                      </Link>
+                    </Button>
+                  </ItemActions>
+                )}
+              </Item>
+            )}
+          </ItemGroup>
           {fields.length ? (
             <Section title={`About this ${c.caseType?.name.toLowerCase() ?? 'case'}`} bodyClassName="px-4 py-1" id="case-about">
               <div data-testid="case-typed-fields">
@@ -251,31 +318,6 @@ export default function CasePage() {
           ) : (
             c.fields && <CaseFields fields={c.fields} />
           )}
-
-          <Section title={`Waiting on someone${waiting.length ? ` (${waiting.length})` : ''}`} actions={<AllLink href={c.waitingAllHref} label="All tasks" />} bodyClassName="px-4 py-1">
-            {waiting.length ? (
-              <ItemGroup data-testid="case-waiting">
-                {waiting.map((w) => (
-                  <Item key={w.taskId} size="sm" className="px-0" data-testid="case-waiting-task">
-                    <ItemMedia variant="icon">
-                      <UserCheck />
-                    </ItemMedia>
-                    <ItemContent>
-                      <ItemTitle>{w.title}</ItemTitle>
-                      <ItemDescription>{[w.assignee?.name ?? w.group ?? 'Unassigned', `opened ${relativeTime(w.openedAt)}`, w.dueAt ? `due ${relativeTime(w.dueAt)}` : 'no deadline of its own'].join(' · ')}</ItemDescription>
-                    </ItemContent>
-                    <ItemActions>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={w.href}>Open Human Task</Link>
-                      </Button>
-                    </ItemActions>
-                  </Item>
-                ))}
-              </ItemGroup>
-            ) : (
-              <EmptyState icon={ListChecks} title="Nothing is waiting on a person" description="No Human Task of this case's runs is open." testId="case-waiting-empty" />
-            )}
-          </Section>
 
           {actions.length > 0 && (
             <Section title={`Drafted actions (${actions.length})`} bodyClassName="px-4 py-1">
@@ -304,28 +346,7 @@ export default function CasePage() {
             </Section>
           )}
 
-          <Section title="Recent activity" actions={<AllLink href={c.activity?.allHref ?? `/activity?case=${encodeURIComponent(c.id)}`} label={c.activity && c.activity.total > (c.activity.recent.length ?? 0) ? `View all ${c.activity.total}` : 'View all'} />}>
-            {c.activity?.recent.length ? (
-              <ol className="flex flex-col gap-3 p-4" data-testid="case-activity">
-                {c.activity.recent.map((e, i) => (
-                  <li key={`${e.at}-${i}`} className="flex flex-col gap-0.5 border-l pl-4" data-testid="case-activity-line">
-                    <span className="text-xs text-muted-foreground">
-                      {e.actorName} · {relativeTime(e.at)}
-                    </span>
-                    {e.href ? (
-                      <Link href={e.href} className="text-sm underline-offset-4 hover:underline">
-                        {e.text}
-                      </Link>
-                    ) : (
-                      <span className="text-sm">{e.text}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">Nothing has happened on this case yet.</p>
-            )}
-          </Section>
+          {c.feed && <StoryFeed title="Activity" description="Everything that happened to this case, newest first." lines={c.feed.lines} more={c.feed.more} filters testId="case-feed" />}
         </div>
       </RecordLayout>
       <DialogShell

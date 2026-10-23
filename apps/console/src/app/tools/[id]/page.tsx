@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronDown, CircleDashed, Download, GitCompareArrows, KeyRound, ListPlus, Pencil, Plus, SearchX, ShieldAlert, ShieldCheck, Trash2, Unplug } from 'lucide-react';
+import { ChevronDown, CircleDashed, Download, GitCompareArrows, KeyRound, ListPlus, Pencil, Plus, ShieldAlert, ShieldCheck, Trash2, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { PageLayout } from '@/components/page-layout';
@@ -59,7 +59,6 @@ import {
   useUpdateOperation,
 } from '@/hooks/tool-module-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { ApiError } from '@/lib/api';
 import { plural, shortDate } from '@/lib/format';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 
@@ -116,11 +115,7 @@ export default function ModulePage() {
   if (query.isError)
     return (
       <PageLayout title="Module" backHref="/tools">
-        {query.error instanceof ApiError && query.error.status === 404 ? (
-          <EmptyState icon={SearchX} title="Module not found" description="It may have been deleted, or the link is wrong." action={{ label: 'Back to tools', href: '/tools' }} />
-        ) : (
-          <QueryError what="this module" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-        )}
+        <QueryError what="this module" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to tools', href: '/tools' }} />
       </PageLayout>
     );
 

@@ -1,5 +1,5 @@
 """/v1/widgets: widget templates an agent version pins and fills in chat (c-082,
-`.codeloop/wiki/concepts/chat-widgets.md`).
+`docs/architecture/chat-widgets.md`).
 
 The seeded library (seed/widgets.json) is listed as published, platform-wide templates. A builder creates a widget in
 their team, saves drafts, and requests its publish, decided in Reviews by someone other than whoever asked or saved
@@ -55,7 +55,7 @@ async def _mine(rt: Runtime, me: Principal, widget_id: str, what: str) -> dict[s
     member of the owning team outside the builder and admin roles gets 403."""
     row = await widgets(rt).find(widget_id)
     teams = teams_of(me)
-    if row is None or (teams is not None and row["team_id"] not in teams):
+    if row is None or row["team_id"] not in teams:
         if rt.catalog.widget(widget_id) is not None:
             raise Conflict(
                 f"{widget_id} is a platform widget from the seeded library; it cannot be edited here.",

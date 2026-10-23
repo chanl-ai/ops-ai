@@ -144,7 +144,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="members" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="members" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={cols}

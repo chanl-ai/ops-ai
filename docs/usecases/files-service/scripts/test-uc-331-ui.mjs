@@ -4,13 +4,13 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-const SHOTS = join(ROOT, '.codeloop/evidence/335/screens');
+const SHOTS = evidenceDir('335', 'screens');
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const data = async (r) => {
   const body = await r.json().catch(() => ({}));

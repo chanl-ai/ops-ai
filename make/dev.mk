@@ -22,6 +22,8 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" || { \
 		echo "make up stopped: the database is ahead of this checkout (above). Nothing was changed."; exit 1; }
 	@$(MAKE) -s migrate || { echo "make up stopped: a migration failed (above). The database keeps what applied; fix the migration or run make reset-db."; exit 1; }
+	@# A migration that just landed makes every process started before it stale: stopped here, started below.
+	@$(STACK) stop-stale
 	@$(STACK) up
 	@# The dev mail and bank fakes answer at this machine's private address, which moves with the network; the
 	@# shared stack's egress list is brought up to date with it so mail and bank calls are not refused after a move.
@@ -59,12 +61,12 @@ restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|f
 	@# worker uses agents-service's.
 	@if [ -n "$(SVC)" ]; then \
 		$(STACK) stop $(SVC) && \
-		{ case "$(SVC)" in console|worker|embed|apidocs) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate;; esac; } && \
+		{ case "$(SVC)" in console|worker|embed|apidocs) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate && $(STACK) note-migrations;; esac; } && \
 		$(STACK) start $(SVC); \
 	else \
 		$(STACK) down && \
 		for d in $(SVC_DIR_agents) $(SVC_DIR_tools) $(SVC_DIR_models) $(SVC_DIR_kb) $(SVC_DIR_platform) $(SVC_DIR_files) $(SVC_DIR_documents); do $(MAKE) -s -C $$d migrate || exit 1; done && \
-		$(STACK) up; \
+		$(STACK) note-migrations && $(STACK) up; \
 	fi
 	@$(STACK) health $(SVC)
 

@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import AsyncGenerator
-from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -20,7 +18,6 @@ from ops_agent_kernel.pii import masked
 from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
-from ops_engine.compiler import redacted
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
 from ops_engine.document_types import pinned, unpinned
 from ops_engine.node_types import start_form
@@ -37,11 +34,12 @@ from ops_service_kit.http import Envelope, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
+from ...store.actor_names import UNNAMED_WORKFLOW
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
 from ...store.tenancy import current_team, current_tenant
-from .. import ai_steps_gate, engine_lifecycle, run_starts, step_shapes, task_view
+from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
@@ -59,7 +57,8 @@ from ..email_trigger import binding_of
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
 from ..file_names import named
-from ..schemas import SSE_RESPONSE, Out, PublishReview
+from ..run_story import decisions_in, files_in, steps_view
+from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview
 from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
@@ -719,6 +718,8 @@ class RunRow(Out):
     mode: str
     status: str
     outcome: str | None
+    # The outcome as people read it ("Documents read"), run_story.words over `outcome` (c-508).
+    outcome_text: str | None = None
     error: str | None
     input: dict[str, Any] | None
     output: Any
@@ -793,6 +794,112 @@ class RunDecision(Out):
     at: str | None
 
 
+class StoryAttachment(Out):
+    file_id: str
+    name: str
+    type: str | None
+    size: int | None
+
+
+class StorySkipped(Out):
+    name: str
+    # Why the mailbox did not store it, in words.
+    message: str
+
+
+class StoryBodyFile(Out):
+    file_id: str
+    name: str
+
+
+class StoryEmail(Out):
+    """The email a run began with (its trigger is Email received), from its input (ops_engine shapes.EMAIL)."""
+
+    from_: str = Field(alias="from")
+    subject: str
+    received_at: str | None
+    body: str
+    mailbox: str | None
+    attachments: list[StoryAttachment]
+    skipped: list[StorySkipped]
+    body_file: StoryBodyFile | None
+
+
+class StoryRead(Out):
+    """An Extract from file step's read, as the read check draws it."""
+
+    node_id: str
+    # The step's name in the workflow.
+    name: str
+    read: DocumentRead
+
+
+class StoryFact(Out):
+    label: str
+    value: str
+
+
+class StoryCase(Out):
+    case_id: str
+    subject: str
+    customer: str | None
+    # The case's own fields, worded.
+    facts: list[StoryFact]
+
+
+class StoryTask(Out):
+    review_id: str
+    title: str
+    open: bool
+    # The option chosen, as its label reads; None while open.
+    decision: str | None
+    # "Hold or flag · waiting for Maya Okafor", "Hold or flag: Hold by Maya Okafor".
+    state: str
+
+
+class StoryChild(Out):
+    """A run a step started, as a person reads it: what it was about, where it is now, its case and Human Task."""
+
+    run_id: str
+    node_id: str
+    index: int
+    workflow_name: str
+    step_name: str
+    # The step's label for its item, else the item's first text that is not an id, else the workflow's name.
+    label: str
+    status: str
+    outcome: str | None
+    # The End step it finished on, by name; None until it succeeds.
+    ending: str | None
+    # Where it is now, in words.
+    state: str
+    cases: list[StoryCase]
+    tasks: list[StoryTask]
+
+
+class StoryLine(Out):
+    """One thing a run did, as a sentence a person reads (c-500); the case feed is made of the same lines."""
+
+    at: str | None
+    # person, automation or email: what the feed's filters narrow by.
+    source: str
+    # Who did it: a person's or key's name, the email's sender, or the workflow's name for automation.
+    actor: str
+    text: str
+    # The run, file, case or Human Task the line is about.
+    href: str | None
+
+
+class RunStory(Out):
+    email: StoryEmail | None
+    reads: list[StoryRead]
+    children: list[StoryChild]
+    # Runs past the first 50 a step started, counted and not told.
+    children_more: int
+    # What the run did, oldest first.
+    lines: list[StoryLine]
+
+
 class RunDetail(RunRow):
     steps: list[EngineRunStep]
     # Set once the run reached an End, a failure End too: what that End returned.
@@ -804,6 +911,8 @@ class RunDetail(RunRow):
     files: list[RunFile] = Field(default_factory=list[RunFile])
     # Each Human Task decided in this run, in step order, with the person named.
     decisions: list[RunDecision] = Field(default_factory=list[RunDecision])
+    # The run told from its steps' output shapes (c-477): the email, each read, each run it started.
+    story: RunStory | None = None
 
 
 def runs(rt: Runtime) -> RunStore:
@@ -844,6 +953,7 @@ def run_view(r: dict[str, Any]) -> dict[str, Any]:
         "mode": r["mode"],
         "status": r["status"],
         "outcome": r["outcome"],
+        "outcomeText": run_story.words(str(r["outcome"])) if r["outcome"] else None,
         "error": r["error"],
         "input": r["input"],
         "output": r["output"],
@@ -853,44 +963,6 @@ def run_view(r: dict[str, Any]) -> dict[str, Any]:
         "updatedAt": r["updated_at"],
         "finishedAt": r["finished_at"],
     }
-
-
-def steps_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Attempts grouped per node and iteration, in the order the steps started; each step shows its last attempt."""
-    grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
-    for r in rows:
-        grouped.setdefault((r["node_id"], r["iteration"]), []).append(r)
-    out: list[dict[str, Any]] = []
-    for (node, iteration), attempts in grouped.items():
-        attempts.sort(key=lambda a: a["attempt"])
-        last = attempts[-1]
-        out.append(
-            {
-                "nodeId": node,
-                "iteration": iteration,
-                "status": last["status"],
-                "port": last["port"],
-                "input": redacted(last["input"]),
-                "output": redacted(last["output"]),
-                "error": last["error"],
-                "attempts": [
-                    {
-                        "attempt": a["attempt"],
-                        "status": a["status"],
-                        "effects": a["effects"],
-                        "key": a["key"],
-                        "port": a["port"],
-                        "input": redacted(a["input"]),
-                        "output": redacted(a["output"]),
-                        "error": a["error"],
-                        "startedAt": a["started_at"],
-                        "finishedAt": a["finished_at"],
-                    }
-                    for a in attempts
-                ],
-            }
-        )
-    return out
 
 
 async def startable(
@@ -1012,7 +1084,7 @@ async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> 
         await for_people(rt, r, run_view(r))
         | {
             "canCancel": can_cancel(me, r),
-            "workflowName": r.get("workflow_name"),
+            "workflowName": r.get("workflow_name") or UNNAMED_WORKFLOW,
             "startedBy": who.get(started_by_of(r)),
         }
         for r in rows
@@ -1029,7 +1101,9 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     steps = steps_view(await store.steps(run_id))
     decided = decisions_in(run_id, steps)
     names = await actors(rt, [d["by"] for d in decided if d["by"]])
+    told = await run_story.story(rt, run, steps, scope=key_scope(me), masking=False)
     body = run_view(run) | {
+        "workflowName": told.pop("workflowName"),
         "steps": steps,
         "children": await started_runs(store, steps),
         "files": await named(rt, str(run["team_id"]), files_in(run["input"])),
@@ -1037,8 +1111,19 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         "result": await run_result(rt, run, steps),
         "canCancel": can_cancel(me, run),
         "startedBy": (await actors(rt, [started_by_of(run)])).get(started_by_of(run)),
+        "story": told,
     }
-    return ok(await for_people(rt, run, body))
+    shown = await for_people(rt, run, body)
+    if shown is not body:
+        # Masking is on. The story sits outside the keys for_people masks, so it is masked here; the addresses the
+        # run's email came from and arrived at are where it came from, not a customer's data, and stay shown.
+        shown["story"] = run_story.masked_story(shown["story"])
+        addresses = await run_story.channel_addresses(rt, run)
+        shown = run_story.keep_channel(shown, body, addresses)
+        # The lines are sentences, so the addresses are kept inside them rather than by value.
+        told = cast(dict[str, Any], body["story"])
+        shown["story"]["lines"] = run_story.masked_lines(cast(list[dict[str, Any]], told["lines"]), addresses)
+    return ok(shown)
 
 
 # Where a run read carries what its steps worked on: the run's and each step's and attempt's input and output, an
@@ -1061,58 +1146,6 @@ def _values_masked(body: Any) -> Any:
     if isinstance(body, list):
         return [_values_masked(v) for v in cast(list[Any], body)]
     return body
-
-
-def decisions_in(run_id: str, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The decided Human Task steps: a step whose output carries the person's `decision`, with when its last attempt
-    finished; `by` stays raw for the caller to name."""
-    out: list[dict[str, Any]] = []
-    for s in steps:
-        o = s.get("output")
-        if s.get("status") != "ok" or not isinstance(o, dict):
-            continue
-        d = cast(dict[str, Any], o)
-        if not isinstance(d.get("decision"), str):
-            continue
-        attempts = cast(list[dict[str, Any]], s.get("attempts") or [])
-        finished = attempts[-1].get("finishedAt") if attempts else None
-        out.append(
-            {
-                "nodeId": s["nodeId"],
-                "iteration": s["iteration"],
-                "reviewId": f"{run_id}:{s['nodeId']}:{s['iteration']}",
-                "action": d["decision"],
-                "reason": d.get("reason") if isinstance(d.get("reason"), str) else None,
-                "by": str(d["by"]) if d.get("by") else None,
-                "at": finished.isoformat() if isinstance(finished, datetime) else (str(finished) if finished else None),
-            }
-        )
-    return out
-
-
-FILE_ID = re.compile(r"fil_[0-9a-f]{32}")
-
-
-def files_in(value: Any) -> list[dict[str, Any]]:
-    """Every value in the input that is a file id, at any depth, once each and in order, with the name an upload gave
-    beside it (`{fileId, name}`)."""
-    found: dict[str, str | None] = {}
-
-    def walk(v: Any, name: str | None = None) -> None:
-        if isinstance(v, str):
-            if FILE_ID.fullmatch(v):
-                found[v] = found.get(v) or name
-        elif isinstance(v, dict):
-            d = cast(dict[str, Any], v)
-            named = d.get("name") if isinstance(d.get("name"), str) else None
-            for k, x in d.items():
-                walk(x, named if k == "fileId" else None)
-        elif isinstance(v, list):
-            for x in cast(list[Any], v):
-                walk(x)
-
-    walk(value)
-    return [{"id": i, "name": n} for i, n in found.items()]
 
 
 async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:

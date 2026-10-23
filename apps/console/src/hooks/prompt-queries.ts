@@ -1,17 +1,18 @@
 'use client';
 
 import * as React from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { PromptAnalysis, PromptContext, PromptSection, PromptSpec, RewriteSectionInput } from '@/lib/types/prompts';
 import type { ListParams } from '@/lib/types/query';
+import { useTeamQuery } from './team-query';
 
 export const pk = {
   variables: ['prompt-variables'] as const,
 };
 
-export const usePromptVariables = () => useQuery({ queryKey: pk.variables, queryFn: api.prompts.variables, staleTime: 10 * 60_000 });
+export const usePromptVariables = () => useTeamQuery({ queryKey: pk.variables, queryFn: api.prompts.variables, staleTime: 10 * 60_000 });
 
 export const useAnalyzePrompt = () => useMutation({ mutationFn: ({ sections, context }: { sections: PromptSection[]; context: PromptContext }) => api.prompts.analyze(sections, context) });
 export const useRewriteSection = () => useMutation({ mutationFn: (i: RewriteSectionInput) => api.prompts.rewriteSection(i) });

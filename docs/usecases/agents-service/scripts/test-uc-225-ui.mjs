@@ -5,7 +5,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -88,7 +88,7 @@ await withUiStack(
       check('3 Assign to me takes it: it is under Assigned to me, and the sheet says it is hers', result.data?.updated?.includes(review.id) && sheet.includes(`Assigned to ${MAYA}`), { result: result.data, sheet: sheet.slice(0, 300) });
 
       // The card's visual record: the queue with the task taken, and its sheet, at desktop and phone width.
-      const shots = join(ROOT, '.codeloop/evidence/074');
+      const shots = evidenceDir('074');
       mkdirSync(shots, { recursive: true });
       await page.getByTestId('review-sheet').waitFor({ state: 'visible', timeout: 10_000 });
       await page.waitForTimeout(500); // the sheet's slide-in

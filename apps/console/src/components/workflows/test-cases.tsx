@@ -223,7 +223,7 @@ export function TestCases({ workflowId, liveGraph, tools }: { workflowId: string
         ))}
       </div>
     );
-  if (query.isError) return <QueryError what="test cases" onRetry={() => query.refetch()} retrying={query.isFetching} />;
+  if (query.isError) return <QueryError what="test cases" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />;
 
   const s = last.data?.summary;
   return (

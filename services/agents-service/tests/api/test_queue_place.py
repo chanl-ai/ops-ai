@@ -21,7 +21,7 @@ from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, TENANT
 async def _queue(s: Stack) -> list[dict[str, Any]]:
     c, rt = s
     with tenant_scope(TENANT):
-        await seeded_store(rt.db)
+        await seeded_store(rt.db, "team_ops")
     await typed_waiting(s, await typed_case(s, customer="C-place"), 2)
     await old_waiting(s, "place", 2)
     return cast(

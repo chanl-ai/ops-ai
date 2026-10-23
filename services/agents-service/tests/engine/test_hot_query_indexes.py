@@ -178,15 +178,18 @@ async def test_the_runs_list_filtered_by_one_workflow_seeks_tenant_and_workflow(
     engine: AsyncEngine,  # noqa: F811
     recorded: list[tuple[str, Any]],
 ) -> None:
-    """One team's 300 runs, ten of them of the workflow asked for: the page and its count seek the workflow."""
+    """One team's 300 runs, ten of them of the workflow asked for: the page and its count seek the workflow. The
+    workflow's id is this test's own, so what the planner estimates does not depend on what earlier runs left in the
+    table."""
     tx = EngineTransactions(engine)
+    asked = f"wf_{uuid4().hex[:8]}"
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
         rows: list[dict[str, Any]] = [
             {
                 "id": f"wfrun_{uuid4().hex[:12]}",
                 "tenant_id": tx.tenant(),
                 "team_id": "team_a",
-                "workflow_id": "wf_one" if i % 30 == 0 else f"wf_{i % 7}",
+                "workflow_id": asked if i % 30 == 0 else f"wf_{i % 7}",
                 "version": 1,
                 "digest": "d",
                 "run_key": f"k{i}",
@@ -202,10 +205,17 @@ async def test_the_runs_list_filtered_by_one_workflow_seeks_tenant_and_workflow(
             await c.execute(engine_runs.insert(), rows)
         await analyse(engine, "engine_runs")
         recorded.clear()
-        await RunStore(tx).page(workflow_id="wf_one", team_id="team_a")
+        await RunStore(tx).page(workflow_id=asked, team_id="team_a")
         page, count = (await plans(tx, about(recorded, "engine_runs")))[:2]
-    assert seeks("ix_engine_runs_workflow_created", "tenant_id", "workflow_id")(page), page
-    assert seeks("ix_engine_runs_workflow_created", "tenant_id", "workflow_id")(count), count
+    # Any index that seeks the tenant and the workflow serves the failure mode (reading the whole team): with one
+    # workflow's few runs the workflow's own index and the run-key index cost the same, and the planner picks either.
+    # A page read newest first walks its index backwards ("Index Scan Backward using").
+    sought = re.compile(
+        r"Scan (?:Backward )?using \w+ on engine_runs.*\n\s*Index Cond: (?=.*tenant_id)(?=.*workflow_id)"
+    )
+    for plan in (page, count):
+        assert sought.search(plan), plan
+        assert "ix_engine_runs_team" not in plan, plan
 
 
 async def connect(dsn: str) -> Any:

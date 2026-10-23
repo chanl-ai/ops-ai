@@ -49,7 +49,7 @@ export default function WikiCollectionsPage() {
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={4} />
       ) : query.isError && !query.data ? (
-        <QueryError what="collections" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="collections" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={columns}

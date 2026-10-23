@@ -55,6 +55,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..event_log import REVIEW_KINDS
 from ..publish_policy import decide
+from ..review_text import describe_call
 from ..runs import config, definition, execute, graph_store, pending, require_graphs, resolve
 from ..schemas import (
     SSE_RESPONSE,
@@ -257,6 +258,21 @@ async def list_threads(rt: Rt, me: Me, graph: str | None = None) -> JSONResponse
     return ok([_thread_view(r) for r in await _store(rt).threads(graph) if _reachable(me, r)])
 
 
+async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:
+    """A refused call's `tool_error` with `action`, the call in words (describe_call's label), so no page words a tool
+    itself (c-500)."""
+    raw = values.get("tool_error")
+    failure = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    if not failure.get("tool"):
+        return values
+    # The input the refused call carried, when a decision chose it.
+    decision = cast(dict[str, Any], values.get("decision") or {})
+    call = cast(dict[str, Any], decision.get("call") or {})
+    given = call.get("input") if call.get("tool") == failure["tool"] else None
+    told = await describe_call(rt, {"tool": failure["tool"], "input": given or {}}, currency=None, money_key=None)
+    return values | {"tool_error": failure | {"action": str(told["label"])}}
+
+
 @router.get("/{thread_id}/state", response_model=Envelope[ThreadState])
 async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     row, graph = await _thread_for(rt, me, thread_id)
@@ -269,7 +285,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(with_children(snap.values or {}, row["meta"] or {})),
+            "values": jsonable_encoder(await _worded_failure(rt, with_children(snap.values or {}, row["meta"] or {}))),
             "next": list(snap.next),
             "interrupt": await hitl_facade.interrupt_view(rt, row, pending[0]) if pending else None,
             "sla": await sla_view(rt, thread_id),

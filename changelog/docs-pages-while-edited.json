@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Docs pages keep working while they are edited",
+  "description": "A documentation page being changed no longer breaks the docs site; the other pages stay open while it is edited.",
+  "tag": "fix",
+  "cards": [
+    "c-514"
+  ]
+}

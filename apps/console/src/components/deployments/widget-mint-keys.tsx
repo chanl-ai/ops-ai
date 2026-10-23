@@ -136,7 +136,7 @@ export function WidgetMintKeysDialog({ deployment, open, onOpenChange }: { deplo
         {keys.isPending ? (
           <Skeleton className="h-16" />
         ) : keys.isError ? (
-          <QueryError what="keys" onRetry={() => keys.refetch()} retrying={keys.isFetching} />
+          <QueryError what="keys" onRetry={() => keys.refetch()} error={keys.error} retrying={keys.isFetching} />
         ) : !keys.data.length ? (
           <p className="text-sm text-muted-foreground">No keys yet.</p>
         ) : (

@@ -65,6 +65,8 @@ class WidgetBase(WireModel):
     app: str
     tool: str
     as_of: str
+    # The tool's action in words, as people read it (c-508); `tool` stays for builders and the event log.
+    tool_label: str = ""
 
 
 class TableColumn(WireModel):

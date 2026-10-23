@@ -93,7 +93,7 @@ export function KnowledgeTab({ connection }: { connection: IntegrationDetail }) 
       {query.isPending ? (
         <PageSkeleton statCards={0} tableRows={3} showToolbar={false} />
       ) : query.isError && !query.data ? (
-        <QueryError what="the sources on this connection" onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <QueryError what="the sources on this connection" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <DataTableWithViews
           columns={columns}
