@@ -1,7 +1,9 @@
 # Release package: one download a client team installs from
 
-Status: current. Built and proven by c-385 (`deploy/release/proof.sh`);
-not yet installed on a client's machines. The guide inside the package is `install-guide.md`.
+Status: current. Proven end to end; not yet installed on a client's machines. The guide inside the package is the
+[install guide](install-guide.md).
+
+<!-- Built by c-385; the proof is deploy/release/proof.sh. -->
 
 A client team runs Ops AI on its own Linux machines with Docker, often with no internet access from those machines, and
 its DBA applies every schema change. The release package carries everything that needs: prebuilt images, compose files,

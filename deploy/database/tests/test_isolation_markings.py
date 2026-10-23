@@ -68,15 +68,6 @@ WAITING: dict[str, set[str]] = {
         "tool_secrets",
     },
     "c-416": {
-        "kb_base_sources",
-        "kb_bases",
-        "kb_changes",
-        "kb_chunks",
-        "kb_item_versions",
-        "kb_items",
-        "kb_retired_bases",
-        "kb_runs",
-        "kb_sources",
         "model_aliases",
         "model_call_log",
         "model_key_tenants",
@@ -92,7 +83,7 @@ def _tables() -> dict[str, sa.Table]:
 
 def test_every_table_is_marked_or_waits_for_the_card_that_marks_it() -> None:
     unmarked = {name for name, t in _tables().items() if isolation_kind(t) is None}
-    waiting = set().union(*WAITING.values())
+    waiting: set[str] = set[str]().union(*WAITING.values())
     assert sorted(unmarked - waiting) == [], "mark these TENANT_SCOPED or system(reason)"
     assert sorted(waiting - unmarked) == [], "now marked: take these off WAITING"
 

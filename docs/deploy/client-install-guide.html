@@ -684,9 +684,10 @@ workload and watch the work queue and database load (<a href="#operate-what-to-w
 <section id="install" aria-labelledby="install-h">
 <h2 id="install-h"><span class="n">8</span>Install</h2>
 <p>One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
-result, and later upgrades, backs up, restores and reports on the same install (<a href="#operate">Operate</a>). Images are
-pulled from <code>ghcr.io/chanl-ai/ops-ai</code> by default; a release&#39;s offline image file, or a build from source, serve a
-machine with no registry access.</p>
+result, and later upgrades, backs up, restores and reports on the same install (<a href="#operate">Operate</a>). It pulls the
+published images by default; a release&#39;s offline image file, or a build from source, serves a machine with no
+registry access.</p>
+<p>The published images are at <code>ghcr.io/chanl-ai/ops-ai</code>.</p>
 <h3 id="install-before-you-start">Before you start</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>What you need</th><th>Details</th></tr></thead>
@@ -780,6 +781,8 @@ runs <code>.github/workflows/release-images.yml</code>, which builds every image
 
 <section id="operate" aria-labelledby="operate-h">
 <h2 id="operate-h"><span class="n">9</span>Operate</h2>
+<p>How to check, upgrade, back up, restore and scale an Ops AI install. The install script&#39;s commands come first; the
+manual commands after them are the fallback, and the ones Kubernetes uses.</p>
 <p>Run the script&#39;s commands from the clone the install ran in; they read its settings from <code>ops-ai.env</code> there. In the
 manual commands, <code>$C</code> is the Compose command for your install, for example
 <code>docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/dba.yaml --env-file ops-ai.env</code>, and <code>ops-ai</code>

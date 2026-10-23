@@ -1,9 +1,9 @@
 # Workflows and agents
 
-Status: proposed design. Parts are built and each table row says built, partial or planned; the agent run API, agent
-jobs, the Reviews service (`ops_hitl`) and the trigger service (`ops_triggers`) are not built. The database section is
-superseded in part by [ADR-0017](../../architecture/decisions/database-support.md): the supported databases are
-PostgreSQL and SQL Server, and MySQL is dropped.
+Status: proposed design. Parts are built, and each table row says built, partial or planned. The agent run API,
+agent jobs, the Reviews service and the trigger service are not built. The supported databases are PostgreSQL and SQL
+Server ([database support](../../architecture/decisions/database-support.md)), which replaces this page's database
+section where they differ.
 
 A bank's operations teams want to hand routine work to software, with a person approving anything that moves money or
 changes a record. Some of that work is open-ended: a banker asks a question, or a morning check reads held wires and

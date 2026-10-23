@@ -143,7 +143,7 @@ export default function BackgroundPage() {
             </Note>
           )}
           <Section title="Processes" description="Each runs once for the account and does each job inside that job's team." flush>
-            <DataTableWithViews columns={PROCESS_COLUMNS} data={view.processes} getRowId={(p) => p.key} hideViewSwitcher />
+            <DataTableWithViews columns={PROCESS_COLUMNS} data={view.processes} getRowId={(p) => p.key} hideViewSwitcher initialColumnVisibility={{ every: false, service: false }} />
           </Section>
           <Section title="Latest jobs" description={`The newest ${plural(view.jobs.length, 'job')} across every team`} flush>
             <DataTableWithViews

@@ -71,6 +71,7 @@ there is one, lives in the title.
 | Rule | Detail |
 |---|---|
 | Status | Every doc states its status near the top: current, draft for review, or superseded by another file |
+| Openings | The title, status line and first paragraph are for the reader, in plain words: no code span, path, service or package name, and no card id. File locations and proofs go lower, in a table or a hidden note. The docs site's link check enforces this on the Docs tab |
 | Headings | Sentence case |
 | Tables | For anything enumerable; prose for reasoning only |
 | Plain statements | State the fact and its consequence. No "X is a Y, not a Z" constructions, rhetorical questions or keynote phrasing |

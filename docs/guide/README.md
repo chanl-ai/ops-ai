@@ -1,8 +1,10 @@
 # Ops AI architecture and installation guide
 
-Status: current. The one source of the client guide: `scripts/docs/build_guide.mjs` renders these files into
-`docs/deploy/client-install-guide.html`, and the install and operate sections into the release package's INSTALL.md.
-Edit here, then run `node scripts/docs/build_guide.mjs`.
+Status: current.
+
+<!-- The one source of the client guide: scripts/docs/build_guide.mjs renders these files into
+docs/deploy/client-install-guide.html, and the install and operate sections into the release package's INSTALL.md.
+Edit here, then run node scripts/docs/build_guide.mjs. -->
 
 This guide is for the architects, DBAs, security reviewers and operators of a team that runs Ops AI on its own
 infrastructure. It says what each part does, how work moves through them, where data is kept and how it is kept apart,

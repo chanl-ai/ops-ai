@@ -1,10 +1,14 @@
 # Ops AI on Kubernetes
 
-Status: current. Built and proven on a local kind cluster by c-268 (`deploy/k8s/proof.sh`); not yet run on a bank's cluster. Files: `deploy/k8s/`.
+Status: current. Proven on a local kind cluster; not yet run on a bank's cluster.
 
-Kustomize, with `kubectl apply -k` and no other tool: a base with one folder per service, and an overlay per
-environment that picks the images, the origin, the secrets and the database. The images are the same ones compose
-and Fly run (`deploy/fly/Dockerfile`), and the database is installed the way `docs/deploy/database.md` describes.
+<!-- Built by c-268; the proof is deploy/k8s/proof.sh. -->
+
+Ops AI on Kubernetes uses Kustomize and no other tool: a base with one folder per service, and an overlay per
+environment that picks the images, the origin, the secrets and the database. The images are the ones Compose runs,
+and the database is installed the way [the database guide](database.md) describes.
+
+The manifests are in `deploy/k8s/`, applied with `kubectl apply -k`; the images build from `deploy/fly/Dockerfile`.
 
 ## What runs
 

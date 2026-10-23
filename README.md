@@ -30,7 +30,7 @@
   <a href="#use-cases">Use cases</a> &bull;
   <a href="#quick-start">Quick start</a> &bull;
   <a href="#roadmap">Roadmap</a> &bull;
-  <a href="docs/README.md">Docs</a>
+  <a href="https://opsai.chanl.ai">Docs</a>
 </p>
 
 ---

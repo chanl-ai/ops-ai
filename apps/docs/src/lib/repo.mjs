@@ -43,8 +43,13 @@ function walk(root, dir = '', out = []) {
   return out;
 }
 
-/** docs/a/b.md -> /a/b, docs/a/README.md -> /a, docs/README.md -> / */
+// The site opens on the Welcome page; docs/README.md, the index of every document, sits at /contents.
+/** @type {Record<string, string>} */
+export const SITE_ROOTS = { 'docs/welcome.md': '/', 'docs/README.md': '/contents' };
+
+/** docs/a/b.md -> /a/b, docs/a/README.md -> /a, with SITE_ROOTS for the two top pages */
 export function pageUrl(repoPath) {
+  if (SITE_ROOTS[repoPath]) return SITE_ROOTS[repoPath];
   const rel = repoPath.replace(/^docs\//, '').replace(/\.md$/, '');
   const trimmed = rel === 'README' ? '' : rel.replace(/\/README$/, '');
   return `/${trimmed}`;

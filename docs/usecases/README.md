@@ -238,3 +238,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-486 | console | Workflow steps are laid out with gaps and port order and lines go around steps, re-routed when a step is dropped, in the preview, the step editor (Tidy up and Undo) and a run's canvas | ui | passing |
 | uc-505 | console | Pages wait for the person's team after sign-in: a remembered team they do not hold gives way to theirs, and a record in another team says not found, or in another team, with a switch | ui | passing |
 | uc-510 | console | What's new lists the changelog newest first in plain words with a Coming next tab, and its unread dot clears once opened | ui | passing |
+| uc-516 | agents-service | An account admin sees every background process and what it did; a builder is told the page is not theirs; a stopped worker reads late then stopped; a team sees only its own background jobs in Activity | ui | passing |

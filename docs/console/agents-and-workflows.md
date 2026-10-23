@@ -1,7 +1,6 @@
 # Agents and workflows
 
-Status: user guide for the design agreed 2026-10-16. Rows marked "planned" name the card that builds them; the rest
-work today on the console at `:3016`.
+Status: user guide. Rows marked "planned" are designed and not yet built; the rest work in the console today.
 
 ## Two things, used together
 

@@ -1,12 +1,15 @@
 # Ops AI on Docker Compose
 
-Status: current. Built and proven on one machine by c-269 (`deploy/compose/proof.sh`); not yet run on a bank's
-servers. Files: `deploy/compose/`, `deploy/images/`, image stages in `deploy/fly/Dockerfile`. A client team installs
-from a release package instead, with prebuilt images and no checkout (`release-package.md`).
+Status: current. Proven on one machine; not yet run on a bank's servers. A client team installs from a
+[release package](release-package.md) instead, with prebuilt images and no checkout.
+
+<!-- Built by c-269; the proof is deploy/compose/proof.sh. -->
 
 Compose runs every service, the workflow worker, the console, OPA and one proxy as containers against a PostgreSQL the
-bank runs. Nothing runs from the repo's dev scripts. Compose is optional: every release still runs on one VM with no
-container runtime (`architecture/service-map.md`, "Deployment targets").
+bank runs. Nothing runs from the repository's development scripts. Compose is optional: every release still runs on
+one machine with no container runtime ([deployment targets](../architecture/service-map.md#deployment-targets)).
+
+The files are in `deploy/compose/` and `deploy/images/`, and the image stages in `deploy/fly/Dockerfile`.
 
 ## What runs
 
