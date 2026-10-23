@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "The docs are organised around what you want to do",
+  "description": "The documentation site has four tabs: Docs, API reference, Architecture and Contributing. Docs leads from getting started through concepts, building, deploying and operating, with an icon on every page, and each page's contents sit on its right.",
+  "tag": "improved",
+  "cards": [
+    "c-514"
+  ]
+}

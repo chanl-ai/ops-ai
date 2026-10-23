@@ -1,13 +1,20 @@
 # Install and operate Ops AI
 
-Status: generated from `docs/guide/install.md` and `docs/guide/operate.md` by `scripts/docs/build_guide.mjs`; edit those, then run the build. The full guide, with the architecture, data, security and deployment options, is `docs/deploy/client-install-guide.html`.
+Status: current. How to install, run and maintain Ops AI on your own machines. The full client guide adds the architecture, data, security and deployment options.
+
+<!-- Generated from docs/guide/install.md and docs/guide/operate.md by scripts/docs/build_guide.mjs; edit those, then run the build. The full guide is docs/deploy/client-install-guide.html. -->
 
 ## Install
 
+<!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
+INSTALL.md are built; edit them there. -->
+
 One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
-result, and later upgrades, backs up, restores and reports on the same install ([Operate](#operate)). Images are
-pulled from `ghcr.io/chanl-ai/ops-ai` by default; a release's offline image file, or a build from source, serve a
-machine with no registry access.
+result, and later upgrades, backs up, restores and reports on the same install ([Operate](#operate)). It pulls the
+published images by default; a release's offline image file, or a build from source, serves a machine with no
+registry access.
+
+The published images are at `ghcr.io/chanl-ai/ops-ai`.
 
 ### Before you start
 
@@ -109,6 +116,9 @@ Every step the script runs can also be run by hand: the Compose files and settin
 [The database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md), and a Kubernetes install in [Ops AI on Kubernetes](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md).
 
 ## Operate
+
+How to check, upgrade, back up, restore and scale an Ops AI install. The install script's commands come first; the
+manual commands after them are the fallback, and the ones Kubernetes uses.
 
 Run the script's commands from the clone the install ran in; they read its settings from `ops-ai.env` there. In the
 manual commands, `$C` is the Compose command for your install, for example

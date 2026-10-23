@@ -191,19 +191,6 @@ async def emit(
 
 _beats: dict[int, background.Beat] = {}
 
-# The events that start the shipped event workflows, as a person reads them in Activity.
-_EVENT_WORDS = {
-    "tool_access.requested": "a tool access request",
-    "file.read_requested": "a file to read",
-    "file.deleted": "a deleted file",
-    "extraction.corrected": "corrected read values",
-    "task.requested": "a task opened through the API",
-}
-
-
-def plain_event(name: str) -> str:
-    return _EVENT_WORDS.get(name, "an event")
-
 
 def event_beat(db: AsyncEngine) -> background.Beat:
     """The event workflows' heartbeat in this process (c-516): one per database, as the API and worker both deliver."""
@@ -280,7 +267,7 @@ async def _deliver(
         if event["team_id"]:
             await jobs.record(
                 "event_workflows",
-                f"Ran {title} for {plain_event(name)}",
+                f"Ran {title}",
                 "done",
                 team_id=str(event["team_id"]),
             )

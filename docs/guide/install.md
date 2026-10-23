@@ -1,12 +1,16 @@
 # Install
 
-Status: current. The steps below are included from `docs/deploy/install.md`, the install script's guide, when the
-page and INSTALL.md are built; edit them there.
+Status: current.
+
+<!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
+INSTALL.md are built; edit them there. -->
 
 One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
-result, and later upgrades, backs up, restores and reports on the same install ([Operate](operate.md)). Images are
-pulled from `ghcr.io/chanl-ai/ops-ai` by default; a release's offline image file, or a build from source, serve a
-machine with no registry access.
+result, and later upgrades, backs up, restores and reports on the same install ([Operate](operate.md)). It pulls the
+published images by default; a release's offline image file, or a build from source, serves a machine with no
+registry access.
+
+The published images are at `ghcr.io/chanl-ai/ops-ai`.
 
 ## Before you start
 

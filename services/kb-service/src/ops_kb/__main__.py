@@ -11,12 +11,13 @@ import uvicorn
 from ops_identity import Auth
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.schema_version import require_current_schema
 
 from .agents import StaticAgents
 from .app import create_kb_app
 from .files import KnowledgeFiles, file_intake, move_files
-from .seed import seed_demo
+from .seed import TENANT, seed_demo
 from .service import KnowledgeService, source_team
 from .store import KnowledgeStore, engine_for
 from .store.fulltext import PostgresFullTextRetriever
@@ -25,6 +26,11 @@ from .store.fulltext import PostgresFullTextRetriever
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 log = get_logger(__name__)
+
+# Background processes, which stay account-level: the dev demo seed and the start-up move between file stores work
+# every team's bases and sources of one tenant.
+DEMO_SEED = "background process: the dev demo seed writes the demo knowledge bases"
+MOVE_FILES = "background process: the start-up move between file stores repoints every team's sources"
 
 
 async def _seed(settings: Settings) -> None:
@@ -37,7 +43,8 @@ async def _seed(settings: Settings) -> None:
         await _files_ready(settings)
         if settings.files_url:
             await move_to_files_service(service, KnowledgeFiles(settings.kb_files_dir))
-        await seed_demo(service)
+        with isolation.tenant_wide(DEMO_SEED, tenant_id=TENANT):
+            await seed_demo(service)
     except Exception:
         # A demo base that cannot be made must not stop the service starting; the log says which and why.
         log.exception("demo_knowledge_seed_failed")
@@ -51,12 +58,13 @@ async def move_to_files_service(
     """A stack that kept files in kb-service's own store and now uses files-service: each source's files the old
     store holds are copied into files-service and the source points at the copies, so its documents keep syncing."""
     for tenant in tenants if tenants is not None else await service.store.tenants():
-        for s in await service.store.sources(tenant):
-            names: dict[str, str] = s.get("file_names") or {}
-            moved = await move_files(tenant, source_team(s), list(s["file_ids"]), names, to=service.files, old=old)
-            if moved:
-                await service.store.swap_files(tenant, str(s["id"]), moved)
-                log.info("kb_files_moved_to_files_service", source=s["id"], files=len(moved))
+        with isolation.tenant_wide(MOVE_FILES, tenant_id=tenant):
+            for s in await service.store.sources(tenant):
+                names: dict[str, str] = s.get("file_names") or {}
+                moved = await move_files(tenant, source_team(s), list(s["file_ids"]), names, to=service.files, old=old)
+                if moved:
+                    await service.store.swap_files(tenant, str(s["id"]), moved)
+                    log.info("kb_files_moved_to_files_service", source=s["id"], files=len(moved))
 
 
 async def _files_ready(settings: Settings) -> None:

@@ -59,9 +59,17 @@ async def test_another_teams_base_documents_answer_404(kb: httpx.AsyncClient, te
     assert r.status_code == 404, r.text
 
 
-async def test_a_name_another_team_holds_answers_409_not_500(kb: httpx.AsyncClient, tenant: str) -> None:  # noqa: F811
-    # A base's name is unique across the tenant, so the check before the insert sees every team's bases (c-407).
-    await _base(kb)
+async def test_a_name_is_unique_in_a_team_and_another_teams_id_is_refused_unnamed(
+    kb: httpx.AsyncClient,  # noqa: F811
+    tenant: str,
+) -> None:
+    """A base's name is unique in its team, and a team never sees another's (c-507): another team may use the name. An
+    id is unique in the tenant, so another team's is refused with 409 and no owner named, never a 500."""
+    base = await _base(kb)
     again = {"name": "Dispute handbook", "owner": "Lending"}
+    assert (await kb.post("/v1/knowledge-bases", json=again)).status_code == 409, "the same team's name is taken"
     r = await kb.post("/v1/knowledge-bases", json=again, headers=outsider(tenant))
-    assert r.status_code == 409, r.text
+    assert r.status_code == 201, r.text
+    same_id = {"id": base["id"], "name": "Another handbook", "owner": "Lending"}
+    r = await kb.post("/v1/knowledge-bases", json=same_id, headers=outsider(tenant))
+    assert r.status_code == 409 and "team_" not in r.text, r.text

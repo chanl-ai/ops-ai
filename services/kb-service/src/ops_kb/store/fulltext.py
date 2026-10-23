@@ -5,7 +5,10 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_store import isolation
+
 from ..retrieval import Passage
+from .knowledge import ROLE
 
 # Below half of the question's terms a passage is not an answer: "mortgage brokers selling travel insurance" shares
 # two of five terms with a rate sheet and is not answered by it. With at least two terms in the question, a passage
@@ -62,7 +65,8 @@ class PostgresFullTextRetriever:
             "floor": FLOOR,
             "min_shared": MIN_SHARED_TERMS,
         }
-        async with self.engine.connect() as c:
+        # As the tenant role, so the team policy keeps another team's chunks out of the search.
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (await c.execute(_SEARCH, params)).mappings().all()
         seen: set[tuple[str, int, str]] = set()
         out: list[Passage] = []

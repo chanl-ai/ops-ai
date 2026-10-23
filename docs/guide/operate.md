@@ -1,7 +1,9 @@
 # Operate
 
-Status: current. The install script's commands come first; the manual commands after them are the fallback, and the
-ones Kubernetes uses.
+Status: current.
+
+How to check, upgrade, back up, restore and scale an Ops AI install. The install script's commands come first; the
+manual commands after them are the fallback, and the ones Kubernetes uses.
 
 Run the script's commands from the clone the install ran in; they read its settings from `ops-ai.env` there. In the
 manual commands, `$C` is the Compose command for your install, for example

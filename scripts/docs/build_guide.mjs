@@ -315,7 +315,8 @@ function installMarkdown(index) {
         }),
     )
     .join('\n');
-  return `# Install and operate Ops AI\n\nStatus: generated from \`docs/guide/install.md\` and \`docs/guide/operate.md\` by \`scripts/docs/build_guide.mjs\`; edit those, then run the build. The full guide, with the architecture, data, security and deployment options, is \`docs/deploy/client-install-guide.html\`.\n\n${body.trim()}\n`;
+  // The first lines are what a client team reads first, so they hold no paths; the edit note is a comment.
+  return `# Install and operate Ops AI\n\nStatus: current. How to install, run and maintain Ops AI on your own machines. The full client guide adds the architecture, data, security and deployment options.\n\n<!-- Generated from docs/guide/install.md and docs/guide/operate.md by scripts/docs/build_guide.mjs; edit those, then run the build. The full guide is docs/deploy/client-install-guide.html. -->\n\n${body.trim()}\n`;
 }
 
 // ---------- the page ----------

@@ -27,9 +27,6 @@ export default async function Page({ params }: Props) {
   return (
     <DocsPage
       toc={data.toc}
-      full
-      tableOfContent={{ enabled: false }}
-      tableOfContentPopover={{ enabled: true }}
       editOnGithub={{ owner, repo, sha: REF, path: file }}
       className="ops-page"
     >

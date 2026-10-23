@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from contextlib import AbstractContextManager
 from pathlib import Path
 from types import ModuleType
 
@@ -21,8 +22,15 @@ from ops_kb.seed import seed_demo
 from ops_kb.service import KnowledgeService, Who
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.fulltext import PostgresFullTextRetriever
+from ops_store import isolation
 
 from .conftest import kb_client
+
+
+def seeding(tenant: str) -> AbstractContextManager[object]:
+    """The tenant scope the dev seed runs in at start-up (__main__.DEMO_SEED): no request sets one."""
+    return isolation.tenant_wide("test: the dev seed acts for its tenant, as at start-up", tenant_id=tenant)
+
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "seed_demo_knowledge.py"
 
@@ -128,18 +136,20 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     indexed, after a start, and a second start must change nothing (c-072 T006)."""
     store = KnowledgeStore(engine)
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
-    assert await seed_demo(service, tenant) == ["kb_retail_products", "kb_branch_operations"]
-    assert await seed_demo(service, tenant) == [], "a second start adds nothing"
-    await store.remove_base(tenant, "kb_retail_products", by="j.richardson@harborpine.example")
-    assert await seed_demo(service, tenant) == [], "a demo base someone retired is not brought back"
+    with seeding(tenant):
+        assert await seed_demo(service, tenant) == ["kb_retail_products", "kb_branch_operations"]
+        assert await seed_demo(service, tenant) == [], "a second start adds nothing"
+        await store.remove_base(tenant, "kb_retail_products", by="j.richardson@harborpine.example")
+        assert await seed_demo(service, tenant) == [], "a demo base someone retired is not brought back"
     other = f"{tenant}_hand"
-    await service.create_base(
-        Who(other, "j.richardson@harborpine.example", "team_ops"),
-        {"name": "Retail products", "owner": "j.richardson@harborpine.example"},
-    )
-    assert await seed_demo(service, other) == ["kb_branch_operations"], (
-        "a base of the same name made by hand is left as it is"
-    )
+    with seeding(other):
+        await service.create_base(
+            Who(other, "j.richardson@harborpine.example", "team_ops"),
+            {"name": "Retail products", "owner": "j.richardson@harborpine.example"},
+        )
+        assert await seed_demo(service, other) == ["kb_branch_operations"], (
+            "a base of the same name made by hand is left as it is"
+        )
     agents_seed = json.loads((Path(__file__).parents[2] / "agents-service" / "seed" / "chat_agents.json").read_text())
     named = {a["id"]: a["default_kb_ids"] for a in agents_seed if a["id"] in ("ag_advisor", "ag_policy")}
     assert named == {"ag_advisor": ["kb_retail_products"], "ag_policy": ["kb_branch_operations"]}
@@ -162,12 +172,13 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
     different owner raised Forbidden and stopped kb-service starting. The base is skipped and the source untouched."""
     store = KnowledgeStore(engine)
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
-    mine = await service.create_source(
-        Who(tenant, "m.okafor@harborpine.example", "team_ops"),
-        {"type": "file", "name": "Fee schedule", "collection": "Mine", "owner": "m.okafor@harborpine.example"},
-    )
-    assert await seed_demo(service, tenant) == ["kb_retail_products"]
-    row = next(s for s in await store.sources(tenant) if s["id"] == mine["id"])
+    with seeding(tenant):
+        mine = await service.create_source(
+            Who(tenant, "m.okafor@harborpine.example", "team_ops"),
+            {"type": "file", "name": "Fee schedule", "collection": "Mine", "owner": "m.okafor@harborpine.example"},
+        )
+        assert await seed_demo(service, tenant) == ["kb_retail_products"]
+        row = next(s for s in await store.sources(tenant) if s["id"] == mine["id"])
     assert row["file_ids"] == [] and row["owner"] == "m.okafor@harborpine.example", row
 
 
@@ -179,10 +190,12 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
     store = KnowledgeStore(engine)
     retriever = PostgresFullTextRetriever(engine)
     before = KnowledgeService(store, KnowledgeFiles(tmp_path / "before"), retriever, StaticAgents())
-    assert await seed_demo(before, tenant) == ["kb_retail_products", "kb_branch_operations"]
     after = KnowledgeService(store, KnowledgeFiles(tmp_path / "after"), retriever, StaticAgents())
-    assert await seed_demo(after, tenant) == ["kb_retail_products", "kb_branch_operations"]
-    assert await seed_demo(after, tenant) == [], "a second start on the new store changes nothing"
-    for s in await store.sources(tenant):
+    with seeding(tenant):
+        assert await seed_demo(before, tenant) == ["kb_retail_products", "kb_branch_operations"]
+        assert await seed_demo(after, tenant) == ["kb_retail_products", "kb_branch_operations"]
+        assert await seed_demo(after, tenant) == [], "a second start on the new store changes nothing"
+        sources = await store.sources(tenant)
+    for s in sources:
         assert len(s["file_ids"]) == 1, s
         await after.files.read(tenant, "team_ops" if "Retail" in s["name"] else "team_security", s["file_ids"][0])

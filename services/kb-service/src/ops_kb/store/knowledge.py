@@ -2,7 +2,9 @@
 
 A knowledge base belongs to a department team and names its owner; a source brings documents in (file sources only
 in this slice, holding file ids, never bytes); a knowledge base reads the sources attached to it. Every row carries
-its tenant, and every query filters on it.
+its tenant and its team, and the database holds each transaction to them (kb_0011): every transaction is
+`ops_store.isolation.isolated_tx` as `ops_kb_tenant`, and a link, document, version, chunk, change and run take the
+team of the base, source or document they belong to.
 """
 
 from __future__ import annotations
@@ -12,17 +14,26 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ops_store import Guarantee
+from ops_service_kit.errors import Conflict
+from ops_store import Guarantee, isolation
 from ops_store.database import open_database
-from ops_store.schema import TEAM_OWNED, team_owned_via
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-__all__ = ["AsyncEngine", "KnowledgeStore", "engine_for", "metadata", "reachable"]
+__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "metadata", "reachable"]
 
 metadata = sa.MetaData()
+
+# The role every kb transaction runs as, which the team policy applies to, and the start-up move's role that reads which
+# tenants hold a source (kb_0011).
+ROLE = "ops_kb_tenant"
+SYSTEM_ROLE = "ops_kb_system"
+# The start-up move between file stores reads every tenant's sources before it knows a tenant.
+MOVE_TENANTS = "background process: the start-up move between file stores lists the tenants holding a source"
 
 kb_bases = sa.Table(
     "kb_bases",
@@ -48,9 +59,10 @@ kb_bases = sa.Table(
     # The base's own documents source, which Add documents adds files to (c-159); found by id, so renaming the base or
     # the source never makes a second one. Null until the first Add documents.
     sa.Column("documents_source_id", sa.String(64)),
-    # Name uniqueness per tenant: two knowledge bases with one name make a grant ambiguous to the person granting it.
-    sa.UniqueConstraint("tenant_id", "name", name="uq_kb_bases_name"),
-    info=TEAM_OWNED,
+    # Name uniqueness per team: two of a team's knowledge bases with one name make a grant ambiguous to the person
+    # granting it. Another team's names are not seen (c-507).
+    sa.UniqueConstraint("tenant_id", "team_id", "name", name="uq_kb_bases_name"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 kb_sources = sa.Table(
@@ -75,13 +87,14 @@ kb_sources = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_sync_at", sa.DateTime(timezone=True)),
     sa.Column("last_run_status", sa.String(16)),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 kb_base_sources = sa.Table(
     "kb_base_sources",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("kb_id", sa.String(64), primary_key=True),
     sa.Column("source_id", sa.String(64), primary_key=True),
     sa.ForeignKeyConstraint(
@@ -93,6 +106,7 @@ kb_base_sources = sa.Table(
         ondelete="CASCADE",
         name="fk_kb_link_source",
     ),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -101,16 +115,19 @@ kb_retired_bases = sa.Table(
     "kb_retired_bases",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("retired_by", sa.String(200), nullable=False),
     sa.Column("retired_at", sa.DateTime(timezone=True), nullable=False),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 kb_items = sa.Table(
     "kb_items",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("source_id", sa.String(64), nullable=False),
     # One document per name in a source: a file uploaded again under the same name is its next version.
@@ -142,13 +159,14 @@ kb_items = sa.Table(
         name="fk_kb_item_source",
     ),
     sa.UniqueConstraint("tenant_id", "source_id", "path", name="uq_kb_items_path"),
-    info=team_owned_via("kb_sources", "source_id"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 kb_item_versions = sa.Table(
     "kb_item_versions",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("item_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("file_id", sa.String(64), nullable=False),
@@ -159,12 +177,14 @@ kb_item_versions = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_version_item"
     ),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 kb_chunks = sa.Table(
     "kb_chunks",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("item_id", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
@@ -190,6 +210,7 @@ kb_chunks = sa.Table(
         ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
     ),
     sa.Index("ix_kb_chunks_tsv", "tsv", postgresql_using="gin"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -197,6 +218,7 @@ kb_changes = sa.Table(
     "kb_changes",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("item_id", sa.String(64), nullable=False),
     sa.Column("source_id", sa.String(64), nullable=False),
@@ -210,6 +232,7 @@ kb_changes = sa.Table(
     sa.Column("changed_at", sa.DateTime(timezone=True), nullable=False),
     # No foreign key to the item: the record of who changed what outlives the document's removal.
     sa.Index("ix_kb_changes_at", "tenant_id", "changed_at"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -217,6 +240,7 @@ kb_runs = sa.Table(
     "kb_runs",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("source_id", sa.String(64), nullable=False),
     sa.Column("trigger", sa.String(16), nullable=False),  # manual | full | retry
@@ -234,6 +258,7 @@ kb_runs = sa.Table(
         name="fk_kb_run_source",
     ),
     sa.Index("ix_kb_runs_source", "tenant_id", "source_id", "started_at"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 
@@ -246,31 +271,39 @@ class KnowledgeStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
+    def _tx(self) -> Any:
+        """One transaction carrying the request's (or the task's) tenant and team, as the role the policy applies to."""
+        return isolation.isolated_tx(self.engine, role=ROLE)
+
+    @staticmethod
+    async def _team_of(c: AsyncConnection, table: sa.Table, tenant: str, row_id: str) -> str:
+        """The team of a base, source or document, which the rows written under it take."""
+        q = sa.select(table.c.team_id).where(table.c.tenant_id == tenant, table.c.id == row_id, team_visible(table))
+        return str((await c.execute(q)).scalar_one())
+
     async def bases(self, tenant: str) -> list[dict[str, Any]]:
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             q = sa.select(kb_bases).where(kb_bases.c.tenant_id == tenant, team_visible(kb_bases))
             rows = (await c.execute(q)).mappings()
             return [dict(r) for r in rows]
 
     async def taken(self, tenant: str, *, name: str | None = None, kb_id: str | None = None) -> list[dict[str, Any]]:
-        """Bases in any team holding `name` (any case) or `kb_id`: a name and an id are unique across the tenant, so
-        the check before a create or a rename sees every team, not only the caller's."""
+        """The caller's team's bases holding `name` (any case) or `kb_id`. A name is unique in a team; an id another
+        team holds is refused by the insert (`create_base`), without naming that team."""
         t = kb_bases.c
         wanted = [sa.func.lower(t.name) == name.lower()] if name else []
         wanted += [t.id == kb_id] if kb_id else []
         if not wanted:
             return []
-        q = sa.select(t.id, t.name).where(
-            t.tenant_id == tenant, sa.or_(*wanted), any_team(kb_bases, "a base's name and id are unique per tenant")
-        )
-        async with self.engine.connect() as c:
+        q = sa.select(t.id, t.name).where(t.tenant_id == tenant, sa.or_(*wanted), team_visible(kb_bases))
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def team_bases(self, tenant: str, team: str | None) -> list[dict[str, Any]]:
         """The bases a person in `team` reads: the team's and those no team owns, as the picker offers (c-222)."""
         t = kb_bases.c
         scope = t.team_id.is_(None) if team is None else sa.or_(t.team_id.is_(None), t.team_id == team)
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             rows = (
                 await c.execute(sa.select(kb_bases).where(t.tenant_id == tenant, scope, team_visible(kb_bases)))
             ).mappings()
@@ -286,11 +319,11 @@ class KnowledgeStore:
         q = sa.select(t.id, t.name, t.description, t.owner).where(t.tenant_id == tenant, scope, team_visible(kb_bases))
         q = q.where(t.id.in_(ids) if ids is not None else contains(t.name, search))
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def base(self, tenant: str, kb_id: str) -> dict[str, Any] | None:
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             q = sa.select(kb_bases).where(
                 kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id, team_visible(kb_bases)
             )
@@ -299,8 +332,8 @@ class KnowledgeStore:
 
     async def tenants(self) -> list[str]:
         """Every tenant holding a source; only the start-up move between file stores reads across tenants."""
-        async with self.engine.connect() as c:
-            q = sa.select(kb_sources.c.tenant_id).where(any_team(kb_sources, "the start-up move reads every source"))
+        async with isolation.system_tx(self.engine, MOVE_TENANTS, role=SYSTEM_ROLE) as c:
+            q = sa.select(kb_sources.c.tenant_id).where(any_team(kb_sources, MOVE_TENANTS))
             return [str(r[0]) for r in await c.execute(q.distinct())]
 
     async def sources(self, tenant: str, ids: list[str] | None = None) -> list[dict[str, Any]]:
@@ -321,7 +354,7 @@ class KnowledgeStore:
         )
         if ids is not None:
             counted = counted.where(kb_items.c.source_id.in_(ids))
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             counts: dict[str, dict[str, int]] = {}
             for r in (await c.execute(counted)).mappings():
@@ -333,65 +366,78 @@ class KnowledgeStore:
 
     async def links(self, tenant: str) -> list[tuple[str, str]]:
         """(knowledge base id, source id) for every attachment in the tenant."""
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             q = sa.select(kb_base_sources.c.kb_id, kb_base_sources.c.source_id).where(
-                kb_base_sources.c.tenant_id == tenant
+                kb_base_sources.c.tenant_id == tenant, team_visible(kb_base_sources)
             )
             return [(r.kb_id, r.source_id) for r in await c.execute(q)]
 
     async def create_base(self, row: dict[str, Any], source_ids: list[str]) -> None:
-        async with self.engine.begin() as c:
-            await c.execute(sa.insert(kb_bases).values(**row))
-            await self._link(c, row["tenant_id"], row["id"], source_ids)
+        try:
+            async with self._tx() as c:
+                await c.execute(sa.insert(kb_bases).values(**row))
+                await self._link(c, row["tenant_id"], row["id"], source_ids)
+        except IntegrityError as e:
+            # An id is unique in the tenant; one another team holds is not seen before the insert.
+            raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
 
     async def update_base(self, tenant: str, kb_id: str, values: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.update(kb_bases).where(kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id).values(**values)
             )
 
     async def attach(self, tenant: str, kb_id: str, source_ids: list[str]) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await self._link(c, tenant, kb_id, source_ids)
 
     async def _link(self, c: AsyncConnection, tenant: str, kb_id: str, source_ids: list[str]) -> None:
         if not source_ids:
             return
+        team = await self._team_of(c, kb_bases, tenant, kb_id)
         stmt = pg_insert(kb_base_sources).values(
-            [{"tenant_id": tenant, "kb_id": kb_id, "source_id": s} for s in source_ids]
+            [{"tenant_id": tenant, "team_id": team, "kb_id": kb_id, "source_id": s} for s in source_ids]
         )
         await c.execute(stmt.on_conflict_do_nothing())
 
     async def create_source(self, row: dict[str, Any], kb_ids: list[str]) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(sa.insert(kb_sources).values(**row))
             for kb_id in kb_ids:
                 await self._link(c, row["tenant_id"], kb_id, [row["id"]])
 
     async def remove_base(self, tenant: str, kb_id: str, *, by: str) -> bool:
         """Deletes the base and records its id as retired, in one transaction."""
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             key = (kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id)
-            row = (await c.execute(sa.select(kb_bases.c.name).where(*key, team_visible(kb_bases)))).first()
+            q = sa.select(kb_bases.c.name, kb_bases.c.team_id).where(*key, team_visible(kb_bases))
+            row = (await c.execute(q)).first()
             if row is None:
                 return False
             await c.execute(sa.delete(kb_bases).where(*key))
             await c.execute(
                 sa.insert(kb_retired_bases).values(
-                    tenant_id=tenant, id=kb_id, name=row.name, retired_by=by, retired_at=sa.func.now()
+                    tenant_id=tenant,
+                    team_id=row.team_id,
+                    id=kb_id,
+                    name=row.name,
+                    retired_by=by,
+                    retired_at=sa.func.now(),
                 )
             )
             return True
 
     async def retired(self, tenant: str, kb_ids: list[str] | None = None) -> set[str]:
-        q = sa.select(kb_retired_bases.c.id).where(kb_retired_bases.c.tenant_id == tenant)
+        q = sa.select(kb_retired_bases.c.id).where(
+            kb_retired_bases.c.tenant_id == tenant, team_visible(kb_retired_bases)
+        )
         if kb_ids is not None:
             q = q.where(kb_retired_bases.c.id.in_(kb_ids))
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return {str(r.id) for r in await c.execute(q)}
 
     async def remove_source(self, tenant: str, source_id: str) -> bool:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             q = sa.delete(kb_sources).where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             return (await c.execute(q)).rowcount > 0
 
@@ -405,26 +451,35 @@ class KnowledgeStore:
             q = q.where(kb_items.c.source_id.in_(source_ids))
         if item_id is not None:
             q = q.where(kb_items.c.id == item_id)
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
 
     async def versions(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(kb_item_versions)
-            .where(kb_item_versions.c.tenant_id == tenant, kb_item_versions.c.item_id == item_id)
+            .where(
+                kb_item_versions.c.tenant_id == tenant,
+                kb_item_versions.c.item_id == item_id,
+                team_visible(kb_item_versions),
+            )
             .order_by(kb_item_versions.c.version.desc())
         )
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def chunks(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
         """The item's live chunks, in reading order."""
         q = (
             sa.select(kb_chunks.c.position, kb_chunks.c.section, kb_chunks.c.page, kb_chunks.c.tokens, kb_chunks.c.text)
-            .where(kb_chunks.c.tenant_id == tenant, kb_chunks.c.item_id == item_id, kb_chunks.c.withdrawn_at.is_(None))
+            .where(
+                kb_chunks.c.tenant_id == tenant,
+                kb_chunks.c.item_id == item_id,
+                kb_chunks.c.withdrawn_at.is_(None),
+                team_visible(kb_chunks),
+            )
             .order_by(kb_chunks.c.position)
         )
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def index_version(
@@ -440,7 +495,13 @@ class KnowledgeStore:
         """Writes one version of an item with its chunks, and withdraws the previous version's chunks, in one
         transaction: a reader sees the old version or the new one, never both, and the change row lands with the
         version it records. Returns the version it replaced."""
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
+            # The document, its version, chunks and change take its source's team.
+            team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
+            item = {**item, "team_id": team}
+            version = {**version, "team_id": team}
+            chunks = [{**ch, "team_id": team} for ch in chunks]
+            change = {**change, "team_id": team} if change is not None else None
             replaced: int | None = None
             if new:
                 await c.execute(sa.insert(kb_items).values(**item))
@@ -476,7 +537,7 @@ class KnowledgeStore:
         values: dict[str, Any] = {"last_sync_at": sa.func.now(), "last_run_status": status}
         if activate:
             values["status"] = sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
@@ -484,7 +545,7 @@ class KnowledgeStore:
             )
 
     async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -507,7 +568,7 @@ class KnowledgeStore:
 
     async def swap_files(self, tenant: str, source_id: str, moved: dict[str, str]) -> None:
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -526,7 +587,7 @@ class KnowledgeStore:
         """Removes files from a source; the stored blobs stay, other sources may hold them."""
         if not file_ids:
             return
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = (
                 await c.execute(
@@ -546,7 +607,7 @@ class KnowledgeStore:
     async def refreshed(self, tenant: str, kb_ids: list[str]) -> None:
         if not kb_ids:
             return
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.update(kb_bases)
                 .where(kb_bases.c.tenant_id == tenant, kb_bases.c.id.in_(kb_ids))
@@ -556,7 +617,9 @@ class KnowledgeStore:
     async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[dict[str, Any]]) -> None:
         """Rebuilds an item's chunks from the same content, keeping its version: the old chunks are withdrawn in the
         transaction that inserts the new ones."""
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
+            team = await self._team_of(c, kb_items, tenant, item_id)
+            chunks = [{**ch, "team_id": team} for ch in chunks]
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
@@ -571,13 +634,13 @@ class KnowledgeStore:
                 await c.execute(sa.insert(kb_chunks), chunks)
 
     async def update_item(self, tenant: str, item_id: str, values: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
 
     async def update_source(self, tenant: str, source_id: str, values: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
@@ -585,7 +648,7 @@ class KnowledgeStore:
             )
 
     async def detach(self, tenant: str, kb_id: str, source_id: str) -> None:
-        async with self.engine.begin() as c:
+        async with self._tx() as c:
             await c.execute(
                 sa.delete(kb_base_sources).where(
                     kb_base_sources.c.tenant_id == tenant,
@@ -595,25 +658,26 @@ class KnowledgeStore:
             )
 
     async def add_run(self, row: dict[str, Any]) -> None:
-        async with self.engine.begin() as c:
-            await c.execute(sa.insert(kb_runs).values(**row))
+        async with self._tx() as c:
+            team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
+            await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
 
     async def runs(
         self, tenant: str, *, source_id: str | None = None, run_id: str | None = None
     ) -> list[dict[str, Any]]:
-        q = sa.select(kb_runs).where(kb_runs.c.tenant_id == tenant)
+        q = sa.select(kb_runs).where(kb_runs.c.tenant_id == tenant, team_visible(kb_runs))
         if source_id is not None:
             q = q.where(kb_runs.c.source_id == source_id)
         if run_id is not None:
             q = q.where(kb_runs.c.id == run_id)
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
 
     async def changes(self, tenant: str, *, item_ids: list[str] | None = None) -> list[dict[str, Any]]:
-        q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant)
+        q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
         if item_ids is not None:
             q = q.where(kb_changes.c.item_id.in_(item_ids))
-        async with self.engine.connect() as c:
+        async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_changes.c.changed_at.desc()))).mappings()]
 
 

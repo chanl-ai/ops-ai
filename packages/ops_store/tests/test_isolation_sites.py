@@ -47,6 +47,10 @@ WIDENINGS: dict[str, set[str]] = {
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
+    # c-507: kb's background processes, the dev demo seed and the start-up move between file stores.
+    "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
+    "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
+    "MOVE_FILES": {"services/kb-service/src/ops_kb/__main__.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # c-516: heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},

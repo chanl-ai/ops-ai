@@ -83,6 +83,23 @@ Subsystems compose through workflows, not through each other (rulebook `service-
 its input from files and never the other way; storing results on a file, review and purge are workflow steps. The engine and the agent kernel never import `ops_extract`; an Extract node and the `extract_document` tool are
 thin calls on the documents API (review checklist §3, "A node or tool with no API behind it").
 
+### Background processes
+
+Work that runs without a person asking is one list, `PROCESSES` in `packages/ops_store/src/ops_store/background.py`
+(c-516). Each process runs once for the account, finds its next job across teams, and does that job inside the job's
+team. A loop starts only through `background.run`, which retries a failed pass after 1 s doubling to 60 s and writes a
+heartbeat at most every 10 s and on every error; `test_background_registry.py` fails on a loop not on the list.
+
+| Process | Service | Heartbeat kept in | Jobs logged |
+|---|---|---|---|
+| Workflow worker, sweeper, timer poller, memory clean-up, mail listener, event workflows | agents-service | `background_heartbeats` (one row per process instance) | `background_jobs`, in the job's team (memory clean-up: none) |
+| File hand-off, document hand-off, tool events (outbox relays), document reading | files, documents, tools | the process's memory | none: a failed hand-off shows as the heartbeat's last error and on its outbox row |
+
+Each service answers `GET /health/background` (states and counts, no record's data), which `make health` and the
+staging check read; late after two gaps and stopped after five, a gap being the interval or the 10 s write gap,
+whichever is longer. Agents-service `GET /v1/background` serves Govern > Background to account admins only, reading
+its own tables and only reading the other services' `/health/background`; a team reads its own jobs in Activity.
+
 ## Roadmap
 
 | Service | Built now | Next | Later |

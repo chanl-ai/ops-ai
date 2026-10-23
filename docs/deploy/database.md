@@ -1,12 +1,16 @@
 # The database: install, upgrade and verify from reviewed scripts
 
-Status: current for PostgreSQL (c-336); proven on a throwaway server (`deploy/database/proof.sh`). SQL Server and Azure SQL use the same targets with `DIALECT=mssql` (c-344): the
-scripts are generated and reviewed as golden files, and have not yet been applied to a SQL Server (c-345). See
-[SQL Server](#sql-server-and-azure-sql).
+Status: current for PostgreSQL, proven on a throwaway server. For SQL Server and Azure SQL the scripts are generated
+and reviewed, and not yet applied to a server ([SQL Server](#sql-server-and-azure-sql)).
+
+<!-- PostgreSQL: c-336, proof deploy/database/proof.sh. SQL Server: c-344 (DIALECT=mssql), first apply is c-345. -->
 
 A bank's DBA applies every schema change in their own change window and never runs Ops AI's code against
-production. The migration chains (one Alembic chain per service, `deploy/images/chains`) stay the source; every script
-below is generated from them by `deploy/database/schema.py` and is never edited by hand.
+production. Each service's migration chain stays the source, and every script below is generated from those chains
+and never edited by hand.
+
+The chains are in `deploy/images/chains`, one Alembic chain per service, and `deploy/database/schema.py` generates the
+scripts.
 
 ## Who runs what
 

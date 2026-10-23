@@ -25,5 +25,7 @@ with the Egress page's own form. Only `/preview/human-tasks` stays, until the ma
 
 ## Non-vacuous check
 
-Run on a clone at the c-517 spec commit, before any of its code, steps 1 to 4 fail (`uc-red.txt` under
-`evidenceDir('517')`); on the card's last commit all pass (`uc-green.txt` there).
+With the agent settings, the agent page and the tool request builder at their versions from before c-517, steps 1 to 3
+fail: no Agent ID field, no host notice, no Add allowed host. Step 4 failed during the build while the settings and
+workflow-layout mocks still answered 200. On the card's last commit all five pass (`uc-red.txt` and `uc-green.txt`
+under `evidenceDir('517')`).

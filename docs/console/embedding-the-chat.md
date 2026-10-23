@@ -1,7 +1,9 @@
 # Embedding the chat on a bank page
 
-Status: current, 2026-10-17. The server side, the loader and the embed app (`apps/embed`) are built; uc-119 drives them
-on a sample bank page.
+Status: current. The server side, the loader and the embed app are built, and an end-to-end check drives them on a
+sample bank page.
+
+<!-- The embed app is apps/embed; the check is uc-119. -->
 
 A bank team puts its Ops AI agent on an intranet page: a launcher in the corner opens the same chat people use in the
 console, with sources, answer widgets, tool cards and approval cards (an approver decides them in Human Tasks). The chat
