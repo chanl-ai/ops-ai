@@ -1,15 +1,16 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { Bot } from 'lucide-react';
 
 import { Suggestion } from '@/components/ai-elements/suggestion';
 import { Composer } from '@/components/chat/composer';
+import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
 import { RecordCard } from '@/components/chat/record-cards';
 import { QueryError } from '@/components/shared/query-states';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useSidebar } from '@/components/ui/sidebar';
 import { useChatAgents, useDefaultAgent } from '@/hooks/chat-queries';
 import { useReviews } from '@/hooks/queries';
 import type { ChatAttachment } from '@/lib/types/chat';
@@ -29,7 +30,7 @@ function greeting(now = new Date()): string {
 
 /**
  * Chat's home (c-469), where a person lands after signing in: the composer, four suggested starts and, under Needs
- * you, the first Human Task waiting for them as its card. Laid out as Focus (owner, 2026-10-22): while the home is
+ * you, the first Human Task assigned to them as its card, or how many are open in their team when none is. Laid out as Focus (owner, 2026-10-22): while the home is
  * open the console sidebar folds to its icon rail, and it is put back as it was when the person leaves. A team with no
  * default agent starts on its Ops Assistant, which the first message creates; the header's picker chooses another agent.
  */
@@ -50,13 +51,7 @@ export function ChatHome({
   /** `agentId` undefined starts on the team's default, made on the first chat when the team has none. */
   onStart: (agentId: string | undefined, kbIds: string[], text: string, attachments: ChatAttachment[]) => void;
 }) {
-  const { open, setOpen } = useSidebar();
-  const was = React.useRef(open);
-  React.useEffect(() => {
-    const before = was.current;
-    setOpen(false);
-    return () => setOpen(before);
-  }, [setOpen]);
+  useCollapsedSidebar();
 
   const list = agents.data ?? [];
   const defaultId = useDefaultAgent().data?.agentId;
@@ -64,6 +59,9 @@ export function ChatHome({
   const agent = list.find((a) => a.id === (picked ?? defaultId));
   const needs = useReviews({ view: 'mine', page: 1, pageSize: 1 });
   const waiting = needs.data?.data[0];
+  // Nothing assigned to the person still leaves the team's open tasks, which an approver decides: say how many.
+  const open = useReviews({ view: 'open', page: 1, pageSize: 1 });
+  const openCount = open.data?.pagination.total ?? 0;
   const begin = (text: string, attachments: ChatAttachment[] = []) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments);
 
   return (
@@ -121,7 +119,16 @@ export function ChatHome({
                 <RecordCard cardRef={{ type: 'task', id: waiting.id, view: waiting }} onActed={() => void needs.refetch()} />
               ) : (
                 <p className="text-sm text-muted-foreground" data-testid="home-needs-none">
-                  Nothing is waiting for you.
+                  Nothing is assigned to you.
+                  {openCount > 0 && (
+                    <>
+                      {' '}
+                      <Link href="/reviews" className="font-medium text-foreground underline-offset-4 hover:underline" data-testid="home-needs-open">
+                        {openCount === 1 ? '1 task is open in your team' : `${openCount} tasks are open in your team`}
+                      </Link>
+                      .
+                    </>
+                  )}
                 </p>
               )}
             </section>

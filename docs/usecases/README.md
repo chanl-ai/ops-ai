@@ -231,6 +231,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-445 | console | Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file | ui | passing |
 | uc-466 | console | Start run draws the trigger's start form: a test email runs as a mailbox email does and reaches a Human Task; Files starts a workflow with a file; sub-workflows are not offered; a re-upload under another purpose reuses the file | ui | passing |
 | uc-469 | console | A person lands on Chat's home in the Focus layout, asks what needs them, approves a Human Task from its card and sees the run move on | ui | passing |
+| uc-460 | console | A reviewer works Human Tasks grouped by case, decides beside a fixed decision panel with step-up and options, moves to the case's next task, reassigns, and every old task link opens there | ui | passing |
 | uc-477 | console | An email-started run's page tells the email, the read beside the document and a row per run it started, named, with its case and Human Task; an unmatched debtor gets a No customer matched case and task | ui | passing |
 | uc-500 | console | A case says what is left, on whom and by when, how its work began (form, email or by hand), one timer, and one feed of what happened in the run page's sentences | ui | passing |
 | uc-508 | console | Activity, a Human Task's write preview, the case list's first response and the run page read a step in the API's words: no tool, node or workflow id, the outcome in words | ui | passing |
@@ -240,3 +241,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-505 | console | Pages wait for the person's team after sign-in: a remembered team they do not hold gives way to theirs, and a record in another team says not found, or in another team, with a switch | ui | passing |
 | uc-510 | console | What's new lists the changelog newest first in plain words with a Coming next tab, and its unread dot clears once opened | ui | passing |
 | uc-516 | agents-service | An account admin sees every background process and what it did; a builder is told the page is not theirs; a stopped worker reads late then stopped; a team sees only its own background jobs in Activity | ui | passing |
+| uc-526 | agents-service | Another team's records answer not found | api | passing |
+| uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api | passing |

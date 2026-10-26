@@ -36,6 +36,7 @@ AGENTS_PORT = int(os.environ.get("OPS_USECASE_AGENTS_PORT", "8790"))
 TOOLS_PORT = int(os.environ.get("OPS_USECASE_TOOLS_PORT", "8791"))
 MODELS_PORT = int(os.environ.get("OPS_USECASE_MODELS_PORT", "8792"))
 KB_PORT = int(os.environ.get("OPS_USECASE_KB_PORT", "8793"))
+RUNNER_PORT = int(os.environ.get("OPS_USECASE_RUNNER_PORT", "8795"))
 # The runner does not assign this one yet; unset, a free port, so two runs never share it.
 FILES_PORT = int(os.environ.get("OPS_USECASE_FILES_PORT", "0"))
 # The committed fake-OpenAI rules (the levy's and the banker demo's), for fake_openai(DEMO_RULES).
@@ -432,6 +433,19 @@ def fake_openai(folder: Path) -> Generator[str]:
 
 
 @contextmanager
+def runner() -> Generator[str]:
+    """runner-service (c-531): code tools' Python on WASM, calling back to the use case's tools-service. Pass its URL
+    to tools() as OPS_RUNNER_URL. Fetches the pinned Python build into .data/runner first. Yields its base URL."""
+    env = _env()
+    env["OPS_RUNNER_PORT"] = str(RUNNER_PORT)
+    env["OPS_TOOLS_URL"] = f"http://127.0.0.1:{TOOLS_PORT}"
+    runner_dir = ROOT / "services" / "runner-service"
+    subprocess.run(["uv", "run", "python", "-m", "ops_runner.fetch"], cwd=runner_dir, env=env, check=True)
+    with _serve("runner", ["uv", "run", "python", "-m", "ops_runner"], RUNNER_PORT, env, cwd=runner_dir) as base:
+        yield base
+
+
+@contextmanager
 def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     """The tools service (tool gateway) on the use-case database, deciding with an OPA of its own: the compose OPA's
     key and policy are rewritten by every other tools-service that starts."""
@@ -651,16 +665,16 @@ def sso_round_trip(
 
 def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str]) -> dict[str, Any]:
     """Approves the module's open review in agents-service's Reviews as `headers` (a Security approver), as Human Tasks
-    would (c-163); Reviews applies it in tools-service. Returns the module's detail afterwards."""
-    module = data(gw.get(f"/v1/tool-modules/{module_id}", headers=headers))
+    would (c-163); Reviews applies it in tools-service. The module is read as `gw` (its own team): the approver acts in
+    Security, which does not read another team's modules. Returns the module's detail afterwards."""
+    module = data(gw.get(f"/v1/tool-modules/{module_id}"))
     waiting = next(v for v in module["versions"] if v["status"] == "in_review")
     with httpx.Client(base_url=f"http://127.0.0.1:{AGENTS_PORT}", timeout=30) as reviews:
-        data(
-            reviews.post(
-                f"/v1/publish-requests/{waiting['reviewId']}/decision", json={"decision": "approved"}, headers=headers
-            )
+        decided = reviews.post(
+            f"/v1/publish-requests/{waiting['reviewId']}/decision", json={"decision": "approved"}, headers=headers
         )
-    return data(gw.get(f"/v1/tool-modules/{module_id}", headers=headers))
+    check(f"the review of {module_id} is approved (200)", decided.status_code == 200, decided.text[:300])
+    return data(gw.get(f"/v1/tool-modules/{module_id}"))
 
 
 def data(res: httpx.Response) -> Any:
@@ -729,7 +743,7 @@ def core_bank() -> Generator[dict[str, Any]]:
 def publish_bank_module(gw: httpx.Client, host: str) -> str:
     """The core bank's document imported as a published module, as reimport_bank_module.py leaves it, decided under
     dev auth: every operation, reads from GET, place_hold approved by one person of team_ops with a step-up."""
-    security = {"X-Dev-User": "Nadia Petrov"}
+    security = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
     found = data(gw.post("/v1/tool-modules/discover", json=source))
     ops = [

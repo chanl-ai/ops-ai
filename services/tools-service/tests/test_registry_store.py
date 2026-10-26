@@ -20,7 +20,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
-from ops_tools.modules.seed import aggregates, load
+from ops_store.team_scope import acting_as
+from ops_tools.modules.seed import aggregates, blank, load
 from ops_tools.store.modules import ModuleStore, RetiredAccessError, StaleModuleError
 
 SERVICE = Path(__file__).parents[1]
@@ -82,6 +83,58 @@ async def test_seed_loads_the_console_modules_once(store: ModuleStore, seed: dic
     found = await store.operation_named(tenant, "get_loan_account")
     assert found is not None and found[0]["id"] == "mod_core_banking"
     assert found[1]["access"] == "read"
+
+
+async def test_two_teams_in_one_tenant_each_own_a_module_of_the_same_name(store: ModuleStore, tenant: str) -> None:
+    now = datetime.now(UTC)
+
+    def module(team: str, module_id: str) -> dict[str, Any]:
+        row = blank(
+            module_id=module_id,
+            tenant_id=tenant,
+            team_id=team,
+            owner="Ops",
+            me="seed",
+            at=now,
+            input={"displayName": "Shared bank", "name": "shared-bank", "type": "http"},
+        )
+        row["operations"] = [
+            {
+                "id": f"{module_id}_op1",
+                "tool_id": "tl_search",
+                "name": "search_customers",
+                "description": "Find a customer",
+                "access": "read",
+                "enabled": True,
+                "executor": "stub",
+                "method": None,
+                "path": None,
+                "headers": [],
+                "body": None,
+                "input": [],
+                "masked_output": [],
+                "binding": None,
+                "rate_limit_per_min": 60,
+                "requires_approval": False,
+                "amount_max": None,
+                "stub": {"ok": True},
+            }
+        ]
+        return row
+
+    await store.put(module("team_a", "mod_a"), expected_revision=None)
+    await store.put(module("team_b", "mod_b"), expected_revision=None)
+    with acting_as("team_a"):
+        assert (await store.get(tenant, "mod_a")) is not None
+        assert (await store.get(tenant, "mod_b")) is None
+        found = await store.operation_named(tenant, "search_customers")
+        assert found is not None and found[0]["id"] == "mod_a"
+        assert "shared-bank" in await store.names(tenant)
+    with acting_as("team_b"):
+        assert (await store.get(tenant, "mod_b")) is not None
+        assert (await store.get(tenant, "mod_a")) is None
+        found = await store.operation_named(tenant, "search_customers")
+        assert found is not None and found[0]["id"] == "mod_b"
 
 
 async def test_the_seed_has_only_read_and_write_and_two_approver_writes_need_approval(seed: dict[str, Any]) -> None:

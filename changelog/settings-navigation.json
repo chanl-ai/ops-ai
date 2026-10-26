@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-24",
+  "title": "Settings is easier to find your way around",
+  "description": "Every page in the sidebar and in Settings now has an icon, Settings sections fold away, and opening Settings takes you straight to your workspace's general settings.",
+  "tag": "improved",
+  "cards": ["c-528"],
+  "commits": ["4ca891df"]
+}

@@ -7,10 +7,9 @@ from typing import Any
 
 import httpx
 from fake_bank_https import HOST, fake_bank
-
 from usecase_harness import agents, approve_tool_review, check, data, finish, service_headers, tools
 
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 
 
 def clean(gw: httpx.Client, bank_range: str) -> None:

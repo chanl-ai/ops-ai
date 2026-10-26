@@ -11,6 +11,8 @@ from .conftest import Platform
 
 PUBLIC = {
     ("GET", "/v1/health"),
+    # Background process states (c-529), as every service answers them: counts and error types, no record's data.
+    ("GET", "/health/background"),
     ("GET", "/.well-known/jwks.json"),
     ("POST", "/v1/auth/sign-in"),
     ("POST", "/v1/auth/refresh"),

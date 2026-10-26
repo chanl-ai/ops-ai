@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -84,7 +85,11 @@ SPEC: dict[str, Any] = {
             }
         },
         "/statements/latest": {
-            "get": {"operationId": "latestStatement", "summary": "The latest statement", "security": [{"statementsKey": []}]}
+            "get": {
+                "operationId": "latestStatement",
+                "summary": "The latest statement",
+                "security": [{"statementsKey": []}],
+            }
         },
     },
 }
@@ -123,7 +128,11 @@ DAYS = [f"2026-10-{d:02d}" for d in range(1, 7)]
 SHAPED: dict[str, Any] = {
     "transactions": {
         "transactions": [
-            {"date": f"2026-10-{d:02d}", "merchant": ["Metro Grocers", "Transit", "Cafe Nord"][d % 3], "amount": round(9.5 + d * 4.25, 2)}
+            {
+                "date": f"2026-10-{d:02d}",
+                "merchant": ["Metro Grocers", "Transit", "Cafe Nord"][d % 3],
+                "amount": round(9.5 + d * 4.25, 2),
+            }
             for d in range(1, 13)
         ]
     },
@@ -132,7 +141,14 @@ SHAPED: dict[str, Any] = {
     "disputes": {"value": 3, "label": "Open disputes", "unit": "cases", "delta": -1},
     # Text, not an object: since c-055 T024 a nested object draws as a record, so this is the answer that fits no shape.
     "profile": "Ada Chen, a customer since 2019, banks at the King St branch.",
-    "statement-lines": [{"line": f"L{n:03d}", "payee": ["Metro Grocers", "Transit", "Cafe Nord", "Pharmacy"][n % 4], "amount": round(5 + n * 0.75, 2)} for n in range(1, 251)],
+    "statement-lines": [
+        {
+            "line": f"L{n:03d}",
+            "payee": ["Metro Grocers", "Transit", "Cafe Nord", "Pharmacy"][n % 4],
+            "amount": round(5 + n * 0.75, 2),
+        }
+        for n in range(1, 251)
+    ],
 }
 
 
@@ -172,7 +188,10 @@ class FakeBank:
     @property
     def settings(self) -> dict[str, str]:
         """What tools-service needs to reach this fake as `https://api.bank.test`."""
-        return {"OPS_EGRESS_CA_FILE": str(self.ca_file), "OPS_EGRESS_RESOLVE": json.dumps({HOST: f"{self.address}:{self.port}"})}
+        return {
+            "OPS_EGRESS_CA_FILE": str(self.ca_file),
+            "OPS_EGRESS_RESOLVE": json.dumps({HOST: f"{self.address}:{self.port}"}),
+        }
 
     @property
     def range(self) -> str:
@@ -181,7 +200,7 @@ class FakeBank:
 
 def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+        def log_message(self, format: str, *args: Any) -> None:
             return
 
         def _send(self, status: int, body: Any) -> None:
@@ -193,9 +212,11 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(raw)
 
         def _record(self, body: bytes) -> None:
-            bank.received.append({"method": self.command, "path": self.path, "headers": dict(self.headers), "body": body})
+            bank.received.append(
+                {"method": self.command, "path": self.path, "headers": dict(self.headers), "body": body}
+            )
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             self._record(b"")
             if self.path == "/v1/openapi.json":
                 return self._send(200, SPEC)
@@ -212,6 +233,14 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
                 return self._send(200, SHAPED[parts[4]])
             if self.path.startswith("/v1/accounts/"):
                 return self._send(200, {"accountId": self.path.rsplit("/", 1)[1], "balance": 1200.5})
+            if self.path.split("?")[0] == "/v1/limits":
+                # A card's daily limit behind a key sent as a query value (c-531): proves which key arrived without
+                # returning it, and repeats the key, as a careless API might, so the gateway's scrubbing shows.
+                key = dict(parse_qsl(urlsplit(self.path).query)).get("rulesKey")
+                if not key:
+                    return self._send(401, {"error": "no rulesKey"})
+                print_ = hashlib.sha256(key.encode()).hexdigest()[:12]
+                return self._send(200, {"dailyLimit": 900, "spentToday": 0, "keyFingerprint": print_, "echo": key})
             if self.path == "/v1/statements/latest":
                 key = self.headers.get("X-Api-Key")
                 if not key:
@@ -221,7 +250,7 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
                 return self._send(200, {"statement": "2026-09", "keyFingerprint": print_, "echo": dict(self.headers)})
             return self._send(404, {"error": "not found"})
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             self._record(raw)
             if self.path.startswith("/v1/accounts/") and self.path.endswith("/holds"):
@@ -237,14 +266,21 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
                 return None
             if method == "initialize":
                 info = {"name": "Case desk", "version": "4.1.0"}
-                return self._send(200, {"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": "2025-06-18", "serverInfo": info}})
+                return self._send(
+                    200, {"jsonrpc": "2.0", "id": rid, "result": {"protocolVersion": "2025-06-18", "serverInfo": info}}
+                )
             if method == "tools/list":
                 return self._send(200, {"jsonrpc": "2.0", "id": rid, "result": {"tools": bank.mcp_tools}})
             if method == "tools/call":
                 params: dict[str, Any] = msg.get("params") or {}
-                result = {"content": [{"type": "text", "text": "ok"}], "structuredContent": {"tool": params.get("name"), "arguments": params.get("arguments")}}
+                result = {
+                    "content": [{"type": "text", "text": "ok"}],
+                    "structuredContent": {"tool": params.get("name"), "arguments": params.get("arguments")},
+                }
                 return self._send(200, {"jsonrpc": "2.0", "id": rid, "result": result})
-            return self._send(200, {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "unknown method"}})
+            return self._send(
+                200, {"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "unknown method"}}
+            )
 
     return Handler
 
@@ -257,7 +293,11 @@ def fake_bank():  # type: ignore[no-untyped-def]
         server = ThreadingHTTPServer((address, 0), BaseHTTPRequestHandler)
         bank = FakeBank(address, server.server_address[1], cert_file)
         bank.mcp_tools = [
-            {"name": "lookupCase", "description": "A case by its id", "inputSchema": {"type": "object", "properties": {"caseId": {"type": "string"}}, "required": ["caseId"]}},
+            {
+                "name": "lookupCase",
+                "description": "A case by its id",
+                "inputSchema": {"type": "object", "properties": {"caseId": {"type": "string"}}, "required": ["caseId"]},
+            },
         ]
         server.RequestHandlerClass = _handler(bank)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

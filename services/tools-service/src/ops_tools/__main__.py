@@ -27,6 +27,7 @@ from ops_store.schema_version import require_current_schema
 from .app import create_gateway_app
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
+from .code_runs import CodeExecutor, code_signer
 from .connections.routes import connections_router
 from .connections.service import ConnectionService
 from .egress import EgressPolicy, OverrideResolver, egress_client, egress_transport
@@ -200,6 +201,19 @@ def main() -> None:
         secret_resolver=secrets,
         authenticator=authenticator,
         directory=directory,
+        # Code operations run on runner-service (c-531); its calls back are checked with this service's own key.
+        code=CodeExecutor(
+            ServiceClient.for_settings(
+                settings,
+                httpx.AsyncClient(base_url=settings.runner_url, timeout=90),
+                service="tools",
+                audience="runner",
+                timeout=90,
+            )
+            if settings.runner_url
+            else None,
+            code_signer(settings.secrets_key.get_secret_value()),
+        ),
         routers=(
             modules_router(modules, directory),
             executions_router(modules, directory),

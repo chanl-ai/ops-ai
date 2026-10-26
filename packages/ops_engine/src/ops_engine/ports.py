@@ -212,9 +212,19 @@ class CasePort(Protocol):
         has none."""
         ...
 
-    async def add(self, run_id: str, case_id: str, note: str | None, fields: dict[str, Any] | None = None) -> None:
-        """Adds the run to the case's timeline and `fields` to the case's own values; raises CaseNotFoundError for a
-        case outside the run's team."""
+    async def add(
+        self,
+        run_id: str,
+        case_id: str,
+        note: str | None,
+        fields: dict[str, Any] | None = None,
+        *,
+        status: str | None = None,
+        key: str | None = None,
+    ) -> None:
+        """Adds the run to the case's timeline, `fields` to the case's own values and moves it to `status` (never to or
+        from closed, which is a person's); a later step of the same run adds its `note` once for its `key`. Raises
+        CaseNotFoundError for a case outside the run's team."""
         ...
 
 

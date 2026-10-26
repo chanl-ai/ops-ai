@@ -1108,7 +1108,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         "children": await started_runs(store, steps),
         "files": await named(rt, str(run["team_id"]), files_in(run["input"])),
         "decisions": [d | {"by": names.get(d["by"]) if d["by"] else None} for d in decided],
-        "result": await run_result(rt, run, steps),
+        "result": await run_result(rt, run, steps, decided=decided, names=names),
         "canCancel": can_cancel(me, run),
         "startedBy": (await actors(rt, [started_by_of(run)])).get(started_by_of(run)),
         "story": told,
@@ -1172,9 +1172,18 @@ async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dic
     ]
 
 
-async def run_result(rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+async def run_result(
+    rt: Runtime,
+    run: dict[str, Any],
+    steps: list[dict[str, Any]],
+    *,
+    decided: list[dict[str, Any]] | None = None,
+    names: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     """The run's result: the End node it finished on, from the pinned definition and the journal, with the outcome and
-    output the worker recorded on the run."""
+    output the worker recorded on the run. An output that is the last Human Task's decision reads as people read it:
+    the decision in words and who decided by name, since masking is for customer data and a staff address would show
+    as [email]."""
     if run["status"] == "cancelled" or run["outcome"] is None:
         return None
     stored = await definitions(rt).get(run["workflow_id"], run["version"])
@@ -1182,7 +1191,19 @@ async def run_result(rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any
     ends = [s for s in steps if nodes.get(s["nodeId"], {}).get("type") == "ops.flow.end" and s["status"] == "ok"]
     end = ends[-1]["nodeId"] if ends else None
     name = str(nodes[end].get("name") or end) if end else None
-    return {"node": end, "name": name, "outcome": run["outcome"] or "done", "output": run["output"]}
+    output = run["output"]
+    last = decided[-1] if decided else None
+    if isinstance(output, dict) and last is not None and cast(dict[str, Any], output).get("decision") == last["action"]:
+        output = cast(dict[str, Any], output)
+        shown: dict[str, Any] = {
+            **output,
+            "decision": run_story.decision_label(nodes.get(last["nodeId"]), last["action"]),
+        }
+        who = (names or {}).get(str(output.get("by") or ""))
+        if who:
+            shown["by"] = who["name"]
+        output = shown
+    return {"node": end, "name": name, "outcome": run["outcome"] or "done", "output": output}
 
 
 @runs_router.post("/{run_id}/cancel", response_model=Envelope[RunRow])

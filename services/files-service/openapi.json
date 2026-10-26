@@ -2190,7 +2190,7 @@
   "paths": {
     "/health": {
       "get": {
-        "operationId": "health_health_get",
+        "operationId": "health_health",
         "responses": {
           "200": {
             "content": {
@@ -2216,13 +2216,14 @@
         "summary": "Health",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/health/background": {
       "get": {
         "description": "This service's background processes and their state; counts and error types only, no record's data.",
-        "operationId": "health_background_health_background_get",
+        "operationId": "health_health_background",
         "responses": {
           "200": {
             "content": {
@@ -2238,13 +2239,14 @@
         "summary": "Health Background",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files": {
       "get": {
         "description": "Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the\nuploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in\nthe query, which also answers each view's count and the facet counts; `readPath=model` keeps files no\ntemplate matched.",
-        "operationId": "list_files_v1_files_get",
+        "operationId": "files_list_files",
         "parameters": [
           {
             "in": "query",
@@ -2700,11 +2702,12 @@
         "summary": "List Files",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A file written in one request, the bytes as the body, with the same checks as a browser upload (files F19).\nA service names the person it writes for in `uploadedBy`; a person is always the uploader.",
-        "operationId": "write_file_v1_files_post",
+        "operationId": "files_write_file",
         "parameters": [
           {
             "in": "query",
@@ -2989,13 +2992,14 @@
         "summary": "Write File",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/bulk-delete": {
       "post": {
         "description": "Deletes each file the rules allow; one that is referenced, held or retained is skipped with the reason.",
-        "operationId": "bulk_delete_v1_files_bulk_delete_post",
+        "operationId": "files_bulk_delete",
         "parameters": [
           {
             "in": "header",
@@ -3207,13 +3211,14 @@
         "summary": "Bulk Delete",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/legal-hold": {
       "post": {
         "description": "Places or releases holds; an admin of the team only, with a reason. Sets the storage-level hold too.",
-        "operationId": "set_legal_hold_v1_files_legal_hold_post",
+        "operationId": "files_set_legal_hold",
         "parameters": [
           {
             "in": "header",
@@ -3425,13 +3430,14 @@
         "summary": "Set Legal Hold",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/limits": {
       "get": {
         "description": "The purpose limits uploads are checked against; readable by everyone who can upload.",
-        "operationId": "upload_limits_v1_files_limits_get",
+        "operationId": "files_upload_limits",
         "parameters": [
           {
             "in": "header",
@@ -3633,13 +3639,14 @@
         "summary": "Upload Limits",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/options": {
       "get": {
         "description": "The team's files a picker offers, searched and paged in the query; one not scanned clean is disabled with\nthe reason. `ids` labels stored values instead of searching.",
-        "operationId": "file_options_v1_files_options_get",
+        "operationId": "files_file_options",
         "parameters": [
           {
             "in": "query",
@@ -3898,13 +3905,14 @@
         "summary": "File Options",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/scan-results": {
       "post": {
         "description": "A scanner's verdict on one file of the token's tenant; the file stays pending and unreadable until then. Only\na token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one.",
-        "operationId": "scan_result_v1_files_scan_results_post",
+        "operationId": "files_scan_result",
         "parameters": [
           {
             "in": "header",
@@ -4068,13 +4076,14 @@
         "summary": "Scan Result",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/files/uploads": {
       "post": {
         "description": "A ticket for one upload: a signed storage URL, or this service's content route on the local backend.",
-        "operationId": "create_upload_v1_files_uploads_post",
+        "operationId": "files_create_upload",
         "parameters": [
           {
             "description": "A retry with the same key returns the same file.",
@@ -4304,13 +4313,14 @@
         "summary": "Create Upload",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/uploads/{file_id}/complete": {
       "post": {
         "description": "Checks size, type by signature and sha256, then dedupes within the team.",
-        "operationId": "complete_upload_v1_files_uploads__file_id__complete_post",
+        "operationId": "files_complete_upload",
         "parameters": [
           {
             "in": "path",
@@ -4521,13 +4531,14 @@
         "summary": "Complete Upload",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/uploads/{file_id}/content": {
       "put": {
         "description": "The proxy upload: the bytes as the body, streamed into storage. Local backend and proxy environments.",
-        "operationId": "put_content_v1_files_uploads__file_id__content_put",
+        "operationId": "files_put_content",
         "parameters": [
           {
             "in": "path",
@@ -4741,13 +4752,14 @@
         "summary": "Put Content",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}": {
       "delete": {
         "description": "409 while the file is referenced, held or retained.",
-        "operationId": "delete_file_v1_files__file_id__delete",
+        "operationId": "files_delete_file",
         "parameters": [
           {
             "in": "path",
@@ -4951,10 +4963,11 @@
         "summary": "Delete File",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
-        "operationId": "get_file_v1_files__file_id__get",
+        "operationId": "files_get_file",
         "parameters": [
           {
             "in": "path",
@@ -5165,13 +5178,14 @@
         "summary": "Get File",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/content": {
       "get": {
         "description": "A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool\nfixtures use with a service token.",
-        "operationId": "get_content_v1_files__file_id__content_get",
+        "operationId": "files_get_content",
         "parameters": [
           {
             "in": "path",
@@ -5375,13 +5389,14 @@
         "summary": "Get Content",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/data": {
       "put": {
         "description": "Records what was read from the file: its document type and version, template or model, how many fields\nwait for a person, and the extraction (c-250). The extract workflow's step writes it; files-service calls no\nother service for it.",
-        "operationId": "set_file_data_v1_files__file_id__data_put",
+        "operationId": "files_set_file_data",
         "parameters": [
           {
             "in": "path",
@@ -5602,13 +5617,14 @@
         "summary": "Set File Data",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/download-url": {
       "post": {
         "description": "A short-lived link; 423 until the file is scanned clean.",
-        "operationId": "download_url_v1_files__file_id__download_url_post",
+        "operationId": "files_download_url",
         "parameters": [
           {
             "in": "path",
@@ -5836,13 +5852,14 @@
         "summary": "Download Url",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/read-requests": {
       "post": {
         "description": "Asks for the file to be read with a document type (c-250): the system extract workflow runs as the caller,\nstarted by this service's file.read_requested event, and saves what was read on the file. 202 at once; the\nrequest carries the run once the event is delivered. A repeat with the same Idempotency-Key returns the first\nrequest.",
-        "operationId": "request_read_v1_files__file_id__read_requests_post",
+        "operationId": "files_request_read",
         "parameters": [
           {
             "in": "path",
@@ -6081,13 +6098,14 @@
         "summary": "Request Read",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/read-requests/{key}": {
       "get": {
         "description": "A read request and, once its event was delivered, the run it started.",
-        "operationId": "get_read_request_v1_files__file_id__read_requests__key__get",
+        "operationId": "files_get_read_request",
         "parameters": [
           {
             "in": "path",
@@ -6307,13 +6325,14 @@
         "summary": "Get Read Request",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/references": {
       "post": {
         "description": "A service records that one of its records uses the file; 409 when it is pending or quarantined.",
-        "operationId": "attach_v1_files__file_id__references_post",
+        "operationId": "files_attach",
         "parameters": [
           {
             "in": "path",
@@ -6534,12 +6553,13 @@
         "summary": "Attach",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/files/{file_id}/references/{ref_type}/{ref_id}": {
       "delete": {
-        "operationId": "detach_v1_files__file_id__references__ref_type___ref_id__delete",
+        "operationId": "files_detach",
         "parameters": [
           {
             "in": "path",
@@ -6778,12 +6798,13 @@
         "summary": "Detach",
         "tags": [
           "files"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/storage": {
       "get": {
-        "operationId": "get_settings_v1_settings_storage_get",
+        "operationId": "settings_get_settings",
         "parameters": [
           {
             "in": "header",
@@ -6955,11 +6976,12 @@
         "summary": "Get Settings",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Saves the next version; 409 when `version` is not the saved one, 422 naming the purpose whose target fails\nits test (nothing is saved), 409 when a target that still holds files is dropped.",
-        "operationId": "save_settings_v1_settings_storage_put",
+        "operationId": "settings_save_settings",
         "parameters": [
           {
             "in": "header",
@@ -7141,12 +7163,13 @@
         "summary": "Save Settings",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/storage/credentials": {
       "get": {
-        "operationId": "list_credentials_v1_settings_storage_credentials_get",
+        "operationId": "settings_list_credentials",
         "parameters": [
           {
             "in": "header",
@@ -7318,12 +7341,13 @@
         "summary": "List Credentials",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/storage/credentials/{name}": {
       "delete": {
-        "operationId": "delete_credential_v1_settings_storage_credentials__name__delete",
+        "operationId": "settings_delete_credential",
         "parameters": [
           {
             "in": "path",
@@ -7497,11 +7521,12 @@
         "summary": "Delete Credential",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Sets or replaces a credential. The values are sealed and never returned; the answer names it only.",
-        "operationId": "set_credential_v1_settings_storage_credentials__name__put",
+        "operationId": "settings_set_credential",
         "parameters": [
           {
             "in": "path",
@@ -7692,13 +7717,14 @@
         "summary": "Set Credential",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/storage/test": {
       "post": {
         "description": "Writes, reads and deletes a small object on the target with its credential; saves nothing.",
-        "operationId": "test_target_v1_settings_storage_test_post",
+        "operationId": "settings_test_target",
         "parameters": [
           {
             "in": "header",
@@ -7880,7 +7906,8 @@
         "summary": "Test Target",
         "tags": [
           "settings"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     }
   }

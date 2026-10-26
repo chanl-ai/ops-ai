@@ -158,6 +158,22 @@
       }
     },
     {
+      "key": "levy_reply_debtor",
+      "file": "levy_reply_debtor.json",
+      "id": "levy_reply_debtor",
+      "story": "levy",
+      "name": "Levy notice: answer for one person",
+      "description": "One person a levy notice names: found at the bank or not, a hold worked out by code and approved by a person, and the sender answered once a person approves the reply."
+    },
+    {
+      "key": "levy_reply_document",
+      "file": "levy_reply_document.json",
+      "id": "levy_reply_document",
+      "story": "levy",
+      "name": "Levy notice: read and reply",
+      "description": "One emailed levy notice: read, the sender thanked at once, and each person it names answered in their own run."
+    },
+    {
       "key": "levy_mail",
       "seed": "mail_intake",
       "id": "levy_mail_intake",
@@ -414,5 +430,44 @@
         ]
       }
     ]
-  }
+  },
+  "codeModules": [
+    {
+      "key": "levy",
+      "name": "levy-calculations",
+      "displayName": "Levy calculations",
+      "system": "Levy rules",
+      "function": {
+        "name": "compute_levy_hold",
+        "description": "How much of a levy notice to hold, and on which account",
+        "access": "read",
+        "input": [
+          {
+            "name": "document",
+            "type": "object",
+            "required": true
+          },
+          {
+            "name": "accounts",
+            "type": "array",
+            "required": true
+          }
+        ],
+        "code": {
+          "file": "compute_levy_hold.py",
+          "bindings": [
+            "get_levy_rules"
+          ],
+          "secrets": [
+            "BANK_API_KEY"
+          ],
+          "limits": {
+            "timeS": 10,
+            "memoryMb": 256,
+            "calls": 5
+          }
+        }
+      }
+    }
+  ]
 }

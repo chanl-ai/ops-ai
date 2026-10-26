@@ -27,8 +27,9 @@ CATALOGS = [
     ROOT / "services/agents-service/tests/fixtures/seed/tools.json",
 ]
 # The writes that run without approval, each decided by a person (owner via orch, 2026-10-18): open_case changes only
-# the team's own case list; log_activity is an internal note. book_appointment books with the bank, so it waits.
-AT_ONCE = {"open_case", "log_activity"}
+# the team's own case list; log_activity is an internal note; send_acknowledgement thanks a message's sender at once
+# (owner via orch, 2026-10-23, c-532). book_appointment books with the bank, so it waits.
+AT_ONCE = {"open_case", "log_activity", "send_acknowledgement"}
 
 
 def _declared() -> dict[str, list[Any]]:

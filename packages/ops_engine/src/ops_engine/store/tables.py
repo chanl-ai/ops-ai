@@ -146,3 +146,26 @@ engine_work = sa.Table(
     sa.Index("ix_engine_work_lease", "status", "build", "lease_expires_at"),
     info=TENANT_SCOPED,
 )
+
+# One row per step parked on work another service finishes (c-525): what a service event or a signed callback looks a
+# waiting step up by. Written with the run's waiting state, deleted by every resume. `event` and `wait_key` are empty
+# for a step only a callback resumes.
+engine_waits = sa.Table(
+    "engine_waits",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("run_id", sa.String(64), nullable=False),
+    sa.Column("node_id", sa.String(120), nullable=False),
+    sa.Column("iteration", sa.Integer, nullable=False),
+    sa.Column("interrupt_id", sa.String(64), nullable=False),
+    sa.Column("event", sa.String(120), nullable=False, server_default=""),
+    sa.Column("wait_key", sa.String(240), nullable=False, server_default=""),
+    # Epoch seconds by the database's clock; none when the step waits without a limit.
+    sa.Column("due_at", sa.Float()),
+    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.PrimaryKeyConstraint("tenant_id", "run_id", "node_id", "iteration", name="pk_engine_waits"),
+    # The event lookup: (team from the reporting service's token, event name, correlation key).
+    sa.Index("ix_engine_waits_event", "tenant_id", "team_id", "event", "wait_key"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
+)

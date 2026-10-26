@@ -109,14 +109,11 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
           <span className="text-muted-foreground" title="The agents service did not answer">
             Unknown
           </span>
-        ) : row.original.agentsElsewhere && !row.original.agentNames.length ? (
-          <span className="whitespace-nowrap text-muted-foreground">{plural(row.original.agentsElsewhere, 'agent')} in other teams</span>
         ) : row.original.agentNames.length ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="cursor-default whitespace-nowrap underline decoration-dotted underline-offset-4">
                 {plural(row.original.agentNames.length, 'agent')}
-                {row.original.agentsElsewhere ? ` +${row.original.agentsElsewhere} in other teams` : ''}
               </span>
             </TooltipTrigger>
             <TooltipContent>

@@ -17,6 +17,7 @@ from fastapi.routing import APIRoute, iter_route_contexts
 
 from ops_agents.api.app import create_app
 from ops_agents.api.auth import principal, service_principal
+from ops_agents.api.routers.run_resume import resume_caller
 from ops_agents.api.routers.widget import mint_key_caller, widget_caller
 from ops_identity import current_caller, current_principal, current_service, current_tenant_caller
 from ops_service_kit.settings import Settings
@@ -43,6 +44,8 @@ ORDER = [
     "ops_documents",
     "ops_email",
     "ops_signin",
+    # Code tools' runner (c-531): the kit and identity below it, reached by tools-service over HTTP only.
+    "ops_runner",
     "ops_agent_kernel",
     "ops_checkpointer",
     # The workflow runner sits below every ops_agents layer, so rule 1 refuses any import of ops_agents from it.
@@ -222,7 +225,8 @@ def check_routes(out: list[str]) -> int:
         # mint_key_caller (the deployment's mint key, c-131). A route a person or a service may call (c-180) reaches
         # ops_identity's current_caller, and a service-only one its current_service, through whatever wraps them; one a
         # person or any service of the tenant may call, whether or not its token names a team, current_tenant_caller.
-        authenticated = {principal, service_principal, widget_caller, mint_key_caller}
+        # An outside system resuming a parked workflow step holds that step's signed token, resume_caller (c-525).
+        authenticated = {principal, service_principal, widget_caller, mint_key_caller, resume_caller}
         identity = {current_caller, current_principal, current_service, current_tenant_caller}
         if not deps(route.dependant) & (authenticated | identity):
             out.append(f"route {sorted(route.methods or set())} {ctx.path or route.path} rule 5: no auth dependency")

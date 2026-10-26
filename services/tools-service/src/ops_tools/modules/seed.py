@@ -13,10 +13,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
+from ops_store.team_scope import acting_as
+
 from ..connections.records import seed_rows
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
-from ..store.modules import Aggregate, ModuleStore
+from ..store.modules import Aggregate, ModuleStore, StaleModuleError
 
 DOCUMENT_SERVICE = {
     "displayName": "Document service",
@@ -27,7 +29,12 @@ DOCUMENT_SERVICE = {
 }
 REQUESTERS = ("Maya Okafor", "Priya Shah", "Anika Singh")
 # Workflow tools the agents catalogue does not list but the Runtime runs locally; send_reply emails a customer.
-WORKFLOW_TOOLS = ("send_reply", "open_case")
+WORKFLOW_TOOLS = ("send_reply", "open_case", "send_acknowledgement")
+# The mail sends: a reply waits for a person; an acknowledgement to the sender of a message leaves at once (c-532).
+SENDS = {
+    "send_reply": ("Email a reply to a customer.", True),
+    "send_acknowledgement": ("Email an automatic acknowledgement to the sender of a message; no approval.", False),
+}
 # Tools of the platform itself, run locally in every tenant's Runtime module, and the one declaration of their access
 # and approval (registry.WORKFLOW_TOOLS reads it). open_case opens a case in the caller's team (c-219): a write, but
 # one that changes only the team's own case list and closes nothing, so it runs without approval unless the team's
@@ -228,8 +235,8 @@ def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggreg
     )
     ops: list[dict[str, Any]] = []
     for i, name in enumerate(names):
-        if name == "send_reply":
-            description, access, approval, fields = "Email a reply to a customer.", "write", True, SEND_REPLY_INPUT
+        if name in SENDS:
+            (description, approval), access, fields = SENDS[name], "write", SEND_REPLY_INPUT
         else:
             t = declared[name]
             description, access = str(t["description"]), str(t["access"])
@@ -262,7 +269,8 @@ def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggreg
     return {
         **m,
         "status": "published",
-        "description": "Workflow tools run in process: send_reply emails a reply, open_case opens a case.",
+        "description": "Workflow tools run in process: send_reply emails a reply, send_acknowledgement thanks a "
+        "sender at once, open_case opens a case.",
         "version": "1.0.0",
         "operations": ops,
         "versions": [version],
@@ -271,14 +279,40 @@ def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggreg
 
 async def ensure_platform_tools(store: ModuleStore, *, tenant_id: str, at: datetime) -> Literal["present", "written"]:
     """Writes the Platform tools module for the platform tools no module of the tenant holds, so a workflow's reply
-    resolves in every install and not only where the dev seed wrote its mail module. A module already there, edited or
-    not, is left as it is. It is a workspace-level record: no team owns it (c-433)."""
+    resolves in every install and not only where the dev seed wrote its mail module. A tool declared after the module
+    was written is added to that copy (c-509), so send_acknowledgement reaches a team that already has one. It is a
+    workspace-level record: no team owns it (c-433), and every team reads and calls it."""
     taken = await store.names_taken(tenant_id, list(WORKFLOW_TOOLS))
     missing = [n for n in WORKFLOW_TOOLS if n not in taken]
-    if not missing or await store.get_any(tenant_id, PLATFORM_MODULE) is not None:
+    if not missing:
         return "present"
-    module = platform_module(missing, tenant_id=tenant_id, at=at)
-    return "written" if await store.insert_if_missing(module) else "present"
+    existing = await store.get_any(tenant_id, PLATFORM_MODULE)
+    if existing is None:
+        module = platform_module(missing, tenant_id=tenant_id, at=at)
+        return "written" if await store.insert_if_missing(module) else "present"
+    added = [
+        {**o, "id": f"{existing['id']}_{o['name']}"}
+        for o in platform_module(missing, tenant_id=tenant_id, at=at)["operations"]
+    ]
+    baseline = existing.get("baseline")
+    try:
+        await store.put(
+            {
+                **existing,
+                "operations": [*existing["operations"], *added],
+                "baseline": None if baseline is None else [*baseline, *added],
+            },
+            expected_revision=existing["revision"],
+            seeded=existing["revision"] == 0,
+        )
+    except StaleModuleError:
+        return "present"
+    except Exception as e:
+        # Another first lookup inserted the same operation name (store.put raises sqlalchemy IntegrityError).
+        if type(e).__name__ != "IntegrityError":
+            raise
+        return "present"
+    return "written"
 
 
 def aggregates(
@@ -290,9 +324,9 @@ def aggregates(
     local = {t["name"] for t in catalog or []} | set(WORKFLOW_TOOLS)
     # A tool the Runtime runs locally takes the Runtime's input, which can differ from the console seed's picture of
     # the same operation; the gateway validates calls against what will actually run.
-    runtime_input = {t["name"]: fields_of(t.get("input_schema") or {}) for t in [*(catalog or []), *PLATFORM_TOOLS]} | {
-        "send_reply": SEND_REPLY_INPUT
-    }
+    runtime_input = {
+        t["name"]: fields_of(t.get("input_schema") or {}) for t in [*(catalog or []), *PLATFORM_TOOLS]
+    } | dict.fromkeys(SENDS, SEND_REPLY_INPUT)
     # Workflows are agents-service's; the seed keeps each approval's workflow name, and a test fixture may list them.
     workflows = {w["id"]: w["name"] for w in seed.get("workflows", [])}
     teams: list[dict[str, Any]] = seed["teams"]
@@ -469,15 +503,18 @@ async def load(
     for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):
         await egress.add(tenant_id, "host", host, actor="dev seed", note="called by a seeded module", at=now)
     for agg in mods:
-        stored = await store.get(tenant_id, agg["id"])
-        if stored is None:
-            await store.put(agg, expected_revision=None, seeded=True)
-            added += 1
-        elif stored["revision"] == 0:
-            await store.put(agg, expected_revision=0, seeded=True)
+        # Each module is written in its own team so a leftover acting team cannot hide it or raise NoTenantError.
+        with acting_as(agg["team_id"]):
+            stored = await store.get(tenant_id, agg["id"])
+            if stored is None:
+                await store.put(agg, expected_revision=None, seeded=True)
+                added += 1
+            elif stored["revision"] == 0:
+                await store.put(agg, expected_revision=0, seeded=True)
     # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
     if RUNTIME_MODULE not in {m["id"] for m in mods}:
-        stale = await store.get(tenant_id, RUNTIME_MODULE)
-        if stale is not None and stale["revision"] == 0:
-            await store.delete(tenant_id, RUNTIME_MODULE)
+        with acting_as(None):
+            stale = await store.get(tenant_id, RUNTIME_MODULE)
+            if stale is not None and stale["revision"] == 0:
+                await store.delete(tenant_id, RUNTIME_MODULE)
     return added

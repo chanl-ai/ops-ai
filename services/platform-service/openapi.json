@@ -572,6 +572,145 @@
         "title": "AuditPage",
         "type": "object"
       },
+      "BackgroundHealthOut": {
+        "additionalProperties": false,
+        "properties": {
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/BackgroundProcessOut"
+            },
+            "title": "Processes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "processes"
+        ],
+        "title": "BackgroundHealthOut",
+        "type": "object"
+      },
+      "BackgroundProcessOut": {
+        "additionalProperties": false,
+        "properties": {
+          "does": {
+            "title": "Does",
+            "type": "string"
+          },
+          "doneHour": {
+            "title": "Donehour",
+            "type": "integer"
+          },
+          "everySeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Everyseconds"
+          },
+          "instances": {
+            "title": "Instances",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterror"
+          },
+          "lastErrorAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lasterrorat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "nextRunAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrunat"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "late",
+              "stopped",
+              "not_reported"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting"
+          }
+        },
+        "required": [
+          "key",
+          "service",
+          "title",
+          "does",
+          "everySeconds",
+          "state",
+          "instances",
+          "lastRunAt",
+          "nextRunAt",
+          "doneHour",
+          "waiting",
+          "lastError",
+          "lastErrorAt"
+        ],
+        "title": "BackgroundProcessOut",
+        "type": "object"
+      },
       "BulkOut": {
         "additionalProperties": false,
         "properties": {
@@ -1107,6 +1246,25 @@
         "title": "Envelope[StepUpOut]",
         "type": "object"
       },
+      "Envelope_TeamDeleteCheckOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TeamDeleteCheckOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[TeamDeleteCheckOut]",
+        "type": "object"
+      },
       "Envelope_WhyOut_": {
         "additionalProperties": false,
         "properties": {
@@ -1143,6 +1301,25 @@
           "data"
         ],
         "title": "Envelope[WorkspaceNameOut]",
+        "type": "object"
+      },
+      "Envelope_WorkspaceStateOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WorkspaceStateOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[WorkspaceStateOut]",
         "type": "object"
       },
       "Envelope_WorkspaceTeamOut_": {
@@ -2185,6 +2362,9 @@
           },
           "user": {
             "$ref": "#/components/schemas/MeUser"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceStateOut"
           }
         },
         "required": [
@@ -2193,7 +2373,8 @@
           "tenantName",
           "teams",
           "policies",
-          "securityTeamId"
+          "securityTeamId",
+          "workspace"
         ],
         "title": "Me",
         "type": "object"
@@ -3581,6 +3762,66 @@
         "title": "StepUpSsoStartIn",
         "type": "object"
       },
+      "TeamDeleteCheckOut": {
+        "additionalProperties": false,
+        "description": "Whether a team may be deleted now and why not (c-529): the Delete card reads it in one call.",
+        "properties": {
+          "canDelete": {
+            "title": "Candelete",
+            "type": "boolean"
+          },
+          "daysLeft": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daysleft"
+          },
+          "liveWorkflows": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Liveworkflows",
+            "type": "array"
+          },
+          "runsInProgress": {
+            "title": "Runsinprogress",
+            "type": "integer"
+          },
+          "security": {
+            "title": "Security",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
+            "type": "string"
+          },
+          "usageKnown": {
+            "title": "Usageknown",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "teamId",
+          "status",
+          "security",
+          "daysLeft",
+          "usageKnown",
+          "liveWorkflows",
+          "runsInProgress",
+          "canDelete"
+        ],
+        "title": "TeamDeleteCheckOut",
+        "type": "object"
+      },
       "TeamIn": {
         "additionalProperties": false,
         "properties": {
@@ -3711,6 +3952,24 @@
         "title": "TeamRenameIn",
         "type": "object"
       },
+      "TransferIn": {
+        "additionalProperties": false,
+        "description": "The account admin who becomes the workspace's owner.",
+        "properties": {
+          "userId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Userid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ],
+        "title": "TransferIn",
+        "type": "object"
+      },
       "TxtRecordOut": {
         "additionalProperties": false,
         "properties": {
@@ -3815,6 +4074,23 @@
         "title": "WhyOut",
         "type": "object"
       },
+      "WorkspaceCloseIn": {
+        "additionalProperties": false,
+        "description": "The workspace's name, typed by its owner to confirm the delete.",
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WorkspaceCloseIn",
+        "type": "object"
+      },
       "WorkspaceNameOut": {
         "additionalProperties": false,
         "properties": {
@@ -3850,6 +4126,52 @@
           "name"
         ],
         "title": "WorkspaceRenameIn",
+        "type": "object"
+      },
+      "WorkspaceStateOut": {
+        "additionalProperties": false,
+        "description": "The workspace's owner and status (c-529): `purgeAfter` is when a closed workspace's records go, else null.",
+        "properties": {
+          "ownerUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owneruserid"
+          },
+          "purgeAfter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purgeafter"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended",
+              "closed",
+              "purging",
+              "purged"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ownerUserId",
+          "status",
+          "purgeAfter"
+        ],
+        "title": "WorkspaceStateOut",
         "type": "object"
       },
       "WorkspaceTeamOut": {
@@ -3981,7 +4303,7 @@
   "paths": {
     "/.well-known/jwks.json": {
       "get": {
-        "operationId": "platform_jwks_document",
+        "operationId": "auth_jwks_document",
         "responses": {
           "200": {
             "content": {
@@ -3996,14 +4318,38 @@
         },
         "summary": "Jwks Document",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/health/background": {
+      "get": {
+        "description": "This service's background processes and their state; counts and error types only, no record's data.",
+        "operationId": "health_health_background",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackgroundHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Background",
+        "tags": [
+          "health"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/access/check": {
       "post": {
         "description": "Whether a person may take `area.action` in the team the request acts in (c-150), by the same `can()` the\nservices run with the workspace's policies: allowed with the granting roles, or refused with the reason. The\ncaller needs access.view there; each check is audited as access.check.",
-        "operationId": "platform_check_access",
+        "operationId": "access_check_access",
         "parameters": [
           {
             "in": "header",
@@ -4152,14 +4498,15 @@
         },
         "summary": "Check Access",
         "tags": [
-          "platform"
-        ]
+          "access"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/access/holders": {
       "get": {
         "description": "Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:\nwhat a \"View only\" notice names (c-186). The team is `team`, the record's, when the page shows another team's\nrecord, else the one the request acts in; a member of that team, or a workspace admin, may ask.",
-        "operationId": "platform_access_holders",
+        "operationId": "access_access_holders",
         "parameters": [
           {
             "in": "query",
@@ -4335,14 +4682,15 @@
         },
         "summary": "Access Holders",
         "tags": [
-          "platform"
-        ]
+          "access"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/api-key-summaries": {
       "get": {
         "description": "Every team's keys in the workspace with what each serves (c-246): for agents-service's list of API channels\n(a service token with the `settings:view` scope), or for a person who manages access across the workspace\n(`can('access', 'manage')` in every team), as an admin may do everything.",
-        "operationId": "platform_api_key_summaries",
+        "operationId": "api_keys_api_key_summaries",
         "parameters": [
           {
             "in": "header",
@@ -4465,13 +4813,14 @@
         },
         "summary": "Api Key Summaries",
         "tags": [
-          "platform"
-        ]
+          "api-keys"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/api-keys": {
       "get": {
-        "operationId": "platform_list_api_keys",
+        "operationId": "api_keys_list_api_keys",
         "parameters": [
           {
             "in": "header",
@@ -4610,11 +4959,12 @@
         },
         "summary": "List Api Keys",
         "tags": [
-          "platform"
-        ]
+          "api-keys"
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
-        "operationId": "platform_create_api_key",
+        "operationId": "api_keys_create_api_key",
         "parameters": [
           {
             "in": "header",
@@ -4763,13 +5113,14 @@
         },
         "summary": "Create Api Key",
         "tags": [
-          "platform"
-        ]
+          "api-keys"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/api-keys/{key_id}/revoke": {
       "post": {
-        "operationId": "platform_revoke_api_key",
+        "operationId": "api_keys_revoke_api_key",
         "parameters": [
           {
             "in": "path",
@@ -4918,13 +5269,14 @@
         },
         "summary": "Revoke Api Key",
         "tags": [
-          "platform"
-        ]
+          "api-keys"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/audit": {
       "get": {
-        "operationId": "platform_read_audit",
+        "operationId": "audit_read_audit",
         "parameters": [
           {
             "in": "query",
@@ -5214,13 +5566,14 @@
         },
         "summary": "Read Audit",
         "tags": [
-          "platform"
-        ]
+          "audit"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/introspect": {
       "post": {
-        "operationId": "platform_introspect",
+        "operationId": "auth_introspect",
         "parameters": [
           {
             "in": "header",
@@ -5353,14 +5706,15 @@
         },
         "summary": "Introspect",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/auth/oidc/callback": {
       "get": {
         "description": "The provider sends the browser back here; it goes on to the console with a one-time code or an error.",
-        "operationId": "platform_oidc_callback",
+        "operationId": "auth_oidc_callback",
         "parameters": [
           {
             "in": "query",
@@ -5487,14 +5841,15 @@
         },
         "summary": "Oidc Callback",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/options": {
       "post": {
         "description": "How an email signs in: a password, the workspace's SSO provider, or both. It reads the email's domain only,\nso it says nothing about whether an account exists.",
-        "operationId": "platform_sign_in_options",
+        "operationId": "auth_sign_in_options",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5609,14 +5964,15 @@
         },
         "summary": "Sign In Options",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/password/forgot": {
       "post": {
         "description": "Mails a reset link when the email can sign in by password; the answer is the same either way.",
-        "operationId": "platform_forgot_password",
+        "operationId": "auth_forgot_password",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5724,14 +6080,15 @@
         },
         "summary": "Forgot Password",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/password/reset": {
       "post": {
         "description": "Sets the new password from a reset link, once, and ends every session the person had.",
-        "operationId": "platform_reset_password",
+        "operationId": "auth_reset_password",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5839,13 +6196,14 @@
         },
         "summary": "Reset Password",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/refresh": {
       "post": {
-        "operationId": "platform_refresh",
+        "operationId": "auth_refresh",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5960,14 +6318,15 @@
         },
         "summary": "Refresh",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/saml/acs": {
       "post": {
         "description": "The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page.",
-        "operationId": "platform_saml_acs",
+        "operationId": "auth_saml_acs",
         "responses": {
           "303": {
             "content": {
@@ -6070,14 +6429,15 @@
         },
         "summary": "Saml Acs",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/saml/metadata": {
       "get": {
         "description": "The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the\ncertificate for signed requests and encrypted assertions (c-197). Public: it holds nothing secret.",
-        "operationId": "platform_saml_metadata",
+        "operationId": "auth_saml_metadata",
         "responses": {
           "200": {
             "content": {
@@ -6182,13 +6542,14 @@
         },
         "summary": "Saml Metadata",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/session": {
       "get": {
-        "operationId": "platform_session",
+        "operationId": "auth_session",
         "parameters": [
           {
             "in": "header",
@@ -6311,13 +6672,14 @@
         },
         "summary": "Session",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/sign-in": {
       "post": {
-        "operationId": "platform_sign_in",
+        "operationId": "auth_sign_in",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6432,13 +6794,14 @@
         },
         "summary": "Sign In",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/sign-out": {
       "post": {
-        "operationId": "platform_sign_out",
+        "operationId": "auth_sign_out",
         "parameters": [
           {
             "in": "header",
@@ -6554,14 +6917,15 @@
         },
         "summary": "Sign Out",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/sso/complete": {
       "post": {
         "description": "The one-time code from the callback and the starting browser's flow key, for a session.",
-        "operationId": "platform_sso_complete",
+        "operationId": "auth_sso_complete",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6676,14 +7040,15 @@
         },
         "summary": "Sso Complete",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/sso/start": {
       "post": {
         "description": "Where to send the browser to sign in at the email domain's provider, and the flow key that browser keeps\nto finish.",
-        "operationId": "platform_sso_start",
+        "operationId": "auth_sso_start",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6798,14 +7163,15 @@
         },
         "summary": "Sso Start",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/step-up": {
       "post": {
         "description": "The signed-in person re-enters their password and gets a five-minute step-up token for money decisions.",
-        "operationId": "platform_step_up",
+        "operationId": "auth_step_up",
         "parameters": [
           {
             "in": "header",
@@ -6938,13 +7304,14 @@
         },
         "summary": "Step Up",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/step-up/sso/complete": {
       "post": {
-        "operationId": "platform_step_up_sso_complete",
+        "operationId": "auth_step_up_sso_complete",
         "parameters": [
           {
             "in": "header",
@@ -7077,14 +7444,15 @@
         },
         "summary": "Step Up Sso Complete",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/step-up/sso/start": {
       "post": {
         "description": "An SSO session's step-up: back to its own provider, which must ask for credentials again.",
-        "operationId": "platform_step_up_sso_start",
+        "operationId": "auth_step_up_sso_start",
         "parameters": [
           {
             "in": "header",
@@ -7217,8 +7585,9 @@
         },
         "summary": "Step Up Sso Start",
         "tags": [
-          "platform"
-        ]
+          "auth"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/health": {
@@ -7239,12 +7608,13 @@
         "summary": "Health",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/invites/{token}": {
       "get": {
-        "operationId": "platform_read_invite",
+        "operationId": "invites_read_invite",
         "parameters": [
           {
             "in": "path",
@@ -7361,14 +7731,15 @@
         },
         "summary": "Read Invite",
         "tags": [
-          "platform"
-        ]
+          "invites"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/invites/{token}/accept": {
       "post": {
         "description": "A new person accepts with the link alone; a person who already has an account sends their own session.",
-        "operationId": "platform_accept_invite",
+        "operationId": "invites_accept_invite",
         "parameters": [
           {
             "in": "path",
@@ -7511,13 +7882,14 @@
         },
         "summary": "Accept Invite",
         "tags": [
-          "platform"
-        ]
+          "invites"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me": {
       "get": {
-        "operationId": "platform_me",
+        "operationId": "me_me",
         "parameters": [
           {
             "in": "header",
@@ -7640,14 +8012,15 @@
         },
         "summary": "Me",
         "tags": [
-          "platform"
-        ]
+          "me"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me/permissions": {
       "get": {
         "description": "What the caller may do in each of their teams, and the roles that grant each action.",
-        "operationId": "platform_my_permissions",
+        "operationId": "me_my_permissions",
         "parameters": [
           {
             "in": "header",
@@ -7770,14 +8143,15 @@
         },
         "summary": "My Permissions",
         "tags": [
-          "platform"
-        ]
+          "me"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me/why": {
       "get": {
         "description": "Whether the caller may take `area.action` in the team they act in, and if not why, which roles grant it\nand who in the team can give roles (c-150): the reason a locked button gives.",
-        "operationId": "platform_why_not",
+        "operationId": "me_why_not",
         "parameters": [
           {
             "in": "query",
@@ -7936,14 +8310,15 @@
         },
         "summary": "Why Not",
         "tags": [
-          "platform"
-        ]
+          "me"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/people-names": {
       "get": {
         "description": "Every person's display name in the workspace by email (c-201), so a list naming who did something shows a\nname rather than an address. Any member reads them; a service token needs the `settings:view` scope.",
-        "operationId": "platform_people_names",
+        "operationId": "people_people_names",
         "parameters": [
           {
             "in": "header",
@@ -8066,14 +8441,15 @@
         },
         "summary": "People Names",
         "tags": [
-          "platform"
-        ]
+          "people"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/people/{person_id}/permissions": {
       "get": {
         "description": "What a person may do in the teams they share with the caller, with their name and address; 404 when they\nshare none.",
-        "operationId": "platform_person_permissions",
+        "operationId": "people_person_permissions",
         "parameters": [
           {
             "in": "path",
@@ -8206,14 +8582,15 @@
         },
         "summary": "Person Permissions",
         "tags": [
-          "platform"
-        ]
+          "people"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/policies": {
       "get": {
         "description": "Every policy with its value and open default; any member of the workspace reads them.",
-        "operationId": "platform_list_policies",
+        "operationId": "policies_list_policies",
         "parameters": [
           {
             "in": "header",
@@ -8352,14 +8729,15 @@
         },
         "summary": "List Policies",
         "tags": [
-          "platform"
-        ]
+          "policies"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/policies/{key}": {
       "get": {
         "description": "One policy of the workspace. Any member reads it; a service token needs the\n`settings:view` scope and reads its own tenant's value, as a background job with no person does (c-206's\nmemory sweep). 400 `policy_value` for a key the catalogue does not hold.",
-        "operationId": "platform_get_policy",
+        "operationId": "policies_get_policy",
         "parameters": [
           {
             "in": "path",
@@ -8508,12 +8886,13 @@
         },
         "summary": "Get Policy",
         "tags": [
-          "platform"
-        ]
+          "policies"
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Sets one policy for the workspace, audited, and moves the permission version so tokens refresh; who holds\nsettings.manage in the acting team. 400 `policy_value` for a key or value the catalogue does not take.",
-        "operationId": "platform_set_policy",
+        "operationId": "policies_set_policy",
         "parameters": [
           {
             "in": "path",
@@ -8672,14 +9051,15 @@
         },
         "summary": "Set Policy",
         "tags": [
-          "platform"
-        ]
+          "policies"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/roles": {
       "get": {
         "description": "Every role in the tenant, built-in first, with how many permissions it grants and how many hold it.",
-        "operationId": "platform_list_roles",
+        "operationId": "roles_list_roles",
         "parameters": [
           {
             "in": "header",
@@ -8802,14 +9182,15 @@
         },
         "summary": "List Roles",
         "tags": [
-          "platform"
-        ]
+          "roles"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/roles/{role_id}": {
       "get": {
         "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null.",
-        "operationId": "platform_read_role",
+        "operationId": "roles_read_role",
         "parameters": [
           {
             "in": "path",
@@ -8942,13 +9323,14 @@
         },
         "summary": "Read Role",
         "tags": [
-          "platform"
-        ]
+          "roles"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/members": {
       "get": {
-        "operationId": "platform_list_members",
+        "operationId": "members_list_members",
         "parameters": [
           {
             "in": "query",
@@ -9125,13 +9507,15 @@
         },
         "summary": "List Members",
         "tags": [
-          "platform"
-        ]
+          "members"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/members/delete": {
       "post": {
-        "operationId": "platform_remove_members",
+        "description": "The owner is never removed here: 409 `owner_must_transfer` (c-529).",
+        "operationId": "members_remove_members",
         "parameters": [
           {
             "in": "header",
@@ -9280,13 +9664,14 @@
         },
         "summary": "Remove Members",
         "tags": [
-          "platform"
-        ]
+          "members"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/members/invite": {
       "post": {
-        "operationId": "platform_invite_members",
+        "operationId": "members_invite_members",
         "parameters": [
           {
             "in": "header",
@@ -9435,13 +9820,14 @@
         },
         "summary": "Invite Members",
         "tags": [
-          "platform"
-        ]
+          "members"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/members/options": {
       "get": {
-        "operationId": "platform_member_options",
+        "operationId": "members_member_options",
         "parameters": [
           {
             "in": "query",
@@ -9643,13 +10029,15 @@
         },
         "summary": "Member Options",
         "tags": [
-          "platform"
-        ]
+          "members"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/members/role": {
       "post": {
-        "operationId": "platform_change_roles",
+        "description": "The owner is never demoted here: 409 `owner_must_transfer` (c-529).",
+        "operationId": "members_change_roles",
         "parameters": [
           {
             "in": "header",
@@ -9798,14 +10186,15 @@
         },
         "summary": "Change Roles",
         "tags": [
-          "platform"
-        ]
+          "members"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/sign-in/domains/{domain}/verify": {
       "post": {
         "description": "Checks the domain's TXT record and, when it holds the claim's value, lets the domain route sign-in; returns\nits provider. 422 `domain_unverified` with what DNS held, 409 `domain_taken` when another workspace has it.",
-        "operationId": "platform_verify_signin_domain",
+        "operationId": "sign_in_providers_verify_signin_domain",
         "parameters": [
           {
             "in": "path",
@@ -9955,14 +10344,15 @@
         },
         "summary": "Verify Signin Domain",
         "tags": [
-          "platform"
-        ]
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/sign-in/providers": {
       "get": {
         "description": "The workspace's sign-in providers; Security team admins only.",
-        "operationId": "platform_list_signin_providers",
+        "operationId": "sign_in_providers_list_signin_providers",
         "parameters": [
           {
             "in": "header",
@@ -10101,13 +10491,14 @@
         },
         "summary": "List Signin Providers",
         "tags": [
-          "platform"
-        ]
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/sign-in/providers/{provider_id}": {
       "delete": {
-        "operationId": "platform_delete_signin_provider",
+        "operationId": "sign_in_providers_delete_signin_provider",
         "parameters": [
           {
             "in": "path",
@@ -10249,12 +10640,13 @@
         },
         "summary": "Delete Signin Provider",
         "tags": [
-          "platform"
-        ]
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Creates or replaces a provider by id, with its domains and first sign-in team; Security team admins only.",
-        "operationId": "platform_save_signin_provider",
+        "operationId": "sign_in_providers_save_signin_provider",
         "parameters": [
           {
             "in": "path",
@@ -10413,14 +10805,15 @@
         },
         "summary": "Save Signin Provider",
         "tags": [
-          "platform"
-        ]
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/sign-in/secret-names": {
       "get": {
         "description": "The names an OIDC provider may give as `clientSecretRef` (`OPS_SIGNIN_SECRETS`), never the values.",
-        "operationId": "platform_list_signin_secret_names",
+        "operationId": "sign_in_providers_list_signin_secret_names",
         "parameters": [
           {
             "in": "header",
@@ -10559,14 +10952,15 @@
         },
         "summary": "List Signin Secret Names",
         "tags": [
-          "platform"
-        ]
+          "sign-in-providers"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/teams": {
       "get": {
         "description": "Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every\nteam) only.",
-        "operationId": "platform_list_workspace_teams",
+        "operationId": "teams_list_workspace_teams",
         "parameters": [
           {
             "in": "query",
@@ -10746,12 +11140,13 @@
         },
         "summary": "List Workspace Teams",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A new team with its first admin; workspace admins (`access.manage` in every team) only. A name the\nworkspace already uses, in any case, is 409, so a retried create never makes a second team.",
-        "operationId": "platform_create_team",
+        "operationId": "teams_create_team",
         "parameters": [
           {
             "in": "header",
@@ -10884,13 +11279,146 @@
         },
         "summary": "Create Team",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/teams/{team_id}": {
+      "delete": {
+        "description": "Deletes a team archived for the window with no live workflow; account admins only. Its row and audit\nentries stay; its members and assignments go and its name is free again.",
+        "operationId": "teams_delete_team",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Delete Team",
+        "tags": [
+          "teams"
+        ],
+        "x-ops-public": "sdk"
+      },
       "patch": {
-        "operationId": "platform_rename_team",
+        "operationId": "teams_rename_team",
         "parameters": [
           {
             "in": "path",
@@ -11033,14 +11561,15 @@
         },
         "summary": "Rename Team",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/teams/{team_id}/archive": {
       "post": {
         "description": "The team leaves its members' next tokens and takes no new members; what it owns stays its own.",
-        "operationId": "platform_archive_team",
+        "operationId": "teams_archive_team",
         "parameters": [
           {
             "in": "path",
@@ -11173,13 +11702,289 @@
         },
         "summary": "Archive Team",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/teams/{team_id}/delete-check": {
+      "get": {
+        "description": "Whether an account admin may delete the team now, and each reason not: archived days left, live\nworkflows by name, and `usageKnown` false when agents-service did not answer.",
+        "operationId": "teams_team_delete_check",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TeamDeleteCheckOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Team Delete Check",
+        "tags": [
+          "teams"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/teams/{team_id}/leave": {
+      "post": {
+        "description": "The caller leaves one team; its last admin is refused with 409 `last_admin`.",
+        "operationId": "teams_leave_team",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Leave Team",
+        "tags": [
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/teams/{team_id}/restore": {
       "post": {
-        "operationId": "platform_restore_team",
+        "operationId": "teams_restore_team",
         "parameters": [
           {
             "in": "path",
@@ -11312,14 +12117,15 @@
         },
         "summary": "Restore Team",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/workspace": {
       "patch": {
         "description": "Names the workspace (the console's header and switcher read it from `/v1/me`); workspace admins only.",
-        "operationId": "platform_rename_workspace",
+        "operationId": "workspace_rename_workspace",
         "parameters": [
           {
             "in": "header",
@@ -11452,14 +12258,15 @@
         },
         "summary": "Rename Workspace",
         "tags": [
-          "platform"
-        ]
+          "workspace"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/settings/workspace-teams": {
       "get": {
         "description": "The workspace's security team and the team new people join when nothing else names one (c-202). A workspace\nadmin reads them; a service token needs the `settings:view` scope and reads its own tenant's (c-230).",
-        "operationId": "platform_read_workspace_teams",
+        "operationId": "teams_read_workspace_teams",
         "parameters": [
           {
             "in": "header",
@@ -11582,12 +12389,13 @@
         },
         "summary": "Read Workspace Teams",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Workspace admins only. Moving the security team moves Security admin with it, at once.",
-        "operationId": "platform_set_workspace_teams",
+        "operationId": "teams_set_workspace_teams",
         "parameters": [
           {
             "in": "header",
@@ -11720,14 +12528,15 @@
         },
         "summary": "Set Workspace Teams",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/team-names": {
       "get": {
         "description": "Every team's display name in the workspace (c-224), so a page showing another team's record names its team.\nAny member reads them; a service token needs the `settings:view` scope and reads its own tenant's.",
-        "operationId": "platform_team_names",
+        "operationId": "teams_team_names",
         "parameters": [
           {
             "in": "header",
@@ -11850,14 +12659,15 @@
         },
         "summary": "Team Names",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/teams": {
       "get": {
         "description": "The teams the caller may switch to: their own, and every active team for a workspace admin (c-208).",
-        "operationId": "platform_list_teams",
+        "operationId": "teams_list_teams",
         "parameters": [
           {
             "in": "header",
@@ -11980,8 +12790,546 @@
         },
         "summary": "List Teams",
         "tags": [
-          "platform"
-        ]
+          "teams"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workspace/close": {
+      "post": {
+        "description": "Deletes the workspace: it closes at once, its owner can restore it for the window, then its records go.\nOnly the owner, typing its name; 409 `runs_in_progress` while any team runs, 503 `usage_unavailable` when that\ncannot be checked.",
+        "operationId": "workspace_close_workspace",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCloseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_WorkspaceStateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Close Workspace",
+        "tags": [
+          "workspace"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workspace/leave": {
+      "post": {
+        "description": "The caller leaves every team of the workspace and their sessions end; the owner is refused with 409\n`owner_must_transfer` until they transfer.",
+        "operationId": "workspace_leave_workspace",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Leave Workspace",
+        "tags": [
+          "workspace"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workspace/restore": {
+      "post": {
+        "description": "Reopens a closed workspace and the keys its close stopped; 409 `purged` once the purge has started.",
+        "operationId": "workspace_restore_workspace",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_WorkspaceStateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Restore Workspace",
+        "tags": [
+          "workspace"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workspace/transfer": {
+      "post": {
+        "description": "The owner hands the workspace to an account admin, at once and audited (c-529); the old owner stays an\nadmin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in\nevery team.",
+        "operationId": "workspace_transfer_workspace",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_WorkspaceStateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Transfer Workspace",
+        "tags": [
+          "workspace"
+        ],
+        "x-ops-public": "sdk"
       }
     }
   }

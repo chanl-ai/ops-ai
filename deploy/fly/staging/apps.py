@@ -99,6 +99,7 @@ SETTINGS: dict[str, str] = {
     "OPS_KB_URL": f"http://{internal('kb', 8740)}",
     "OPS_FILES_URL": f"http://{internal('files', 8750)}",
     "OPS_DOCUMENTS_URL": f"http://{internal('documents', 8760)}",
+    "OPS_RUNNER_URL": f"http://{internal('runner', 8770)}",
     "OPS_OPA_URL": f"http://{internal('opa', 8181)}",
     # files-service keeps bytes on its volume (below); knowledge-base bytes stay on the kb machine's disk until a
     # Security admin points storage at a bucket (Settings > Storage), and a redeploy of kb loses them.
@@ -133,6 +134,8 @@ APPS: list[App] = [
         python=False,
     ),
     App("tools", "tools", 256, 8720, "/health", signs_as="TOOLS"),
+    # Code tools' functions on WASM (c-531): 512 MB for two runs at the default 256 MB cap each.
+    App("runner", "runner", 512, 8770, "/health", signs_as="RUNNER"),
     App("models", "models", 256, 8730, "/health", signs_as="MODELS"),
     # The fake model: answers from committed rules and never calls a provider. Staging's only model connection.
     App(

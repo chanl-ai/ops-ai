@@ -1,0 +1,61 @@
+# Publishes the SDKs (sdk/python to PyPI as ops-ai, sdk/typescript to npm as @chanl-ai/ops-ai) when the version in a
+# package's file is not on its registry yet. A release is a commit that raises that version; the release notes name
+# the platform tag it was tested on.
+#
+# Every run is a dry run (build, check, `--dry-run`) until the owner turns publishing on: set the repository variable
+# SDK_PUBLISH to 1 and the secrets NPM_TOKEN (an npm automation token for the @chanl-ai scope) and PYPI_TOKEN.
+name: sdk-publish
+
+on:
+  push:
+    branches: [main]
+    paths: ["sdk/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build
+        run: uv build --out-dir dist sdk/python
+      - name: Install the wheel in an empty environment and import it
+        run: |
+          uv venv /tmp/smoke && VIRTUAL_ENV=/tmp/smoke uv pip install dist/*.whl
+          /tmp/smoke/bin/python -c "import ops_ai; print(ops_ai.__version__)"
+      - name: Publish when this version is new
+        env:
+          PUBLISH: ${{ vars.SDK_PUBLISH == '1' && secrets.PYPI_TOKEN != '' }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' sdk/python/pyproject.toml)
+          if curl -sf "https://pypi.org/pypi/ops-ai/$version/json" >/dev/null; then echo "ops-ai $version is on PyPI already"; exit 0; fi
+          if [ "$PUBLISH" = true ]; then uv publish dist/*; else echo "dry run: would publish ops-ai $version"; ls dist; fi
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Install, build and test
+        run: pnpm install --frozen-lockfile --filter @chanl-ai/ops-ai && pnpm --filter @chanl-ai/ops-ai test
+      - name: Publish when this version is new
+        working-directory: sdk/typescript
+        env:
+          PUBLISH: ${{ vars.SDK_PUBLISH == '1' && secrets.NPM_TOKEN != '' }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "@chanl-ai/ops-ai@$version" version >/dev/null 2>&1; then echo "@chanl-ai/ops-ai $version is on npm already"; exit 0; fi
+          # pnpm publish, never npm publish: npm leaves workspace: ranges in a published package.
+          if [ "$PUBLISH" = true ]; then pnpm publish --access public --no-git-checks; else pnpm publish --dry-run --no-git-checks; fi

@@ -53,3 +53,16 @@ async def test_the_platform_module_belongs_to_no_team_so_every_team_reaches_it(
     assert reply is not None and reply.module is not None and reply.module["team_id"] is None, reply
     policy = await ToolRegistry(local_catalog, store).policy_for("send_reply", tenant)
     assert policy is not None and policy["approver_team"] is None, policy
+
+
+async def test_the_acknowledgement_runs_at_once_and_the_reply_still_waits(
+    local_catalog: Any, store: ModuleStore, tenant: str
+) -> None:
+    """c-532: an automatic thank-you to a message's sender leaves with no approval, as its own operation, so making it
+    leaves send_reply waiting for a person everywhere."""
+    registry = ToolRegistry(local_catalog, store)
+    ack = await registry.resolve("send_acknowledgement", tenant_id=tenant)
+    assert ack is not None and ack.module is not None and ack.operation is not None, ack
+    assert (ack.module["id"], ack.executor, ack.access) == (PLATFORM_MODULE, "local", "write")
+    assert await registry.requires_approval("send_acknowledgement", tenant) is False
+    assert await registry.requires_approval("send_reply", tenant) is True

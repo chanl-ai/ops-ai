@@ -141,8 +141,13 @@ for (const f of files) {
   }
 
   // 20. No mock pages in the console (c-517): a design mock is HTML in the docs (:3009), never a console route, so what
-  //     is reviewed is what ships. human-tasks stays until the owner picks its layout.
-  if (/^src\/app\/preview\//.test(f.rel) && !/^src\/app\/preview\/human-tasks\//.test(f.rel)) report(f, 0, 'is a preview page (draw design mocks as HTML in the docs; ship the real page)');
+  //     is reviewed is what ships.
+  if (/^src\/app\/preview\//.test(f.rel)) report(f, 0, 'is a preview page (draw design mocks as HTML in the docs; ship the real page)');
+
+  // 21. One way to decide a Human Task (c-460): the decide forms and the decision route are used only by the shared
+  //     TaskDecision, the queue's panel, the decider and chat's task card, so a new surface cannot drift from them.
+  if (!/^src\/components\/reviews\/(task-decision|decision-panel|use-review-decider|option-decision-form|review-detail|model-validation)\.tsx$|^src\/components\/chat\/record-cards\.tsx$|^src\/hooks\/queries\.ts$/.test(f.rel))
+    for (const m of text.matchAll(/import\s*\{[^}]*\b(OptionDecisionForm|ReviewDecisionForm|ModelValidationDecisionForm|useDecideReview)\b[^}]*\}\s*from/g)) report(f, m.index, `imports ${m[1]} (decide through components/reviews/task-decision.tsx)`);
 
   // 11. No ad-hoc state switches from copied projects.
   for (const m of text.matchAll(/usePageState|PageStateGate|[?&]state=(empty|loading|error)/g)) report(f, m.index, 'copied ?state= switch (use React Query states and ?mock=)');

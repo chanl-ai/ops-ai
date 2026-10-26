@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 
@@ -26,7 +27,8 @@ async def client(platform: Platform, *, dev: bool, seed: Path) -> httpx.AsyncCli
 
 
 async def seeded(platform: Platform, tmp_path: Path) -> tuple[str, Path]:
-    p = await platform.person(roles=("builder",), email="j.richardson@harborpine.example")
+    # An email of its own per run: sign-in finds a person by email, and a database kept between runs holds earlier ones.
+    p = await platform.person(roles=("builder",), email=f"j.richardson.{uuid4().hex[:8]}@harborpine.example")
     seed = tmp_path / "people.json"
     seed.write_text(
         json.dumps(

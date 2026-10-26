@@ -203,6 +203,9 @@ await withUiStack(
         const lines = (await page.getByTestId('run-story-feed-line').allInnerTexts()).map((t) => t.trim());
         await shot('dispute-run');
         check('7 the dispute run page tells what happened in the same sentences', lines[0] === 'James Richardson started Card dispute intake (uc-500) from its form' && lines.some((l) => /^Maya Okafor rejected: /.test(l)), lines);
+        // The result names who decided and words the decision: a staff address is not customer data, so it never reads [email].
+        const result = (await page.getByTestId('run-result').innerText()).replace(/\s+/g, ' ');
+        check('7b the result says Rejected by Maya Okafor, not a raw value or a masked address', /Rejected/.test(result) && /Maya Okafor/.test(result) && !/\[email\]|\breject\b/.test(result), result);
       });
       check('8 no page errors and no sideways scroll at 400 px', errors.length === 0, errors.slice(0, 3));
     } finally {

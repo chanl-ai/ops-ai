@@ -63,7 +63,9 @@ async def test_a_call_to_another_teams_module_is_refused(
 ) -> None:
     tool = await _read_op(engine, tenant, "mod_payments_hub")
     r = await _call(gw, tenant, LENDING, tool)
-    assert r.status_code == 403 and r.json()["error"]["code"] == "team_forbidden", r.text
+    # The name is unique per team (c-509): another team's operation is not found, and the refusal names no owner.
+    assert r.status_code == 403 and r.json()["error"]["code"] == "gateway_refused", r.text
+    assert "not registered" in r.json()["error"]["message"]
 
 
 async def test_a_grant_to_the_teams_workflow_lets_its_runs_call(

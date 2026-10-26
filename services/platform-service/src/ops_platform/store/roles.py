@@ -14,7 +14,18 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_access import ANY_TEAM, BUILTIN_IDS, BUILTIN_ROLES, Assignment, Grant, active, builtin_roles_for, effective
+from ops_access import (
+    ANY_TEAM,
+    BUILTIN_IDS,
+    BUILTIN_ROLES,
+    OWNER,
+    Assignment,
+    Grant,
+    active,
+    builtin_roles_for,
+    effective,
+)
+from ops_access.catalogue import ADMIN
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 
@@ -255,6 +266,43 @@ async def ensure_builtin_roles(c: AsyncConnection, tenant_id: str, *, at: str) -
                 for a, x, s in role.grants
             ],
         )
+
+
+async def ensure_owner(c: AsyncConnection, tenant_id: str, *, at: str) -> str | None:
+    """The workspace's owner (c-529): while it has none, its earliest account admin (Admin in every team) becomes it,
+    as migration 0026 did for workspaces made before it. None when it has no account admin."""
+    owner = role_assignments.c.role_id == OWNER.id
+    found = (
+        await c.execute(
+            sa.select(role_assignments.c.subject_id).where(role_assignments.c.tenant_id == tenant_id, owner)
+        )
+    ).scalar()
+    if found is not None:
+        return str(found)
+    first = (
+        await c.execute(
+            sa.select(role_assignments.c.subject_id)
+            .where(
+                role_assignments.c.tenant_id == tenant_id,
+                role_assignments.c.role_id == ADMIN.id,
+                role_assignments.c.team_id == ANY_TEAM,
+                role_assignments.c.subject_kind == "person",
+            )
+            .order_by(role_assignments.c.created_at, role_assignments.c.id)
+            .limit(1)
+        )
+    ).scalar()
+    if first is None:
+        return None
+    await c.execute(
+        role_assignments.insert().values(
+            id=new_id("ras"), tenant_id=tenant_id, subject_kind="person", subject_id=first, role_id=OWNER.id,
+            team_id=ANY_TEAM, granted_by="seed", reason="The workspace's first account admin", source="grant",
+            created_at=at,
+        )
+    )  # fmt: skip
+    await bump_version(c, tenant_id)
+    return str(first)
 
 
 async def mirror_membership(

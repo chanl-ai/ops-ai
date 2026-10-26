@@ -245,7 +245,7 @@ class ExtractionsStore:
             )
             e = extractions
             q = sa.select(e.c.team, e.c.file_id, e.c.type_id, e.c.asked_by).where(
-                e.c.tenant_id == tenant, e.c.id == extraction_id
+                e.c.tenant_id == tenant, e.c.id == extraction_id, team_visible(e)
             )
             row = (await c.execute(q)).first()
             if row is not None:

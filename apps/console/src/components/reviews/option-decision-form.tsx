@@ -1,12 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Sparkles } from 'lucide-react';
+import { LockKeyhole, Sparkles } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -54,6 +56,7 @@ export function OptionDecisionForm({
   layout = 'sheet',
   blocked,
   suggested,
+  parts,
 }: {
   /** The option an AI assist suggests, by name: its button is marked, and it is never chosen for the person. */
   suggested?: string;
@@ -61,8 +64,12 @@ export function OptionDecisionForm({
   /** Why an option waits ("confirm 2 key fields first"), by its name; its button says so and stays off. */
   blocked?: Record<string, string | undefined>;
   /** `sheet` sticks to the bottom of a side sheet; `footer` is one row of a page grid: the focused option's consequence
-   * and the buttons, with an option's inputs opening a row above only once that option is chosen. */
-  layout?: 'sheet' | 'footer';
+   * and the buttons, with an option's inputs opening a row above only once that option is chosen. `panel` is the Human
+   * Tasks decision panel (c-460): every option as a choice with its consequence, the chosen one's inputs and a reason,
+   * and one Decide named after the chosen option, handed to `parts` so the panel keeps Decide in its fixed footer. */
+  layout?: 'sheet' | 'footer' | 'panel';
+  /** With `panel`: where the choice and the Decide button go. */
+  parts?: (p: { choice: React.ReactNode; decide: React.ReactNode }) => React.ReactNode;
   options: ReviewOption[];
   /** The option being sent, while the request is in flight. */
   pending: string | null;
@@ -149,10 +156,64 @@ export function OptionDecisionForm({
           ));
   const [focused, setFocused] = React.useState(options[0]?.name);
   const [armed, setArmed] = React.useState<string | null>(null);
+  const [picked, setPicked] = React.useState<string | undefined>(undefined);
   React.useEffect(() => {
     setFocused(options[0]?.name);
     setArmed(null);
+    setPicked(undefined);
   }, [reviewId, optionsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (layout === 'panel') {
+    const chosen = options.find((o) => o.name === (picked ?? suggested)) ?? options[0];
+    if (!chosen) return null;
+    const send = () => {
+      if (chosen.reason === 'required' && !reason.trim()) return setErrors((e) => ({ ...e, reason: `Add a reason to ${(chosen.label ?? label(chosen.name)).toLowerCase()}.` }));
+      submit(chosen);
+    };
+    const choice = (
+      <fieldset className="flex flex-col gap-3" data-testid="option-decision-form" data-layout="panel">
+        <legend className="mb-2 text-sm font-medium">Your decision</legend>
+        <RadioGroup value={chosen.name} onValueChange={setPicked} className="gap-2">
+          {options.map((o) => (
+            <Label
+              key={o.name}
+              htmlFor={fieldId(reviewId, o.name)}
+              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal transition-colors hover:bg-accent/50 ${chosen.name === o.name ? 'border-primary bg-accent/40' : ''}`}
+              data-testid={`option-${o.name}`}
+            >
+              <RadioGroupItem id={fieldId(reviewId, o.name)} value={o.name} className="mt-0.5" />
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {o.label ?? label(o.name)}
+                  {suggested === o.name && (
+                    <Badge variant="secondary">
+                      <Sparkles className="size-3" aria-hidden /> Suggested
+                    </Badge>
+                  )}
+                  {o.stepUp && (
+                    <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                      <LockKeyhole className="size-3" aria-hidden /> Needs a fresh sign-in
+                    </span>
+                  )}
+                </span>
+                {o.consequence && <span className="text-xs leading-relaxed text-muted-foreground">{o.consequence}</span>}
+                {blocked?.[o.name] && <span className="text-xs text-warning-text">{blocked[o.name]}</span>}
+              </span>
+            </Label>
+          ))}
+        </RadioGroup>
+        {chosen.inputs?.length ? inputRows([chosen]) : null}
+        <FormField id={`option-reason-${reviewId}`} label="Reason" optional={chosen.reason !== 'required'} hint="Kept on the case with your name and the time." error={errors.reason}>
+          <Textarea id={`option-reason-${reviewId}`} rows={2} value={reason} onChange={(e) => (setReason(e.target.value), setErrors((x) => ({ ...x, reason: '' })))} placeholder="e.g. Balance confirmed with the branch" className="bg-card" data-testid="option-reason" />
+        </FormField>
+      </fieldset>
+    );
+    const decide = (
+      <LoadingButton type="button" className="w-full" isLoading={pending === chosen.name} disabled={!!pending || !!blocked?.[chosen.name]} onClick={send} data-testid="decide">
+        {chosen.label ?? label(chosen.name)}
+      </LoadingButton>
+    );
+    return <>{parts ? parts({ choice, decide }) : (<>{choice}{decide}</>)}</>;
+  }
   if (layout === 'footer') {
     const shown = options.find((o) => o.name === (armed ?? focused)) ?? options[0];
     const armedOption = withInputs.find((o) => o.name === armed);

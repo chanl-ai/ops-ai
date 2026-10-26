@@ -9,7 +9,7 @@ from fake_bank_https import HOST, fake_bank
 from usecase_harness import AGENTS_PORT, agents, approve_tool_review, check, data, finish, service_headers, tools
 
 OTHER = {"X-Dev-User": "Priya Shah"}
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 RUN = int(time.time())
 OPERATION = {
     "name": f"get_statement_{RUN}",

@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Write a tool as a Python function",
+  "description": "A code module holds Python functions that run in a sandbox with no network, read the step's input, call the tools they are allowed to and return data the next step can branch on. A function names a secret, such as a bank key, and the gateway sends the value with the call, so the function never sees it.",
+  "tag": "new",
+  "cards": [
+    "c-531"
+  ]
+}

@@ -74,7 +74,8 @@ class TeamAdminStore:
             .outerjoin(counts, counts.c.team_id == teams.c.id)
             .order_by(teams.c.status, teams.c.name_key, teams.c.id)
         )
-        where: list[sa.ColumnElement[bool]] = []
+        # A deleted team (c-529) keeps its row for its audit entries and is out of every list.
+        where: list[sa.ColumnElement[bool]] = [teams.c.status != "deleted"]
         if statuses:
             where.append(teams.c.status.in_(statuses))
         if team_id is not None:

@@ -178,6 +178,12 @@ def teams_of(me: Principal) -> list[str]:
     return list(me.team_ids)
 
 
+def reader_teams(me: Principal) -> list[str]:
+    """The teams a person reads as a member (an API key reads none of a person's): what decides whether a case's title
+    is shown to them, as against `review_teams`, the teams they decide reviews in."""
+    return [] if me.is_key else list(me.team_ids)
+
+
 def review_teams(me: Principal) -> list[str]:
     """The teams whose reviews a person decides (`reviews.decide` held there); the dev header caller decides in the
     team it acts in, an API key in none."""

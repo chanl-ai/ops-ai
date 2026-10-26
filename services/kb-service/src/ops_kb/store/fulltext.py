@@ -12,9 +12,12 @@ from .knowledge import ROLE
 
 # Below half of the question's terms a passage is not an answer: "mortgage brokers selling travel insurance" shares
 # two of five terms with a rate sheet and is not answered by it. With at least two terms in the question, a passage
-# must also share two, so one common word ("mortgage") never carries a passage on its own.
+# must also share two, so one common word ("mortgage") never carries a passage on its own. A long prompt (a workflow
+# agent step with its instructions) is scored against a bounded term set, or the answering passage falls under the
+# floor because the extra words drown it.
 FLOOR = 0.5
 MIN_SHARED_TERMS = 2
+TERM_CAP = 6
 
 
 # Every live chunk of an indexed item in a source the knowledge base reads, scored against the question's lexemes.
@@ -39,8 +42,9 @@ _SEARCH = sa.text(
               array(SELECT quote_literal(t) FROM unnest(q.terms) t), ' | '))
     )
     SELECT * FROM hits
-    WHERE shared >= LEAST(:min_shared, total) AND shared::float / total >= :floor
-    ORDER BY shared::float / total DESC, rank DESC
+    WHERE shared >= LEAST(:min_shared, total)
+      AND shared::float / LEAST(total, :term_cap) >= :floor
+    ORDER BY shared::float / LEAST(total, :term_cap) DESC, rank DESC
     LIMIT :limit
     """
 )
@@ -64,6 +68,7 @@ class PostgresFullTextRetriever:
             "limit": limit,
             "floor": FLOOR,
             "min_shared": MIN_SHARED_TERMS,
+            "term_cap": TERM_CAP,
         }
         # As the tenant role, so the team policy keeps another team's chunks out of the search.
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:

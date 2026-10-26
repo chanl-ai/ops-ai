@@ -18,7 +18,7 @@ from ops_service_kit.errors import ApiError
 
 from .deps import Runtime
 
-WORKFLOW_TOOLS = {"send_reply": "write"}
+WORKFLOW_TOOLS = {"send_reply": "write", "send_acknowledgement": "write"}
 
 
 class ToolsUnavailable(ApiError):
@@ -29,12 +29,11 @@ class ToolsUnavailable(ApiError):
 @dataclass(frozen=True)
 class WritePolicy:
     """How a write to a tool is approved (docs/architecture/tool-lifecycle.md, "Write approval"): `approvers` distinct
-    people, from `approver_team` when the registry names one. Whether the person who asked may be one is the tenant's
-    requesterMayDecide policy (c-186), not the tool's."""
+    people of the run's team (c-509; an approving team tools-service still names is ignored). Whether the person who
+    asked may be one is the tenant's requesterMayDecide policy (c-186), not the tool's."""
 
     access: str
     approvers: int
-    approver_team: str | None
     # Approving asks the approver for a step-up: the operation says so, or two people approve it.
     step_up: bool = False
 
@@ -78,14 +77,13 @@ async def _policy_of(rt: Runtime, tool: str) -> WritePolicy:
         return WritePolicy(
             access=access,
             approvers=int(approval.get("approvers") or 1),
-            approver_team=approval.get("approverTeam"),
             step_up=bool(approval.get("stepUp")) or int(approval.get("approvers") or 1) > 1,
         )
     access = await access_of(rt, tool)
     definition = rt.catalog.tool(tool)
     approvers = definition.approvers if definition else 1
     step_up = bool(definition and definition.step_up) or approvers > 1
-    return WritePolicy(access, approvers, None, step_up=step_up)
+    return WritePolicy(access, approvers, step_up=step_up)
 
 
 async def access_of(rt: Runtime, tool: str) -> str:

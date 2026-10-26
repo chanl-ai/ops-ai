@@ -2237,7 +2237,7 @@
   "paths": {
     "/health": {
       "get": {
-        "operationId": "health_health_get",
+        "operationId": "health_health",
         "responses": {
           "200": {
             "content": {
@@ -2263,13 +2263,14 @@
         "summary": "Health",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/health/background": {
       "get": {
         "description": "This service's background processes and their state; counts and error types only, no record's data.",
-        "operationId": "health_background_health_background_get",
+        "operationId": "health_health_background",
         "responses": {
           "200": {
             "content": {
@@ -2285,13 +2286,14 @@
         "summary": "Health Background",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types": {
       "get": {
         "description": "The team's types, and whether the caller may add one (the console's New type).",
-        "operationId": "list_types_v1_document_types_get",
+        "operationId": "document_types_list_types",
         "parameters": [
           {
             "in": "header",
@@ -2463,11 +2465,12 @@
         "summary": "List Types",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A document type and its version 1; the name is unique in the team.",
-        "operationId": "create_type_v1_document_types_post",
+        "operationId": "document_types_create_type",
         "parameters": [
           {
             "in": "header",
@@ -2649,12 +2652,13 @@
         "summary": "Create Type",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}": {
       "get": {
-        "operationId": "get_type_v1_document_types__type_id__get",
+        "operationId": "document_types_get_type",
         "parameters": [
           {
             "in": "path",
@@ -2835,13 +2839,14 @@
         "summary": "Get Type",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/examples": {
       "get": {
         "description": "The corrections people made on the type's reads, which its later reads are given, newest first (c-297).",
-        "operationId": "list_examples_v1_document_types__type_id__examples_get",
+        "operationId": "document_types_list_examples",
         "parameters": [
           {
             "in": "path",
@@ -3022,13 +3027,14 @@
         "summary": "List Examples",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/examples/{example_id}": {
       "delete": {
         "description": "Later reads of the type are no longer given this example.",
-        "operationId": "remove_example_v1_document_types__type_id__examples__example_id__delete",
+        "operationId": "document_types_remove_example",
         "parameters": [
           {
             "in": "path",
@@ -3211,13 +3217,14 @@
         "summary": "Remove Example",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/samples": {
       "post": {
         "description": "A team file and the values it should read; Files keeps the file while the sample names it.",
-        "operationId": "add_sample_v1_document_types__type_id__samples_post",
+        "operationId": "document_types_add_sample",
         "parameters": [
           {
             "in": "path",
@@ -3408,12 +3415,13 @@
         "summary": "Add Sample",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/samples/{sample_id}": {
       "delete": {
-        "operationId": "remove_sample_v1_document_types__type_id__samples__sample_id__delete",
+        "operationId": "document_types_remove_sample",
         "parameters": [
           {
             "in": "path",
@@ -3596,13 +3604,14 @@
         "summary": "Remove Sample",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/template-offers": {
       "get": {
         "description": "Groups of at least 5 checked model reads of one layout that no current template reads (c-254).",
-        "operationId": "template_offers_v1_document_types__type_id__template_offers_get",
+        "operationId": "document_types_template_offers",
         "parameters": [
           {
             "in": "path",
@@ -3783,13 +3792,14 @@
         "summary": "Template Offers",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/templates/suggest": {
       "post": {
         "description": "A layout template drafted from the team's finished reads of the type, and how it reads each; nothing is\nsaved until a builder posts it as a new version (c-254).",
-        "operationId": "suggest_template_v1_document_types__type_id__templates_suggest_post",
+        "operationId": "document_types_suggest_template",
         "parameters": [
           {
             "in": "path",
@@ -3980,12 +3990,13 @@
         "summary": "Suggest Template",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/test-runs/{test_id}": {
       "get": {
-        "operationId": "get_test_v1_document_types__type_id__test_runs__test_id__get",
+        "operationId": "document_types_get_test",
         "parameters": [
           {
             "in": "path",
@@ -4175,13 +4186,14 @@
         "summary": "Get Test",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/versions": {
       "post": {
         "description": "The type's next version; earlier versions stay as they were.",
-        "operationId": "add_version_v1_document_types__type_id__versions_post",
+        "operationId": "document_types_add_version",
         "parameters": [
           {
             "in": "path",
@@ -4372,12 +4384,13 @@
         "summary": "Add Version",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/versions/{version}": {
       "get": {
-        "operationId": "get_version_v1_document_types__type_id__versions__version__get",
+        "operationId": "document_types_get_version",
         "parameters": [
           {
             "in": "path",
@@ -4567,13 +4580,14 @@
         "summary": "Get Version",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/versions/{version}/test-estimate": {
       "get": {
         "description": "What testing the version spends: calls and cost, before it runs.",
-        "operationId": "test_estimate_v1_document_types__type_id__versions__version__test_estimate_get",
+        "operationId": "document_types_test_estimate",
         "parameters": [
           {
             "in": "path",
@@ -4763,13 +4777,14 @@
         "summary": "Test Estimate",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/document-types/{type_id}/versions/{version}/test-runs": {
       "post": {
         "description": "Runs every sample (at most 20) through extraction with this version; poll the test for its results.",
-        "operationId": "run_test_v1_document_types__type_id__versions__version__test_runs_post",
+        "operationId": "document_types_run_test",
         "parameters": [
           {
             "in": "path",
@@ -4959,13 +4974,14 @@
         "summary": "Run Test",
         "tags": [
           "document-types"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/classifications": {
       "post": {
         "description": "Which of the team's document types the file is, by the model over each type's name and description\n(c-249); typeId null and needsReview when none fits or the model is less sure than the floor.",
-        "operationId": "classify_file_v1_documents_classifications_post",
+        "operationId": "documents_classify_file",
         "parameters": [
           {
             "in": "header",
@@ -5147,13 +5163,14 @@
         "summary": "Classify File",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/extractions": {
       "get": {
         "description": "A file's extractions by the caller's team, newest first; a file the team cannot see is 404.",
-        "operationId": "file_extractions_v1_documents_extractions_get",
+        "operationId": "documents_file_extractions",
         "parameters": [
           {
             "in": "query",
@@ -5359,11 +5376,12 @@
         "summary": "File Extractions",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A file's fields by the schema or a document type, each with value, confidence, page, quote and\nneedsReview against the field's, the schema's and the workspace floor. Up to 5 pages and 5 MB the answer comes\nat once; a larger file answers 202 with the extraction's id to poll.",
-        "operationId": "extract_v1_documents_extractions_post",
+        "operationId": "documents_extract",
         "parameters": [
           {
             "description": "A retry with the same key reads the same extraction.",
@@ -5573,12 +5591,13 @@
         "summary": "Extract",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/extractions/{extraction_id}": {
       "get": {
-        "operationId": "get_extraction_v1_documents_extractions__extraction_id__get",
+        "operationId": "documents_get_extraction",
         "parameters": [
           {
             "in": "path",
@@ -5759,13 +5778,14 @@
         "summary": "Get Extraction",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/extractions/{extraction_id}/fields/{key}": {
       "patch": {
         "description": "A checker's value for one field; the original value and confidence are kept beside it.",
-        "operationId": "correct_field_v1_documents_extractions__extraction_id__fields__key__patch",
+        "operationId": "documents_correct_field",
         "parameters": [
           {
             "in": "path",
@@ -5965,13 +5985,14 @@
         "summary": "Correct Field",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/layout": {
       "post": {
         "description": "The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as\nfractions of the page. Read on the first ask and cached by the file's content digest (c-247).",
-        "operationId": "compute_layout_v1_documents_layout_post",
+        "operationId": "documents_compute_layout",
         "parameters": [
           {
             "in": "header",
@@ -6153,13 +6174,14 @@
         "summary": "Compute Layout",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/layout/{file_id}": {
       "get": {
         "description": "The layout already read for the file, or one page of it; 404 until POST /v1/documents/layout reads it.",
-        "operationId": "get_layout_v1_documents_layout__file_id__get",
+        "operationId": "documents_get_layout",
         "parameters": [
           {
             "in": "path",
@@ -6367,13 +6389,14 @@
         "summary": "Get Layout",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/documents/purge": {
       "post": {
         "description": "Removes what the token's team derived from a deleted file: its extractions with their corrections, and the\nsamples naming it. A workflow on the file-deleted trigger calls this; files-service never does. A file\nfiles-service still serves the team is refused (409), so a purge can never remove the reads of a live file.",
-        "operationId": "purge_v1_documents_purge_post",
+        "operationId": "documents_purge",
         "parameters": [
           {
             "in": "header",
@@ -6555,7 +6578,8 @@
         "summary": "Purge",
         "tags": [
           "documents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     }
   }

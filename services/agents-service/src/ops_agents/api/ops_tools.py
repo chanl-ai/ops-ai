@@ -29,7 +29,7 @@ from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
 from . import hitl_facade
 from .agent_registry import go_live, registry, spec_from_seed
-from .auth import Principal, caller_of
+from .auth import Principal, caller_of, reader_teams
 from .child_runs import TURN_PERSON, ChildRuns, engine_workflows
 from .deps import Runtime
 from .run_starts import REGISTRY
@@ -216,7 +216,9 @@ class OpsReads:
         which = str(args.get("which") or "mine")
         names = frozenset(n for n in (person.email, person.name) if n)
         view = {"mine": "open", "team": "open", "overdue": "overdue"}[which]
-        rows = await hitl_facade.list_reviews(self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names)
+        rows = await hitl_facade.list_reviews(
+            self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names, teams=reader_teams(person)
+        )
         data = cast(list[dict[str, Any]], rows["data"])
         if which == "mine":
             assigned = [r for r in data if r.get("assignee") in names]

@@ -71,9 +71,9 @@ async def test_a_reviewer_reaches_a_review_only_acting_in_the_threads_team(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The approving team (Fraud) still decides the write; the reviewer acts in the thread's team (Operations) to do it,
-    as before c-429, and from any other team the review is not found."""
-    monkeypatch.setattr(hitl_facade, "policy_of", policy(approver_team="team_fraud"))
+    """The reviewer acts in the thread's team (Operations) to decide its write; from any other team the review is not
+    found (c-429, c-509)."""
+    monkeypatch.setattr(hitl_facade, "policy_of", policy())
     c = dev_platform
     url = await drafted(c, person("usr_james", ["team_ops"]))
     thread = url.split("/chat/threads/")[1].split("/")[0]

@@ -201,6 +201,32 @@ LIMITS = (
 )
 
 
+HANDBOOK = (
+    "<knowledge>\n[1] Restraining notices and levies — What the notice requires (version v1): "
+    "A restraining notice or levy names a debtor and an amount. Hold funds in every deposit account "
+    "the debtor owns, up to twice the amount the notice names.\n</knowledge>\n\n"
+)
+LEVY_CHECK = (
+    "Check this levy notice and the hold worked out for it against the levy handbook: "
+    "is the notice complete, is anything in the accounts protected, and is the hold within the limits? "
+    "Cite the handbook for each point."
+)
+
+
+async def test_the_levy_handbook_check_quotes_the_retrieved_passage() -> None:
+    """c-532: the fake model cites the levy handbook only when the retrieved passage is in the prompt."""
+    mod = fake()
+    s = demo_script(mod)
+    fmt = {"type": "json_schema", "json_schema": {"name": "final_result"}}
+    cited = await mod.answer(s, "default", {"messages": [user(HANDBOOK + LEVY_CHECK)], "response_format": fmt})
+    body = json.loads(cited.text or "")
+    assert body["ok"] is True
+    assert "Levy and garnishment procedures" in body["findings"]
+    assert "twice the amount the notice names" in body["findings"]
+    bare = await mod.answer(s, "default", {"messages": [user(LEVY_CHECK)], "response_format": fmt})
+    assert "heard" in (bare.text or "") and "twice the amount" not in (bare.text or "")
+
+
 async def test_the_atm_limit_presents_the_limits_as_rows_from_the_passage_then_cites_it() -> None:
     """c-058 T003 (uc-079's rows check): the limits table comes from the passage's figures, then the cited sentence;
     without the passage neither appears."""

@@ -27,6 +27,16 @@ export const SITE = [
           { page: 'background/problem-statement.md', title: 'Why Ops AI', icon: 'lightbulb' },
           { page: 'guide/whats-built-today.md', icon: 'list-checks' },
           { page: 'guide/install.md', icon: 'download' },
+          { page: 'guide/whats-new.md', icon: 'sparkles' },
+        ],
+      },
+      {
+        group: 'Use cases',
+        icon: 'briefcase',
+        open: true,
+        entries: [
+          { page: 'guide/use-cases/card-disputes.md', title: 'Card disputes', icon: 'credit-card' },
+          { page: 'guide/use-cases/chat-and-human-tasks.md', title: 'Start the day from chat', icon: 'message-square' },
         ],
       },
       {
@@ -100,6 +110,15 @@ export const SITE = [
     description: 'Every route of every service',
     groups: [
       { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'architecture/api.md', title: 'Conventions', icon: 'braces' }] },
+      {
+        group: 'SDKs',
+        icon: 'package',
+        open: true,
+        entries: [
+          { page: 'sdk/python.md', title: 'Python', icon: 'file-code' },
+          { page: 'sdk/typescript.md', title: 'TypeScript', icon: 'file-code-2' },
+        ],
+      },
       {
         group: 'HTTP API',
         icon: 'globe',

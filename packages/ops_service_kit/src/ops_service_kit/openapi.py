@@ -1,7 +1,9 @@
 """The OpenAPI gate every service runs: its document is complete and committed, which is what a generated SDK is built
 from. A service's `scripts/check_openapi.py` builds its app's document and calls `report`.
 
-Findings: an operation with no operationId or tag, a repeated operationId, a request body that is a bare object, a
+Findings: an operation with no operationId or tag, an operationId not named `<tag>_<handler>` (FastAPI's default,
+such as `delete_file_v1_files_file_id_delete`, is the usual cause), an operation with no `x-ops-public` marking or an
+unknown one, a repeated operationId, a request body that is a bare object, a
 success response with no schema that is not on the untyped allowlist, an allowlisted operation that is typed now, an
 allowlist whose header disagrees with its lines or whose count grew against the committed one, and a committed
 openapi.json that differs from the app's document. Used by scripts and tests only (the `testing` extra), never by a
@@ -17,8 +19,13 @@ from typing import Any
 
 from openapi_spec_validator import validate
 
+from .http import PUBLIC_MARK, PUBLIC_MARKS, tag_name
+
 HEADER = re.compile(r"^# (\d+) untyped operations")
 METHODS = ("get", "post", "put", "patch", "delete")
+# FastAPI's default operation name carries the path and ends in the route's own method,
+# `delete_file_v1_files_file_id_delete`; a handler such as `bulk_delete` on a POST is a real name.
+DEFAULT_PATH = re.compile(r"_v\d+_")
 
 
 def render(doc: dict[str, Any]) -> str:
@@ -89,6 +96,14 @@ def problems(doc: dict[str, Any], *, allowlist_path: Path, document_path: Path, 
             seen[oid] = where
             if not op.get("tags"):
                 out.append(f"{oid}: no tag")
+            elif (
+                not oid.startswith(f"{tag_name(op['tags'][0])}_")
+                or DEFAULT_PATH.search(oid)
+                or oid.endswith(f"_{method}")
+            ):
+                out.append(f"{oid}: not named <tag>_<handler>; build the app with ops_service_kit.http.operation_id")
+            if op.get(PUBLIC_MARK) not in PUBLIC_MARKS:
+                out.append(f"{oid}: {PUBLIC_MARK} is {op.get(PUBLIC_MARK)!r}, not one of {', '.join(PUBLIC_MARKS)}")
             body = op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
             if body is not None and bare(body):
                 out.append(f"{oid}: request body is a bare object; give it a model")

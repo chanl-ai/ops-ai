@@ -38,6 +38,7 @@ import hashlib
 import imaplib
 import json
 import os
+import re
 import secrets
 import smtplib
 import ssl
@@ -80,6 +81,9 @@ MAIL_HOSTS = (
     "login.microsoftonline.com",
 )
 NOTICE = ROOT / "services" / "agents-service" / "tests" / "fixtures" / "mailbox" / "levy_notice.pdf"
+# The same notice with five pages of schedules: past documents-service's at-once limit, so it is read in the background.
+LONG_NOTICE = NOTICE.with_name("levy_notice_long.pdf")
+THANKS = "We received your notice and are working on it."
 WAIT_S = float(os.environ.get("DEMO_WAIT_SECONDS", "180"))
 FAILED: list[str] = []
 
@@ -107,12 +111,11 @@ def data(r: httpx.Response) -> Any:
     return body["data"]
 
 
-def sign_in(origin: str, email: str, password: str) -> dict[str, Any]:
-    """A session; asked again a few times, since the first request after a quiet spell can meet a closed pool."""
+def sign_in(platform: str, email: str, password: str) -> dict[str, Any]:
+    """A session from platform-service at `platform`; asked again a few times, since the first request after a quiet
+    spell can meet a closed pool."""
     for _ in range(4):
-        r = httpx.post(
-            f"{origin}/api/platform/v1/auth/sign-in", json={"email": email, "password": password}, timeout=30
-        )
+        r = httpx.post(f"{platform}/v1/auth/sign-in", json={"email": email, "password": password}, timeout=30)
         if r.status_code == 200:
             return dict(r.json()["data"])
         time.sleep(1.5)
@@ -126,10 +129,12 @@ def bearer(session: dict[str, Any], team: str) -> dict[str, str]:
 class Demo:
     def __init__(self, origin: str, admin_env: Path, people: Path, team: str = SECURITY) -> None:
         self.origin = origin.rstrip("/")
+        # A deployed origin routes /api/<service>; a local console's services answer on their own ports.
+        self.urls = service_urls(self.origin)
         admin = read_env(admin_env)
         self.admin_email = admin["OPS_BOOTSTRAP_ADMIN_EMAIL"]
         self.admin_password = admin["OPS_BOOTSTRAP_ADMIN_PASSWORD"]
-        self.admin = sign_in(self.origin, self.admin_email, self.admin_password)
+        self.admin = sign_in(self.urls["platform"], self.admin_email, self.admin_password)
         self.people_file = people
         # The team the demo runs in: Security, the install's first team, unless --team names another. The bank module,
         # the egress list and Secrets stay in Security either way.
@@ -140,7 +145,7 @@ class Demo:
             # admin arranges; their session is renewed so it carries the team.
             known = read_env(self.people_file)
             join_team(self.person("admin"), self.person("approver"), team, "approver")
-            self.approver = sign_in(self.origin, known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"])
+            self.approver = sign_in(self.urls["platform"], known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"])
 
     def person(self, who: str) -> Session:
         """A signed-in person acting in the demo team, for the calls shared with scripts/demo/seed_demo_team.py
@@ -153,7 +158,7 @@ class Demo:
         return person(service_urls(self.origin), email, password, self.ops)
 
     def url(self, service: str, path: str) -> str:
-        return f"{self.origin}/api/{service}{path}"
+        return f"{self.urls[service]}{path}"
 
     def as_admin(self, team: str | None = None) -> dict[str, str]:
         return bearer(self.admin, team or self.ops)
@@ -165,7 +170,7 @@ class Demo:
         """An approver in the demo team: publish reviews need a second person by default."""
         known = read_env(self.people_file)
         if known.get("APPROVER_EMAIL"):
-            session = sign_in(self.origin, known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"])
+            session = sign_in(self.urls["platform"], known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"])
         else:
             domain = self.admin_email.split("@", 1)[1]
             email = f"approver@{domain}"
@@ -188,7 +193,7 @@ class Demo:
             )
             write_env(self.people_file, {**known, "APPROVER_EMAIL": email, "APPROVER_PASSWORD": password})
             print(f"second person: {email}, approver in Security (credentials in {self.people_file})")
-            session = sign_in(self.origin, email, password)
+            session = sign_in(self.urls["platform"], email, password)
         return session
 
     def egress(self, hosts: list[str], ranges: list[str]) -> None:
@@ -332,15 +337,32 @@ class Demo:
                     False, "mailbox", f"{mailbox} is not connected in {self.ops}: connect it on Channels > Email first"
                 )
                 mailbox = None
-        demo_seed.ensure_workflows(builder, approver, levy, {}, mailbox)
+        # The reply workflows (c-532) are files that name the team's per-person workflow, document type and Levy Desk
+        # agent by placeholder; the agent and its handbook are the demo team's own.
+        names = {f"workflow:{w['key']}": w["id"] for w in levy}
+        names |= {f"documentType:{k['id']}": own(k["id"]) for k in spec["documentTypes"]}
+        wanted = {a for w in levy if "file" in w for a in agents_named(w)}
+        if wanted:
+            agents = [a for a in spec["agents"] if a["key"] in wanted]
+            bases = [kb for kb in spec["knowledge"] if any(kb["key"] in a["knowledge"] for a in agents)]
+            knowledge = demo_seed.ensure_knowledge(builder, bases)
+            made = demo_seed.ensure_agents(builder, approver, agents, knowledge, "default")
+            names |= {f"agent:{k}": v for k, v in made.items()}
+        if spec.get("codeModules"):
+            # The levy code tool (c-531) is the team's own module; its publish is Security's decision.
+            known = read_env(self.people_file)
+            security = person(service_urls(self.origin), known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"], SECURITY)
+            demo_seed.ensure_code_modules(builder, security, spec["codeModules"])
+        demo_seed.ensure_workflows(builder, approver, levy, names, mailbox)
         FAILED.extend(demo_seed.FAILED)
         print(f"levy workflows in {self.ops}: {', '.join(w['id'] for w in levy)}")
 
-    def bind_intake(self, wid: str, mailbox: str, document_workflow: str) -> str | None:
+    def bind_intake(self, wid: str, mailbox: str, document_workflow: str, *, repoint: bool = False) -> str | None:
         """The team's Email received workflow `wid` reading `mailbox`, live. A workflow the team already has is
         repointed (its own copy, such as the demo team's); a seeded one the team lacks is saved from the seed with the
         rest of the mail workflows; any other id is saved as a copy of the seeded mail_intake that starts
-        `document_workflow` per attachment. Returns the workflow the intake starts per attachment."""
+        `document_workflow` per attachment; with `repoint`, a workflow the team has starts it too. Returns the
+        workflow the intake starts per attachment."""
         found = httpx.get(self.url("agents", f"/v1/workflows/definitions/{wid}"), headers=self.as_admin(), timeout=30)
         if found.status_code == 404:
             seeded = {
@@ -364,9 +386,14 @@ class Demo:
             triggers = [n for n in definition["nodes"] if n["type"] == "ops.trigger.email"]
             if not triggers:
                 raise SystemExit(f"workflow {wid} in {self.ops} has no Email received trigger")
-            if any(n["parameters"].get("mailbox") != mailbox for n in triggers) or view.get("stage") != "live":
+            starts = [n for n in definition["nodes"] if n["type"] == "ops.action.workflow"]
+            moved = repoint and any(n["parameters"].get("workflow") != document_workflow for n in starts)
+            if moved or any(n["parameters"].get("mailbox") != mailbox for n in triggers) or view.get("stage") != "live":
                 for n in triggers:
                     n["parameters"]["mailbox"] = mailbox
+                if repoint:
+                    for n in starts:
+                        n["parameters"]["workflow"] = document_workflow
                 self.publish(wid, definition)
             else:
                 print(f"workflow {wid}: v{view.get('version')} live on {mailbox}")
@@ -406,6 +433,12 @@ class Demo:
             if any(b["address"] == address and b.get("teamId") == team["id"] for b in boxes):
                 return f"{team['name']} ({team['id']})"
         return None
+
+
+def agents_named(wf: dict[str, Any]) -> set[str]:
+    """The agent keys a team.json workflow file names by `{agent:<key>}`."""
+    text = (demo_seed.HERE / "workflows" / wf["file"]).read_text()
+    return set(re.findall(r"\{agent:(\w+)\}", text))
 
 
 def step(ok: bool, name: str, evidence: str) -> bool:
@@ -469,7 +502,7 @@ def connect(demo: Demo, a: argparse.Namespace) -> str | None:
         steps = ", ".join(f"{x['title']}: {x['state']}" for x in result.get("steps") or [])
         if not step(bool(result.get("ok")), "mailbox connected", f"{box['id']} {a.mailbox} in {demo.ops}: {steps}"):
             return None
-        return demo.bind_intake(a.intake_workflow, a.mailbox, a.document_workflow)
+        return demo.bind_intake(a.intake_workflow, a.mailbox, a.document_workflow, repoint=a.cmd == "replies")
     if not (a.imap and a.smtp):
         step(False, "mailbox connected", f"{a.mailbox} is not connected in {demo.ops}; give --imap and --smtp")
         return None
@@ -495,13 +528,13 @@ def connect(demo: Demo, a: argparse.Namespace) -> str | None:
                     "provider": "imap",
                     "imapHost": imap_host,
                     "imapPort": imap_port,
-                    "imapTls": True,
+                    "imapTls": not a.no_tls,
                     "passwordSecret": a.secret,
                     "sender": "smtp",
                     "fromAddress": a.mailbox,
                     "smtpHost": smtp_host,
                     "smtpPort": smtp_port,
-                    "smtpStarttls": True,
+                    "smtpStarttls": not a.no_tls,
                     "senderSecret": a.secret,
                 },
                 headers=admin,
@@ -516,7 +549,7 @@ def connect(demo: Demo, a: argparse.Namespace) -> str | None:
     steps = ", ".join(f"{x['title']}: {x['state']}" for x in result.get("steps") or [])
     step(bool(result.get("ok")), "mailbox connected", f"{box['id']} {a.mailbox} in {demo.ops}: {steps or tested.text}")
     # The team's Email received trigger picks the mailbox; a change is published and approved by a second person.
-    return demo.bind_intake(a.intake_workflow, a.mailbox, a.document_workflow)
+    return demo.bind_intake(a.intake_workflow, a.mailbox, a.document_workflow, repoint=a.cmd == "replies")
 
 
 def walk(demo: Demo, a: argparse.Namespace) -> int:
@@ -770,10 +803,146 @@ def imap_reply(a: argparse.Namespace, sender: str, suffix: str) -> str | None:
     return None
 
 
+def replies(demo: Demo, a: argparse.Namespace) -> int:
+    """The email-to-reply walk (c-532): the levy notice emailed to the team's mailbox, read (in the background with
+    --long), the sender thanked at once with no approval, and each person it names answered: a person decides the hold
+    and each reply in Human Tasks, as the team's people would. PASS or FAIL per step; the exit status counts FAILs."""
+    admin, approver = demo.as_admin(), demo.person("approver")
+    # A reply is approved by the team that owns the mail sends; decide() has the approver join it as the workspace
+    # admin would arrange.
+    demo_seed.ADMIN.append(demo.person("admin"))
+    if connect(demo, a) is None:
+        return len(FAILED)
+    suffix = uuid.uuid4().hex[:8]
+    sender, subject = f"clerk+{suffix}@court.example", f"Notice of garnishment {suffix}"
+    notice = LONG_NOTICE if a.long else NOTICE
+
+    def run(run_id: str) -> dict[str, Any]:
+        return dict(data(httpx.get(demo.url("agents", f"/v1/runs/{run_id}"), headers=admin, timeout=30)))
+
+    def out_of(r: dict[str, Any], node: str) -> Any:
+        return next((s.get("output") for s in r.get("steps", []) if s.get("nodeId") == node), None)
+
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = sender, a.mailbox, subject
+    msg["Message-ID"] = make_msgid(idstring=suffix, domain="court.example")
+    msg.set_content(
+        "Please find the notice of garnishment attached. Confirm to the registry within five business days."
+    )
+    msg.add_attachment(notice.read_bytes(), maintype="application", subtype="pdf", filename=f"notice-{suffix}.pdf")
+    host, port = hostport(a.send_smtp)
+    with smtplib.SMTP(host, port, timeout=20) as smtp:
+        if a.send_user:
+            smtp.starttls(context=tls_context())
+            smtp.login(a.send_user, a.mailbox_password)
+        smtp.send_message(msg)
+    print(f"      sent '{subject}' ({notice.name}) from {sender} to {a.mailbox}", flush=True)
+
+    def intake_run() -> dict[str, Any] | None:
+        rows = data(
+            httpx.get(
+                demo.url("agents", "/v1/runs"), params={"workflowId": a.intake_workflow}, headers=admin, timeout=30
+            )
+        )["data"]
+        return next((run(r["id"]) for r in rows[:20] if suffix in str(run(r["id"]).get("input"))), None)
+
+    intake = until(f"the {a.intake_workflow} run", intake_run, 180)
+    if not step(intake is not None, "email started the intake", f"{a.intake_workflow} {(intake or {}).get('id')}"):
+        return len(FAILED)
+    started = until("the document run", lambda: (out_of(run(intake["id"]), "each") or {}).get("runs"))
+    doc_id = str(started[0]["runId"]) if started else ""
+    if not step(bool(doc_id), "notice run started", f"{a.document_workflow} {doc_id}"):
+        return len(FAILED)
+    read = until("the read", lambda: out_of(run(doc_id), "read"), 1500 if a.long else WAIT_S) or {}
+    if a.long:
+        # The run's own record of the pause: a fast read can park and wake between two polls of the run.
+        events = httpx.get(
+            demo.url("agents", f"/v1/runs/{doc_id}/events"), params={"follow": "false"}, headers=admin, timeout=30
+        ).text
+        kinds = [k for k in ("waiting_external", "resumed_by_event") if f"event: {k}" in events]
+        step(len(kinds) == 2, "long read waited in the background", f"{doc_id}: {', '.join(kinds) or 'no wait'}")
+    records = read.get("records") or []
+    step(bool(records), "notice read", f"{[r['values'].get('name') for r in records]}")
+    ack = until("the thank-you", lambda: out_of(run(doc_id), "ack")) or {}
+    step(ack.get("status") == "sent", "sender thanked with no approval", f"{ack}")
+    people = until("the person runs", lambda: (out_of(run(doc_id), "each") or {}).get("runs")) or []
+    step(len(people) == len(records) > 0, "a run per person", f"{[p['label'] for p in people]}")
+
+    asks = {"review", "ask_none", "ask_exempt"}
+    # A person deciding in Human Tasks (--decide-in-console, while a recording runs) takes longer than the API.
+    wait = 900.0 if a.decide_in_console else WAIT_S
+
+    def at(run_id: str, nodes: set[str]) -> dict[str, Any] | None:
+        got = run(run_id)
+        node = (got.get("waiting") or {}).get("node")
+        return got if node in nodes or got["status"] in ("succeeded", "failed", "cancelled") else None
+
+    for p in people:
+        name, rid = p["label"], str(p["runId"])
+        got = until(f"{name}'s first question", lambda rid=rid: at(rid, asks)) or {}
+        node = (got.get("waiting") or {}).get("node")
+        case_id = ((out_of(got, "case") or out_of(got, "case_none")) or {}).get("caseId")
+        step(bool(case_id), f"{name}: case opened", f"{case_id}")
+        if node == "review":
+            calc, check = out_of(got, "calc") or {}, out_of(got, "checked") or {}
+            step(float(calc.get("holdAmount") or 0) > 0, f"{name}: hold worked out by code", f"{calc}")
+            findings = str(check.get("findings") or "")
+            named = "levy and garnishment procedures" in findings.lower()
+            quoted = any(
+                phrase in findings
+                for phrase in (
+                    "exemption notice within 2 business days",
+                    "first 2,500.00 CAD in a personal account",
+                    "Government benefit deposits made in the last 60 days",
+                    "twice the amount the notice names",
+                    "Hold funds in every deposit account",
+                    "Answer the creditor within 5 business days",
+                    "Work out the exempt amount before placing the hold",
+                    "A name alone is never a match",
+                )
+            )
+            step(named and quoted, f"{name}: checked against the handbook", findings)
+            if not a.decide_in_console:
+                try:
+                    decide(approver, rid, {"decision": "hold", "reason": "Demo: the hold matches the notice"})
+                except Refused as e:
+                    step(False, f"{name}: hold approved", str(e))
+                    continue
+            got = until(f"{name}'s hold reply", lambda rid=rid: at(rid, {"ask_held"}), wait) or {}
+            step(bool((out_of(got, "hold") or {}).get("id")), f"{name}: hold placed", f"{out_of(got, 'hold')}")
+            node = (got.get("waiting") or {}).get("node")
+        # In the console a person may have decided this run's tasks while the walk checked another's.
+        decided_already = a.decide_in_console and got.get("outcome") in ("held", "no_account", "exempt")
+        if node not in ("ask_held", "ask_none", "ask_exempt") and not decided_already:
+            step(False, f"{name}: reply waits for approval", f"{rid} at {node}, {got.get('status')}")
+            continue
+        step(True, f"{name}: reply waits for approval", node or f"decided in the console: {got.get('outcome')}")
+        if not a.decide_in_console:
+            try:
+                decide(approver, rid, {"decision": "approved", "reason": "Demo: the reply is right"})
+            except Refused as e:
+                step(False, f"{name}: reply approved", str(e))
+                continue
+        done = until(f"{name}'s run to end", lambda rid=rid: at(rid, set()), wait) or {}
+        case = data(httpx.get(demo.url("agents", f"/v1/cases/{case_id}"), headers=admin, timeout=30)) if case_id else {}
+        step(
+            done.get("status") == "succeeded" and case.get("status") == "resolved",
+            f"{name}: replied and case resolved",
+            f"{rid} {done.get('outcome')}; case {case_id} {case.get('status')}",
+        )
+    if a.read_mailpit:
+        r = httpx.get(f"{a.read_mailpit}/api/v1/search", params={"query": f'to:"{sender}"'}, timeout=30)
+        got = [m.get("Snippet", "") for m in r.json().get("messages", [])]
+        thanked = sum(THANKS in s for s in got)
+        step(thanked == 1 and len(got) == 1 + len(people), "every reply in the sender's inbox", f"{len(got)}: {got}")
+    print(f"      ids: intake {intake['id']}, notice {doc_id}, people {[p['runId'] for p in people]}", flush=True)
+    return len(FAILED)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("seed", "egress", "levy", "walk"):
+    for name in ("seed", "egress", "levy", "walk", "replies"):
         p = sub.add_parser(name)
         p.add_argument("--origin", required=True)
         p.add_argument("--admin-env", type=Path, required=True, help="OPS_BOOTSTRAP_ADMIN_EMAIL and _PASSWORD")
@@ -787,7 +956,17 @@ def main() -> None:
     levy = sub.choices["levy"]
     levy.add_argument("--team", required=True, help="the team the levy story is set up in")
     levy.add_argument("--bank", default="https://<your-app>-bank.fly.dev", help="the bank stand-in's origin")
-    w = sub.choices["walk"]
+    sub.choices["replies"].add_argument("--long", action="store_true", help="email the six-page notice")
+    sub.choices["replies"].add_argument(
+        "--decide-in-console", action="store_true", help="wait for a person to decide each Human Task in the console"
+    )
+    for w in (sub.choices["walk"], sub.choices["replies"]):
+        walk_arguments(w)
+    a = ap.parse_args()
+    run_command(ap, a)
+
+
+def walk_arguments(w: argparse.ArgumentParser) -> None:
     w.add_argument("--imap", help="host:port the services read the mailbox at, to connect it")
     w.add_argument("--smtp", help="host:port the services send replies through, to connect it")
     w.add_argument("--send-smtp", help="host:port this machine sends the notice through (not with --upload)")
@@ -808,13 +987,21 @@ def main() -> None:
     found.add_argument("--read-mailpit", help="the reply sender's Mailpit API, where the reply is found")
     found.add_argument("--read-imap", help="host:port of the mailbox's IMAP over TLS, where the reply is found")
     w.add_argument("--send-user", help="sign in to --send-smtp as this account, over STARTTLS")
+    w.add_argument("--no-tls", action="store_true", help="connect the mailbox without TLS (the local GreenMail)")
     w.add_argument(
         "--mailbox-password",
         default=os.environ.get("DEMO_MAILBOX_PASSWORD"),
         help="the mailbox's password; default the DEMO_MAILBOX_PASSWORD environment variable, so it is never typed. "
         "Needed to make the secret, to send the notice as --send-user and to read the reply over IMAP",
     )
-    a = ap.parse_args()
+
+
+def run_command(ap: argparse.ArgumentParser, a: argparse.Namespace) -> None:
+    if a.cmd == "replies":
+        if not (a.send_smtp and a.mailbox):
+            ap.error("replies needs --mailbox and --send-smtp to email the notice")
+        demo = Demo(a.origin, a.admin_env.expanduser(), a.people.expanduser(), a.team)
+        sys.exit(replies(demo, a))
     if a.cmd == "walk" and not a.upload and not (a.send_smtp and a.mailbox):
         ap.error("walk needs --mailbox and --send-smtp to email the notice, or --upload")
     demo = Demo(a.origin, a.admin_env.expanduser(), a.people.expanduser(), getattr(a, "team", SECURITY))

@@ -535,6 +535,10 @@ async def ai_prompt(call: NodeCall) -> Outcome:
     return Outcome(port, out)
 
 
+# How long Extract from file waits for a background read by default: 20 minutes (c-525).
+EXTRACT_WAIT_SECONDS = 1200.0
+
+
 async def ai_extract(call: NodeCall) -> Outcome:
     """Extract from file (c-157, c-235, c-256): documents-service's extraction API reads the file and scores every
     field; the step maps its answer onto the ports. A failure documents-service may get past on a retry (the floor or
@@ -567,6 +571,20 @@ async def ai_extract(call: NodeCall) -> Outcome:
     key = f"{call.run_id}:{call.node.id}:{call.iteration}"
     answer = await call.ports.documents.extract(call.run_id, file_id, request, key=key)
     status = answer.get("status")
+    if status in ("queued", "running"):
+        # A long file is read in the background (c-525): the step parks until documents-service reports the read
+        # finished. The step then runs again, and its request under the same key reads the finished extraction.
+        eid = str(answer.get("id") or "")
+        seconds = float(call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS)
+        title = call.node.name or "Extract from file"
+        park_external(call, event="extraction.finished", key=eid, title=title, timeout_seconds=seconds)
+        # Back here only when the time limit (or a callback) woke a read still under way.
+        waited = {"waitedFor": "extraction.finished", "key": eid, "seconds": seconds, "extractionId": eid}
+        if call.params.get("onTimeout") == "port":
+            return Outcome("timeout", waited)
+        return Outcome(
+            "error", {"error": f"The read did not finish in {seconds:g} seconds", "code": "extraction_timeout"}
+        )
     if status == "failed":
         error = cast(dict[str, Any], answer.get("error") or {})
         if error.get("code") == "schema_error":
@@ -739,6 +757,26 @@ def _collected(
     return {"workflowId": workflow, "count": total, "children": rows, "counts": counts}
 
 
+def park_external(call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float) -> dict[str, Any]:
+    """Parks the step on work another service finishes (c-525): the pass ends and no worker is held. The run is woken
+    by whichever comes first: the service event `event` carrying correlation key `key`, a signed callback to the
+    step's resume URL, or the time limit. Returns how it was woken: `{"event": payload}`, `{"callback": body}` or
+    `{"timeout": True}`; the step runs again in the same attempt and reads it."""
+    resumed = interrupt(
+        {
+            "kind": "external",
+            "node": call.node.id,
+            "iteration": call.iteration,
+            "event": event,
+            "key": key,
+            "title": title,
+            "timeoutSeconds": timeout_seconds,
+            "wakeAfterSeconds": timeout_seconds,
+        }
+    )
+    return cast(dict[str, Any], resumed) if isinstance(resumed, dict) else {}
+
+
 async def _wait_for_children(
     call: NodeCall,
     workflow: str,
@@ -826,9 +864,15 @@ async def case_add(call: NodeCall) -> Outcome:
         return Outcome("error", {"error": "Add to case read no case id.", "code": "case_required"})
     note = call.params.get("note")
     fields = call.params.get("fields")
+    status = call.params.get("status")
     try:
         await call.ports.cases.add(
-            call.run_id, case_id, str(note) if note else None, cast(dict[str, Any], fields) if fields else None
+            call.run_id,
+            case_id,
+            str(note) if note else None,
+            cast(dict[str, Any], fields) if fields else None,
+            status=str(status) if status else None,
+            key=f"{call.run_id}:{call.node.id}:{call.iteration}",
         )
     except CaseNotFoundError:
         return Outcome("error", {"error": f"No case {case_id} in this run's team.", "code": "case_not_found"})
@@ -891,7 +935,21 @@ async def flow_wait(call: NodeCall) -> Outcome:
     return Outcome("out", out)
 
 
+async def flow_wait_for(call: NodeCall) -> Outcome:
+    """Wait for (c-525): parks until a callback, the event with its key, or the time limit; goes on by `ok` with the
+    callback's body or the event's payload, or by `timeout` with what it waited for."""
+    event = str(call.params.get("event") or "")
+    key = str(call.params.get("key") or "") if event else ""
+    seconds = float(call.params.get("timeoutSeconds") or 86400)
+    woke = park_external(call, event=event, key=key, title=call.node.name or call.node.id, timeout_seconds=seconds)
+    if woke.get("timeout"):
+        return Outcome("timeout", {"waitedFor": event or "a callback", "key": key, "seconds": seconds})
+    answer = woke.get("callback") if "callback" in woke else woke.get("event")
+    return Outcome("ok", cast(dict[str, Any], answer) if isinstance(answer, dict) else {"value": answer})
+
+
 EXECUTORS: dict[str, Executor] = {
+    "flow.wait_for": flow_wait_for,
     "trigger.payload": trigger_payload,
     "data.set": data_set,
     "data.compute": data_compute,

@@ -60,7 +60,7 @@ GREENMAIL_IMAP = int(os.environ.get("OPS_GREENMAIL_IMAP_PORT", "3143"))
 IMAP_HOST, SECRET = "mail.harborpine.test", "DEV_IMAP_PASSWORD"
 OPS = {"X-Team-Id": "team_ops"}
 MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 BANK_KEY = {"X-Api-Key": "dev-bank-key"}
 SETTLED = ("succeeded", "failed", "cancelled")
 

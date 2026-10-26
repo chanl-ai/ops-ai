@@ -4,10 +4,13 @@ version = "0.1.0"
 description = "Ops AI Python workspace: reusable libraries in packages/, deployable services in services/"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-checkpointer", "ops-metering", "ops-policy", "ops-identity", "ops-access", "ops-agents-service", "ops-platform-service", "ops-tools-service", "ops-models-service", "ops-storage", "ops-ingest[ocr]", "ops-files-service", "ops-files-client", "ops-documents-service", "ops-documents-client", "ops-kb-service", "ops-store", "ops-engine", "ops-email", "ops-signin[fake]"]
+dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-checkpointer", "ops-metering", "ops-policy", "ops-identity", "ops-access", "ops-agents-service", "ops-platform-service", "ops-tools-service", "ops-models-service", "ops-storage", "ops-ingest[ocr]", "ops-files-service", "ops-files-client", "ops-documents-service", "ops-documents-client", "ops-kb-service", "ops-runner-service", "ops-store", "ops-engine", "ops-email", "ops-signin[fake]"]
 
 [dependency-groups]
 dev = [
+    # Generates the Python SDK's models from the services' OpenAPI (sdk/generate.py); pinned so a regeneration changes
+    # only what the documents changed.
+    "datamodel-code-generator==0.86.0",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
@@ -30,7 +33,7 @@ default-groups = ["dev"]
 package = false
 
 [tool.uv.workspace]
-members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service"]
+members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service", "services/runner-service"]
 
 [tool.uv.sources]
 ops-contracts = { workspace = true }
@@ -58,6 +61,7 @@ ops-platform-service = { workspace = true }
 ops-tools-service = { workspace = true }
 ops-kb-service = { workspace = true }
 ops-models-service = { workspace = true }
+ops-runner-service = { workspace = true }
 
 [tool.ruff]
 line-length = 120
@@ -69,7 +73,7 @@ select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "RUF", "PL", "N"]
 ignore = ["PLR0913", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "N818"]
 
 [tool.pyright]
-include = ["packages", "services/agents-service", "services/tools-service", "services/files-service", "services/kb-service"]
+include = ["packages", "services/agents-service", "services/tools-service", "services/files-service", "services/kb-service", "services/runner-service"]
 exclude = ["**/.venv", "**/__pycache__", "**/node_modules"]
 # Each project has its own `tests` package imported as `tests.*`, so each gets its own import root.
 executionEnvironments = [
@@ -78,6 +82,7 @@ executionEnvironments = [
     { root = "services/files-service", extraPaths = ["services/files-service"] },
     { root = "services/documents-service", extraPaths = ["services/documents-service"] },
     { root = "services/kb-service", extraPaths = ["services/kb-service"] },
+    { root = "services/runner-service", extraPaths = ["services/runner-service"] },
     { root = "packages/ops_ingest", extraPaths = ["packages/ops_ingest"] },
     { root = "packages/ops_extract", extraPaths = ["packages/ops_extract"] },
     { root = "packages/ops_policy", extraPaths = ["packages/ops_policy"] },

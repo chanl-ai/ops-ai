@@ -11,7 +11,7 @@ from ops_store import Guarantee
 from ops_store.team_scope import team_visible
 
 from .clock import db_now, now_iso
-from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_work
+from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
 from .tx import Transactions
 from .work import WorkQueue
 
@@ -185,6 +185,72 @@ class RunStore:
                 .where(engine_runs.c.id == run_id, engine_runs.c.status != "cancelled")
                 .values(**values, updated_at=now_iso())
             )
+
+    async def park(
+        self, run_id: str, *, generation: int | None, waiting: dict[str, Any], wait: dict[str, Any] | None = None
+    ) -> None:
+        """The run waits at a step: its waiting state and, for a step another service finishes, the row a service
+        event or a callback finds it by (`wait`: event, key, dueAt), in one transaction, so an event that arrives at
+        once already finds the step. A cancelled run is never written again."""
+        async with self.tx.tenant_tx() as c:
+            await self.tx.check_fence(c, run_id, generation)
+            r = engine_runs
+            changed = await c.execute(
+                r.update()
+                .where(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status != "cancelled")
+                .values(status="waiting", waiting=waiting, updated_at=now_iso())
+            )
+            if wait is None or not changed.rowcount:
+                return
+            team = (await c.execute(sa.select(r.c.team_id).where(r.c.id == run_id, team_visible(r)))).scalar_one()
+            w = engine_waits
+            mine = sa.and_(
+                w.c.tenant_id == self.tx.tenant(),
+                w.c.run_id == run_id,
+                w.c.node_id == waiting["node"],
+                w.c.iteration == waiting["iteration"],
+                team_visible(w),
+            )
+            await c.execute(w.delete().where(mine))
+            await c.execute(
+                w.insert().values(
+                    tenant_id=self.tx.tenant(),
+                    team_id=team,
+                    run_id=run_id,
+                    node_id=waiting["node"],
+                    iteration=waiting["iteration"],
+                    interrupt_id=waiting["interruptId"],
+                    event=str(wait.get("event") or ""),
+                    wait_key=str(wait.get("key") or ""),
+                    due_at=wait.get("dueAt"),
+                    created_at=now_iso(),
+                )
+            )
+
+    async def waits_for(self, event: str, key: str) -> list[dict[str, Any]]:
+        """The steps of the acting team parked on `event` with correlation key `key`."""
+        w = engine_waits
+        q = w.select().where(
+            w.c.tenant_id == self.tx.tenant(), w.c.event == event, w.c.wait_key == key, team_visible(w)
+        )
+        async with self.tx.tenant_tx() as c:
+            return [dict(m) for m in (await c.execute(q)).mappings()]
+
+    async def unpark(self, run_id: str, node: str, iteration: int) -> bool:
+        """Deletes a step's wait row; whether there was one. Every resume path calls it, so a later wait of the same
+        step starts clean and an event for a finished wait finds nothing."""
+        w = engine_waits
+        async with self.tx.tenant_tx() as c:
+            gone = await c.execute(
+                w.delete().where(
+                    w.c.tenant_id == self.tx.tenant(),
+                    w.c.run_id == run_id,
+                    w.c.node_id == node,
+                    w.c.iteration == iteration,
+                    team_visible(w),
+                )
+            )
+        return bool(gone.rowcount)
 
     async def finish(
         self, run_id: str, *, generation: int | None, failed: bool, outcome: str, output: Any, error: str | None

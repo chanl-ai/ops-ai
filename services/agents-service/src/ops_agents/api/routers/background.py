@@ -77,6 +77,8 @@ def _urls(settings: Settings) -> dict[str, str | None]:
         "files": settings.files_url,
         "documents": settings.documents_url,
         "tools": settings.tools_url or settings.gateway_url,
+        # The workspace purge (c-529).
+        "platform": settings.platform_url,
     }
 
 

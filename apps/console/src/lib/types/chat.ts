@@ -122,6 +122,8 @@ export type WidgetAction = { type: 'approve'; stepUpToken?: string } | { type: '
 export interface ToolCall {
   id: string;
   name: string;
+  /** The call's action in words (agents-service call_label); shown in place of `name`, which is the tool's id. */
+  label?: string;
   /** MCP server the tool belongs to. */
   server: string;
   input: Record<string, unknown>;

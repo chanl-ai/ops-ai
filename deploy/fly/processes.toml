@@ -44,9 +44,16 @@ command = ["/app/.venv/bin/python", "-m", "fake_openai", "/app/services/models-s
 env = { FAKE_OPENAI_HOST = "127.0.0.1", FAKE_OPENAI_PORT = "8746", PYTHONPATH = "/app/services/models-service/scripts" }
 ready = "http://127.0.0.1:8746/health"
 
+# Code tools' functions (c-531): Python on WASM with no network, no database and no secrets; tools-service is its
+# only caller and the only service it calls back.
+[process.runner]
+command = ["/app/.venv/bin/python", "-m", "ops_runner"]
+env = { OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_RUNNER}", OPS_SERVICE_SIGNING_KID = "svc-runner-1", OPS_TOOLS_URL = "http://127.0.0.1:8720" }
+ready = "http://127.0.0.1:8770/health"
+
 [process.tools]
 command = ["/app/.venv/bin/python", "-m", "ops_tools"]
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_TOOLS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_TOOLS}", OPS_SERVICE_SIGNING_KID = "svc-tools-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_TOOLS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_TOOLS}", OPS_SERVICE_SIGNING_KID = "svc-tools-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}", OPS_RUNNER_URL = "http://127.0.0.1:8770" }
 ready = "http://127.0.0.1:8720/health"
 
 [process.kb]

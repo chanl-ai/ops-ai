@@ -306,9 +306,10 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]
 
 
 async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
-    if not req.kb_ids or not req.user_turn:
+    query = (req.search_text or req.user_turn or "").strip()
+    if not req.kb_ids or not query:
         return []
-    return await ports.knowledge.search(req.user_turn, req.kb_ids, k=KNOWLEDGE_K)
+    return await ports.knowledge.search(query, req.kb_ids, k=KNOWLEDGE_K)
 
 
 def _reason(requests: DeferredToolRequests, call_id: str) -> str | None:

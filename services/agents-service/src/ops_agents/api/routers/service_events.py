@@ -45,9 +45,12 @@ class EventOut(Out):
     id: str
     name: str
     key: str
-    status: Literal["started", "unhandled"]
+    # started: listener runs began; resumed: a step parked on it carried on (c-525); unhandled: neither.
+    status: Literal["started", "resumed", "unhandled"]
     # One run per listening system workflow, the latest attempt of each.
     run_ids: list[str]
+    # The waiting runs it resumed: steps parked on this event and key (c-525).
+    woke: list[str] = Field(default_factory=list)
     attempts: int
 
 
@@ -88,6 +91,7 @@ async def emit_event(rt: Rt, caller: CurrentService, body: EventIn) -> JSONRespo
             "status": event["status"],
             "runIds": event["run_ids"],
             "attempts": event["attempts"],
+            "woke": event.get("woke") or [],
         },
         status=202,
     )

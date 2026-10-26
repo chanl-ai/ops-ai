@@ -21,6 +21,7 @@ after the console section it serves. `packages/` holds reusable libraries; `serv
 | `kb-service` | Data Hub: Knowledge bases, Wiki | Sources, ingestion, indexing, retrieval, citations, freshness | First slice built in `services/kb-service` on :8740 (`docs/services/kb-service/overview.md`), started by `make up`; uses `packages/ops_ingest` |
 | `files-service` | Data Hub: Files, uploads | File bytes: upload, download, type judged from the bytes, scanning, dedupe, retention, legal hold, WORM evidence | First slice on :8750 (c-087): uploads, proxy routes on the local backend, dedupe, downloads, legal holds, scan hook; client in `packages/ops_files_client` |
 | `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain (c-256), on `packages/ops_extract` ([documents service](../services/documents-service/overview.md)) |
+| `runner-service` | Data Hub: Tools (a code module's functions) | Runs a code tool's Python function in a sandbox: CPython on WASM, no network, no secrets, memory, time and call limits; `ops.call` goes back through tools-service as the caller | First slice on :8770 (c-531), started by `make up`; no database (`docs/services/runner-service/overview.md`) |
 
 There is no human-in-the-loop service. Reviews, Cases and work items move into the `ops_hitl` package (planned), and
 schedule, webhook, email and poll triggers into the `ops_triggers` package (planned); agents-service serves both today.
@@ -55,6 +56,7 @@ Every call goes through a typed client with a service token and the caller's tea
 | tools-service | platform-service | Reads `checkBeforeSend`, `toolWritesNeedApproval` and `requesterMayDecide` live on each call; an unreadable `checkBeforeSend` counts as on (register E39) | service token | `settings:view` |
 | outside assistants (Claude Code, Cursor) | tools-service | The team's read tools over MCP at `/mcp/test/{team}` through the same call path as `POST /v1/calls` (c-356) | MCP streamable HTTP | an API key or a person's token of that team holding `tools.run` |
 | an agent, an outside caller | agents-service | One workflow AI step's answer (Classify, Summarise, Extract from text, Draft) as a step would give it, under the team's `aiSteps` (c-298) | `POST /v1/ai-steps/{step}` | `workflows.run` in the team |
+| platform-service | agents-service | Before a team is deleted or its workspace closed: the team's runs in progress and the names of its live workflows, `GET /v1/teams/usage` for the token's team only. No answer refuses the delete or close (503 `usage_unavailable`) (c-529) | service token naming the team | `workflows:view` |
 | every service | platform-service | Identity tokens checked locally against its public keys | `ops_identity` | none |
 
 ### Service events
@@ -111,9 +113,10 @@ its own tables and only reading the other services' `/health/background`; a team
 | `kb-service` | Sources, ingestion, retrieval with citations | Freshness | Wiki |
 | `files-service` | Storage, dedupe, holds, type from bytes, OCR for scans | Purge to documents on delete | Retention jobs, resumable uploads, virus scan |
 | `documents-service` | Extraction and document types, on :8760 with its own chain (c-256) | layout (c-247), cited boxes (c-252), templates (c-253, c-254), classify (c-249), file page (c-250), proof on the restraining-notice samples (c-255) | Tables (c-238), split (c-239), accuracy from corrections (c-240) |
+| `runner-service` | Python functions on WASM, `ops.call` to bound tools, secret handles (c-531) | none | TypeScript, curated packages, gVisor and Firecracker backends, test cases at publish |
 | `ops-host` | none | none | Starts any set of services in one process |
 
-Dev ports: platform 8710, agents 8700, tools 8720, models 8730, kb 8740, files 8750, documents 8760, console 3016.
+Dev ports: platform 8710, agents 8700, tools 8720, models 8730, kb 8740, files 8750, documents 8760, runner 8770, console 3016.
 
 ## Naming
 
@@ -142,6 +145,7 @@ classes (designed).
 | `kb-service` | [kb-service](../services/kb-service/overview.md); ADR-0006 |
 | `files-service` | [files](../services/files-service/overview.md); ADR-0006, ADR-0010 |
 | `documents-service` | [documents service](../services/documents-service/overview.md); sample documents and their test cases in `docs/services/documents-service/` (with the move) |
+| `runner-service` | [runner service](../services/runner-service/overview.md); data gateway spec section c |
 
 ## Decisions
 

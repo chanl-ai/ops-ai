@@ -4,10 +4,10 @@ import * as React from 'react';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Archive, ArchiveRestore, Bot, Brain, Link2, MessageSquareDashed, MessagesSquare, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Bot, Brain, Link2, MessageSquareDashed, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { ChatLayout } from '@/components/chat/chat-layout';
+import { ChatLayout, ChatRailButton } from '@/components/chat/chat-layout';
 import { ChatHome } from './chat-home';
 import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
 import { ThreadSettingsButton } from '@/components/chat/thread-settings';
@@ -149,7 +149,6 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           kbs={kbsFor(thread.data?.agentId)}
           agent={agents.data?.find((a) => a.id === thread.data?.agentId)}
           agents={agents.data ?? []}
-          onOpenRail={() => setRailOpen(true)}
           editingTitle={editingTitle}
           titleDraft={titleDraft}
           setTitleDraft={setTitleDraft}
@@ -173,7 +172,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           initialAgentId={searchParams.get('agent') ?? undefined}
           header={
             <>
-              <RailButton onClick={() => setRailOpen(true)} />
+              <ChatRailButton />
               <span className="px-1 text-sm font-semibold">New chat</span>
             </>
           }
@@ -218,13 +217,6 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   );
 }
 
-function RailButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button variant="outline" size="sm" className="lg:hidden" onClick={onClick}>
-      <MessagesSquare className="size-4" /> <span className="sr-only sm:not-sr-only">Chats</span>
-    </Button>
-  );
-}
 
 function ThreadView({
   threadId,
@@ -234,7 +226,6 @@ function ThreadView({
   kbs,
   agent,
   agents,
-  onOpenRail,
   editingTitle,
   titleDraft,
   setTitleDraft,
@@ -259,7 +250,6 @@ function ThreadView({
   agent?: ChatAgent;
   /** Agents the person can hand the chat to with @ (c-174). */
   agents: ChatAgent[];
-  onOpenRail: () => void;
   editingTitle: boolean;
   titleDraft: string;
   setTitleDraft: (s: string) => void;
@@ -295,7 +285,7 @@ function ThreadView({
     return (
       <>
         <header className="flex min-h-12 items-center gap-2 border-b px-3 py-2">
-          <RailButton onClick={onOpenRail} />
+          <ChatRailButton />
           <span className="px-1 text-sm font-semibold">Chat not found</span>
         </header>
         <div className="flex flex-1 items-center justify-center p-6">
@@ -313,7 +303,7 @@ function ThreadView({
   return (
     <>
       <header className="flex min-h-12 flex-wrap items-center gap-2 border-b px-3 py-2">
-        <RailButton onClick={onOpenRail} />
+        <ChatRailButton />
         <div className="min-w-0 flex-1">
           {t && editingTitle ? (
             <Input

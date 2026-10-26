@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer, TokenError, mint, verify
-from ops_service_kit.errors import Unauthorized
+from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id
 
 from .passwords import Passwords
@@ -98,7 +98,16 @@ class Auth:
         self, user: User, *, request_id: str, method: str, provider_id: str | None = None
     ) -> Issued:
         """A new session and its first token, for sign-in, an SSO sign-in and an accepted invite. `method` is how
-        the person proved who they are (dev, password, oidc, saml); every token of the session carries it."""
+        the person proved who they are (dev, password, oidc, saml); every token of the session carries it. A closed
+        workspace lets only its owner in (c-529), and only after they have proved who they are, so the refusal says
+        nothing to someone who has not."""
+        match await self.store.workspace_open_to(user.tenant_id, user.id):
+            case "closed":
+                raise Forbidden("This workspace is closed.", code="workspace_closed")
+            case "gone":
+                raise _refused()
+            case _:
+                pass
         now = datetime.now(UTC)
         session_id, secret = new_id("ses"), secrets.token_urlsafe(32)
         await self.store.open_session(

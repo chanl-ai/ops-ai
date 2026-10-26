@@ -402,20 +402,20 @@ class EmailTriggers:
                     if self.beat is not None:
                         done = sum(len(r.started) for r in results)
                         await self.beat.ok(done, waiting=len(results), next_in=every)
+                    live: set[str] = set()
+                    for b in await self.bindings():
+                        if not is_idle(self.source(b)):
+                            continue
+                        key = f"{b.tenant}:{b.workflow}:{b.row['version']}:{b.mailbox.id}:{b.mailbox.updated_at}"
+                        live.add(key)
+                        if key not in idlers or idlers[key].done():
+                            idlers[key] = asyncio.create_task(self.idle_forever(b, stop, every))
+                    for key in set(idlers) - live:
+                        idlers.pop(key).cancel()
                 except Exception as e:  # The bindings could not be read; the next pass tries again.
                     log.exception("email_bindings_failed", error=type(e).__name__)
                     if self.beat is not None:
                         await self.beat.failed(e, next_in=every)
-                live: set[str] = set()
-                for b in await self.bindings():
-                    if not is_idle(self.source(b)):
-                        continue
-                    key = f"{b.tenant}:{b.workflow}:{b.row['version']}:{b.mailbox.id}:{b.mailbox.updated_at}"
-                    live.add(key)
-                    if key not in idlers or idlers[key].done():
-                        idlers[key] = asyncio.create_task(self.idle_forever(b, stop, every))
-                for key in set(idlers) - live:
-                    idlers.pop(key).cancel()
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), every)
         finally:

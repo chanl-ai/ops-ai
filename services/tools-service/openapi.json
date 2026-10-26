@@ -676,6 +676,202 @@
         "title": "Change",
         "type": "object"
       },
+      "CodeCallIn": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "CodeCallIn",
+        "type": "object"
+      },
+      "CodeLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "memoryMb": {
+            "title": "Memorymb",
+            "type": "integer"
+          },
+          "timeS": {
+            "title": "Times",
+            "type": "number"
+          }
+        },
+        "required": [
+          "memoryMb",
+          "timeS",
+          "calls"
+        ],
+        "title": "CodeLimits",
+        "type": "object"
+      },
+      "CodeLimitsIn": {
+        "additionalProperties": false,
+        "description": "What a run may use; runner-service holds each to the deployment's cap whatever is asked.",
+        "properties": {
+          "calls": {
+            "default": 20,
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Calls",
+            "type": "integer"
+          },
+          "memoryMb": {
+            "default": 256,
+            "maximum": 4096.0,
+            "minimum": 32.0,
+            "title": "Memorymb",
+            "type": "integer"
+          },
+          "timeS": {
+            "default": 10,
+            "exclusiveMinimum": 0.0,
+            "maximum": 600.0,
+            "title": "Times",
+            "type": "number"
+          }
+        },
+        "title": "CodeLimitsIn",
+        "type": "object"
+      },
+      "CodeOperationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "default": "read",
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "code": {
+            "$ref": "#/components/schemas/CodeSettingsIn"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/SchemaFieldIn"
+            },
+            "title": "Input",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "code"
+        ],
+        "title": "CodeOperationIn",
+        "type": "object"
+      },
+      "CodeSettings": {
+        "additionalProperties": false,
+        "description": "A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them.",
+        "properties": {
+          "bindings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "entry": {
+            "title": "Entry",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CodeLimits"
+          },
+          "secrets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Secrets",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "entry",
+          "bindings",
+          "secrets",
+          "limits"
+        ],
+        "title": "CodeSettings",
+        "type": "object"
+      },
+      "CodeSettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Bindings",
+            "type": "array"
+          },
+          "entry": {
+            "default": "main",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Entry",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CodeLimitsIn"
+          },
+          "secrets": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Secrets",
+            "type": "array"
+          },
+          "source": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "CodeSettingsIn",
+        "type": "object"
+      },
       "Connection": {
         "additionalProperties": false,
         "description": "How to sign in to one mailbox; the password goes by its secret's name only.",
@@ -3423,6 +3619,16 @@
             "title": "Endpoint",
             "type": "string"
           },
+          "function": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodeOperationIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "http": {
             "anyOf": [
               {
@@ -3618,6 +3824,16 @@
             "title": "Calls24H",
             "type": "integer"
           },
+          "code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodeSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -3635,7 +3851,8 @@
               "http",
               "mcp",
               "stub",
-              "local"
+              "local",
+              "code"
             ],
             "title": "Executor",
             "type": "string"
@@ -4529,6 +4746,16 @@
               }
             ],
             "title": "Body"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodeSettingsIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "anyOf": [
@@ -7187,7 +7414,7 @@
   "paths": {
     "/health": {
       "get": {
-        "operationId": "health_health_get",
+        "operationId": "gateway_health",
         "responses": {
           "200": {
             "content": {
@@ -7201,13 +7428,14 @@
         "summary": "Health",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/health/background": {
       "get": {
         "description": "This service's background processes and their state; counts and error types only, no record's data.",
-        "operationId": "health_background_health_background_get",
+        "operationId": "health_health_background",
         "responses": {
           "200": {
             "content": {
@@ -7223,12 +7451,13 @@
         "summary": "Health Background",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/calls": {
       "post": {
-        "operationId": "call_v1_calls_post",
+        "operationId": "gateway_call",
         "parameters": [
           {
             "in": "header",
@@ -7378,13 +7607,14 @@
         "summary": "Call",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/calls/abandon": {
       "post": {
         "description": "Internal (service token), for a workflow that lost the answer to a write: the call the gateway has under\n`key` (a claim still running past its expiry reads as lost), or, when it has none, the key abandoned so the\ncall is refused if it arrives later (it was still in flight). One transaction under the key's lock, so a call\nand its abandon never both win. Idempotent.",
-        "operationId": "abandon_v1_calls_abandon_post",
+        "operationId": "gateway_abandon",
         "parameters": [
           {
             "in": "header",
@@ -7518,7 +7748,165 @@
         "summary": "Abandon",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "internal"
+      }
+    },
+    "/v1/code-runs/calls": {
+      "post": {
+        "description": "Internal: one `ops.call` from a running code operation (c-531), sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call.",
+        "operationId": "gateway_code_run_call",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-code-run",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Code-Run"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeCallIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CallResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Code Run Call",
+        "tags": [
+          "gateway"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/connection-kinds": {
@@ -7696,7 +8084,8 @@
         "summary": "Kinds",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections": {
@@ -7906,7 +8295,8 @@
         "summary": "List Connections",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "connections_create_connection",
@@ -8091,7 +8481,8 @@
         "summary": "Create Connection",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/mcp": {
@@ -8279,7 +8670,8 @@
         "summary": "Connect Mcp",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/{connection_id}": {
@@ -8459,7 +8851,8 @@
         "summary": "Delete Connection",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "connections_get_connection",
@@ -8643,7 +9036,8 @@
         "summary": "Get Connection",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "operationId": "connections_change_connection",
@@ -8837,7 +9231,8 @@
         "summary": "Change Connection",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/{connection_id}/environments/{environment}": {
@@ -9043,7 +9438,8 @@
         "summary": "Set Environment",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/{connection_id}/sign-in": {
@@ -9240,7 +9636,8 @@
         "summary": "Start Sign In",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/{connection_id}/sign-in/complete": {
@@ -9437,7 +9834,8 @@
         "summary": "Complete Sign In",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/connections/{connection_id}/sign-out": {
@@ -9633,7 +10031,8 @@
         "summary": "Sign Out",
         "tags": [
           "connections"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/egress": {
@@ -9810,7 +10209,8 @@
         "summary": "Allow List",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/egress/hosts": {
@@ -10037,7 +10437,8 @@
         "summary": "List Hosts",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "egress_add_host",
@@ -10222,7 +10623,8 @@
         "summary": "Add Host",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/egress/hosts/remove": {
@@ -10409,7 +10811,8 @@
         "summary": "Remove Host",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/egress/ranges": {
@@ -10596,7 +10999,8 @@
         "summary": "Add Range",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/egress/ranges/remove": {
@@ -10783,7 +11187,8 @@
         "summary": "Remove Range",
         "tags": [
           "egress"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/executions": {
@@ -11085,7 +11490,8 @@
         "summary": "List Executions",
         "tags": [
           "executions"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/executions/{call_id}": {
@@ -11292,7 +11698,8 @@
         "summary": "Get Execution",
         "tags": [
           "executions"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/expressions/evaluate": {
@@ -11479,13 +11886,14 @@
         "summary": "Evaluate Formulas",
         "tags": [
           "expressions"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/fences": {
       "post": {
         "description": "Internal (service token): agents-service calls it when it takes a thread over, so the new generation is\nthe fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;\na lower generation than the fence is refused.",
-        "operationId": "raise_fence_v1_fences_post",
+        "operationId": "gateway_raise_fence",
         "parameters": [
           {
             "in": "header",
@@ -11537,13 +11945,14 @@
         "summary": "Raise Fence",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/grantable-operations": {
       "get": {
         "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view` (c-168).\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
-        "operationId": "grantable_operations_v1_grantable_operations_get",
+        "operationId": "gateway_grantable_operations",
         "parameters": [
           {
             "in": "header",
@@ -11667,13 +12076,14 @@
         "summary": "Grantable Operations",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/mailboxes/read": {
       "post": {
         "description": "One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail.",
-        "operationId": "read_v1_mailboxes_read_post",
+        "operationId": "mailboxes_read",
         "parameters": [
           {
             "in": "header",
@@ -11727,13 +12137,14 @@
         "summary": "Read",
         "tags": [
           "mailboxes"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/mailboxes/test": {
       "post": {
         "description": "Test connection: the secret and host checks, then sign-in and the folder's newest message, read without\nmarking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error.",
-        "operationId": "test_v1_mailboxes_test_post",
+        "operationId": "mailboxes_test",
         "parameters": [
           {
             "in": "header",
@@ -11787,13 +12198,14 @@
         "summary": "Test",
         "tags": [
           "mailboxes"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/mailboxes/wait": {
       "post": {
         "description": "True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none.",
-        "operationId": "wait_v1_mailboxes_wait_post",
+        "operationId": "mailboxes_wait",
         "parameters": [
           {
             "in": "header",
@@ -11847,7 +12259,8 @@
         "summary": "Wait",
         "tags": [
           "mailboxes"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/secrets": {
@@ -12080,7 +12493,8 @@
         "summary": "List Secrets",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "secrets_create_secret",
@@ -12265,13 +12679,14 @@
         "summary": "Create Secret",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/secrets/values": {
       "post": {
         "description": "Internal (service token holding `secrets_egress:run`, c-221): the values of the tenant's workspace-wide\nsecrets, for a service that keeps no credential of its own (models-service's provider keys). A secret scoped to\nteams never leaves for another service, and every value read is audited as the calling service.",
-        "operationId": "secret_values_v1_secrets_values_post",
+        "operationId": "secrets_secret_values",
         "parameters": [
           {
             "in": "header",
@@ -12405,7 +12820,8 @@
         "summary": "Secret Values",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/secrets/{name}": {
@@ -12584,7 +13000,8 @@
         "summary": "Delete Secret",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "The teams whose tool modules may read it; the gateway refuses a call from any other team's module. Moving\nit is an edit where it is now and a create where it goes.",
@@ -12779,7 +13196,8 @@
         "summary": "Scope Secret",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/secrets/{name}/rotate": {
@@ -12975,7 +13393,8 @@
         "summary": "Rotate Secret",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/send-policy": {
@@ -13173,7 +13592,8 @@
         "summary": "Get Send Policy",
         "tags": [
           "send-policy"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Saves the next version; writes from then on are judged against it.",
@@ -13379,7 +13799,8 @@
         "summary": "Save Send Policy",
         "tags": [
           "send-policy"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules": {
@@ -13732,7 +14153,8 @@
         "summary": "List Modules",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "tool_modules_create_module",
@@ -13937,7 +14359,8 @@
         "summary": "Create Module",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/blank": {
@@ -14144,7 +14567,8 @@
         "summary": "Create Blank Module",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/bulk-delete": {
@@ -14351,7 +14775,8 @@
         "summary": "Bulk Remove Modules",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/discover": {
@@ -14558,7 +14983,8 @@
         "summary": "Discover",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/grants": {
@@ -14806,7 +15232,8 @@
         "summary": "List Grants",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}": {
@@ -15005,7 +15432,8 @@
         "summary": "Remove Module",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "tool_modules_get_module",
@@ -15209,7 +15637,8 @@
         "summary": "Get Module",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "operationId": "tool_modules_update_module_details",
@@ -15423,7 +15852,8 @@
         "summary": "Update Module Details",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/activity": {
@@ -15629,7 +16059,8 @@
         "summary": "Module Activity",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/approvals": {
@@ -15845,7 +16276,8 @@
         "summary": "Request Approval",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/approvals/revoke": {
@@ -16061,7 +16493,8 @@
         "summary": "Revoke Approvals",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/approvals/{approval_id}/decide": {
@@ -16286,7 +16719,8 @@
         "summary": "Decide Approval",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/connection": {
@@ -16502,7 +16936,226 @@
         "summary": "Set Connection",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tool-modules/{module_id}/functions": {
+      "post": {
+        "description": "Adds a Python function to a code module (c-531); it runs on runner-service when called.",
+        "operationId": "tool_modules_add_function",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "module_id",
+            "required": true,
+            "schema": {
+              "title": "Module Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeOperationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ToolModuleDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Add Function",
+        "tags": [
+          "tool-modules"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/operations": {
@@ -16718,7 +17371,8 @@
         "summary": "Add Operation",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/operations/import": {
@@ -16934,7 +17588,8 @@
         "summary": "Import Operations",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/operations/{op_id}/mocks": {
@@ -17150,7 +17805,8 @@
         "summary": "List Mocks",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A mock answer after the operation's others. Keeping a Try it answer is this call with that answer's status\nand body, which the test console returned already scrubbed and masked.",
@@ -17374,7 +18030,8 @@
         "summary": "Add Mock",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/operations/{op_id}/mocks/{mock_id}": {
@@ -17591,7 +18248,8 @@
         "summary": "Delete Mock",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "operationId": "tool_modules_change_mock",
@@ -17823,7 +18481,8 @@
         "summary": "Change Mock",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/operations/{operation_id}": {
@@ -18048,7 +18707,8 @@
         "summary": "Update Operation",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/pending-changes": {
@@ -18254,7 +18914,8 @@
         "summary": "Discard Changes",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/review-decisions": {
@@ -18423,7 +19084,8 @@
         "summary": "Apply Review Decision",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/tool-modules/{module_id}/reviews": {
@@ -18639,7 +19301,8 @@
         "summary": "Request Review",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/test": {
@@ -18855,7 +19518,8 @@
         "summary": "Test Operation",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tool-modules/{module_id}/versions": {
@@ -19071,13 +19735,14 @@
         "summary": "Publish Version",
         "tags": [
           "tool-modules"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tools/{name}": {
       "get": {
         "description": "Internal (service token): a tool's access class from the gateway's registry, the one the policy decides\non. The review service asks here how many approvers a call needs instead of reading the registry itself.",
-        "operationId": "tool_access_v1_tools__name__get",
+        "operationId": "gateway_tool_access",
         "parameters": [
           {
             "in": "path",
@@ -19208,7 +19873,8 @@
         "summary": "Tool Access",
         "tags": [
           "gateway"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     }
   }

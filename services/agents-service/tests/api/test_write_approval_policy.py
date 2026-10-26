@@ -1,7 +1,7 @@
 """The review service applies each operation's write approval policy (c-048 T005), by failure mode: the person who
 asked approving their own write after the tenant switched requesterMayDecide off (c-186), read from the platform
-token, or refused while it is open; an approver from outside the operation's approving team; and the workspace's
-stepUp policy not asking for a step-up on a write whose operation asks for none. tools-service's
+token, or refused while it is open; the workspace's stepUp policy not asking for a step-up on a write whose operation
+asks for none. Who decides is the thread's team (c-509): test_approval_in_the_runs_team.py. tools-service's
 side (the policy, and OPA counting approvers) is tested there; here the policy is what tools-service would answer."""
 
 from __future__ import annotations
@@ -116,9 +116,9 @@ async def dev_platform() -> AsyncIterator[AsyncClient]:
         yield c
 
 
-def policy(*, approver_team: str | None = None) -> Callable[..., Any]:
+def policy() -> Callable[..., Any]:
     async def fake(_rt: Any, _tool: str) -> WritePolicy:
-        return WritePolicy("write", 1, approver_team)
+        return WritePolicy("write", 1)
 
     return fake
 
@@ -149,35 +149,11 @@ async def test_the_asker_approves_their_own_write_until_the_tenant_switches_it_o
     assert (await production.post(url, json={"type": "approve"}, headers=maya)).status_code == 200
 
 
-async def test_an_approver_outside_the_approving_team_is_refused(
-    dev_platform: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(hitl_facade, "policy_of", policy(approver_team="team_fraud"))
-    url = await drafted(dev_platform, person("usr_james", ["team_ops"]))
-    outside = await dev_platform.post(url, json={"type": "approve"}, headers=person("usr_maya", ["team_ops"]))
-    assert outside.status_code == 403 and "team_fraud" in outside.json()["error"]["message"], outside.text
-    inside = person("usr_nadia", ["team_ops", "team_fraud"])
-    assert (await dev_platform.post(url, json={"type": "approve"}, headers=inside)).status_code == 200
-
-
-async def test_a_reviewer_outside_the_approving_team_cannot_reject_either(
-    dev_platform: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The showcase run: Maya's approval of a write Fraud decides was refused, and her rejection of it was accepted."""
-    monkeypatch.setattr(hitl_facade, "policy_of", policy(approver_team="team_fraud"))
-    url = await drafted(dev_platform, person("usr_james", ["team_ops"]))
-    no = {"type": "reject", "reason": "Not ours"}
-    outside = await dev_platform.post(url, json=no, headers=person("usr_maya", ["team_ops"]))
-    assert (outside.status_code, outside.json()["error"]["code"]) == (403, "role_required"), outside.text
-    inside = person("usr_nadia", ["team_ops", "team_fraud"])
-    assert (await dev_platform.post(url, json=no, headers=inside)).status_code == 200
-
-
 async def test_a_chat_write_says_what_approving_does_and_which_team_decides(
     dev_platform: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The showcase run: a write drafted in chat showed an empty "If you approve" card and never said Fraud decides."""
-    monkeypatch.setattr(hitl_facade, "policy_of", policy(approver_team="team_fraud"))
+    """The showcase run: a write drafted in chat showed an empty "If you approve" card and never said who decides."""
+    monkeypatch.setattr(hitl_facade, "policy_of", policy())
     james = person("usr_james", ["team_ops"])
     thread = (await drafted(dev_platform, james)).split("/")[3]
     review = (await dev_platform.get(f"/reviews/{thread}", headers=james)).json()["data"]
@@ -185,25 +161,20 @@ async def test_a_chat_write_says_what_approving_does_and_which_team_decides(
         review["consequence"] == "Ask a customer to provide a document (receipt, statement, proof of address, ID)."
     ), review
     assert {"label": "Document", "value": "proof of address"} in review["actionFields"], review["actionFields"]
-    assert review["decidingTeam"] == {"id": "team_fraud", "name": "Fraud Operations"}, review
-    monkeypatch.setattr(hitl_facade, "policy_of", policy())
-    review = (await dev_platform.get(f"/reviews/{thread}", headers=james)).json()["data"]
     assert review["decidingTeam"] == {"id": "team_ops", "name": "Operations"}, review
 
 
-async def test_a_person_signed_in_with_the_dev_password_approves_only_for_their_teams(
+async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_threads_team(
     dev_platform: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A dev stack signs people in through platform-service with the demo password; they keep their teams, unlike the
-    dev header caller, so Operations cannot approve what Fraud Operations decides."""
-    monkeypatch.setattr(hitl_facade, "policy_of", policy(approver_team="team_fraud"))
+    dev header caller, so a Fraud Operations approver does not reach Operations' write, and Operations' does."""
+    monkeypatch.setattr(hitl_facade, "policy_of", policy())
     url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev"))
+    omar = person("usr_omar", ["team_fraud"], auth_method="dev")
+    assert (await dev_platform.post(url, json={"type": "approve"}, headers=omar)).status_code == 404
     maya = person("usr_maya", ["team_ops"], auth_method="dev")
-    outside = await dev_platform.post(url, json={"type": "approve"}, headers=maya)
-    assert outside.status_code == 403 and "team_fraud" in outside.json()["error"]["message"], outside.text
-    # The conversation is team_ops's, so the Fraud approver opens it from team_ops, as with a session token (c-407).
-    omar = person("usr_omar", ["team_ops", "team_fraud"], auth_method="dev")
-    r = await dev_platform.post(url, json={"type": "approve"}, headers=omar)
+    r = await dev_platform.post(url, json={"type": "approve"}, headers=maya)
     assert r.status_code == 200, r.text
 
 

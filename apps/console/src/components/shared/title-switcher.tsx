@@ -32,8 +32,9 @@ export function TitleSwitcher({ title }: { title: string }) {
         {section.pages.map((p) => (
           <DropdownMenuItem key={p.href} asChild>
             <Link href={p.href} aria-current={p.href === current ? 'page' : undefined} data-testid={`title-switcher-${p.href.replace(/\//g, '-').slice(1)}`}>
+              {p.icon ? <p.icon className="size-4 text-muted-foreground" /> : null}
+              <span className="flex-1">{p.label}</span>
               <Check className={p.href === current ? 'size-4' : 'size-4 opacity-0'} />
-              {p.label}
             </Link>
           </DropdownMenuItem>
         ))}

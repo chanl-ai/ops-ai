@@ -41,12 +41,13 @@ import { createConnectHttp } from './connect-http';
 import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
 
-function qs(params: ListParams & { view?: string }) {
+function qs(params: ListParams & { view?: string; group?: string }) {
   const q = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
   if (params.search) q.set('search', params.search);
   if (params.sortBy) q.set('sortBy', params.sortBy);
   if (params.sortOrder) q.set('sortOrder', params.sortOrder);
   if (params.view) q.set('view', params.view);
+  if (params.group) q.set('group', params.group);
   for (const [k, v] of Object.entries(params.filters ?? {})) v?.forEach((x) => q.append(k, x));
   return q.toString();
 }
@@ -82,7 +83,7 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     // Review ids hold colons (run:step:iteration); every path encodes them once, from the raw id.
     get: (id) => get(`/reviews/${encodeURIComponent(id)}`),
     byRunKey: (key) => get(`/reviews/by-run-key/${encodeURIComponent(key)}`),
-    place: (id) => get(`/reviews/${encodeURIComponent(id)}/place`),
+    place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),

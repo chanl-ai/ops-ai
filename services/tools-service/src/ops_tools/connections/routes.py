@@ -7,7 +7,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
 
 from ops_service_kit.http import Envelope, error_responses, ok
 
@@ -29,13 +28,9 @@ from .schemas import (
 from .service import ConnectionService
 
 
-def _operation_id(route: APIRoute) -> str:
-    return f"connections_{route.name}"
-
-
 def connections_router(service: ConnectionService, directory: Directory) -> APIRouter:
     caller = caller_in(directory)
-    r = APIRouter(tags=["connections"], responses=error_responses(), generate_unique_id_function=_operation_id)
+    r = APIRouter(tags=["connections"], responses=error_responses())
 
     @r.get("/v1/connection-kinds", response_model=Envelope[ConnectionKinds])
     async def kinds(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

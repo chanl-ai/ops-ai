@@ -64,7 +64,16 @@ from ops_documents.store.metadata import reachable
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, ListResult, error_body, error_responses, install_error_handlers, ok, paged
+from ops_service_kit.http import (
+    Envelope,
+    ListResult,
+    error_body,
+    error_responses,
+    install_error_handlers,
+    ok,
+    operation_id,
+    paged,
+)
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
@@ -177,7 +186,9 @@ def create_documents_app(
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    app = FastAPI(title="documents-service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="documents-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id
+    )
     install_error_handlers(app)
     install_auth(app, auth or Auth.from_settings(config, audience="documents"))
     if config.cors_origins:

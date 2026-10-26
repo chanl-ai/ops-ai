@@ -13,6 +13,15 @@ from ops_identity import ServiceCallError, ServiceUnreachable
 
 from .deps import Runtime
 
+# What the dev seed and tools-service's seed record as who asked for a review; a person reads it as Setup.
+SEEDED_REQUESTERS = frozenset({"seed", "the tools-service seed"})
+
+
+def requester(raw: str) -> str:
+    """Who asked for a review as a person reads it: a seeded request is Setup, anyone else as recorded."""
+    return "Setup" if raw in SEEDED_REQUESTERS else raw
+
+
 _PLACEHOLDER = re.compile(r"\{([A-Za-z0-9_]+)\}")
 _FILE_ID = re.compile(r"^fil_[A-Za-z0-9]+$")
 # A value only a machine reads (mod_core_banking, apr_f150a1a6, wfrun_…): an id, nothing a person decides on.

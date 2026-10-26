@@ -8,7 +8,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
 
 from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden
@@ -20,6 +19,7 @@ from .schemas import (
     ApprovalRequestIn,
     BlankModuleIn,
     BulkResult,
+    CodeOperationIn,
     ConnectionIn,
     DecisionIn,
     DiscoveryResult,
@@ -48,18 +48,12 @@ from .service import Caller, ModuleService
 ERRORS = error_responses({501: "Not available on this service yet", 502: "The source could not be reached"})
 
 
-def _operation_id(route: APIRoute) -> str:
-    return f"{route.tags[0]}_{route.name}".replace("-", "_") if route.tags else route.name
-
-
 def executions_router(service: ModuleService, directory: Directory) -> APIRouter:
     """`GET /v1/executions`: the gateway's call log with caller identity, as the console's ToolCallRow."""
 
     caller = caller_in(directory)
 
-    r = APIRouter(
-        prefix="/v1/executions", tags=["executions"], responses=ERRORS, generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/executions", tags=["executions"], responses=ERRORS)
 
     @r.get("", response_model=Envelope[ExecutionList])
     async def list_executions(  # pyright: ignore[reportUnusedFunction]
@@ -98,9 +92,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
 
     caller = caller_in(directory)
 
-    r = APIRouter(
-        prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS, generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS)
 
     @r.get("", response_model=Envelope[ModuleList])
     async def list_modules(  # pyright: ignore[reportUnusedFunction]
@@ -183,6 +175,13 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         module_id: str, body: HttpOperationIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.add_operation(who, module_id, body.model_dump()))
+
+    @r.post("/{module_id}/functions", response_model=Envelope[ToolModuleDetail])
+    async def add_function(
+        module_id: str, body: CodeOperationIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Adds a Python function to a code module (c-531); it runs on runner-service when called."""
+        return ok(await service.add_function(who, module_id, body.model_dump()))
 
     @r.post("/{module_id}/operations/import", response_model=Envelope[ToolModuleDetail])
     async def import_operations(  # pyright: ignore[reportUnusedFunction]

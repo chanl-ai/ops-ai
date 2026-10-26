@@ -167,6 +167,24 @@ class Settings(BaseSettings):
     # documents-service (c-256): what is read from a file, beside files-service, which keeps the bytes.
     documents_port: int = 8760
     documents_url: str | None = None
+    # runner-service (c-531): runs code tools' functions in Python on WASM, with no network and no secrets.
+    # tools-service calls it at runner_url; unset, a code operation fails runner_unavailable. The CPython WASI build is
+    # fetched by `make -C services/runner-service wasm` from runner_wasm_url into runner_cache_dir, and the runner
+    # refuses to start unless its SHA-256 is runner_wasm_sha256. Concurrency bounds host memory: the base plus N times
+    # a run's memory cap.
+    runner_port: int = 8770
+    runner_url: str | None = None
+    runner_wasm_url: str = (
+        "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/"
+        "python%2F3.12.0%2B20231211-040d5a6/python-3.12.0.wasm"
+    )
+    runner_wasm_sha256: str = "e5dc5a398b07b54ea8fdb503bf68fb583d533f10ec3f930963e02b9505f7a763"
+    runner_cache_dir: Path = _REPO_ROOT / ".data" / "runner"
+    runner_concurrency: int = 2
+    # The most a code operation may ask for; its own limits default to 256 MB, 10 s and 20 calls.
+    runner_max_memory_mb: int = 1024
+    runner_max_time_s: float = 60.0
+    runner_max_calls: int = 100
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None
@@ -193,6 +211,10 @@ class Settings(BaseSettings):
     platform_url: str | None = None
     platform_port: int = 8710
     platform_internal_port: int = 8711
+    # How long a closed workspace can be restored by its owner before its records are purged, and how long a team stays
+    # archived before it can be deleted (c-529). The use-case stack sets both to 0.
+    workspace_restore_days: int = 30
+    team_delete_after_days: int = 30
     # Where other services reach the internal port to introspect API keys. Unset: this machine's internal port, as when
     # every service runs on one host; each in its own container names platform-service's address on a private network.
     platform_internal_url: str | None = None
@@ -268,6 +290,8 @@ class Settings(BaseSettings):
     service_scopes: dict[str, list[str]] = Field(
         default_factory=lambda: {
             "scanner": ["files:decide"],
+            # runner-service sends a running code operation's calls back to tools-service (c-531).
+            "runner": ["tools:run"],
             "kb": ["files:view", "files:create", "files:edit", "agents:view"],
             # The workflow worker reads a file an Extract from file step names (c-157).
             # It also stores the attachments of mail that starts a workflow (c-187).
@@ -312,6 +336,9 @@ class Settings(BaseSettings):
             "documents": ["files:view", "files:edit", "settings:view", "events:emit"],
             # secrets_egress:run: it reads its provider keys from tools-service's Secrets store (c-221, c-177).
             "models": ["secrets_egress:run"],
+            # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
+            # workspace closed (c-529).
+            "platform": ["workflows:view"],
         }
     )
     # The embed app's own origins (apps/embed, c-158), such as https://ops.bank.example. A widget request from one of

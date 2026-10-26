@@ -161,6 +161,9 @@ class KernelAgents:
         except Unprocessable as e:
             # A model the agent does not allow is the step's setting, not a passing fault: the error port, no retry.
             return AgentResult(False, error=str(e), code="step_setting")
+        # The compiler appends "\n\nInput:\n" and the mapped JSON; search the prompt so those names and ids do not
+        # drown the handbook terms (c-532).
+        prompt, sep, _ = request.message.partition("\n\nInput:\n")
         req = TurnRequest(
             turn_id=request.turn_id,
             run_id=request.turn_id,
@@ -168,6 +171,7 @@ class KernelAgents:
             tools=await grants_for(self.directory, list(agent.tools)),
             transcript=[],
             user_turn=request.message,
+            search_text=prompt if sep else request.message,
             kb_ids=agent.default_kb_ids,
             output_schema=request.output_schema,
         )

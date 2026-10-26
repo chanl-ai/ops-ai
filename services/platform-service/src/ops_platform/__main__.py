@@ -13,6 +13,8 @@ from ops_email import EmailProviders
 from ops_identity import ServiceAuth, service_verifiers
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import run as run_background
 from ops_store.schema_version import require_current_schema
 
 from .api.app import create_internal_app, create_public_app
@@ -20,6 +22,8 @@ from .keys import signer_from
 from .seed import seed
 from .signin_options import SignInOptions
 from .store.identity import IdentityStore
+from .store.lifecycle import LifecycleStore
+from .workspace_lifecycle import WorkspacePurge
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
@@ -55,9 +59,17 @@ async def serve(settings: Settings) -> None:
             uvicorn.Config(internal, host=settings.bind_host, port=settings.platform_internal_port, log_level="info")
         ),
     ]
+    # Workspaces closed longer than the restore window are purged here (c-529), one copy for the account.
+    purge = WorkspacePurge(
+        LifecycleStore(store.db, security_team=settings.security_team_id), restore_days=settings.workspace_restore_days
+    )
+    stop = asyncio.Event()
+    purging = asyncio.create_task(run_background("workspace_lifecycle", purge.once, stop=stop, store=LOCAL_BEATS))
     try:
         await asyncio.gather(*(s.serve() for s in servers))
     finally:
+        stop.set()
+        await purging
         await store.close()
 
 

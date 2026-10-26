@@ -59,7 +59,8 @@ export const useReview = (id: string | null) =>
     refetchInterval: (q) => (q.state.data?.task?.regions.some((r) => r.region === 'assist' && (r.data as { pending?: unknown } | null)?.pending === true) ? 2000 : false),
   });
 /** The task's place in the open queue ("5 of 24") and its neighbours, from the server. */
-export const useReviewPlace = (id: string | null) => useTeamQuery({ queryKey: ['reviews', 'place', id], queryFn: () => api.reviews.place(id!), enabled: !!id });
+export const useReviewPlace = (id: string | null, opts?: { view?: string; group?: 'case' }) =>
+  useTeamQuery({ queryKey: ['reviews', 'place', id, opts?.view ?? 'open', opts?.group ?? null], queryFn: () => api.reviews.place(id!, opts), enabled: !!id });
 export const useReviewByRunKey = (runKey: string | null) =>
   useTeamQuery({ queryKey: ['reviews', 'run-key', runKey], queryFn: () => api.reviews.byRunKey(runKey!), enabled: !!runKey });
 export const useReviews = (p: ReviewListParams) => usePagedQuery({ queryKey: qk.reviews(p), queryFn: () => api.reviews.list(p) });

@@ -18,7 +18,6 @@ services/agents-service/src/ops_agents/api/chat_budget.py refusal admin_only 1 E
 services/agents-service/src/ops_agents/api/chat_budget.py refusal not_owner 3 E14
 services/agents-service/src/ops_agents/api/engine_reviews.py refusal forbidden 1 E10
 services/agents-service/src/ops_agents/api/engine_reviews.py refusal not_decided_by 1 E10
-services/agents-service/src/ops_agents/api/hitl_facade.py refusal role_required 1 E13
 services/agents-service/src/ops_agents/api/routers/reviews.py refusal forbidden 1 E10
 services/agents-service/src/ops_agents/api/routers/widgets.py conflict seeded_widget 1 E38
 services/agents-service/src/ops_agents/api/tool_module_reviews.py refusal service_required 1 E08
@@ -29,9 +28,12 @@ services/files-service/src/ops_files/app.py refusal forbidden 1 E13
 services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13
 services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16
 services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16
+services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44
 services/platform-service/src/ops_platform/store/teams.py role-name admin 1 E17
 services/platform-service/src/ops_platform/store/workspace.py role-name admin 1 E17
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18
+services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43
+services/platform-service/src/ops_platform/workspace_lifecycle.py conflict owner_must_transfer 1 E42
 services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06
 services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06
 services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16
@@ -69,6 +71,8 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict agent_paused 0 state
 * conflict already_decided 0 state
 * conflict already_published 0 state
+* conflict already_resumed 0 state
+* conflict archived_too_recently 0 state
 * conflict budget_paused 0 state
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
@@ -88,12 +92,16 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict guardrail_pinned 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
+* conflict live_workflows 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state
 * conflict no_default_agent 0 state
 * conflict no_sla_waiting 0 state
 * conflict node_missing 0 state
 * conflict not_a_draft 0 state
+* conflict not_an_account_admin 0 state
+* conflict not_archived 0 state
+* conflict not_closed 0 state
 * conflict not_indexed 0 state
 * conflict not_live 0 state
 * conflict not_newest_draft 0 state
@@ -102,6 +110,8 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict not_routable 0 state
 * conflict not_waiting 0 state
 * conflict nothing_to_approve 0 state
+* conflict owner_changed 0 state
+* conflict purged 0 state
 * conflict resume_via_budget 0 state
 * conflict resume_via_review 0 state
 * conflict review_open 0 state
@@ -110,6 +120,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict run_finished 0 state
 * conflict run_not_waiting 0 state
 * conflict run_waiting 0 state
+* conflict runs_in_progress 0 state
 * conflict secret_in_use 0 state
 * conflict security_team 0 state
 * conflict skill_deprecated 0 state

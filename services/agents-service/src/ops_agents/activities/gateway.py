@@ -115,7 +115,7 @@ class GatewayClient:
         return str((await self.tool_policy(tool))["access"])
 
     async def tool_policy(self, tool: str) -> dict[str, Any]:
-        """The tool's access class and write approval policy (`approval`: approvers, approverTeam, stepUp) as
+        """The tool's access class and write approval policy (`approval`: approvers, stepUp) as
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:
             return cast(dict[str, Any], await self.tools.get(f"/v1/tools/{tool}"))

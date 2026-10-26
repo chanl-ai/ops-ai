@@ -55,6 +55,7 @@ from .engine_host import (
     ThreadLeases,
     assisted_reviews,
 )
+from .engine_resume import resume_link
 from .engine_runs import WorkflowStarts
 from .fencing import ToolsFence
 from .mailbox_gateway import mailbox_client, mailbox_source
@@ -155,10 +156,18 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             enter_run=enter_run,
             review_hours=review_sla.hours if review_sla is not None else None,
             remind=reminders(db),
+            resume_link=lambda run, waiting, seconds: resume_link(
+                settings.review_key.get_secret_value(),
+                tenant=str(run["tenant_id"]),
+                team=str(run["team_id"]),
+                run_id=str(run["id"]),
+                waiting=waiting,
+                seconds=seconds,
+            ),
         )
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
-            listening = asyncio.create_task(listener.run_forever(stop, settings.email_poll_seconds))
+            listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))
             stack.push_async_callback(lambda: asyncio.wait_for(listening, None))
         log.info(
             "engine_worker_started",
@@ -184,6 +193,17 @@ def enter_run(run: dict[str, Any]) -> None:
     its own task, so the team set here is that run's alone; a run with no team stays tenant-wide."""
     if team := run.get("team_id"):
         isolation.enter(isolation.tenant(), str(team), kind="worker")
+
+
+async def keep_mail_listening(listener: EmailTriggers, stop: asyncio.Event, every_s: float) -> None:
+    """Restarts the mail listener after a crash, through the same runner as the other loops (c-516)."""
+
+    async def once() -> int:
+        await listener.run_forever(stop, every_s)
+        return 0
+
+    store = listener.beat.store if listener.beat is not None else background.LOCAL
+    await background.run("mail_listener", once, stop=stop, store=store, every_s=every_s)
 
 
 def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: AsyncExitStack) -> EmailTriggers | None:

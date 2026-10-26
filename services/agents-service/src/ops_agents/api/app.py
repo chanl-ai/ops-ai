@@ -16,7 +16,6 @@ import httpx
 import httpx2
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.routing import APIRoute
 from pydantic_ai.models import Model
 
 from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_model
@@ -36,6 +35,7 @@ from ops_agents.graphs.registry import build_graphs
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient, install_auth
 from ops_metering import PriceTable
+from ops_service_kit.http import operation_id
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
@@ -99,9 +99,11 @@ from .routers import knowledge_usage as knowledge_usage_routes
 from .routers import mailboxes as mailbox_routes
 from .routers import memories as memory_routes
 from .routers import routing as routing_routes
+from .routers import run_resume as run_resume_routes
 from .routers import skills as skill_routes
 from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
+from .routers import team_usage as team_usage_routes
 from .routers import timers as timer_routes
 from .routers import widget as embed_routes
 from .routers import widgets as widget_routes
@@ -187,11 +189,6 @@ async def seed_mailboxes(db: Database, path: Path | None) -> None:
                     updated_at=now,
                 )
             )
-
-
-def operation_id(route: APIRoute) -> str:
-    """`<tag>_<handler>`, e.g. `agents_list_agents`: stable across path changes, and the name a generated SDK uses."""
-    return f"{route.tags[0]}_{route.name}".lower().replace(" ", "_") if route.tags else route.name
 
 
 # The `area:action` scopes this service claims on another service's public routes (c-168), by audience. Those calls
@@ -468,9 +465,12 @@ def create_app(
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
     mount(engine_routes.runs_router, "Workflows")
+    # An outside system resumes the step it was handed (c-525), by the step's own token; no person's.
+    mount(run_resume_routes.router, "Workflows")
     mount(workflows.router, "Workflows")
     mount(workflows.refs_router, "Workflows")
     mount(knowledge_usage_routes.router, "Agents")
+    mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")

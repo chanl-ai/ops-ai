@@ -1,6 +1,6 @@
 [
   {
-    "description": "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input. A case of another team, or none, takes the error port.",
+    "description": "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input, and can move it on: waiting on the customer, or resolved when the run has done the work. Closing a case is a person's. A case of another team, or none, takes the error port.",
     "effects": "write",
     "executor": "case.add",
     "extraOutputs": [],
@@ -48,6 +48,13 @@
           "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
           "type": "string"
         },
+        "status": {
+          "enum": [
+            "open",
+            "waiting_on_customer",
+            "resolved"
+          ]
+        },
         "timeoutSeconds": {
           "exclusiveMinimum": 0,
           "type": "number"
@@ -83,6 +90,11 @@
           "label": "Note",
           "widget": "mapping"
         },
+        "status": {
+          "help": "Empty leaves its status; only a person closes a case",
+          "label": "Move the case to",
+          "widget": "select"
+        },
         "timeoutSeconds": {
           "help": "Per attempt; the type's default when empty",
           "label": "Time limit (seconds)",
@@ -93,6 +105,7 @@
         "caseId",
         "note",
         "fields",
+        "status",
         "timeoutSeconds"
       ]
     },
@@ -939,7 +952,13 @@
       }
     ],
     "label": "Extract from file",
-    "optionalOutputs": [],
+    "optionalOutputs": [
+      {
+        "parameter": "onTimeout",
+        "port": "timeout",
+        "value": "port"
+      }
+    ],
     "outputs": [
       {
         "connection": "main",
@@ -1075,12 +1094,24 @@
         "ocr": {
           "type": "boolean"
         },
+        "onTimeout": {
+          "default": "error",
+          "enum": [
+            "error",
+            "port"
+          ]
+        },
         "reviewBelow": {
           "maximum": 1,
           "minimum": 0,
           "type": "number"
         },
         "timeoutSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "waitSeconds": {
+          "description": "How long a background read may take before the step gives up (default 1,200)",
           "exclusiveMinimum": 0,
           "type": "number"
         }
@@ -1130,6 +1161,11 @@
           "label": "Read scans with OCR",
           "widget": "switch"
         },
+        "onTimeout": {
+          "help": "Leave by Error, or by a Timeout way of its own",
+          "label": "If the read takes longer",
+          "widget": "select"
+        },
         "reviewBelow": {
           "help": "Fields under this confidence go to a person",
           "label": "Review below",
@@ -1138,6 +1174,11 @@
         "timeoutSeconds": {
           "help": "Per attempt; the type's default when empty",
           "label": "Time limit (seconds)",
+          "widget": "number"
+        },
+        "waitSeconds": {
+          "help": "A long file is read in the background; 1,200 if empty",
+          "label": "Wait for a long read (seconds)",
           "widget": "number"
         }
       },
@@ -1149,7 +1190,9 @@
         "reviewBelow",
         "many",
         "ocr",
-        "timeoutSeconds"
+        "timeoutSeconds",
+        "waitSeconds",
+        "onTimeout"
       ]
     },
     "version": 1
@@ -2883,6 +2926,100 @@
         "mode",
         "seconds",
         "until"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Waits for work another system finishes, holding no worker: an outside system posts its result to the step's resume URL with the step's token, or a service event `event` arrives carrying correlation key `key`, whichever comes first, and the run goes on by `ok` with that result. With no answer within the time limit it goes on by `timeout` with what it waited for. Set an answer schema to pick its fields in later steps.",
+    "effects": "none",
+    "executor": "flow.wait_for",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.waitFor",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Wait for",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Timeout",
+        "name": "timeout"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "event": {
+          "description": "A service event that also wakes the step, e.g. extraction.finished",
+          "type": "string"
+        },
+        "key": {
+          "description": "With event: the correlation key the event must carry: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "outputSchema": {
+          "description": "JSON Schema of the answer the step goes on with",
+          "type": "object"
+        },
+        "timeoutSeconds": {
+          "default": 86400,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "timeoutSeconds"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "event": {
+          "help": "A service event that also wakes the step, such as extraction.finished",
+          "label": "Or an event",
+          "widget": "text"
+        },
+        "key": {
+          "help": "With an event: the value the event carries, such as an id an earlier step returned",
+          "label": "Event key",
+          "widget": "mapping"
+        },
+        "outputSchema": {
+          "help": "The fields of the answer, so later steps can pick them; empty takes any answer",
+          "label": "Answer schema",
+          "widget": "json"
+        },
+        "timeoutSeconds": {
+          "help": "With no answer by then the run takes the Timeout way",
+          "label": "Time limit (seconds)",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "timeoutSeconds",
+        "event",
+        "key",
+        "outputSchema"
       ]
     },
     "version": 1

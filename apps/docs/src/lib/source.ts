@@ -70,7 +70,13 @@ function icon(name: string) {
 }
 
 const built = siteTree(source.pageTree, icon);
-if (built.missing.length) throw new Error(`docs sidebar: SITE names pages or folders that do not exist: ${built.missing.join(', ')}`);
+// The build fails on a name SITE gives that no page has. A dev server reads the pages once at start, so a page added
+// since reads as missing there: it warns instead of answering 500 on every route until restarted.
+if (built.missing.length) {
+  const message = `docs sidebar: SITE names pages or folders that do not exist: ${built.missing.join(', ')}`;
+  if (process.env.NODE_ENV === 'development') console.warn(`${message} (restart the dev server after adding a page)`);
+  else throw new Error(message);
+}
 
 /** The tree the sidebar shows: four tabs in journey order, built from SITE in nav.mjs. */
 export const sidebarTree = built.tree as PageTree.Root;

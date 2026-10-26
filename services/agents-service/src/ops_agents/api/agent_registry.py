@@ -28,6 +28,7 @@ from ..store.agent_registry import (
 from ..store.graphs import GraphStore
 from .auth import Principal, caller_of
 from .deps import Runtime
+from .review_text import requester
 
 # The team that owns every seeded agent and workflow: Operations, under the id platform-service's dev seed gives it, so
 # agents-service, tools-service and platform-service name it the same way and no seed carries a placeholder team.
@@ -424,7 +425,7 @@ def review_view(
     return {
         "id": req["id"],
         "title": f"Publish {name} v{req['version']}",
-        "customer": f"Requested by {req['requested_by']}",
+        "customer": f"Requested by {requester(str(req['requested_by']))}",
         "workflowId": "" if agent else req["subject_id"],
         "workflowName": name,
         "agentSlug": slug if agent else "",

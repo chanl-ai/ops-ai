@@ -83,7 +83,7 @@ const READ_AND_DECIDE = {
   name: 'Read a long levy and decide (uc-525)',
   nodes: [
     trigger,
-    { id: 'read', type: 'ops.ai.extract', typeVersion: 1, name: 'Read the levy', parameters: { file: '$.input.fileId', detect: true } },
+    { id: 'read', type: 'ops.ai.extract', typeVersion: 1, name: 'Read the levy', parameters: { file: '$.input.fileId', detect: true, onTimeout: 'port' } },
     { id: 'decide', type: 'ops.flow.if', typeVersion: 1, name: 'Over 1,000?', parameters: { conditions: [{ left: '$.nodes.read.out.fields.amount_due.value', op: 'gt', right: 1000 }] } },
     end('large', 'large_levy'),
     end('small', 'small_levy'),

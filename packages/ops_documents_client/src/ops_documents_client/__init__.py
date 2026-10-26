@@ -5,8 +5,6 @@ the caller acts for, which documents-service reads from the signed token, never 
 
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any
 
 import httpx
@@ -62,11 +60,10 @@ class DocumentsClient:
         request: dict[str, Any],
         *,
         idempotency_key: str,
-        poll_seconds: float = 2.0,
-        wait_seconds: float = 900.0,
     ) -> dict[str, Any]:
-        """The file's extraction, finished: done, unreadable or failed. A small file is answered at once; a larger one
-        is polled while queued or running. A retry with the same `idempotency_key` reads the same extraction."""
+        """The file's extraction: finished (done, unreadable or failed) for a small file, which is read at once, or
+        queued or running for a larger one, read in the background; documents-service reports `extraction.finished`
+        when it ends (c-525). A repeat with the same `idempotency_key` answers the same extraction as it is now."""
         try:
             answer: dict[str, Any] = await self._documents.request(
                 "POST",
@@ -77,16 +74,6 @@ class DocumentsClient:
                 team=team,
                 timeout=180,  # parsing, OCR and the model call happen inside a synchronous answer
             )
-            deadline = time.monotonic() + wait_seconds
-            while answer["status"] in ("queued", "running"):
-                if time.monotonic() > deadline:
-                    raise DocumentsRefused(
-                        504, "extraction_timeout", f"extraction {answer['id']} is still {answer['status']}"
-                    )
-                await asyncio.sleep(poll_seconds)
-                answer = await self._documents.request(
-                    "GET", f"/v1/documents/extractions/{answer['id']}", tenant=tenant, team=team
-                )
         except ServiceCallError as e:
             raise _refused(e) from e
         return answer

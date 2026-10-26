@@ -22,7 +22,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pytest
 import sqlalchemy as sa
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +37,7 @@ TEAM_COLUMNS = ("team_id", "team")
 TENANT_HELD = {
     "members": "a person's membership of a team, read by the account's access pages",
     "api_keys": "an account key names the team it acts in; the key belongs to the account's admins",
+    "role_assignments": "a person's role in one team or in every team ('*', the account admin): the account's access",
     "audit_entries": "sign-in and membership events have no team; team pages filter on the acting team (c-507 Q1)",
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
@@ -68,10 +68,6 @@ ALLOWED_BRANCHES = {
     "packages/ops_engine/src/ops_engine/store/definitions.py": "background process: the engine's loops read every "
     "team's live definitions; a team reads its own and the background processes",
 }
-
-# Red until c-507 lands (saved in its spec folder as lock-red.txt); strict, so a test that turns green fails until its
-# mark is removed in the task that made it green.
-UNTIL_C507 = pytest.mark.xfail(strict=True, reason="c-507 builds the boundary this asserts")
 
 TABLE_BUILDERS = re.compile(r"\bsa\.Table\(|\b_child\(|\bTable\(")
 
@@ -118,7 +114,6 @@ def test_the_scan_reads_the_tables_it_guards() -> None:
     assert {"engine_runs", "thread_events", "tool_modules", "kb_bases", "files"} <= set(TABLES)
 
 
-@UNTIL_C507
 def test_every_table_with_a_team_column_is_team_owned_with_a_team_on_every_row() -> None:
     problems: list[str] = []
     for name, t in sorted(TABLES.items()):

@@ -19,7 +19,8 @@ from ops_store.team_scope import team_visible
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
 
-Status = Literal["started", "unhandled"]
+# started: listener runs began; resumed: no listener, but a step parked on it carried on (c-525); unhandled: neither.
+Status = Literal["started", "resumed", "unhandled"]
 EVENT_TRIGGER = "ops.trigger.event"
 
 service_events = sa.Table(

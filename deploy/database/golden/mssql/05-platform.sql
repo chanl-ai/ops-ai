@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0025_connections_cells
+-- platform-service, stamped at 0026_workspace_owner
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -10,6 +10,8 @@ CREATE TABLE tenants (
 	permission_version INTEGER NOT NULL DEFAULT '1', 
 	security_team_id VARCHAR(64) NULL, 
 	default_team_id VARCHAR(64) NULL, 
+	closed_at VARCHAR(40) NULL, 
+	closed_by VARCHAR(64) NULL, 
 	CONSTRAINT tenants_pkey PRIMARY KEY (id)
 );
 GO
@@ -200,6 +202,8 @@ CREATE TABLE role_assignments (
 );
 GO
 CREATE INDEX ix_role_assignments_subject ON role_assignments (tenant_id, subject_id);
+GO
+CREATE UNIQUE INDEX ux_role_assignments_owner ON role_assignments (tenant_id) WHERE role_id = 'owner';
 GO
 CREATE TABLE signin_providers (
 	id VARCHAR(64) NOT NULL, 
@@ -440,5 +444,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0025_connections_cells');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0026_workspace_owner');
 GO

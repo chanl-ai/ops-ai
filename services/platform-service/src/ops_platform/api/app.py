@@ -5,6 +5,7 @@ introspection behind the service token and is bound to a port the public host ne
 # FastAPI resolves string annotations against module globals, where those names do not exist.
 
 import json
+import time
 from pathlib import Path as FilePath
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs
@@ -13,11 +14,12 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from fastapi.routing import APIRoute
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
-from ops_identity import ServiceAuth, service_verifiers
+from ops_access.catalogue import ADMIN
+from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
@@ -25,13 +27,17 @@ from ops_service_kit.http import (
     OptionsPage,
     error_responses,
     install_error_handlers,
+    mark_public,
     ok,
+    operation_id,
     options_page,
     options_window,
 )
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 
 from ..access_check import AccessCheck
 from ..api_keys import ApiKeys
@@ -47,6 +53,7 @@ from ..store.audit import AuditLog
 from ..store.holders import HolderStore
 from ..store.identity import IdentityStore
 from ..store.keys import KeyStore
+from ..store.lifecycle import LifecycleStore
 from ..store.members import Actor, TeamStore
 from ..store.policies import PolicyStore
 from ..store.roles import RoleStore
@@ -54,7 +61,9 @@ from ..store.signin import SignInStore
 from ..store.teams import TeamAdminStore
 from ..store.workspace import WorkspaceStore
 from ..team_admin import TeamAdmin
+from ..team_usage import AgentsUsage, UsageReader, team_usage
 from ..teams import Members
+from ..workspace_lifecycle import WorkspaceLifecycle
 from .schemas import (
     DOMAIN,
     AcceptIn,
@@ -102,13 +111,17 @@ from .schemas import (
     StepUpIn,
     StepUpOut,
     StepUpSsoStartIn,
+    TeamDeleteCheckOut,
     TeamIn,
     TeamName,
     TeamOut,
     TeamRenameIn,
+    TransferIn,
     WhyOut,
+    WorkspaceCloseIn,
     WorkspaceNameOut,
     WorkspaceRenameIn,
+    WorkspaceStateOut,
     WorkspaceTeamOut,
     WorkspaceTeamsIn,
     WorkspaceTeamsOut,
@@ -119,10 +132,6 @@ KEY_ID = r"^key_[A-Za-z0-9_-]{1,60}$"
 ISO_TIME = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$"
 INVITE_TOKEN = r"^inv_[A-Za-z0-9_-]{8,64}$"
 RECORD_ID = r"^[A-Za-z0-9_-]{1,64}$"
-
-
-def operation_id(route: APIRoute) -> str:
-    return f"{route.tags[0]}_{route.name}".lower() if route.tags else route.name
 
 
 def _bearer(authorization: Annotated[str | None, Header()] = None) -> str:
@@ -152,11 +161,11 @@ def _dev_sign_in(app: FastAPI, auth: Auth, demo_password: str, people: list[dict
     and only a seeded email can be signed in this way."""
     seeded = {p["email"].lower() for p in people}
 
-    @app.get("/v1/auth/dev-people", tags=["platform"], response_model=Envelope[list[DevPerson]], responses=ERRORS)
+    @app.get("/v1/auth/dev-people", tags=["auth"], response_model=Envelope[list[DevPerson]], responses=ERRORS)
     async def dev_people() -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(people)
 
-    @app.post("/v1/auth/dev-sign-in", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    @app.post("/v1/auth/dev-sign-in", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def dev_sign_in(body: DevSignInIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         if body.email.lower() not in seeded:
             raise NotFound("A seeded demo person with that email")
@@ -180,9 +189,11 @@ def create_public_app(
     security_team: str = "team_security",
     signin: SignInOptions | None = None,
     services: ServiceAuth | None = None,
+    usage: UsageReader | None = None,
 ) -> FastAPI:
     """`signin` unset takes its values from settings, with no mail sender and no public or console URL. `services`
-    verifies the service tokens the few routes open to services accept (a policy read); unset, settings' keys."""
+    verifies the service tokens the few routes open to services accept (a policy read); unset, settings' keys.
+    `usage` reads what still runs in a team (c-529); unset, agents-service at settings' agents URL."""
     sign = signin or SignInOptions.from_settings(Settings())
     signin_store = SignInStore(store.db, security_team=security_team)
     passwords = Passwords(
@@ -220,6 +231,7 @@ def create_public_app(
     )
     app = FastAPI(title="Ops AI platform service", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)
+    mark_public(app)
     if cors_origins:
         # The console runs on another origin. Bearer tokens, not cookies, so no credentials mode.
         app.add_middleware(
@@ -235,52 +247,57 @@ def create_public_app(
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
 
-    @app.get("/.well-known/jwks.json", tags=["platform"], response_model=Jwks)
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        return {"processes": background_report(await LOCAL_BEATS.read(), "platform", time.time())}
+
+    @app.get("/.well-known/jwks.json", tags=["auth"], response_model=Jwks)
     async def jwks_document(response: Response) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         response.headers["Cache-Control"] = "public, max-age=300"
         return jwks
 
-    @app.post("/v1/auth/sign-in", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    @app.post("/v1/auth/sign-in", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sign_in(body: SignIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(_issued(await auth.sign_in(body.email, body.password, request_id=new_id("req"))))
 
     if demo_password is not None and dev_people is not None:
         _dev_sign_in(app, auth, demo_password, _seeded_people(dev_people))
 
-    @app.get("/v1/auth/session", tags=["platform"], response_model=Envelope[Principal], responses=ERRORS)
+    @app.get("/v1/auth/session", tags=["auth"], response_model=Envelope[Principal], responses=ERRORS)
     async def session(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         _, claims = await auth.session_of(token)
         return ok(principal_from_claims(claims))
 
-    @app.post("/v1/auth/refresh", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    @app.post("/v1/auth/refresh", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def refresh(body: Refresh) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(_issued(await auth.refresh(body.refresh_token, request_id=new_id("req"))))
 
-    @app.post("/v1/auth/step-up", tags=["platform"], response_model=Envelope[StepUpOut], responses=ERRORS)
+    @app.post("/v1/auth/step-up", tags=["auth"], response_model=Envelope[StepUpOut], responses=ERRORS)
     async def step_up(body: StepUpIn, token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The signed-in person re-enters their password and gets a five-minute step-up token for money decisions."""
         issued = await auth.step_up(token, body.password, request_id=new_id("req"))
         return ok({"token": issued.token, "expiresAt": issued.expires_at})
 
-    @app.post("/v1/auth/sign-out", tags=["platform"], status_code=204, responses=ERRORS)
+    @app.post("/v1/auth/sign-out", tags=["auth"], status_code=204, responses=ERRORS)
     async def sign_out(token: Annotated[str, Depends(_bearer)]) -> Response:  # pyright: ignore[reportUnusedFunction]
         await auth.sign_out(token, request_id=new_id("req"))
         return Response(status_code=204)
 
-    @app.post("/v1/auth/options", tags=["platform"], response_model=Envelope[OptionsOut], responses=ERRORS)
+    @app.post("/v1/auth/options", tags=["auth"], response_model=Envelope[OptionsOut], responses=ERRORS)
     async def sign_in_options(body: OptionsIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         """How an email signs in: a password, the workspace's SSO provider, or both. It reads the email's domain only,
         so it says nothing about whether an account exists."""
         return ok(await sso.options(body.email))
 
-    @app.post("/v1/auth/sso/start", tags=["platform"], response_model=Envelope[SsoStarted], responses=ERRORS)
+    @app.post("/v1/auth/sso/start", tags=["auth"], response_model=Envelope[SsoStarted], responses=ERRORS)
     async def sso_start(body: SsoStartIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Where to send the browser to sign in at the email domain's provider, and the flow key that browser keeps
         to finish."""
         started = await sso.start(body.email, next_path=body.next)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
-    @app.get("/v1/auth/oidc/callback", tags=["platform"], status_code=303, responses=ERRORS)
+    @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
     async def oidc_callback(  # pyright: ignore[reportUnusedFunction]
         state: Annotated[str, Query(max_length=200)] = "",
         code: Annotated[str, Query(max_length=2000)] = "",
@@ -290,7 +307,7 @@ def create_public_app(
 
     @app.get(
         "/v1/auth/saml/metadata",
-        tags=["platform"],
+        tags=["auth"],
         response_class=Response,
         responses={
             200: {"content": {"application/samlmetadata+xml": {"schema": {"type": "string"}}}},
@@ -302,7 +319,7 @@ def create_public_app(
         certificate for signed requests and encrypted assertions (c-197). Public: it holds nothing secret."""
         return Response(sso.sp_metadata(), media_type="application/samlmetadata+xml")
 
-    @app.post("/v1/auth/saml/acs", tags=["platform"], status_code=303, responses=ERRORS)
+    @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
     async def saml_acs(request: Request) -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
         """The SAML POST binding: a form with SAMLResponse and RelayState, posted by the provider's page."""
         raw = await request.body()
@@ -314,12 +331,12 @@ def create_public_app(
         )
         return RedirectResponse(target, status_code=303)
 
-    @app.post("/v1/auth/sso/complete", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    @app.post("/v1/auth/sso/complete", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sso_complete(body: SsoCompleteIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The one-time code from the callback and the starting browser's flow key, for a session."""
         return ok(_issued(await sso.complete(code=body.code, flow_key=body.flow_key, request_id=new_id("req"))))
 
-    @app.post("/v1/auth/step-up/sso/start", tags=["platform"], response_model=Envelope[SsoStarted], responses=ERRORS)
+    @app.post("/v1/auth/step-up/sso/start", tags=["auth"], response_model=Envelope[SsoStarted], responses=ERRORS)
     async def step_up_sso_start(  # pyright: ignore[reportUnusedFunction]
         body: StepUpSsoStartIn, token: Annotated[str, Depends(_bearer)]
     ) -> Any:
@@ -327,20 +344,20 @@ def create_public_app(
         started = await sso.step_up_start(token, next_path=body.next)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
-    @app.post("/v1/auth/step-up/sso/complete", tags=["platform"], response_model=Envelope[StepUpOut], responses=ERRORS)
+    @app.post("/v1/auth/step-up/sso/complete", tags=["auth"], response_model=Envelope[StepUpOut], responses=ERRORS)
     async def step_up_sso_complete(  # pyright: ignore[reportUnusedFunction]
         body: SsoCompleteIn, token: Annotated[str, Depends(_bearer)]
     ) -> Any:
         issued = await sso.step_up_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
         return ok({"token": issued.token, "expiresAt": issued.expires_at})
 
-    @app.post("/v1/auth/password/forgot", tags=["platform"], status_code=204, responses=ERRORS)
+    @app.post("/v1/auth/password/forgot", tags=["auth"], status_code=204, responses=ERRORS)
     async def forgot_password(body: ForgotIn) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Mails a reset link when the email can sign in by password; the answer is the same either way."""
         await passwords.forgot(body.email, request_id=new_id("req"))
         return Response(status_code=204)
 
-    @app.post("/v1/auth/password/reset", tags=["platform"], status_code=204, responses=ERRORS)
+    @app.post("/v1/auth/password/reset", tags=["auth"], status_code=204, responses=ERRORS)
     async def reset_password(body: ResetIn) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Sets the new password from a reset link, once, and ends every session the person had."""
         await passwords.reset(body.token, body.password, request_id=new_id("req"))
@@ -348,9 +365,32 @@ def create_public_app(
 
     team_store = TeamStore(store.db, security_team=security_team)
     people = Members(team_store)
+    settings = Settings()
+    lifecycle = WorkspaceLifecycle(
+        LifecycleStore(store.db, security_team=security_team),
+        TeamAdminStore(store.db, security_team=security_team),
+        people,
+        restore_days=settings.workspace_restore_days,
+        team_delete_after_days=settings.team_delete_after_days,
+    )
+    if usage is None:
+        agents_http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
+        agents = ServiceClient.for_settings(
+            settings, agents_http, service="platform", audience="agents", scopes=["workflows:view"], timeout=5
+        )
+        usage = AgentsUsage(agents)
+    app.state.team_usage = usage
+
+    async def claims_open(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+        """A live session's claims whatever the workspace's status: `/v1/me` and restore, which a closed workspace's
+        owner still reaches."""
+        return (await auth.session_of(token))[1]
 
     async def claims_of(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
-        return (await auth.session_of(token))[1]
+        """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed` (c-529)."""
+        claims = await claims_open(token)
+        await lifecycle.open_or_refuse(str(claims["tenant_id"]))
+        return claims
 
     async def acting(
         claims: Annotated[dict[str, Any], Depends(claims_of)],
@@ -373,8 +413,8 @@ def create_public_app(
     async def everywhere(tenant: str, user: str) -> bool:
         return await RoleStore(store.db).workspace_admin(tenant, user, now=now_iso())
 
-    @app.get("/v1/me", tags=["platform"], response_model=Envelope[Me], responses=ERRORS)
-    async def me(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    @app.get("/v1/me", tags=["me"], response_model=Envelope[Me], responses=ERRORS)
+    async def me(claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         found = await store.user(tenant, user)
         if found is None:
@@ -388,18 +428,17 @@ def create_public_app(
                 "teams": [{"id": t["id"], "name": t["name"], "role": t["role"]} for t in teams],
                 "policies": await policy_store.values(tenant),
                 "securityTeamId": await team_store.security_team_of(tenant),
+                "workspace": await lifecycle.state(tenant),
             }
         )
 
-    @app.get("/v1/teams", tags=["platform"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
+    @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
     async def list_teams(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The teams the caller may switch to: their own, and every active team for a workspace admin (c-208)."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         return ok(await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user)))
 
-    @app.get(
-        "/v1/settings/members", tags=["platform"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS
-    )
+    @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
         actor: Annotated[Actor, Depends(acting)],
         role: Annotated[list[str] | None, Query()] = None,
@@ -426,7 +465,7 @@ def create_public_app(
         }
         return ok({"data": rows, "pagination": pagination, "facets": facets})
 
-    @app.get("/v1/settings/members/options", tags=["platform"], response_model=Envelope[OptionsPage], responses=ERRORS)
+    @app.get("/v1/settings/members/options", tags=["members"], response_model=Envelope[OptionsPage], responses=ERRORS)
     async def member_options(  # pyright: ignore[reportUnusedFunction]
         actor: Annotated[Actor, Depends(acting)],
         search: str | None = None,
@@ -442,28 +481,35 @@ def create_public_app(
         )
         return ok(options_page(rows, offset, limit))
 
-    @app.post(
-        "/v1/settings/members/invite", tags=["platform"], response_model=Envelope[InviteBulkOut], responses=ERRORS
-    )
+    @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
     async def invite_members(body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
 
-    @app.post("/v1/settings/members/role", tags=["platform"], response_model=Envelope[BulkOut], responses=ERRORS)
+    async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
+        rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
+        return [str(m["userId"]) for m in rows if m["id"] in member_ids and m.get("userId")]
+
+    @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
     async def change_roles(body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The owner is never demoted here: 409 `owner_must_transfer` (c-529)."""
+        if body.role != ADMIN.id:
+            await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.set_role(actor, body.ids, body.role))
 
-    @app.post("/v1/settings/members/delete", tags=["platform"], response_model=Envelope[BulkOut], responses=ERRORS)
+    @app.post("/v1/settings/members/delete", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
     async def remove_members(body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The owner is never removed here: 409 `owner_must_transfer` (c-529)."""
+        await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.remove(actor, body.ids))
 
     roles = Roles(RoleStore(store.db))
 
-    @app.get("/v1/roles", tags=["platform"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
+    @app.get("/v1/roles", tags=["roles"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
     async def list_roles(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it."""
         return ok(await roles.list(str(claims["tenant_id"])))
 
-    @app.get("/v1/roles/{role_id}", tags=["platform"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    @app.get("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def read_role(  # pyright: ignore[reportUnusedFunction]
         role_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
@@ -472,7 +518,7 @@ def create_public_app(
 
     holder_store = HolderStore(store.db)
 
-    @app.get("/v1/access/holders", tags=["platform"], response_model=Envelope[HoldersOut], responses=ERRORS)
+    @app.get("/v1/access/holders", tags=["access"], response_model=Envelope[HoldersOut], responses=ERRORS)
     async def access_holders(  # pyright: ignore[reportUnusedFunction]
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
@@ -493,14 +539,14 @@ def create_public_app(
         team = security if (area, action) in SECURITY_TEAM_ACTIONS else team or actor.team_id
         return ok({"teamId": team, **await holder_store.holders(actor.tenant_id, team, area, action)})
 
-    @app.get("/v1/me/permissions", tags=["platform"], response_model=Envelope[PermissionsOut], responses=ERRORS)
+    @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
     async def my_permissions(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """What the caller may do in each of their teams, and the roles that grant each action."""
         return ok(await roles.of_me(str(claims["tenant_id"]), str(claims["sub"])))
 
     checker = AccessCheck(RoleStore(store.db), team_store, store, policy_store, people, holder_store)
 
-    @app.get("/v1/me/why", tags=["platform"], response_model=Envelope[WhyOut], responses=ERRORS)
+    @app.get("/v1/me/why", tags=["me"], response_model=Envelope[WhyOut], responses=ERRORS)
     async def why_not(  # pyright: ignore[reportUnusedFunction]
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
@@ -512,7 +558,7 @@ def create_public_app(
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
         return ok(await checker.why(actor, area, action))
 
-    @app.post("/v1/access/check", tags=["platform"], response_model=Envelope[AccessCheckOut], responses=ERRORS)
+    @app.post("/v1/access/check", tags=["access"], response_model=Envelope[AccessCheckOut], responses=ERRORS)
     async def check_access(  # pyright: ignore[reportUnusedFunction]
         body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
@@ -529,7 +575,7 @@ def create_public_app(
 
     @app.get(
         "/v1/people/{person_id}/permissions",
-        tags=["platform"],
+        tags=["people"],
         response_model=Envelope[PermissionsOut],
         responses=ERRORS,
     )
@@ -549,7 +595,7 @@ def create_public_app(
 
     @app.get(
         "/v1/settings/sign-in/providers",
-        tags=["platform"],
+        tags=["sign-in-providers"],
         response_model=Envelope[list[ProviderOut]],
         responses=ERRORS,
     )
@@ -559,7 +605,7 @@ def create_public_app(
 
     @app.put(
         "/v1/settings/sign-in/providers/{provider_id}",
-        tags=["platform"],
+        tags=["sign-in-providers"],
         response_model=Envelope[ProviderOut],
         responses=ERRORS,
     )
@@ -572,7 +618,10 @@ def create_public_app(
         return ok(await signin_settings.save(actor, provider_id, body.model_dump(by_alias=True)))
 
     @app.get(
-        "/v1/settings/sign-in/secret-names", tags=["platform"], response_model=Envelope[list[str]], responses=ERRORS
+        "/v1/settings/sign-in/secret-names",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[str]],
+        responses=ERRORS,
     )
     async def list_signin_secret_names(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The names an OIDC provider may give as `clientSecretRef` (`OPS_SIGNIN_SECRETS`), never the values."""
@@ -580,7 +629,7 @@ def create_public_app(
 
     @app.post(
         "/v1/settings/sign-in/domains/{domain}/verify",
-        tags=["platform"],
+        tags=["sign-in-providers"],
         response_model=Envelope[ProviderOut],
         responses=ERRORS,
     )
@@ -593,17 +642,22 @@ def create_public_app(
 
     policies = Policies(policy_store, people)
 
-    @app.get("/v1/policies", tags=["platform"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
+    @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
     async def list_policies(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Every policy with its value and open default; any member of the workspace reads them."""
         return ok(await policies.list(actor))
 
-    settings = Settings()
     readers = services or ServiceAuth(
         audience="platform", verifiers=service_verifiers(settings, "platform"), scopes=settings.service_scopes
     )
 
-    @app.get("/v1/policies/{key}", tags=["platform"], response_model=Envelope[PolicyOut], responses=ERRORS)
+    async def service_of(token: str) -> Any:
+        """A service token's caller, refused with `workspace_closed` when it names a closed workspace (c-529)."""
+        svc = readers.resolve(token)
+        await lifecycle.open_or_refuse(svc.tenant_id)
+        return svc
+
+    @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
         key: Annotated[str, Path(max_length=64)],
         token: Annotated[str, Depends(_bearer)],
@@ -613,7 +667,7 @@ def create_public_app(
         `settings:view` scope and reads its own tenant's value, as a background job with no person does (c-206's
         memory sweep). 400 `policy_value` for a key the catalogue does not hold."""
         if readers.signs(token):
-            svc = readers.resolve(token)
+            svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             rows = await policies.for_tenant(svc.tenant_id)
@@ -624,14 +678,14 @@ def create_public_app(
             raise ValidationFailed(f"{key} is not a policy", code="policy_value")
         return ok(row)
 
-    @app.get("/v1/team-names", tags=["platform"], response_model=Envelope[list[TeamName]], responses=ERRORS)
+    @app.get("/v1/team-names", tags=["teams"], response_model=Envelope[list[TeamName]], responses=ERRORS)
     async def team_names(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's display name in the workspace (c-224), so a page showing another team's record names its team.
         Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
-            svc = readers.resolve(token)
+            svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
@@ -639,14 +693,14 @@ def create_public_app(
             tenant = str((await claims_of(token))["tenant_id"])
         return ok(await team_store.names(tenant))
 
-    @app.get("/v1/people-names", tags=["platform"], response_model=Envelope[list[PersonName]], responses=ERRORS)
+    @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every person's display name in the workspace by email (c-201), so a list naming who did something shows a
         name rather than an address. Any member reads them; a service token needs the `settings:view` scope."""
         if readers.signs(token):
-            svc = readers.resolve(token)
+            svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
@@ -654,7 +708,7 @@ def create_public_app(
             tenant = str((await claims_of(token))["tenant_id"])
         return ok(await team_store.people_names(tenant))
 
-    @app.put("/v1/policies/{key}", tags=["platform"], response_model=Envelope[PolicyOut], responses=ERRORS)
+    @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def set_policy(  # pyright: ignore[reportUnusedFunction]
         key: Annotated[str, Path(max_length=64)], body: PolicyIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
@@ -662,7 +716,9 @@ def create_public_app(
         settings.manage in the acting team. 400 `policy_value` for a key or value the catalogue does not take."""
         return ok(await policies.set(actor, key, body.value))
 
-    @app.delete("/v1/settings/sign-in/providers/{provider_id}", tags=["platform"], status_code=204, responses=ERRORS)
+    @app.delete(
+        "/v1/settings/sign-in/providers/{provider_id}", tags=["sign-in-providers"], status_code=204, responses=ERRORS
+    )
     async def delete_signin_provider(  # pyright: ignore[reportUnusedFunction]
         provider_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Response:
@@ -681,7 +737,7 @@ def create_public_app(
 
     @app.get(
         "/v1/settings/teams",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[ListResult[WorkspaceTeamOut]],
         responses=ERRORS,
     )
@@ -700,7 +756,7 @@ def create_public_app(
 
     @app.post(
         "/v1/settings/teams",
-        tags=["platform"],
+        tags=["teams"],
         status_code=201,
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
@@ -712,7 +768,7 @@ def create_public_app(
 
     @app.get(
         "/v1/settings/workspace-teams",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[WorkspaceTeamsOut],
         responses=ERRORS,
     )
@@ -720,7 +776,7 @@ def create_public_app(
         """The workspace's security team and the team new people join when nothing else names one (c-202). A workspace
         admin reads them; a service token needs the `settings:view` scope and reads its own tenant's (c-230)."""
         if readers.signs(token):
-            svc = readers.resolve(token)
+            svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             return ok(await team_admin.workspace_teams_of(svc.tenant_id))
@@ -728,7 +784,7 @@ def create_public_app(
 
     @app.put(
         "/v1/settings/workspace-teams",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[WorkspaceTeamsOut],
         responses=ERRORS,
     )
@@ -740,7 +796,7 @@ def create_public_app(
 
     @app.patch(
         "/v1/settings/workspace",
-        tags=["platform"],
+        tags=["workspace"],
         response_model=Envelope[WorkspaceNameOut],
         responses=ERRORS,
     )
@@ -752,7 +808,7 @@ def create_public_app(
 
     @app.patch(
         "/v1/settings/teams/{team_id}",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
     )
@@ -765,7 +821,7 @@ def create_public_app(
 
     @app.post(
         "/v1/settings/teams/{team_id}/archive",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
     )
@@ -777,7 +833,7 @@ def create_public_app(
 
     @app.post(
         "/v1/settings/teams/{team_id}/restore",
-        tags=["platform"],
+        tags=["teams"],
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
     )
@@ -786,20 +842,91 @@ def create_public_app(
     ) -> Any:
         return ok(await team_admin.set_status(actor, team_id, archived=False))
 
+    async def on_workspace_open(claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Actor:
+        return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
+
+    @app.post(
+        "/v1/workspace/transfer", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS
+    )
+    async def transfer_workspace(  # pyright: ignore[reportUnusedFunction]
+        body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
+    ) -> Any:
+        """The owner hands the workspace to an account admin, at once and audited (c-529); the old owner stays an
+        admin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in
+        every team."""
+        return ok(await lifecycle.transfer(actor, body.user_id))
+
+    @app.post("/v1/workspace/leave", tags=["workspace"], status_code=204, responses=ERRORS)
+    async def leave_workspace(actor: Annotated[Actor, Depends(on_workspace)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """The caller leaves every team of the workspace and their sessions end; the owner is refused with 409
+        `owner_must_transfer` until they transfer."""
+        await lifecycle.leave(actor)
+        return Response(status_code=204)
+
+    @app.post("/v1/workspace/close", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
+    async def close_workspace(  # pyright: ignore[reportUnusedFunction]
+        body: WorkspaceCloseIn,
+        actor: Annotated[Actor, Depends(on_workspace)],
+        reader: Annotated[UsageReader, Depends(team_usage)],
+    ) -> Any:
+        """Deletes the workspace: it closes at once, its owner can restore it for the window, then its records go.
+        Only the owner, typing its name; 409 `runs_in_progress` while any team runs, 503 `usage_unavailable` when that
+        cannot be checked."""
+        return ok(await lifecycle.close(actor, body.name, reader))
+
+    @app.post("/v1/workspace/restore", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
+    async def restore_workspace(actor: Annotated[Actor, Depends(on_workspace_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """Reopens a closed workspace and the keys its close stopped; 409 `purged` once the purge has started."""
+        return ok(await lifecycle.restore(actor))
+
+    @app.post("/v1/settings/teams/{team_id}/leave", tags=["teams"], status_code=204, responses=ERRORS)
+    async def leave_team(  # pyright: ignore[reportUnusedFunction]
+        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+    ) -> Response:
+        """The caller leaves one team; its last admin is refused with 409 `last_admin`."""
+        await lifecycle.leave_team(actor, team_id)
+        return Response(status_code=204)
+
+    @app.get(
+        "/v1/settings/teams/{team_id}/delete-check",
+        tags=["teams"],
+        response_model=Envelope[TeamDeleteCheckOut],
+        responses=ERRORS,
+    )
+    async def team_delete_check(  # pyright: ignore[reportUnusedFunction]
+        team_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(on_workspace)],
+        reader: Annotated[UsageReader, Depends(team_usage)],
+    ) -> Any:
+        """Whether an account admin may delete the team now, and each reason not: archived days left, live
+        workflows by name, and `usageKnown` false when agents-service did not answer."""
+        return ok(await lifecycle.delete_check(actor, team_id, reader))
+
+    @app.delete("/v1/settings/teams/{team_id}", tags=["teams"], status_code=204, responses=ERRORS)
+    async def delete_team(  # pyright: ignore[reportUnusedFunction]
+        team_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(on_workspace)],
+        reader: Annotated[UsageReader, Depends(team_usage)],
+    ) -> Response:
+        """Deletes a team archived for the window with no live workflow; account admins only. Its row and audit
+        entries stay; its members and assignments go and its name is free again."""
+        await lifecycle.delete_team(actor, team_id, reader)
+        return Response(status_code=204)
+
     keys = ApiKeys(KeyStore(store.db), people)
 
-    @app.get("/v1/api-keys", tags=["platform"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
+    @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
     async def list_api_keys(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await keys.list(actor))
 
     @app.post(
-        "/v1/api-keys", tags=["platform"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS
+        "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS
     )
     async def create_api_key(body: ApiKeyIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         target = body.target.model_dump() if body.target else None
         return ok(await keys.create(actor, body.name, list(body.scopes), body.expires_in_days, target), status=201)
 
-    @app.get("/v1/api-key-summaries", tags=["platform"], response_model=Envelope[list[ApiKeySummary]], responses=ERRORS)
+    @app.get("/v1/api-key-summaries", tags=["api-keys"], response_model=Envelope[list[ApiKeySummary]], responses=ERRORS)
     async def api_key_summaries(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
@@ -807,16 +934,16 @@ def create_public_app(
         (a service token with the `settings:view` scope), or for a person who manages access across the workspace
         (`can('access', 'manage')` in every team), as an admin may do everything."""
         if not readers.signs(token):
-            claims = (await auth.session_of(token))[1]
+            claims = await claims_of(token)
             actor = Actor(str(claims["tenant_id"]), ANY_TEAM, str(claims["sub"]), new_id("req"))
             await people.require_admin(actor, "access", "manage")
             return ok(await keys.summaries(actor.tenant_id))
-        svc = readers.resolve(token)
+        svc = await service_of(token)
         if "settings:view" not in svc.scopes:
             raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
         return ok(await keys.summaries(svc.tenant_id))
 
-    @app.post("/v1/api-keys/{key_id}/revoke", tags=["platform"], response_model=Envelope[ApiKeyOut], responses=ERRORS)
+    @app.post("/v1/api-keys/{key_id}/revoke", tags=["api-keys"], response_model=Envelope[ApiKeyOut], responses=ERRORS)
     async def revoke_api_key(  # pyright: ignore[reportUnusedFunction]
         key_id: Annotated[str, Path(pattern=KEY_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
@@ -824,7 +951,7 @@ def create_public_app(
 
     reader = AuditReader(AuditLog(store.db), team_store, people)
 
-    @app.get("/v1/audit", tags=["platform"], response_model=Envelope[AuditPage], responses=ERRORS)
+    @app.get("/v1/audit", tags=["audit"], response_model=Envelope[AuditPage], responses=ERRORS)
     async def read_audit(  # pyright: ignore[reportUnusedFunction]
         *,
         actor: Annotated[Actor, Depends(acting)],
@@ -842,11 +969,11 @@ def create_public_app(
         filters |= {"from": since, "to": until}
         return ok(await reader.page(actor, filters, page, page_size))
 
-    @app.get("/v1/invites/{token}", tags=["platform"], response_model=Envelope[InvitePreview], responses=ERRORS)
+    @app.get("/v1/invites/{token}", tags=["invites"], response_model=Envelope[InvitePreview], responses=ERRORS)
     async def read_invite(token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.preview(token))
 
-    @app.post("/v1/invites/{token}/accept", tags=["platform"], response_model=Envelope[SessionOut], responses=ERRORS)
+    @app.post("/v1/invites/{token}/accept", tags=["invites"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def accept_invite(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Path(pattern=INVITE_TOKEN)],
         body: AcceptIn,
@@ -876,10 +1003,11 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth) -> FastA
     keys = Keys(store)
     app = FastAPI(title="Ops AI platform service (internal)", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)
+    mark_public(app, default="internal")
 
     @app.post(
         "/v1/auth/introspect",
-        tags=["platform"],
+        tags=["auth"],
         dependencies=[Depends(services.principal)],
         response_model=Envelope[Principal],
         responses=ERRORS,

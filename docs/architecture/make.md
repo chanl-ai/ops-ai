@@ -27,6 +27,7 @@ Every Makefile, root or service, includes `make/env.mk` first (service Makefiles
 | `make/console.mk` | `console-install`, `dev`, `dev-runtime`, `console-verify` | The console in the foreground |
 | `make/python.mk` | `python-install`, `python-verify` | The uv workspace: ruff and pyright on `packages/`, then each service's verify with model keys unset |
 | `make/docs.mk` | `docs-verify` | `scripts/check-docs.mjs` |
+| `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
 | `make/usecase.mk` | `usecase-test`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-runner-test` | Calls `scripts/usecase.mjs` (`packages/usecase-runner`); use-case ports and database `OPS_USECASE_*`. Registry and rules: `docs/usecases/README.md` |
 | `make/experiments.mk` | `experiment` | Runs `services/agents-service/experiments/e<n>_*.py` on the scripted model |
 | `make/service-common.mk` | `help`, `stop`, `logs`, `health` | Included by running services' Makefiles: the verbs that act on the `make up` process |

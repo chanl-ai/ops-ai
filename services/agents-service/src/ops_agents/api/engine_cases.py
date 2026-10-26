@@ -59,7 +59,16 @@ class RunCases:
             await self.cases.add_event(case_id, "run", ref=run_id, detail={}, by=f"run:{run_id}")
         return OpenedCase(case_id, opened.created)
 
-    async def add(self, run_id: str, case_id: str, note: str | None, fields: dict[str, Any] | None = None) -> None:
+    async def add(
+        self,
+        run_id: str,
+        case_id: str,
+        note: str | None,
+        fields: dict[str, Any] | None = None,
+        *,
+        status: str | None = None,
+        key: str | None = None,
+    ) -> None:
         team, _ = await self._team_of(run_id)
         try:
             await self.cases.get(case_id, [team])
@@ -68,9 +77,16 @@ class RunCases:
         if fields:
             # A retried step sets the same values again, which changes nothing.
             await self.cases.merge_fields(case_id, fields)
-        # A retried step finds the run on the timeline already and adds nothing.
-        if any(e["kind"] == "run" and e["ref"] == run_id for e in await self.cases.events(case_id)):
-            return
-        await self.cases.add_event(
-            case_id, "run", ref=run_id, detail={"text": note} if note else {}, by=f"run:{run_id}"
-        )
+        if status:
+            if status == "closed":
+                raise ValueError("a run does not close a case; closing is a person's")
+            # The same status again changes nothing, so a retried step records no second move.
+            await self.cases.change(case_id, {"status": status}, by=f"run:{run_id}")
+        events = await self.cases.events(case_id)
+        by = f"run:{run_id}"
+        # A retried step finds its entry on the timeline already and adds nothing: the run's own entry the first time
+        # it joins, a note of a later step of the same run by that step's key.
+        if not any(e["kind"] == "run" and e["ref"] == run_id for e in events):
+            await self.cases.add_event(case_id, "run", ref=run_id, detail={"text": note} if note else {}, by=by)
+        elif note and key and not any(e["kind"] == "note" and e["ref"] == key for e in events):
+            await self.cases.add_event(case_id, "note", ref=key, detail={"text": note}, by=by)

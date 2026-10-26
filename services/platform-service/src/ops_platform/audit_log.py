@@ -3,9 +3,12 @@ is `all` (the platform team). Entries are written by each store in the transacti
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil
 from typing import Any
+
+from ops_access import ANY_TEAM
+from ops_service_kit.errors import Forbidden
 
 from .store.audit import KIND, VIEWS, AuditLog
 from .store.members import Actor, TeamStore
@@ -41,6 +44,18 @@ def summary(row: dict[str, Any]) -> str:
         "auth.step_up": lambda: "Signed in again to confirm a decision",
         "auth.refresh_reuse": lambda: "A reused sign-in token ended every session",
         "team.rename": lambda: f"Renamed the team to {d.get('to', target)}",
+        "team.create": lambda: f"Created the team {d.get('name', target)}",
+        "team.archive": lambda: f"Archived the team {target}",
+        "team.restore": lambda: f"Restored the team {target}",
+        "team.leave": lambda: "Left the team",
+        "team.delete": lambda: f"Deleted the team {target}",
+        "workspace.rename": lambda: f"Renamed the workspace to {d.get('to', target)}",
+        "workspace.teams": lambda: "Changed the workspace's security and default teams",
+        "workspace.transfer": lambda: "Transferred the workspace to another account admin",
+        "workspace.leave": lambda: "Left the workspace",
+        "workspace.close": lambda: "Deleted the workspace; it can be restored until its records are removed",
+        "workspace.restore": lambda: "Restored the workspace",
+        "workspace.purge": lambda: "Removed the closed workspace's records",
         "access.check": lambda: (
             f"Checked {target}'s access to {words(d.get('action'))} on {words(d.get('area'))}: "
             + ("allowed" if d.get("allowed") else "refused")
@@ -76,12 +91,21 @@ class AuditReader:
     teams: TeamStore
     members: Members
 
+    async def _account_admin(self, actor: Actor) -> bool:
+        try:
+            await self.members.require_admin(replace(actor, team_id=ANY_TEAM), "audit", "view")
+        except Forbidden:
+            return False
+        return True
+
     async def page(self, actor: Actor, filters: dict[str, str | None], page: int, size: int) -> dict[str, Any]:
         await self.members.require_admin(actor, "audit", "view")
-        everyone = await self.teams.scope_of(actor.tenant_id, actor.team_id) == "all"
-        team = None if everyone else actor.team_id
-        rows, total = await self.log.page(actor.tenant_id, team, filters=filters, page=page, size=size)
-        counts = await self.log.counts(actor.tenant_id, team)
+        # The acting team's entries; the account's own (no team) only for whoever reads audit in every team, the
+        # account admin (owner's answer, c-507 Q1). No team reads another team's.
+        account = await self._account_admin(actor)
+        team = actor.team_id
+        rows, total = await self.log.page(actor.tenant_id, team, account=account, filters=filters, page=page, size=size)
+        counts = await self.log.counts(actor.tenant_id, team, account=account)
         kinds: dict[str, int] = {}
         targets: dict[str, int] = {}
         for (action, target), n in counts.items():

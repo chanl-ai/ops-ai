@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from ops_engine import compiler
 from ops_engine.compiler import NodeCall, ai_extract, files_set_data
 from ops_engine.definition import NodeInstance
 from ops_engine.node_types import default_registry
@@ -99,7 +100,7 @@ async def test_a_floor_out_of_reach_is_raised_so_the_step_is_retried() -> None:
         await ai_extract(call(Files({"id": "ext_1", "status": "failed", "fileId": "fil_1", "error": error})))
 
 
-@pytest.mark.parametrize("answer", [{"status": "running"}, {"status": "done"}, {"status": "done", "outcome": "maybe"}])
+@pytest.mark.parametrize("answer", [{"status": "done"}, {"status": "done", "outcome": "maybe"}])
 async def test_a_state_the_step_does_not_know_is_raised(answer: dict[str, Any]) -> None:
     with pytest.raises(RuntimeError, match="documents-service answered"):
         await ai_extract(call(Files({"id": "ext_1", "fileId": "fil_1", **answer})))
@@ -184,3 +185,28 @@ async def test_save_data_on_file_names_the_type_the_read_names() -> None:
         "Levy notice",
     )
     assert (data["fieldsToCheck"], data["extractionId"], data["path"]) == (1, "ext_7", "model"), data
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+async def test_a_background_read_parks_on_its_extraction_and_its_time_limit_takes_the_ports_it_asks_for(
+    status: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A long file was polled inside the step's own time limit, so a read past it left by error with no fields (c-525).
+    It now parks on extraction.finished keyed by the extraction; past the limit it takes Timeout when the step asks,
+    Error otherwise. (A read that finished is read again under the same key when the step resumes: the done path.)"""
+    parked: list[dict[str, Any]] = []
+
+    def interrupt(payload: dict[str, Any]) -> dict[str, Any]:
+        parked.append(payload)
+        return {"timeout": True}
+
+    monkeypatch.setattr(compiler, "interrupt", interrupt)
+    files = Files({"id": "ext_9", "fileId": "fil_1", "status": status})
+    timed = await ai_extract(call(files, onTimeout="port", waitSeconds=30))
+    plain = await ai_extract(call(files))
+    assert [(p["kind"], p["event"], p["key"], p["timeoutSeconds"]) for p in parked] == [
+        ("external", "extraction.finished", "ext_9", 30.0),
+        ("external", "extraction.finished", "ext_9", 1200.0),
+    ], parked
+    assert timed.port == "timeout" and timed.out["extractionId"] == "ext_9", timed
+    assert plain.port == "error" and plain.out["code"] == "extraction_timeout", plain

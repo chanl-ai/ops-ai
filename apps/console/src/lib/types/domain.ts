@@ -495,6 +495,8 @@ export interface Review {
   reply?: ReplyPreview | null;
   /** The case the review's run is on (agents-service, c-128); null when the run is on no case. */
   caseId?: string | null;
+  /** The case's subject on a list grouped by case (c-460); null when the reader's teams do not hold the case. */
+  caseTitle?: string | null;
   /** A workflow runner's step: its name and its run, for the sheet's subtitle and link (c-169). */
   stepName?: string | null;
   runId?: string | null;

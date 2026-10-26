@@ -172,6 +172,9 @@ class TurnRequest:
     tools: list[ToolGrant]
     transcript: list[TranscriptMessage] = field(default_factory=list[TranscriptMessage])
     user_turn: str | None = None
+    # What knowledge search uses when it is not the whole user turn (a workflow agent step searches the prompt,
+    # not the mapped input JSON whose names and ids drown the handbook terms).
+    search_text: str | None = None
     kb_ids: list[str] = field(default_factory=list[str])
     # The conversation named knowledge bases and the agent no longer holds any of them: the turn says so and does not
     # call the model, which would otherwise answer from its own knowledge, uncited.

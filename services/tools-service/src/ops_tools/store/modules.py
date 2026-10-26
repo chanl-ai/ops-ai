@@ -10,7 +10,8 @@ security on them arrives with ops_identity (c-006), as the checkpointer does it.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager, nullcontext
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
@@ -22,7 +23,7 @@ from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED
-from ops_store.team_scope import acting_team, any_team, team_visible
+from ops_store.team_scope import acting_as, acting_team, any_team, team_visible
 
 metadata = sa.MetaData()
 
@@ -65,9 +66,31 @@ tool_modules = sa.Table(
     sa.Column("revision", sa.Integer, nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
-    # Workflows pin a module by name, so a name is unique within a tenant.
-    sa.UniqueConstraint("tenant_id", "name", name="ux_tool_modules_name"),
+    # Workflows pin a module by name, so a name is unique within a team (c-509). A workspace-level
+    # module (null team) is unique on (tenant, name) so two shared copies cannot land.
     info=TEAM_OWNED,
+)
+
+_OWNED = tool_modules.c.team_id.isnot(None)
+_SHARED = tool_modules.c.team_id.is_(None)
+sa.Index(
+    "ux_tool_modules_name",
+    tool_modules.c.tenant_id,
+    tool_modules.c.team_id,
+    tool_modules.c.name,
+    unique=True,
+    postgresql_where=_OWNED,
+    mssql_where=_OWNED,
+    sqlite_where=_OWNED,
+)
+sa.Index(
+    "ux_tool_modules_shared_name",
+    tool_modules.c.tenant_id,
+    tool_modules.c.name,
+    unique=True,
+    postgresql_where=_SHARED,
+    mssql_where=_SHARED,
+    sqlite_where=_SHARED,
 )
 
 
@@ -98,7 +121,8 @@ module_operations = _child(
     sa.Column("access", sa.String(16), nullable=False),
     sa.Column("enabled", sa.Boolean, nullable=False),
     # How the gateway runs it: `http` calls the module's endpoint, `stub` answers with `stub` (a seeded system with no
-    # reachable upstream), `local` runs the Runtime's demo tool of the same name.
+    # reachable upstream), `local` runs the Runtime's demo tool of the same name, `code` runs the operation's function
+    # on runner-service.
     sa.Column("executor", sa.String(8), nullable=False, server_default="http"),
     sa.Column("method", sa.String(8)),
     sa.Column("path", sa.Text),
@@ -127,11 +151,15 @@ module_operations = _child(
     # The JSON Schema of the first success response, as an imported OpenAPI document gives it (c-353): a workflow
     # step's output fields before it runs. Null when the import had none.
     sa.Column("response_schema", sa.JSON),
+    # A code operation's function (c-531): source, entry, the tool names it may call, the secret names it may hand to
+    # them, and its limits. Null for every other executor.
+    sa.Column("code", sa.JSON),
     # Read or write only (migration tools_0012): a database holding any other class is rebuilt, never read.
     sa.CheckConstraint("access IN ('read', 'write')", name="ck_module_operations_access"),
     sa.Column("stub", sa.JSON, nullable=False),
-    # The gateway resolves a call by tool name, so an operation name is unique within a tenant.
-    sa.UniqueConstraint("tenant_id", "name", name="ux_module_operations_name"),
+    # The gateway resolves a call by tool name in the run's team, so the same name may exist in
+    # another team's module (c-509). Unique per module: two operations of one module cannot share it.
+    sa.UniqueConstraint("tenant_id", "module_id", "name", name="ux_module_operations_name"),
 )
 
 module_versions = _child(
@@ -232,6 +260,7 @@ OPERATION_DEFAULTS: dict[str, Any] = {
     "step_up": False,
     "output_shape": None,
     "response_schema": None,
+    "code": None,
 }
 # Defaults per child table, for rows written before a column existed.
 CHILD_DEFAULTS: dict[str, dict[str, Any]] = {
@@ -307,6 +336,17 @@ class StaleModuleError(RuntimeError):
 RUN_PATHS = "a run's call or grant list is authorized by its grants and approval token (c-433 scopes it)"
 
 
+@contextmanager
+def _as_team(team_id: str | None) -> Generator[None]:
+    """Act as `team_id` for a lookup that names it; otherwise keep the request's acting team."""
+    if team_id is not None:
+        with acting_as(team_id):
+            yield
+    else:
+        with nullcontext():
+            yield
+
+
 def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
     """Modules approved for one of the acting team's workflows: the explicit grant across teams (c-423 Q3)."""
     team = acting_team()
@@ -377,14 +417,13 @@ class ModuleStore:
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
         return [{**r, **kids[r["id"]]} for r in rows]
 
-    async def names(self, tenant_id: str) -> set[str]:
-        """Every module name in the tenant, in any team: a name is unique per tenant, so the check before a create sees
-        every team's."""
-        q = sa.select(tool_modules.c.name).where(
-            tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, "a module name is unique per tenant")
-        )
-        async with self.engine.connect() as c:
-            return {str(r[0]) for r in await c.execute(q)}
+    async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
+        """Module names of the acting team (or `team_id`), plus workspace-level names: a name is unique per team
+        (c-509), so the check before a create does not see another team's."""
+        with _as_team(team_id):
+            q = sa.select(tool_modules.c.name).where(tool_modules.c.tenant_id == tenant_id, team_visible(tool_modules))
+            async with self.engine.connect() as c:
+                return {str(r[0]) for r in await c.execute(q)}
 
     async def secret_readers(self, tenant_id: str) -> list[Aggregate]:
         """Each module's id, display name and baseline with its operations' id, name, path and headers: what the
@@ -433,16 +472,37 @@ class ModuleStore:
                 return None
             return {**dict(row), **(await self._children(c, tenant_id, [module_id]))[module_id]}
 
-    async def operation_named(self, tenant_id: str, name: str) -> tuple[Aggregate, dict[str, Any]] | None:
-        """The module holding operation `name`, and the operation: how the gateway resolves a call by tool name."""
-        async with self.engine.connect() as c:
-            q = sa.select(module_operations.c.module_id).where(
-                module_operations.c.tenant_id == tenant_id, module_operations.c.name == name
-            )
-            module_id = (await c.execute(q)).scalar()
-        if module_id is None:
-            return None
-        agg = await self.get_any(tenant_id, module_id)
+    async def operation_named(
+        self, tenant_id: str, name: str, team_id: str | None = None
+    ) -> tuple[Aggregate, dict[str, Any]] | None:
+        """The module holding operation `name` in the acting team (or `team_id`), and the operation. Another team's
+        module of the same name is not seen. A workspace-level module is used when the team has no copy of its own."""
+        with _as_team(team_id):
+            async with self.engine.connect() as c:
+                q = (
+                    sa.select(tool_modules.c.id, tool_modules.c.team_id)
+                    .select_from(
+                        module_operations.join(
+                            tool_modules,
+                            sa.and_(
+                                module_operations.c.tenant_id == tool_modules.c.tenant_id,
+                                module_operations.c.module_id == tool_modules.c.id,
+                            ),
+                        )
+                    )
+                    .where(
+                        module_operations.c.tenant_id == tenant_id,
+                        module_operations.c.name == name,
+                        sa.or_(team_visible(tool_modules), _granted(tenant_id)),
+                    )
+                )
+                rows = list((await c.execute(q)).all())
+            if not rows:
+                return None
+            team = team_id if team_id is not None else acting_team()
+            own = next((r[0] for r in rows if r[1] == team), None) if team else None
+            module_id = own if own is not None else rows[0][0]
+            agg = await self.get(tenant_id, module_id)
         if agg is None:
             return None
         op = next((o for o in served_operations(agg) if o["name"] == name), None)
@@ -450,15 +510,31 @@ class ModuleStore:
             return None
         return agg, op
 
-    async def names_taken(self, tenant_id: str, names: list[str]) -> set[str]:
-        """Which of `names` are already operation names in the tenant, in any module."""
+    async def names_taken(self, tenant_id: str, names: list[str], team_id: str | None = None) -> set[str]:
+        """Which of `names` are already operation names in the acting team (or `team_id`), or on a workspace-level
+        module. Another team's names are not taken."""
         if not names:
             return set()
-        q = sa.select(module_operations.c.name).where(
-            module_operations.c.tenant_id == tenant_id, module_operations.c.name.in_(names)
-        )
-        async with self.engine.connect() as c:
-            return {r[0] for r in await c.execute(q)}
+        with _as_team(team_id):
+            q = (
+                sa.select(module_operations.c.name)
+                .select_from(
+                    module_operations.join(
+                        tool_modules,
+                        sa.and_(
+                            module_operations.c.tenant_id == tool_modules.c.tenant_id,
+                            module_operations.c.module_id == tool_modules.c.id,
+                        ),
+                    )
+                )
+                .where(
+                    module_operations.c.tenant_id == tenant_id,
+                    module_operations.c.name.in_(names),
+                    team_visible(tool_modules),
+                )
+            )
+            async with self.engine.connect() as c:
+                return {r[0] for r in await c.execute(q)}
 
     async def put(
         self,

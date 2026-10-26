@@ -30,6 +30,7 @@ WIDENINGS: dict[str, set[str]] = {
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
     "SIGNIN_LOCKOUT": {"services/platform-service/src/ops_platform/store/signin.py"},
     "RESET_LOOKUP": {"services/platform-service/src/ops_platform/store/signin.py"},
+    "PURGE_LOOKUP": {"services/platform-service/src/ops_platform/store/lifecycle.py"},
     "TESTS": {"services/agents-service/src/ops_agents/store/tenancy.py"},
     "SEED": {
         "services/agents-service/src/ops_agents/api/app.py",
@@ -64,6 +65,7 @@ WIDENINGS: dict[str, set[str]] = {
 ENTRIES: dict[str, set[str]] = {
     "enter_caller": {"packages/ops_identity/src/ops_identity/fastapi.py"},
     "enter": {
+        "services/agents-service/src/ops_agents/api/routers/run_resume.py",
         "services/agents-service/src/ops_agents/api/routers/widget.py",
         "services/agents-service/src/ops_agents/api/worker.py",
     },

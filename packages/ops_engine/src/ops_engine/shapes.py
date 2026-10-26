@@ -148,9 +148,11 @@ async def _extract(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
         listed = await lookups.document_fields(str(typed["id"]), cast(int | None, typed.get("version")))
         fields = {str(f.get("key") or f.get("name")): {} for f in listed}
     read = opened(("extractionId",), props={"fields": opened(props=fields)})
-    return {
-        p: (closed(("error", "code"), ("details",)) if p == "error" else read) for p in t.output_ports(node.parameters)
+    others = {
+        "error": closed(("error", "code"), ("details",)),
+        "timeout": closed(("waitedFor", "key", "seconds", "extractionId")),
     }
+    return {p: others.get(p, read) for p in t.output_ports(node.parameters)}
 
 
 async def _set_file_data(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
@@ -185,6 +187,14 @@ async def _wait(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     return {p: ports[p] for p in t.output_ports(node.parameters)}
 
 
+async def _wait_for(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    """Wait for goes on with whatever the outside system posted or the event carried: its answer schema when the step
+    sets one, so a Decide step can pick the fields, else any object; the time limit with what it waited for."""
+    schema = node.parameters.get("outputSchema")
+    ok = cast(Shape, schema) if isinstance(schema, Mapping) and schema else ANY
+    return {"ok": ok, "timeout": closed(("waitedFor", "key", "seconds"))}
+
+
 async def _end(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     return {"": closed(("outcome", "output"), ("result", "name"))}
 
@@ -211,6 +221,7 @@ BUILDERS: dict[str, Builder] = {
     "case.open": _case_open,
     "case.add": _case_add,
     "flow.wait": _wait,
+    "flow.wait_for": _wait_for,
     "flow.end": _end,
 }
 

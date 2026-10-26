@@ -13,6 +13,7 @@ leaves engine threads (RUN_PREFIX) alone.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass, field
@@ -83,6 +84,9 @@ class WorkerHost:
     # Records a reminder on a review still waiting (c-277), with the run and {node, iteration, n, title, openedAt,
     # waitedHours}: the host reports it as its `task.reminder` service event. None records only the run's own event.
     remind: Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]] | None = None
+    # The URL and token an outside system resumes a step parked on its work with (c-525), from the run and its waiting
+    # state; None gives a parked step no callback, so only its event or its time limit wakes it.
+    resume_link: Callable[[dict[str, Any], dict[str, Any], float], dict[str, str]] | None = None
     _cache: CompiledCache | None = field(default=None, init=False)
 
     def cache(self) -> CompiledCache:
@@ -310,6 +314,10 @@ class Worker:
                 # at: resuming would decide the next pause.
                 log.info("engine_resume_stale", run=run["id"], kind=work.kind)
                 return
+            if here.get("kind") == "external":
+                # Every way a parked step wakes (event, callback, time limit) clears its wait row here too, so the
+                # time limit's resume leaves none behind.
+                await self.runs.unpark(run["id"], str(here.get("node")), int(here.get("iteration") or 1))
             graph_input = Command(resume=cast(dict[str, Any], work.payload or {}).get("resume"))
         elif work.kind in ("timeout", "remind"):
             return  # the review was decided before its deadline or its reminder
@@ -342,9 +350,25 @@ class Worker:
         node = str(payload.get("node"))
         iteration = int(payload.get("iteration") or 1)
         waiting = {"node": node, "iteration": iteration, "interruptId": interrupt.id, "payload": payload}
-        await self.runs.update(run["id"], generation=generation, status="waiting", waiting=waiting)
-        await self.runs.settle_parents(run)
-        await self._event(run, generation, "waiting_review", node, {"payload": payload})
+        if payload.get("kind") == "external":
+            # A step parked on outside work (c-525): the row its event or callback finds it by is written with the
+            # waiting state, and the callback's URL and token are derived now, never stored apart from the run.
+            seconds = float(payload.get("timeoutSeconds") or 0)
+            if self.host.resume_link is not None:
+                waiting["payload"] = payload | {"resume": self.host.resume_link(run, waiting, seconds)}
+            wait = {
+                "event": payload.get("event"),
+                "key": payload.get("key"),
+                "dueAt": (time.time() + seconds) if seconds else None,
+            }
+            await self.runs.park(run["id"], generation=generation, waiting=waiting, wait=wait)
+            await self.runs.settle_parents(run)
+            due = {"title": payload.get("title"), "event": payload.get("event"), "timeoutSeconds": seconds}
+            await self._event(run, generation, "waiting_external", node, due)
+        else:
+            await self.runs.update(run["id"], generation=generation, status="waiting", waiting=waiting)
+            await self.runs.settle_parents(run)
+            await self._event(run, generation, "waiting_review", node, {"payload": payload})
         if payload.get("wakeAfterSeconds"):
             # A step paused for a time (Wait, c-277; Run workflow's timeout, c-263) is woken by delayed work, queued
             # once per step and iteration at the first pause: later pauses of the same step find it.

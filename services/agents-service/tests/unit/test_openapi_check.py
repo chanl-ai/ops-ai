@@ -1,5 +1,6 @@
 """The OpenAPI check fails on each thing it guards: an untyped route off the allowlist, a typed route still on it,
-a repeated or missing operationId, and a document that drifted from openapi.json."""
+a repeated or missing operationId, an operation not named `<tag>_<handler>`, a missing or unknown public marking,
+and a document that drifted from openapi.json."""
 
 from __future__ import annotations
 
@@ -39,3 +40,14 @@ def test_each_guarded_change_is_a_finding(doc: dict[str, Any], tmp_path: Path, m
     assert "GET /v1/tools: no operationId" in found
     assert "agents_get_agent: on the allowlist but typed now" in found
     assert "openapi.json differs" in found
+
+
+def test_a_default_name_and_a_missing_or_unknown_marking_are_findings(doc: dict[str, Any]) -> None:
+    d = copy.deepcopy(doc)
+    d["paths"]["/v1/agents"]["get"]["operationId"] = "list_agents_v1_agents_get"
+    del d["paths"]["/v1/workflows"]["get"]["x-ops-public"]
+    d["paths"]["/v1/tools"]["get"]["x-ops-public"] = "public"
+    found = "\n".join(check_openapi.problems(d))  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    assert "list_agents_v1_agents_get: not named <tag>_<handler>" in found
+    assert f"{d['paths']['/v1/workflows']['get']['operationId']}: x-ops-public is None" in found
+    assert f"{d['paths']['/v1/tools']['get']['operationId']}: x-ops-public is 'public'" in found

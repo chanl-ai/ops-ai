@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0032_platform_no_team
+-- tools-service, stamped at tools_0034_tools_per_team
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -75,11 +75,14 @@ CREATE TABLE tool_modules (
 	revision INTEGER NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
 	updated_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT tool_modules_pkey PRIMARY KEY (tenant_id, id), 
-	CONSTRAINT ux_tool_modules_name UNIQUE (tenant_id, name)
+	CONSTRAINT tool_modules_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE INDEX ix_tool_modules_template_id ON tool_modules (template_id);
+GO
+CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL AND team_id IS NOT NULL;
+GO
+CREATE UNIQUE INDEX ux_tool_modules_shared_name ON tool_modules (tenant_id, name) WHERE team_id IS NULL;
 GO
 CREATE TABLE service_outbox (
 	id VARCHAR(64) NOT NULL, 
@@ -299,10 +302,11 @@ CREATE TABLE module_operations (
 	step_up BIT NOT NULL DEFAULT 0, 
 	output_shape VARCHAR(16) NULL, 
 	response_schema NVARCHAR(max) NULL, 
+	code NVARCHAR(max) NULL, 
 	stub NVARCHAR(max) NOT NULL, 
 	CONSTRAINT module_operations_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT ck_module_operations_access CHECK (access IN ('read', 'write')), 
-	CONSTRAINT ux_module_operations_name UNIQUE (tenant_id, name), 
+	CONSTRAINT ux_module_operations_name UNIQUE (tenant_id, module_id, name), 
 	CONSTRAINT module_operations_tenant_id_module_id_fkey FOREIGN KEY(tenant_id, module_id) REFERENCES tool_modules (tenant_id, id) ON DELETE CASCADE
 );
 GO
@@ -407,5 +411,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0032_platform_no_team');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0034_tools_per_team');
 GO

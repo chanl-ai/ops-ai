@@ -22,13 +22,12 @@ from typing import Annotated, Any, cast
 import httpx
 from fastapi import Depends, FastAPI, Header, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_identity import Auth, current_service, install_auth
 from ops_metering import Price, Usage, cost
-from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok
+from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
 from ops_store.database import Database
@@ -104,11 +103,6 @@ class AdmitIn(_Wire):
 
 
 ERRORS = error_responses()
-
-
-def operation_id(route: APIRoute) -> str:
-    """`<tag>_<handler>`, e.g. `keys_issue_key`: stable across path changes, and the name a generated SDK uses."""
-    return f"{route.tags[0]}_{route.name}".lower() if route.tags else route.name
 
 
 def secret_hash(secret: str) -> str:

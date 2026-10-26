@@ -42,6 +42,8 @@ from reportlab.pdfgen import canvas
 HERE = Path(__file__).resolve().parent
 TEAM_FILE = HERE / "team.json"
 SERVICES = ("platform", "agents", "tools", "kb", "files", "documents")
+# The team that decides tool module publish reviews: a workspace's own security team.
+SECURITY_TEAM = os.environ.get("OPS_DEMO_SECURITY_TEAM", "team_security")
 LOCAL_PORTS = {"platform": 8710, "agents": 8700, "tools": 8720, "kb": 8740, "files": 8750, "documents": 8760}
 WAIT_S = 120.0
 
@@ -312,7 +314,12 @@ def ensure_knowledge(who: Session, bases: list[dict[str, Any]]) -> dict[str, str
     ids: dict[str, str] = {}
     for base in bases:
         listed = items(data(kb.get("/v1/knowledge-bases", params={"search": base["name"], "pageSize": 100})))
-        found = next((b for b in listed if b["name"].lower() == base["name"].lower()), None)
+        same = [b for b in listed if b["name"].lower() == base["name"].lower()]
+        # This team's copy first; an unowned handbook with the same name is visible here and blocks a second
+        # create, so the seed reuses it rather than 409 (c-532).
+        found = next((b for b in same if b.get("teamId") == who.team), None) or next(
+            (b for b in same if not b.get("teamId")), None
+        )
         if found and any(s.get("itemsContributed") for s in found.get("sources") or []):
             say("FOUND", f"knowledge base {base['name']}", found["id"])
             ids[base["key"]] = str(found["id"])
@@ -413,6 +420,72 @@ class Models:
 
 
 MODELS = Models()
+
+
+# The bank's own document, served by the fake bank on the stack (tools-service reaches it through its egress list).
+BANK_HOST = os.environ.get("OPS_DEMO_BANK_HOST", "api.bank.test")
+BANK_MODULE = "northfield-core-banking"
+
+
+def ensure_bank_module(builder: Session, admin: Session) -> None:
+    """The team's own copy of the bank system: its OpenAPI document imported as a module the team owns, published
+    through the workspace's Security team as any module is. A team uses only modules it owns (team = workspace: sharing
+    is installing a copy), so the agents and workflows that read customers and accounts need it before they are made.
+    Reads come from GET; place_hold needs one approver of the team with a step-up; the levy webhook runs at once."""
+    api = builder("tools")
+    listed = items(data(api.get("/v1/tool-modules", params={"search": BANK_MODULE, "pageSize": 50})))
+    # The list is this team's: a published module of the same name another team holds is not here (c-509).
+    found = next((m for m in listed if m["name"] == BANK_MODULE and m.get("status") == "published"), None)
+    if found is not None:
+        say("FOUND", "bank module", str(found["id"]))
+        return
+    source = {"kind": "openapi", "specUrl": f"https://{BANK_HOST}/openapi.json"}
+    try:
+        doc = data(api.post("/v1/tool-modules/discover", json=source))
+        operations = [
+            {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"}
+            for o in doc["operations"]
+        ]
+        draft = next((m for m in listed if m["name"] == BANK_MODULE), None)
+        made = draft or data(
+            api.post(
+                "/v1/tool-modules",
+                json={
+                    "name": BANK_MODULE,
+                    "displayName": "Northfield Core Banking",
+                    "system": doc["system"],
+                    "type": "openapi",
+                    "endpoint": doc["endpoint"],
+                    "operations": operations,
+                    "source": source,
+                },
+            )
+        )
+        module = data(api.get(f"/v1/tool-modules/{made['id']}"))
+        for op in module["operations"]:
+            if op["name"] == "place_hold":
+                policy = {"approvers": 1, "approverTeam": builder.team, "requiresApproval": True, "stepUp": True}
+                data(api.patch(f"/v1/tool-modules/{made['id']}/operations/{op['id']}", json=policy))
+            elif op["name"] == "notify_webhook":
+                data(
+                    api.patch(
+                        f"/v1/tool-modules/{made['id']}/operations/{op['id']}",
+                        json={"requiresApproval": False},
+                    )
+                )
+        data(api.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "The team's copy of the bank system."}))
+        waiting = next(
+            v for v in data(api.get(f"/v1/tool-modules/{made['id']}"))["versions"] if v["status"] == "in_review"
+        )
+        security_team = str(data(admin("platform").get("/v1/me"))["securityTeamId"])
+        security = sign_in(admin.urls, admin.email, admin.password, security_team)
+        decided = security("agents").post(
+            f"/v1/publish-requests/{waiting['reviewId']}/decision",
+            json={"decision": "approved", "reason": "The bank's own document, copied for the team."},
+        )
+        say("MADE" if decided.status_code < 300 else "FAIL", "bank module", f"{made['id']} {decided.status_code}")
+    except Refused as e:
+        say("FAIL", "bank module", str(e))
 
 
 def ensure_agents(
@@ -578,9 +651,11 @@ def ensure_mailbox(admin: Session, lead: Session, env: dict[str, str], spec: dic
 
 
 def placeholders(value: Any, names: dict[str, str]) -> Any:
-    """`{agent:<key>}` and `{workflow:<key>}` in a definition file name a record this run made, by its key."""
+    """`{agent:<key>}`, `{workflow:<key>}` and `{documentType:<id>}` in a definition file name a record this run made:
+    an agent by its key, a workflow by its team.json key, a document type by its team.json id."""
     if isinstance(value, str):
-        return re.sub(r"\{(agent|workflow):(\w+)\}", lambda m: names[f"{m.group(1)}:{m.group(2)}"], value)
+        pattern = r"\{(agent|workflow|documentType):(\w+)\}"
+        return re.sub(pattern, lambda m: names[f"{m.group(1)}:{m.group(2)}"], value)
     if isinstance(value, list):
         return [placeholders(v, names) for v in value]
     if isinstance(value, dict):
@@ -589,8 +664,16 @@ def placeholders(value: Any, names: dict[str, str]) -> Any:
 
 
 def same_definition(stored: dict[str, Any], wanted: dict[str, Any]) -> bool:
-    """Whether the stored version is the file's, read as numbers (the service stores positions as floats)."""
+    """Whether the stored version is the file's, read as numbers (the service stores positions as floats). A node the
+    file gives no position is laid out by the service, so its stored position is not compared."""
     keys = ("name", "description", "nodes", "connections")
+    unplaced = {n["id"] for n in wanted.get("nodes") or [] if "position" not in n}
+    stored = stored | {
+        "nodes": [
+            {k: v for k, v in n.items() if not (k == "position" and n["id"] in unplaced)}
+            for n in stored.get("nodes") or []
+        ]
+    }
 
     def plain(d: dict[str, Any]) -> str:
         return json.dumps(json.loads(json.dumps({k: d.get(k) for k in keys}), parse_int=float), sort_keys=True)
@@ -630,9 +713,16 @@ def definition_of(wf: dict[str, Any], names: dict[str, str], mailbox: str | None
 
 
 def levy_story(wf: dict[str, Any]) -> bool:
-    """Whether a team.json workflow belongs to the levy story: a copy of a seeded levy workflow, which
-    deploy/fly/staging/mailbox_demo.py levy makes under the team's own ids."""
-    return "seed" in wf
+    """Whether a team.json workflow belongs to the levy story: a copy of a seeded levy workflow, or a file marked
+    `story: levy`, which deploy/fly/staging/mailbox_demo.py levy makes under the team's own ids."""
+    return "seed" in wf or wf.get("story") == "levy"
+
+
+def ids_by_key(spec: dict[str, Any]) -> dict[str, str]:
+    """The placeholder names of the team's workflows (by team.json key) and document types (by their unprefixed id),
+    each to the id the team makes it under."""
+    out = {f"workflow:{wf['key']}": wf["id"] for wf in spec["workflows"] if "id" in wf}
+    return out | {f"documentType:{k.get('key') or k['id']}": k["id"] for k in spec["documentTypes"]}
 
 
 def team_workflows(spec: dict[str, Any], *, no_levy: bool) -> list[dict[str, Any]]:
@@ -659,10 +749,49 @@ def ensure_workflows(
         if not same:
             view = data(api.post("/v1/workflows/definitions", json={"definition": definition}))
             say("MADE", f"workflow {definition['name']}", f"{wid} v{view.get('version')}")
-        review = data(
-            api.post(f"/v1/workflows/definitions/{wid}/publish-requests", json={"note": "First release for the team."})
+        asked = api.post(
+            f"/v1/workflows/definitions/{wid}/publish-requests", json={"note": "First release for the team."}
         )
-        decide_publish(approver, review, f"workflow {definition['name']}")
+        if asked.status_code == 409 and Refused(asked).code == "not_a_draft":
+            # The seed's version is one the team had before; a later one someone published stays live.
+            say("NOTE", f"workflow {definition['name']}", f"{wid}: a later version is live and is left as it is")
+            continue
+        decide_publish(approver, data(asked), f"workflow {definition['name']}")
+
+
+def ensure_code_modules(builder: Session, security: Session, modules: list[dict[str, Any]]) -> None:
+    """Each code tool module (c-531), its function's source read from code/ beside this script, made by the builder
+    and published through Security's review as any module is. A module of that name already in the team is FOUND and
+    left as it is."""
+    api = builder("tools")
+    for spec in modules:
+        listed = items(data(api.get("/v1/tool-modules", params={"search": spec["name"], "pageSize": 50})))
+        found = next((m for m in listed if m["name"] == spec["name"]), None)
+        if found is not None and found.get("status") == "published":
+            say("FOUND", f"code module {spec['displayName']}", str(found["id"]))
+            continue
+        fn = spec["function"]
+        source = (HERE / "code" / fn["code"]["file"]).read_text()
+        body = {k: v for k, v in spec.items() if k not in ("key", "function")} | {
+            "type": "code",
+            "endpoint": "",
+            "function": fn | {"code": {k: v for k, v in fn["code"].items() if k != "file"} | {"source": source}},
+        }
+        module = found or data(api.post("/v1/tool-modules", json=body))
+        say("MADE" if found is None else "FOUND", f"code module {spec['displayName']}", str(module["id"]))
+        data(api.post(f"/v1/tool-modules/{module['id']}/reviews", json={"note": "The demo team's levy rules."}))
+        waiting = next(
+            v for v in data(api.get(f"/v1/tool-modules/{module['id']}"))["versions"] if v["status"] == "in_review"
+        )
+        decided = security("agents").post(
+            f"/v1/publish-requests/{waiting['reviewId']}/decision",
+            json={"decision": "approved", "reason": "Checked the function, its one bound read and its secret."},
+        )
+        say(
+            "MADE" if decided.status_code < 300 else "FAIL",
+            f"code module {spec['displayName']} publish",
+            str(decided.status_code),
+        )
 
 
 def ensure_tool_access(
@@ -1149,6 +1278,7 @@ def prefixed(spec: dict[str, Any], prefix: str) -> None:
         ids[own] = wf["id"] = f"{prefix}{own}"
     kinds: dict[str, str] = {}
     for kind in spec["documentTypes"]:
+        kind.setdefault("key", kind["id"])
         kinds[kind["id"]] = kind["id"] = f"{prefix}{kind['id']}"
     for wf in spec["workflows"]:
         if "workflows" in wf:
@@ -1251,10 +1381,14 @@ def main() -> int:
     model = env.get("OPS_DEMO_MODEL_ALIAS") or "default"
     MODELS.scripted, MODELS.live = model, env.get("OPS_DEMO_LIVE_MODEL_ALIAS") or None
     MODELS.builder, MODELS.approver = builder, people["approver"]
+    ensure_bank_module(builder, admin)
     agents = ensure_agents(builder, people["approver"], spec["agents"], knowledge, model)
     MODELS.agents = agents
-    names = {f"agent:{k}": v for k, v in agents.items()}
+    names = {f"agent:{k}": v for k, v in agents.items()} | ids_by_key(spec)
     ensure_document_types(builder, spec["documentTypes"])
+    if not args.no_levy:
+        security = sign_in(urls, env["OPS_DEMO_ADMIN_EMAIL"], env["OPS_DEMO_ADMIN_PASSWORD"], SECURITY_TEAM)
+        ensure_code_modules(builder, security, spec.get("codeModules") or [])
     mailbox = ensure_mailbox(admin, lead, env, spec["mailbox"])
     ensure_workflows(builder, people["approver"], team_workflows(spec, no_levy=args.no_levy), names, mailbox)
     if args.tool_access:

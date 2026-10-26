@@ -11,6 +11,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_definitions TO ops_agents_run
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_runs TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_steps TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_work TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_waits TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agents TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_publish_requests TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_agents_runtime;

@@ -9,6 +9,9 @@ delete and a move out of the folder) that are not counted.
 layer listing each person's name, address, last four of their SSN, amount, court and case number, and the Graph item
 that carries it as a base64 `contentBytes` attachment. Two persons match customers the fake bank seeds
 (services/tools-service/scripts/fake_bank/app.py), one matches none.
+
+`levy_notice_long.pdf` (c-532), written alone by `make_mailbox_fixture.py long`: the same notice followed by five pages
+of schedules, so it is past documents-service's at-once limit (SYNC_PAGES) and is read in the background.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import base64
 import io
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -123,9 +127,10 @@ def reply(n: int, to_case: int, *, mid_run: bool = False) -> dict[str, Any]:
     return item
 
 
-def levy_pdf(persons: list[dict[str, str]]) -> bytes:
+def levy_pdf(persons: list[dict[str, str]], schedules: int = 0) -> bytes:
     """A one-page notice with a text layer: a heading, then one block per person. Text is drawn line by line so a
-    text extractor reads each field on its own line."""
+    text extractor reads each field on its own line. `schedules` pages of the court's standing terms follow it, naming
+    no debtor."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=LETTER)
     c.setTitle("Notice of Garnishment")
@@ -153,8 +158,26 @@ def levy_pdf(persons: list[dict[str, str]]) -> bytes:
             y -= 14
         y -= 10
     c.showPage()
+    for n in range(1, schedules + 1):
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(72, 740, f"SCHEDULE {chr(64 + n)} - TERMS OF THE GARNISHMENT")
+        c.setFont("Helvetica", 10)
+        for i, line in enumerate(SCHEDULE_TERMS):
+            c.drawString(72, 712 - i * 14, f"{n}.{i + 1} {line}")
+        c.showPage()
     c.save()
     return buf.getvalue()
+
+
+# The standing terms a court prints after its notice; they name no debtor, so the read finds the same three people.
+SCHEDULE_TERMS = [
+    "The garnishee holds the funds named until the court orders their release or payment.",
+    "Funds the law exempts from garnishment are not held; the garnishee applies its own exemption rules.",
+    "The garnishee confirms to the registry in writing within five business days of service.",
+    "A garnishee holding no account for a debtor says so in its confirmation.",
+    "Nothing in this schedule changes the amounts listed for each debtor in the notice.",
+]
+LEVY_LONG_PDF = FIXTURES / "levy_notice_long.pdf"
 
 
 def levy_item(pdf: bytes, persons: list[dict[str, str]]) -> dict[str, Any]:
@@ -192,6 +215,9 @@ def write_levy() -> None:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["long"]:
+        LEVY_LONG_PDF.write_bytes(levy_pdf(LEVY_PERSONS, schedules=5))
+        return
     write_levy()
     rng = random.Random(6)
     items: list[dict[str, Any]] = []

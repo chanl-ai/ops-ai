@@ -242,6 +242,8 @@ class ToolGate(WireModel):
 class ToolCall(WireModel):
     id: str
     name: str
+    # The call's action in words ("Look up accounts"), as review_text.call_label words it; people read this, not `name`.
+    label: str | None = None
     server: str
     input: dict[str, Any]
     output: Any = None
