@@ -20,7 +20,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from ops_agents.api.email_trigger import EmailTriggers, SourceFor, run_key
+from ops_agents.api.email_trigger import Bound, EmailTriggers, SourceFor, run_key
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
@@ -360,6 +360,41 @@ async def test_an_upload_in_flight_from_another_workflow_is_read_again_not_dropp
     await env.listener().poll_all()
     [run] = await env.runs()
     assert [a["name"] for a in run["input"]["attachments"]] == [NOTICE["attachments"][0]["name"]]
+
+
+async def test_a_database_error_after_a_poll_does_not_stop_the_listener(env: Env) -> None:
+    # run_forever used to call bindings() again for IDLE outside the try, so a postgres restart ended the task and
+    # mail_listener stayed stopped until the worker was restarted (c-532).
+    await env.publish()
+    listener = env.listener()
+    calls = {"n": 0}
+    real = listener.bindings
+
+    async def flaky() -> list[Bound]:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ConnectionError("the database system is starting up")
+        return await real()
+
+    listener.bindings = flaky  # type: ignore[method-assign]
+    stop = asyncio.Event()
+    task = asyncio.create_task(listener.run_forever(stop, 0.02))
+    try:
+        for _ in range(200):
+            if calls["n"] >= 2:
+                break
+            await asyncio.sleep(0.02)
+        assert calls["n"] >= 2, "the listener never reached the second bindings() call"
+        env.drop(mail(1))
+        for _ in range(200):
+            if await env.runs():
+                break
+            await asyncio.sleep(0.02)
+        assert await env.runs(), f"the listener stopped after the database error; bindings calls={calls['n']}"
+        assert calls["n"] >= 3
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=2)
 
 
 async def test_an_email_with_no_attachment_carries_its_text_as_a_file(env: Env) -> None:

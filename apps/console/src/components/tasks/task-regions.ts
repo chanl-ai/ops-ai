@@ -31,12 +31,25 @@ export interface TaskView {
 }
 
 type Data = Record<string, unknown>;
+type EmailNode = Extract<KindNode, { type: 'email' }>;
 const text = (v: unknown) => (typeof v === 'string' ? v : '');
 const pairsOf = (v: unknown) =>
   (Array.isArray(v) ? v : [])
     .filter((x): x is Data => !!x && typeof x === 'object')
     .map((x) => ({ label: text(x.label) || text(x.name), value: typeof x.value === 'number' ? x.value : text(x.value) || String(x.value ?? '') }))
     .filter((x) => x.label);
+const factOf = (facts: { label: string; value: string | number }[], label: string) => String(facts.find((f) => f.label.toLowerCase() === label.toLowerCase())?.value ?? '');
+const attachmentsOf = (v: unknown): EmailNode['attachments'] =>
+  (Array.isArray(v) ? v : [])
+    .filter((x): x is Data => !!x && typeof x === 'object')
+    .map((x) => ({
+      name: text(x.name) || text(x.fileName),
+      fileId: text(x.fileId) || text(x.id) || undefined,
+      type: text(x.type) || text(x.mime) || undefined,
+      size: typeof x.size === 'number' ? x.size : undefined,
+    }))
+    .filter((a) => a.name);
+const emailOf = (e: Omit<EmailNode, 'type'>): EmailNode => ({ type: 'email', ...e });
 
 /** A typed read check's fields (as the Extract step gives them) as the read the field check draws. */
 function readOf(fileId: string, fields: unknown, name: string | undefined): DocumentRead | undefined {
@@ -80,19 +93,40 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   const regions = Object.fromEntries(task.regions.map((x) => [x.region, x.data])) as Record<string, Data | undefined>;
   const evidence: KindNode[] = [];
   const decide: KindNode[] = [];
+  const facts = pairsOf(regions.facts?.facts);
   const doc = regions.document;
   const fileId = text(doc?.file) || r.read?.fileId || '';
   const regionBoxes = Array.isArray(doc?.boxes) ? (doc!.boxes as Extract<KindNode, { type: 'viewer' }>['boxes']) : [];
   if (fileId) evidence.push({ type: 'viewer', fileId, boxes: regionBoxes?.length || !r.read ? regionBoxes : boxesOf(r.read) });
   const received = doc?.received as Data | undefined;
   if (received)
-    evidence.push({
-      type: 'document',
-      name: text(received.subject) ? `Received “${text(received.subject)}”` : 'Received',
-      passage: [text(received.from) ? `From ${text(received.from)}` : '', text(received.body) || text(received.text) || text(received.summary)].filter(Boolean).join(' · '),
-    });
+    evidence.push(
+      emailOf({
+        label: 'Received',
+        from: text(received.from),
+        to: text(received.to) || factOf(facts, 'From'),
+        subject: text(received.subject),
+        date: text(received.date) || text(received.receivedAt) || text(received.at),
+        body: text(received.body) || text(received.text) || text(received.summary),
+        html: text(received.html) || undefined,
+        attachments: attachmentsOf(received.attachments),
+      }),
+    );
   const message = text(regions.message?.text);
-  if (message) (evidence.length ? evidence : decide).push({ type: 'document', name: evidence.length ? 'The reply' : 'Why it was asked', passage: message });
+  const reply = r.reply;
+  if (reply || (message && (evidence.length || received))) {
+    (evidence.length ? evidence : decide).push(
+      emailOf({
+        label: 'The reply',
+        from: reply?.mailbox || factOf(facts, 'From'),
+        to: reply?.to || factOf(facts, 'To') || text(received?.from),
+        subject: reply?.subject || (text(received?.subject) ? `Re: ${text(received?.subject)}` : ''),
+        body: reply?.body || message,
+      }),
+    );
+  } else if (message) {
+    (evidence.length ? evidence : decide).push({ type: 'document', name: 'Why it was asked', passage: message });
+  }
   // The AI assist (c-302) comes first when the team has it on, labelled as AI so nobody reads it as the record.
   const assist = regions.assist;
   if (assist?.pending)
@@ -124,8 +158,8 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   // The question already says some values ("Hold 2,000.00 on account CHQ-2219?"); the card adds what it does not say.
   const question = text(regions.header?.title) || r.question || r.title || '';
   const inQuestion = (v: unknown) => String(v ?? '').length > 2 && question.toLowerCase().includes(String(v).toLowerCase());
-  const facts = pairsOf(regions.facts?.facts);
-  const unsaid = facts.filter((f) => !inQuestion(f.value));
+  const emailShown = [...evidence, ...decide].some((n) => n.type === 'email');
+  const unsaid = facts.filter((f) => !inQuestion(f.value) && !(emailShown && /^(from|to|subject)$/i.test(f.label)));
   if (unsaid.length) decide.push({ type: 'entity', title: task.type.name, fields: unsaid });
   // The write's fields as the operation labels them, worded by the API (write_preview.fields, c-508).
   const described = Array.isArray(regions.write_preview?.fields) ? (regions.write_preview!.fields as Data[]) : [];
@@ -236,7 +270,15 @@ function regionsOf(r: Review, details: KindNode[]): TaskView {
     const cases = r.reply.cases.map((c, i) => ({ label: `Case ${i + 1}`, value: c.caseId ? (c.subject ?? 'Opened') : 'Opening' }));
     return {
       question: `Send this reply to ${r.reply.to}?`,
-      evidence: [{ type: 'document', name: r.reply.subject, passage: r.reply.body }],
+      evidence: [
+        emailOf({
+          label: 'The reply',
+          from: r.reply.mailbox ?? '',
+          to: r.reply.to,
+          subject: r.reply.subject,
+          body: r.reply.body,
+        }),
+      ],
       decide: cases.length ? [{ type: 'entity', title: 'Cases this covers', fields: cases }] : [],
       details,
       consequence: `Approve: the reply goes to ${r.reply.to} from ${r.reply.mailbox ?? 'the workspace sender'}. Reject: nothing is sent.`,

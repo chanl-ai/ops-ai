@@ -1,0 +1,35 @@
+{
+  "name": "@chanl-ai/ops-ai",
+  "version": "0.1.0",
+  "description": "The Ops AI SDK: agents, workflows, runs, human tasks, cases, tools, knowledge and files from TypeScript",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chanl-ai/ops-ai",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://opsai.chanl.ai/docs/sdk/typescript",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -163,7 +163,7 @@ export interface OpsApi {
     /** The review of the system workflow run a service event started, by its run key `<event>:<key>` (c-257). */
     byRunKey(runKey: string): Promise<Review>;
     /** Where a review sits in the open queue, in the list's order: position, total and the reviews either side. */
-    place(id: string): Promise<ReviewPlace>;
+    place(id: string, opts?: { view?: string; group?: 'case' }): Promise<ReviewPlace>;
     decide(id: string, input: ReviewDecisionInput): Promise<Review>;
     assign(ids: string[], assignee?: string): Promise<BulkResult>;
     /** Approving calls that need two approvers needs `stepUpToken` from a re-authentication in the last 5 minutes; one covers the batch. */

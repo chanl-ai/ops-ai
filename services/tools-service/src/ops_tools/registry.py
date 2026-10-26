@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from ops_agents.activities.catalog import Catalog
 
-from .modules.seed import PLATFORM_TOOLS, ensure_platform_tools
+from .modules.seed import PLATFORM_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.modules import Aggregate, ModuleStore, served_operations
 
@@ -22,7 +22,7 @@ JSON_TYPES = {"string", "number", "integer", "boolean", "object", "array"}
 
 # Workflow tools that are not in the agent catalogue: their access and whether a write waits for approval. send_reply
 # emails a customer, so it is a write that waits; the platform's own tools come from their one declaration.
-WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {"send_reply": ("write", True)} | {
+WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {name: ("write", waits) for name, (_, waits) in SENDS.items()} | {
     str(t["name"]): (str(t["access"]), bool(t["requires_approval"])) for t in PLATFORM_TOOLS
 }
 
@@ -151,14 +151,16 @@ class ToolRegistry:
                 )
         return sorted(rows, key=lambda r: (r["module_name"], r["name"]))
 
-    async def access_for(self, tool: str, tenant_id: str) -> str:
+    async def access_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> str:
         """The class the gateway decides `tool` by for the tenant: the registry's operation, else a workflow tool."""
-        return self._access(tool, await self.resolve(tool, tenant_id=tenant_id))
+        return self._access(tool, await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
-    async def described(self, tool: str, tenant_id: str) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+    async def described(
+        self, tool: str, tenant_id: str, team_id: str | None = None
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
         """access_for, policy_for and output_schema_for of `tool`, from one resolve: a review list asks this once per
         tool, and resolving three times read the tool's module three times (c-451)."""
-        resolved = await self.resolve(tool, tenant_id=tenant_id)
+        resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         return self._access(tool, resolved), self._policy(tool, resolved), self._output(resolved)
 
     @staticmethod
@@ -167,10 +169,10 @@ class ToolRegistry:
             return resolved.access
         return WORKFLOW_TOOLS.get(tool, ("unknown", True))[0]
 
-    async def requires_approval(self, tool: str, tenant_id: str) -> bool:
+    async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
         """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
         flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing waits."""
-        resolved = await self.resolve(tool, tenant_id=tenant_id)
+        resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
             return bool(resolved.operation["requires_approval"])
         if tool in WORKFLOW_TOOLS:
@@ -178,12 +180,12 @@ class ToolRegistry:
         definition = self.catalog.tool(tool)
         return definition is None or definition.requires_approval is not False
 
-    async def policy_for(self, tool: str, tenant_id: str) -> dict[str, Any] | None:
+    async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's
         (its `approvers`, no particular team). None for a tool neither holds."""
         if self.modules is None:
             return self._policy(tool, None)
-        return self._policy(tool, await self.resolve(tool, tenant_id=tenant_id))
+        return self._policy(tool, await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
     def _policy(self, tool: str, resolved: Resolved | None) -> dict[str, Any] | None:
         if self.modules is None:
@@ -199,12 +201,12 @@ class ToolRegistry:
             return None
         return approval_policy(resolved.module, resolved.operation)
 
-    async def output_schema_for(self, tool: str, tenant_id: str) -> dict[str, Any] | None:
+    async def output_schema_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The shape of what the tenant's operation `tool` answers (c-353): its imported response schema, else one
         inferred from its example response (open, since an example may leave fields out), else None."""
         if self.modules is None:
             return None
-        return self._output(await self.resolve(tool, tenant_id=tenant_id))
+        return self._output(await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
     def _output(self, resolved: Resolved | None) -> dict[str, Any] | None:
         if self.modules is None or resolved is None or resolved.operation is None:
@@ -216,15 +218,15 @@ class ToolRegistry:
         # {"ok": true} is the stub an import writes when the document gives no example.
         return inferred(stub) if stub not in (None, {"ok": True}) else None
 
-    async def resolve(self, tool: str, *, tenant_id: str) -> Resolved | None:
+    async def resolve(self, tool: str, *, tenant_id: str, team_id: str | None = None) -> Resolved | None:
         if self.modules is None:
             access = self.access(tool)
             return None if access == "unknown" else Resolved(access, "local")
-        # The calling service's tenant, from its service token.
-        found = await self.modules.operation_named(tenant_id, tool)
+        # The calling service's tenant, from its service token; the team from the run or the person.
+        found = await self.modules.operation_named(tenant_id, tool, team_id)
         if found is None and tool in PLATFORM_MODULE_TOOLS:
             await self._platform_tools(tenant_id)
-            found = await self.modules.operation_named(tenant_id, tool)
+            found = await self.modules.operation_named(tenant_id, tool, team_id)
         if found is None:
             # A system tool (c-257) is no module's operation, so no agent can be granted it; it resolves as the
             # platform's own, and the gateway runs it only for its system workflow.

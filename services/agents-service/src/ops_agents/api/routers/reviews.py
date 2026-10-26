@@ -27,6 +27,7 @@ from .. import hitl_facade, service_events
 from ..auth import (
     Principal,
     principal,
+    reader_teams,
     require_not_own,
     require_reviews_decide,
     require_step_up,
@@ -70,17 +71,14 @@ async def record_approval(
         call = waiting[0]["payload"].get("call") if waiting else None
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
-    teams = review_teams(approver)
     policy = await policy_of(rt, call["tool"])
-    hitl_facade.require_approver_team(policy, teams, call["tool"])
-    if not policy.approver_team:
-        # No approving team named: the thread's team reviews it, by its reviewers and admins (c-122 Q3).
-        require_reviews_decide(teams, str(row["team_id"]), f"the write {call['tool']}")
+    # The thread's team reviews it, by its reviewers and admins (c-122 Q3, c-509).
+    require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
     payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
     require_not_own(
         approver,
         [hitl_facade.requester_of(row, payload)],
-        team=policy.approver_team or str(row["team_id"]),
+        team=str(row["team_id"]),
         what=f"the write {call['tool']}",
     )
     if policy.approvers > 1 or workspace_step_up(approver):
@@ -137,6 +135,8 @@ class ReviewsQuery(BaseModel):
     kind: list[str] = Field(default_factory=list[str])
     agentSlug: list[str] = Field(default_factory=list[str])  # noqa: N815
     status: list[str] = Field(default_factory=list[str])
+    # "case" orders the view by case and names each row's case (c-460).
+    group: str | None = None
 
 
 @console_router.get("", response_model=Envelope[ReviewList])
@@ -151,6 +151,8 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
             page_no=q.page,
             size=q.pageSize,
             me=frozenset({me.email, me.name}),
+            group=q.group,
+            teams=reader_teams(me),
         )
         rows["data"] = [await _with_can_decide(rt, me, r) for r in rows["data"]]
     return ok(rows)
@@ -186,10 +188,11 @@ class QueuePlace(Out):
 
 
 @console_router.get("/{review_id}/place", response_model=Envelope[QueuePlace])
-async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open") -> JSONResponse:
-    """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side."""
+async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", group: str | None = None) -> JSONResponse:
+    """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
+    `group=case` in the order the queue grouped by case lists them (c-460)."""
     with one_read_per_tool():
-        return ok(await hitl_facade.queue_place(rt, review_id, view))
+        return ok(await hitl_facade.queue_place(rt, review_id, view, group))
 
 
 @console_router.get("/{thread_id}", response_model=Envelope[Review])

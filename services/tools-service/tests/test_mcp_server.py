@@ -163,7 +163,8 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
     async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/test/team_cards") as c:
         result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
     assert result.is_error is True and result.structured_content is not None
-    assert result.structured_content["code"] == "team_forbidden"
+    # Another team's operation is not found (c-509); the refusal names no owner.
+    assert result.structured_content["code"] == "gateway_refused"
     [row] = await stack.rows("lookup_case")
     assert (row["channel"], row["outcome"]) == ("mcp", "refused")
 

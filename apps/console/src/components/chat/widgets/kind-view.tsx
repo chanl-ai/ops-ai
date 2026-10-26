@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { Textarea } from '@/components/ui/textarea';
 import { DocumentReadSection, type ReadChecks, type ReadEdits } from '@/components/reviews/document-read';
 import { DocumentViewer } from '@/components/shared/document-viewer';
+import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
 import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -573,6 +574,27 @@ function ReceiptKind({ node }: { node: Extract<KindNode, { type: 'receipt' }> })
 
 // ── sources ──
 
+function EmailKind({ node }: { node: Extract<KindNode, { type: 'email' }> }) {
+  return (
+    <EmailPreview
+      className={ENTER}
+      label={node.label}
+      from={node.from}
+      to={node.to}
+      subject={node.subject}
+      date={node.date}
+      body={node.body}
+      html={node.html}
+      attachments={node.attachments?.map((a) => ({
+        name: a.name,
+        href: a.fileId ? `/files/${encodeURIComponent(a.fileId)}` : undefined,
+        type: a.type,
+        size: a.size,
+      }))}
+    />
+  );
+}
+
 function DocumentKind({ node, onOpenFile }: { node: Extract<KindNode, { type: 'document' }>; onOpenFile?: (fileId: string, page?: number) => void }) {
   return (
     <Artifact className={ENTER} data-kind="document">
@@ -871,6 +893,8 @@ export function KindView({ node, actions = {}, onOpenFile, truncatedFrom, fieldE
       return <ConfirmKind node={node} actions={actions} />;
     case 'document':
       return <DocumentKind node={node} onOpenFile={onOpenFile} />;
+    case 'email':
+      return <EmailKind node={node} />;
     case 'quote':
       return <QuoteKind node={node} onOpenFile={onOpenFile} />;
     case 'plan':

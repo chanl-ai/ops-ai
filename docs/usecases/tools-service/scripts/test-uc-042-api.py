@@ -14,7 +14,7 @@ from usecase_harness import AGENTS_PORT, agents, approve_tool_review, check, dat
 from ops_service_kit.ids import input_hash
 from ops_tools.tokens import Binding, mint
 
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 OTHER = {"X-Dev-User": "Priya Shah"}
 RUN = int(time.time())
 THREAD = f"gth_uc042_{RUN}"
@@ -73,7 +73,8 @@ def approve(gw: Any, module_id: str, days: int) -> str:
         json={"decision": "approved"},
         headers=OTHER,
     )
-    return str(data(decided)["status"])
+    check(f"the {days}-day approval is decided (200)", decided.status_code == 200, decided.text[:300])
+    return str((data(decided) or {}).get("status"))
 
 
 settings = {"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}

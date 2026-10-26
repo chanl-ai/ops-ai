@@ -18,10 +18,11 @@ from typing import Any, cast
 from langgraph.types import Command
 
 from ops_agents.graphs.definition import option_declarations, option_name
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
+from ..store.cases import CaseStore
 from ..store.events import EventLog
 from ..store.leases import LeaseHeldError
 from ..store.review_assignments import ReviewAssignments
@@ -44,7 +45,7 @@ from .review_text import describe_call
 from .runs import GraphsUnavailable, config, definition, execute, graph_store, pending, resolve
 from .team_names import deciding_team
 from .timers import sla_view
-from .tool_access import WritePolicy, policy_of
+from .tool_access import policy_of
 
 # Chat agents run on threads too; only workflows are runs on the Cases page.
 log = get_logger("ops_agents.api.hitl_facade")
@@ -142,17 +143,6 @@ def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
 
 
 CHAT_GRAPH = "agent_wrapper"
-
-
-def require_approver_team(policy: WritePolicy, approver_teams: list[str] | None, tool: str) -> None:
-    """Refuses an approver outside the operation's approving team; `approver_teams` None (dev) approves for any."""
-    if approver_teams is not None and policy.approver_team and policy.approver_team not in approver_teams:
-        # `approver_teams` are the teams where `can(reviews, decide)` holds (auth.review_teams), so this is the grid.
-        raise Forbidden(
-            f"Only someone on {policy.approver_team} approves {tool}.",
-            code="role_required",
-            details={"teamId": policy.approver_team, "area": "reviews", "action": "decide"},
-        )
 
 
 def _is_chat(row: dict[str, Any]) -> bool:
@@ -485,8 +475,6 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
     amount = _amount_of(proposals)
     # The step's own call in words, as a workflow review words it (engine_reviews.view): what approving does and sends.
     described = await describe_call(rt, call, currency=None, money_key=None) if call.get("tool") else None
-    held = [await policy_of(rt, str(c["tool"])) for c in held_calls(payload)]
-    approving = next((p.approver_team for p in held if p.approver_team), None)
     customer: dict[str, Any] = dict(payload.get("customer") or {})
     origin: dict[str, Any] = (
         {"kind": "chat", "threadId": row["id"], "agentName": agent_name} if chat else {"kind": "workflow"}
@@ -530,7 +518,7 @@ async def review_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any
         "consequence": (described["consequence"] or described["sentence"]) if described else None,
         "actionFields": described["fields"] if described else [],
         # Who decides it, as _check_thread_decider checks: a write's approving team, else the thread's team.
-        "decidingTeam": await deciding_team(rt, approving or row.get("team_id")),
+        "decidingTeam": await deciding_team(rt, row.get("team_id")),
     }
 
 
@@ -647,6 +635,39 @@ REVIEW_VIEWS: dict[str, Callable[[dict[str, Any]], bool]] = {
 }
 
 
+GROUPS = frozenset({"case"})
+
+
+def by_case(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows grouped by case (c-460): each case's rows together, the case whose soonest deadline is soonest first, then
+    the rows inside a case by their own deadline. A row on no case is its own group. Rows with no deadline (`dueAt`
+    is set on workflow steps only) sort last, keeping the order they came in, so the list and the place agree."""
+    first: dict[str, int] = {}
+    soonest: dict[str, str] = {}
+    for i, r in enumerate(rows):
+        group = str(r.get("caseId") or r["id"])
+        first.setdefault(group, i)
+        due = r.get("dueAt")
+        if due and (group not in soonest or due < soonest[group]):
+            soonest[group] = due
+
+    def key(item: tuple[int, dict[str, Any]]) -> tuple[bool, str, int, bool, str, int]:
+        i, r = item
+        group = str(r.get("caseId") or r["id"])
+        due = r.get("dueAt")
+        return (group not in soonest, soonest.get(group, ""), first[group], not due, due or "", i)
+
+    return [r for _, r in sorted(enumerate(rows), key=key)]
+
+
+def _grouped(rows: list[dict[str, Any]], group: str | None) -> list[dict[str, Any]]:
+    if group is None:
+        return rows
+    if group not in GROUPS:
+        raise ValidationFailed(f"Unknown group {group}; use case.")
+    return by_case(rows)
+
+
 async def list_reviews(
     rt: Runtime,
     *,
@@ -656,8 +677,12 @@ async def list_reviews(
     page_no: int,
     size: int,
     me: frozenset[str] = frozenset(),
+    group: str | None = None,
+    teams: list[str],
 ) -> dict[str, Any]:
-    """`me` is every name the caller is recorded by (email, name); Assigned to me lists open reviews assigned to one."""
+    """`me` is every name the caller is recorded by (email, name); Assigned to me lists open reviews assigned to one.
+    `group="case"` orders the view by case and names each row's case from `teams`, the teams the caller reads in
+    (c-460)."""
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
 
@@ -689,19 +714,26 @@ async def list_reviews(
     for column, wanted in filters.items():
         if wanted:
             in_view = [r for r in in_view if str(r.get(column)) in wanted]
-    shown = page(in_view, page_no, size)
+    shown = page(_grouped(in_view, group), page_no, size)
     shown["data"] = await engine_reviews.expand(rt, shown["data"])
+    if group == "case":
+        # One read for the page; a case of a team the caller is not in is left out, so its row has no title.
+        ids = sorted({str(r["caseId"]) for r in shown["data"] if r.get("caseId")})
+        named = await CaseStore(rt.db).summaries(ids, teams)
+        shown["data"] = [
+            r | {"caseTitle": (named.get(str(r.get("caseId"))) or {}).get("subject")} for r in shown["data"]
+        ]
     return {**shown, "facets": facets, "viewCounts": counts, "stats": stats}
 
 
-async def queue_place(rt: Runtime, review_id: str, view: str = "open") -> dict[str, Any]:
+async def queue_place(rt: Runtime, review_id: str, view: str = "open", group: str | None = None) -> dict[str, Any]:
     """Where a review sits in a view, in the order Human Tasks lists it: its position, the total, and the reviews either
     side, so a task's page says "5 of 24" and steps through the queue without the console fetching it."""
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
     # Overdue reads each review's deadline, which only a built review has; the other views need the id and status.
     rows = await (all_reviews(rt) if view == "overdue" else _places(rt))
-    ids = [str(r["id"]) for r in rows if REVIEW_VIEWS[view](r)]
+    ids = [str(r["id"]) for r in _grouped([r for r in rows if REVIEW_VIEWS[view](r)], group)]
     # A run's id names the review it waits on (`<run>:<step>:<iteration>`), as GET /reviews/{id} reads it.
     if review_id not in ids:
         review_id = next((i for i in ids if i.startswith(f"{review_id}:")), review_id)
@@ -853,17 +885,11 @@ async def decide(
 async def _check_thread_decider(
     rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
 ) -> None:
-    """Who may decide a paused thread step: a reviewer or admin of the thread's team unless a policy of the writes it
-    decides (`calls`) names an approving team (that team is required instead), and not who asked for it while
-    requesterMayDecide is off."""
-    teams, approving = review_teams(approver), None
-    for call in calls:
-        policy = await policy_of(rt, str(call["tool"]))
-        require_approver_team(policy, teams, str(call["tool"]))
-        approving = approving or policy.approver_team
-    team = approving or str(row["team_id"])
-    if not approving:
-        require_reviews_decide(teams, team, "this review")
+    """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
+    (`calls`) are (c-509), and not who asked for it while requesterMayDecide is off."""
+    del calls
+    team = str(row["team_id"])
+    require_reviews_decide(review_teams(approver), team, "this review")
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
 
 

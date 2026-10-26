@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Scripts can run workflows from Python or TypeScript",
+  "description": "Developers can start workflow runs, wait for them, decide the human tasks they open and work with agents, cases, knowledge and files from a Python or TypeScript library with an API key. The guides are in the docs under API reference.",
+  "tag": "new",
+  "cards": [
+    "c-526"
+  ]
+}

@@ -20,6 +20,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.engine.default import DefaultExecutionContext
 
+from ops_access import OWNER
 from ops_store.schema import TENANT_SCOPED
 
 metadata = sa.MetaData()
@@ -35,7 +36,8 @@ tenants = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
-    sa.Column("status", sa.String(16), nullable=False),  # active | suspended
+    # active | suspended | closed (its owner deleted it, restorable for the window) | purging | purged (c-529)
+    sa.Column("status", sa.String(16), nullable=False),
     # Email domains an invite may be accepted from; empty means any.
     sa.Column("allowed_domains", sa.JSON, nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
@@ -44,6 +46,9 @@ tenants = sa.Table(
     # join when nothing else names one (null: none).
     sa.Column("security_team_id", sa.String(64)),
     sa.Column("default_team_id", sa.String(64)),
+    # Migration 0026 (c-529): when and by whom the workspace was closed; a restore clears both.
+    sa.Column("closed_at", sa.String(40)),
+    sa.Column("closed_by", sa.String(64)),
     info=TENANT_SCOPED,
 )
 
@@ -57,7 +62,8 @@ teams = sa.Table(
     sa.Column("scope", sa.String(16), nullable=False),  # all | owned
     sa.Column("created_at", sa.String(40), nullable=False),
     # Migration 0013 (c-198): an archived team keeps what it owns and leaves its members' tokens.
-    sa.Column("status", sa.String(16), nullable=False, server_default="active"),  # active | archived
+    # active | archived | deleted (c-529: never removed as a row, since audit entries reference it)
+    sa.Column("status", sa.String(16), nullable=False, server_default="active"),
     sa.Column("archived_at", sa.String(40)),
     # The lower-case name: two teams of one workspace never share a name in any case, on every database.
     sa.Column("name_key", sa.String(200), nullable=False, default=_name_key),
@@ -209,6 +215,15 @@ role_assignments = sa.Table(
     sa.Index("ix_role_assignments_subject", "tenant_id", "subject_id"),
     sa.ForeignKeyConstraint(["tenant_id", "role_id"], ["roles.tenant_id", "roles.id"], name="fk_role_assignments_role"),
     info=TENANT_SCOPED,
+)
+# One owner per workspace (c-529): two transfers racing cannot both leave an Owner assignment behind.
+sa.Index(
+    "ux_role_assignments_owner",
+    role_assignments.c.tenant_id,
+    unique=True,
+    postgresql_where=role_assignments.c.role_id == OWNER.id,
+    mssql_where=role_assignments.c.role_id == OWNER.id,
+    sqlite_where=role_assignments.c.role_id == OWNER.id,
 )
 
 # Sign-in (migration 0010, c-188). A workspace with no enabled provider signs in by password; once one is enabled,

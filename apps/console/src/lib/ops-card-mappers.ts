@@ -69,7 +69,7 @@ export function taskCard(r: Review): OpsCardSpec {
       : { text: `Waiting for ${r.policy?.reviewers ?? 'a reviewer'}`, tone: 'neutral' };
   return {
     id: `task-${r.id}`,
-    record: { type: 'task', label: r.workflowName ? `Human Task · ${r.workflowName}` : 'Human Task', href: `/reviews/${encodeURIComponent(r.id)}`, open: 'Open in Human Tasks' },
+    record: { type: 'task', label: r.workflowName ? `Human Task · ${r.workflowName}` : 'Human Task', href: `/reviews?review=${encodeURIComponent(r.id)}`, open: 'Open in Human Tasks' },
     title: r.title,
     subtitle: r.customer || undefined,
     status,

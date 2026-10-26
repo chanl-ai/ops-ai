@@ -16,15 +16,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ops_access import can
 from ops_identity import Auth, CurrentService, Principal, install_auth
+from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import Forbidden, NotFound, ServiceUnavailable
-from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers
+from ops_service_kit.errors import Forbidden, NotFound, ServiceUnavailable, Unprocessable
+from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
 from .auth import Authenticator
+from .code_runs import CodeExecutor, resolve_handles, run_caller, run_claims
 from .egress import EgressPolicy, egress_client
 from .executor import Executor, HttpExecutor
 from .gateway_calls import API, WRITES, CallRequest, GatewayCalls, Outcome, Refused
@@ -33,7 +35,7 @@ from .mocks import MockAnswers
 from .modules.directory import Directory
 from .modules.policy import WriteApprovals
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
-from .registry import ToolRegistry
+from .registry import Resolved, ToolRegistry
 from .secrets import SecretMissing, SecretOutOfScope, SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
@@ -92,6 +94,11 @@ class CallIn(_Wire):
     key: str
     run_context: RunContext = Field(alias="runContext")
     approval_token: str | None = Field(default=None, alias="approvalToken")
+
+
+class CodeCallIn(_Wire):
+    tool: str
+    input: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
 class GrantableOperation(Out):
@@ -168,6 +175,7 @@ def create_gateway_app(
     send_check: SendCheck | None = None,
     authenticator: Authenticator | None = None,
     directory: Directory | None = None,
+    code: CodeExecutor | None = None,
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -180,14 +188,18 @@ def create_gateway_app(
     runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews, c-163).
     `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
     `authenticator` signs a module's calls in through its connection (c-330); without it a connection adds nothing.
-    `directory` holds the teams the MCP adapter scopes each assistant's tools to (c-356); without it no /mcp."""
+    `directory` holds the teams the MCP adapter scopes each assistant's tools to (c-356); without it no /mcp.
+    `code` runs code operations on runner-service and checks their calls back (c-531); without it they fail."""
     # Resolved secrets go into the URLs this gateway requests, and httpx logs each URL at INFO; the gateway turns those
     # lines off whether or not its process called configure_logging.
     quiet_request_logs()
     rules = policy if policy is not None else POLICY_FILE.read_text()
     client = http_client or (egress_client(egress) if egress else httpx.AsyncClient())
     executor = Executor(
-        runner, HttpExecutor(client, egress, secret_resolver, authenticator), mocks=MockAnswers(MockStore(log.engine))
+        runner,
+        HttpExecutor(client, egress, secret_resolver, authenticator),
+        mocks=MockAnswers(MockStore(log.engine)),
+        code=code,
     )
     expected = policy_hash(rules)
     counters = rates or RateWindows(log.engine)
@@ -227,7 +239,7 @@ def create_gateway_app(
             for t in tasks:
                 t.cancel()
 
-    app = FastAPI(title="Ops AI tool gateway", lifespan=lifespan)
+    app = FastAPI(title="Ops AI tool gateway", lifespan=lifespan, generate_unique_id_function=operation_id)
     install_error_handlers(app)
     install_auth(app, resolved_auth)
     if cors_origins:
@@ -309,7 +321,7 @@ def create_gateway_app(
     async def tool_access(name: str, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
         on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
-        access, policy, output = await registry.described(name, caller.tenant_id)
+        access, policy, output = await registry.described(name, caller.tenant_id, caller.team_id)
         if access == "unknown":
             return as_response(Refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"]))
         approval = (
@@ -372,6 +384,40 @@ def create_gateway_app(
             approval_token=body.approval_token,
         )
         found = await calls.call(caller, request, generation=x_lease_generation, channel=API, sees=team_view(caller))
+        return as_response(found)
+
+    @app.post("/v1/code-runs/calls", tags=["gateway"], response_model=Envelope[CallResult], responses=error_responses())
+    async def code_run_call(  # pyright: ignore[reportUnusedFunction]
+        body: CodeCallIn, caller: CurrentService, x_code_run: Annotated[str | None, Header()] = None
+    ) -> JSONResponse:
+        """Internal: one `ops.call` from a running code operation (c-531), sent by runner-service with the run's call
+        token. Only a tool the operation binds is called, decided as the run's caller's own gateway call."""
+        can(caller, "tools", "run", what="a code run's calls")
+        if code is None:
+            raise Unprocessable("This gateway runs no code.", code="runner_unavailable")
+        claims = run_claims(x_code_run, code.signer)
+        if body.tool not in claims.get("bindings", []):
+            message = f"{body.tool} is not one of the tools this function may call."
+            raise Unprocessable(message, code="binding_forbidden")
+        principal = run_caller(claims)
+        request = CallRequest(
+            tool=body.tool,
+            input=body.input,
+            # The same call with the same input in one run is the same call: a write is claimed once.
+            key=f"{claims['key']}:{body.tool}:{input_hash(body.input)[:16]}",
+            run_context={"act": f"code:{claims['operation']}", "environment": claims.get("environment")},
+        )
+
+        async def prepare(resolved: Resolved | None, args: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+            return await resolve_handles(claims, resolved, args, secret_resolver)
+
+        found = await calls.call(
+            principal,
+            request,
+            channel=API,
+            prepare=prepare,
+            sees=team_view(principal),
+        )
         return as_response(found)
 
     return app

@@ -2,14 +2,13 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { FileText } from 'lucide-react';
 
 import { DocumentReadView, type ReadDocument } from '@/components/files/document-read-view';
-import { FieldRow } from '@/components/shared/field-row';
+import { EmailPreview } from '@/components/shared/email-preview';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { Button } from '@/components/ui/button';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
-import { bytes, dateTime, mimeLabel, plural, relativeTime } from '@/lib/format';
+import { plural, relativeTime } from '@/lib/format';
 import type { RunEmail, RunRead, RunStory, RunStoryChild } from '@/lib/types/engine';
 
 export type { ReadDocument };
@@ -17,45 +16,31 @@ export type { ReadDocument };
 /** The email the run began with: who sent it, when, its text and its attachments. */
 export function RunEmailSection({ email }: { email: RunEmail }) {
   return (
-    <Section title="Email" description={email.receivedAt ? `Received ${relativeTime(email.receivedAt)}` : 'The email this run started from'}>
-      <div className="flex flex-col gap-3" data-testid="run-email">
-        <div>
-          <FieldRow label="From" value={email.from} wrap testId="run-email-from" />
-          <FieldRow label="Subject" value={email.subject || 'No subject'} wrap testId="run-email-subject" />
-          {email.receivedAt && <FieldRow label="Received" value={dateTime(email.receivedAt)} wrap />}
-          {email.mailbox && <FieldRow label="Mailbox" value={email.mailbox} wrap />}
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Text</span>
-          <p className="max-h-64 overflow-y-auto rounded-md border bg-muted/30 p-3 text-sm break-words whitespace-pre-wrap" data-testid="run-email-body">
-            {email.body.trim() || <span className="text-muted-foreground">The email had no text.</span>}
-          </p>
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">{email.attachments.length ? plural(email.attachments.length, 'attachment') : 'No attachments'}</span>
-          {!!email.attachments.length && (
-            <Rows className="rounded-md border" testId="run-email-attachments">
-              {email.attachments.map((a) => (
-                <Row
-                  key={a.fileId}
-                  href={`/files/${encodeURIComponent(a.fileId)}`}
-                  leading={<FileText className="size-4 text-muted-foreground" />}
-                  title={a.name}
-                  description={[a.type ? mimeLabel(a.type) : null, a.size != null ? bytes(a.size) : null].filter(Boolean).join(' · ') || undefined}
-                />
-              ))}
-            </Rows>
-          )}
-          {!!email.skipped.length && (
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="run-email-skipped">
-              {email.skipped.map((s) => (
-                <p key={s.name} className="break-words">
-                  Not stored: {s.name}. {s.message}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
+    <Section title="Email" description={email.receivedAt ? `Received ${relativeTime(email.receivedAt)}` : 'The email this run started from'} flush>
+      <div className="flex flex-col gap-3 p-4">
+        <EmailPreview
+          testId="run-email"
+          from={email.from}
+          to={email.mailbox}
+          subject={email.subject}
+          date={email.receivedAt}
+          body={email.body}
+          attachments={email.attachments.map((a) => ({
+            name: a.name,
+            href: `/files/${encodeURIComponent(a.fileId)}`,
+            type: a.type,
+            size: a.size,
+          }))}
+        />
+        {!!email.skipped.length && (
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="run-email-skipped">
+            {email.skipped.map((s) => (
+              <p key={s.name} className="break-words">
+                Not stored: {s.name}. {s.message}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </Section>
   );

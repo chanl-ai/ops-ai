@@ -29,7 +29,8 @@ def test_no_levy_leaves_out_every_workflow_the_levy_walk_makes() -> None:
     team = json.loads(demo.TEAM_FILE.read_text())
     kept = {w["key"] for w in demo.team_workflows(team, no_levy=True)}
     assert kept == {"dispute"}, kept
-    assert {w["key"] for w in team["workflows"] if demo.levy_story(w)} == {"levy_debtor", "levy_document", "levy_mail"}
+    levy = {w["key"] for w in team["workflows"] if demo.levy_story(w)}
+    assert levy == {"levy_debtor", "levy_document", "levy_mail", "levy_reply_debtor", "levy_reply_document"}, levy
 
 
 def test_with_the_levy_story_the_seed_makes_every_workflow() -> None:
@@ -51,6 +52,20 @@ def test_a_prefixed_team_reads_its_own_document_type() -> None:
     copy = demo.definition_of(next(w for w in team["workflows"] if w.get("documentTypes")), {}, None)
     read = [n["parameters"]["documentType"]["id"] for n in copy["nodes"] if "documentType" in n["parameters"]]
     assert read and set(read) <= kinds, read
+
+
+def test_a_prefixed_teams_reply_workflows_name_its_own_type_and_person_workflow() -> None:
+    """c-532: the reply workflow files name the document type and the per-person workflow by placeholder, so a second
+    demo team's copy reads its own type and starts its own per-person workflow."""
+    demo = seed()
+    team = json.loads(demo.TEAM_FILE.read_text())
+    demo.prefixed(team, "northfield_")
+    names = {"agent:levy": "ag_levy_northfield"} | demo.ids_by_key(team)
+    copy = demo.definition_of(next(w for w in team["workflows"] if w["key"] == "levy_reply_document"), names, None)
+    params = {n["id"]: n["parameters"] for n in copy["nodes"]}
+    assert copy["id"] == "northfield_levy_reply_document"
+    assert params["read"]["documentType"]["id"] == "northfield_garnishment_notice"
+    assert params["each"]["workflow"] == "northfield_levy_reply_debtor"
 
 
 def test_a_type_id_another_team_holds_fails_the_seed_instead_of_counting_as_found() -> None:

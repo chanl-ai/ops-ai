@@ -106,10 +106,11 @@ yet: `edited` is false for every field, since case values are written only by wo
 size or scan result, which the viewer link shows.
 
 Case types (`/v1/case-types`, `store/case_types.py`) are versioned records like task types, on the same store
-(`store/typed_records.py`): the seeded ones in `seed/case_types.json` are system records copied to change, and a team
-creates, saves and publishes its own with `workflows.create`, `edit` and `publish`. An Open case step names one with
-`caseType`; the case pins its newest published version, and a type with none takes the error port
-(`case_type_unknown`). uc-251 runs it end to end.
+(`store/typed_records.py`). Both are kept per team, keyed (tenant, team, id) since c-507: each team holds its own copy
+of the seeded ones in `seed/task_types.json` and `seed/case_types.json`, made on the team's first read, and creates,
+saves and publishes its own with `workflows.create`, `edit` and `publish`; no team reads another team's types. An
+Open case step names one with `caseType`; the case pins its newest published version, and a type with none takes the
+error port (`case_type_unknown`). uc-251 runs it end to end.
 
 ## Activity
 

@@ -31,14 +31,49 @@ KIND = {
     "auth.step_up": "login",
     "auth.refresh_reuse": "revoked",
     "team.rename": "edited",
+    "team.create": "created",
+    "team.archive": "edited",
+    "team.restore": "edited",
+    "team.leave": "deleted",
+    "team.delete": "deleted",
+    "workspace.rename": "edited",
+    "workspace.teams": "edited",
+    "workspace.transfer": "role_changed",
+    "workspace.leave": "deleted",
+    "workspace.close": "deleted",
+    "workspace.restore": "edited",
+    "workspace.purge": "deleted",
     "policy.set": "edited",
     "access.check": "checked",
+}
+
+# Every route that changes a workspace or a team, and the audit action it writes in the same transaction (c-529). The
+# route-table walk in tests/test_workspace_lifecycle.py fails on a changing route missing here or an action missing
+# from KIND, so a new route says what it records before it ships.
+ROUTE_ACTIONS: dict[tuple[str, str], str] = {
+    ("POST", "/v1/settings/teams"): "team.create",
+    ("PATCH", "/v1/settings/teams/{team_id}"): "team.rename",
+    ("POST", "/v1/settings/teams/{team_id}/archive"): "team.archive",
+    ("POST", "/v1/settings/teams/{team_id}/restore"): "team.restore",
+    ("PATCH", "/v1/settings/workspace"): "workspace.rename",
+    ("PUT", "/v1/settings/workspace-teams"): "workspace.teams",
+    ("POST", "/v1/settings/members/invite"): "member.invite",
+    ("POST", "/v1/settings/members/role"): "member.role",
+    ("POST", "/v1/settings/members/delete"): "member.remove",
+    ("POST", "/v1/workspace/transfer"): "workspace.transfer",
+    ("POST", "/v1/workspace/leave"): "workspace.leave",
+    ("POST", "/v1/workspace/close"): "workspace.close",
+    ("POST", "/v1/workspace/restore"): "workspace.restore",
+    ("POST", "/v1/settings/teams/{team_id}/leave"): "team.leave",
+    ("DELETE", "/v1/settings/teams/{team_id}"): "team.delete",
 }
 
 # The audit page's views, as the platform actions each holds; platform-service records no publishes.
 VIEWS: dict[str, frozenset[str]] = {
     "access": frozenset(a for a in KIND if a.startswith(("member.", "key."))),
-    "deletions": frozenset({"member.remove", "key.revoke"}),
+    "deletions": frozenset(
+        {"member.remove", "key.revoke", "team.delete", "workspace.close", "workspace.purge", "workspace.leave"}
+    ),
     "publishes": frozenset(),
 }
 
@@ -133,8 +168,17 @@ class TeamNameAudit:
             return int((await c.execute(q)).scalar_one())
 
 
+def _seen(team_id: str, account: bool) -> sa.ColumnElement[bool]:
+    """The team's entries, and with `account` the ones no team holds."""
+    own = audit_entries.c.team_id == team_id
+    if not account:
+        return own
+    return sa.or_(own, audit_entries.c.team_id.is_(None), audit_entries.c.team_id == "")
+
+
 class AuditLog:
-    """Reads entries, newest first. `team_id` None reads every entry in the tenant (a team with scope `all`)."""
+    """Reads one team's entries, newest first, and with `account` the entries no team holds (sign-in, membership: the
+    account's own records). Never another team's (c-507)."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
 
@@ -144,15 +188,14 @@ class AuditLog:
     async def page(
         self,
         tenant_id: str,
-        team_id: str | None,
+        team_id: str,
         *,
+        account: bool = False,
         filters: dict[str, str | None],
         page: int,
         size: int,
     ) -> tuple[list[dict[str, Any]], int]:
-        where: list[Any] = []
-        if team_id is not None:
-            where.append(audit_entries.c.team_id == team_id)
+        where: list[Any] = [_seen(team_id, account)]
         for column in ("action", "actor", "target_kind"):
             if filters.get(column):
                 where.append(audit_entries.c[column] == filters[column])
@@ -192,12 +235,12 @@ class AuditLog:
             count = int((await c.execute(total)).scalar_one())
         return found, count
 
-    async def counts(self, tenant_id: str, team_id: str | None) -> dict[tuple[str, str], int]:
+    async def counts(self, tenant_id: str, team_id: str, *, account: bool = False) -> dict[tuple[str, str], int]:
         """Entries per (action, target kind): what the audit page's views and filters count."""
-        q = sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count()).group_by(
-            audit_entries.c.action, audit_entries.c.target_kind
+        q = (
+            sa.select(audit_entries.c.action, audit_entries.c.target_kind, sa.func.count())
+            .where(_seen(team_id, account))
+            .group_by(audit_entries.c.action, audit_entries.c.target_kind)
         )
-        if team_id is not None:
-            q = q.where(audit_entries.c.team_id == team_id)
         async with self.db.tenant_tx(tenant_id) as c:
             return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}

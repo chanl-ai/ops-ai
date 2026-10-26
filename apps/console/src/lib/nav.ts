@@ -1,5 +1,5 @@
 import type { Icon } from '@tabler/icons-react';
-import { IconDatabase, IconFileText, IconFolder, IconHome, IconInbox, IconLayoutDashboard, IconListDetails, IconMail, IconMessages, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck } from '@tabler/icons-react';
+import { IconChecklist, IconCpu, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
 
 /** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
 export interface NavChild {
@@ -7,6 +7,8 @@ export interface NavChild {
   url: string;
   /** Shown only to a team admin: the page refuses everyone else (the audit log). */
   adminOnly?: boolean;
+  /** The sub-row's icon, from the same @tabler set as the items. */
+  icon?: Icon;
 }
 
 export interface NavItem {
@@ -16,6 +18,8 @@ export interface NavItem {
   children?: NavChild[];
   /** Label of the parent's own tab in the section strip when it differs from the sidebar name (Brain's first tab is the knowledge bases list). */
   tabTitle?: string;
+  /** The icon of the parent's own sub-row, when the parent shows one beside a lone child. */
+  tabIcon?: Icon;
 }
 
 export interface NavGroup {
@@ -33,14 +37,14 @@ export const NAV: NavGroup[] = [
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
       // Every conversation the person has had, searchable, beside the chat itself.
-      { title: 'Chat', url: '/chat', icon: IconMessages, children: [{ title: 'Conversations', url: '/chat/conversations' }] },
+      { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
     ],
   },
   {
     label: 'Agents',
     items: [
       { title: 'Agents', url: '/agents', icon: IconRobot },
-      { title: 'Workflows', tabTitle: 'All workflows', url: '/workflows', icon: IconRoute, children: [{ title: 'Runs', url: '/workflows/runs' }] },
+      { title: 'Workflows', tabTitle: 'All workflows', url: '/workflows', icon: IconRoute, tabIcon: IconList, children: [{ title: 'Runs', url: '/workflows/runs', icon: IconPlayerPlay }] },
       // Where workflows hear from outside: the mailboxes an Email received trigger watches (c-199).
       { title: 'Channels', url: '/channels', icon: IconInbox },
       { title: 'Skills', url: '/skills', icon: IconSparkles },
@@ -67,10 +71,10 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, children: [{ title: 'Tool calls', url: '/logs/tool-calls' }, { title: 'Audit log', url: '/logs/audit', adminOnly: true }, { title: 'Background', url: '/logs/background', adminOnly: true }] },
-      { title: 'Access', tabTitle: 'Members', url: '/access', icon: IconShieldLock, children: [{ title: 'Roles', url: '/access/roles' }, { title: 'Tool access', url: '/access/tool-access' }] },
+      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/logs/tool-calls', icon: IconTool }, { title: 'Audit log', url: '/logs/audit', adminOnly: true, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', adminOnly: true, icon: IconHeartbeat }] },
+      { title: 'Access', tabTitle: 'Members', url: '/access', icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
-      { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, children: [{ title: 'Model inventory', url: '/model-risk' }] },
+      { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },
       { title: 'Settings', url: '/settings', icon: IconSettings },
     ],
   },
@@ -113,8 +117,8 @@ export function crumbsFor(pathname: string): string[] {
 }
 
 /** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */
-export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string }[] } | null {
+export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string; icon?: Icon }[] } | null {
   const best = navMatch(pathname);
   if (!best?.item.children?.length) return null;
-  return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title }, ...best.item.children.map((c) => ({ href: c.url, label: c.title }))] };
+  return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title, icon: best.item.tabIcon }, ...best.item.children.map((c) => ({ href: c.url, label: c.title, icon: c.icon }))] };
 }

@@ -25,21 +25,28 @@ template is copied into a workspace rather than referenced across.
 
 ### Where the code still crosses teams
 
-Each line is removed or changed by the team boundary card; the boundary lock fails on any new one.
+Each line is removed or changed by the card named; the boundary lock (`scripts/tests/test_team_boundary.py`) fails on
+any new crossing: a table with a team column that is not team-owned or allows no team, a row policy that reads rows
+with no team, or code that means "every team".
 
 | Crossing | Where | Change |
 |---|---|---|
-| Records with no team are readable by every team | `packages/ops_store/src/ops_store/schema.py:333` (`@team_id IS NULL` in the read policy) | Team column `NOT NULL` on every team-owned table; the read policy drops the null branch |
-| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`, c-423), the no-team Platform tools module (c-433) | Each team installs its own modules; a workflow uses only its team's modules |
-| A tool's approver is the module's owning team | `services/agents-service/src/ops_agents/api/routers/reviews.py:83`, `registry.approval_policy` (`op.approver_team or module.team_id`) | The approver is a role in the run's team; `approver_team` is removed |
-| A workflow may use another team's task type | `services/agents-service/src/ops_agents/store/task_types.py:3` | Task and document types are installed per team from the catalog |
-| A knowledge base counts other teams' agents | `services/kb-service/src/ops_kb/service.py:154`, `routers/knowledge_usage.py:52` | Counts the team's own agents only |
-| Case reads with no team filter | `services/agents-service/src/ops_agents/store/cases.py:171` (`teams=None`) | Every read names the acting team |
-| The dev header acts for every team | `ops_identity` dev mode (reason `dev`) | The dev caller selects one team like everyone else |
+| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`, c-423), the no-team Platform tools module (c-433) | c-509: each team installs its own; keys are per team |
+| A tool's approver is the module's owning team | `services/agents-service/src/ops_agents/api/routers/reviews.py:83`, `registry.approval_policy` (`op.approver_team or module.team_id`) | c-509: the approver is a role in the run's team |
+| The dev header acts for every team at the request level | `ops_store.isolation.enter_caller` (reason `dev`) | c-509; inside agents-service the dev caller already acts in the one team its request names (c-507) |
 
-`isolation.tenant_wide` stays for background loops that claim across teams and seed data (13 sites, listed in
-`packages/ops_store/tests/test_isolation_sites.py`); each must hand the work to the record's team, and none may return
-data to a request.
+Removed by c-507: rows with no team (every team-owned table's team column is `NOT NULL` and the read policy has no
+null branch), task and case types shared across teams (each team holds its own copy, keyed by team), knowledge usage
+counting other teams' agents, case reads with no team filter, and every agents-service code path meaning "every team".
+Knowledge bases are held to their team by the database as well (kb_0011).
+
+Account-level records, named in the lock with their reason: people, memberships, role assignments, API keys, sign-in
+and membership audit entries (shown only to the account admin), the outboxes, and the background processes (the
+built-in event workflows, their update notices, and the loops), which act in each record's team.
+
+`isolation.tenant_wide` stays for background loops that claim across teams and seed data, each listed by reason in
+`packages/ops_store/tests/test_isolation_sites.py`; each hands the work to the record's team and none returns data to
+a request.
 
 ## Decisions
 

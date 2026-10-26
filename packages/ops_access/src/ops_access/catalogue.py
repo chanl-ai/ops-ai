@@ -42,6 +42,9 @@ AREAS = (
     "settings",
     "access",
     "audit",
+    # The workspace itself (c-529): `manage` transfers, closes and restores it. Only Owner holds it, one person per
+    # workspace, moved only by a transfer; Admin's every-cell grid leaves it out.
+    "workspace",
 )
 ACTIONS = ("view", "create", "edit", "publish", "delete", "run", "decide", "manage")
 Scope = Literal["all", "own"]
@@ -73,7 +76,9 @@ def _all(area: str, *actions: str) -> list[Grant]:
 
 # Every member reads these today: no service checks a role or owner on these reads. Chat is not one of them: a chat
 # thread is read by the person who started it only, admins included (agents-service `chat_threads.owned_by`).
-_READS: list[Grant] = [(area, "view", "all") for area in AREAS if area not in ("settings", "audit", "chat", "memory")]
+_READS: list[Grant] = [
+    (area, "view", "all") for area in AREAS if area not in ("settings", "audit", "chat", "memory", "workspace")
+]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team (c-122); a module access approval by an approver or admin of the
 # acting team (tools-service `_needs_role(who, APPROVES, ...)`).
@@ -135,7 +140,10 @@ ADMIN = BuiltinRole(
     # Admins read the team's chat threads only where the workspace turns chatThreadsOwnerOnly off (can() caps the
     # read at their own while it is on); what agents remember about a person is that person's to edit (c-206).
     tuple(
-        (area, action, "own" if (area, action) == ("memory", "edit") else "all") for area in AREAS for action in ACTIONS
+        (area, action, "own" if (area, action) == ("memory", "edit") else "all")
+        for area in AREAS
+        if area != "workspace"
+        for action in ACTIONS
     ),
 )
 BUILDER = BuiltinRole(
@@ -174,7 +182,15 @@ CHAT_USER = BuiltinRole(
     "Chats with the agents published to the team and sees only their own threads; nothing else.",
     _merge([("chat", "view", "own"), ("chat", "run", "all"), ("memory", "edit", "own")]),
 )
-BUILTIN_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, SECURITY_ADMIN, CHAT_USER)
+# Owner decision 2026-10-23 (c-529): the workspace's one owner, assigned in every team (`ANY_TEAM`) to its first admin
+# and moved only by a transfer. It holds the workspace cell and nothing else; the owner is an account admin as well.
+OWNER = BuiltinRole(
+    "owner",
+    "Owner",
+    "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
+    (("workspace", "manage", "all"),),
+)
+BUILTIN_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, SECURITY_ADMIN, CHAT_USER, OWNER)
 BUILTIN_IDS = frozenset(r.id for r in BUILTIN_ROLES)
 
 # members.role to the built-in role it becomes; the stored value `approver` is shown as Reviewer.

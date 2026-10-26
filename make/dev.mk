@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports seed-walk demo-model demo-reset
+.PHONY: up down restart reset-db health logs ports seed-walk demo-model demo-reset demo-replies
 
 ##@ Stack (ISOLATED=1 for a second stack)
 
@@ -81,6 +81,9 @@ seed-walk: ## Prove the seeded stack works: agents, pins, workflows, then a skil
 
 demo-mailbox: ## Email a levy notice to the team mailbox and follow it to cases, a Human Task and the reply in Mailpit (PASS/FAIL each; re-runnable; LOW=1 sends a scan that a person checks first)
 	@LOW=$(LOW) uv run --quiet python scripts/demo_mailbox.py
+
+demo-replies: ## Email a levy notice to the demo mailbox and follow it to the automatic reply, the hold and the second reply (PASS/FAIL each; re-runnable)
+	@uv run --quiet python scripts/demo_replies.py
 
 demo-sweep: ## Every demo scenario on the shared stack (chat, guardrail, tools, write approval, workflow, workflow as a tool, mailbox), PASS/FAIL each
 	@uv run --quiet python scripts/demo_sweep.py

@@ -13,6 +13,7 @@ include make/services.mk
 include make/console.mk
 include make/python.mk
 include make/docs.mk
+include make/sdk.mk
 include make/usecase.mk
 include make/experiments.mk
 
@@ -25,7 +26,7 @@ help: ## List targets (add ISOLATED=1 to any stack target for a second stack on 
 
 install: console-install python-install ## Install the console and the Python workspace
 
-verify: console-verify docs-verify python-verify changelog-verify ## Everything a commit must pass (scripted model only)
+verify: console-verify docs-verify python-verify sdk-verify changelog-verify ## Everything a commit must pass (scripted model only)
 
 changelog-verify: ## What's new entries and Coming next items are written for a person using the console (c-510)
 	node scripts/changelog-check.mjs --entries

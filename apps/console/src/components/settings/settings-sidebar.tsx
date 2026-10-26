@@ -3,10 +3,12 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Search } from 'lucide-react';
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 import { Kbd } from '@/components/ui/kbd';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
 import type { SidebarTree } from '@/lib/settings-tree';
 
 /**
@@ -88,23 +90,49 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
                   {g.items.map((s) => {
                     const within = (href: string) => href === current;
                     const active = s.children ? s.children.some((c) => within(c.href)) : within(s.href);
+                    if (!s.children)
+                      return (
+                        <SidebarMenuItem key={s.id}>
+                          <SidebarMenuButton asChild isActive={active}>
+                            <Link href={s.href}>
+                              <s.icon />
+                              <span>{s.label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    // A section folds, open to start with.
                     return (
-                      <SidebarMenuItem key={s.id}>
-                        <SidebarMenuButton asChild isActive={active && !s.children}>
-                          <Link href={s.href}>{s.label}</Link>
-                        </SidebarMenuButton>
-                        {s.children && (
-                          <SidebarMenuSub>
-                            {s.children.map((c) => (
-                              <SidebarMenuSubItem key={c.id}>
-                                <SidebarMenuSubButton asChild isActive={within(c.href)}>
-                                  <Link href={c.href}>{c.label}</Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                          </SidebarMenuSub>
-                        )}
-                      </SidebarMenuItem>
+                      <Collapsible key={s.id} asChild defaultOpen>
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton>
+                              <s.icon />
+                              <span>{s.label}</span>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuAction className="data-[state=open]:rotate-90" aria-label={`Show or hide ${s.label}`}>
+                              <ChevronRight />
+                            </SidebarMenuAction>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {s.children.map((c) => (
+                                <SidebarMenuSubItem key={c.id}>
+                                  <SidebarMenuSubButton asChild isActive={within(c.href)} className="h-auto min-h-7 py-1">
+                                    <Link href={c.href}>
+                                      <c.icon />
+                                      {/* A long name wraps rather than cut off: the sub-row is indented and holds an icon. */}
+                                      <span className="overflow-visible! whitespace-normal!">{c.label}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
                     );
                   })}
                 </SidebarMenu>
@@ -119,7 +147,10 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
           {tree.personal.map((s) => (
             <SidebarMenuItem key={s.id}>
               <SidebarMenuButton asChild isActive={pathname === link(s.href)}>
-                <Link href={s.href}>{s.label}</Link>
+                <Link href={s.href}>
+                  <s.icon />
+                  <span>{s.label}</span>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

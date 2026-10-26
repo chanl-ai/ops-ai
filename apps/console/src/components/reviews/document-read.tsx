@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Check, ChevronRight, FileText, Mail } from 'lucide-react';
+import { Check, ChevronRight, FileText } from 'lucide-react';
 
+import { EmailPreview } from '@/components/shared/email-preview';
 import { Row, Rows } from '@/components/shared/surface';
 import { ConfidenceBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
@@ -389,27 +390,7 @@ export function DocumentReadSection({
 export function ReplySection({ reply }: { reply: ReplyPreview }) {
   return (
     <div className="flex flex-col gap-3" data-testid="reply-preview">
-      <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border text-sm sm:grid-cols-2">
-        <div className="bg-card p-3">
-          <dt className="text-xs text-muted-foreground">To</dt>
-          <dd className="font-medium" data-testid="reply-to">
-            {reply.to}
-          </dd>
-        </div>
-        <div className="bg-card p-3">
-          <dt className="text-xs text-muted-foreground">From</dt>
-          <dd className="flex items-center gap-1.5 font-medium" data-testid="reply-from">
-            <Mail className="size-3.5 text-muted-foreground" /> {reply.mailbox ?? 'The workspace sender'}
-          </dd>
-        </div>
-        <div className="bg-card p-3 sm:col-span-2">
-          <dt className="text-xs text-muted-foreground">Subject</dt>
-          <dd className="font-medium">{reply.subject}</dd>
-        </div>
-      </dl>
-      <p className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm" data-testid="reply-body">
-        {reply.body}
-      </p>
+      <EmailPreview testId="reply" from={reply.mailbox ?? 'The workspace sender'} to={reply.to} subject={reply.subject} body={reply.body} />
       {reply.cases.length > 0 && (
         <Rows className="rounded-lg border">
           {reply.cases.map((c, i) => (

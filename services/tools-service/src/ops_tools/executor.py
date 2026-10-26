@@ -27,7 +27,7 @@ import re
 import ssl
 import time
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlsplit
 
 import httpx
@@ -41,6 +41,9 @@ from .mocks import MockAnswers
 from .registry import Resolved
 from .secrets import SecretMissing, SecretOutOfScope, SecretResolver, scrub
 from .tools import ToolCaller, ToolRunner
+
+if TYPE_CHECKING:
+    from .code_runs import CodeExecutor
 
 # A single-brace argument placeholder; the inner braces of a `{{NAME}}` secret reference are not one.
 URL_VAR = re.compile(r"(?<!\{)\{([a-zA-Z0-9_]+)\}(?!\})")
@@ -559,12 +562,15 @@ class Executor:
         http: HttpExecutor,
         mcp_executor: McpExecutor | None = None,
         mocks: MockAnswers | None = None,
+        code: CodeExecutor | None = None,
     ) -> None:
-        """`mocks` answers a test call from the operation's mock answers (c-332); without it none is read."""
+        """`mocks` answers a test call from the operation's mock answers (c-332); without it none is read. `code` runs
+        a code operation's function on runner-service (c-531); without it a code operation fails."""
         self.local = local
         self.http = http
         self.mcp = mcp_executor or McpExecutor(http.client, http.policy, http.secrets, http.auth)
         self.mocks = mocks
+        self.code = code
 
     async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
         """A test call answered as the system would have, before any egress (c-332): the same failures a real answer
@@ -609,6 +615,10 @@ class Executor:
         # approver saw), so nothing the approver did not see is added to it.
         if resolved.access == "read":
             args = with_defaults(op.get("input") or [], args)
+        if resolved.executor == "code":
+            if self.code is None:
+                return _failure("runner_unavailable", "This gateway has no code runner.")
+            return await self.code.run(op, args, key=key, caller=caller, environment=environment)
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, op["name"], args, environment)
         ):

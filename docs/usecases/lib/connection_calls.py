@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from usecase_harness import approve_tool_review, check, data, service_headers
 
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 
 
 def allow_bank(gw: httpx.Client, bank: dict[str, Any], *hosts: str) -> None:

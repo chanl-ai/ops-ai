@@ -26,6 +26,7 @@ from ..store.service_events import ServiceEvents, attempts_of, listeners
 from ..store.tenancy import current_tenant
 from .deps import Runtime
 from .engine_lifecycle import definitions, open_publish
+from .engine_resume import wake_parked
 from .engine_runs import start_run
 from .event_workflows import EVENT_WORKFLOWS, handlers
 
@@ -237,6 +238,10 @@ async def _deliver(
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
+    # A step parked on this event and key (c-525) resumes before any listener starts: the run it belongs to is waiting.
+    woken = await wake_parked(
+        db, name=name, key=key, team_id=str(event["team_id"]), payload=cast(dict[str, Any], event["payload"])
+    )
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
     runs = RunStore(EngineTransactions(db))
@@ -271,8 +276,8 @@ async def _deliver(
                 "done",
                 team_id=str(event["team_id"]),
             )
-    status = "started" if run_ids else "unhandled"
-    if not run_ids:
+    status = "started" if run_ids else "resumed" if woken else "unhandled"
+    if not run_ids and not woken:
         log.warning("service_event_unhandled", event_name=name, key=key, source=source)
     await events.started(str(event["id"]), status=status, run_ids=run_ids, attempts=attempts)
-    return event | {"status": status, "run_ids": run_ids, "attempts": attempts}
+    return event | {"status": status, "run_ids": run_ids, "attempts": attempts, "woke": woken}

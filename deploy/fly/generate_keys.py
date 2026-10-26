@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
 
 from ops_policy import Ed25519Signer
 
-SERVICES = ("platform", "agents", "tools", "kb", "files", "models", "documents")
+SERVICES = ("platform", "agents", "tools", "kb", "files", "models", "documents", "runner")
 
 
 def _b64(raw: bytes) -> str:

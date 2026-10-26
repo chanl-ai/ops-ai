@@ -13,13 +13,13 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_access import active
+from ops_access import ANY_TEAM, OWNER, active
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 
 from .audit import record
 from .roles import RoleStore, version_in
-from .tables import api_keys, members, sessions, teams, tenants, users
+from .tables import api_keys, members, role_assignments, sessions, teams, tenants, users
 from .tenancy import KEY_LOOKUP, SESSION_LOOKUP, SIGNIN_LOOKUP, TenantDb
 
 
@@ -88,6 +88,24 @@ class IdentityStore:
         q = sa.select(tenants.c.name).where(tenants.c.id == tenant_id)
         async with self.db.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
+
+    async def workspace_open_to(self, tenant_id: str, user_id: str) -> str:
+        """`open` in an active workspace; in a closed one, `open` for its owner and `closed` for everyone else; `gone`
+        once its purge has started (c-529)."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            status = (await c.execute(sa.select(tenants.c.status).where(tenants.c.id == tenant_id))).scalar()
+            if status in {"active", "suspended"}:
+                return "open"
+            if status != "closed":
+                return "gone"
+            owner = (
+                await c.execute(
+                    sa.select(role_assignments.c.subject_id).where(
+                        role_assignments.c.role_id == OWNER.id, role_assignments.c.team_id == ANY_TEAM
+                    )
+                )
+            ).scalar()
+        return "open" if owner == user_id else "closed"
 
     async def roles(self, tenant_id: str, user_id: str) -> dict[str, str]:
         """Team id to role for every active membership, in the order the memberships were made."""

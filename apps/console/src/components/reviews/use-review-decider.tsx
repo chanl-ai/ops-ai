@@ -15,7 +15,23 @@ import type { Review, ReviewDecision, ReviewOption } from '@/lib/types/domain';
  * needs, a corrected read sent as the whole records list, an option's own call, and the toast each kind of review
  * says. `onDone` runs once the decision is recorded and the review is closed (not when it waits on a second approver).
  */
-export function useReviewDecider({ active, edits, confirmed, onDone }: { active: Review | null; edits: ReadEdits; confirmed?: ReadConfirmed; onDone: () => void }) {
+/** A decision someone else recorded first: the server answers 409 `already_decided` (hitl_facade.decide). */
+const decidedElsewhere = (e: unknown) => (e as { status?: number; code?: string } | null)?.status === 409;
+
+export function useReviewDecider({
+  active,
+  edits,
+  confirmed,
+  onDone,
+  action,
+}: {
+  active: Review | null;
+  edits: ReadEdits;
+  confirmed?: ReadConfirmed;
+  onDone: () => void;
+  /** A link on the recorded decision's toast (Human Tasks links the case, c-460). */
+  action?: (r: Review) => { label: string; onClick: () => void } | undefined;
+}) {
   const decide = useDecideReview();
   const [pendingDecision, setPendingDecision] = React.useState<ReviewDecision | null>(null);
   const [pendingOption, setPendingOption] = React.useState<string | null>(null);
@@ -65,7 +81,7 @@ export function useReviewDecider({ active, edits, confirmed, onDone }: { active:
       );
     } else {
       const t = decisionToast(updated, decision);
-      toast.success(t.title, { description: t.description });
+      toast.success(t.title, { description: t.description, action: action?.(updated) });
     }
     if (addTestCase && decision !== 'approved' && updated.testTarget) {
       toast(`Added a draft case to ${updated.testTarget.name}’s suite`, { description: 'It shows under Evals → Suites. The owner activates it before the gate runs it.' });
@@ -75,7 +91,10 @@ export function useReviewDecider({ active, edits, confirmed, onDone }: { active:
     stepUp
       .withStepUp(`Approving ${target.id}`, (stepUpToken) => decide.mutateAsync({ id: target.id, decision, reason, conditions, actingAsId, addTestCase, inputs, stepUpToken }), { upfront: decision === 'approved' && !!target.stepUp })
       .then(decided, (e) => {
-        if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
+        if (decidedElsewhere(e)) {
+          toast('Someone decided this task first', { description: 'Their decision stands; the next task is open.' });
+          onDone();
+        } else if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
       })
       .finally(() => setPendingDecision(null));
   };
@@ -102,11 +121,14 @@ export function useReviewDecider({ active, edits, confirmed, onDone }: { active:
             toast(`${updated.id} needs a second reviewer`, { description: `Your decision is recorded. Someone else in ${updated.policy.reviewers} must also approve.` });
             return;
           }
-          toast.success(`${option.name.charAt(0).toUpperCase()}${option.name.slice(1)} · ${updated.id}`, { description: 'The run has resumed with your decision; its outcome is on the case.' });
+          toast.success(`${option.label ?? `${option.name.charAt(0).toUpperCase()}${option.name.slice(1)}`} · ${updated.title}`, { description: 'The run has resumed with your decision; its outcome is on the case.', action: action?.(updated) });
           onDone();
         },
         (e) => {
-          if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
+          if (decidedElsewhere(e)) {
+            toast('Someone decided this task first', { description: 'Their decision stands; the next task is open.' });
+            onDone();
+          } else if (!(e instanceof StepUpCancelled)) toast.error(`Couldn’t record the decision on ${target.id}`, { description: (e as Error).message });
         },
       )
       .finally(() => setPendingOption(null));

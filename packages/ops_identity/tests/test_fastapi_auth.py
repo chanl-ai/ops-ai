@@ -1,7 +1,7 @@
 """The shared FastAPI layer, by failure mode: the mode taken from anything but auth_mode, the dev team overriding an
 explicit X-Team-Id, X-Dev-User naming only half the person, the dev caller missing the policies a token would carry,
-a service's per-request hook skipped, and a route on an app that never installed auth answering as if
-authenticated."""
+a service's per-request hook skipped, a route on an app that never installed auth answering as if
+authenticated, and a service-only route offered to the SDK as public."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from ops_identity import Auth, CurrentPrincipal, Principal, install_auth
+from ops_identity import Auth, CurrentPrincipal, CurrentService, Principal, current_service, install_auth
+from ops_service_kit.http import operation_id
 from ops_service_kit.settings import Settings
 
 SEED = Path(__file__).parents[3] / "services" / "agents-service" / "tests" / "fixtures" / "seed"
@@ -75,3 +76,38 @@ async def test_the_services_hook_runs_for_each_request() -> None:
 async def test_an_app_without_installed_auth_refuses_to_answer() -> None:
     with pytest.raises(RuntimeError, match="install_auth"):
         await get(app_with(None))
+
+
+def test_a_route_that_takes_only_a_service_token_is_internal_and_the_rest_are_for_the_sdk() -> None:
+    app = FastAPI(generate_unique_id_function=operation_id)
+    install_auth(app, Auth.from_settings(settings(), audience="tools"))
+
+    @app.get("/v1/things", tags=["things"])
+    async def list_things(p: CurrentPrincipal) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return {}
+
+    @app.post("/v1/things/sync", tags=["things"])
+    async def sync_things(s: CurrentService) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return {}
+
+    @app.get("/v1/things/search", tags=["things"], openapi_extra={"x-ops-public": "both"})
+    async def search_things(p: CurrentPrincipal) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return {}
+
+    # A router-level service dependency, behind an include, as tools-service's mailbox routes are.
+    router = APIRouter(prefix="/v1/hooks", tags=["hooks"], dependencies=[Depends(current_service)])
+
+    @router.post("")
+    async def deliver_hook() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return {}
+
+    app.include_router(router)
+    paths = app.openapi()["paths"]
+    marks = {(m, p): op["x-ops-public"] for p, ops in paths.items() for m, op in ops.items()}
+    assert marks == {
+        ("get", "/v1/things"): "sdk",
+        ("post", "/v1/things/sync"): "internal",
+        ("get", "/v1/things/search"): "both",
+        ("post", "/v1/hooks"): "internal",
+    }
+    assert paths["/v1/things"]["get"]["operationId"] == "things_list_things"

@@ -1,0 +1,1096 @@
+{
+ "schemaVersion": 2,
+ "id": "levy_reply_debtor",
+ "name": "Levy notice: answer for one person",
+ "description": "One person a levy notice names: find them at the bank; with no account, reply so and resolve the case; with accounts, the levy code works out the hold, and funds the handbook exempts are replied as exempt; otherwise the hold is checked against the handbook, a person approves it, and the sender is told once it is placed.",
+ "nodes": [
+  {
+   "id": "start",
+   "type": "ops.trigger.request",
+   "typeVersion": 1,
+   "name": "Person",
+   "parameters": {
+    "inputSchema": {
+     "type": "object",
+     "required": [
+      "record"
+     ],
+     "properties": {
+      "record": {
+       "type": "object"
+      },
+      "notice": {
+       "type": "string"
+      },
+      "fileId": {
+       "type": "string"
+      },
+      "from": {
+       "type": "string"
+      },
+      "mailbox": {
+       "type": "string"
+      },
+      "acknowledgement": {
+       "type": "object"
+      }
+     }
+    },
+    "onlyFromWorkflows": true
+   }
+  },
+  {
+   "id": "search",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Search customers",
+   "parameters": {
+    "operation": "search_customers",
+    "input": {
+     "query": "$.input.record.name"
+    }
+   }
+  },
+  {
+   "id": "match",
+   "type": "ops.data.match",
+   "typeVersion": 1,
+   "name": "Match the person",
+   "parameters": {
+    "item": "$.input.record",
+    "candidates": "$.nodes.search.out",
+    "all": [
+     {
+      "left": "name",
+      "op": "equals",
+      "right": "name"
+     }
+    ],
+    "any": [
+     {
+      "left": "ssn_last4",
+      "op": "equals",
+      "right": "ssnLast4"
+     },
+     {
+      "left": "address",
+      "op": "overlaps",
+      "right": "address",
+      "minLength": 6
+     }
+    ]
+   }
+  },
+  {
+   "id": "case",
+   "type": "ops.action.openCase",
+   "typeVersion": 1,
+   "name": "Open the levy case",
+   "parameters": {
+    "subject": "Levy notice: {$.input.record.name} ({$.input.record.case_no})",
+    "priority": "high",
+    "customerId": "$.nodes.match.out.match.id",
+    "customerName": "$.nodes.match.out.match.name",
+    "fields": {
+     "notice": "$.input.record"
+    }
+   }
+  },
+  {
+   "id": "case_none",
+   "type": "ops.action.openCase",
+   "typeVersion": 1,
+   "name": "Open a no account case",
+   "parameters": {
+    "subject": "No account: {$.input.record.name} ({$.input.record.case_no})",
+    "priority": "normal",
+    "customerName": "$.input.record.name",
+    "fields": {
+     "notice": "$.input.record"
+    }
+   }
+  },
+  {
+   "id": "noted",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Note the thank-you",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId",
+    "note": "Sent to {$.input.from} without approval: We received your notice and are working on it.",
+    "fields": {
+     "acknowledgement": "$.input.acknowledgement"
+    }
+   }
+  },
+  {
+   "id": "route",
+   "type": "ops.flow.if",
+   "typeVersion": 1,
+   "name": "Customer found?",
+   "parameters": {
+    "conditions": [
+     {
+      "left": "$.nodes.case.out.caseId",
+      "op": "empty"
+     }
+    ],
+    "combine": "any"
+   }
+  },
+  {
+   "id": "accounts",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "List accounts",
+   "parameters": {
+    "operation": "list_accounts",
+    "input": {
+     "customer_id": "$.nodes.match.out.match.id"
+    }
+   }
+  },
+  {
+   "id": "any_accounts",
+   "type": "ops.flow.if",
+   "typeVersion": 1,
+   "name": "No accounts?",
+   "parameters": {
+    "conditions": [
+     {
+      "left": "$.nodes.accounts.out",
+      "op": "empty"
+     }
+    ],
+    "combine": "any"
+   }
+  },
+  {
+   "id": "calc",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Work out the hold",
+   "parameters": {
+    "operation": "compute_levy_hold",
+    "input": {
+     "document": "$.input.record",
+     "accounts": "$.nodes.accounts.out"
+    }
+   }
+  },
+  {
+   "id": "anything",
+   "type": "ops.flow.if",
+   "typeVersion": 1,
+   "name": "Anything to hold?",
+   "parameters": {
+    "conditions": [
+     {
+      "left": "$.nodes.calc.out.holdAmount",
+      "op": "lte",
+      "right": 0
+     }
+    ],
+    "combine": "any"
+   }
+  },
+  {
+   "id": "checked",
+   "type": "ops.ai.agent",
+   "typeVersion": 1,
+   "name": "Check against the handbook",
+   "parameters": {
+    "agent": "{agent:levy}",
+    "prompt": "Check this levy notice and the hold worked out for it against the levy handbook: is the notice complete, is anything in the accounts protected, and is the hold within the limits? Cite the handbook for each point.",
+    "input": {
+     "notice": "$.input.record",
+     "hold": "$.nodes.calc.out",
+     "accounts": "$.nodes.accounts.out"
+    },
+    "outputSchema": {
+     "type": "object",
+     "required": [
+      "ok",
+      "findings"
+     ],
+     "properties": {
+      "ok": {
+       "type": "boolean"
+      },
+      "findings": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "review",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Place the hold?",
+   "parameters": {
+    "title": "Place the hold for {$.input.record.name}",
+    "summary": {
+     "notice": "$.input.record",
+     "customer": "$.nodes.match.out.match",
+     "accounts": "$.nodes.accounts.out",
+     "hold": "$.nodes.calc.out",
+     "check": "$.nodes.checked.out",
+     "lastError": "$.nodes.hold.out",
+     "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId"
+    },
+    "options": [
+     {
+      "name": "hold",
+      "label": "Place the hold",
+      "call": {
+       "node": "hold"
+      }
+     },
+     {
+      "name": "no_hold",
+      "label": "Do not hold"
+     }
+    ]
+   }
+  },
+  {
+   "id": "hold",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Place the hold",
+   "parameters": {
+    "operation": "place_hold",
+    "approvedBy": "review",
+    "input": {
+     "account_id": "$.nodes.calc.out.accountId",
+     "amount": "$.nodes.calc.out.holdAmount",
+     "reason": "$.input.record.case_no"
+    }
+   }
+  },
+  {
+   "id": "held_note",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Record the hold",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId",
+    "note": "Hold placed: {$.nodes.calc.out.holdAmount} on {$.nodes.calc.out.accountId}.",
+    "fields": {
+     "hold": "$.nodes.hold.out",
+     "holdWorkedOut": "$.nodes.calc.out"
+    }
+   }
+  },
+  {
+   "id": "ask_held",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Send: hold applied",
+   "parameters": {
+    "title": "Tell {$.input.from} the hold has been applied?",
+    "summary": {
+     "to": "$.input.from",
+     "person": "$.input.record",
+     "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId"
+    },
+    "approves": "reply_held",
+    "taskType": {
+     "id": "acknowledgement"
+    },
+    "params": {
+     "title": "Tell {$.input.from} the hold has been applied?",
+     "received": {
+      "subject": "$.input.notice",
+      "from": "$.input.from",
+      "summary": "{$.input.record.name} ({$.input.record.case_no})"
+     },
+     "reply": "The hold has been applied.",
+     "onApprove": "The reply goes to {$.input.from} now.",
+     "onReject": "Nothing is sent.",
+     "facts": [
+      {
+       "label": "To",
+       "value": "$.input.from"
+      },
+      {
+       "label": "From",
+       "value": "$.input.mailbox"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "reply_held",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Reply: hold applied",
+   "parameters": {
+    "operation": "send_reply",
+    "approvedBy": "ask_held",
+    "input": {
+     "to": "$.input.from",
+     "subject": "Re: {$.input.notice}",
+     "body": "The hold has been applied.",
+     "mailbox": "$.input.mailbox"
+    }
+   }
+  },
+  {
+   "id": "done_held",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Resolve the case",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId",
+    "note": "Replied to {$.input.from}: The hold has been applied.",
+    "status": "resolved"
+   }
+  },
+  {
+   "id": "ask_none",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Send: no account",
+   "parameters": {
+    "title": "Tell {$.input.from} the bank holds no account for {$.input.record.name}?",
+    "summary": {
+     "to": "$.input.from",
+     "person": "$.input.record",
+     "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId"
+    },
+    "approves": "reply_none",
+    "taskType": {
+     "id": "acknowledgement"
+    },
+    "params": {
+     "title": "Tell {$.input.from} the bank holds no account for {$.input.record.name}?",
+     "received": {
+      "subject": "$.input.notice",
+      "from": "$.input.from",
+      "summary": "{$.input.record.name} ({$.input.record.case_no})"
+     },
+     "reply": "Harbor & Pine Bank holds no account for {$.input.record.name}, named in {$.input.record.case_no}, so no funds are held.",
+     "onApprove": "The reply goes to {$.input.from} now.",
+     "onReject": "Nothing is sent.",
+     "facts": [
+      {
+       "label": "To",
+       "value": "$.input.from"
+      },
+      {
+       "label": "From",
+       "value": "$.input.mailbox"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "reply_none",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Reply: no account",
+   "parameters": {
+    "operation": "send_reply",
+    "approvedBy": "ask_none",
+    "input": {
+     "to": "$.input.from",
+     "subject": "Re: {$.input.notice}",
+     "body": "Harbor & Pine Bank holds no account for {$.input.record.name}, named in {$.input.record.case_no}, so no funds are held.",
+     "mailbox": "$.input.mailbox"
+    }
+   }
+  },
+  {
+   "id": "done_none",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Resolve the case",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId",
+    "note": "Replied to {$.input.from}: no account at the bank.",
+    "status": "resolved"
+   }
+  },
+  {
+   "id": "ask_exempt",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Send: funds exempt",
+   "parameters": {
+    "title": "Tell {$.input.from} the funds of {$.input.record.name} are exempt?",
+    "summary": {
+     "to": "$.input.from",
+     "person": "$.input.record",
+     "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId"
+    },
+    "approves": "reply_exempt",
+    "taskType": {
+     "id": "acknowledgement"
+    },
+    "params": {
+     "title": "Tell {$.input.from} the funds of {$.input.record.name} are exempt?",
+     "received": {
+      "subject": "$.input.notice",
+      "from": "$.input.from",
+      "summary": "{$.input.record.name} ({$.input.record.case_no})"
+     },
+     "reply": "Harbor & Pine Bank holds {$.input.record.name}'s accounts, but their funds are exempt from this levy ({$.input.record.case_no}), so nothing is held.",
+     "onApprove": "The reply goes to {$.input.from} now.",
+     "onReject": "Nothing is sent.",
+     "facts": [
+      {
+       "label": "To",
+       "value": "$.input.from"
+      },
+      {
+       "label": "From",
+       "value": "$.input.mailbox"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "reply_exempt",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Reply: funds exempt",
+   "parameters": {
+    "operation": "send_reply",
+    "approvedBy": "ask_exempt",
+    "input": {
+     "to": "$.input.from",
+     "subject": "Re: {$.input.notice}",
+     "body": "Harbor & Pine Bank holds {$.input.record.name}'s accounts, but their funds are exempt from this levy ({$.input.record.case_no}), so nothing is held.",
+     "mailbox": "$.input.mailbox"
+    }
+   }
+  },
+  {
+   "id": "done_exempt",
+   "type": "ops.action.addToCase",
+   "typeVersion": 1,
+   "name": "Resolve the case",
+   "parameters": {
+    "caseId": "$.nodes.case.out.caseId ?? $.nodes.case_none.out.caseId",
+    "note": "Replied to {$.input.from}: the funds are exempt; nothing held.",
+    "status": "resolved"
+   }
+  },
+  {
+   "id": "exempt",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Exempt, replied",
+   "parameters": {
+    "outcome": "exempt",
+    "output": "$.nodes.calc.out"
+   }
+  },
+  {
+   "id": "held",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Held and replied",
+   "parameters": {
+    "outcome": "held",
+    "output": "$.nodes.hold.out"
+   }
+  },
+  {
+   "id": "no_account",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "No account, replied",
+   "parameters": {
+    "outcome": "no_account"
+   }
+  },
+  {
+   "id": "not_held",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Not held",
+   "parameters": {
+    "outcome": "not_held"
+   }
+  },
+  {
+   "id": "not_sent",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Reply not sent",
+   "parameters": {
+    "outcome": "reply_not_sent",
+    "result": "failed"
+   }
+  },
+  {
+   "id": "lookup_failed",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Lookup failed",
+   "parameters": {
+    "outcome": "lookup_failed",
+    "result": "failed"
+   }
+  },
+  {
+   "id": "case_failed",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Case not opened",
+   "parameters": {
+    "outcome": "case_not_opened",
+    "result": "failed"
+   }
+  }
+ ],
+ "connections": [
+  {
+   "from": {
+    "node": "start",
+    "port": "payload"
+   },
+   "to": {
+    "node": "search",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "ok"
+   },
+   "to": {
+    "node": "match",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "refused"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "search",
+    "port": "error"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "match",
+    "port": "matched"
+   },
+   "to": {
+    "node": "case",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "match",
+    "port": "none"
+   },
+   "to": {
+    "node": "case_none",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case",
+    "port": "opened"
+   },
+   "to": {
+    "node": "noted",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case",
+    "port": "error"
+   },
+   "to": {
+    "node": "case_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case_none",
+    "port": "opened"
+   },
+   "to": {
+    "node": "noted",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "case_none",
+    "port": "error"
+   },
+   "to": {
+    "node": "case_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "noted",
+    "port": "added"
+   },
+   "to": {
+    "node": "route",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "noted",
+    "port": "error"
+   },
+   "to": {
+    "node": "route",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "route",
+    "port": "true"
+   },
+   "to": {
+    "node": "ask_none",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "route",
+    "port": "false"
+   },
+   "to": {
+    "node": "accounts",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "ok"
+   },
+   "to": {
+    "node": "any_accounts",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "refused"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "accounts",
+    "port": "error"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "any_accounts",
+    "port": "true"
+   },
+   "to": {
+    "node": "ask_none",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "any_accounts",
+    "port": "false"
+   },
+   "to": {
+    "node": "calc",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "calc",
+    "port": "refused"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "calc",
+    "port": "error"
+   },
+   "to": {
+    "node": "lookup_failed",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "checked",
+    "port": "ok"
+   },
+   "to": {
+    "node": "review",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "checked",
+    "port": "error"
+   },
+   "to": {
+    "node": "review",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "review",
+    "port": "hold"
+   },
+   "to": {
+    "node": "hold",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "review",
+    "port": "no_hold"
+   },
+   "to": {
+    "node": "not_held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "hold",
+    "port": "ok"
+   },
+   "to": {
+    "node": "held_note",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "hold",
+    "port": "refused"
+   },
+   "to": {
+    "node": "review",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "hold",
+    "port": "error"
+   },
+   "to": {
+    "node": "review",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "held_note",
+    "port": "added"
+   },
+   "to": {
+    "node": "ask_held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "held_note",
+    "port": "error"
+   },
+   "to": {
+    "node": "ask_held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_held",
+    "port": "approve"
+   },
+   "to": {
+    "node": "reply_held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_held",
+    "port": "reject"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_held",
+    "port": "ok"
+   },
+   "to": {
+    "node": "done_held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_held",
+    "port": "refused"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_held",
+    "port": "error"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_held",
+    "port": "added"
+   },
+   "to": {
+    "node": "held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_held",
+    "port": "error"
+   },
+   "to": {
+    "node": "held",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_none",
+    "port": "approve"
+   },
+   "to": {
+    "node": "reply_none",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_none",
+    "port": "reject"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_none",
+    "port": "ok"
+   },
+   "to": {
+    "node": "done_none",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_none",
+    "port": "refused"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_none",
+    "port": "error"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_none",
+    "port": "added"
+   },
+   "to": {
+    "node": "no_account",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_none",
+    "port": "error"
+   },
+   "to": {
+    "node": "no_account",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "calc",
+    "port": "ok"
+   },
+   "to": {
+    "node": "anything",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "anything",
+    "port": "true"
+   },
+   "to": {
+    "node": "ask_exempt",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "anything",
+    "port": "false"
+   },
+   "to": {
+    "node": "checked",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_exempt",
+    "port": "approve"
+   },
+   "to": {
+    "node": "reply_exempt",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ask_exempt",
+    "port": "reject"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_exempt",
+    "port": "ok"
+   },
+   "to": {
+    "node": "done_exempt",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_exempt",
+    "port": "refused"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "reply_exempt",
+    "port": "error"
+   },
+   "to": {
+    "node": "not_sent",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_exempt",
+    "port": "added"
+   },
+   "to": {
+    "node": "exempt",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "done_exempt",
+    "port": "error"
+   },
+   "to": {
+    "node": "exempt",
+    "port": "in"
+   }
+  }
+ ]
+}

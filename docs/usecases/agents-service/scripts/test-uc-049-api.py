@@ -23,7 +23,7 @@ from usecase_harness import (
     tools,
 )
 
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 MAYA, PRIYA = {"X-Dev-User": "Maya Okafor"}, {"X-Dev-User": "Priya Shah"}
 RUN = int(time.time())
 WRITE = f"freeze_account_{RUN}"

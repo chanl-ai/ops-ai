@@ -20,7 +20,7 @@ RUN = int(time.time())
 ECHO = "postman-echo.com"
 # A name under the reserved .invalid TLD never resolves: an allowed host whose call fails on our side.
 NOWHERE = f"nowhere-{RUN}.invalid"
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 OTHER = {"X-Dev-User": "Priya Shah"}
 
 

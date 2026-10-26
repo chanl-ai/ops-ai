@@ -332,7 +332,7 @@ export interface KnowledgeBaseRow extends KnowledgeBase {
   sourceNames: string[];
   /** Agents of the signed-in person's team that cite it. */
   agentNames: string[];
-  /** Agents of other teams that cite it: counted, not named. */
+  /** @deprecated Always 0: a base is its team's alone (c-507); the field leaves the API next release. */
   agentsElsewhere?: number;
   /** False when agents-service could not say who cites it; treat the base as in use. */
   agentsKnown?: boolean;

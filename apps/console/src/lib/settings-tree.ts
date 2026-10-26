@@ -1,4 +1,4 @@
-import { Bell, ChartColumn, Globe, HardDrive, KeyRound, KeySquare, LogIn, ShieldCheck, SlidersHorizontal, Webhook, type LucideIcon } from 'lucide-react';
+import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconGavel, IconGitPullRequest, IconKey, IconLock, IconLockPassword, IconLogin, IconServer, IconShieldCheck, IconUserCircle, IconUserShield, IconWebhook, IconWorld, type Icon } from '@tabler/icons-react';
 
 /**
  * The settings tree the owner approved (card c-178; the design is the planning repo docs/plans/ops-ai/settings-design.html):
@@ -12,7 +12,7 @@ export interface SettingsEntry {
   id: string;
   title: string;
   href: string;
-  icon: LucideIcon;
+  icon: Icon;
   description: string;
   group: SettingsGroup;
   /** Entries sharing a section nest under one parent row in the sidebar (Govern > Security). */
@@ -20,28 +20,31 @@ export interface SettingsEntry {
 }
 
 export const SETTINGS_NAV: SettingsEntry[] = [
-  { id: 'workspace-general', title: 'General', href: '/settings/workspace', icon: SlidersHorizontal, description: 'The workspace’s name, address and logo', group: 'Workspace' },
-  { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: HardDrive, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace' },
-  { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: ChartColumn, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace' },
-  { id: 'team-general', title: 'General', href: '/settings/team', icon: SlidersHorizontal, description: 'The team’s name, owner and the agent new chats start on', group: 'Team' },
-  { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: Bell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },
-  { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: Webhook, description: 'Send events to the bank’s other systems', group: 'Team' },
-  { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: KeyRound, description: 'Keys for systems that start runs or read logs', group: 'Team' },
-  { id: 'policies', title: 'Workspace policies', href: '/settings/policies', icon: ShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
-  { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: ShieldCheck, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
-  { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: ShieldCheck, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
-  { id: 'sign-in', title: 'Sign-in', href: '/settings/security/sign-in', icon: LogIn, description: 'Sign-in methods, single sign-on, two-step verification and sessions', group: 'Govern', section: 'Security' },
-  { id: 'egress', title: 'Egress', href: '/settings/security/egress', icon: Globe, description: 'Hosts and private ranges tool calls may reach', group: 'Govern', section: 'Security' },
-  { id: 'secrets', title: 'Secrets', href: '/settings/security/secrets', icon: KeySquare, description: 'Credentials tool calls send, never shown again', group: 'Govern', section: 'Security' },
+  { id: 'workspace-general', title: 'General', href: '/settings/workspace', icon: IconAdjustmentsHorizontal, description: 'The workspace’s name, address and logo', group: 'Workspace' },
+  { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: IconServer, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace' },
+  { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: IconChartBar, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace' },
+  { id: 'team-general', title: 'General', href: '/settings/team', icon: IconAdjustmentsHorizontal, description: 'The team’s name, owner and the agent new chats start on', group: 'Team' },
+  { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: IconBell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },
+  { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team' },
+  { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team' },
+  { id: 'policies', title: 'Workspace policies', href: '/settings/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
+  { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
+  { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
+  { id: 'sign-in', title: 'Sign-in', href: '/settings/security/sign-in', icon: IconLogin, description: 'Sign-in methods, single sign-on, two-step verification and sessions', group: 'Govern', section: 'Security' },
+  { id: 'egress', title: 'Egress', href: '/settings/security/egress', icon: IconWorld, description: 'Hosts and private ranges tool calls may reach', group: 'Govern', section: 'Security' },
+  { id: 'secrets', title: 'Secrets', href: '/settings/security/secrets', icon: IconLockPassword, description: 'Credentials tool calls send, never shown again', group: 'Govern', section: 'Security' },
 ];
 
 export const SETTINGS_GROUPS: SettingsGroup[] = ['Workspace', 'Team', 'Govern'];
 
+/** The icon of a section's parent row (Govern > Policies, Govern > Security). */
+const SECTION_ICON: Record<string, Icon> = { Policies: IconShieldCheck, Security: IconLock };
+
 /** The person's own settings, kept at the bottom of the settings sidebar. */
 export const PERSONAL_SETTINGS = [
-  { id: 'my-account', label: 'My account', href: '/settings/account' },
-  { id: 'my-security', label: 'My security', href: '/settings/account/security' },
-  { id: 'my-memory', label: 'My memory', href: '/settings/account/memory' },
+  { id: 'my-account', label: 'My account', href: '/settings/account', icon: IconUserCircle },
+  { id: 'my-security', label: 'My security', href: '/settings/account/security', icon: IconUserShield },
+  { id: 'my-memory', label: 'My memory', href: '/settings/account/memory', icon: IconBrain },
 ];
 
 /** True on the routes the settings sidebar replaces the app sidebar for. */
@@ -71,13 +74,14 @@ export interface SidebarItem {
   id: string;
   label: string;
   href: string;
-  children?: { id: string; label: string; href: string }[];
+  icon: Icon;
+  children?: { id: string; label: string; href: string; icon: Icon }[];
 }
 
 export interface SidebarTree {
   home: string;
   groups: { label: string; items: SidebarItem[] }[];
-  personal: { id: string; label: string; href: string }[];
+  personal: { id: string; label: string; href: string; icon: Icon }[];
   find: (query: string) => FoundSetting[];
 }
 
@@ -85,13 +89,13 @@ function itemsOf(group: SettingsGroup): SidebarItem[] {
   const out: SidebarItem[] = [];
   for (const e of SETTINGS_NAV.filter((x) => x.group === group)) {
     if (!e.section) {
-      out.push({ id: e.id, label: e.title, href: e.href });
+      out.push({ id: e.id, label: e.title, href: e.href, icon: e.icon });
       continue;
     }
     const parent = out.find((o) => o.id === `section-${e.section}`);
-    const child = { id: e.id, label: e.title, href: e.href };
+    const child = { id: e.id, label: e.title, href: e.href, icon: e.icon };
     if (parent) parent.children!.push(child);
-    else out.push({ id: `section-${e.section}`, label: e.section, href: e.href, children: [child] });
+    else out.push({ id: `section-${e.section}`, label: e.section, href: e.href, icon: SECTION_ICON[e.section] ?? e.icon, children: [child] });
   }
   return out;
 }

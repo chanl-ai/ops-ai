@@ -95,12 +95,17 @@ COPY packages packages
 COPY services services
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+# runner-service's CPython for WASI (c-531), pinned by SHA-256 in settings: fetched at build, so no machine fetches it
+# when it starts.
+RUN python -m ops_runner.fetch
 
 # What every service image adds: the deploy scripts, a non-root user owning /data (files and knowledge bytes), and the
 # listen address every container needs so the others reach it.
 FROM python-base AS service
 COPY deploy deploy
-RUN useradd --system --uid 10001 --home-dir /app ops && mkdir -p /data && chown ops:ops /data
+# The runner writes wasmtime's compiled-module cache beside its Python build, so the service user owns that folder.
+RUN useradd --system --uid 10001 --home-dir /app ops && mkdir -p /data && chown ops:ops /data \
+ && chown -R ops:ops /app/.data/runner
 USER ops
 ENV OPS_BIND_HOST=0.0.0.0 OPS_ENVIRONMENT=production OPS_AUTH_MODE=platform
 ENTRYPOINT ["/app/deploy/images/entrypoint.sh"]
@@ -141,6 +146,12 @@ FROM service AS documents
 EXPOSE 8760
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8760/health"]
 CMD ["python", "-m", "ops_documents"]
+
+# Code tools' functions (c-531): Python on WASM with no network; tools-service is its only caller.
+FROM service AS runner
+EXPOSE 8770
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8770/health"]
+CMD ["python", "-m", "ops_runner"]
 
 # tools-service's policy engine with its policy built in, so an install needs no copy of the repo.
 FROM openpolicyagent/opa:1.21.1-static AS opa

@@ -3794,7 +3794,7 @@
   "paths": {
     "/health": {
       "get": {
-        "operationId": "health_health_get",
+        "operationId": "health_health",
         "responses": {
           "200": {
             "content": {
@@ -3820,12 +3820,13 @@
         "summary": "Health",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/items/{item_id}": {
       "get": {
-        "operationId": "get_item_v1_items__item_id__get",
+        "operationId": "items_get_item",
         "parameters": [
           {
             "in": "path",
@@ -4006,12 +4007,13 @@
         "summary": "Get Item",
         "tags": [
           "items"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/items/{item_id}/owner": {
       "put": {
-        "operationId": "set_item_owner_v1_items__item_id__owner_put",
+        "operationId": "items_set_item_owner",
         "parameters": [
           {
             "in": "path",
@@ -4202,12 +4204,13 @@
         "summary": "Set Item Owner",
         "tags": [
           "items"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/items/{item_id}/verify": {
       "post": {
-        "operationId": "verify_item_v1_items__item_id__verify_post",
+        "operationId": "items_verify_item",
         "parameters": [
           {
             "in": "path",
@@ -4398,12 +4401,13 @@
         "summary": "Verify Item",
         "tags": [
           "items"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases": {
       "get": {
-        "operationId": "list_knowledge_bases_v1_knowledge_bases_get",
+        "operationId": "knowledge_bases_list_knowledge_bases",
         "parameters": [
           {
             "in": "query",
@@ -4630,10 +4634,11 @@
         "summary": "List Knowledge Bases",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
-        "operationId": "create_knowledge_base_v1_knowledge_bases_post",
+        "operationId": "knowledge_bases_create_knowledge_base",
         "parameters": [
           {
             "in": "header",
@@ -4815,13 +4820,14 @@
         "summary": "Create Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/options": {
       "get": {
         "description": "Knowledge bases a picker offers, searched and limited in the query: the caller's team's and those no team\nowns. `ids` labels stored values instead of searching.",
-        "operationId": "knowledge_base_options_v1_knowledge_bases_options_get",
+        "operationId": "knowledge_bases_knowledge_base_options",
         "parameters": [
           {
             "in": "query",
@@ -5050,13 +5056,14 @@
         "summary": "Knowledge Base Options",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/refs": {
       "get": {
         "description": "Knowledge bases by id and name, for agents-service's grant check and thread names, and for a person's picker\nor script: the tenant's for a service, the team's and unowned ones for a person.",
-        "operationId": "knowledge_base_refs_v1_knowledge_bases_refs_get",
+        "operationId": "knowledge_bases_knowledge_base_refs",
         "parameters": [
           {
             "in": "header",
@@ -5228,13 +5235,14 @@
         "summary": "Knowledge Base Refs",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/search": {
       "post": {
         "description": "Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who\nsearches only bases they may read.",
-        "operationId": "search_knowledge_v1_knowledge_bases_search_post",
+        "operationId": "knowledge_bases_search_knowledge",
         "parameters": [
           {
             "in": "header",
@@ -5416,12 +5424,13 @@
         "summary": "Search Knowledge",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}": {
       "delete": {
-        "operationId": "remove_knowledge_base_v1_knowledge_bases__kb_id__delete",
+        "operationId": "knowledge_bases_remove_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -5595,10 +5604,11 @@
         "summary": "Remove Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
-        "operationId": "get_knowledge_base_v1_knowledge_bases__kb_id__get",
+        "operationId": "knowledge_bases_get_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -5779,10 +5789,11 @@
         "summary": "Get Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
-        "operationId": "update_knowledge_base_v1_knowledge_bases__kb_id__patch",
+        "operationId": "knowledge_bases_update_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -5973,12 +5984,13 @@
         "summary": "Update Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/documents": {
       "get": {
-        "operationId": "list_documents_v1_knowledge_bases__kb_id__documents_get",
+        "operationId": "knowledge_bases_list_documents",
         "parameters": [
           {
             "in": "path",
@@ -6198,11 +6210,12 @@
         "summary": "List Documents",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Files already in Files, added to the base's documents source (made the first time) and synced at once.",
-        "operationId": "add_documents_v1_knowledge_bases__kb_id__documents_post",
+        "operationId": "knowledge_bases_add_documents",
         "parameters": [
           {
             "in": "path",
@@ -6393,12 +6406,13 @@
         "summary": "Add Documents",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/pages": {
       "post": {
-        "operationId": "add_page_v1_knowledge_bases__kb_id__pages_post",
+        "operationId": "knowledge_bases_add_page",
         "parameters": [
           {
             "in": "path",
@@ -6589,12 +6603,13 @@
         "summary": "Add Page",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/query": {
       "post": {
-        "operationId": "query_knowledge_base_v1_knowledge_bases__kb_id__query_post",
+        "operationId": "knowledge_bases_query_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -6785,12 +6800,13 @@
         "summary": "Query Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/refresh": {
       "post": {
-        "operationId": "refresh_knowledge_base_v1_knowledge_bases__kb_id__refresh_post",
+        "operationId": "knowledge_bases_refresh_knowledge_base",
         "parameters": [
           {
             "in": "path",
@@ -6971,12 +6987,13 @@
         "summary": "Refresh Knowledge Base",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/retry-failed": {
       "post": {
-        "operationId": "retry_failed_v1_knowledge_bases__kb_id__retry_failed_post",
+        "operationId": "knowledge_bases_retry_failed",
         "parameters": [
           {
             "in": "path",
@@ -7157,12 +7174,13 @@
         "summary": "Retry Failed",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/sources": {
       "post": {
-        "operationId": "attach_sources_v1_knowledge_bases__kb_id__sources_post",
+        "operationId": "knowledge_bases_attach_sources",
         "parameters": [
           {
             "in": "path",
@@ -7353,12 +7371,13 @@
         "summary": "Attach Sources",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-bases/{kb_id}/sources/{source_id}": {
       "delete": {
-        "operationId": "detach_source_v1_knowledge_bases__kb_id__sources__source_id__delete",
+        "operationId": "knowledge_bases_detach_source",
         "parameters": [
           {
             "in": "path",
@@ -7548,12 +7567,13 @@
         "summary": "Detach Source",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-changes": {
       "get": {
-        "operationId": "list_changes_v1_knowledge_changes_get",
+        "operationId": "changes_list_changes",
         "parameters": [
           {
             "in": "query",
@@ -7790,12 +7810,13 @@
         "summary": "List Changes",
         "tags": [
           "changes"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-changes/{change_id}": {
       "get": {
-        "operationId": "get_change_v1_knowledge_changes__change_id__get",
+        "operationId": "changes_get_change",
         "parameters": [
           {
             "in": "path",
@@ -7976,12 +7997,13 @@
         "summary": "Get Change",
         "tags": [
           "changes"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge/lookups": {
       "get": {
-        "operationId": "lookups_v1_knowledge_lookups_get",
+        "operationId": "knowledge_bases_lookups",
         "parameters": [
           {
             "in": "header",
@@ -8153,12 +8175,13 @@
         "summary": "Lookups",
         "tags": [
           "knowledge-bases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources": {
       "get": {
-        "operationId": "list_sources_v1_sources_get",
+        "operationId": "sources_list_sources",
         "parameters": [
           {
             "in": "query",
@@ -8369,10 +8392,11 @@
         "summary": "List Sources",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
-        "operationId": "create_source_v1_sources_post",
+        "operationId": "sources_create_source",
         "parameters": [
           {
             "in": "header",
@@ -8554,12 +8578,13 @@
         "summary": "Create Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}": {
       "delete": {
-        "operationId": "remove_source_v1_sources__source_id__delete",
+        "operationId": "sources_remove_source",
         "parameters": [
           {
             "in": "path",
@@ -8733,10 +8758,11 @@
         "summary": "Remove Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
-        "operationId": "get_source_v1_sources__source_id__get",
+        "operationId": "sources_get_source",
         "parameters": [
           {
             "in": "path",
@@ -8917,10 +8943,11 @@
         "summary": "Get Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
-        "operationId": "update_source_v1_sources__source_id__patch",
+        "operationId": "sources_update_source",
         "parameters": [
           {
             "in": "path",
@@ -9111,13 +9138,14 @@
         "summary": "Update Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/files": {
       "post": {
         "description": "Files already in Files, by id: each must be the team's and scanned clean, and is referenced there so it is\nkept while the source reads it. The next sync indexes them.",
-        "operationId": "add_files_v1_sources__source_id__files_post",
+        "operationId": "sources_add_files",
         "parameters": [
           {
             "in": "path",
@@ -9308,12 +9336,13 @@
         "summary": "Add Files",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/items": {
       "get": {
-        "operationId": "list_items_v1_sources__source_id__items_get",
+        "operationId": "sources_list_items",
         "parameters": [
           {
             "in": "path",
@@ -9533,12 +9562,13 @@
         "summary": "List Items",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/pause": {
       "post": {
-        "operationId": "pause_source_v1_sources__source_id__pause_post",
+        "operationId": "sources_pause_source",
         "parameters": [
           {
             "in": "path",
@@ -9719,12 +9749,13 @@
         "summary": "Pause Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/resume": {
       "post": {
-        "operationId": "resume_source_v1_sources__source_id__resume_post",
+        "operationId": "sources_resume_source",
         "parameters": [
           {
             "in": "path",
@@ -9905,12 +9936,13 @@
         "summary": "Resume Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/runs": {
       "get": {
-        "operationId": "list_runs_v1_sources__source_id__runs_get",
+        "operationId": "sources_list_runs",
         "parameters": [
           {
             "in": "path",
@@ -10114,12 +10146,13 @@
         "summary": "List Runs",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sources/{source_id}/sync": {
       "post": {
-        "operationId": "sync_source_v1_sources__source_id__sync_post",
+        "operationId": "sources_sync_source",
         "parameters": [
           {
             "in": "path",
@@ -10317,12 +10350,13 @@
         "summary": "Sync Source",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/sync-runs/{run_id}": {
       "get": {
-        "operationId": "get_run_v1_sync_runs__run_id__get",
+        "operationId": "sources_get_run",
         "parameters": [
           {
             "in": "path",
@@ -10503,7 +10537,8 @@
         "summary": "Get Run",
         "tags": [
           "sources"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     }
   }

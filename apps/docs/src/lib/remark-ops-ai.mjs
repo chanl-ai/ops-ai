@@ -7,6 +7,7 @@
  * - a table cell that starts with built, partial, planned or not built shows that word as a badge
  * - `<!-- site: cards -->` above a table or a list renders it as summary cards
  * - `<!-- site: steps -->` above a numbered list renders it as steps
+ * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
  * - a GitHub alert (`> [!NOTE]`, `> [!WARNING]` ...) becomes a callout
  * - ```mermaid blocks render as diagrams that follow the light and dark theme
  * - an image of docs/diagrams/<name>.svg, where docs/diagrams/<name>.yaml exists, becomes the live diagram
@@ -17,9 +18,12 @@
  * A link to a page or file that does not exist is an error. scripts/check-links.mjs runs this plugin over every page
  * before `next build`, because a throw inside the build surfaces only as an unreadable module error.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { toString as mdToString } from 'mdast-util-to-string';
+import { remark } from 'remark';
+import remarkGfm from 'remark-gfm';
 import { SKIP, visit } from 'unist-util-visit';
 
 import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
@@ -141,6 +145,30 @@ function listToCards(list) {
  * @param {{ throwOnError?: boolean, warn?: boolean }} [options] throwOnError: throw on a broken link (the build) or
  *   only record it on file.data.opsAi (the link check); warn: also print it, for the dev server
  */
+const TAGS = { new: 'New', improved: 'Improved', fix: 'Fixed' };
+
+/** The changelog entries as markdown nodes: a heading per date, newest first, then each entry's tag, title and
+ * description. Card ids stay out: they mean nothing to a reader. */
+function whatsNew() {
+  const dir = path.join(repoIndex().root, 'changelog');
+  const entries = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')))
+    .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+  const lines = [];
+  let date = '';
+  for (const e of entries) {
+    if (e.date !== date) {
+      date = e.date;
+      const day = new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      lines.push('', `## ${day}`, '');
+    }
+    lines.push(`- **${TAGS[e.tag] ?? e.tag}: ${e.title}.** ${e.description}`);
+  }
+  return remark().use(remarkGfm).parse(lines.join('\n')).children;
+}
+
 export function remarkOpsAi(options = {}) {
   const throwOnError = options.throwOnError ?? true;
 
@@ -238,6 +266,13 @@ export function remarkOpsAi(options = {}) {
           cell.children.unshift(jsx('StatusBadge', { status }, [], false), ...rest);
         }
       }
+    });
+
+    // The What's new entries, read from changelog/ at build time.
+    visit(tree, 'html', (n, i, parent) => {
+      if (!parent || i === undefined || !/^<!--\s*site:\s*whats-new\s*-->$/.test(n.value.trim())) return;
+      parent.children.splice(i, 1, ...whatsNew());
+      return [SKIP, i];
     });
 
     // Markers: an HTML comment above a block.

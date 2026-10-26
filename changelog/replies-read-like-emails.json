@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-25",
+  "title": "Replies read like emails",
+  "description": "A reply waiting for approval now shows its sender, recipient, subject and body the way an email client does.",
+  "tag": "improved",
+  "cards": [
+    "c-532"
+  ]
+}

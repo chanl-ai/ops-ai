@@ -132,6 +132,18 @@ export type KindNode =
   /** `actionsOff`: the page around it owns the decision (a Human Task's footer), so the card draws no buttons. */
   | { type: 'confirm'; title: string; summary?: string; details?: Pair[]; tone?: Tone; confirm: KindAction; cancel?: KindAction; actionsOff?: boolean }
   | { type: 'document'; name: string; page?: number; pages?: number; before?: string; passage: string; after?: string; fileId?: string }
+  /** A reply, acknowledgement or received email, drawn as a mail client shows it. */
+  | {
+      type: 'email';
+      label?: string;
+      from?: string;
+      to?: string;
+      subject?: string;
+      date?: string;
+      body: string;
+      html?: string;
+      attachments?: { name: string; fileId?: string; type?: string; size?: number }[];
+    }
   | { type: 'quote'; passage: string; source: string; page?: number; confidence?: number; fileId?: string }
   | { type: 'plan'; title: string; description?: string; steps: { label: string; state: StepStateKind; detail?: string }[]; action?: KindAction }
   | { type: 'reasoning'; title?: string; steps: { label: string; detail?: string; state: 'done' | 'active' | 'pending'; results?: string[] }[] }

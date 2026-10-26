@@ -63,6 +63,13 @@ async def test_a_question_nothing_answers_returns_no_passage(client: httpx.Async
     assert weak["citations"] == [], "two of five terms shared with the rate sheet is not an answer"
     one = await ask(client, kb["id"], "mortgage")
     assert one["citations"] != [], "a one-word question is answered by a passage with that word"
+    long = (
+        "Check this customer notice and the hold worked out for it against the policy handbook: "
+        "is the notice complete, and how many mortgage payments can a borrower who lost their job defer? "
+        "Cite the handbook for each point."
+    )
+    padded = await ask(client, kb["id"], long)
+    assert padded["citations"] and "three mortgage payments" in padded["citations"][0]["snippet"], padded
 
 
 async def test_a_knowledge_base_that_never_indexed_says_so(client: httpx.AsyncClient) -> None:

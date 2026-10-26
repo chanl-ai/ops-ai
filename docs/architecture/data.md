@@ -10,6 +10,7 @@ another service's tables ([service-map.md](service-map.md)).
 
 | Rule | What it means | In code |
 |---|---|---|
+| Every record has one team | A team-owned table carries `team_id NOT NULL` and the generated team policy, which reads only the acting team's rows (no null branch since c-507); account records (people, memberships, role assignments, API keys, sign-in audit, outboxes) and the background processes are named in the lock with their reason | `scripts/tests/test_team_boundary.py`, `ops_store.schema.isolation_ddl`, `docs/architecture/identity-and-tenancy.md` "The team is the workspace" |
 | One door per service | A service reaches its database only through repository classes in its `store/` package; routers and runtime code call them and never import SQLAlchemy | In code: agents-service repositories are in `ops_agents/store/`, tools-service's in `ops_tools/store/`. The `drivers-only-in-stores` contract in `.importlinter` (`uv run lint-imports`, in the commit gate and `make python-verify`) fails a database driver imported elsewhere; it lists no file outside a store |
 | Guarantees declared | Each repository class names what its correctness rests on, `requires: frozenset[Guarantee]`: `CAS`, `TRANSACTION`, `LOCK`, `CLOCK`, `RLS`. A backend lists what it provides; a repository is refused on one that lacks a guarantee (`ops_store.unmet`) | `packages/ops_store` |
 | Conformance per port | Each port whose correctness rests on a guarantee has a suite, run by the owning service on every registered backend: leases (a lapsed owner's write is refused, one of many contenders wins), timer claims (exactly one poller), audit (a change and its entry land together or neither) | `ops_store.conformance`; each suite fails on a test implementation that drops its guarantee |
@@ -75,6 +76,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.holders` | `HolderStore` | RLS | none |
 | platform-service | `ops_platform.store.identity` | `IdentityStore` | CAS, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.keys` | `KeyStore` | RLS, TRANSACTION | none |
+| platform-service | `ops_platform.store.lifecycle` | `LifecycleStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.members` | `TeamStore` | LOCK, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.policies` | `PolicyStore` | TRANSACTION | none |
 | platform-service | `ops_platform.store.roles` | `RoleStore` | RLS, TRANSACTION | none |

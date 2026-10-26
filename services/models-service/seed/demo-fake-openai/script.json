@@ -1,5 +1,6 @@
 {
  "rules": [
+  {"when": "(?=[\\s\\S]*\\[(?P<n>\\d+)\\] (?P<source>Funds exempt from a levy|Restraining notices and levies)[^\\n]*: (?P<quote>[^\\n]+))[\\s\\S]*Check this levy notice and the hold worked out for it against the levy handbook", "tool": "final_result", "arguments": {"ok": true, "findings": "Levy and garnishment procedures, {source}: \"{quote}\" The hold follows that rule."}},
   {"when": "what needs me( today)?", "tool": "my_human_tasks", "arguments": {"which": "mine"}},
   {"after": "my_human_tasks", "when": "what needs me", "text": "Here is what is waiting for you."},
   {"when": "find my open cases", "tool": "find_cases", "arguments": {"status": "open"}},

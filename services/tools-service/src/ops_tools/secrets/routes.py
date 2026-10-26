@@ -10,7 +10,6 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -130,10 +129,6 @@ def _meta(row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = N
     return out
 
 
-def _operation_id(route: APIRoute) -> str:
-    return f"secrets_{route.name}"
-
-
 def may_write_secret(
     p: Principal, action: str, teams: list[str] | None, *, security_team: str, protection: str | None = None
 ) -> None:
@@ -175,9 +170,7 @@ def secrets_router(
     caller = person
     team = security_team or Settings().security_team_id
 
-    r = APIRouter(
-        prefix="/v1/secrets", tags=["secrets"], responses=error_responses(), generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/secrets", tags=["secrets"], responses=error_responses())
 
     async def _users(tenant_id: str) -> dict[str, list[dict[str, Any]]]:
         return users_of(await modules.secret_readers(tenant_id)) if modules is not None else {}

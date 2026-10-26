@@ -6528,6 +6528,25 @@
         "title": "Envelope[QueuePlace]",
         "type": "object"
       },
+      "Envelope_ResumeOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResumeOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ResumeOut]",
+        "type": "object"
+      },
       "Envelope_Retired_": {
         "additionalProperties": false,
         "properties": {
@@ -6811,6 +6830,25 @@
           "data"
         ],
         "title": "Envelope[TaskTypeDetail]",
+        "type": "object"
+      },
+      "Envelope_TeamUsage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TeamUsage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[TeamUsage]",
         "type": "object"
       },
       "Envelope_TestView_": {
@@ -7610,10 +7648,18 @@
           "status": {
             "enum": [
               "started",
+              "resumed",
               "unhandled"
             ],
             "title": "Status",
             "type": "string"
+          },
+          "woke": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Woke",
+            "type": "array"
           }
         },
         "required": [
@@ -11611,6 +11657,32 @@
         "title": "ReplyPreview",
         "type": "object"
       },
+      "ResumeBody": {
+        "additionalProperties": true,
+        "description": "The outside system's result, whatever its fields: the step goes on with it as its output, and a step that sets\nan answer schema names the fields later steps read.",
+        "properties": {},
+        "title": "ResumeBody",
+        "type": "object"
+      },
+      "ResumeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "status"
+        ],
+        "title": "ResumeOut",
+        "type": "object"
+      },
       "RetireInput": {
         "additionalProperties": false,
         "properties": {
@@ -15580,6 +15652,28 @@
         "title": "TaskWarning",
         "type": "object"
       },
+      "TeamUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "liveWorkflows": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Liveworkflows",
+            "type": "array"
+          },
+          "runsInProgress": {
+            "title": "Runsinprogress",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runsInProgress",
+          "liveWorkflows"
+        ],
+        "title": "TeamUsage",
+        "type": "object"
+      },
       "TemperatureLimits": {
         "additionalProperties": false,
         "properties": {
@@ -15995,6 +16089,17 @@
               }
             ],
             "title": "Caseid"
+          },
+          "caseTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Casetitle"
           },
           "confidence": {
             "anyOf": [
@@ -19045,7 +19150,8 @@
         "summary": "Health",
         "tags": [
           "Health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/health/background": {
@@ -19156,7 +19262,8 @@
         "summary": "Health Background",
         "tags": [
           "Background"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews": {
@@ -19267,6 +19374,22 @@
               },
               "title": "Status",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
             }
           },
           {
@@ -19439,7 +19562,8 @@
         "summary": "List Reviews",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/assign": {
@@ -19627,7 +19751,8 @@
         "summary": "Assign",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/bulk-decision": {
@@ -19814,7 +19939,8 @@
         "summary": "Bulk Decide",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/by-run-key/{run_key}": {
@@ -20001,12 +20127,13 @@
         "summary": "Get Review By Run Key",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/{review_id}/place": {
       "get": {
-        "description": "Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side.",
+        "description": "Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;\n`group=case` in the order the queue grouped by case lists them (c-460).",
         "operationId": "reviews_get_queue_place",
         "parameters": [
           {
@@ -20026,6 +20153,22 @@
               "default": "open",
               "title": "View",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
             }
           },
           {
@@ -20198,7 +20341,8 @@
         "summary": "Get Queue Place",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/{thread_id}": {
@@ -20384,7 +20528,8 @@
         "summary": "Get Review",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/reviews/{thread_id}/decision": {
@@ -20580,7 +20725,8 @@
         "summary": "Decide",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/runs": {
@@ -20851,7 +20997,8 @@
         "summary": "List Runs",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/runs/{thread_id}": {
@@ -21037,7 +21184,8 @@
         "summary": "Get Run",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/activity": {
@@ -21357,7 +21505,8 @@
         "summary": "List Activity",
         "tags": [
           "Activity"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents": {
@@ -21619,7 +21768,8 @@
         "summary": "List Agents",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "agents_create_agent",
@@ -21804,7 +21954,8 @@
         "summary": "Create Agent",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}": {
@@ -21983,7 +22134,8 @@
         "summary": "Delete Agent",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "agents_get_agent",
@@ -22167,7 +22319,8 @@
         "summary": "Get Agent",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Saves the patched spec as a new draft version; what is live does not change until it is published.",
@@ -22362,7 +22515,8 @@
         "summary": "Update Agent",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/live": {
@@ -22549,7 +22703,8 @@
         "summary": "Agent Live",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/paused": {
@@ -22746,7 +22901,8 @@
         "summary": "Set Paused",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/publish-preview": {
@@ -22942,7 +23098,8 @@
         "summary": "Publish Preview",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/publish-requests": {
@@ -23139,7 +23296,8 @@
         "summary": "Request Publish",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/runs": {
@@ -23338,7 +23496,8 @@
         "summary": "Recent Runs",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/skills": {
@@ -23524,7 +23683,8 @@
         "summary": "Get Agent Skills",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/skills/options": {
@@ -23788,7 +23948,8 @@
         "summary": "Agent Skill Options",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/skills/{skill_id}": {
@@ -23983,7 +24144,8 @@
         "summary": "Detach Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "description": "Attaches the skill at `version`, or moves its pin there, as a new draft agent version; it serves once that\nversion is published (spec 11 5.4).",
@@ -24187,7 +24349,8 @@
         "summary": "Attach Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/test": {
@@ -24384,7 +24547,8 @@
         "summary": "Test Agent",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/versions": {
@@ -24570,7 +24734,8 @@
         "summary": "List Versions",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/agents/{agent_id}/versions/{version}/restore": {
@@ -24766,7 +24931,8 @@
         "summary": "Restore Version",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/ai-steps/{step}": {
@@ -24969,7 +25135,8 @@
         "summary": "Run Ai Step",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/step-up": {
@@ -25156,7 +25323,8 @@
         "summary": "Step Up",
         "tags": [
           "Auth"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/auth/step-up/sso": {
@@ -25344,7 +25512,8 @@
         "summary": "Sso Step Up",
         "tags": [
           "Auth"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/background": {
@@ -25521,7 +25690,8 @@
         "summary": "Background Processes",
         "tags": [
           "Background"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/case-types": {
@@ -25699,7 +25869,8 @@
         "summary": "List Case Types",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A team's case type as draft v1: from nothing, or a copy of another type's published version with edits.",
@@ -25885,7 +26056,8 @@
         "summary": "Create Case Type",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/case-types/{type_id}": {
@@ -26072,7 +26244,8 @@
         "summary": "Get Case Type",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/case-types/{type_id}/draft": {
@@ -26269,7 +26442,8 @@
         "summary": "Save Case Type",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/case-types/{type_id}/publish": {
@@ -26466,7 +26640,8 @@
         "summary": "Publish Case Type",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/cases": {
@@ -26763,7 +26938,8 @@
         "summary": "List Cases",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Opens a case in the acting team: 201, or 200 with the case a retry with the same producer key opened.",
@@ -26949,7 +27125,8 @@
         "summary": "Open Case",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/cases/{case_id}": {
@@ -27136,7 +27313,8 @@
         "summary": "Get Case",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Changes the fields sent, each one a timeline entry. Moving to or from `closed` is `cases.manage` and a\nperson's; leaving `waiting_on_customer` moves both deadlines on by the time it waited.",
@@ -27331,7 +27509,8 @@
         "summary": "Change Case",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/cases/{case_id}/events": {
@@ -27528,7 +27707,8 @@
         "summary": "Add Event",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/cases/{case_id}/links": {
@@ -27725,7 +27905,8 @@
         "summary": "Link Case",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels": {
@@ -28022,7 +28203,8 @@
         "summary": "List Channels",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Connects a chat channel: the agent pinned at its published version, answering on exact origins, in the\ncaller's team (builders and admins of the agent's team).",
@@ -28208,7 +28390,8 @@
         "summary": "Create Channel",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/mailboxes": {
@@ -28412,7 +28595,8 @@
         "summary": "List Mailboxes",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Connects a mailbox for the acting team. 409 `address_taken` when the tenant has one at this address.",
@@ -28598,7 +28782,8 @@
         "summary": "Connect Mailbox",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/mailboxes/test": {
@@ -28786,7 +28971,8 @@
         "summary": "Test Unsaved Mailbox",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/mailboxes/{mailbox_id}": {
@@ -28972,7 +29158,8 @@
         "summary": "Get Mailbox",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Edits a mailbox's name or connection. Its address cannot change while a live workflow watches it (409\n`mailbox_in_use`): the workflow names it by address and would stop receiving mail without a word.",
@@ -29167,7 +29354,8 @@
         "summary": "Edit Mailbox",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/mailboxes/{mailbox_id}/test": {
@@ -29353,7 +29541,8 @@
         "summary": "Test Mailbox",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/{channel_id}": {
@@ -29560,7 +29749,8 @@
         "summary": "Update Channel",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/channels/{channel_id}/retire": {
@@ -29747,7 +29937,8 @@
         "summary": "Retire Channel",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/deployments": {
@@ -29935,7 +30126,8 @@
         "summary": "Put Deployment",
         "tags": [
           "Deployments"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/deployments/{deployment_id}": {
@@ -30131,7 +30323,8 @@
         "summary": "Pause Deployment",
         "tags": [
           "Deployments"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/events": {
@@ -30332,7 +30525,8 @@
         "summary": "Team Stream",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.\nA repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the\nreporting service never depends on who reacts.",
@@ -30470,7 +30664,8 @@
         "summary": "Emit Event",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/graphs": {
@@ -30647,7 +30842,8 @@
         "summary": "List Graphs",
         "tags": [
           "Graphs"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/graphs/{name}/versions": {
@@ -30833,7 +31029,8 @@
         "summary": "List Versions",
         "tags": [
           "Graphs"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy (c-086) this route refuses one with 409 `review_required`.",
@@ -31028,7 +31225,8 @@
         "summary": "Publish Version",
         "tags": [
           "Graphs"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails": {
@@ -31245,7 +31443,8 @@
         "summary": "List Guardrails",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "agents_create_guardrail",
@@ -31430,7 +31629,8 @@
         "summary": "Create Guardrail",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails/options": {
@@ -31665,7 +31865,8 @@
         "summary": "Guardrail Options",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails/{guardrail_id}": {
@@ -31845,7 +32046,8 @@
         "summary": "Delete Guardrail",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "agents_get_guardrail",
@@ -32029,7 +32231,8 @@
         "summary": "Get Guardrail",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Saves the next version as a draft; agents keep the version they pin until a publish and a re-pin.",
@@ -32224,7 +32427,8 @@
         "summary": "Update Guardrail",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails/{guardrail_id}/publish-requests": {
@@ -32421,7 +32625,8 @@
         "summary": "Request Guardrail Publish",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails/{guardrail_id}/publish-requests/{request_id}/decision": {
@@ -32626,7 +32831,8 @@
         "summary": "Decide Guardrail Publish",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/guardrails/{guardrail_id}/status": {
@@ -32823,7 +33029,8 @@
         "summary": "Set Guardrail Status",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/knowledge-usage": {
@@ -33000,7 +33207,8 @@
         "summary": "Knowledge Usage",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me/memories": {
@@ -33194,7 +33402,8 @@
         "summary": "Forget Agent Memories",
         "tags": [
           "Memory"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "description": "What agents remember about the caller, newest first; `agentId` keeps one agent's.",
@@ -33386,7 +33595,8 @@
         "summary": "List Memories",
         "tags": [
           "Memory"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me/memories/export": {
@@ -33564,7 +33774,8 @@
         "summary": "Export Memories",
         "tags": [
           "Memory"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/me/memories/{memory_id}": {
@@ -33744,7 +33955,8 @@
         "summary": "Forget Memory",
         "tags": [
           "Memory"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Replaces a memory's value with the caller's own; the old value is kept as superseded and is no longer loaded.",
@@ -33939,7 +34151,8 @@
         "summary": "Correct Memory",
         "tags": [
           "Memory"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/model-aliases": {
@@ -34116,7 +34329,8 @@
         "summary": "List Model Aliases",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/overview": {
@@ -34293,7 +34507,8 @@
         "summary": "Overview",
         "tags": [
           "Cases"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/publish-requests": {
@@ -34497,7 +34712,8 @@
         "summary": "Open Publish Request",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/publish-requests/{request_id}": {
@@ -34683,7 +34899,8 @@
         "summary": "Get Publish Request",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/publish-requests/{request_id}/decision": {
@@ -34879,7 +35096,8 @@
         "summary": "Decide Publish Request",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/runs": {
@@ -35125,7 +35343,8 @@
         "summary": "List Engine Runs",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow (c-246) starts that one only, on the version it pins when it pins one.",
@@ -35321,7 +35540,8 @@
         "summary": "Start Engine Run",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/runs/start": {
@@ -35509,7 +35729,8 @@
         "summary": "Start By Hand",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/runs/{run_id}": {
@@ -35696,7 +35917,8 @@
         "summary": "Get Engine Run",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/runs/{run_id}/cancel": {
@@ -35883,7 +36105,8 @@
         "summary": "Cancel Engine Run",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/runs/{run_id}/events": {
@@ -36093,7 +36316,167 @@
         "summary": "Engine Run Events",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/runs/{run_id}/steps/{step}/resume": {
+      "post": {
+        "description": "Resumes the step parked on outside work with the posted result, which the step goes on with.",
+        "operationId": "workflows_resume_step",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ResumeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Resume Step",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills": {
@@ -36328,7 +36711,8 @@
         "summary": "List Skills",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "agents_create_skill",
@@ -36513,7 +36897,8 @@
         "summary": "Create Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills/options": {
@@ -36691,7 +37076,8 @@
         "summary": "Skill Options",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills/{skill_id}": {
@@ -36871,7 +37257,8 @@
         "summary": "Delete Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "agents_get_skill",
@@ -37055,7 +37442,8 @@
         "summary": "Get Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills/{skill_id}/deprecate": {
@@ -37251,7 +37639,8 @@
         "summary": "Deprecate Skill",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills/{skill_id}/draft": {
@@ -37448,7 +37837,8 @@
         "summary": "Save Skill Draft",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/skills/{skill_id}/publish-requests": {
@@ -37645,7 +38035,8 @@
         "summary": "Request Skill Publish",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/task-types": {
@@ -37823,7 +38214,8 @@
         "summary": "List Task Types",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A team's type as draft v1: from nothing, or a copy of another type's published version with edits.",
@@ -38009,7 +38401,8 @@
         "summary": "Create Task Type",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/task-types/{type_id}": {
@@ -38196,7 +38589,8 @@
         "summary": "Get Task Type",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/task-types/{type_id}/draft": {
@@ -38393,7 +38787,8 @@
         "summary": "Save Task Type",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/task-types/{type_id}/publish": {
@@ -38590,7 +38985,8 @@
         "summary": "Publish Task Type",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tasks": {
@@ -38796,7 +39192,8 @@
         "summary": "Create Task",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tasks/{task_id}": {
@@ -38983,7 +39380,186 @@
         "summary": "Get Task",
         "tags": [
           "Reviews"
-        ]
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/teams/usage": {
+      "get": {
+        "operationId": "workflows_team_usage",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TeamUsage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Team Usage",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads": {
@@ -39176,7 +39752,8 @@
         "summary": "List Threads",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "threads_create_thread",
@@ -39371,7 +39948,8 @@
         "summary": "Create Thread",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/approvals": {
@@ -39567,7 +40145,8 @@
         "summary": "Approve",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/events": {
@@ -39764,7 +40343,8 @@
         "summary": "Thread Event",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/inbox": {
@@ -39950,7 +40530,8 @@
         "summary": "Get Inbox",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "A channel message (a customer's reply) delivered into a waiting thread; the person posting it needs a builder's\nrole in the thread's team.",
@@ -40145,7 +40726,8 @@
         "summary": "Post Inbox",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/migrate": {
@@ -40342,7 +40924,8 @@
         "summary": "Migrate",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/route-to-people": {
@@ -40539,7 +41122,8 @@
         "summary": "Route One",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/runs": {
@@ -40726,7 +41310,8 @@
         "summary": "Thread Runs",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/runs/stream": {
@@ -40925,7 +41510,8 @@
         "summary": "Stream Run",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/runs/{run_id}/events": {
@@ -41144,7 +41730,8 @@
         "summary": "Reattach",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads/{thread_id}/state": {
@@ -41330,7 +41917,8 @@
         "summary": "Thread State",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/threads:route-to-people": {
@@ -41518,7 +42106,8 @@
         "summary": "Route Version",
         "tags": [
           "Threads"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tools": {
@@ -41715,7 +42304,8 @@
         "summary": "List Tools",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/tools/options": {
@@ -41950,7 +42540,8 @@
         "summary": "Tool Options",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/widgets": {
@@ -42167,7 +42758,8 @@
         "summary": "List Widgets",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "agents_create_widget",
@@ -42352,7 +42944,8 @@
         "summary": "Create Widget",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/widgets/options": {
@@ -42606,7 +43199,8 @@
         "summary": "Widget Options",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/widgets/{widget_id}": {
@@ -42792,7 +43386,8 @@
         "summary": "Get Widget",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "description": "Edits the newest draft, or opens the next version on top of the published one. 409 while retired or in\nreview.",
@@ -42987,7 +43582,8 @@
         "summary": "Save Widget",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/widgets/{widget_id}/publish-requests": {
@@ -43184,7 +43780,8 @@
         "summary": "Request Widget Publish",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/widgets/{widget_id}/retire": {
@@ -43381,7 +43978,8 @@
         "summary": "Retire Widget",
         "tags": [
           "Agents"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflow-refs": {
@@ -43559,7 +44157,8 @@
         "summary": "Workflow Refs",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows": {
@@ -43826,7 +44425,8 @@
         "summary": "List Workflows",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Creates the row with the template's graph as its draft. The id is a new graph name.",
@@ -44012,7 +44612,8 @@
         "summary": "Create Workflow",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions": {
@@ -44259,7 +44860,8 @@
         "summary": "List Definitions",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "post": {
         "description": "Stores the definition as the workflow's next version, once it passes every check; the same definition again\nreturns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless\nthe caller is a builder or admin of the team that owns the workflow (the acting team for a new one).",
@@ -44455,7 +45057,8 @@
         "summary": "Create Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/validate": {
@@ -44643,7 +45246,8 @@
         "summary": "Validate Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}": {
@@ -44823,7 +45427,8 @@
         "summary": "Delete Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "workflows_get_definition",
@@ -45023,7 +45628,8 @@
         "summary": "Get Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/archive": {
@@ -45210,7 +45816,8 @@
         "summary": "Archive Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/pause": {
@@ -45397,7 +46004,8 @@
         "summary": "Pause Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/publish-requests": {
@@ -45594,7 +46202,8 @@
         "summary": "Request Definition Publish",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/restore": {
@@ -45781,7 +46390,8 @@
         "summary": "Restore Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/resume": {
@@ -45968,7 +46578,8 @@
         "summary": "Resume Definition",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
@@ -46164,7 +46775,8 @@
         "summary": "Definition Shapes",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/node-types": {
@@ -46342,7 +46954,8 @@
         "summary": "Node Types",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/option-sources": {
@@ -46535,7 +47148,8 @@
         "summary": "Option Sources",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/route-fields": {
@@ -46713,7 +47327,8 @@
         "summary": "Route Fields",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}": {
@@ -46893,7 +47508,8 @@
         "summary": "Delete Workflow",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "get": {
         "operationId": "workflows_get_workflow",
@@ -47077,7 +47693,8 @@
         "summary": "Get Workflow",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "patch": {
         "operationId": "workflows_update_settings",
@@ -47271,7 +47888,8 @@
         "summary": "Update Settings",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/draft": {
@@ -47457,7 +48075,8 @@
         "summary": "Discard Draft",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       },
       "put": {
         "operationId": "workflows_save_draft",
@@ -47651,7 +48270,8 @@
         "summary": "Save Draft",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/live": {
@@ -47838,7 +48458,8 @@
         "summary": "Workflow Live",
         "tags": [
           "Channels"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/pointer": {
@@ -48035,7 +48656,8 @@
         "summary": "Move Pointer",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/publish-requests": {
@@ -48232,7 +48854,8 @@
         "summary": "Request Publish",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/runs": {
@@ -48441,7 +49064,8 @@
         "summary": "List Runs",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/status": {
@@ -48637,7 +49261,8 @@
         "summary": "Set Status",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/test": {
@@ -48834,7 +49459,8 @@
         "summary": "Test Run",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/validate": {
@@ -49031,7 +49657,8 @@
         "summary": "Validate Graph",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/validations/latest": {
@@ -49217,7 +49844,8 @@
         "summary": "Last Validation",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/versions": {
@@ -49403,7 +50031,8 @@
         "summary": "List Versions",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/workflows/{workflow_id}/versions/{version}/restore": {
@@ -49599,7 +50228,8 @@
         "summary": "Restore Version",
         "tags": [
           "Workflows"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     }
   }

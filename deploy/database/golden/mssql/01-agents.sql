@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0081_background_jobs_at_text
+-- agents-service, stamped at 0082_engine_waits
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -99,6 +99,22 @@ GO
 CREATE INDEX ix_engine_work_run_id ON engine_work (run_id);
 GO
 CREATE INDEX ix_engine_work_tenant_id ON engine_work (tenant_id);
+GO
+CREATE TABLE engine_waits (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	run_id VARCHAR(64) NOT NULL, 
+	node_id VARCHAR(120) NOT NULL, 
+	iteration INTEGER NOT NULL, 
+	interrupt_id VARCHAR(64) NOT NULL, 
+	event VARCHAR(120) NOT NULL DEFAULT '', 
+	wait_key VARCHAR(240) NOT NULL DEFAULT '', 
+	due_at FLOAT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT pk_engine_waits PRIMARY KEY (tenant_id, run_id, node_id, iteration)
+);
+GO
+CREATE INDEX ix_engine_waits_event ON engine_waits (tenant_id, team_id, event, wait_key);
 GO
 CREATE TABLE registry_agents (
 	id VARCHAR(64) NOT NULL, 
@@ -917,6 +933,12 @@ CREATE SECURITY POLICY ops_security.engine_work_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.engine_work AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.engine_waits_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.engine_waits,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_waits AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_waits AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.registry_publish_requests_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_publish_requests,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_publish_requests AFTER INSERT,
@@ -1084,5 +1106,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0081_background_jobs_at_text');
+INSERT INTO alembic_version (version_num) VALUES ('0082_engine_waits');
 GO

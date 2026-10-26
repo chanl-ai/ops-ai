@@ -21,6 +21,7 @@ from ops_service_kit.http import (
     error_responses,
     install_error_handlers,
     ok,
+    operation_id,
 )
 from ops_service_kit.settings import Settings
 from ops_store.team_scope import acting_team_of, set_acting_team
@@ -119,7 +120,7 @@ def create_kb_app(
     no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
     Settings().agents_url."""
-    app = FastAPI(title="kb-service", version="0.1.0")
+    app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)
     install_auth(app, auth or Auth.from_settings(Settings(), audience="kb"))
     # The console calls this service from its own origin, so the browser preflights every request; without this

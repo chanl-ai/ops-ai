@@ -8,7 +8,6 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -33,16 +32,11 @@ class EvaluateOut(Out):
     out: dict[str, Any]
 
 
-def _operation_id(route: APIRoute) -> str:
-    return f"expressions_{route.name}"
-
-
 def expressions_router() -> APIRouter:
     r = APIRouter(
         prefix="/v1/expressions",
         tags=["expressions"],
         responses=error_responses(),
-        generate_unique_id_function=_operation_id,
     )
 
     @r.post("/evaluate", response_model=Envelope[EvaluateOut])

@@ -21,6 +21,7 @@
 import * as React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSidebarFoldsWhenNarrow } from '@/components/shared/collapsed-sidebar';
 import { SplitView } from '@/components/shared/setting/split-view';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +36,8 @@ export function RecordLayout({
   children: React.ReactNode;
   className?: string;
 }) {
+  // The main column keeps priority on a 13-inch laptop: the app sidebar folds before the rail and main squeeze.
+  useSidebarFoldsWhenNarrow();
   return (
     <div className={className}>
       <SplitView id="record-layout" bare rightFirstWhenStacked defaultLeft={27} leftMin="20" rightMin="40" left={<div className="flex w-full min-w-0 flex-col gap-4">{rail}</div>} right={<div className="min-w-0">{children}</div>} />

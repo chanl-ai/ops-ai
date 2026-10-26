@@ -170,6 +170,8 @@ function checkCommit(msgFile) {
 function checkShas(shas, at) {
   const start = gateStart();
   const has = cardsWithEntries(at);
+  // A cardless commit is covered by an entry that names it in `commits`: its message cannot change once made.
+  const covered = readChangelog(at).flatMap(({ entry }) => (Array.isArray(entry?.commits) ? entry.commits : []));
   const bad = [];
   for (const sha of shas) {
     // Commits made before the gate landed are not held to it.
@@ -185,7 +187,7 @@ function checkShas(shas, at) {
     // since still counts, so its entry is still owed.
     if (tryGit(['diff', '--quiet', `${sha}^`, at, '--', ...paths.filter((p) => USER_PATHS.test(p))]) !== null) continue;
     const ids = trailerIds(message);
-    if (!ids.length) bad.push(`${sha.slice(0, 8)} ${subjectOf(message)}: a feat or fix that changes apps/ or services/ names no card`);
+    if (!ids.length && !covered.some((c) => String(c).length >= 7 && sha.startsWith(String(c)))) bad.push(`${sha.slice(0, 8)} ${subjectOf(message)}: a feat or fix that changes apps/ or services/ names no card`);
     for (const id of ids) if (!has.has(id) && !cardBeforeGate(id, start)) bad.push(`${sha.slice(0, 8)}: ${id} has no changelog entry; ${howToAdd(id)}`);
   }
   for (const { id, entry } of readChangelog(at)) for (const p of entry ? entryProblems(entry) : ['not valid JSON']) bad.push(`changelog/${id}: ${p}`);
@@ -268,6 +270,13 @@ function selfTest() {
     const shas = (...s) => spawnSync('node', [join(dir, 'scripts/changelog-check.mjs'), '--repo', dir, '--shas', ...s], { encoding: 'utf8' }).status;
     expect('repo.sh check refuses a commit that skipped the hook', shas(skipped) === 1);
     expect('repo.sh check passes a commit with its entry', shas(withEntry) === 0);
+    writeFileSync(join(dir, 'apps/a.ts'), 'cardless\n');
+    sh('git add apps && git commit -q --no-verify -m "feat(x): cardless"');
+    const cardless = sh('git rev-parse HEAD').stdout.trim();
+    expect('repo.sh check refuses a cardless feat on apps/', shas(cardless) === 1);
+    writeFileSync(join(dir, 'changelog/cardless.json'), JSON.stringify({ ...clean, cards: ['c-906'], commits: [cardless.slice(0, 8)] }));
+    sh('git add changelog && git commit -q --no-verify -m "chore: cover cardless"');
+    expect('repo.sh check passes a cardless feat once its sha is listed in commits', shas(cardless, sh('git rev-parse HEAD').stdout.trim()) === 0);
     // A feat a later commit took back, file for file, owes no entry; one changed again afterwards still does.
     writeFileSync(join(dir, 'apps/mock.ts'), 'a mock\n');
     sh('git add apps && git commit -q --no-verify -m "feat(x): a mock page" -m "Card: c-904"');

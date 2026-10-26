@@ -1,11 +1,11 @@
-"""A tool module is its team's (c-423): a person outside the owning team does not see it listed and reads it by id as
-404, unless it is approved for one of their team's workflows, the explicit grant across teams. By failure mode, with
-tokens minted as platform-service mints them:
+"""A tool module is its team's (c-423, c-509): a person outside the owning team does not see it listed and reads it by
+id as 404, unless it is approved for one of their team's workflows, the explicit grant across teams. By failure mode,
+with tokens minted as platform-service mints them:
 
 - the list shows another team's module;
 - a read by id answers 200 (or 403 naming the owner);
 - a module made in a team the dev seed does not hold is stored as the all-scope team's, so its own team loses it;
-- a name another team holds answers 500 instead of 409;
+- a name another team holds is refused in this team, or 500 instead of a second copy;
 - the explicit grant stops working;
 - another service's grant list, which a run's grants decide, loses another team's operations.
 """
@@ -96,14 +96,17 @@ async def test_another_teams_module_answers_404_by_id(
         assert r.status_code == 404, f"{path}: {r.text}"
 
 
-async def test_a_name_another_team_holds_answers_409_not_500(
+async def test_two_teams_each_own_a_module_of_the_same_name_and_neither_sees_the_other(
     people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]],
 ) -> None:
     c, who = people
-    await _made(c, who["builder"], "nf-shared-name")
-    body = {"displayName": "nf-shared-name", "name": "nf-shared-name", "type": "http"}
-    r = await c.post("/v1/tool-modules/blank", json=body, headers=who["outsider"])
-    assert r.status_code == 409, r.text
+    theirs = await _made(c, who["builder"], "nf-shared-name")
+    mine = await _made(c, who["outsider"], "nf-shared-name")
+    assert mine["id"] != theirs["id"]
+    assert mine["id"] in _ids(await c.get("/v1/tool-modules", params={"pageSize": 100}, headers=who["outsider"]))
+    assert theirs["id"] not in _ids(await c.get("/v1/tool-modules", params={"pageSize": 100}, headers=who["outsider"]))
+    assert (await c.get(f"/v1/tool-modules/{theirs['id']}", headers=who["outsider"])).status_code == 404
+    assert (await c.get(f"/v1/tool-modules/{mine['id']}", headers=who["builder"])).status_code == 404
 
 
 async def test_a_module_approved_for_a_teams_workflow_is_read_by_that_team(

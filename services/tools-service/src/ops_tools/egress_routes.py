@@ -10,7 +10,6 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -74,18 +73,12 @@ class Change(Out):
     changed: bool
 
 
-def _operation_id(route: APIRoute) -> str:
-    return f"egress_{route.name}"
-
-
 def egress_router(store: EgressStore, *, security_team: str | None = None) -> APIRouter:
     caller = person
     team = security_team or Settings().security_team_id
     changer = security_admin(team)
 
-    r = APIRouter(
-        prefix="/v1/egress", tags=["egress"], responses=error_responses(), generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/egress", tags=["egress"], responses=error_responses())
 
     def _valid(kind: str, value: str) -> str:
         try:

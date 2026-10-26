@@ -21,6 +21,9 @@ EXEMPT = {
     ("ops_agents.api.routers.step_up", "sso_step_up"): "the same for a single sign-on session",
     ("ops_agents.api.routers.engine", "validate_definition"): "checks a posted definition and stores nothing",
     ("ops_agents.api.routers.widget", "server_session"): "authenticated by the deployment's mint key, not a principal",
+    ("ops_agents.api.routers.run_resume", "resume_step"): (
+        "authenticated by the step's own resume token, bound to its run, step, pass and team (c-525)"
+    ),
     ("ops_agents.api.routers.service_events", "emit_event"): (
         "a service token's events:emit scope, capped per service by Settings.service_scopes (c-258); no person calls it"
     ),

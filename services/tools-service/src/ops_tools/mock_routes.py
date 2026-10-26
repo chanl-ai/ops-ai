@@ -20,7 +20,7 @@ from ops_service_kit.ids import new_id
 from .callers import caller_in
 from .mocks import MAX_WAIT_MS
 from .modules.directory import Directory
-from .modules.routes import ERRORS, _operation_id  # pyright: ignore[reportPrivateUsage]
+from .modules.routes import ERRORS
 from .modules.service import Caller
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
@@ -100,9 +100,7 @@ def _view(row: dict[str, Any]) -> dict[str, Any]:
 
 def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *, security_team: str) -> APIRouter:
     caller = caller_in(directory)
-    r = APIRouter(
-        prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS, generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS)
 
     async def _operation(who: Caller, module_id: str, op_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """The module, seen from the caller's team (404 otherwise, as every module read), and its operation."""

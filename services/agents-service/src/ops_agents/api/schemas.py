@@ -1017,6 +1017,8 @@ class ThreadReview(Out):
     step_up_ref: str | None = None
     # The case the review's run is on (c-128), so Human Tasks names it; None when the run is on no case.
     case_id: str | None = None
+    # The case's subject, on a list grouped by case (c-460); None when the reader's teams do not hold the case.
+    case_title: str | None = None
     # The document read the step asks a person to check, and the reply it approves (c-169); None on other reviews.
     read: DocumentRead | None = None
     reply: ReplyPreview | None = None

@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Hand over, leave or delete a workspace or team",
+  "description": "The workspace's owner can hand it to another account admin, or delete it and restore it within 30 days. People can leave a team or the workspace, and an account admin can delete a team once it has been archived for 30 days with no live workflow.",
+  "tag": "new",
+  "cards": [
+    "c-529"
+  ]
+}

@@ -17,7 +17,7 @@ from ops_service_kit.http import Envelope, ok
 
 from .callers import caller_in
 from .modules.directory import Directory
-from .modules.routes import ERRORS, _operation_id  # pyright: ignore[reportPrivateUsage]
+from .modules.routes import ERRORS
 from .modules.service import Caller
 from .store.send_policies import SendPolicies
 
@@ -45,9 +45,7 @@ def _view(row: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def send_policy_router(store: SendPolicies, directory: Directory) -> APIRouter:
     caller = caller_in(directory)
-    r = APIRouter(
-        prefix="/v1/send-policy", tags=["send-policy"], responses=ERRORS, generate_unique_id_function=_operation_id
-    )
+    r = APIRouter(prefix="/v1/send-policy", tags=["send-policy"], responses=ERRORS)
 
     def _principal(who: Caller) -> Any:
         if who.principal is None:

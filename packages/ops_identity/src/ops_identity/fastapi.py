@@ -33,6 +33,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Request
 
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import mark_public
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
@@ -125,7 +126,10 @@ class Auth:
 
 
 def install_auth(app: FastAPI, auth: Auth) -> None:
+    """Also marks each operation in the app's OpenAPI document as `internal` when it takes only a service token, and
+    `sdk` otherwise (`ops_service_kit.http.mark_public`)."""
     app.state.ops_auth = auth
+    mark_public(app, service_only=(current_service,))
 
 
 def _auth(request: Request) -> Auth:

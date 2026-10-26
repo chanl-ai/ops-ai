@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-23",
+  "title": "Work through Human Tasks case by case",
+  "description": "Human Tasks now shows your queue grouped by case beside the open task, and the next task in the same case opens after you decide. Every task as a table, with bulk decisions, is under All tasks.",
+  "tag": "new",
+  "cards": [
+    "c-460"
+  ]
+}

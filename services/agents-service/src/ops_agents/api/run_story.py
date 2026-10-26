@@ -281,6 +281,11 @@ def _option_label(node: dict[str, Any] | None, decision: str) -> str:
     return words(decision)
 
 
+def decision_label(node: dict[str, Any] | None, decision: str) -> str:
+    """A decision as a person reads it: Approved or Rejected, or the chosen option's label."""
+    return {"approve": "Approved", "reject": "Rejected"}.get(decision) or _option_label(node, decision)
+
+
 def state_of(child: dict[str, Any], ending: str | None, last: str | None, open_task: bool) -> str:
     """Where a run is now, in words: the End step's name once it finished, or what it waits for."""
     status = str(child["status"])
@@ -463,8 +468,8 @@ def keep_channel(shown: Any, real: Any, addresses: set[str]) -> Any:
 TOOL = "gateway.call"
 AI_STEPS = ("kernel.turn", "ai.prompt")
 CASE_OPEN, CASE_ADD = "case.open", "case.add"
-# The platform's reply operation (tools-service PLATFORM_TOOLS): a call to it is an email the run sent.
-REPLY_TOOL = "send_reply"
+# The platform's reply operations (tools-service PLATFORM_TOOLS): a call to either is an email the run sent.
+REPLY_TOOL, ACK_TOOL = "send_reply", "send_acknowledgement"
 DECIDED = {"approve": "approved", "reject": "rejected"}
 
 
@@ -612,7 +617,7 @@ def lines(
         elif executor == TOOL:
             told = calls.get(key) or {}
             g = cast(dict[str, Any], st.get("input") or {})
-            if g.get("operation") == REPLY_TOOL and not failed:
+            if g.get("operation") in (REPLY_TOOL, ACK_TOOL) and not failed:
                 given = cast(dict[str, Any], g.get("input") or {})
                 out.append(
                     _line(

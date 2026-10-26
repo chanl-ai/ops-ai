@@ -12,4 +12,5 @@ USES: dict[str, tuple[str, ...]] = {
     "models": (),
     "kb": (),
     "documents": (),
+    "runner": (),
 }

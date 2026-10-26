@@ -43,5 +43,5 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       )}
     </>
   );
-  return <ChatToolCall name={asked ? `Asking ${asked}` : call.name} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;
+  return <ChatToolCall name={asked ? `Asking ${asked}` : (call.label ?? call.name)} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;
 }

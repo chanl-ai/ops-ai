@@ -6,12 +6,14 @@ against them; `ops_service_kit.contract` closes that gap in each service's tests
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Literal, cast
 
 from fastapi import FastAPI, Request
+from fastapi.dependencies.models import Dependant
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute, iter_route_contexts
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException
@@ -64,6 +66,51 @@ def error_responses(overrides: Mapping[int, str] | None = None) -> dict[int | st
     """The `responses=` a route declares for its errors; a service rewords any status through `overrides`."""
     descriptions = {**ERROR_DESCRIPTIONS, **(overrides or {})}
     return {status: {"model": ErrorEnvelope, "description": text} for status, text in descriptions.items()}
+
+
+def tag_name(tag: str) -> str:
+    """A tag as it starts an operation name: `Knowledge-bases` -> `knowledge_bases`."""
+    return tag.lower().replace("-", "_").replace(" ", "_")
+
+
+def operation_id(route: APIRoute) -> str:
+    """`<tag>_<handler>`, e.g. `files_delete_file`: every service's `generate_unique_id_function`. The name stays put
+    when a path changes, and it is the method name a generated SDK gives the operation."""
+    return f"{tag_name(str(route.tags[0]))}_{route.name}" if route.tags else route.name
+
+
+# Who may call an operation, on every operation of every service's OpenAPI document: `sdk` routes are generated into
+# the SDKs and CLI, `tool` routes are offered to agents as platform tools, `both` is each, and `internal` routes take a
+# service token and are in neither. ops_identity.fastapi sets it; a route may set its own through `openapi_extra`.
+PUBLIC_MARK = "x-ops-public"
+PUBLIC_MARKS = ("sdk", "tool", "both", "internal")
+
+
+def _depends_on(dependant: Dependant, calls: tuple[Callable[..., Any], ...]) -> bool:
+    return any(d.call in calls or _depends_on(d, calls) for d in dependant.dependencies)
+
+
+def mark_public(app: FastAPI, *, service_only: tuple[Callable[..., Any], ...] = (), default: str = "sdk") -> None:
+    """Puts `x-ops-public` on every operation of `app`'s document when it is built: `internal` for a route that
+    depends on one of `service_only` (the dependency that accepts a service token and nothing else), `default` for the
+    rest, and a value the route set itself is kept."""
+    build = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        doc = build()  # FastAPI caches the document and rebuilds it when routes change; marking it again is a no-op
+        # Included routers are nested in app.routes; iter_route_contexts gives each route with its full path and the
+        # router-level dependencies, as FastAPI's own document generation reads them.
+        for route in iter_route_contexts(app.routes):
+            if not isinstance(route.original_route, APIRoute) or not route.include_in_schema:
+                continue
+            mark = "internal" if _depends_on(route.dependant, service_only) else default
+            for method in route.methods or ():
+                op = doc["paths"].get(route.path_format, {}).get(method.lower())
+                if op is not None:
+                    op.setdefault(PUBLIC_MARK, mark)
+        return doc
+
+    app.openapi = openapi
 
 
 class Pagination(Out):

@@ -179,6 +179,35 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
+    """A code operation's settings as stored and sent to runner-service (c-531), from CodeSettingsIn's dump."""
+    limits = cast(dict[str, Any], c.get("limits") or {})
+    return {
+        "source": c["source"],
+        "entry": c.get("entry") or "main",
+        "bindings": list(dict.fromkeys(c.get("bindings") or [])),
+        "secrets": list(dict.fromkeys(c.get("secrets") or [])),
+        "limits": {
+            "memoryMb": limits.get("memory_mb", 256),
+            "timeS": limits.get("time_s", 10),
+            "calls": limits.get("calls", 20),
+        },
+    }
+
+
+def _code_operation(f: dict[str, Any]) -> dict[str, Any]:
+    """A new code operation from CodeOperationIn's dump."""
+    return {
+        "name": f["name"],
+        "description": f["description"],
+        "access": f["access"],
+        "group": "functions",
+        "input": f["input"],
+        "executor": "code",
+        "code": _code_settings(f["code"]),
+    }
+
+
 def _kebab(s: str) -> str:
     return re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", s.lower()))
 
@@ -482,6 +511,8 @@ class ModuleService:
             if o[col] is not None:
                 out[key] = o[col]
         out["executor"] = o["executor"]
+        if o.get("code"):
+            out["code"] = o["code"]
         out["headers"] = o.get("headers") or []
         for key, col in (("body", "body"), ("responseTransform", "response_transform"), ("timeoutMs", "timeout_ms")):
             if o.get(col) is not None:
@@ -923,16 +954,17 @@ class ModuleService:
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
             "output_shape": o.get("output_shape"),
             "response_schema": o.get("response_schema"),
+            "code": o.get("code"),
         }
 
     async def _names_free(self, who: Caller, ops: list[dict[str, Any]]) -> None:
-        taken = await self.store.names_taken(who.tenant_id, [o["name"] for o in ops])
+        taken = await self.store.names_taken(who.tenant_id, [o["name"] for o in ops], who.team.id)
         if taken:
             name = sorted(taken)[0]
             raise Conflict(f"An operation named {name} already exists in another module.")
 
     async def _name_free(self, who: Caller, name: str) -> bool:
-        return name not in await self.store.names(who.tenant_id)
+        return name not in await self.store.names(who.tenant_id, who.team.id)
 
     async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
@@ -960,9 +992,12 @@ class ModuleService:
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
             if not may_use(conn, who.team.id, self.dir.wide_teams):
                 raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
-        if i["type"] == "code":
-            raise Unprocessable("Code modules need the sandbox, which is not available yet.")
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
+        if i["type"] == "code":
+            # A code module's functions run on runner-service (c-531): no endpoint and no egress host of its own.
+            if not i.get("function"):
+                raise ValidationFailed("Write the module's first function.")
+            ops_in = [_code_operation(i["function"])]
         endpoint: str = i["endpoint"]
         if i.get("source") and ops_in:
             # An MCP server behind sign-in lists its tools only with the connection's token (c-331).
@@ -1192,7 +1227,9 @@ class ModuleService:
         if approvers is not None and approvers not in (1, 2):
             raise ValidationFailed("A write is approved by one person or by two different people.")
         team = patch.get("approver_team")
-        if team is not None and self.dir.team_by_id(team) is None:
+        # The directory is the console seed. A platform team the token names (the demo team) is not in that
+        # list; the caller naming their own team is enough (c-509: a record belongs to the acting team).
+        if team is not None and self.dir.team_by_id(team) is None and team != who.team.id:
             raise Unprocessable(f"{team} is not a team in this workspace.")
         binding = patch.get("binding")
         new_input = self._field_list(patch["input"]) if "input" in fields and patch.get("input") is not None else None
@@ -1306,9 +1343,38 @@ class ModuleService:
                     {"operation": name, "kind": "settings", "detail": "Mock response edited", "major": False}
                 )
                 o["stub"] = stub
+        if "code" in fields and patch.get("code") is not None:
+            changes.extend(self._code_changes(o, _code_settings(patch["code"])))
         if not changes:
             raise ValidationFailed("Nothing changed.")
         self._stage(m, changes)
+        return await self._detail(await self._save(m), who.team, who)
+
+    @staticmethod
+    def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:
+        """Applies a code operation's new settings. A tool or secret it did not have widens what the function reaches,
+        so Security reviews it; an edit to the source or the limits alone is minor."""
+        if o["executor"] != "code":
+            raise ValidationFailed(f"{o['name']} is not a code operation.")
+        before = cast(dict[str, Any], o.get("code") or {})
+        if code == before:
+            return []
+        added = [
+            *(set(code["bindings"]) - set(before.get("bindings") or [])),
+            *(set(code["secrets"]) - set(before.get("secrets") or [])),
+        ]
+        detail = f"May now use {', '.join(sorted(added))}" if added else "Function edited"
+        o["code"] = code
+        kind = "binding_changed" if added else "settings"
+        return [{"operation": o["name"], "kind": kind, "detail": detail, "major": bool(added)}]
+
+    async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
+        """Adds a function to a code module (c-531)."""
+        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        m = await self._changeable(who, module_id)
+        if m["type"] != "code":
+            raise ValidationFailed(f"{m['display_name']} is not a code module; add its operations from its system.")
+        await self._append(who, m, [_code_operation(f)])
         return await self._detail(await self._save(m), who.team, who)
 
     def _checked_shape(
@@ -1945,7 +2011,7 @@ class ModuleService:
         module's egress policy, its secrets and masks. Its latency and host are the real call's. The answer comes back
         before any transform; the caller applies the draft's. `secret_values` stand in for the tenant's secrets they
         name, for this call only: they are not stored, logged or returned (the request is scrubbed of them)."""
-        found = await self.store.operation_named(module["tenant_id"], op["name"])
+        found = await self.store.operation_named(module["tenant_id"], op["name"], module.get("team_id"))
         if found is not None:
             module, op = found
         assert self.egress is not None and self.http is not None

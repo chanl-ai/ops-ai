@@ -860,6 +860,9 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         # A kind Detect cannot name, or is unsure of, takes review with no fields: a person decides what the file is,
         # and `classification` on the output says why (c-249).
         outputs=(Port("ok"), Port("review"), Port("unreadable"), Port("error")),
+        # A long file is read in the background and the step waits for it holding no worker (c-525); past `waitSeconds`
+        # it leaves by a port of its own when the step asks, else by error.
+        optional_outputs=(("onTimeout", "port", "timeout"),),
         parameters={
             "type": "object",
             "required": ["file"],
@@ -911,6 +914,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "many": {"type": "boolean", "description": "One record per thing the document names, as `records`"},
                 "ocr": {"type": "boolean"},
                 "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+                "waitSeconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "How long a background read may take before the step gives up (default 1,200)",
+                },
+                "onTimeout": {"enum": ["error", "port"], "default": "error"},
             },
         },
         timeout_seconds=120.0,
@@ -932,6 +941,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ),
             ("ocr", _f("Read scans with OCR", "switch", "Off by default; OCR'd fields score lower")),
             _TIMEOUT,
+            (
+                "waitSeconds",
+                _f("Wait for a long read (seconds)", "number", "A long file is read in the background; 1,200 if empty"),
+            ),
+            ("onTimeout", _f("If the read takes longer", "select", "Leave by Error, or by a Timeout way of its own")),
         ),
     ),
     _ai_step(
@@ -1308,8 +1322,9 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         group="action",
         label="Add to case",
         description=(
-            "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input. "
-            "A case of another team, or none, takes the error port."
+            "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input, "
+            "and can move it on: waiting on the customer, or resolved when the run has done the work. Closing a case "
+            "is a person's. A case of another team, or none, takes the error port."
         ),
         executor="case.add",
         effects="write",
@@ -1329,6 +1344,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "additionalProperties": {"description": _MAPPING},
                     "description": "Values the case keeps by name, such as what was read from a document",
                 },
+                "status": {"enum": ["open", "waiting_on_customer", "resolved"]},
                 "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
             },
         },
@@ -1336,6 +1352,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("caseId", _f("Case", "mapping", "The case's id, e.g. `$.nodes.<step>.out.caseId`")),
             ("note", _f("Note", "mapping", "Shown on the case's timeline beside the run")),
             ("fields", _f("Fields", "mappings", "Values added to the case's own; a name it has takes the new value")),
+            ("status", _f("Move the case to", "select", "Empty leaves its status; only a person closes a case")),
             _TIMEOUT,
         ),
     ),
@@ -1402,6 +1419,62 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("mode", _f("Wait", "select", "For a duration, or until a date")),
             ("seconds", _f("For (seconds)", "number", "With a duration: how long the run pauses")),
             ("until", _f("Until", "mapping", "With until: a date such as a response date from an earlier step")),
+        ),
+    ),
+    NodeType(
+        id="ops.flow.waitFor",
+        version=1,
+        group="flow",
+        label="Wait for",
+        description=(
+            "Waits for work another system finishes, holding no worker: an outside system posts its result to the "
+            "step's resume URL with the step's token, or a service event `event` arrives carrying correlation key "
+            "`key`, whichever comes first, and the run goes on by `ok` with that result. With no answer within the "
+            "time limit it goes on by `timeout` with what it waited for. Set an answer schema to pick its fields in "
+            "later steps."
+        ),
+        executor="flow.wait_for",
+        effects="none",
+        inputs=MAIN_IN,
+        outputs=(Port("ok"), Port("timeout")),
+        parameters={
+            "type": "object",
+            "properties": {
+                "event": {
+                    "type": "string",
+                    "description": "A service event that also wakes the step, e.g. extraction.finished",
+                },
+                "key": {"description": "With event: the correlation key the event must carry: " + _MAPPING},
+                "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0, "default": 86400},
+                "outputSchema": {"type": "object", "description": "JSON Schema of the answer the step goes on with"},
+            },
+            "required": ["timeoutSeconds"],
+        },
+        ui=_form(
+            (
+                "timeoutSeconds",
+                _f("Time limit (seconds)", "number", "With no answer by then the run takes the Timeout way"),
+            ),
+            (
+                "event",
+                _f("Or an event", "text", "A service event that also wakes the step, such as extraction.finished"),
+            ),
+            (
+                "key",
+                _f(
+                    "Event key",
+                    "mapping",
+                    "With an event: the value the event carries, such as an id an earlier step returned",
+                ),
+            ),
+            (
+                "outputSchema",
+                _f(
+                    "Answer schema",
+                    "json",
+                    "The fields of the answer, so later steps can pick them; empty takes any answer",
+                ),
+            ),
         ),
     ),
     NodeType(

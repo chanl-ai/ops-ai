@@ -30,6 +30,7 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	$(KEEP) uv run pytest -q deploy/k8s/tests
 	$(KEEP) $(MAKE) -k -C services/files-service verify
 	$(KEEP) $(MAKE) -k -C services/documents-service verify
+	$(KEEP) $(MAKE) -k -C services/runner-service verify
 	$(KEEP) $(MAKE) -k -C services/models-service verify
 	$(KEEP) $(MAKE) -k -C $(SVC_DIR_kb) verify
 	$(KEEP) $(MAKE) -k -C services/platform-service verify

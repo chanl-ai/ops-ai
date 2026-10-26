@@ -98,6 +98,7 @@ rules, a `CLAUDE.md`. `node scripts/check-docs.mjs` enforces this.
 | `docs/console/` | Console page plan and UI designs |
 | `docs/services/<service>/` | One folder per service; the name matches a folder in `services/` |
 | `docs/packages/<package>/` | One folder per package; the name matches a folder in `packages/` |
+| `docs/sdk/` | The Python and TypeScript SDKs in `sdk/`, one guide per language |
 | `docs/deploy/` | Runbooks for the VM, Compose and Kubernetes targets |
 | `docs/plan/` | Plans, named for their topic |
 | `docs/artifacts/` | Published HTML design artifacts |

@@ -11,7 +11,7 @@ from typing import Any
 from fake_bank_https import HOST, fake_bank
 from usecase_harness import AGENTS_PORT, TEAM, TOOLS_PORT, agents, approve_tool_review, check, data, finish, sse, tools
 
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 RUN = int(time.time())
 READ, WRITE = f"get_balance_{RUN}", f"hold_account_{RUN}"
 ACCOUNT = "CHQ-2219"

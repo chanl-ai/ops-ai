@@ -175,6 +175,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
 | `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
 | `console/approved/channels/README.md` | The Channels screens the maintainers approved, at 1280 and 400 px, which the real pages are built to |
+| `console/approved/human-tasks/README.md` | The Human Tasks queue and task screens (layout A) the maintainers approved, at 1280 and 400 px, which /reviews is built to |
 | `console/proposed/files/README.md` | The file page and Extract screens built by c-262, at 1280 and 400 px, waiting for the maintainers' approval |
 | `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after c-266, side by side |
 | `console/proposed/tasks/README.md` | The Human Task page built by c-289 beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the maintainers' approval |
@@ -216,6 +217,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/calls-through-the-registry.md` | uc-011: a tool call runs through the registry and is logged with its caller |
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
+| `usecases/tools-service/a-builder-adds-a-python-function-tool.md` | uc-531: a Python function tool runs sandboxed, reads bound tools through ops.call, hands a secret by name, and is stopped at an unbound tool, a socket, its time limit and its memory cap |
 | `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of c-048 on the shared stack |
 | `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
@@ -273,6 +275,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/pages-wait-for-the-team.md` | uc-505: a sign-in straight to a case loads for the person's own team, and a record in another team says not found, or in another team, with a switch |
 | `usecases/console/whats-new.md` | uc-510: What's new in the sidebar lists what changed in plain words, with Coming next, and its dot clears once opened |
 | `usecases/console/chat-home.md` | uc-469: an approver lands on Chat's home, asks what needs them, approves a task from its card, and sees the run move on |
+| `usecases/console/human-tasks-queue.md` | uc-460: Human Tasks as queue and task, grouped by case, a decision panel that keeps Decide in view, All tasks for the table |
 | `usecases/console/every-page-has-the-header.md` | uc-264: every sidebar route and one record of each kind render the shared page header; the runtime half of check-standards rule 12 |
 | `usecases/console/services-unreachable.md` | uc-404: a link to a missing task says so; a session ended elsewhere goes back to sign-in keeping the page; with the run's platform-service stopped, one shell screen says the services are out of reach, with Try again |
 | `usecases/console/case-page-assembled.md` | uc-256: a case opened by a configured workflow shows its header and next action, fields in the case type's order, the task it waits on, the drafted action, linked records and recent activity from one case request; approved, the action reads approved |
@@ -377,12 +380,14 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/wait-for-children.md` | uc-402: A workflow waits for its children and uses their results |
 | `usecases/agents-service/wait-and-reminders.md` | uc-403: A workflow waits for a time or date and reminds a person |
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
+| `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
 | `architecture/make.md` | How make is organised: root orchestration, fragments by concern, the service verb set, env names, ports, `ISOLATED=1`, the daily commands |
 | `architecture/embedded-chat.md` | Embedded chat for customers: the design, the identity options and the recommendation |
 | `services/agents-service/overview.md` | Agents service: modules, graphs on four calls, settings, proofs, where it differs from the specs |
+| `services/agents-service/design.md` | Agents service design for Human Tasks: the flow from pause to decision, the reviews routes with `group=case`, the data they read, the decide sequence |
 | `services/agents-service/chat-streaming.md` | Chat streaming: the SSE events, `replace`, and the audit record of a withdrawn answer |
 | `services/agents-service/experiments/own-checkpointer.md` | E0: own LangGraph checkpointer on asyncpg with tenant row-level security |
 | `services/agents-service/experiments/pause-survives-graph-change.md` | E1: a paused thread survives a graph change by version pinning |
@@ -410,12 +415,18 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/tools-service/overview.md` | tools-service: the tool-module registry, calls resolved and validated through it, executors, and the executions log |
 | `services/files-service/overview.md` | files-service on :8750: uploads, proxy routes, dedupe, downloads, scan hook, retention and legal holds over local, S3 and Azure Blob stores; its client |
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |
+| `services/runner-service/overview.md` | runner-service on :8770: code tools' Python on WASM, its walls, `ops.call` back through tools-service |
 | `services/documents-service/overview.md` | documents-service on :8760: extractions, document types, samples and test runs, reading bytes through files-service; the sample documents as requirements |
 | `packages/ops_ingest/overview.md` | Knowledge ingestion library: parsing, splitting, metadata, dedupe, source rules |
 | `packages/ops_ingest/tests.md` | Knowledge ingestion failure modes and the test guarding each |
 | `packages/ops_email/overview.md` | Email library: mail in and out behind two protocols, providers picked by settings |
 | `packages/ops_email/test-with-gmail.md` | Steps to run the Email received trigger from a real Gmail mailbox with an app password |
 | `packages/ops_signin/overview.md` | Sign-in library: password hashing, OIDC with PKCE, SAML, and a fake identity provider |
+| `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
+| `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
+| `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
+| `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
+| `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
 | `plan/implementation-plan.md` |
 | `plan/ai-gateway-console.md` | AI gateway console feature: prior art, placement under Govern, pages, contract, open questions (plan only) |
 | `plan/agent-completions-through-models-service.md` | Agent turns on their own alias through models-service: what exists, what changes, uc-028, decisions, slices (research note) |

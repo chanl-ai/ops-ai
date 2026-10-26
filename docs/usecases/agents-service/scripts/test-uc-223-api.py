@@ -60,7 +60,7 @@ ADDRESS = f"intake-{RUN}@harborpine.test"
 IMAP_HOST, SMTP_HOST, SECRET = "mail.harborpine.test", "smtp.harborpine.test", "DEV_IMAP_PASSWORD"
 OPS = {"X-Team-Id": "team_ops"}
 MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
-SECURITY = {"X-Dev-User": "Nadia Petrov"}
+SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 SETTLED = ("succeeded", "failed", "cancelled")
 CSV = (
     b"name,address,ssn_last4,amount,court,case_no\n"

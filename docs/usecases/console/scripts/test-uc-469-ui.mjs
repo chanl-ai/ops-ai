@@ -90,6 +90,9 @@ await withUiStack(
         const approve = await taskCard.getByTestId('ops-card-action-approve').count();
         await shot('task-card');
         check('2 "What needs me today?" answers with the dispute’s Human Task as a card she can decide', /Provisional credit/.test(text) && /Marcus Bell/.test(text) && approve === 1 && !/[{}]/.test(text), { text: text.slice(0, 300), approve });
+        // The tool row reads as words ("My human tasks"), never the tool's id.
+        const tools = (await page.getByTestId('chat-tool-call').allInnerTexts()).map((t) => t.split('\n')[0].trim());
+        check('2b the chat names the tool it used in words, not its id', tools.length > 0 && tools.every((t) => !/_/.test(t)), tools);
       });
 
       await step('3 she approves from the card, signing in again if the task asks, and the card says so', async () => {
@@ -127,6 +130,28 @@ await withUiStack(
         const status = await card.getByTestId('ops-card-status').innerText();
         const buttons = await card.locator('[data-testid^=ops-card-action-]').count();
         check('5 after a reload the task card reads who decided it and offers no buttons', /^Approved by /.test(status) && buttons === 0, { status, buttons });
+      });
+
+      await step('5b on a 13-inch laptop the middle column keeps its room: the sidebar folds first, the chats rail hides on demand', async () => {
+        const widths = {};
+        const middle = () => page.evaluate(() => Math.round(document.querySelector('[data-middle-column]')?.getBoundingClientRect().width ?? 0));
+        const sidebar = () => page.locator('[data-slot=sidebar]').first().getAttribute('data-state');
+        for (const w of [1024, 1280, 1440]) {
+          await page.setViewportSize({ width: w, height: 800 });
+          await page.waitForTimeout(600);
+          widths[w] = { middle: await middle(), sidebar: await sidebar() };
+        }
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.waitForTimeout(400);
+        await page.getByTestId('chat-rail-toggle').click();
+        const hidden = await middle();
+        await page.getByTestId('chat-rail-toggle').click();
+        await page.goto(`${consoleUrl}/workflows/runs/${runId}`, { waitUntil: 'domcontentloaded' });
+        await page.setViewportSize({ width: 1024, height: 800 });
+        await page.waitForTimeout(3000);
+        const runFold = await sidebar();
+        await page.setViewportSize({ width: 1280, height: 900 });
+        check('5b on a 13-inch laptop the middle column keeps its room: the sidebar folds first, the chats rail hides on demand', widths[1024].middle >= 640 && widths[1024].sidebar === 'collapsed' && widths[1280].sidebar === 'collapsed' && widths[1440].sidebar === 'expanded' && hidden > widths[1280].middle + 200 && runFold === 'collapsed', { widths, hidden, runFold });
       });
 
       await step('6 leaving the home puts the sidebar back', async () => {

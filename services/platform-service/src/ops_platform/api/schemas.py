@@ -112,6 +112,14 @@ class MeTeam(Out):
     role: str
 
 
+class WorkspaceStateOut(Out):
+    """The workspace's owner and status (c-529): `purgeAfter` is when a closed workspace's records go, else null."""
+
+    owner_user_id: str | None
+    status: Literal["active", "suspended", "closed", "purging", "purged"]
+    purge_after: str | None
+
+
 class Me(Out):
     user: MeUser
     tenant_id: str
@@ -122,6 +130,7 @@ class Me(Out):
     policies: dict[str, Any]
     # The team that holds the Security team's actions in this deployment.
     security_team_id: str
+    workspace: WorkspaceStateOut
 
 
 class TeamName(Out):
@@ -165,6 +174,33 @@ class WorkspaceRenameIn(In):
 class WorkspaceNameOut(Out):
     id: str
     name: str
+
+
+class TransferIn(In):
+    """The account admin who becomes the workspace's owner."""
+
+    user_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class WorkspaceCloseIn(In):
+    """The workspace's name, typed by its owner to confirm the delete."""
+
+    name: str = Field(min_length=1, max_length=80)
+
+
+class TeamDeleteCheckOut(Out):
+    """Whether a team may be deleted now and why not (c-529): the Delete card reads it in one call."""
+
+    team_id: str
+    status: str
+    security: bool
+    # Days until an archived team may be deleted; null while it is active.
+    days_left: int | None
+    # False when agents-service did not answer; Delete is then off.
+    usage_known: bool
+    live_workflows: list[str]
+    runs_in_progress: int
+    can_delete: bool
 
 
 class WorkspaceTeamOut(Out):

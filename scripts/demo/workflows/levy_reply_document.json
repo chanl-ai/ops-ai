@@ -1,0 +1,288 @@
+{
+ "schemaVersion": 2,
+ "id": "levy_reply_document",
+ "name": "Levy notice: read and reply",
+ "description": "One emailed levy notice: read every person it names (a long notice is read in the background), thank the sender at once, then look each person up and answer for them in their own run.",
+ "nodes": [
+  {
+   "id": "start",
+   "type": "ops.trigger.request",
+   "typeVersion": 1,
+   "name": "Notice",
+   "parameters": {
+    "inputSchema": {
+     "type": "object",
+     "required": [
+      "fileId",
+      "from",
+      "mailbox"
+     ],
+     "properties": {
+      "fileId": {
+       "type": "string",
+       "title": "Notice file",
+       "format": "file"
+      },
+      "name": {
+       "type": "string",
+       "title": "File name"
+      },
+      "from": {
+       "type": "string",
+       "title": "Sender's email"
+      },
+      "subject": {
+       "type": "string",
+       "title": "Subject"
+      },
+      "mailbox": {
+       "type": "string",
+       "title": "Mailbox it arrived in"
+      }
+     }
+    },
+    "onlyFromWorkflows": true
+   }
+  },
+  {
+   "id": "read",
+   "type": "ops.ai.extract",
+   "typeVersion": 1,
+   "name": "Read the people it names",
+   "parameters": {
+    "file": "$.input.fileId",
+    "ocr": true,
+    "documentType": {
+     "id": "{documentType:garnishment_notice}",
+     "version": 1
+    },
+    "waitSeconds": 1200,
+    "onTimeout": "port"
+   }
+  },
+  {
+   "id": "check",
+   "type": "ops.flow.humanReview",
+   "typeVersion": 1,
+   "name": "Check the read",
+   "parameters": {
+    "title": "Check the people read from the notice",
+    "summary": {
+     "document": "$.input.name",
+     "read": "$.nodes.read.out"
+    },
+    "editable": "$.nodes.read.out.records"
+   }
+  },
+  {
+   "id": "ack",
+   "type": "ops.action.tool",
+   "typeVersion": 1,
+   "name": "Thank the sender",
+   "parameters": {
+    "operation": "send_acknowledgement",
+    "input": {
+     "to": "$.input.from",
+     "subject": "Re: {$.input.subject}",
+     "body": "We received your notice and are working on it.",
+     "mailbox": "$.input.mailbox"
+    }
+   }
+  },
+  {
+   "id": "each",
+   "type": "ops.action.workflow",
+   "typeVersion": 1,
+   "name": "Answer for each person",
+   "parameters": {
+    "workflow": "{workflow:levy_reply_debtor}",
+    "forEach": "$.nodes.check.out.edited ?? $.nodes.read.out.records",
+    "input": {
+     "record": "$.item.values",
+     "notice": "$.input.subject",
+     "fileId": "$.input.fileId",
+     "from": "$.input.from",
+     "mailbox": "$.input.mailbox",
+     "acknowledgement": "$.nodes.ack.out"
+    },
+    "label": "{$.item.values.name}"
+   }
+  },
+  {
+   "id": "answered",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Answered",
+   "parameters": {
+    "outcome": "answering",
+    "output": {
+     "people": "$.nodes.each.out",
+     "acknowledgement": "$.nodes.ack.out"
+    }
+   }
+  },
+  {
+   "id": "manual",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Needs a manual read",
+   "parameters": {
+    "outcome": "needs_manual_read"
+   }
+  },
+  {
+   "id": "slow",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Read took too long",
+   "parameters": {
+    "outcome": "read_timed_out",
+    "output": "$.nodes.read.out",
+    "result": "failed"
+   }
+  },
+  {
+   "id": "not_started",
+   "type": "ops.flow.end",
+   "typeVersion": 1,
+   "name": "Not answered",
+   "parameters": {
+    "outcome": "not_answered",
+    "output": "$.nodes.each.out",
+    "result": "failed"
+   }
+  }
+ ],
+ "connections": [
+  {
+   "from": {
+    "node": "start",
+    "port": "payload"
+   },
+   "to": {
+    "node": "read",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "read",
+    "port": "ok"
+   },
+   "to": {
+    "node": "ack",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "read",
+    "port": "review"
+   },
+   "to": {
+    "node": "check",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "read",
+    "port": "unreadable"
+   },
+   "to": {
+    "node": "manual",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "read",
+    "port": "error"
+   },
+   "to": {
+    "node": "manual",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "read",
+    "port": "timeout"
+   },
+   "to": {
+    "node": "slow",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "check",
+    "port": "approve"
+   },
+   "to": {
+    "node": "ack",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "check",
+    "port": "reject"
+   },
+   "to": {
+    "node": "manual",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ack",
+    "port": "ok"
+   },
+   "to": {
+    "node": "each",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ack",
+    "port": "refused"
+   },
+   "to": {
+    "node": "each",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "ack",
+    "port": "error"
+   },
+   "to": {
+    "node": "each",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "each",
+    "port": "started"
+   },
+   "to": {
+    "node": "answered",
+    "port": "in"
+   }
+  },
+  {
+   "from": {
+    "node": "each",
+    "port": "error"
+   },
+   "to": {
+    "node": "not_started",
+    "port": "in"
+   }
+  }
+ ]
+}

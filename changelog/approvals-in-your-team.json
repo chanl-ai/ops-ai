@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-24",
+  "title": "Approvals go to your own team",
+  "description": "A step waiting for approval now goes to approvers in the run's own team.",
+  "tag": "fix",
+  "cards": ["c-509"]
+}

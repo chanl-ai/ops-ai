@@ -29,3 +29,12 @@ async def test_send_reply_hands_the_message_to_the_provider_under_the_call_key()
     assert out.ok and out.output["status"] == "sent"
     sent = mail.sent["run1:reply:0"]
     assert (sent.to, sent.subject, sent.body) == (("ana@example.com",), REPLY["subject"], REPLY["body"])
+
+
+async def test_the_acknowledgement_hands_its_message_to_the_same_provider() -> None:
+    mail = MemorySender()
+    out = await LocalToolRunner(load_catalog(AGENTS_FIXTURES), mail).run(
+        "send_acknowledgement", REPLY, key="run1:ack:0", caller=CALLER
+    )
+    assert out.ok and out.output["status"] == "sent"
+    assert mail.sent["run1:ack:0"].to == ("ana@example.com",)

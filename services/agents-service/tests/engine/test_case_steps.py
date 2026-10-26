@@ -1,6 +1,6 @@
 """Open case and Add to case (c-219) through the real worker into the host, on the real database under tenant RLS,
 by failure mode: a retried Open case step opens a second case; Add to case joins another team's case; a test run's
-case reads as a customer's issue."""
+case reads as a customer's issue; a later step's note is lost or written twice; a run closes a case (c-532)."""
 
 from __future__ import annotations
 
@@ -116,9 +116,10 @@ async def test_a_run_opens_one_case_and_joins_it_and_a_retry_opens_no_second(
         assert (await cases.t.runs.get(run_id) or {})["status"] == "succeeded"
         events = await cases.store.events(str(case["id"]))
         again = await cases.port.open(run_id, {"subject": "Card dispute"}, f"{run_id}:open:1")
-        await cases.port.add(run_id, str(case["id"]), "Statement requested")
+        await cases.port.add(run_id, str(case["id"]), "Statement requested", key=f"{run_id}:join:1")
         after = await cases.store.events(str(case["id"]))
-    assert [(e["kind"], e["ref"]) for e in events] == [("opened", None), ("run", run_id)]
+    assert [(e["kind"], e["ref"]) for e in events] == [("opened", None), ("run", run_id), ("note", f"{run_id}:join:1")]
+    assert events[-1]["detail"] == {"text": "Statement requested"}, "the join step's note is on the timeline"
     assert (again.case_id, again.created) == (case["id"], False), "the step's key finds the case it opened"
     assert len(after) == len(events) and len(await cases.all()) == 1, "a retried step adds nothing"
 
@@ -150,6 +151,19 @@ async def test_a_case_keeps_the_fields_a_run_gives_it_and_a_later_step_adds_more
     await cases.run(dispute(open=opened, join=joined), db=engine)
     [case] = await cases.all()
     assert case["fields"] == {"customer": "C-1001", "amount": 99, "statement": "requested"}, case["fields"]
+
+
+async def test_a_run_resolves_its_case_and_never_closes_one(cases: Cases, engine: AsyncEngine) -> None:  # noqa: F811
+    run_id = await cases.run(dispute(join={"status": "resolved", "note": "Replied: no account at the bank"}), db=engine)
+    [case] = await cases.all()
+    with tenant_scope(cases.t.id):
+        events = await cases.store.events(str(case["id"]))
+        with pytest.raises(ValueError, match="closing is a person's"):
+            await cases.port.add(run_id, str(case["id"]), None, status="closed")
+        [after] = await cases.all()
+    assert case["status"] == "resolved", case["status"]
+    assert ("field", f"run:{run_id}") in [(e["kind"], e["by"]) for e in events], "the move is on the timeline"
+    assert after["status"] == "resolved"
 
 
 async def test_an_open_case_step_pins_its_case_types_published_version_and_an_unknown_type_is_its_error_port(

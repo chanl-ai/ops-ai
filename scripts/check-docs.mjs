@@ -7,7 +7,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 
 // media holds the README's screenshots and clips (docs/usecases/lib/capture_demo.mjs writes them); diagrams holds the
 // architecture diagrams' data files and their exported SVGs (apps/docs draws them).
-const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'guide', 'plan', 'artifacts', 'usecases', 'media', 'diagrams'];
+const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'guide', 'plan', 'artifacts', 'usecases', 'media', 'diagrams', 'sdk'];
 // Use case scripts and their shared harness live beside the use case docs; only the docs follow the naming rules.
 const USECASE_CODE = /^docs\/usecases\/(lib|[a-z0-9-]+\/scripts)\/[^/]+\.(py|mjs)$/;
 // Mapped folders: docs/services/<x> needs services/<x>, docs/packages/<x> needs packages/<x>.

@@ -33,6 +33,7 @@ KEY_LOOKUP = "key_lookup"  # an API key by its id
 INVITE_LOOKUP = "invite_lookup"  # an invitation by its token hash
 SIGNIN_LOCKOUT = "signin_lockout"  # failed sign-ins counted by email hash (signin_email_failures holds no tenant)
 RESET_LOOKUP = "reset_lookup"  # a password reset by its token hash
+PURGE_LOOKUP = "purge_lookup"  # workspaces closed longer than the restore window, for the purge loop (c-529)
 
 
 class TenantDb:

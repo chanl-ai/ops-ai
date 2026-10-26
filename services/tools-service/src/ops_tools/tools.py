@@ -84,7 +84,8 @@ class LocalToolRunner:
         self.decisions = decisions
 
     async def run(self, tool: str, arguments: dict[str, Any], *, key: str, caller: ToolCaller) -> ToolOutcome:
-        if tool == "send_reply":
+        # send_acknowledgement sends the same way; it is declared a write that runs at once (seed.SENDS).
+        if tool in ("send_reply", "send_acknowledgement"):
             message = OutboundMessage(key, (arguments["to"],), arguments["subject"], arguments["body"])
             mailbox = str(arguments.get("mailbox") or "")
             try:

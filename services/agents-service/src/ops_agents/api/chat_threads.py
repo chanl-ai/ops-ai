@@ -109,6 +109,7 @@ class AssistantBuilder:
         return ToolCall(
             id=str(c["id"]),
             name=str(c.get("tool")),
+            label=call_label(self.catalog, c),
             server=str(c.get("server") or ""),
             input=_d(c.get("input")),
             output=output,

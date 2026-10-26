@@ -80,6 +80,7 @@ from ops_service_kit.http import (
     error_responses,
     install_error_handlers,
     ok,
+    operation_id,
 )
 from ops_service_kit.settings import Settings
 from ops_storage.base import ObjectLockedError, content_disposition
@@ -301,7 +302,7 @@ def create_files_app(
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    app = FastAPI(title="files-service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="files-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id)
     config = Settings()
     app.state.security_team = config.security_team_id
     install_error_handlers(app)

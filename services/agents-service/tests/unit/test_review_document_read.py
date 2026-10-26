@@ -245,7 +245,7 @@ async def test_an_acknowledgement_shows_the_reply_and_the_case_each_started_run_
 
 
 async def _policy(_rt: Any, _tool: str) -> Any:
-    return SimpleNamespace(approvers=1, access="write", step_up=False, approver_team=None)
+    return SimpleNamespace(approvers=1, access="write", step_up=False)
 
 
 async def test_a_review_with_no_read_and_no_reply_has_neither() -> None:

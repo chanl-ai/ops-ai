@@ -103,7 +103,9 @@ async def logged(jobs: BackgroundJobs | None, recovering: Awaitable[str | None])
 
 
 async def sweep_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, jobs: BackgroundJobs) -> None:
-    """The sweeper, a listed background process: a failed sweep is retried and shows in its heartbeat."""
+    """The sweeper, a listed background process: a failed sweep is retried and shows in its heartbeat. The first sweep
+    waits one interval, as before: at start-up it would run beside the seeds, and on one SQLite connection (the API
+    tests) its transaction takes the seed's first insert."""
     assert rt.leases is not None
     leases = rt.leases
 
@@ -113,4 +115,6 @@ async def sweep_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, 
     async def waiting() -> int:
         return sum(1 for x in await leases.expired() if not x.thread_id.startswith((RUN_PREFIX, POLL_LEASE_PREFIX)))
 
-    await background.run("sweeper", once, stop=asyncio.Event(), store=beats, every_s=interval, waiting=waiting)
+    await background.run(
+        "sweeper", once, stop=asyncio.Event(), store=beats, every_s=interval, waiting=waiting, first_in=interval
+    )

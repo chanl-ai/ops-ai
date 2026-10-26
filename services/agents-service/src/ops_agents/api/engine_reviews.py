@@ -16,10 +16,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from ops_engine.store import RUN_PREFIX, DefinitionStore, RunStore, WorkQueue
+from ops_engine.store import RUN_PREFIX, DefinitionStore, RunStore
 from ops_policy import input_hash
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
-from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
 from ..store.cases import CaseNotFound, CaseStore
@@ -29,10 +28,11 @@ from ..store.reviews import ReviewStore
 from ..store.tenancy import current_team
 from .auth import Principal, require_not_own, require_reviews_decide, require_step_up, review_teams, workspace_step_up
 from .deps import Runtime
+from .engine_resume import enqueue_resume
 from .legacy_tasks import NOT_READ, legacy_task
 from .option_inputs import held_calls
 from .review_sla import sla_hours
-from .review_text import describe_call, question, source_file
+from .review_text import describe_call, question, requester, source_file
 from .task_type_seeds import task_type_store
 from .task_view import TaskReads, typed_task
 from .team_names import deciding_team
@@ -202,7 +202,7 @@ def _task_words(task: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]
     if text := data.get("message", {}).get("text"):
         words["reasoning"] = [str(text)]
     if asked := [str(x) for x in cast(list[Any], payload.get("requestedBy") or []) if x]:
-        words["customer"] = f"Requested by {', '.join(asked)}"
+        words["customer"] = f"Requested by {', '.join(requester(a) for a in asked)}"
     return words
 
 
@@ -421,8 +421,6 @@ async def view(
     calls = _calls(payload)
     policies = [await policy_of(rt, str(c["tool"])) for c in calls if c.get("tool")]
     two = any(p.approvers > 1 for p in policies)
-    # Who decides it, as _check_decider checks: a write's approving team, else the run's team.
-    approving = next((p.approver_team for p in policies if p.approver_team), None)
     step_up = any(p.step_up for p in policies)
     draft = payload.get("draft")
     call = calls[0] if calls else {}
@@ -492,7 +490,7 @@ async def view(
         "calls": None,
         "error": None,
         "caseId": case_id or None,
-        "decidingTeam": await deciding_team(rt, approving or run.get("team_id")),
+        "decidingTeam": await deciding_team(rt, run.get("team_id")),
         **typed,
     }
     if task := await typed_task(rt, payload, run, reads):
@@ -593,6 +591,8 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
             "risk": _risk(policies),
             "status": "pending" if decided is None else _decided_status(decided),
             "slaMinutes": review_deadline(payload, hours, now)["minutes"] if decided is None else None,
+            # The deadline a list grouped by case orders on (c-460); the place reads the same from its own rows.
+            "dueAt": review_deadline(payload, hours, now)["dueAt"] if decided is None else None,
             "createdAt": run["updated_at"],
             # "" says "looked up, on no case", so expand does not ask again per row.
             "caseId": on_case.get(str(run["id"])) or None,
@@ -631,13 +631,20 @@ async def all_places(rt: Runtime) -> list[dict[str, Any]]:
         log.warning("engine_reviews_unavailable", error=type(e).__name__)
         return []
     decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
+    # The case and the deadline a list grouped by case orders on (c-460): one query and one setting, no review built.
+    on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
+    hours = await sla_hours(rt)
+    now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     for run in runs:
+        case_id = on_case.get(str(run["id"])) or None
         for d in decisions.get(str(run["id"]), []):
-            out.append({"id": step_id(run, cast(dict[str, Any], d.get("payload") or {})), "status": _decided_status(d)})
+            payload = cast(dict[str, Any], d.get("payload") or {})
+            out.append({"id": step_id(run, payload), "status": _decided_status(d), "caseId": case_id, "dueAt": None})
         if run["status"] == "waiting" and run.get("waiting"):
             waiting = cast(dict[str, Any], dict(run["waiting"]).get("payload") or {})
-            out.append({"id": step_id(run, waiting), "status": "pending"})
+            due = review_deadline(waiting, hours, now)["dueAt"]
+            out.append({"id": step_id(run, waiting), "status": "pending", "caseId": case_id, "dueAt": due})
     return out
 
 
@@ -662,26 +669,19 @@ async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
 
 
 async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], calls: list[dict[str, Any]]) -> None:
-    """Who may decide a run's review: a reviewer or admin of the run's team unless a policy of the writes it decides
-    (`calls`) names an approving team, which is required instead, and not who started the run or whom the step names in
-    requestedBy while requesterMayDecide is off. Anyone the step names in notDecidedBy is refused whatever the policy,
-    such as whoever saved the version it approves."""
-    from .hitl_facade import require_approver_team  # noqa: PLC0415 - hitl_facade imports this module
-
+    """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
+    are (c-509), and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
+    Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
+    approves."""
+    del calls
     paused = cast(dict[str, Any], dict(run.get("waiting") or {}).get("payload") or {})
     barred = {str(x).lower() for x in cast(list[Any], paused.get("notDecidedBy") or [])}
     if approver.email.lower() in barred:
         raise Forbidden("You are named as not deciding this review; another reviewer must.", code="not_decided_by")
-    teams, approving = review_teams(approver), None
-    for call in calls:
-        policy = await policy_of(rt, str(call["tool"]))
-        require_approver_team(policy, teams, str(call["tool"]))
-        approving = approving or policy.approver_team
-    if not approving:
-        require_reviews_decide(teams, str(run["team_id"]), "this review")
+    require_reviews_decide(review_teams(approver), str(run["team_id"]), "this review")
     # Who started the run, and whoever the step names as having asked (an event's requester), under the same policy.
     asked = [run["created_by"], *(str(x) for x in cast(list[Any], paused.get("requestedBy") or []))]
-    require_not_own(approver, asked, team=approving or str(run["team_id"]), what="this run's review")
+    require_not_own(approver, asked, team=str(run["team_id"]), what="this run's review")
 
 
 async def check_decider(rt: Runtime, approver: Principal, review_id: str) -> None:
@@ -820,15 +820,7 @@ async def decide(
         # A reference to the recorded approvals, never the token: the worker mints the token from them when it calls
         # the gateway, so no token is stored in the queue, the journal or a run's detail.
         resume |= {"call": call, "approval": approval}
-    key = f"resume:{run_id}:{waiting['node']}:{waiting['iteration']}"
-    payload = {
-        "resume": resume,
-        "payload": waiting.get("payload"),
-        "at": now_iso(),
-        "interruptId": waiting.get("interruptId"),
-    }
-    queue = WorkQueue(EngineTransactions(rt.db), owner="api", ttl=rt.settings.lease_ttl_seconds)
-    row, created = await queue.enqueue(run_id, "resume", key, payload)
+    row, created = await enqueue_resume(rt.db, run_id, waiting, resume)
     stored = cast(dict[str, Any], row["payload"])
     if not created:
         was = cast(dict[str, Any], stored.get("resume") or {})

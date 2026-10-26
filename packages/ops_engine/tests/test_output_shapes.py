@@ -59,7 +59,16 @@ class Cases:
     async def open(self, run_id: str, fields: dict[str, Any], key: str) -> OpenedCase:
         return OpenedCase("case_1", True)
 
-    async def add(self, run_id: str, case_id: str, note: str | None, fields: dict[str, Any] | None = None) -> None:
+    async def add(
+        self,
+        run_id: str,
+        case_id: str,
+        note: str | None,
+        fields: dict[str, Any] | None = None,
+        *,
+        status: str | None = None,
+        key: str | None = None,
+    ) -> None:
         return None
 
 
@@ -225,7 +234,9 @@ async def test_a_join_declares_each_branch_it_writes() -> None:
 
 
 async def test_every_registered_type_has_a_case_and_a_shape() -> None:
+    # Parking types (a review, Wait for) end their pass outside a graph; their shapes are read by the tests below.
     covered = {t for t, _ in CASES} | {"ops.data.match", "ops.flow.humanReview", "ops.flow.join", "ops.trigger.email"}
+    covered |= {"ops.flow.waitFor"}
     assert {t.id for t in REGISTRY.all()} - covered == set()
     assert {t.executor for t in REGISTRY.all() if not t.deferred} - set(BUILDERS) == set()
 
@@ -280,3 +291,13 @@ async def test_a_mapping_to_a_field_the_step_never_outputs_is_warned_and_one_int
     assert [(w["node"], w["code"], w["level"]) for w in warned] == [("use", "unknown_output_field", "warning")]
     assert await unknown_fields(mapped("name"), REGISTRY, Lookups()) == []
     assert await unknown_fields(mapped("anything", operation="nobody_knows"), REGISTRY, Lookups()) == []
+
+
+async def test_wait_for_offers_its_answer_schema_fields_and_the_time_limits_facts() -> None:
+    """A Decide step after Wait for picks `$.nodes.<step>.out.<field>` from the step's answer schema (c-525); with none
+    any field reads, and the Timeout way always carries what it waited for."""
+    schema = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
+    typed = await declared(node("ops.flow.waitFor", timeoutSeconds=5, outputSchema=schema))
+    untyped = await declared(node("ops.flow.waitFor", timeoutSeconds=5))
+    assert typed["ok"] == schema and is_open(untyped["ok"])
+    assert set(typed["timeout"]["required"]) == {"waitedFor", "key", "seconds"}

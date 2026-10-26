@@ -106,7 +106,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   // A page only an admin may read is not offered to anyone else.
                   const children = item.children?.filter((c) => !c.adminOnly || role === 'admin');
                   const parentSubRow = children?.length === 1;
-                  const subRows = parentSubRow && children ? [{ title: item.tabTitle ?? item.title, url: item.url }, ...children] : (children ?? []);
+                  const subRows = parentSubRow && children ? [{ title: item.tabTitle ?? item.title, url: item.url, icon: item.tabIcon }, ...children] : (children ?? []);
                   const active = onParentPage && !parentSubRow;
                   const count = badges[item.url];
                   const row = (
@@ -141,6 +141,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                               <SidebarMenuSubItem key={child.url}>
                                 <SidebarMenuSubButton asChild isActive={child.url === item.url ? onParentPage : hit?.child?.url === child.url}>
                                   <Link href={child.url}>
+                                    {child.icon && <child.icon />}
                                     <span>{child.title}</span>
                                   </Link>
                                 </SidebarMenuSubButton>

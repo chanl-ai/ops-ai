@@ -70,7 +70,16 @@ class Cases:
         self.opened.append(fields)
         return OpenedCase(f"case_{len(self.opened)}", True)
 
-    async def add(self, run_id: str, case_id: str, note: str | None, fields: dict[str, Any] | None = None) -> None:
+    async def add(
+        self,
+        run_id: str,
+        case_id: str,
+        note: str | None,
+        fields: dict[str, Any] | None = None,
+        *,
+        status: str | None = None,
+        key: str | None = None,
+    ) -> None:
         return None
 
 

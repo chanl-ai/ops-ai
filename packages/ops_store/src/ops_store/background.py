@@ -128,6 +128,14 @@ PROCESSES: tuple[Process, ...] = (
         None,
         "Reads queued before a restart are resumed for every team, each in its own team.",
     ),
+    Process(
+        "workspace_lifecycle",
+        "platform",
+        "Workspace purge",
+        "Removes the records of workspaces closed longer than the restore window.",
+        900.0,
+        "Any workspace's restore window can end; each is purged in its own tenant.",
+    ),
 )
 BY_KEY: dict[str, Process] = {p.key: p for p in PROCESSES}
 
@@ -149,6 +157,7 @@ EXEMPT: dict[str, str] = {
     "ops_engine.worker.Worker._heartbeat": "renews one run's claim while a pass runs; part of the workflow worker",
     "ops_engine.compiler.*": "waits inside one compiled step",
     "ops_tools.transform.*": "waits on one call's child process",
+    "ops_runner.wasm.*": "waits inside one code run, for its guest's pipes and lines, bounded by the run's time limit",
     "ops_tools.opa.*": "retries loading the policy at start-up",
     "ops_identity.client.*": "pages through one list call",
     "ops_email.inbound.*": "reads one mailbox for the mail listener",

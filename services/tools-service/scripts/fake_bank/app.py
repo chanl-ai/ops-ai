@@ -316,6 +316,22 @@ def get_account(account_id: str) -> Account:
     return ACCOUNTS[account_id]
 
 
+class LevyRules(BaseModel):
+    protectedBalance: float  # noqa: N815 - the bank API's field name
+    currency: str
+    exemptAccountTypes: list[str]  # noqa: N815
+
+
+@app.get("/levy-rules", operation_id="get_levy_rules", summary="The exempt-funds rules a levy hold follows")
+def get_levy_rules(rules_key: Annotated[str | None, Query(alias="rulesKey")] = None) -> LevyRules:
+    """The levy handbook's exempt funds: the first 2,500.00 CAD of a personal chequing or savings account. The key is
+    an ordinary query parameter, not a security scheme, so an import makes it an input that a code tool fills with a
+    secret handle (c-531), and the value never reaches the function."""
+    if rules_key != KEY:
+        raise HTTPException(401, "missing or wrong rulesKey")
+    return LevyRules(protectedBalance=2500.0, currency="CAD", exemptAccountTypes=["chequing", "savings"])
+
+
 @app.get(
     "/accounts/{account_id}/statement",
     operation_id="get_statement",

@@ -16,6 +16,7 @@ from typing import Any, cast
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import Principal
 from ops_policy import input_hash
+from ops_service_kit.errors import ApiError
 from ops_service_kit.ids import new_id, now_iso
 
 from .auth.kinds import TEST
@@ -24,6 +25,7 @@ from .limits import amount_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
+from .secrets import scrub
 from .send_check import NEEDS_REVIEW, SendCheck
 from .store import CallAbandonedError, CallLog, LeaseSupersededError
 from .store.modules import Aggregate
@@ -32,6 +34,9 @@ from .tokens import claims_of
 from .tools import ToolCaller
 
 API, MCP = "api", "mcp"
+
+# Turns a call's input into what is sent, and names the values to scrub from its answer (code runs, c-531).
+Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
 
 
 @dataclass(frozen=True)
@@ -153,6 +158,7 @@ class GatewayCalls:
         generation: int | None = None,
         channel: str = API,
         client_name: str | None = None,
+        prepare: Prepare | None = None,
         sees: Callable[[Aggregate], bool] | None = None,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
@@ -164,7 +170,7 @@ class GatewayCalls:
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
 
-        resolved = await self.registry.resolve(req.tool, tenant_id=caller.tenant_id)
+        resolved = await self.registry.resolve(req.tool, tenant_id=caller.tenant_id, team_id=caller.team_id)
         access = resolved.access if resolved else "unknown"
         digest = input_hash(req.input)
         ctx = req.run_context
@@ -215,7 +221,18 @@ class GatewayCalls:
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": "team_forbidden", "message": reason}
             )
             return Refused(call_id, 403, "team_forbidden", [reason])
-        early = _before_policy(resolved, req.input)
+        args, hide = req.input, list[str]()
+        if prepare is not None:
+            # A code run's call (c-531): its secret handles become values here, after the input hash was taken, so
+            # neither the hash nor the log row holds a value, and the answer is scrubbed of them.
+            try:
+                args, hide = await prepare(resolved, req.input)
+            except ApiError as e:
+                row.update(decision="deny", reasons=[e.message])
+                error = {"code": e.code, "message": e.message}
+                await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
+                return Refused(call_id, e.status, e.code, [e.message])
+        early = _before_policy(resolved, args)
         if early is not None:
             status, code, reason, problems = early
             row.update(decision="deny", reasons=[reason])
@@ -223,13 +240,13 @@ class GatewayCalls:
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason}
             )
             return Refused(call_id, status, code, [reason], {"invalid": problems} if problems else {})
-        policy = await self.registry.policy_for(req.tool, caller.tenant_id) if resolved else None
+        policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
         # From the registry and the team's policy, never the caller: whether this write needs an approval token. A
         # write declared to run at once (open_case) still waits while the team has every write wait.
         approval_required = access not in WRITES or (
             # Over MCP every write waits for a person, whatever the operation declares (owner, c-354 Q4).
             channel == MCP
-            or await self.registry.requires_approval(req.tool, caller.tenant_id)
+            or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
             or await self.all_writes_wait(caller.tenant_id, caller.team_id)
         )
         if access in WRITES and req.approval_token is None and self.send_check is not None:
@@ -279,11 +296,13 @@ class GatewayCalls:
             outcome = await self.executor.run(
                 resolved or Resolved(access, "local"),
                 req.tool,
-                req.input,
+                args,
                 key=req.key,
                 caller=ToolCaller.of(caller),
                 environment=ctx.get("environment"),
             )
+            if hide:
+                outcome = ToolOutcome(outcome.ok, scrub(outcome.output, hide), outcome.view)
             failed = _error_of(outcome)
             await self.log.record(**row, outcome="ok" if outcome.ok else "error", latency_ms=elapsed(), error=failed)
             return Allowed(call_id, outcome.ok, outcome.output, outcome.view)

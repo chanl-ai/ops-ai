@@ -1292,7 +1292,8 @@
         "summary": "Health",
         "tags": [
           "health"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/admit": {
@@ -1432,7 +1433,8 @@
         "summary": "Admit",
         "tags": [
           "admission"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/aliases": {
@@ -1561,7 +1563,8 @@
         "summary": "List Aliases",
         "tags": [
           "aliases"
-        ]
+        ],
+        "x-ops-public": "internal"
       },
       "post": {
         "operationId": "aliases_create_alias",
@@ -1698,7 +1701,8 @@
         "summary": "Create Alias",
         "tags": [
           "aliases"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/aliases/{name}/versions": {
@@ -1836,7 +1840,8 @@
         "summary": "List Versions",
         "tags": [
           "aliases"
-        ]
+        ],
+        "x-ops-public": "internal"
       },
       "post": {
         "operationId": "aliases_add_version",
@@ -1982,7 +1987,8 @@
         "summary": "Add Version",
         "tags": [
           "aliases"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/calls": {
@@ -2187,7 +2193,8 @@
         "summary": "List Calls",
         "tags": [
           "calls"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/chat/completions": {
@@ -2417,7 +2424,8 @@
         "summary": "Completions",
         "tags": [
           "completions"
-        ]
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/keys": {
@@ -2546,7 +2554,8 @@
         "summary": "List Keys",
         "tags": [
           "keys"
-        ]
+        ],
+        "x-ops-public": "internal"
       },
       "post": {
         "operationId": "keys_issue_key",
@@ -2683,7 +2692,8 @@
         "summary": "Issue Key",
         "tags": [
           "keys"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/keys/{key_id}/rotate": {
@@ -2831,7 +2841,8 @@
         "summary": "Rotate Key",
         "tags": [
           "keys"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/providers": {
@@ -2960,7 +2971,8 @@
         "summary": "List Providers",
         "tags": [
           "providers"
-        ]
+        ],
+        "x-ops-public": "internal"
       },
       "post": {
         "operationId": "providers_create_provider",
@@ -3097,7 +3109,8 @@
         "summary": "Create Provider",
         "tags": [
           "providers"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/models/providers/{provider_id}": {
@@ -3246,7 +3259,8 @@
         "summary": "Rebind Provider",
         "tags": [
           "providers"
-        ]
+        ],
+        "x-ops-public": "internal"
       }
     }
   }

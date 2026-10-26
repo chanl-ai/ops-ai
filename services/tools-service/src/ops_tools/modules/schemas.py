@@ -5,7 +5,7 @@ contract checker validates every response against that document, so a field adde
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -128,6 +128,22 @@ class OperationHeader(Out):
     value: str
 
 
+class CodeLimits(Out):
+    memory_mb: int
+    time_s: float
+    calls: int
+
+
+class CodeSettings(Out):
+    """A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them."""
+
+    source: str
+    entry: str
+    bindings: list[str]
+    secrets: list[str]
+    limits: CodeLimits
+
+
 class ModuleOperation(Out):
     id: str
     tool_id: str
@@ -136,7 +152,7 @@ class ModuleOperation(Out):
     access: Access
     enabled: bool
     # How the gateway runs it; only `http` operations have a call shape a builder edits.
-    executor: Literal["http", "mcp", "stub", "local"]
+    executor: Literal["http", "mcp", "stub", "local", "code"]
     method: Method | None = None
     path: str | None = None
     # Literals or {{NAME}} secret references; a literal credential is refused on save, so no value here is secret.
@@ -164,6 +180,8 @@ class ModuleOperation(Out):
     secrets: list[SecretNeed] = Field(default_factory=list[SecretNeed])
     # The mock response (c-088): answers a stub executor and every test against the mock.
     stub: Any = None
+    # Set for a code operation only (c-531).
+    code: CodeSettings | None = None
 
 
 class ModuleApproval(Out):
@@ -404,6 +422,35 @@ class HttpOperationIn(In):
     body: str | None = None
 
 
+SECRET_NAME = r"^[A-Z][A-Z0-9_]*$"
+
+
+class CodeLimitsIn(In):
+    """What a run may use; runner-service holds each to the deployment's cap whatever is asked."""
+
+    memory_mb: int = Field(default=256, ge=32, le=4096)
+    time_s: float = Field(default=10, gt=0, le=600)
+    calls: int = Field(default=20, ge=0, le=1000)
+
+
+class CodeSettingsIn(In):
+    source: str = Field(min_length=1, max_length=100_000)
+    entry: str = Field(default="main", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    # Tool names the function may call with ops.call, each decided as the caller's own call.
+    bindings: list[str] = Field(default_factory=list[str], max_length=50)
+    # Secret names the function may hand to a bound read with ops.secret; their values never reach the function.
+    secrets: list[Annotated[str, Field(pattern=SECRET_NAME)]] = Field(default_factory=list[str], max_length=20)
+    limits: CodeLimitsIn = Field(default_factory=CodeLimitsIn)
+
+
+class CodeOperationIn(In):
+    name: str = Field(min_length=1, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str
+    access: Access = "read"
+    input: list[SchemaFieldIn] = Field(default_factory=list[SchemaFieldIn])
+    code: CodeSettingsIn
+
+
 class ModuleIn(In):
     name: str
     display_name: str
@@ -417,6 +464,8 @@ class ModuleIn(In):
     # inputs and headers from there; the caller's copies only pick operations and confirm reads.
     source: ModuleSourceIn | None = None
     http: HttpOperationIn | None = None
+    # A code module's first function (c-531).
+    function: CodeOperationIn | None = None
     unique_name: bool = False
     # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -474,6 +523,8 @@ class OperationPatchIn(In):
     input: list[SchemaFieldIn] | None = None
     # The mock response (c-088): what the stub executor and every test write answer; null is back to {"ok": true}.
     stub: Any = None
+    # A code operation's function, bindings, secrets and limits as they should be (c-531).
+    code: CodeSettingsIn | None = None
 
 
 class NoteIn(In):

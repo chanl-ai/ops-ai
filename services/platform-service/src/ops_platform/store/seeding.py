@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_access import ANY_TEAM
 from ops_service_kit.ids import now_iso
 
-from .roles import bump_version, ensure_builtin_roles, mirror_membership
+from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
 from .tables import members, role_assignments, teams, tenants, users
 from .tenancy import TenantDb
 
@@ -156,6 +156,7 @@ async def write_seed(
                 )
             if every:
                 await bump_version(c, tenant_id)
+        await ensure_owner(c, tenant_id, at=now)
 
 
 async def _taken(db: TenantDb, table: sa.Table, row_id: str) -> bool:

@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 STACK=${OPS_STACK:-shared}
 # files before kb: kb-service stores uploads in files-service and its dev seed uploads on start.
-SERVICES=(platform agents tools files documents kb console embed apidocs)
+SERVICES=(platform agents runner tools files documents kb console embed apidocs)
 # The workflow runner's worker serves no port; v2 runs (POST /v1/runs) and every mailbox trigger wait until it runs.
 WORKERS=(worker)
 # What the demos need beside the services (c-212, c-223, the mailbox demo): models-service with the fake OpenAI behind
@@ -28,7 +28,7 @@ else
   UP_SERVICES=("${SERVICES[@]}")
 fi
 # The Python services do not reload code; the console does (next dev), so only these can run code older than HEAD.
-PY_SERVICES=(platform agents tools files documents kb models worker)
+PY_SERVICES=(platform agents runner tools files documents kb models worker)
 LOG_DIR=${OPS_LOG_DIR:-.logs}
 RUN_DIR=${OPS_RUN_DIR:-.run}
 AGENTS_PORT=${OPS_AGENTS_PORT:-8700}
@@ -36,6 +36,7 @@ TOOLS_PORT=${OPS_TOOLS_PORT:-8720}
 KB_PORT=${OPS_KB_PORT:-8740}
 FILES_PORT=${OPS_FILES_PORT:-8750}
 DOCUMENTS_PORT=${OPS_DOCUMENTS_PORT:-8760}
+RUNNER_PORT=${OPS_RUNNER_PORT:-8770}
 PLATFORM_PORT=${OPS_PLATFORM_PORT:-8710}
 CONSOLE_PORT=${OPS_CONSOLE_PORT:-3016}
 EMBED_PORT=${OPS_EMBED_PORT:-3020}
@@ -63,7 +64,7 @@ PLATFORM_INTERNAL_PORT=${OPS_PLATFORM_INTERNAL_PORT:-8711}
 mkdir -p "$LOG_DIR" "$RUN_DIR"
 RUN_ABS=$(cd "$RUN_DIR" && pwd)
 
-port_of() { case "$1" in platform) echo "$PLATFORM_PORT" ;; agents) echo "$AGENTS_PORT" ;; tools) echo "$TOOLS_PORT" ;; kb) echo "$KB_PORT" ;; files) echo "$FILES_PORT" ;; documents) echo "$DOCUMENTS_PORT" ;; console) echo "$CONSOLE_PORT" ;; embed) echo "$EMBED_PORT" ;; models) echo "$MODELS_PORT" ;; fakeai) echo "$FAKE_OPENAI_PORT" ;; fakebank) echo "$FAKE_BANK_PORT" ;; apidocs) echo "$API_DOCS_PORT" ;; esac; }
+port_of() { case "$1" in platform) echo "$PLATFORM_PORT" ;; agents) echo "$AGENTS_PORT" ;; tools) echo "$TOOLS_PORT" ;; kb) echo "$KB_PORT" ;; files) echo "$FILES_PORT" ;; documents) echo "$DOCUMENTS_PORT" ;; runner) echo "$RUNNER_PORT" ;; console) echo "$CONSOLE_PORT" ;; embed) echo "$EMBED_PORT" ;; models) echo "$MODELS_PORT" ;; fakeai) echo "$FAKE_OPENAI_PORT" ;; fakebank) echo "$FAKE_BANK_PORT" ;; apidocs) echo "$API_DOCS_PORT" ;; esac; }
 
 url_of() {
   case "$1" in
@@ -73,6 +74,7 @@ url_of() {
     kb) echo "http://127.0.0.1:$KB_PORT/health" ;;
     files) echo "http://127.0.0.1:$FILES_PORT/health" ;;
     documents) echo "http://127.0.0.1:$DOCUMENTS_PORT/health" ;;
+    runner) echo "http://127.0.0.1:$RUNNER_PORT/health" ;;
     console) echo "http://127.0.0.1:$CONSOLE_PORT/" ;;
     # The loader, which the embed app passes through to agents-service: up only when both are.
     embed) echo "http://127.0.0.1:$EMBED_PORT/embed/v1.js" ;;
@@ -128,7 +130,9 @@ cmd_of() {
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt} OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) uv run --directory services/tools-service python -m ops_tools" ;;
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt} OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    # Code tools' functions (c-531): Python on WASM, calling back to tools-service. start fetches its Python build first.
+    runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
     # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
@@ -142,7 +146,7 @@ cmd_of() {
     # files-service delivers its service events (file.deleted, file.read_requested) to agents-service (c-250).
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
     # documents-service extracts on its own models-service key (c-235, c-256), whatever key the root .env hands agents.
-    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
+    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
     console)
       local dist=.next
@@ -178,6 +182,67 @@ authfile() { echo "$RUN_DIR/$1.auth"; }
 started_auth() { cat "$(authfile "$1")" 2>/dev/null || echo dev; }
 listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1; }
 
+# Env of a pid: Linux /proc, else ps eww (macOS). Used to tell this stack's leftovers from an isolated stack's.
+pid_env() {
+  local pid=$1
+  if [[ -r "/proc/$pid/environ" ]]; then
+    tr '\0' '\n' <"/proc/$pid/environ"
+  else
+    ps eww -p "$pid" 2>/dev/null
+  fi
+}
+
+# Pids whose command matches $1 and whose env names this stack's files-service, so an isolated worker is left alone.
+stack_cmd_pids() {
+  local needle=$1 pid
+  for pid in $(pgrep -f "$needle" || true); do
+    pid_env "$pid" | grep -Fq "OPS_FILES_URL=http://127.0.0.1:$FILES_PORT" && echo "$pid"
+  done
+  return 0
+}
+
+stop_pids() {
+  local pid
+  for pid in "$@"; do
+    [[ -n "$pid" ]] || continue
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  done
+}
+
+# The python -m module a service runs, so a leftover on its port can be told from someone else's process.
+# Matched as `-m <module>`: macOS Framework Python is `Python`, uv's is `python`.
+module_of() {
+  case "$1" in
+    platform) echo "-m ops_platform" ;;
+    agents) echo "-m ops_agents.api" ;;
+    worker) echo "-m ops_agents.api.worker" ;;
+    tools) echo "-m ops_tools" ;;
+    kb) echo "-m ops_kb" ;;
+    files) echo "-m ops_files" ;;
+    documents) echo "-m ops_documents" ;;
+    models) echo "-m ops_models" ;;
+    runner) echo "-m ops_runner" ;;
+    fakebank) echo "-m fake_bank" ;;
+  esac
+}
+
+# Pid listening on this service's port that is this stack's leftover (same module), or empty.
+ours_listener() {
+  local svc=$1 pid cmd mod
+  pid=$(listener "$(port_of "$svc")") || return 1
+  [[ -n "$pid" ]] || return 1
+  mod=$(module_of "$svc")
+  [[ -n "$mod" ]] || return 1
+  cmd=$(ps -p "$pid" -o command= 2>/dev/null || true)
+  [[ "$cmd" == *"$mod"* ]] || return 1
+  # The worker's module starts with the API's; a leftover worker does not listen on the API port.
+  if [[ "$svc" == agents && "$cmd" == *"ops_agents.api.worker"* ]]; then
+    return 1
+  fi
+  echo "$pid"
+}
+
 # The service folder whose migrations a service needs before it starts; the worker runs agents-service's code.
 migrations_of() { case "$1" in platform | agents | tools | kb | files | documents | models) echo "services/$1-service" ;; worker) echo services/agents-service ;; esac; }
 
@@ -204,9 +269,27 @@ start() {
     stop "$svc"
   fi
   if alive "$svc"; then echo "$svc: already running (pid $(cat "$(pidfile "$svc")"), auth $AUTH)"; return; fi
+  # A worker whose pidfile was lost is still this stack's: record it instead of starting a second one (three leftovers
+  # were still claiming work and the mail listener's lease after make up, c-532).
+  if [[ "$svc" == worker ]]; then
+    local leftover
+    leftover=$(stack_cmd_pids "ops_agents.api.worker" | head -1)
+    if [[ -n "$leftover" ]]; then
+      echo "$leftover" >"$(pidfile "$svc")"
+      echo "$AUTH" >"$(authfile "$svc")"
+      echo "$svc: already running (pid $leftover, auth $AUTH)"
+      return
+    fi
+  fi
   # A port held by a process this script did not start belongs to someone else; it is reported, never killed.
   if [[ -n "$port" ]] && pid=$(listener "$port") && [[ -n "$pid" ]]; then echo "$port already served by pid $pid, skipping $svc"; return; fi
   migrate "$svc" || return 1
+  # The runner's pinned Python build (c-531): fetched into .data/runner once, checked by SHA-256 on every start. The
+  # command line is word-split, not parsed by a shell, so this runs here rather than chained in cmd_of.
+  if [[ "$svc" == runner ]] && ! uv run --directory services/runner-service python -m ops_runner.fetch >/dev/null; then
+    echo "runner: its Python build could not be fetched or checked, not starting it" >&2
+    return 1
+  fi
   nohup $(cmd_of "$svc") >"$LOG_DIR/$svc.log" 2>&1 &
   echo $! >"$(pidfile "$svc")"
   echo "$AUTH" >"$(authfile "$svc")"
@@ -223,6 +306,12 @@ stop() {
     kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
     for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
     echo "$svc: stopped (pid $pid)"
+  fi
+  # Leftovers from a start that did not kill the last process: same command, this stack's env or fake-bank dir.
+  if [[ "$svc" == worker ]]; then
+    stop_pids $(stack_cmd_pids "ops_agents.api.worker")
+  elif [[ "$svc" == fakebank ]]; then
+    stop_pids $(pgrep -f "fake_bank $RUN_ABS/fake-bank" || true)
   fi
   rm -f "$(pidfile "$svc")" "$(authfile "$svc")"
 }
@@ -244,7 +333,7 @@ age_of() {
 }
 
 # The last commit that changed what a Python service runs: its own directory (code and migrations) or packages/.
-code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; esac; }
+code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; runner) echo services/runner-service packages ;; esac; }
 # shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
 code_commit() { git log -1 --format="$2" -- $(code_dirs "$1"); }
 
@@ -296,23 +385,41 @@ private_address() {
 }
 
 stop_moved() {
-  local now was
+  local now was pinned
   now=$(private_address) || return 0
   was=$(cat "$RUN_DIR/dev-address" 2>/dev/null || true)
-  if [[ -n "$was" && "$was" != "$now" ]]; then
-    echo "this machine moved from $was to $now; restarting what reaches the dev fakes there"
-    for svc in fakebank tools; do stop "$svc"; done
+  pinned=$(cat "$RUN_DIR/tools.pinned" 2>/dev/null || true)
+  # The recorded address can match while fakebank still listens on an earlier one (the route flipped after make up
+  # wrote the file; health then reports STALE). Restart whenever this address does not answer on the bank port.
+  if [[ -n "$was" && "$was" != "$now" ]] || [[ -n "$pinned" && "$pinned" != "$now" ]] \
+    || { ! nc -z -G 3 "$now" "$FAKE_BANK_PORT" 2>/dev/null && { alive fakebank || listener "$FAKE_BANK_PORT" >/dev/null; }; }; then
+    echo "this machine's private address is $now (was ${was:-unknown}); restarting the dev fakes that bind it"
+    stop fakebank
+    stop tools
   fi
   echo "$now" >"$RUN_DIR/dev-address"
 }
 
 stop_stale() {
+  local extras pid svc
   [[ "$STACK" == shared ]] && stop_moved
+  # uv + its python child are two pids; more than that is a leftover worker still claiming work.
+  if [[ "$STACK" == shared ]]; then
+    extras=$(stack_cmd_pids "ops_agents.api.worker" | wc -l | tr -d ' ')
+    if (( extras > 2 )); then
+      echo "worker: $extras processes still running; stopping them so one worker remains"
+      stop worker
+    fi
+  fi
   for svc in "${PY_SERVICES[@]}"; do
     stale "$svc" || continue
     if alive "$svc"; then
       echo "$svc: $(stale_why "$svc"); restarting"
       stop "$svc"
+    elif pid=$(ours_listener "$svc"); then
+      # Pidfile lost after a crash or a start that skipped; the process is still this stack's module on this port.
+      echo "$svc: leftover pid $pid $(stale_why "$svc"); stopping it"
+      stop_pids "$pid"
     else
       echo "$svc: :$(port_of "$svc") is served by pid $(serving_pid "$svc"), $(stale_why "$svc"), and not started by make up; stop it" >&2
     fi
@@ -426,7 +533,17 @@ health() {
       failed=1
     fi
   done
-  if alive worker; then row worker - - "running" "$(owner_of worker "")"; elif [[ "$STACK" == shared && -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
+  if alive worker; then
+    row worker - - "running" "$(owner_of worker "")"
+    if [[ "$STACK" == shared && -z "$only" ]]; then
+      local extras
+      extras=$(stack_cmd_pids "ops_agents.api.worker" | wc -l | tr -d ' ')
+      if (( extras > 2 )); then
+        row worker - - STALE "$((extras / 2)) processes still claiming work; make restart SVC=worker"
+        failed=1
+      fi
+    fi
+  elif [[ "$STACK" == shared && -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
   [[ -z "$only" ]] && { background_rows || failed=1; }
   if [[ "$STACK" == shared && -z "$only" ]]; then
     for svc in "${FAKES[@]}"; do
