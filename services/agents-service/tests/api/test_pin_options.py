@@ -11,7 +11,11 @@ from typing import Any
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.engine.test_lifecycle_rights import BUILDER, person, stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from tests.engine.test_lifecycle_rights import (  # noqa: F401  # a fixture
+    BUILDER,  # pyright: ignore[reportUnusedImport]
+    person,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_skills import HARDSHIP, _published  # pyright: ignore[reportPrivateUsage]

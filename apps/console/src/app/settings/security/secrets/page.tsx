@@ -3,37 +3,34 @@
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
-import { AlertCircle, HardDrive, KeySquare, Plus, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
+import { HardDrive, KeySquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { CREDENTIAL_KIND_LABEL } from '@/components/files/file-meta';
-import { SecretDialog, TeamsField, USED_BY_SHOWN } from '@/components/settings/secret-dialog';
+import { SecretDialog, USED_BY_SHOWN } from '@/components/settings/secret-dialog';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { selectColumn } from '@/components/shared/select-column';
-import { DialogShell } from '@/components/shared/dialog-shell';
 import { StopRowClick } from '@/components/shared/form-field';
-import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useStorageCredentials } from '@/hooks/file-queries';
-import { useDeleteSecret, useSecretsPage, useSetSecretScope } from '@/hooks/secrets-queries';
+import { useDeleteSecret, useSecretsPage } from '@/hooks/secrets-queries';
 import { useTeam } from '@/hooks/use-team';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime, shortDate } from '@/lib/format';
 import type { SecretMeta } from '@/lib/types/secrets';
 import { useCan } from '@/hooks/me-queries';
 
-function columns(canEdit: boolean, teamName: (id: string) => string, onRotate: (s: SecretMeta) => void, onScope: (s: SecretMeta) => void, onDelete: (s: SecretMeta) => void): ColumnDef<SecretMeta>[] {
+function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: (s: SecretMeta) => void): ColumnDef<SecretMeta>[] {
   const cols: ColumnDef<SecretMeta>[] = [
     // The name is the secret's id, so there is no separate Id column.
     selectColumn<SecretMeta>((s) => s.name),
@@ -80,12 +77,6 @@ function columns(canEdit: boolean, teamName: (id: string) => string, onRotate: (
           <span className="text-sm text-muted-foreground">No operation</span>
         ),
     },
-    {
-      id: 'scope',
-      accessorFn: (s) => (s.teams ?? []).join(','),
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Teams" />,
-      cell: ({ row }) => <span className="text-sm whitespace-nowrap">{row.original.teams?.length ? row.original.teams.map(teamName).join(', ') : 'Every team'}</span>,
-    },
     { accessorKey: 'version', header: ({ column }) => <DataTableColumnHeader column={column} title="Version" />, cell: ({ row }) => <span className="text-sm tabular-nums">v{row.original.version}</span> },
     {
       accessorKey: 'createdAt',
@@ -108,7 +99,6 @@ function columns(canEdit: boolean, teamName: (id: string) => string, onRotate: (
             row={row}
             actions={[
               { label: 'Rotate', icon: RefreshCw, onClick: (r) => onRotate(r.original) },
-              { label: 'Change teams', icon: ShieldCheck, onClick: (r) => onScope(r.original) },
               {
                 label: 'Delete',
                 icon: Trash2,
@@ -128,56 +118,6 @@ function columns(canEdit: boolean, teamName: (id: string) => string, onRotate: (
   return canEdit ? cols : cols.filter((c) => c.id !== 'actions');
 }
 
-/** The teams one secret is limited to. */
-function ScopeDialog({ secret, onOpenChange }: { secret: SecretMeta | null; onOpenChange: (open: boolean) => void }) {
-  const scope = useSetSecretScope();
-  const [teams, setTeams] = React.useState<string[]>([]);
-  const [error, setError] = React.useState<string>();
-  React.useEffect(() => {
-    if (secret) (setTeams(secret.teams ?? []), setError(undefined));
-  }, [secret]);
-  const submit = async () => {
-    if (!secret) return;
-    try {
-      await scope.mutateAsync({ name: secret.name, teams: teams.length ? teams : null });
-      toast.success(`Saved the teams for ${secret.name}`);
-      onOpenChange(false);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <DialogShell
-      open={!!secret}
-      onSubmit={submit}
-      onOpenChange={onOpenChange}
-      title={secret ? `Teams for ${secret.name}` : ''}
-      description="A call from a module of a team left out is refused before anything is sent."
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <LoadingButton type="submit" isLoading={scope.isPending} loadingText="Saving…" data-testid="secret-scope-submit"
-          >
-            Save teams
-          </LoadingButton>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <TeamsField value={teams} onChange={(v) => (setTeams(v), setError(undefined))} />
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-      </div>
-    </DialogShell>
-  );
-}
-
 export default function SecretsPage() {
   const list = useListParams('name');
   const [filterResetKey, setFilterResetKey] = React.useState(0);
@@ -185,17 +125,15 @@ export default function SecretsPage() {
   const remove = useDeleteSecret();
   const [dialog, setDialog] = React.useState<{ rotating: SecretMeta | null } | null>(null);
   const [deleting, setDeleting] = React.useState<SecretMeta | null>(null);
-  const [scoping, setScoping] = React.useState<SecretMeta | null>(null);
-  const { teams } = useTeam();
+  const { team } = useTeam();
   // A secret is a credential every tool call may send, so only the Security team's admins add, rotate or delete one.
   const canEdit = useCan('secrets_egress', 'create') === true;
-  const teamName = React.useCallback((id: string) => teams.find((t) => t.id === id)?.name ?? id, [teams]);
-  const cols = React.useMemo(() => columns(canEdit, teamName, (s) => setDialog({ rotating: s }), setScoping, setDeleting), [canEdit, teamName]);
+  const cols = React.useMemo(() => columns(canEdit, (s) => setDialog({ rotating: s }), setDeleting), [canEdit]);
 
   return (
     <SettingsPageLayout
       section="Secrets"
-      description="Credentials tool calls send, such as API keys. A value is encrypted, never shown again, and scrubbed from whatever a system answers."
+      description={`Credentials ${team ? `${team.name}'s` : 'this team’s'} tool calls send, such as API keys. A value is encrypted, never shown again, and scrubbed from whatever a system answers.`}
       actions={
         canEdit ? (
           <Button onClick={() => setDialog({ rotating: null })}>
@@ -235,7 +173,6 @@ export default function SecretsPage() {
       {canEdit && <StorageCredentials />}
 
       <SecretDialog open={!!dialog} rotating={dialog?.rotating ?? null} onOpenChange={(o) => !o && setDialog(null)} />
-      <ScopeDialog secret={scoping} onOpenChange={(o) => !o && setScoping(null)} />
       <DeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

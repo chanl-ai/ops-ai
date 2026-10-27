@@ -3,7 +3,7 @@
 name: ops-runtime
 services:
   postgres:
-    image: postgres:17-alpine
+    image: ${OPS_BASE_IMAGE_PREFIX:-}postgres:17-alpine
     environment:
       POSTGRES_USER: ops
       POSTGRES_PASSWORD: ops
@@ -20,7 +20,7 @@ services:
   # The tool gateway's policy engine: the official OPA image serving services/tools-service/policy. Port 8181 is OPA's
   # default; only the gateway calls it.
   opa:
-    image: openpolicyagent/opa:1.21.1
+    image: ${OPS_BASE_IMAGE_PREFIX:-}openpolicyagent/opa:1.21.1
     command: ["run", "--server", "--watch", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"]
     ports:
       - "${OPS_OPA_PORT:-8181}:8181"
@@ -30,14 +30,14 @@ services:
   # server: mail sent to any address on its SMTP port lands in that address's mailbox, read over IMAP with any password
   # (auth disabled). Mailpit catches what the platform sends over SMTP and shows it on its HTTP API and web page.
   greenmail:
-    image: greenmail/standalone:2.1.3
+    image: ${OPS_BASE_IMAGE_PREFIX:-}greenmail/standalone:2.1.3
     environment:
       GREENMAIL_OPTS: "-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled"
     ports:
       - "${OPS_GREENMAIL_SMTP_PORT:-3025}:3025"
       - "${OPS_GREENMAIL_IMAP_PORT:-3143}:3143"
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: ${OPS_BASE_IMAGE_PREFIX:-}axllent/mailpit:v1.27
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"

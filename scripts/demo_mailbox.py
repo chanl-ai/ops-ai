@@ -39,7 +39,8 @@ FILES = f"http://127.0.0.1:{os.environ.get('OPS_FILES_PORT', '8750')}"
 MODELS = f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
 FAKE_OPENAI = f"http://127.0.0.1:{os.environ.get('OPS_FAKE_OPENAI_PORT', '8746')}"
 SMTP_PORT = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
-MAILPIT = f"http://127.0.0.1:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
+GREENMAIL_HOST = os.environ.get("OPS_GREENMAIL_HOST", "127.0.0.1")
+MAILPIT = f"http://{os.environ.get('OPS_MAILPIT_HOST', '127.0.0.1')}:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
 MAILBOX = "intake@harborpine.test"
 TEAM = "team_ops"
 PASSWORD = "northfield-demo"
@@ -104,7 +105,7 @@ def mail_pin() -> str | None:
 def tcp(port: int) -> bool:
     with socket.socket() as s:
         s.settimeout(2)
-        return s.connect_ex(("127.0.0.1", port)) == 0
+        return s.connect_ex((GREENMAIL_HOST if port == SMTP_PORT else "127.0.0.1", port)) == 0
 
 
 def worker_alive() -> bool:
@@ -168,7 +169,7 @@ def send(suffix: str, sender: str) -> str:
     msg["Message-ID"] = make_msgid(idstring=suffix, domain="court.example")
     msg.set_content("Please find the garnishment notice attached.")
     msg.add_attachment(NOTICE.read_bytes(), maintype="application", subtype="pdf", filename=f"levy-{suffix}.pdf")
-    with smtplib.SMTP("127.0.0.1", SMTP_PORT, timeout=10) as smtp:
+    with smtplib.SMTP(GREENMAIL_HOST, SMTP_PORT, timeout=10) as smtp:
         smtp.send_message(msg)
     return str(msg["Subject"])
 

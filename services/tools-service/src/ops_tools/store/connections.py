@@ -194,17 +194,17 @@ class ConnectionStore:
             return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
     @staticmethod
-    def _visible(tenant_id: str, teams: list[str] | None, search: str) -> sa.ColumnElement[bool]:
-        """`teams`: the owning teams the caller sees; None is every team (an all-scope team)."""
+    def _visible(tenant_id: str, teams: list[str], search: str) -> sa.ColumnElement[bool]:
+        """`teams`: the owning teams the caller sees (its own, c-509)."""
         where = sa.and_(connections.c.tenant_id == tenant_id, contains(connections.c.name, search))
-        return where if teams is None else sa.and_(where, connections.c.team_id.in_(teams))
+        return sa.and_(where, connections.c.team_id.in_(teams))
 
-    async def count(self, tenant_id: str, teams: list[str] | None, search: str) -> int:
+    async def count(self, tenant_id: str, teams: list[str], search: str) -> int:
         q = sa.select(sa.func.count()).select_from(connections).where(self._visible(tenant_id, teams, search))
         async with self.engine.connect() as c:
             return int((await c.execute(q)).scalar_one())
 
-    async def page(self, tenant_id: str, teams: list[str] | None, search: str, offset: int, limit: int) -> list[Row]:
+    async def page(self, tenant_id: str, teams: list[str], search: str, offset: int, limit: int) -> list[Row]:
         q = (
             connections.select()
             .where(self._visible(tenant_id, teams, search))

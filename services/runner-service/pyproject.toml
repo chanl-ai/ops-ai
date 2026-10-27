@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Runner service: code tools' Python functions on WASM, with no network and no secrets (data-gateway spec, section c)"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-service-kit", "ops-identity", "wasmtime==50.0.1", "pydantic>=2.7,<3", "fastapi>=0.115", "httpx>=0.27", "anyio>=4", "uvicorn>=0.30"]
+dependencies = ["ops-service-kit", "ops-identity", "wasmtime==49.0.0", "pydantic>=2.7,<3", "fastapi>=0.115", "httpx>=0.27", "anyio>=4", "uvicorn>=0.30"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

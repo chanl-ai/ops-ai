@@ -95,11 +95,11 @@ async def env(engine: AsyncEngine, tenant: str) -> AsyncIterator[Env]:
     cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
     await SecretStore(engine).create(
         tenant,
+        TEAM,
         SECRET,
         cipher.encrypt("smtp-password", context=context_of(tenant, SECRET)),
         actor="t",
         at=now,
-        teams=[TEAM],
     )
     agents = Agents(
         {
@@ -148,7 +148,10 @@ async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
 
 
 async def test_the_secret_is_read_for_the_mailboxs_team(env: Env) -> None:
-    await SecretStore(env.engine).set_teams(env.tenant, SECRET, ["team_fraud"], actor="t", at=datetime.now(UTC))
+    store, now = SecretStore(env.engine), datetime.now(UTC)
+    blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt("x", context=context_of(env.tenant, SECRET))
+    await store.create(env.tenant, "team_fraud", SECRET, blob, actor="t", at=now)
+    assert await store.delete(env.tenant, TEAM, SECRET, actor="t", at=now)
     sender = await env.senders.sender(env.tenant, TEAM, env.agents.mailbox["address"])
     with pytest.raises(MailboxSendRefused, match="cannot be used"):
         await sender.send(message("scoped away"))

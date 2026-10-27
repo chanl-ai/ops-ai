@@ -3,7 +3,7 @@ name = "ops-agent-kernel"
 version = "0.1.0"
 description = "Agent loop per spec 15 on Pydantic AI; no Temporal, no database"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-service-kit", "ops-pii", "pydantic-ai-slim[anthropic,openai]>=2.55,<3", "jsonschema>=4.23"]
+dependencies = ["ops-service-kit", "ops-pii", "pydantic-ai-slim[anthropic,openai]>=2.51,<3", "jsonschema>=4.23"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

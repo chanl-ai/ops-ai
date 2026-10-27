@@ -242,4 +242,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-510 | console | What's new lists the changelog newest first in plain words with a Coming next tab, and its unread dot clears once opened | ui | passing |
 | uc-516 | agents-service | An account admin sees every background process and what it did; a builder is told the page is not theirs; a stopped worker reads late then stopped; a team sees only its own background jobs in Activity | ui | passing |
 | uc-526 | agents-service | Another team's records answer not found | api | passing |
-| uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api | passing |
+| uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api, ui | passing |

@@ -40,9 +40,10 @@ to the call shape it goes through security review.
 | Field | Values | Default |
 |---|---|---|
 | `approvers` | 1 or 2 distinct people | 1 |
-| `approverTeam` | A team id | The module's owning team |
 | `selfApproval` | Whether the person whose chat drafted the call may approve it | Off. Dev may turn it on (`OPS_ALLOW_SELF_APPROVAL_IN_CHAT`) |
 
+The approvers come from the run's (or chat's) team: a held write is decided by people with `reviews.decide` there,
+whatever module the operation is on (c-509). An `approverTeam` an older caller still sends is accepted and ignored.
 The gateway and OPA read these fields from the registry, never from the caller. The two-approver rule that "Moves
 money" carried today becomes `approvers: 2`.
 
@@ -52,7 +53,7 @@ money" carried today becomes `approvers: 2`.
 |---|---|---|
 | Security review of a module | Module owner | Security team |
 | Workflow access to a module | Workflow owner | Module's team, not the requester |
-| Write approval, from a workflow run or a chat | The agent's call | The operation's `approverTeam`, under its policy |
+| Write approval, from a workflow run or a chat | The agent's call | The run's or chat's team, under the operation's policy (c-509) |
 | Agent or workflow publish | Builder | Another publisher (dev auto-approval is off on walk stacks) |
 
 The chat widget and the Reviews row decide the same review through the same decide call.

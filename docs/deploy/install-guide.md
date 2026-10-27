@@ -109,6 +109,72 @@ runs `.github/workflows/release-images.yml`, which builds every image for both p
 `deploy/release/images.sh` and pushes `<version>` and `latest`. The same script builds the release package's images
 (`release-package.md`) and `--build`.
 
+### Behind a company mirror
+
+A company that serves packages from its own mirror (Sonatype Nexus, Artifactory or similar) can build and install Ops AI
+without a download from the open internet. Every download in this repository goes through one setting below; a setting
+left empty keeps the public address. Every locked version is at least 30 days old, which is the age most mirrors
+require, with two named exceptions in `pnpm-workspace.yaml` until 2026-10-30 (streamdown 2.7.0 and remend 1.4.0).
+
+| Setting | What it moves | Where it is read |
+|---|---|---|
+| `UV_DEFAULT_INDEX` | Python packages: the PyPI "simple" index of the mirror, ending in `/simple` | uv; `scripts/install_via_mirror.sh`; Docker build argument of the same name |
+| `NPM_CONFIG_REGISTRY` | npm packages, including the console's fonts (they are npm packages, not a Google Fonts fetch) | pnpm; Docker build argument of the same name |
+| `COREPACK_NPM_REGISTRY` | the pnpm release `package.json` names, which corepack downloads | corepack; Docker build argument of the same name |
+| `UV_PYTHON_DOWNLOADS` | uv never fetches a Python by itself (`python-downloads = "manual"` in `pyproject.toml`); use the image's or the system's Python 3.12 | uv |
+| `UV_PYTHON_INSTALL_MIRROR` | an explicit `uv python install 3.12`, used only by the Dockerfile's database-scripts stage | Docker build argument |
+| `OPS_RUNNER_WASM_URL` | the 26 MB CPython-for-WASI file the code-tools runner needs; its SHA-256 is still checked | `python -m ops_runner.fetch`; Docker build argument |
+| `PLAYWRIGHT_DOWNLOAD_HOST` | browser downloads for `playwright install`; only the UI use-case tests need a browser, so it is optional (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` skips it) | Playwright |
+| `OPS_BASE_IMAGE_PREFIX` | a registry prefix ending in `/` for every third-party image: PostgreSQL, OPA, the mail test servers, and the Dockerfile's base images (`IMAGE_REGISTRY` build argument) | `deploy/compose/*.yaml`, `deploy/compose/build.yaml`, `deploy/fly/Dockerfile` |
+| `OPS_IMAGE_REGISTRY` | where `install.sh` pulls the Ops AI release images, when they are mirrored (default `ghcr.io/chanl-ai/ops-ai`) | `install.sh` |
+| `APT_MIRROR`, `APK_MIRROR` | Debian and Alpine package sources used while building images | Docker build arguments |
+| `TIKTOKEN_CACHE_DIR` | not a mirror setting: tiktoken downloads its encoding file on first use from a public blob store; vendor the file and point this at it (`docs/architecture/dependencies.md`) | tiktoken, at run time |
+
+The Compose build passes each setting through (`deploy/compose/build.yaml`); a plain `docker build` takes them as
+`--build-arg`. A URL with a user name and password is visible in `docker history` of the build stage that uses it, so
+give the build an anonymous read-only repository.
+
+#### Developer workspaces
+
+The devcontainer (`.devcontainer/`) and the shared-host template (`deploy/devhost/`) take the same settings. In a
+devcontainer, set them in the shell that opens it or in `.devcontainer/.env.local`; the compose file passes them to the
+image build and to the workspace, where `make install` reads the mirror whenever `UV_DEFAULT_INDEX` is set. On the shared
+host, push the template with `--variable 'mirror_settings={...}'` and `--variable base_image_prefix=...`
+(`deploy/devhost/README.md`). Node comes from the Node image, not from nodejs.org, and the devcontainer's Node feature
+(a download from GitHub's registry) is gone.
+
+#### Installing the locked versions through the mirror
+
+`uv sync --frozen` downloads each file from the address `uv.lock` records (`files.pythonhosted.org`), which a mirror does
+not serve. `make install-mirror` reads only the versions and hashes from the lock and fetches the files from
+`UV_DEFAULT_INDEX`, rejecting any file that is not the locked one; pnpm already reads its registry from
+`NPM_CONFIG_REGISTRY`. It sets `UV_NO_CONFIG`, because `exclude-newer` in `pyproject.toml` needs upload times and a
+mirror whose index sends none (Nexus's PyPI proxy is one) then offers no version of anything.
+
+```
+export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-proxy/simple
+export NPM_CONFIG_REGISTRY=https://nexus.example.com/repository/npm-proxy/
+export COREPACK_NPM_REGISTRY=$NPM_CONFIG_REGISTRY
+make deps-doctor           # which locked versions the mirror does not serve
+make deps-relock MIRROR=1  # only when it named some: lock inside what it does serve, then run fast tests
+make install-mirror
+```
+
+`make deps-doctor` asks the mirror for every locked package and prints the package, the locked version, the HTTP status
+of that version's file and the newest version the mirror serves, for the packages it does not serve. Credentials in a
+registry URL are masked in all output. It exits 1 when any package is blocked and writes `.mirror/constraints.txt` and
+`.mirror/npm-overrides.json`. `make deps-relock MIRROR=1` locks every package to its locked version except those, then
+installs and runs the fast tests (`scripts/deps_smoke.sh`). Its `uv.lock` and `pnpm-workspace.yaml` are for that
+machine: they name the mirror's file URLs, so do not commit them.
+
+| Check | Evidence |
+|---|---|
+| A clean install of both lockfiles through Nexus, on a network that reaches only Nexus, then 180 fast tests | `make qa-mirror` (`deploy/mirror-test/`), a nightly lane of the QA runner |
+| Every locked version is at least 30 days old | `scripts/deps_audit.py age`, in the lane: Nexus's free edition has no age rule, so the lane enforces it |
+| No critical advisory (CVSS 9.0 or higher) and no AGPL or GPL licence outside `deploy/mirror-test/audit-baseline.txt` | `scripts/deps_audit.py vulns` (osv-scanner; Sonatype OSS Index too when `OSSINDEX_TOKEN` and `OSSINDEX_USER` are set) and `licenses` |
+| `deps-doctor` names a package the mirror blocks, and the relock succeeds | Run by hand on 2026-10-27 against the lane's Nexus with six 1.17.0 blocked by a routing rule (`deploy/mirror-test/nexus.sh block`): the doctor named it (403, newest served 1.16.0), the relock moved six to 1.16.0, the install and 180 tests passed. Not part of the nightly lane |
+| A mirror that is not Nexus | **unverified**: the lane runs Nexus 3.70.4 only |
+
 ### By hand
 
 Every step the script runs can also be run by hand: the Compose files and settings in

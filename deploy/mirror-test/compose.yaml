@@ -1,0 +1,61 @@
+# The behind-a-mirror QA lane (make qa-mirror): our own Sonatype Nexus Repository (free edition) proxying PyPI and npm,
+# and an install container on a network that reaches only Nexus. Its own compose project and networks; it never touches
+# the shared dev stack.
+name: ${OPS_MIRROR_PROJECT:-ops-mirror-test}
+
+services:
+  nexus:
+    # 3.70.4 is the last release before the Community Edition, whose proxy repositories answer 403 until someone accepts
+    # Sonatype's EULA. This lane runs unattended, so it uses the release that needs no click-through.
+    image: ${OPS_BASE_IMAGE_PREFIX:-}sonatype/nexus3:3.70.4
+    environment:
+      # admin / admin123 on first start, so setup.sh needs no file from inside the container. A throwaway instance.
+      NEXUS_SECURITY_RANDOMPASSWORD: "false"
+      INSTALL4J_ADD_VM_PARAMS: -Xms384m -Xmx896m -XX:MaxDirectMemorySize=512m
+    # A cap so a runaway Nexus is the one the kernel kills, not a neighbour's database; the Docker VM is shared.
+    mem_limit: 2048m
+    # The image is linux/amd64 only, so on an Apple Silicon host its JVM runs under qemu, which now and then kills it;
+    # lane.sh also restarts a Nexus that stays unhealthy.
+    restart: on-failure:5
+    ports:
+      - 127.0.0.1:${OPS_MIRROR_PORT:-18081}:8081
+    volumes:
+      - nexus-data:/nexus-data
+    networks: [mirror, upstream]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8081/service/rest/v1/status/writable || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+
+  # Python 3.12, Node, uv and pnpm, with no route anywhere but Nexus.
+  installer:
+    build:
+      context: ../..
+      dockerfile: deploy/mirror-test/installer.Dockerfile
+      args:
+        IMAGE_REGISTRY: ${OPS_BASE_IMAGE_PREFIX:-}
+    image: ops-mirror-test/installer:dev
+    profiles: [installer]
+    depends_on:
+      nexus: { condition: service_healthy }
+    environment:
+      UV_DEFAULT_INDEX: http://nexus:8081/repository/pypi-proxy/simple
+      NPM_CONFIG_REGISTRY: http://nexus:8081/repository/npm-proxy/
+      COREPACK_NPM_REGISTRY: http://nexus:8081/repository/npm-proxy/
+      UV_PYTHON_DOWNLOADS: never
+      UV_LINK_MODE: copy
+      # A first fetch of a package makes Nexus fetch it from upstream, which can outlast the default 30 seconds.
+      UV_HTTP_TIMEOUT: "300"
+      NPM_CONFIG_FETCH_TIMEOUT: "300000"
+    networks: [mirror]
+
+networks:
+  # internal: containers on it have no route out, so a download that skips the mirror fails by itself.
+  mirror:
+    internal: true
+  upstream: {}
+
+volumes:
+  nexus-data: {}

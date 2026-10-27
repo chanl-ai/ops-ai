@@ -44,7 +44,7 @@ These hold whatever the grid and policies say. A 403 with one of these codes nee
 | Team isolation: another team's record is refused naming the owning team | `team_forbidden` (`details.teamId`), `team_required`, `team_mismatch` | `resolve.py:49`, `check.py:203` |
 | Scoped service tokens and API keys: a token does only what its scopes or key target say | `scope_required`, `event_not_owned`, `key_target`, `widget_key_other_deployment` | `check.py:212-247`, `services/agents-service/src/ops_agents/api/auth.py:272` |
 | Embed origin from config: a widget serves only its deployment's allowed origins | `origin_required`, `origin_mismatch`, `origin_not_allowed` | `services/agents-service/src/ops_agents/api/widget_sessions.py:133-153` |
-| Secrets hidden: no route returns a secret value; a team's secret never reaches another team or service | `secret_out_of_scope`, `secret_refused` | `services/tools-service/src/ops_tools/app.py:286`, secrets |
+| Secrets hidden: no route returns a secret value; a team's secret never reaches another team or service | `secret_refused`; another team's secret is not found | `services/tools-service/src/ops_tools/store/secrets.py`, secrets |
 
 ## Roles
 
@@ -60,7 +60,7 @@ claim and the tenant's `perm_version`; every service reads it locally, so a chan
 | Builder | `builder` | Reads the team's work; creates, edits, tests and publishes its definitions | Team builders |
 | Reviewer | `approver` (people read Reviewer) | Reads; decides the team's reviews; in the Security team, decides module security reviews | Team reviewers |
 | Viewer | `viewer` | Reads the team's work, chats with its agents | Team viewers; every invite starts here (c-311) |
-| Security admin | (none; given with Admin in the Security team) | Egress, workspace-wide secrets, storage settings, module security reviews | Admins of the Security team (`builtin_roles_for`, `catalogue.py:187`) |
+| Security admin | (none; given with Admin in the Security team) | Egress, any team's secrets (naming the team), storage settings, module security reviews | Admins of the Security team (`builtin_roles_for`, `catalogue.py:187`) |
 | Chat user | `chat_user` | Chats with the team's published agents and reads only their own threads | A first SSO sign-in (c-188, c-155); a grant |
 
 The grid, generated from `ops_access` (`scripts/roles_matrix.py`; `make python-verify` fails when it is stale). Rows no
@@ -317,7 +317,7 @@ to the maintainers). Rows the script checks carry the same id in `access-excepti
 | E23 | Every tool write waits for approval unless its operation says it runs at once; `open_case` runs at once | `services/tools-service/src/ops_tools/modules/seed.py:39`; `registry.py:22` | A write needs an approval token (ADR-0005); `open_case` without one is built (9411d062) but c-219 Q1 is unanswered (O11) | 2026-10-17 | ADR-0005; c-219 | decided for writes; open for `open_case` |
 | E24 | Models-service admin routes take a service token only; no person reaches them | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | [identity and tenancy](identity-and-tenancy.md) shortcuts; c-177 | to fix (c-177) |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | c-148 Q2 | decided |
-| E26 | A team admin outside the Security team does not change egress, workspace-wide secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | c-147 Q1; c-079 | decided |
+| E26 | A team admin outside the Security team does not change egress, another team's secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | c-147 Q1; c-079 | decided |
 | E27 | An admin edits only their own memory (`memory.edit` own) | `catalogue.py:135` | What agents remember about a person is that person's to correct or forget | 2026-10-17 | c-206 | decided |
 | E28 | API keys hold three fixed cells in code rather than a role | `KEY_GRANTS` `check.py:56` | A key is a bank system acting for one team: live runs, cancelling its own, and running the team's tools over MCP (reads only; a write waits for a person, `gateway_calls.py`) | 2026-10-19 | c-122 Q1, Q2; c-148 Q2; c-354 Q4 | decided |
 | E29 | `requesterMayDecide` is one value per workspace | `policies.py:48` (no `per_team`) | It is a team policy | 2026-10-18 | owner via orchestrator | to fix |
@@ -376,7 +376,7 @@ when a question comes up again.
 | D30 | Are AI features on by default? | No. Each is a team setting, off until turned on through `can()`: AI steps, task assist, check before sending, builder help, page images to the model | 2026-10-18 | owner; c-298 to c-302 Q3; c-295 |
 | D31 | What does `redactPii` mask? | What people see; it defaults on and the model sees real values | 2026-10-19 | owner via orchestrator |
 | D32 | Who enters credentials? | Only a person, in the console. Root signing keys stay in the deployment's environment | 2026-10-18 | owner (c-304); c-221 Q1 |
-| D33 | Who adds every-team secrets that services read? | The Security team; the read route answers every-team secrets only | 2026-10-18 | c-221 Q2 |
+| D33 | Who adds every-team secrets that services read? | Superseded (2026-10-27): every tool secret belongs to a team and no service reads one; model provider keys move to an account-level store in models-service that account admins edit | 2026-10-18 | c-221 Q2 |
 | D34 | Who owns a team's secrets? | The team: its builders add, change and remove them, unless `securityTeamAddsSecrets` is on | 2026-10-17 | owner; `catalogue.py:104` |
 | D35 | Is knowledge per person or per team? | Shared by the team: any builder changes or deletes its bases and sources | 2026-10-17 | owner; migration 0009 |
 | D36 | Are chats private? | Yes by default (`chatThreadsOwnerOnly`); off lets the team's admins read them | 2026-10-17 | owner via orchestrator |
@@ -396,7 +396,7 @@ when a question comes up again.
 | D50 | Who continues or raises a spent chat budget? | The thread's owner continues; a team admin raises | 2026-10-17 | c-103 Q2, Q3 |
 | D51 | Who changes document types? | Whoever holds `files.create` in the team; others see the pages read only | 2026-10-18 | c-236 Q1; c-243 Q5; c-256 Q2 |
 | D52 | Who changes storage settings? | An admin of the Security team; every save audited | 2026-10-17 | c-100 Q3 |
-| D53 | Is a secret's team scope enforced in the console? | In the gateway: a call from another team's module fails before any request; a secret in use cannot be deleted | 2026-10-17 | c-093 Q4, Q5 |
+| D53 | Is a secret's team scope enforced in the console? | In the gateway: a call reads only its own team's secret, so another team's never reaches it (c-509 replaced scopes with one team per secret); a secret in use cannot be deleted | 2026-10-17 | c-093 Q4, Q5 |
 | D54 | Who provisions a workspace, and what can a team change? | A platform admin or the command line; `system` records need `manage`, `managed` records are changed freely and template fields come back | 2026-10-17 | c-175 Q2, Q3 |
 | D55 | How are teams made? | Flat, created by a workspace admin; Security team and default team are settings | 2026-10-17 | c-198 |
 | D56 | Is the extraction floor an access rule? | No, a quality threshold with the engine's default | 2026-10-17 | owner via orchestrator |

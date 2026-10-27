@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 
 import { AppShell } from './_shell/app-shell';
 import { Providers } from './providers';
 
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' });
+// Served from npm packages, not fetched from Google Fonts at build, so a build behind a package mirror reaches nothing else.
+const inter = localFont({ src: '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2', variable: '--font-inter', weight: '100 900' });
+const mono = localFont({ src: '../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2', variable: '--font-jetbrains', weight: '100 800' });
 
 export const metadata: Metadata = {
   title: 'Ops AI',

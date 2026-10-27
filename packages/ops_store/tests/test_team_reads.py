@@ -32,6 +32,8 @@ NOT_YET_MARKED = {
     "connections",
     "send_policies",
     "send_checks",
+    "tool_secrets",
+    "secret_audit",
     # files-service and documents-service: their `team` column
     # platform-service: identity and administration, read by team and role through platform's own routes
     "members",

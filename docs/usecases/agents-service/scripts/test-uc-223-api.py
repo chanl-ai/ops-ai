@@ -24,7 +24,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from reportlab.lib.pagesizes import LETTER
@@ -196,6 +196,19 @@ def detail(api: httpx.Client, run_id: str) -> dict[str, Any]:
     return data(api.get(f"/v1/runs/{run_id}", headers=OPS))
 
 
+def why(api: httpx.Client, run: dict[str, Any]) -> dict[str, Any]:
+    """What a run waits on or failed at, for a check's detail: its waiting step and its steps that did not end ok."""
+    d = detail(api, run["id"]) or {}
+    raw = d.get("steps") or []
+    steps = list(cast(dict[str, Any], raw).values()) if isinstance(raw, dict) else cast(list[dict[str, Any]], raw)
+    bad = [
+        (v.get("nodeId"), v.get("status"), v.get("port"), str(v.get("output"))[:300], v.get("error"), v.get("attempts"))
+        for v in steps
+        if v.get("status") != "ok" or v.get("port") not in (None, "out", "payload", "default")
+    ]
+    return {"waiting": (d.get("waiting") or {}).get("nodeId"), "outcome": d.get("outcome"), "notOk": bad}
+
+
 def until(fn: Any, seconds: float = 90) -> Any:
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -257,7 +270,7 @@ def main() -> None:
                 gw.post("/v1/egress/hosts", json={"value": host, "note": f"uc-223 {note}"})
             gw.post("/v1/egress/ranges", json={"value": f"{here}/32", "note": "uc-223 this machine"})
             gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"})
-            gw.post("/v1/secrets", json={"name": SECRET, "value": "any", "teams": ["team_ops"]})
+            gw.post("/v1/secrets", json={"name": SECRET, "value": "any", "teamId": "team_ops"})
             bank_module(gw)
 
             # The tenant's limit for case attachments (Settings > Storage): PDFs and CSVs up to 1 MB.
@@ -317,17 +330,22 @@ def main() -> None:
                 cases = until(lambda: resting(api, "levy_case", 4)) or []
                 names = sorted((c["input"]["record"]["name"], c["status"]) for c in cases)
                 check(
-                    "3 each attachment is read in its own run; every debtor opens a case, matched ones wait for review",
+                    "3 each attachment is read in its own run; every debtor opens a case that waits for a person",
                     len(docs) == 2
                     and {d["status"] for d in docs} == {"waiting"}
                     and names
                     == [
-                        ("Jordan Whitfield", "succeeded"),
+                        # No customer matched: a person finds the customer or closes it as not ours (c-477).
+                        ("Jordan Whitfield", "waiting"),
                         ("Marcus Bell", "waiting"),
                         ("Priya Natarajan", "waiting"),
                         ("Priya Natarajan", "waiting"),
                     ],
-                    {"documents": [(d["status"], d["outcome"], d["error"]) for d in docs], "cases": names},
+                    {
+                        "documents": [(d["status"], d["outcome"], d["error"]) for d in docs],
+                        "cases": names,
+                        "why": {c["input"]["record"]["name"]: why(api, c) for c in cases},
+                    },
                 )
 
                 pdf_doc = next(d for d in docs if d["input"]["name"] == "notice-of-garnishment.pdf")
@@ -340,7 +358,7 @@ def main() -> None:
                     and (done or {}).get("outcome") == "replied"
                     and len(sent) == 1
                     and sent[0]["To"][0]["Address"] == "registry@court.example",
-                    {"decision": ack.text[:200], "run": (done or {}).get("outcome"), "replies": sent},
+                    {"decision": ack.text[:200], "run": why(api, pdf_doc), "replies": sent},
                 )
 
                 second = f"Smudged notice {RUN}"

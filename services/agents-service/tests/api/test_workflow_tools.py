@@ -12,7 +12,9 @@ from httpx import AsyncClient
 from ops_agent_kernel import search
 from ops_agents.api.child_runs import ChildRuns
 from ops_agents.api.deps import Runtime
-from tests.api.test_child_runs import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+from tests.api.test_child_runs import (
+    stack,  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+)
 from tests.conftest import sse_events
 
 

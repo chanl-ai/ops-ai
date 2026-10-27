@@ -592,6 +592,25 @@ def hostport(value: str) -> tuple[str, int]:
     return host, int(port)
 
 
+def ensure_team_secret(admin: Session, team_id: str, name: str, value: str) -> None:
+    """A Secrets-page secret in `team_id`, as a Security admin creates one (POST /v1/secrets with teamId). A name
+    already there is left; its value never comes back, so it is not compared."""
+    security_team = str(data(admin("platform").get("/v1/settings/workspace-teams"))["securityTeam"])
+    security = sign_in(admin.urls, admin.email, admin.password, security_team)
+    theirs = items(data(security("tools").get(f"/v1/secrets?teamId={team_id}")))
+    if any(x["name"] == name for x in theirs):
+        say("FOUND", f"secret {name}")
+        return
+    data(security("tools").post("/v1/secrets", json={"name": name, "value": value, "teamId": team_id}))
+    say("MADE", f"secret {name}", f"for team {team_id}")
+
+
+def ensure_bank_secret(admin: Session, lead: Session) -> None:
+    """BANK_API_KEY in the demo team, the same way a person sets it on Secrets. The fake bank's default key is enough
+    for the stand-in; a real bank's value is typed by a person."""
+    ensure_team_secret(admin, str(lead.team), "BANK_API_KEY", os.environ.get("FAKE_BANK_KEY") or "dev-bank-key")
+
+
 def ensure_mailbox(admin: Session, lead: Session, env: dict[str, str], spec: dict[str, Any]) -> str | None:
     """The team's legal orders mailbox on Channels > Email, as an admin connects one: its password a Secrets-page
     secret only the team may use (set by a Security admin), then Test connection."""
@@ -602,19 +621,9 @@ def ensure_mailbox(admin: Session, lead: Session, env: dict[str, str], spec: dic
     imap_host, imap_port = hostport(env["OPS_DEMO_IMAP"])
     smtp_host, smtp_port = hostport(env["OPS_DEMO_REPLY_SMTP"])
     tls = env.get("OPS_DEMO_MAIL_TLS", "1") != "0"
-    security_team = str(data(admin("platform").get("/v1/settings/workspace-teams"))["securityTeam"])
-    security = sign_in(admin.urls, admin.email, admin.password, security_team)
     secret = spec["secret"]
-    found = next((x for x in items(data(security("tools").get("/v1/secrets"))) if x["name"] == secret), None)
-    if found is None:
-        value = env.get("OPS_DEMO_MAILBOX_PASSWORD") or uuid.uuid4().hex
-        data(security("tools").post("/v1/secrets", json={"name": secret, "value": value, "teams": [lead.team]}))
-        say("MADE", f"secret {secret}", f"for team {lead.team} only")
-    elif found.get("teams") is not None and lead.team not in (found.get("teams") or []):
-        data(security("tools").patch(f"/v1/secrets/{secret}", json={"teams": [*(found.get("teams") or []), lead.team]}))
-        say("MADE", f"secret {secret}", f"now usable by team {lead.team}")
-    else:
-        say("FOUND", f"secret {secret}")
+    # The secret is the lead's team's own (c-509); a Security admin writes and reads it by naming that team.
+    ensure_team_secret(admin, str(lead.team), secret, env.get("OPS_DEMO_MAILBOX_PASSWORD") or uuid.uuid4().hex)
     boxes = items(data(lead("agents").get("/v1/channels/mailboxes")))
     box = next((b for b in boxes if b["address"] == address), None)
     if box:
@@ -1381,6 +1390,7 @@ def main() -> int:
     model = env.get("OPS_DEMO_MODEL_ALIAS") or "default"
     MODELS.scripted, MODELS.live = model, env.get("OPS_DEMO_LIVE_MODEL_ALIAS") or None
     MODELS.builder, MODELS.approver = builder, people["approver"]
+    ensure_bank_secret(admin, lead)
     ensure_bank_module(builder, admin)
     agents = ensure_agents(builder, people["approver"], spec["agents"], knowledge, model)
     MODELS.agents = agents

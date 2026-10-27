@@ -35,7 +35,7 @@ await withUiStack(
     check('discovery finds one read per shape in the insights spec', ASK.every((n) => names.includes(n)), names);
     const made = await json(await fetch(`${tools}/v1/tool-modules`, { method: 'POST', headers: J, body: JSON.stringify({ name: `uc061-insights-${TAG}`, displayName: `Insights ${TAG}`, system: 'Core banking', type: 'openapi', endpoint: '', operations: found.operations, source }) }));
     await json(await fetch(`${tools}/v1/tool-modules/${made.id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-061' }) }));
-    await approveToolReview(made.id, N);
+    await approveToolReview(made.id, N, J);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Insights desk ${TAG}`, role: 'Reads account insights' }) }));
     const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: ASK }) });

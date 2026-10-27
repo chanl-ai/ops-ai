@@ -1,0 +1,11 @@
+# Critical advisories and copyleft licences the owner has been told about and left in place (scripts/deps_audit.py).
+# One "<advisory id or package name>  <reason>" per line. Remove a line when its package is upgraded; the audit lists
+# lines that no longer match anything.
+#
+# The nine critical advisories the first run found (certifi, pillow, next, dompurify) were fixed on 2026-10-27 by named
+# security exceptions to the 30-day gate: pyproject.toml exclude-newer-package and pnpm-workspace.yaml.
+
+# Versions younger than 30 days that pnpm-workspace.yaml allows by name. The console's chat code needs streamdown 2.7.0
+# (46448161). Both are 30 days old on 2026-10-30; remove these lines and the minimumReleaseAgeExclude entries then.
+streamdown  2.7.0, released 2026-09-30
+remend  1.4.0, streamdown 2.7.0's dependency

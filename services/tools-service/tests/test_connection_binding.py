@@ -14,16 +14,20 @@ from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignor
 
 
 async def _connect(g: Gateway, engine: AsyncEngine, base_url: str) -> str:
-    made = (await g.client.post("/v1/connections", json={"name": "Ledger", "authKind": "api_key"})).json()["data"]
+    store = ModuleStore(engine)
+    m = await store.get(g.tenant, MODULE)
+    assert m is not None
+    # Made in the module's team: a connection serves its own team's modules only (c-509).
+    team = {"X-Team-Id": str(m["team_id"])}
+    body = {"name": "Ledger", "authKind": "api_key"}
+    made = (await g.client.post("/v1/connections", json=body, headers=team)).json()["data"]
     body = {
         "revision": made["revision"],
         "settings": {"name": "X-Api-Key", "baseUrl": base_url},
         "secretValues": {"key": "k-1"},
     }
-    assert (await g.client.put(f"/v1/connections/{made['id']}/environments/test", json=body)).status_code == 200
-    store = ModuleStore(engine)
-    m = await store.get(g.tenant, MODULE)
-    assert m is not None
+    put = await g.client.put(f"/v1/connections/{made['id']}/environments/test", json=body, headers=team)
+    assert put.status_code == 200, put.text
     await store.put({**m, "connection_id": made["id"]}, expected_revision=m["revision"])
     return str(made["id"])
 

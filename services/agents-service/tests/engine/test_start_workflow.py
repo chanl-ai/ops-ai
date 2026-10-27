@@ -20,7 +20,12 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.ports import RunRefusedError
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
-from tests.engine.test_worker import CountingTools, drain, engine, worker  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_worker import (  # noqa: F401
+    CountingTools,  # pyright: ignore[reportUnusedImport]
+    drain,  # pyright: ignore[reportUnusedImport]
+    engine,  # pyright: ignore[reportUnusedImport]
+    worker,  # pyright: ignore[reportUnusedImport]
+)
 
 TEAM, OTHER = "team_a", "team_b"
 

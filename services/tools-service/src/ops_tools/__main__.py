@@ -67,23 +67,23 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 log = get_logger("ops_tools")
 
 
-async def secret_value(secrets: SecretResolver, tenant_id: str, name: str) -> str:
-    """A send_reply secret (the SMTP password) of the tenant the call is for."""
-    return (await secrets.lookup(tenant_id, [name], tool="send_reply", actor="tools:send_reply"))[name]
+async def secret_value(secrets: SecretResolver, tenant_id: str, team_id: str | None, name: str) -> str:
+    """The platform sender's secret (the SMTP password) in the team the call acts in."""
+    return (await secrets.lookup(tenant_id, team_id, [name], tool="send_reply", actor="tools:send_reply"))[name]
 
 
 def mail_senders(settings: Settings, secrets: SecretResolver) -> Callable[[ToolCaller], MailSender]:
-    """One sender per tenant, made at its first send and kept: each reads its own tenant's SMTP password, and its
-    provider clients and token are reused rather than opened per message."""
-    senders: dict[str, MailSender] = {}
+    """One sender per tenant and team, made at its first send and kept: each reads its own team's SMTP password, and
+    its provider clients and token are reused rather than opened per message."""
+    senders: dict[tuple[str, str | None], MailSender] = {}
 
     def sender(caller: ToolCaller) -> MailSender:
-        tenant = caller.tenant_id
-        if tenant not in senders:
-            senders[tenant] = EmailProviders.from_settings(
-                settings, secret=lambda name: secret_value(secrets, tenant, name)
+        tenant, team = caller.tenant_id, caller.team_id
+        if (tenant, team) not in senders:
+            senders[tenant, team] = EmailProviders.from_settings(
+                settings, secret=lambda name: secret_value(secrets, tenant, team, name)
             ).sender()
-        return senders[tenant]
+        return senders[tenant, team]
 
     return sender
 
@@ -118,7 +118,7 @@ def main() -> None:
     # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
     connection_store = ConnectionStore(engine)
     tokens = Tokens(connection_store, cipher, egress_client(policy, ca_file=ca), policy)
-    authenticator = Authenticator(connection_store, secrets, tokens, directory.wide_teams)
+    authenticator = Authenticator(connection_store, secrets, tokens)
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
 
     def client(audience: str, base_url: str, scopes: list[str] | None = None) -> ServiceClient:

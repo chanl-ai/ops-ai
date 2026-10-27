@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
 import type { ToolAccess } from '@/lib/types/domain';
 import type { BindingSource, HttpOperationInput, ModuleOperation, OperationPatch, SubjectBinding } from '@/lib/types/tool-modules';
@@ -24,7 +23,7 @@ import { BINDING_LABEL } from './module-meta';
 import { SupervisionText } from './operations-table';
 
 const SOURCES = Object.keys(BINDING_LABEL) as BindingSource[];
-type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; requiresApproval: boolean; amountMax: string; approvers: 1 | 2; approverTeam: string; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
+type Draft = { description: string; bound: boolean; binding: SubjectBinding; rate: string; requiresApproval: boolean; amountMax: string; approvers: 1 | 2; stepUp: boolean; access: ToolAccess; input: FieldDraft[]; http: HttpOperationInput; transform: string; timeout: string };
 
 const baseOf = (endpoint: string) => endpoint.replace(/\/+$/, '');
 
@@ -42,7 +41,6 @@ const draftOf = (o: ModuleOperation, endpoint: string): Draft => ({
   requiresApproval: o.requiresApproval,
   amountMax: o.amountMax ? String(o.amountMax) : '',
   approvers: o.approvers,
-  approverTeam: o.approverTeam,
   stepUp: !!o.stepUp,
   access: o.access,
   input: fieldDrafts(o.input),
@@ -77,7 +75,6 @@ export function OperationSheet({
   const [d, setD] = React.useState<Draft | null>(op ? draftOf(op, endpoint) : null);
   // The service's refusal of the input schema, by field name, shown on that row.
   const [inputErrors, setInputErrors] = React.useState<Record<string, string>>({});
-  const { teams } = useTeam();
   React.useEffect(() => {
     setD(op ? draftOf(op, endpoint) : null);
     setInputErrors({});
@@ -87,9 +84,6 @@ export function OperationSheet({
   const write = d.access === 'write';
   // Two approvers means a person approves every call, so the switch cannot turn per-call approval off.
   const twoApprovers = write && d.approvers === 2;
-  // The person's own teams, plus the operation's current approving team when they are not in it.
-  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
-  const teamChoices = [...teams.map((t) => t.id), ...(teams.some((t) => t.id === op.approverTeam) ? [] : [op.approverTeam])];
   const patch: OperationPatch = {};
   if (d.description.trim() !== op.description) patch.description = d.description;
   const nextBinding = d.bound ? d.binding : null;
@@ -98,7 +92,6 @@ export function OperationSheet({
   if (d.requiresApproval !== op.requiresApproval) patch.requiresApproval = d.requiresApproval;
   if (write && d.amountMax.trim() && Number(d.amountMax) !== (op.amountMax ?? 0)) patch.amountMax = Number(d.amountMax);
   if (write && d.approvers !== op.approvers) patch.approvers = d.approvers;
-  if (write && d.approverTeam !== op.approverTeam) patch.approverTeam = d.approverTeam;
   if (write && d.stepUp !== !!op.stepUp) patch.stepUp = d.stepUp;
   if (d.access !== op.access) patch.access = d.access;
   const input = schemaOf(d.input);
@@ -146,11 +139,6 @@ export function OperationSheet({
         <span className="flex flex-wrap items-center gap-2">
           <AccessBadge access={op.access} />
           <SupervisionText op={op} />
-          {write && (
-            <span className="text-xs text-muted-foreground" data-testid="op-approval-policy">
-              Approved by {teamName(op.approverTeam)}
-            </span>
-          )}
           {!op.enabled && <span className="text-xs text-muted-foreground">Hidden</span>}
         </span>
       }
@@ -223,11 +211,7 @@ export function OperationSheet({
                 <li key={sec.name} className="flex items-center gap-2 text-sm">
                   <KeyRound className="size-3.5 text-muted-foreground" />
                   <code className="font-mono text-xs">{sec.name}</code>
-                  {sec.set && sec.available === false ? (
-                    <Link href="/settings/security/secrets" className="inline-flex items-center gap-1 text-xs text-warning-text underline-offset-4 hover:underline">
-                      <AlertTriangle className="size-3.5" /> Not available to this module&apos;s team
-                    </Link>
-                  ) : sec.set ? (
+                  {sec.set ? (
                     <span className="inline-flex items-center gap-1 text-xs text-success-text">
                       <CheckCircle2 className="size-3.5" /> Set
                     </span>
@@ -348,20 +332,6 @@ export function OperationSheet({
                   <SelectContent>
                     <SelectItem value="1">One person</SelectItem>
                     <SelectItem value="2">Two different people</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormField>
-              <FormField id="op-approver-team" label="Approving team" hint="Approvals come from this team. Changing it is a major version.">
-                <Select value={d.approverTeam} onValueChange={(v) => set({ approverTeam: v })}>
-                  <SelectTrigger id="op-approver-team" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamChoices.map((id) => (
-                      <SelectItem key={id} value={id}>
-                        {teamName(id)}
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </FormField>

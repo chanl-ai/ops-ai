@@ -18,7 +18,14 @@ from ops_agents.api.ops_tools import TOOLS, OpsReads, declared_args, ensure_ops_
 from ops_agents.store.cases import CaseStore
 from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, VIEWER
-from tests.api.test_team_default_agent import URL, Stack, say, stack, start, viewer  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.api.test_team_default_agent import (  # noqa: F401
+    URL,  # pyright: ignore[reportUnusedImport]
+    Stack,  # pyright: ignore[reportUnusedImport]
+    say,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+    start,  # pyright: ignore[reportUnusedImport]
+    viewer,  # pyright: ignore[reportUnusedImport]
+)
 from tests.engine.test_lifecycle_rights import TENANT
 
 CARD_DISPUTE = json.loads((Path(__file__).parents[4] / "scripts/demo/workflows/card_dispute_intake.json").read_text())

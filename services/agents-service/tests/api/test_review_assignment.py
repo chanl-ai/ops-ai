@@ -12,7 +12,11 @@ from httpx import AsyncClient
 from ops_agents.api.deps import Runtime
 from ops_agents.store.review_assignments import review_assignments
 
-from .test_hitl_facade import data, paused_dispute, stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from .test_hitl_facade import (  # noqa: F401  # a fixture
+    data,  # pyright: ignore[reportUnusedImport]
+    paused_dispute,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 # The workflow's own identity: it requested the review, so it may not decide or take it.
 REQUESTER = {"X-Dev-User": "workflow:complex_workflow"}

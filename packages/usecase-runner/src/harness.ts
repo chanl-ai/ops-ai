@@ -38,6 +38,7 @@ export const FILES_PORT = Number(process.env.OPS_USECASE_FILES_PORT ?? 8796);
 export const DOCUMENTS_PORT = Number(process.env.OPS_USECASE_DOCUMENTS_PORT ?? 8798);
 export const MODELS_PORT = Number(process.env.OPS_USECASE_MODELS_PORT ?? 8794);
 export const IDP_PORT = Number(process.env.OPS_USECASE_IDP_PORT ?? 8797);
+export const RUNNER_PORT = Number(process.env.OPS_USECASE_RUNNER_PORT ?? 8789);
 /** The OIDC client secret name a `signIn` stack's platform-service holds. */
 export const SIGNIN_SECRET = 'uc-oidc';
 const FAKE_OPENAI_PORT = Number(process.env.OPS_USECASE_FAKE_OPENAI_PORT ?? 8795);
@@ -83,11 +84,13 @@ export function check(name: string, ok: boolean, detail: unknown = ''): boolean 
 
 /**
  * Approves a tool module's open review in agents-service's Reviews as `headers` (a Security approver), as Human
- * Tasks would (c-163); Reviews applies it in tools-service. Returns the module's detail afterwards.
+ * Tasks would (c-163); Reviews applies it in tools-service. The module is read as `owner`, a person of its own team:
+ * the approver acts in Security, which does not read another team's modules (c-509). Returns the module's detail
+ * afterwards.
  */
-export async function approveToolReview(moduleId: string, headers: Record<string, string>): Promise<Record<string, unknown>> {
+export async function approveToolReview(moduleId: string, headers: Record<string, string>, owner: Record<string, string>): Promise<Record<string, unknown>> {
   const tools = `http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules/${moduleId}`;
-  const read = async () => ((await (await fetch(tools, { headers })).json()) as { data: Record<string, any> }).data;
+  const read = async () => ((await (await fetch(tools, { headers: owner })).json()) as { data: Record<string, any> }).data;
   const waiting = (await read()).versions.find((v: { status: string }) => v.status === 'in_review');
   if (!waiting?.reviewId) throw new Error(`${moduleId} has no version waiting for review`);
   const r = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/publish-requests/${waiting.reviewId}/decision`, {
@@ -214,6 +217,8 @@ function runToEnd(name: string, argv: string[], cwd: string, env: NodeJS.Process
 export interface StackOptions {
   /** Settings for the agents service, e.g. `{ OPS_REGISTRY_AUTO_APPROVE: 'false' }` to keep publish requests pending. */
   agentsEnv?: Record<string, string>;
+  /** Settings for platform-service when `platform` is on, e.g. `{ OPS_TEAM_DELETE_AFTER_DAYS: '0' }` (c-529). */
+  platformEnv?: Record<string, string>;
   /**
    * Also start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
    * James and Maya) and sign the console in through it, so every call carries a person's token.
@@ -235,6 +240,8 @@ export interface StackOptions {
      * `stack.mail.range` on the tenant's allow-list, as a person would.
      */
     mail?: boolean;
+    /** Start runner-service (c-531) beside tools-service, so a code operation runs its Python on WASM. */
+    runner?: boolean;
   };
   /**
    * The banker demo on the run's own stack: platform sign-in, tools-service with the fake bank as the agents'
@@ -413,6 +420,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
   let platformProc: ChildProcess | undefined;
   let idpProc: ChildProcess | undefined;
   let toolsProc: ChildProcess | undefined;
+  let runnerProc: ChildProcess | undefined;
   let kbProc: ChildProcess | undefined;
   let filesProc: ChildProcess | undefined;
   let documentsProc: ChildProcess | undefined;
@@ -490,7 +498,15 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
         ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
         ...bankSettings,
+        ...(options.tools.runner ? { OPS_RUNNER_URL: `http://127.0.0.1:${RUNNER_PORT}` } : {}),
       });
+      if (options.tools.runner) {
+        // The runner calls back to this run's tools-service for each bound call; the pinned Python build is fetched once.
+        const runnerDir = join(ROOT, 'services/runner-service');
+        const runnerEnv = stackEnv(process.env, { OPS_RUNNER_PORT: String(RUNNER_PORT), OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}` });
+        await runToEnd('runner-fetch', ['uv', 'run', 'python', '-m', 'ops_runner.fetch'], runnerDir, runnerEnv);
+        runnerProc = await serve('runner', RUNNER_PORT, ['uv', 'run', 'python', '-m', 'ops_runner'], runnerDir, runnerEnv, `http://127.0.0.1:${RUNNER_PORT}/health`, 90_000);
+      }
       await runToEnd('tools-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], toolsDir, toolsEnv);
       toolsProc = await serve('tools', TOOLS_PORT, ['uv', 'run', 'python', '-m', 'ops_tools'], toolsDir, toolsEnv, `http://127.0.0.1:${TOOLS_PORT}/health`, 90_000);
       toolsUrl.NEXT_PUBLIC_OPS_TOOLS_API_URL = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -511,6 +527,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         // The seed's own roles: use cases check what a builder or viewer may not do, so nobody is Admin everywhere.
         OPS_SEED_EVERYONE_ADMIN: 'false',
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
+        // What still runs in a team, read before a team is deleted or the workspace closed (c-529).
+        OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
         ...(stack.mailDir
           ? {
               OPS_PLATFORM_PUBLIC_URL: `http://127.0.0.1:${PLATFORM_PORT}`,
@@ -522,6 +540,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
               OPS_MAIL_FAKE_OUT_DIR: stack.mailDir,
             }
           : {}),
+        ...options.platformEnv,
       });
       await runToEnd('platform-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], platformDir, platformEnv);
       // Dev mode seeds on start. The public app has no /health; the key set answers once it serves.
@@ -699,6 +718,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     if (idpProc) stop(idpProc);
     if (stack.mailDir) rmSync(stack.mailDir, { recursive: true, force: true });
     if (toolsProc) stop(toolsProc);
+    if (runnerProc) stop(runnerProc);
     if (kbProc) stop(kbProc);
     if (documentsProc) stop(documentsProc);
     if (filesProc) stop(filesProc);

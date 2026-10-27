@@ -194,13 +194,11 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
                     title={<span className="font-mono text-xs">{s.name}</span>}
                     description={
                       !s.set ? (
-                        <Link href="/settings/security/secrets" className="text-warning-text underline-offset-4 hover:underline">Not set; set it in Settings</Link>
-                      ) : s.available === false ? (
-                        <Link href="/settings/security/secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-out-of-scope-${s.name}`}>
-                          Not available to this module's team
+                        <Link href="/settings/security/secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
+                          Not set in this module&apos;s team; set it in Settings
                         </Link>
                       ) : (
-                        'Set for this tenant'
+                        'Set in this module’s team'
                       )
                     }
                     trailing={<Input type="password" aria-label={`${s.name} test value`} placeholder="Test value" value={secretValues[s.name] ?? ''} onChange={(e) => setSecretValues({ ...secretValues, [s.name]: e.target.value })} className="h-8 w-44 font-mono text-xs" autoComplete="off" />}

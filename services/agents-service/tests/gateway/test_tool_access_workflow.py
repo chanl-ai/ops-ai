@@ -14,7 +14,12 @@ from ops_engine.worker import Worker
 from ops_identity import dev_service_signer, mint_service_token
 
 from .conftest import Gateway
-from .test_engine_reviewed_write import REVIEWER, STARTER, finish, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from .test_engine_reviewed_write import (  # noqa: F401
+    REVIEWER,  # pyright: ignore[reportUnusedImport]
+    STARTER,  # pyright: ignore[reportUnusedImport]
+    finish,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 TEAM = {"X-Team-Id": "team_ops"}
 

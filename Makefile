@@ -12,6 +12,7 @@ include make/staging.mk
 include make/services.mk
 include make/console.mk
 include make/python.mk
+include make/deps.mk
 include make/docs.mk
 include make/sdk.mk
 include make/usecase.mk

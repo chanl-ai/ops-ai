@@ -23,7 +23,7 @@ from ops_service_kit.errors import Unauthorized, Unprocessable
 
 from .executor import URL_VAR
 from .registry import Resolved
-from .secrets import SecretMissing, SecretOutOfScope, SecretResolver
+from .secrets import SecretMissing, SecretResolver
 from .tools import ToolCaller
 
 PURPOSE = "code-run"
@@ -182,16 +182,12 @@ async def resolve_handles(
     try:
         values = await secrets.lookup(
             str(claims["tenant_id"]),
+            cast(str | None, claims.get("team_id")),
             sorted(set(handles.values())),
             tool=str(claims["operation"]),
             actor=str(claims["sub"]),
-            team=cast(str | None, claims.get("team_id")),
         )
-    except SecretOutOfScope as e:
-        raise Unprocessable(
-            f"The secret {', '.join(e.names)} is not available to this team.", code="secret_out_of_scope"
-        ) from e
     except SecretMissing as e:
-        raise Unprocessable(f"The secret {', '.join(e.names)} is not set.", code="secret_missing") from e
+        raise Unprocessable(f"The secret {', '.join(e.names)} is not set for this team.", code="secret_missing") from e
     filled = {**args, **{arg: values[name] for arg, name in handles.items()}}
     return filled, list(values.values())

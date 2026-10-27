@@ -41,7 +41,7 @@ await withUiStack(
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Core bank ${TAG}`, name: `uc101-bank-${TAG}`, type: 'http' }) }))).id;
     await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{STATEMENTS_API_KEY}}`, headers: [] }) }));
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-101' }) }));
-    await approveToolReview(id, N);
+    await approveToolReview(id, N, J);
     const opNow = async () => (await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }))).operations.find((o) => o.name === OP);
 
     const browser = await chromium.launch();

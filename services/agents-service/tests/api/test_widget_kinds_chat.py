@@ -9,7 +9,9 @@ from typing import Any, cast
 from httpx import AsyncClient
 
 from ops_agents.api.deps import Runtime
-from tests.api.test_child_runs import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+from tests.api.test_child_runs import (
+    stack,  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+)
 from tests.conftest import sse_events
 
 TRACKER = {"kind": "tracker", "data": {"title": "Order 88213", "steps": [{"label": "Packed", "state": "done"}]}}

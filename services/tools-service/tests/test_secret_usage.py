@@ -1,6 +1,6 @@
 """Secrets managed in one place (c-093), by failure mode: a delete that breaks an operation still naming the secret
-(published or staged), a rotation that misses one of the operations reading it, a team scope another team's module gets
-past, and a name rule that strands secrets created before it."""
+(published or staged), a rotation that misses one of the operations reading it, another team's secret of the same name
+reaching this team's module (c-509), and a name rule that strands secrets created before it."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ops_service_kit.settings import Settings
 from ops_tools.store.secrets import SecretStore
 
 from .conftest import Bank, service_headers
-from .test_secrets import MODULE, ROTATED, VALUE, keyed  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from .test_secrets import MODULE, ROTATED, TEAM, VALUE, keyed  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 BASE = f"/v1/tool-modules/{MODULE}"
 
@@ -81,37 +81,36 @@ async def test_a_rotation_reaches_every_operation_that_reads_it(k: Bank, caplog:
     assert ROTATED not in caplog.text, "a log line carries the rotated value"
 
 
-async def test_a_team_scope_refuses_another_teams_module_before_anything_is_sent(k: Bank) -> None:
+async def test_another_teams_secret_of_the_same_name_is_not_read_and_nothing_is_sent(k: Bank) -> None:
     c, tenant = k.api.client, k.api.tenant
-    made = await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE, "teams": ["team_ops"]})
-    assert made.status_code == 201 and made.json()["data"]["teams"] == ["team_ops"], made.text
+    theirs = await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": "sk-platform", "teamId": "team_platform"})
+    assert theirs.status_code == 201 and theirs.json()["data"]["teamId"] == "team_platform", theirs.text
     sent = len(k.received)
     out = (await _call(k, f"echo_{tenant}")).json()["data"]["output"]
-    assert out["error"]["code"] == "SECRET_OUT_OF_SCOPE" and len(k.received) == sent, out
-    widened = await c.patch("/v1/secrets/BANK_KEY", json={"teams": ["team_ops", "team_platform"]})
-    assert widened.status_code == 200, widened.text
+    assert out["error"]["code"] == "SECRET_MISSING" and len(k.received) == sent, out
+    mine = await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
+    assert mine.status_code == 201 and mine.json()["data"]["teamId"] == TEAM, mine.text
     assert (await _call(k, f"echo_{tenant}")).status_code == 200 and k.received[-1]["headers"]["x-api-key"] == VALUE
-    assert (await c.patch("/v1/secrets/BANK_KEY", json={"teams": None})).json()["data"]["teams"] is None
 
 
 async def test_a_name_made_before_the_64_character_rule_keeps_working(k: Bank, engine: AsyncEngine) -> None:
-    """New names stop at 64 characters; one created under the older 120 still resolves, rotates and takes a scope."""
+    """New names stop at 64 characters; one created under the older 120 still resolves and rotates."""
     c, tenant = k.api.client, k.api.tenant
     long = "LEGACY_" + "K" * 73
     assert (await c.post("/v1/secrets", json={"name": long, "value": VALUE})).status_code in (400, 422)
     store = SecretStore(engine)
     # Written as the older rule allowed, with the cipher the app uses (tests/conftest.py build_app).
     blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt(VALUE, context=context_of(tenant, long))
-    assert await store.create(tenant, long, blob, actor="before c-093", at=datetime.now(UTC))
+    assert await store.create(tenant, TEAM, long, blob, actor="before c-093", at=datetime.now(UTC))
     assert (await c.post(f"/v1/secrets/{long}/rotate", json={"value": ROTATED})).status_code == 200
-    assert (await c.patch(f"/v1/secrets/{long}", json={"teams": ["team_platform"]})).status_code == 200
     assert long in [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]
 
 
-async def test_an_operation_says_a_secret_is_not_available_to_its_modules_team(k: Bank) -> None:
+async def test_an_operation_shows_its_secret_set_only_once_its_own_team_has_it(k: Bank) -> None:
     c = k.api.client
-    await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE, "teams": ["team_ops"]})
+    await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE, "teamId": "team_platform"})
     op = (await c.get(BASE)).json()["data"]["operations"][0]
-    assert op["secrets"] == [{"name": "BANK_KEY", "set": True, "available": False}], op["secrets"]
-    await c.patch("/v1/secrets/BANK_KEY", json={"teams": None})
-    assert (await c.get(BASE)).json()["data"]["operations"][0]["secrets"][0]["available"] is True
+    assert op["secrets"] == [{"name": "BANK_KEY", "set": False, "available": False}], op["secrets"]
+    await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
+    op = (await c.get(BASE)).json()["data"]["operations"][0]
+    assert op["secrets"] == [{"name": "BANK_KEY", "set": True, "available": True}], op["secrets"]

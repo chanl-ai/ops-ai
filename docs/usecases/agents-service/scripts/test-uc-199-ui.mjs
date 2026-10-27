@@ -51,7 +51,7 @@ await withUiStack(
   async (consoleUrl) => {
     const S = as(await tokenFor(SAM), 'team_security');
     const J = as(await tokenFor(JAMES), 'team_ops');
-    const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: SECRET, value: 'app-password', teams: ['team_ops'] }) });
+    const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: SECRET, value: 'app-password', teamId: 'team_ops' }) });
     const saved = await (await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ definition: WORKFLOW }) })).json();
     check('0 the secret is on the Secrets page and the draft workflow is saved', secret.status === 201 && !!saved.data?.version, { secret: secret.status, saved });
 

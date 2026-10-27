@@ -9,7 +9,10 @@ from typing import Any
 from httpx import AsyncClient
 
 from ops_agents.api.deps import Runtime
-from tests.api.test_agent_page_backed import WIRE, stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from tests.api.test_agent_page_backed import (  # noqa: F401  # a fixture
+    WIRE,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 
 async def turn(client: AsyncClient, agent: str, message: str) -> dict[str, Any]:

@@ -38,8 +38,9 @@ async def _module(engine: AsyncEngine, tenant: str) -> None:
     m = blank(
         module_id=MODULE,
         tenant_id=tenant,
-        team_id="team_platform",
-        owner="Platform",
+        # Operations, the team the dev caller acts in: the secrets these tests write as that caller are the module's.
+        team_id="team_ops",
+        owner="Operations",
         me="James Richardson",
         at=datetime.now(UTC),
         input={"displayName": "Url keyed", "name": "url-keyed", "type": "http"},

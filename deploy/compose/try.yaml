@@ -6,7 +6,7 @@
 services:
   postgres:
     profiles: [postgres]
-    image: postgres:17-alpine
+    image: ${OPS_BASE_IMAGE_PREFIX:-}postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ops

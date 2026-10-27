@@ -1,7 +1,7 @@
-// uc-107 a Security admin manages every secret in one place, ui layer: docs/usecases/console/secrets-in-one-place.md.
-// Signed in through platform-service as the seeded people. A published module whose two operations read one secret
-// from the fake core bank's query-key route is set up through the API; the secret starts with a wrong value, so a live
-// run fails until the rotation. Each step is checked on its own.
+// uc-107 a team manages its own secrets in one place, ui layer: docs/usecases/console/secrets-in-one-place.md.
+// Signed in through platform-service as the seeded people. An Operations module whose operations read one secret from
+// the fake core bank's query-key route is set up through the API; Operations' secret starts with a wrong value, so a
+// live run fails until the rotation. Each step is checked on its own.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -52,32 +52,37 @@ await withUiStack(
     const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-107' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-107' }) });
-    await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
+    // Operations' own secret (c-509): James, a builder there, adds it in the team his module belongs to.
+    await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc107-stmt-${TAG}`, type: 'http' }) }))).id;
     for (const name of [...OPS, ...MORE]) {
       await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name, description: 'The latest statement', access: 'read', method: 'GET', url: `https://${stack.bank.host}/accounts/{account_id}/statement?api_key={{${KEY}}}`, headers: [] }) }));
     }
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-107' }) }));
-    await approveToolReview(id, N);
+    await approveToolReview(id, N, J);
 
     const browser = await chromium.launch();
     const errors = [];
     try {
       const sam = await signIn(browser, consoleUrl, SAM, errors);
       const james = await signIn(browser, consoleUrl, JAMES, errors);
-      const secretsPage = async () => {
-        await sam.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // Settings > Secrets as `who`, searched for the key; the row, which is absent when `who`'s team holds no such key.
+      const search = async (who) => {
+        await who.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The search is the server's; its answer re-renders the rows, which would close a row menu opened before it.
-        const searched = armed(sam.waitForResponse((r) => r.url().includes(`/v1/secrets?`) && r.url().includes(`search=${KEY}`), { timeout: 60_000 }));
-        await sam.getByPlaceholder('Search secrets…').fill(KEY);
+        const searched = armed(who.waitForResponse((r) => r.url().includes(`/v1/secrets?`) && r.url().includes(`search=${KEY}`), { timeout: 60_000 }));
+        await who.getByPlaceholder('Search secrets…').fill(KEY);
         await searched;
-        const row = sam.getByRole('row', { name: new RegExp(KEY) });
+        return who.getByRole('row', { name: new RegExp(KEY) });
+      };
+      const secretsPage = async () => {
+        const row = await search(james);
         await row.waitFor({ timeout: 120_000 });
         return row;
       };
       const menu = async (row, item) => {
         await row.getByRole('button', { name: 'Open menu' }).click();
-        return sam.getByRole('menuitem', { name: item });
+        return james.getByRole('menuitem', { name: item });
       };
       // A live run of one operation from its workbench, as James; the gateway's answer.
       const runLive = async (op) => {
@@ -94,24 +99,23 @@ await withUiStack(
         return { status: data.status, code: data.output?.error?.code, leaked: text.includes(BANK_KEY) };
       };
 
-      // 1. The secret lists both operations that read it, each linked to its workbench; storage credentials are listed too.
+      // 1. The secret lists both operations that read it, each linked to its workbench.
       await step('1 the secret lists the operations that read it', async () => {
         const row = await secretsPage();
-        const users = sam.getByTestId(`secret-users-${KEY}`);
+        const users = james.getByTestId(`secret-users-${KEY}`);
         const links = await users.getByRole('link').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
-        const storage = await sam.getByText('Storage credentials', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
         // Five operations read it: three chips, each linked to its workbench, then "and 2 more" naming the rest.
         const more = users.getByTestId(`secret-users-more-${KEY}`);
-        const rest = await more.hover().then(() => sam.getByRole('tooltip').first().innerText(), () => '');
+        const rest = await more.hover().then(() => james.getByRole('tooltip').first().innerText(), () => '');
         const all = [...OPS, ...MORE];
         check(
           '1 the secret lists three operations and counts the rest',
-          links.length === 3 && links.every((h) => all.some((op) => h === `/tools/${id}/operations/${op}`)) && (await more.innerText()) === 'and 2 more' && all.filter((op) => !links.some((h) => h.endsWith(`/${op}`))).every((op) => rest.includes(op)) && storage && (await row.count()) === 1,
-          { links, rest, storage },
+          links.length === 3 && links.every((h) => all.some((op) => h === `/tools/${id}/operations/${op}`)) && (await more.innerText()) === 'and 2 more' && all.filter((op) => !links.some((h) => h.endsWith(`/${op}`))).every((op) => rest.includes(op)) && (await row.count()) === 1,
+          { links, rest },
         );
       });
 
-      // 1b. Storage credentials draw skeleton rows while they load, as Storage does, not a line of text.
+      // 1b. Storage credentials, the Security admin's to see, draw skeleton rows while they load, not a line of text.
       await step('1b storage credentials load as skeleton rows', async () => {
         await sam.route('**/settings/storage/credentials', async (route) => {
           await new Promise((r) => setTimeout(r, 4000));
@@ -130,19 +134,19 @@ await withUiStack(
         const del = await menu(row, /Delete/);
         const disabled = (await del.getAttribute('aria-disabled')) === 'true' || (await del.getAttribute('data-disabled')) !== null;
         const reason = await del.innerText();
-        await sam.keyboard.press('Escape');
-        const api = await fetch(`${tools}/v1/secrets/${KEY}`, { method: 'DELETE', headers: S });
+        await james.keyboard.press('Escape');
+        const api = await fetch(`${tools}/v1/secrets/${KEY}`, { method: 'DELETE', headers: J });
         check('2 delete is off while operations read it', disabled && reason.includes('Read by 5 operations') && api.status === 409, { disabled, reason, api: api.status });
       });
 
-      // 3. With the wrong value both runs fail; after Sam rotates it in the console, both send the new value.
+      // 3. With the wrong value both runs fail; after James rotates it in the console, both send the new value.
       await step('3 a rotation reaches both operations', async () => {
         const before = await runLive(OPS[0]);
         const row = await secretsPage();
         await (await menu(row, /Rotate/)).click();
-        const dialog = sam.getByRole('dialog', { name: `Rotate ${KEY}` });
+        const dialog = james.getByRole('dialog', { name: `Rotate ${KEY}` });
         await dialog.locator('#secret-value').fill(BANK_KEY);
-        const rotated = armed(sam.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/secrets/${KEY}/rotate`), { timeout: 60_000 }));
+        const rotated = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/secrets/${KEY}/rotate`), { timeout: 60_000 }));
         await dialog.getByTestId('secret-submit').click();
         const res = await rotated;
         const after = [await runLive(OPS[0]), await runLive(OPS[1])];
@@ -153,24 +157,31 @@ await withUiStack(
         );
       });
 
-      // 4. Limited to the Security team, the Operations module's runs are refused and its workbench says why.
-      await step('4 a team scope refuses another team’s module', async () => {
-        const row = await secretsPage();
-        await (await menu(row, /Change teams/)).click();
-        const dialog = sam.getByRole('dialog', { name: `Teams for ${KEY}` });
-        const grouped = (await dialog.getByRole('group', { name: 'Teams' }).getByRole('checkbox', { name: 'Security' }).count()) === 1;
-        await dialog.getByRole('checkbox', { name: 'Security' }).click();
-        // A failed save stays in the dialog, shown there, and the person fixes it without leaving.
-        await sam.route(`**/v1/secrets/${KEY}`, (route) => (route.request().method() === 'PATCH' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'INTERNAL', message: 'The gateway could not save the teams.' } }) }) : route.fallback()));
-        await dialog.getByTestId('secret-scope-submit').click();
-        const inline = await dialog.getByRole('alert').filter({ hasText: /could not save the teams/ }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
-        await sam.unroute(`**/v1/secrets/${KEY}`);
-        const saved = armed(sam.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/secrets/${KEY}`), { timeout: 60_000 }));
-        await dialog.getByTestId('secret-scope-submit').click();
-        const res = await saved;
+      // 4. Security's secret of the same name is Security's own: Operations' row and runs are untouched, and a secret is
+      // never shared across teams from the page.
+      await step('4 another team keeps its own secret under the same name', async () => {
+        const absent = (await (await search(sam)).count()) === 0;
+        await sam.getByRole('button', { name: /Add secret/ }).first().click();
+        const dialog = sam.getByRole('dialog', { name: 'Add a secret' });
+        const named = await dialog.getByText(/Saved in Security/).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+        const picker = await dialog.getByRole('group', { name: 'Teams' }).count();
+        await dialog.locator('#secret-name').fill(KEY);
+        await dialog.locator('#secret-value').fill('security-own-value');
+        const made = armed(sam.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/secrets'), { timeout: 60_000 }));
+        await dialog.getByTestId('secret-submit').click();
+        const res = await made;
+        const theirs = await (await search(sam)).count();
         const run = await runLive(OPS[0]);
-        const said = await james.getByTestId(`secret-out-of-scope-${KEY}`).waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        check('4 a team scope refuses another team’s module', grouped && inline && res?.status() === 200 && run.code === 'SECRET_OUT_OF_SCOPE' && said, { grouped, inline, scope: res?.status(), run, said });
+        const row = await secretsPage();
+        await row.getByRole('button', { name: 'Open menu' }).click();
+        const items = await james.getByRole('menuitem').allInnerTexts();
+        await james.keyboard.press('Escape');
+        const version = (await row.innerText()).includes('v2');
+        check(
+          '4 another team keeps its own secret under the same name',
+          absent && named && picker === 0 && res?.status() === 201 && theirs === 1 && run.status === 200 && !run.leaked && version && !items.some((t) => /teams/i.test(t)),
+          { absent, named, picker, made: res?.status(), theirs, run, version, items },
+        );
       });
 
       check('no page errors', errors.length === 0, errors);

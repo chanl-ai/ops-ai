@@ -36,7 +36,7 @@ await withUiStack(
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Rates ${TAG}`, name: `uc137-rates-${TAG}`, type: 'http' }) }))).id;
     await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: OP, description: 'A rate', access: 'read', method: 'GET', url: `https://${HOST}/v1/rates/{currency}`, headers: [] }) }));
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-137 first version' }) }));
-    await approveToolReview(id, N);
+    await approveToolReview(id, N, J);
     // A minor change staged through the API: a new description for the read, which touches no call shape or policy.
     const stage = async (description) => {
       const m = await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));

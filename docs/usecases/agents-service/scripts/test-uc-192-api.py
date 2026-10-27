@@ -74,7 +74,7 @@ james = headers("j.richardson@harborpine.example", "team_ops")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, headers=james, timeout=30)
 
-made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password", "teams": ["team_ops"]}, headers=sam)
+made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password", "teamId": "team_ops"}, headers=sam)
 if made.status_code == 409:
     made = tools.post(f"/v1/secrets/{SECRET}/rotate", json={"value": "app-password"}, headers=sam)
 host = tools.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-192 GreenMail"}, headers=sam)

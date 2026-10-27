@@ -345,12 +345,13 @@ class ModuleService:
         since = self._since(timedelta(days=1))
         return await self.calls.traffic([m["id"] for m in mods], since, tenant_id=tenant_id)
 
-    async def _secret_names(self, tenant_id: str) -> dict[str, list[str] | None]:
-        """The secrets the tenant has set, each with the teams it is limited to (None is every team); values are never
-        read here."""
+    async def _secret_names(self, tenant_id: str, mods: list[Aggregate]) -> dict[str | None, set[str]]:
+        """The names of the secrets each of the modules' teams has set (c-509: a module reads its own team's only);
+        values are never read here."""
         if self.secrets is None:
             return {}
-        return {str(r["name"]): r.get("teams") or None for r in await self.secrets.store.listed(tenant_id)}
+        owners = sorted({str(m["team_id"]) for m in mods if m["team_id"]})
+        return {team: {str(r["name"]) for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
 
     async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, dict[str, Any]]:
         return await self.connections.by_ids(
@@ -361,7 +362,7 @@ class ModuleService:
         self,
         m: Aggregate,
         traffic: Traffic,
-        have: dict[str, list[str] | None] | None = None,
+        have: dict[str | None, set[str]] | None = None,
         conns: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         now = self.clock()
@@ -429,7 +430,7 @@ class ModuleService:
         row["templateId"], row["protection"] = m.get("template_id"), m.get("protection")
         if have is not None:
             needed = {n for o in ops for n in secret_names(o)}
-            row["unsetSecrets"] = len(needed - set(have))
+            row["unsetSecrets"] = len(needed - have.get(m["team_id"], set()))
         return row
 
     def _in_view(self, r: dict[str, Any], view: str) -> bool:
@@ -483,7 +484,7 @@ class ModuleService:
         o: dict[str, Any],
         approvals: list[dict[str, Any]],
         t: dict[str, Any],
-        have: dict[str, list[str] | None] | None = None,
+        have: dict[str | None, set[str]] | None = None,
     ) -> dict[str, Any]:
         policy = approval_policy(m, o)
         out: dict[str, Any] = {
@@ -520,11 +521,10 @@ class ModuleService:
         if o["amount_max"] is not None:
             out["amountMax"] = float(o["amount_max"])
         if have is not None:
-            # `available`: set, and its team scope (c-093) includes this module's team, as the gateway checks per call.
-            out["secrets"] = [
-                {"name": n, "set": n in have, "available": n in have and (not have[n] or m["team_id"] in have[n])}
-                for n in secret_names(o)
-            ]
+            # Set in the module's own team, the only secrets the gateway reads for it; `available` says the same, for
+            # callers written when a secret could be limited to some teams.
+            mine = have.get(m["team_id"], set())
+            out["secrets"] = [{"name": n, "set": n in mine, "available": n in mine} for n in secret_names(o)]
         out["stub"] = o.get("stub")
         return out
 
@@ -544,7 +544,7 @@ class ModuleService:
     async def _detail(self, m: Aggregate, team: Team, who: Caller | None = None) -> dict[str, Any]:
         """`who` is the person asking; their rights on the module ride along. A service applying a decision has none."""
         traffic = await self._traffic(str(m["tenant_id"]), [m])
-        have = await self._secret_names(str(m["tenant_id"]))
+        have = await self._secret_names(str(m["tenant_id"]), [m])
         approvals = self._approvals(m)
         ordered = sorted(
             approvals,
@@ -714,7 +714,7 @@ class ModuleService:
         now = self.clock()
         mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
         traffic = await self._traffic(who.tenant_id, mods)
-        have = await self._secret_names(who.tenant_id)
+        have = await self._secret_names(who.tenant_id, mods)
         conns = await self._connections_of(who.tenant_id, mods)
         rows = [self._row(m, traffic, have, conns) for m in mods]
         counts = {"all": len(rows)} | {
@@ -990,7 +990,7 @@ class ModuleService:
                 raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
             if status_of(conn, self.clock()) == "revoked":
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
-            if not may_use(conn, who.team.id, self.dir.wide_teams):
+            if not may_use(conn, who.team.id):
                 raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
         if i["type"] == "code":
@@ -1154,7 +1154,7 @@ class ModuleService:
                 raise ValidationFailed("That connection no longer exists. Pick another one.")
             if status_of(conn, self.clock()) == "revoked":
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another one.")
-            if not may_use(conn, m["team_id"], self.dir.wide_teams):
+            if not may_use(conn, m["team_id"]):
                 raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
             m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
         return await self._detail(await self._save(m), who.team, who)

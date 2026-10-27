@@ -28,7 +28,7 @@ await withUiStack(
     const mid = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Holds ${TAG}`, name: `uc057-${TAG}`, type: 'http' }) }))).id;
     await fetch(`${tools}/v1/tool-modules/${mid}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: WRITE, description: 'Place a hold', access: 'write', method: 'POST', url: `https://${stack.bank.host}/v1/accounts/{accountId}/holds` }) });
     await json(await fetch(`${tools}/v1/tool-modules/${mid}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-057' }) }));
-    await approveToolReview(mid, N);
+    await approveToolReview(mid, N, J);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Holds desk ${TAG}`, role: 'Places holds' }) }));
     const granted = await fetch(`${agentsUrl}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ toolIds: [WRITE] }) });

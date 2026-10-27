@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from ops_agents.activities.catalog import Catalog
+from ops_store.team_scope import acting_team
 
 from .modules.seed import PLATFORM_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
@@ -89,14 +90,17 @@ class ToolRegistry:
         registry writes for a tenant that has none belongs to no team (c-433)."""
         self.catalog = catalog
         self.modules = modules
-        # Tenants whose platform tools this process has made sure of; a restart checks again, which writes nothing.
-        self._platform_checked: set[str] = set()
+        # Teams whose platform tools this process has made sure of, by tenant; a restart checks again, which writes
+        # nothing. Per team: a tool one team holds in its own module (the Platform team's mail module) is not another
+        # team's, so a check made for one team says nothing about the next.
+        self._platform_checked: set[tuple[str, str | None]] = set()
 
-    async def _platform_tools(self, tenant_id: str) -> None:
-        if self.modules is None or tenant_id in self._platform_checked:
+    async def _platform_tools(self, tenant_id: str, team_id: str | None = None) -> None:
+        team = team_id if team_id is not None else acting_team()
+        if self.modules is None or (tenant_id, team) in self._platform_checked:
             return
-        await ensure_platform_tools(self.modules, tenant_id=tenant_id, at=datetime.now(UTC))
-        self._platform_checked.add(tenant_id)
+        await ensure_platform_tools(self.modules, tenant_id=tenant_id, team_id=team, at=datetime.now(UTC))
+        self._platform_checked.add((tenant_id, team))
 
     def access(self, tool: str) -> str:
         """The agents catalogue's class; `resolve` is what the gateway decides by."""
@@ -225,7 +229,7 @@ class ToolRegistry:
         # The calling service's tenant, from its service token; the team from the run or the person.
         found = await self.modules.operation_named(tenant_id, tool, team_id)
         if found is None and tool in PLATFORM_MODULE_TOOLS:
-            await self._platform_tools(tenant_id)
+            await self._platform_tools(tenant_id, team_id)
             found = await self.modules.operation_named(tenant_id, tool, team_id)
         if found is None:
             # A system tool (c-257) is no module's operation, so no agent can be granted it; it resolves as the

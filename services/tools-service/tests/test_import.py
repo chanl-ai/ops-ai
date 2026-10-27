@@ -97,7 +97,9 @@ async def test_an_imported_operation_runs_only_once_its_secret_is_set(
     res: httpx.Response = await gateway_call("get_account", {"accountId": "CHQ-1"})
     assert res.json()["data"]["output"]["error"]["code"] == "SECRET_MISSING"
     assert not [x for x in received if x["path"] == "/v1/accounts/CHQ-1"], "nothing is sent without its credential"
-    await bank_api.client.post("/v1/secrets", json={"name": "STATEMENTS_KEY", "value": "sk-statements-123"})
+    await bank_api.client.post(
+        "/v1/secrets", json={"name": "STATEMENTS_KEY", "value": "sk-statements-123", "teamId": "team_lending"}
+    )
     res = await gateway_call("get_account", {"accountId": "CHQ-1"})
     assert res.json()["data"]["ok"] is True, res.text
     assert received[-1]["headers"].get("x-api-key") == "sk-statements-123"

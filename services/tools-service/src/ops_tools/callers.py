@@ -53,6 +53,8 @@ class Person:
     name: str
     # Who it is, for the provisioner-only fields and a system record's protection (c-180); None only in code.
     principal: Principal | None = None
+    # The team it acts in, whose secrets it reads and writes (c-509); None for a token naming no team.
+    team_id: str | None = None
 
 
 async def tools_reader(p: CurrentCaller) -> Principal:
@@ -63,7 +65,7 @@ async def tools_reader(p: CurrentCaller) -> Principal:
 
 async def person(p: CurrentCaller) -> Person:
     _service_reads(p, "secrets_egress")
-    return Person(tenant_id=p.tenant_id, name=p.name, principal=p)
+    return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)
 
 
 def security_admin(security_team: str) -> Callable[..., Awaitable[Person]]:
@@ -77,6 +79,6 @@ def security_admin(security_team: str) -> Callable[..., Awaitable[Person]]:
         Access(security_team=security_team).can(
             p, "secrets_egress", "manage", what="the egress list", code="not_security_admin"
         )
-        return Person(tenant_id=p.tenant_id, name=p.name, principal=p)
+        return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)
 
     return admin

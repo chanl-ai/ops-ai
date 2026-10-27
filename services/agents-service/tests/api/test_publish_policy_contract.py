@@ -22,7 +22,11 @@ from ops_agents.api.routers import agents, channel_list, graphs, guardrails, ski
 from ops_service_kit.settings import Settings
 from tests.api.test_engine_definitions import basic
 from tests.api.test_graph_versions import definition as graph_definition
-from tests.api.test_publish_policy import _stack, fresh_modes, set_mode  # noqa: F401  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+from tests.api.test_publish_policy import (  # noqa: F401
+    _stack,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+    fresh_modes,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+    set_mode,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+)
 from tests.api.test_skills import HARDSHIP
 from tests.api.test_widget_registry import LIMIT_CARD
 from tests.engine.test_lifecycle_rights import BUILDER

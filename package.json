@@ -1,7 +1,7 @@
 {
   "name": "ops-ai",
   "private": true,
-  "packageManager": "pnpm@10",
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "pnpm --filter @ops-ai/console dev",
     "dev:runtime": "pnpm --filter @ops-ai/console dev:runtime",
@@ -14,7 +14,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ops-ai/usecase-runner": "workspace:*",
-    "marked": "18.1.1",
-    "mermaid": "12.2.0"
+    "marked": "18.0.14",
+    "mermaid": "12.0.0"
   }
 }

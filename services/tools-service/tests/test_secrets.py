@@ -27,6 +27,7 @@ from .fake_upstream import ENDPOINT, HOST
 VALUE = "sk-live-7f3c9e1d2b"
 ROTATED = "sk-live-rotated-55a1"
 MODULE = "mod_keyed"
+TEAM = "team_ops"
 
 
 async def _keyed_module(engine: AsyncEngine, tenant: str) -> None:
@@ -34,8 +35,9 @@ async def _keyed_module(engine: AsyncEngine, tenant: str) -> None:
     m = blank(
         module_id=MODULE,
         tenant_id=tenant,
-        team_id="team_platform",
-        owner="Platform",
+        # Operations, the team the dev caller acts in: the secrets these tests write as that caller are the module's.
+        team_id=TEAM,
+        owner="Operations",
         me="James Richardson",
         at=datetime.now(UTC),
         input={"displayName": "Keyed", "name": "keyed", "type": "http"},
@@ -127,6 +129,7 @@ async def test_a_missing_or_misplaced_secret_sends_nothing(keyed: Bank, engine: 
         await c.execute(
             tool_secrets.insert().values(
                 tenant_id=tenant,
+                team_id=TEAM,
                 name="BANK_KEY",
                 ciphertext=blob,
                 version=1,
@@ -150,7 +153,8 @@ async def test_every_create_rotate_delete_and_use_is_audited(keyed: Bank, engine
     gone = await c.delete("/v1/secrets/SPARE_KEY")
     assert gone.status_code == 204
     trail = [
-        (a["name"], a["action"], a["version"], a["tool"]) for a in await SecretStore(engine).audit(keyed.api.tenant)
+        (a["name"], a["action"], a["version"], a["tool"])
+        for a in await SecretStore(engine).audit(keyed.api.tenant, TEAM)
     ]
     assert trail == [
         ("BANK_KEY", "created", 1, None),

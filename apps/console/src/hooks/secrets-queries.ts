@@ -17,7 +17,6 @@ function useSecretMutation<I>(fn: (i: I) => Promise<unknown>) {
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });
 }
 
-export const useCreateSecret = () => useSecretMutation((i: { name: string; value: string; teams?: string[] | null }) => api.secrets.create(i.name, i.value, i.teams));
-export const useSetSecretScope = () => useSecretMutation((i: { name: string; teams: string[] | null }) => api.secrets.setScope(i.name, i.teams));
+export const useCreateSecret = () => useSecretMutation((i: { name: string; value: string }) => api.secrets.create(i.name, i.value));
 export const useRotateSecret = () => useSecretMutation((i: { name: string; value: string }) => api.secrets.rotate(i.name, i.value));
 export const useDeleteSecret = () => useSecretMutation((name: string) => api.secrets.remove(name));

@@ -64,7 +64,7 @@ omar = headers("o.haddad@harborpine.example", "team_fraud")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, timeout=60)
 
-made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password", "teams": ["team_ops"]}, headers=sam)
+made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password", "teamId": "team_ops"}, headers=sam)
 tools.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-199 GreenMail"}, headers=sam)
 tools.post("/v1/egress/ranges", json={"value": f"{private_address()}/32", "note": "uc-199 GreenMail"}, headers=sam)
 check("0 the secret and the mail host are in place", made.status_code in (201, 409), made.text[:200])

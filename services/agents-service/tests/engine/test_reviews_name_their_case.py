@@ -9,7 +9,18 @@ from uuid import uuid4
 import httpx
 
 from ops_engine.worker import Worker
-from tests.engine.test_lifecycle import JAMES, MAYA, data, definition, drain, engine, publish, save, stack, start  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_lifecycle import (  # noqa: F401
+    JAMES,  # pyright: ignore[reportUnusedImport]
+    MAYA,  # pyright: ignore[reportUnusedImport]
+    data,  # pyright: ignore[reportUnusedImport]
+    definition,  # pyright: ignore[reportUnusedImport]
+    drain,  # pyright: ignore[reportUnusedImport]
+    engine,  # pyright: ignore[reportUnusedImport]
+    publish,  # pyright: ignore[reportUnusedImport]
+    save,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+    start,  # pyright: ignore[reportUnusedImport]
+)
 
 
 async def test_a_review_names_its_case_and_its_decision_lands_on_the_timeline(

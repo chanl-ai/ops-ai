@@ -248,3 +248,46 @@ async def test_an_expired_sign_in_is_refused(client: httpx.AsyncClient, tenant: 
         headers=admin(tenant),
     )
     assert res.status_code == 400 and res.json()["error"]["code"] == "sign_in_expired", res.text
+
+
+async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    """c-509: an all-scope team (the seed's Platform team) listed and read every team's connections, a sharing across
+    teams the team-is-the-workspace rule does not allow."""
+    cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
+    theirs = await _made(client, cards)
+    platform = admin(tenant)
+    listed = (await client.get("/v1/connections", params={"pageSize": 100}, headers=platform)).json()["data"]["data"]
+    assert theirs["id"] not in {c["id"] for c in listed}, listed
+    read = await client.get(f"/v1/connections/{theirs['id']}", headers=platform)
+    assert read.status_code == 404 and "team_cards" not in read.text, read.text
+
+
+async def test_a_connection_made_available_to_another_team_stays_its_own(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    """c-509: `availableTo` let another team's modules sign in with this team's connection; an old caller still sending
+    it is answered and the field ignored."""
+    body = {"name": "Shared ledger", "authKind": "api_key", "availableTo": ["team_cards"]}
+    made = await client.post("/v1/connections", json=body, headers=admin(tenant))
+    assert made.status_code == 201 and made.json()["data"]["availableTo"] == [], made.text
+    cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
+    read = await client.get(f"/v1/connections/{made.json()['data']['id']}", headers=cards)
+    assert read.status_code == 404, read.text
+
+
+async def test_each_team_holding_a_seeded_module_signs_in_with_its_own_connection(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str
+) -> None:
+    """c-509: the seed's connections all belonged to its all-scope team, so once a connection serves only its own team,
+    every other team's seeded module lost its sign-in, and Operations could not use the seeded core banking one."""
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC))
+    store, conns = ModuleStore(engine), ConnectionStore(engine)
+    core = await conns.get(tenant, "int_core_banking")
+    assert core is not None and core["team_id"] == "team_ops", core
+    with_connection = [m for m in await store.all(tenant) if m["connection_id"]]
+    assert with_connection, "the seed binds modules to its connections"
+    for m in with_connection:
+        conn = await conns.get(tenant, m["connection_id"])
+        assert conn is not None and conn["team_id"] == m["team_id"], (m["id"], m["team_id"], conn and conn["team_id"])

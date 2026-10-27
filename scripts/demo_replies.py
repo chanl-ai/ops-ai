@@ -26,8 +26,8 @@ PEOPLE = RUN_DIR / "demo-people.env"
 ADMIN_ENV = RUN_DIR / "demo-replies.admin.env"
 ORIGIN = os.environ.get("OPS_CONSOLE_ORIGIN", f"http://localhost:{os.environ.get('OPS_CONSOLE_PORT', '3016')}")
 TEAM_FILE = ROOT / "scripts" / "demo" / "team.json"
-MAILPIT = f"http://127.0.0.1:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
-SEND_SMTP = f"127.0.0.1:{os.environ.get('OPS_GREENMAIL_SMTP_PORT', '3025')}"
+MAILPIT = f"http://{os.environ.get('OPS_MAILPIT_HOST', '127.0.0.1')}:{os.environ.get('OPS_MAILPIT_HTTP_PORT', '8025')}"
+SEND_SMTP = f"{os.environ.get('OPS_GREENMAIL_HOST', '127.0.0.1')}:{os.environ.get('OPS_GREENMAIL_SMTP_PORT', '3025')}"
 HARBORPINE_BOX = "notices@harborpine.example"
 
 

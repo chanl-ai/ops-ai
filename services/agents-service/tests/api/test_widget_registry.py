@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_agents.api.deps import Runtime
 from ops_agents.api.widgets import listed, widgets
 from ops_agents.store.widgets import WidgetRegistry
-from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from tests.engine.test_lifecycle_rights import (  # noqa: F401  # a fixture
+    BUILDER,  # pyright: ignore[reportUnusedImport]
+    VIEWER,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 

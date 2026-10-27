@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0034_tools_per_team
+-- tools-service, stamped at tools_0035_secrets_per_team
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -223,6 +223,7 @@ CREATE TABLE operation_rate_windows (
 GO
 CREATE TABLE tool_secrets (
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	ciphertext VARCHAR(max) NOT NULL, 
 	version INTEGER NOT NULL, 
@@ -230,11 +231,10 @@ CREATE TABLE tool_secrets (
 	created_at DATETIMEOFFSET NOT NULL, 
 	rotated_at DATETIMEOFFSET NULL, 
 	last_used_at DATETIMEOFFSET NULL, 
-	teams NVARCHAR(max) NULL, 
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	connection_id VARCHAR(64) NULL, 
-	CONSTRAINT tool_secrets_pkey PRIMARY KEY (tenant_id, name)
+	CONSTRAINT tool_secrets_pkey PRIMARY KEY (tenant_id, team_id, name)
 );
 GO
 CREATE INDEX ix_tool_secrets_template_id ON tool_secrets (template_id);
@@ -242,6 +242,7 @@ GO
 CREATE TABLE secret_audit (
 	id INTEGER NOT NULL IDENTITY, 
 	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	action VARCHAR(16) NOT NULL, 
 	version INTEGER NOT NULL, 
@@ -411,5 +412,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0034_tools_per_team');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0035_secrets_per_team');
 GO

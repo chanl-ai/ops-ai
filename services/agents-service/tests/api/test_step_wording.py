@@ -29,7 +29,11 @@ from tests.api.test_activity import activity
 from tests.api.test_case_routes import started_run
 from tests.api.test_memory import chat
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.api.test_write_approval_policy import dev_platform, drafted, person  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.api.test_write_approval_policy import (  # noqa: F401
+    dev_platform,  # pyright: ignore[reportUnusedImport]
+    drafted,  # pyright: ignore[reportUnusedImport]
+    person,  # pyright: ignore[reportUnusedImport]
+)
 from tests.conftest import SEED
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT
 from tests.store.test_cases import store  # noqa: F401  # pyright: ignore[reportUnusedImport]

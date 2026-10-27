@@ -135,14 +135,12 @@ export interface ModuleOperation {
   rateLimitPerMin: number;
   /** Each call waits for an approval token bound to the exact input. */
   requiresApproval: boolean;
-  /** A write's approval policy: how many distinct people approve each call, the team they come from, and whether the
-   * person who asked may approve (honoured in dev only). */
+  /** A write's approval policy: how many distinct people of the run's team approve each call (c-509). */
   approvers: 1 | 2;
-  approverTeam: string;
   /** Approving asks the approver to step up (implied by two approvers). */
   stepUp?: boolean;
   /** Each `{{NAME}}` the headers or path read, and whether the tenant has set it. */
-  /** `available`: set and readable by this module's team; a secret limited to other teams is refused per call (c-093). */
+  /** `set`: the module's own team holds it, the only secrets a call of this module reads (c-509). */
   secrets?: { name: string; set: boolean; available?: boolean }[];
   /** Per-call ceiling in CAD. */
   amountMax?: number;
@@ -159,7 +157,7 @@ export interface ModuleOperation {
  * A staged edit. Method, path or body changes are major; headers, transform and timeout minor. `responseTransform` or
  * `timeoutMs` null clears it. Calls keep the published call until the change is published.
  */
-export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description' | 'method' | 'path' | 'headers' | 'body' | 'approvers' | 'approverTeam' | 'stepUp' | 'access' | 'input' | 'stub'>> & {
+export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description' | 'method' | 'path' | 'headers' | 'body' | 'approvers' | 'stepUp' | 'access' | 'input' | 'stub'>> & {
   responseTransform?: string | null;
   timeoutMs?: number | null;
 };

@@ -9,7 +9,9 @@ from httpx import AsyncClient
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import ChildRuns, acting_for
 from ops_agents.api.deps import Runtime
-from tests.api.test_child_runs import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+from tests.api.test_child_runs import (
+    stack,  # noqa: F401  # pyright: ignore[reportUnusedImport] - the shared app fixture
+)
 
 EMAIL = {"sender": "a@b.example", "subject": "Dispute", "body": "I did not make this payment."}
 

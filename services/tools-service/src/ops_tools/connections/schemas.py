@@ -21,13 +21,15 @@ class _In(BaseModel):
 class NewConnectionIn(_In):
     name: str = Field(min_length=1, max_length=200)
     auth_kind: str = Field(min_length=1, max_length=40)
-    available_to: list[Team] | None = None
+    # Accepted and ignored for one release, then removed (c-509): another team holds its own connection.
+    available_to: list[Team] | None = Field(default=None, deprecated=True)
 
 
 class ConnectionPatchIn(_In):
     revision: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=200)
-    available_to: list[Team] | None = None
+    # Accepted and ignored for one release, then removed (c-509).
+    available_to: list[Team] | None = Field(default=None, deprecated=True)
 
 
 class EnvironmentIn(_In):

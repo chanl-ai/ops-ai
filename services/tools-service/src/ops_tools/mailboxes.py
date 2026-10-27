@@ -42,7 +42,7 @@ from .graph_mailbox import (
     hosts,
     roles,
 )
-from .secrets import SecretMissing, SecretOutOfScope, SecretResolver
+from .secrets import SecretMissing, SecretResolver
 
 log = get_logger("ops_tools.mailboxes")
 IMAP_DEFAULT_PORT = {True: 993, False: 143}
@@ -187,9 +187,9 @@ class MailboxSenders:
         async def password() -> str:
             try:
                 values = await self.resolver.lookup(
-                    tenant, [secret], tool="send_reply", actor=f"mailbox:{address}", team=mailbox_team
+                    tenant, mailbox_team, [secret], tool="send_reply", actor=f"mailbox:{address}"
                 )
-            except (SecretMissing, SecretOutOfScope) as e:
+            except SecretMissing as e:
                 raise MailboxSendRefused(f"The sender's secret {secret} cannot be used: {e}") from e
             return values[secret]
 
@@ -227,12 +227,10 @@ class MailboxSenders:
         try:
             for host in hosts(self.settings.graph_login_url, self.settings.graph_url):
                 await self.egress.dial_address(tenant, host, 443)
-            values = await self.resolver.lookup(
-                tenant, [secret], tool="send_reply", actor=f"mailbox:{address}", team=team
-            )
+            values = await self.resolver.lookup(tenant, team, [secret], tool="send_reply", actor=f"mailbox:{address}")
         except EgressDenied as e:
             raise MailboxSendRefused(str(e)) from e
-        except (SecretMissing, SecretOutOfScope) as e:
+        except SecretMissing as e:
             raise MailboxSendRefused(f"The mailbox's secret {secret} cannot be used: {e}") from e
         http = self.graph(tenant)
         return GraphSender(http, self.tokens.token(http, tenant, ms_tenant, client_id, values[secret]), address)
@@ -263,11 +261,11 @@ def mailboxes_router(
             for host in hosts(settings.graph_login_url, settings.graph_url):
                 await egress.dial_address(tenant, host, 443)
             values = await resolver.lookup(
-                tenant, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, team=str(caller.team_id)
+                tenant, str(caller.team_id), [secret], tool=f"mailbox:{conn.address}", actor=caller.sub
             )
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
-        except (SecretMissing, SecretOutOfScope) as e:
+        except SecretMissing as e:
             raise Forbidden(f"The mailbox's secret {secret} cannot be used: {e}", code="secret_refused") from e
         http = graph(tenant)
         token = tokens.token(http, tenant, conn.graph_tenant_id, conn.graph_client_id, values[secret])
@@ -293,12 +291,10 @@ def mailboxes_router(
         tenant, secret = caller.tenant_id, conn.password_secret
         try:
             address = await egress.dial_address(tenant, host, port)
-            values = await resolver.lookup(
-                tenant, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, team=team
-            )
+            values = await resolver.lookup(tenant, team, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub)
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
-        except (SecretMissing, SecretOutOfScope) as e:
+        except SecretMissing as e:
             raise Forbidden(f"The mailbox's secret {secret} cannot be used: {e}", code="secret_refused") from e
         password, dial, user = values[secret], egress.dial_port(host, port), conn.username or conn.address
         timeout = 30.0

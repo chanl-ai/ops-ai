@@ -13,7 +13,7 @@ DEMO_MODEL ?= gpt-5-mini
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
-up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db)
+up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
 	@# Always migrate, never drop data on its own (owner, c-099). A chain the database holds ahead of this checkout

@@ -9,11 +9,9 @@ export interface SecretsApi {
   list(): Promise<SecretMeta[]>;
   /** One page of the secrets whose name matches the search, by name. */
   page(p: ListParams): Promise<ListResult<SecretMeta>>;
-  /** `teams` limits which teams' tool modules may read it; left out, every team. */
-  create(name: string, value: string, teams?: string[] | null): Promise<SecretMeta>;
+  /** Saved in the current team, the only team whose tool modules read it. */
+  create(name: string, value: string): Promise<SecretMeta>;
   rotate(name: string, value: string): Promise<SecretMeta>;
-  /** Security admins: the teams whose modules may read it; null is every team. */
-  setScope(name: string, teams: string[] | null): Promise<SecretMeta>;
   /** Refused with 409 `secret_in_use` while an operation names it. */
   remove(name: string): Promise<void>;
 }

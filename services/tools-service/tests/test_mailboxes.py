@@ -118,7 +118,7 @@ async def env(engine: AsyncEngine, tenant: str) -> AsyncIterator[Env]:
     await store.add(tenant, "range", f"{private_address()}/32", actor="test", note="", at=now)
     cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
     blob = cipher.encrypt("app-password", context=context_of(tenant, SECRET))
-    await SecretStore(engine).create(tenant, SECRET, blob, actor="sam", at=now, teams=[TEAM])
+    await SecretStore(engine).create(tenant, TEAM, SECRET, blob, actor="sam", at=now)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(engine)), base_url="http://tools") as c:
         yield Env(c, tenant, address, engine)
 
@@ -135,7 +135,7 @@ async def test_a_mailbox_is_read_with_its_secret_and_the_password_never_comes_ba
     [item] = page.json()["data"]["items"]
     assert b"notice-1-" in base64.b64decode(item["rfc822"])
     assert "app-password" not in page.text and "app-password" not in first.text
-    used = await SecretStore(env.engine).audit(env.tenant)
+    used = await SecretStore(env.engine).audit(env.tenant, TEAM)
     assert [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
 
 
@@ -151,8 +151,12 @@ async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
     assert r.status_code == 403 and r.json()["error"]["code"] == "egress_denied", r.text
 
 
-async def test_a_secret_scoped_to_another_team_is_refused(env: Env) -> None:
-    await SecretStore(env.engine).set_teams(env.tenant, SECRET, ["team_fraud"], actor="sam", at=datetime.now(UTC))
+async def test_the_same_name_in_another_team_does_not_serve_this_team(env: Env) -> None:
+    """Another team's row under the same name is that team's: the mailbox's own team holds none, so nothing is read."""
+    store, now = SecretStore(env.engine), datetime.now(UTC)
+    blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt("x", context=context_of(env.tenant, SECRET))
+    await store.create(env.tenant, "team_fraud", SECRET, blob, actor="sam", at=now)
+    assert await store.delete(env.tenant, TEAM, SECRET, actor="sam", at=now)
     r = await env.read(now=True)
     assert r.status_code == 403 and r.json()["error"]["code"] == "secret_refused", r.text
 

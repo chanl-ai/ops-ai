@@ -31,6 +31,15 @@ def private_address() -> str:
         return str(s.getsockname()[0])
 
 
+def host_ip(name: str) -> str | None:
+    if not name or name in {"127.0.0.1", "localhost"}:
+        return None
+    try:
+        return str(socket.getaddrinfo(name, None, socket.AF_INET)[0][4][0])
+    except OSError:
+        return None
+
+
 def headers() -> dict[str, str]:
     """A Security admin's platform token, or the dev header on a stack that runs dev sign-in."""
     try:
@@ -55,6 +64,14 @@ def main() -> int:
     cidr = f"{private_address()}/32"
     if cidr not in ranges:
         wanted.append(("ranges", cidr, "this machine's address, for the dev mail and bank fakes"))
+    for label, name in (
+        ("greenmail", os.environ.get("OPS_GREENMAIL_HOST", "")),
+        ("mailpit", os.environ.get("OPS_MAILPIT_HOST", "")),
+    ):
+        addr = host_ip(name)
+        sidecar = f"{addr}/32" if addr else ""
+        if sidecar and sidecar not in ranges:
+            wanted.append(("ranges", sidecar, f"{label} side container"))
     for kind, value, note in wanted:
         r = httpx.post(f"{TOOLS}/v1/egress/{kind}", json={"value": value, "note": note}, headers=h, timeout=10)
         if r.status_code not in (200, 201):
