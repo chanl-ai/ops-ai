@@ -351,8 +351,8 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description Every secret's metadata, as scripts and earlier callers read it; with `page`, one page of those whose name
-         *     matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.
+         * @description The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
+         *     name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.
          */
         get: operations["secrets_list_secrets"];
         put?: never;
@@ -378,12 +378,7 @@ export interface paths {
         delete: operations["secrets_delete_secret"];
         options?: never;
         head?: never;
-        /**
-         * Scope Secret
-         * @description The teams whose tool modules may read it; the gateway refuses a call from any other team's module. Moving
-         *     it is an edit where it is now and a create where it goes.
-         */
-        patch: operations["secrets_scope_secret"];
+        patch?: never;
         trace?: never;
     };
     "/v1/secrets/{name}/rotate": {
@@ -1236,7 +1231,10 @@ export interface components {
         };
         /** ConnectionPatchIn */
         ConnectionPatchIn: {
-            /** Availableto */
+            /**
+             * Availableto
+             * @deprecated
+             */
             availableTo?: string[] | null;
             /** Name */
             name?: string | null;
@@ -2376,7 +2374,10 @@ export interface components {
         NewConnectionIn: {
             /** Authkind */
             authKind: string;
-            /** Availableto */
+            /**
+             * Availableto
+             * @deprecated
+             */
             availableTo?: string[] | null;
             /** Name */
             name: string;
@@ -2627,21 +2628,18 @@ export interface components {
              */
             type: "string" | "number" | "integer" | "boolean" | "object" | "array";
         };
-        /**
-         * ScopeIn
-         * @description The teams whose tool modules may read the secret; null or empty is every team.
-         */
-        ScopeIn: {
-            /** Teams */
-            teams: string[] | null;
-        };
         /** SecretIn */
         SecretIn: {
             /** Name */
             name: string;
             /** Protection */
             protection?: ("system" | "managed") | null;
-            /** Teams */
+            /** Teamid */
+            teamId?: string | null;
+            /**
+             * Teams
+             * @deprecated
+             */
             teams?: string[] | null;
             /** Templateid */
             templateId?: string | null;
@@ -2679,7 +2677,12 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Rotatedat */
             rotatedAt?: string | null;
-            /** Teams */
+            /** Teamid */
+            teamId: string;
+            /**
+             * Teams
+             * @deprecated
+             */
             teams?: string[] | null;
             /** Templateid */
             templateId?: string | null;
@@ -5431,6 +5434,7 @@ export interface operations {
                 pageSize?: number;
                 search?: string;
                 templateId?: string | null;
+                teamId?: string | null;
             };
             header?: never;
             path?: never;
@@ -5637,7 +5641,9 @@ export interface operations {
     };
     secrets_delete_secret: {
         parameters: {
-            query?: never;
+            query?: {
+                teamId?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -5736,116 +5742,11 @@ export interface operations {
             };
         };
     };
-    secrets_scope_secret: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScopeIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_SecretMeta_"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not signed in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not allowed */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Conflicts with the current state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Refused by a rule */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Over a budget or rate limit */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Service unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
     secrets_rotate_secret: {
         parameters: {
-            query?: never;
+            query?: {
+                teamId?: string | null;
+            };
             header?: never;
             path: {
                 name: string;

@@ -1,6 +1,6 @@
 # A builder adds a Python function tool that runs sandboxed and uses a secret
 
-Status: current. Id: `uc-531`. Service: `tools-service`, `runner-service`, `agents-service` (the workflow step). Layers: api.
+Status: current. Id: `uc-531`. Service: `tools-service`, `runner-service`, `agents-service` (the workflow step). Layers: api, ui.
 
 ## Preconditions
 
@@ -25,6 +25,7 @@ value, returns a fingerprint of the key it received, and repeats the key in its 
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-531-api.py` | passing |
+| ui | `tools-service/scripts/test-uc-531-ui.mjs`: a builder's function as a workflow's tool step, started from its form in the console; the run page shows the step and what it returned | passing |
 
 ## Non-vacuous check
 

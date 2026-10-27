@@ -9,8 +9,12 @@
 VERIFY_FAILED = $(eval VERIFY_FAILED := $(shell mktemp -t ops-verify.XXXXXX))$(VERIFY_FAILED)
 KEEP = $(ROOT)/scripts/keep_going.sh $(VERIFY_FAILED)
 
-python-install: ## uv sync for packages/ and services/
+python-install: ## uv sync for packages/ and services/; from UV_DEFAULT_INDEX instead when it is set (behind a mirror)
+ifdef UV_DEFAULT_INDEX
+	bash $(ROOT)/scripts/install_via_mirror.sh
+else
 	uv sync --frozen
+endif
 
 python-verify: ## Lint and type-check packages, then verify each service with model keys unset
 	@rm -f $(VERIFY_FAILED)

@@ -97,7 +97,7 @@ await withUiStack(
 
     // 0. Security stores the mailbox secret and allows the mail hosts; the team adds its receipt document type.
     await step('0 the mailbox secret, the mail hosts and the receipt type are set up', async () => {
-      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'DEV_IMAP_PASSWORD', value: 'any', teams: ['team_ops'] }) });
+      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'DEV_IMAP_PASSWORD', value: 'any', teamId: 'team_ops' }) });
       const allowed = [];
       for (const value of [stack.mail.imapHost, stack.mail.smtpHost]) allowed.push((await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value, note: 'uc-249' }) })).status);
       allowed.push((await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.mail.range, note: 'uc-249' }) })).status);

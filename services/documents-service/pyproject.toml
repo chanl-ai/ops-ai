@@ -27,6 +27,8 @@ ops-files-client = { workspace = true }
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
+# A test still running after two minutes prints every thread's stack, so a hang names its test in the QA log.
+faulthandler_timeout = 120
 
 [dependency-groups]
 dev = ["ops-service-kit[testing]"]

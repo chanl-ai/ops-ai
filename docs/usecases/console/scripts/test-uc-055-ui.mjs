@@ -232,7 +232,7 @@ await withUiStack(
         // grants keep the published operation until Nadia approves (tools-service served_operations).
         const N = await headers(NADIA, 'team_security');
         const waitingAgain = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: N })).json()).data?.versions ?? []).find((v) => v.status === 'in_review');
-        const approved = waitingAgain ? ((await approveToolReview(moduleId, N)).status === 'published' ? 200 : 'not published') : 'no review';
+        const approved = waitingAgain ? ((await approveToolReview(moduleId, N, J)).status === 'published' ? 200 : 'not published') : 'no review';
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
         // Grants no longer offered are listed under the tools picker (c-135), not inside a dialog.

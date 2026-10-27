@@ -140,7 +140,7 @@ async def allow_and_store(engine: AsyncEngine, tenant: str, *, hosts: bool = Tru
         await store.add(tenant, "range", f"{FAKE_IP}/32", actor="test", note="", at=now)
     cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
     blob = cipher.encrypt("s3cret", context=context_of(tenant, SECRET))
-    await SecretStore(engine).create(tenant, SECRET, blob, actor="sam", at=now, teams=[TEAM])
+    await SecretStore(engine).create(tenant, TEAM, SECRET, blob, actor="sam", at=now)
 
 
 @pytest.fixture
@@ -167,7 +167,7 @@ async def test_a_mailbox_is_read_with_the_teams_registration_and_the_secret_neve
     [item] = page.json()["data"]["items"]
     assert item["internetMessageId"] == NOTICE["internetMessageId"]
     assert "s3cret" not in page.text + first.text
-    used = await SecretStore(engine).audit(tenant)
+    used = await SecretStore(engine).audit(tenant, TEAM)
     assert [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
 
 

@@ -1,0 +1,122 @@
+# One compose project per checkout: the CLI names it from the workspace folder, so two
+# developers never share a network, volume or port. Infra images and settings come from
+# deploy/compose/compose.yaml (include, not a fork). Host port publishes are cleared so
+# two projects on one Docker engine do not bind 5477, 8181 or the mail ports.
+include:
+  - path: ../deploy/compose/compose.yaml
+
+services:
+  postgres:
+    ports: !reset []
+  opa:
+    ports: !reset []
+  greenmail:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  # The levy demo's bank stand-in: https as api.bank.test on :8745. Alias is Docker DNS, so the
+  # workspace resolves the name to this container (loopback is not listable on egress).
+  bank:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        IMAGE_REGISTRY: ${OPS_BASE_IMAGE_PREFIX:-}
+        APT_MIRROR: ${APT_MIRROR:-}
+        UV_DEFAULT_INDEX:
+        NPM_CONFIG_REGISTRY:
+    user: "0:0"
+    working_dir: /workspaces/ops-ai/services/tools-service/scripts
+    volumes:
+      # Every install and build folder is the container's own: on the bind mount, Linux packages overwrite the host's
+      # and two Next dev servers (host and container) wait on each other's .next lock.
+      - ..:/workspaces/ops-ai:cached
+      - fake-bank-tls:/bank
+    environment:
+      FAKE_BANK_BIND: "0.0.0.0"
+      FAKE_BANK_PORT: "8745"
+      FAKE_BANK_KEY: dev-bank-key
+      FAKE_BANK_WEBHOOK_SECRET: dev-webhook-secret
+    command: ["python3", "-m", "fake_bank", "/bank"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import ssl, urllib.request; urllib.request.urlopen('https://127.0.0.1:8745/openapi.json', context=ssl._create_unverified_context(), timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      default:
+        aliases: [api.bank.test]
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        IMAGE_REGISTRY: ${OPS_BASE_IMAGE_PREFIX:-}
+        APT_MIRROR: ${APT_MIRROR:-}
+        UV_DEFAULT_INDEX:
+        NPM_CONFIG_REGISTRY:
+    volumes:
+      - ..:/workspaces/ops-ai:cached
+      - workspace-node-modules:/workspaces/ops-ai/node_modules
+      - workspace-venv:/workspaces/ops-ai/.venv
+      - ws-apps-console-node_modules:/workspaces/ops-ai/apps/console/node_modules
+      - ws-apps-console-next:/workspaces/ops-ai/apps/console/.next
+      - ws-apps-embed-node_modules:/workspaces/ops-ai/apps/embed/node_modules
+      - ws-apps-embed-next:/workspaces/ops-ai/apps/embed/.next
+      - ws-apps-docs-node_modules:/workspaces/ops-ai/apps/docs/node_modules
+      - ws-apps-docs-next:/workspaces/ops-ai/apps/docs/.next
+      - ws-packages-usecase-runner-node_modules:/workspaces/ops-ai/packages/usecase-runner/node_modules
+      - ws-sdk-typescript-node_modules:/workspaces/ops-ai/sdk/typescript/node_modules
+      - workspace-run:/workspaces/ops-ai/.run
+      - workspace-logs:/workspaces/ops-ai/.logs
+      - workspace-data:/workspaces/ops-ai/.data
+      - fake-bank-tls:/workspaces/ops-ai/.run/fake-bank
+    command: sleep infinity
+    working_dir: /workspaces/ops-ai
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      OPS_INFRA: external
+      # A company mirror (docs/deploy/install.md, "Behind a company mirror"): set these in the shell that opens the
+      # workspace, or in .devcontainer/.env.local, and `make install` in post-create reads the mirror instead of the
+      # public indexes. A name with no value passes the host's setting on when it has one.
+      UV_DEFAULT_INDEX:
+      NPM_CONFIG_REGISTRY:
+      COREPACK_NPM_REGISTRY:
+      UV_PYTHON_INSTALL_MIRROR:
+      OPS_RUNNER_WASM_URL:
+      PLAYWRIGHT_DOWNLOAD_HOST:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opa:
+        condition: service_started
+      greenmail:
+        condition: service_started
+      mailpit:
+        condition: service_started
+      bank:
+        condition: service_healthy
+
+volumes:
+  workspace-node-modules:
+  ws-apps-console-node_modules:
+  ws-apps-console-next:
+  ws-apps-embed-node_modules:
+  ws-apps-embed-next:
+  ws-apps-docs-node_modules:
+  ws-apps-docs-next:
+  ws-packages-usecase-runner-node_modules:
+  ws-sdk-typescript-node_modules:
+  workspace-venv:
+  workspace-run:
+  workspace-logs:
+  workspace-data:
+  fake-bank-tls:

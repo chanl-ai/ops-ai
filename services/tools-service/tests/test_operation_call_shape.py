@@ -17,6 +17,8 @@ from .conftest import service_headers
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 BASE = f"/v1/tool-modules/{MODULE}"
+# The module's team, which holds the secrets its operations read (c-509).
+TEAM = "team_platform"
 
 
 async def _op_id(g: Gateway, base: str) -> str:
@@ -131,7 +133,8 @@ async def test_a_transform_that_fails_returns_the_masked_answer_with_the_error(g
 
 async def test_a_transform_cannot_carry_a_secret_out(g: Gateway) -> None:
     secret = "sk-bank-1f2e3d4c5b6a"
-    created = await g.client.post("/v1/secrets", json={"name": f"BANK_KEY_{g.suffix.upper()}", "value": secret})
+    body = {"name": f"BANK_KEY_{g.suffix.upper()}", "value": secret, "teamId": TEAM}
+    created = await g.client.post("/v1/secrets", json=body)
     assert created.status_code == 201, created.text
     shape = {
         "path": "/echo-headers",
@@ -171,7 +174,7 @@ async def test_an_mcp_or_stub_operation_has_no_call_to_edit(g: Gateway) -> None:
 async def test_a_transform_cannot_re_encode_a_secret(g: Gateway) -> None:
     secret = "sk-bank-9a8b7c6d5e4f"
     name = f"ECHO_KEY_{g.suffix.upper()}"
-    assert (await g.client.post("/v1/secrets", json={"name": name, "value": secret})).status_code == 201
+    assert (await g.client.post("/v1/secrets", json={"name": name, "value": secret, "teamId": TEAM})).status_code == 201
     shape = {"path": "/echo-headers", "headers": [{"key": "X-Api-Key", "value": f"{{{{{name}}}}}"}]}
     assert (await _patch(g, "elsewhere", shape)).status_code == 200
     await _publish(g)

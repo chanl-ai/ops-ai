@@ -258,7 +258,7 @@ def build_app(
     resolver = SecretResolver(SecretStore(engine), cipher)
     connections = ConnectionStore(engine)
     tokens = Tokens(connections, cipher, upstream, policy)
-    authenticator = Authenticator(connections, resolver, tokens, directory.wide_teams)
+    authenticator = Authenticator(connections, resolver, tokens)
     service = ModuleService(
         store,
         directory,

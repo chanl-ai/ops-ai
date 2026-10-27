@@ -133,7 +133,7 @@ async def test_the_secrets_an_operation_reads_show_whether_they_are_set(api: Api
     assert before["unsetSecrets"] == 1
     listed = await _ok(await api.call("GET", ""))
     assert next(r for r in listed["data"] if r["id"] == "mod_core_banking")["unsetSecrets"] == 1
-    await api.client.post("/v1/secrets", json={"name": "CORE_KEY", "value": "k-123"})
+    await api.client.post("/v1/secrets", json={"name": "CORE_KEY", "value": "k-123", "teamId": "team_platform"})
     after = await _ok(await api.call("GET", MOD))
     assert next(o for o in after["operations"] if o["id"] == op["id"])["secrets"] == [
         {"name": "CORE_KEY", "set": True, "available": True}

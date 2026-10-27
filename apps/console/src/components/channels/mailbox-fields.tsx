@@ -111,7 +111,8 @@ export function toInput(v: MailboxForm): MailboxInput {
 function SecretPicker({ id, value, onChange }: { id: string; value: string | null; onChange: (name: string) => void }) {
   const secrets = useSecrets();
   const [adding, setAdding] = React.useState(false);
-  const options = (secrets.data ?? []).map((s) => ({ value: s.name, label: s.name, hint: s.teams?.length ? s.teams.join(', ') : 'Every team' }));
+  // The current team's secrets only: a mailbox of this team reads its own team's secret (c-509).
+  const options = (secrets.data ?? []).map((s) => ({ value: s.name, label: s.name }));
   return (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
       <div className="min-w-0 flex-1">

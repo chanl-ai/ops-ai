@@ -10,7 +10,11 @@ import pytest
 from httpx import AsyncClient
 
 from ops_agents.api import hitl_facade
-from tests.api.test_write_approval_policy import dev_platform, drafted, person  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.api.test_write_approval_policy import (  # noqa: F401
+    dev_platform,  # pyright: ignore[reportUnusedImport]
+    drafted,  # pyright: ignore[reportUnusedImport]
+    person,  # pyright: ignore[reportUnusedImport]
+)
 
 
 async def test_the_queue_reads_only_threads_that_can_hold_a_review(

@@ -1,6 +1,7 @@
-"""Who may change the tenant's egress allow-list and tool secrets (c-079), through the real routes with people signed
-in on platform-style tokens: only an admin on the Security team. A builder or an admin of another team would otherwise
-widen what every module may reach, or swap the credentials it calls with."""
+"""Who may change the tenant's egress allow-list and another team's tool secrets (c-079, c-509), through the real routes
+with people signed in on platform-style tokens: only an admin on the Security team. A builder or an admin of another
+team would otherwise widen what every module may reach, or swap the credentials another team calls with; to them that
+team's secrets do not exist."""
 
 from __future__ import annotations
 
@@ -25,9 +26,12 @@ CHANGES = (
     ("post", "/v1/egress/hosts/remove", {"value": "ledger.example.com"}),
     ("post", "/v1/egress/ranges", {"value": "10.20.0.0/16"}),
     ("post", "/v1/egress/ranges/remove", {"value": "10.20.0.0/16"}),
-    ("post", "/v1/secrets", {"name": "LEDGER_TOKEN", "value": "s3cret"}),
-    ("post", "/v1/secrets/LEDGER_TOKEN/rotate", {"value": "s3cret-2"}),
-    ("delete", "/v1/secrets/LEDGER_TOKEN", None),
+)
+# Another team's secret: Fraud's, which none of the refused people acts in.
+SECRET_CHANGES = (
+    ("post", "/v1/secrets", {"name": "LEDGER_TOKEN", "value": "s3cret", "teamId": "team_fraud"}),
+    ("post", "/v1/secrets/LEDGER_TOKEN/rotate?teamId=team_fraud", {"value": "s3cret-2"}),
+    ("delete", "/v1/secrets/LEDGER_TOKEN?teamId=team_fraud", None),
 )
 
 
@@ -69,6 +73,12 @@ async def test_only_a_security_admin_changes_egress_and_secrets(
         assert refused.json()["error"]["code"] == "not_security_admin"
         done = await _send(client, method, path, body, sam)
         assert done.status_code in (200, 201, 204), f"{method} {path}: {done.status_code} {done.text}"
-    # Reading stays open: every builder sees what modules may reach and which secret names exist.
+    for method, path, body in SECRET_CHANGES:
+        done = await _send(client, method, path, body, sam)
+        assert done.status_code in (200, 201, 204), f"{method} {path}: {done.status_code} {done.text}"
+        if method != "delete":
+            refused = await _send(client, method, path, body, other)
+            assert refused.status_code == 404, f"{method} {path}: {refused.status_code} {refused.text}"
+    # Reading stays open: every builder sees what modules may reach, and which secret names their own team holds.
     assert (await client.get("/v1/egress", headers=other)).status_code == 200
     assert (await client.get("/v1/secrets", headers=other)).status_code == 200

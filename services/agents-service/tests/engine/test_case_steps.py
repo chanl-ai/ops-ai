@@ -17,7 +17,12 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.ports import CaseNotFoundError
 from tests.engine.test_start_workflow import TEAM, Tenant, tenants  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_worker import CountingTools, drain, engine, worker  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_worker import (  # noqa: F401
+    CountingTools,  # pyright: ignore[reportUnusedImport]
+    drain,  # pyright: ignore[reportUnusedImport]
+    engine,  # pyright: ignore[reportUnusedImport]
+    worker,  # pyright: ignore[reportUnusedImport]
+)
 
 OTHER = "team_b"
 

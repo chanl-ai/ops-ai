@@ -223,7 +223,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/secrets/{name}",
         "pathParams": ["name"],
-        "query": [],
+        "query": ["teamId"],
         "stream": False,
     },
     "secrets_list_secrets": {
@@ -232,7 +232,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/secrets",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId"],
+        "query": ["page", "pageSize", "search", "templateId", "teamId"],
         "stream": False,
     },
     "secrets_rotate_secret": {
@@ -241,16 +241,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/secrets/{name}/rotate",
         "pathParams": ["name"],
-        "query": [],
-        "stream": False,
-    },
-    "secrets_scope_secret": {
-        "body": "json",
-        "headers": [],
-        "method": "PATCH",
-        "path": "/v1/secrets/{name}",
-        "pathParams": ["name"],
-        "query": [],
+        "query": ["teamId"],
         "stream": False,
     },
     "send_policy_get_send_policy": {
@@ -687,13 +678,14 @@ class Operations:
         page_size: int | None = None,
         search: str | None = None,
         template_id: str | None = None,
+        team_id: str | None = None,
     ) -> Any:
         "List Secrets"
         return self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -702,17 +694,13 @@ class Operations:
         "Create Secret"
         return self._t.call(SERVICE, OPERATIONS["secrets_create_secret"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def secrets_scope_secret(self, name: str, body: ScopeIn) -> SecretMeta:
-        "Scope Secret"
-        return self._t.call(SERVICE, OPERATIONS["secrets_scope_secret"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def secrets_delete_secret(self, name: str) -> Any:
+    def secrets_delete_secret(self, name: str, *, team_id: str | None = None) -> Any:
         "Delete Secret"
-        return self._t.call(SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None)  # type: ignore[no-any-return]
 
-    def secrets_rotate_secret(self, name: str, body: RotateIn) -> SecretMeta:
+    def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:
         "Rotate Secret"
-        return self._t.call(SERVICE, OPERATIONS["secrets_rotate_secret"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["secrets_rotate_secret"], {"name": name}, {"teamId": team_id}, {}, body)  # type: ignore[no-any-return]
 
     def send_policy_get_send_policy(self) -> SendPolicyView:
         "Get Send Policy"
@@ -1084,13 +1072,14 @@ class AsyncOperations:
         page_size: int | None = None,
         search: str | None = None,
         template_id: str | None = None,
+        team_id: str | None = None,
     ) -> Any:
         "List Secrets"
         return await self._t.call(
             SERVICE,
             OPERATIONS["secrets_list_secrets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id, "teamId": team_id},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1099,17 +1088,17 @@ class AsyncOperations:
         "Create Secret"
         return await self._t.call(SERVICE, OPERATIONS["secrets_create_secret"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def secrets_scope_secret(self, name: str, body: ScopeIn) -> SecretMeta:
-        "Scope Secret"
-        return await self._t.call(SERVICE, OPERATIONS["secrets_scope_secret"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def secrets_delete_secret(self, name: str) -> Any:
+    async def secrets_delete_secret(self, name: str, *, team_id: str | None = None) -> Any:
         "Delete Secret"
-        return await self._t.call(SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None
+        )  # type: ignore[no-any-return]
 
-    async def secrets_rotate_secret(self, name: str, body: RotateIn) -> SecretMeta:
+    async def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:
         "Rotate Secret"
-        return await self._t.call(SERVICE, OPERATIONS["secrets_rotate_secret"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["secrets_rotate_secret"], {"name": name}, {"teamId": team_id}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def send_policy_get_send_policy(self) -> SendPolicyView:
         "Get Send Policy"

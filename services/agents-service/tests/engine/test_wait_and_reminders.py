@@ -24,7 +24,13 @@ from ops_engine.definition import WorkflowDefinition, parse
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_work
 from ops_service_kit.ids import new_id
-from tests.engine.test_worker import CountingTools, M, drain, engine, worker  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_worker import (  # noqa: F401
+    CountingTools,  # pyright: ignore[reportUnusedImport]
+    M,  # pyright: ignore[reportUnusedImport]
+    drain,  # pyright: ignore[reportUnusedImport]
+    engine,  # pyright: ignore[reportUnusedImport]
+    worker,  # pyright: ignore[reportUnusedImport]
+)
 
 # About a second: long enough to see it still waiting, short enough to wait out.
 ONE_SECOND_HOURS = 1 / 3600

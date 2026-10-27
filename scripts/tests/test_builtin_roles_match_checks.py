@@ -239,10 +239,11 @@ def tools_security_admin(p: Principal) -> Scope | None:
 
 
 def tools_team_secret(action: str) -> Verdict:
-    """A secret scoped to the team the person acts in: written by that team (c-186), as the secrets routes check."""
+    """A secret of the team the person acts in: written by that team (c-186, one team per secret c-509), as the secrets
+    routes check."""
 
     def verdict(p: Principal) -> Scope | None:
-        return yes(passes(lambda: may_write_secret(p, action, [str(p.team_id)], security_team=SECURITY)))
+        return yes(passes(lambda: may_write_secret(p, action, str(p.team_id), security_team=SECURITY)))
 
     return verdict
 

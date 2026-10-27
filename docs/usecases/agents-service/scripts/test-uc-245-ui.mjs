@@ -111,7 +111,7 @@ await withUiStack(
 
     // 0. A Security admin puts the mailbox password on the Secrets page for team_ops and allows the mail hosts.
     await step('0 Sam stores the mailbox secret and allows the mail hosts', async () => {
-      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: SECRET, value: 'app-password', teams: ['team_ops'] }) });
+      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: SECRET, value: 'app-password', teamId: 'team_ops' }) });
       const allowed = [];
       for (const value of [stack.mail.imapHost, stack.mail.smtpHost]) allowed.push((await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value, note: 'uc-245' }) })).status);
       allowed.push((await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.mail.range, note: 'uc-245' }) })).status);

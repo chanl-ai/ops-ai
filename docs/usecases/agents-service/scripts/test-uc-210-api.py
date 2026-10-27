@@ -142,7 +142,7 @@ def bank_module(gw: httpx.Client) -> None:
     hold = next(o for o in made["operations"] if o["name"] == "place_hold")
     gw.patch(
         f"/v1/tool-modules/{made['id']}/operations/{hold['id']}",
-        json={"approvers": 1, "approverTeam": "team_ops", "stepUp": False},
+        json={"approvers": 1, "stepUp": False},
     )
     data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-210"}))
     approve_tool_review(gw, made["id"], SECURITY)
@@ -243,7 +243,7 @@ def main() -> None:
         gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"})
         gw.post("/v1/egress/hosts", json={"value": IMAP_HOST, "note": "uc-210 GreenMail"})
         gw.post("/v1/egress/ranges", json={"value": f"{private_address()}/32", "note": "uc-210 this machine"})
-        gw.post("/v1/secrets", json={"name": SECRET, "value": "any", "teams": ["team_ops"]})
+        gw.post("/v1/secrets", json={"name": SECRET, "value": "any", "teamId": "team_ops"})
         bank_module(gw)
         form = {
             "name": f"Levy {RUN}",

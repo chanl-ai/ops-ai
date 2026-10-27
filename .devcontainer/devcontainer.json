@@ -1,0 +1,30 @@
+{
+  "name": "Ops AI",
+  "dockerComposeFile": "compose.yaml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/ops-ai",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "forwardPorts": [3016, 8025],
+  "portsAttributes": {
+    "3016": {
+      "label": "console",
+      "onAutoForward": "notify"
+    },
+    "8025": {
+      "label": "mailpit",
+      "onAutoForward": "silent"
+    }
+  },
+  "containerEnv": {
+    "OPS_INFRA": "external"
+  },
+  "remoteEnv": {
+    "OPS_INFRA": "external"
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/post-start.sh"
+}

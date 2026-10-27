@@ -18,7 +18,7 @@ from ops_access import can
 from ops_identity import Auth, CurrentService, Principal, install_auth
 from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import Forbidden, NotFound, ServiceUnavailable, Unprocessable
+from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
@@ -36,7 +36,7 @@ from .modules.directory import Directory
 from .modules.policy import WriteApprovals
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
 from .registry import Resolved, ToolRegistry
-from .secrets import SecretMissing, SecretOutOfScope, SecretResolver
+from .secrets import SecretMissing, SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
 from .store.mocks import MockStore
@@ -272,21 +272,17 @@ def create_gateway_app(
         "/v1/secrets/values", tags=["secrets"], response_model=Envelope[SecretValues], responses=error_responses()
     )
     async def secret_values(body: SecretValuesIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Internal (service token holding `secrets_egress:run`, c-221): the values of the tenant's workspace-wide
-        secrets, for a service that keeps no credential of its own (models-service's provider keys). A secret scoped to
-        teams never leaves for another service, and every value read is audited as the calling service."""
+        """Internal (service token holding `secrets_egress:run`, c-221): secret values for a service that keeps no
+        credential of its own (models-service's provider keys). Every secret belongs to a team and a team's secret
+        never leaves for another service (c-509), so this answers 404 until the owner decides where provider keys
+        live; models-service then reads the dev stack's keys from its settings."""
         can(caller, "secrets_egress", "run", what="secret values")
         if secret_resolver is None:
             raise ServiceUnavailable("This gateway reads no secrets.")
         try:
             found = await secret_resolver.lookup(
-                caller.tenant_id, list(dict.fromkeys(body.names)), tool="secrets.values", actor=caller.sub, team=None
+                caller.tenant_id, None, list(dict.fromkeys(body.names)), tool="secrets.values", actor=caller.sub
             )
-        except SecretOutOfScope as e:
-            raise Forbidden(
-                f"Only workspace-wide secrets are read by services; {', '.join(e.names)} belongs to teams.",
-                code="secret_out_of_scope",
-            ) from e
         except SecretMissing as e:
             raise NotFound(f"Secret {', '.join(e.names)}") from e
         return JSONResponse({"success": True, "data": {"values": found}})

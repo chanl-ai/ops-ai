@@ -76,7 +76,7 @@ await withUiStack(
 
     // 0. A Security admin puts the seeded mailboxes' password on the Secrets page and allows the mail hosts.
     await step('0 Sam stores the mailbox secret and allows the mail hosts', async () => {
-      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'DEV_IMAP_PASSWORD', value: 'any', teams: ['team_ops'] }) });
+      const secret = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'DEV_IMAP_PASSWORD', value: 'any', teamId: 'team_ops' }) });
       const allowed = [];
       for (const value of [stack.mail.imapHost, stack.mail.smtpHost]) allowed.push((await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value, note: 'uc-246' }) })).status);
       allowed.push((await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.mail.range, note: 'uc-246' }) })).status);

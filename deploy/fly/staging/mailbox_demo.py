@@ -401,25 +401,17 @@ class Demo:
         return str(starts[0]["parameters"]["workflow"]) if starts else None
 
     def mailbox_secret(self, name: str, value: str | None) -> bool:
-        """Settings > Secrets, as a Security admin: `name` holds the mailbox password and the demo team may use it.
-        An existing secret keeps its value; only its teams widen."""
+        """Settings > Secrets, as a Security admin: `name` holds the mailbox password, as the demo team's own secret
+        (c-509). An existing secret keeps its value."""
         h = self.as_admin(SECURITY)
-        listed = data(httpx.get(self.url("tools", "/v1/secrets"), headers=h, timeout=30))
-        found = next((x for x in listed if x["name"] == name), None)
-        if found is None:
-            if not value:
-                return step(False, "mailbox secret", f"{name} is not in Secrets; export DEMO_MAILBOX_PASSWORD")
-            made = httpx.post(
-                self.url("tools", "/v1/secrets"), json={"name": name, "value": value, "teams": [self.ops]}, headers=h
-            )
-            return step(made.status_code == 201, "mailbox secret", f"{name} made for {self.ops}: {made.status_code}")
-        teams = found.get("teams")
-        if teams is not None and self.ops not in teams:
-            widened = httpx.patch(
-                self.url("tools", f"/v1/secrets/{name}"), json={"teams": [*teams, self.ops]}, headers=h, timeout=30
-            )
-            return step(widened.status_code == 200, "mailbox secret", f"{name} now usable by {self.ops}")
-        return step(True, "mailbox secret", f"{name} found, usable by {', '.join(teams or ['every team'])}")
+        mine = {"teamId": self.ops}
+        listed = data(httpx.get(self.url("tools", "/v1/secrets"), params=mine, headers=h, timeout=30))
+        if any(x["name"] == name for x in listed):
+            return step(True, "mailbox secret", f"{name} found in {self.ops}")
+        if not value:
+            return step(False, "mailbox secret", f"{name} is not in Secrets; export DEMO_MAILBOX_PASSWORD")
+        made = httpx.post(self.url("tools", "/v1/secrets"), json={"name": name, "value": value, **mine}, headers=h)
+        return step(made.status_code == 201, "mailbox secret", f"{name} made for {self.ops}: {made.status_code}")
 
     def connected_elsewhere(self, address: str) -> str | None:
         """The other team `address` is connected in, if any. A workspace connects an address once, and a mailbox can be

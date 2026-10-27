@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
-from . import database as _database  # noqa: F401  # pyright: ignore[reportUnusedImport] - installs the connect retry on every engine
+from . import (
+    database as _database,  # noqa: F401  # pyright: ignore[reportUnusedImport] - installs the connect retry on every engine
+)
 from .guarantees import Backend, Guarantee, Repository, unmet
 
 __all__ = ["Backend", "Guarantee", "Repository", "unmet"]

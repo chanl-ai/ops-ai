@@ -39,7 +39,7 @@ await withUiStack(
     await add({ name: READ, description: 'A rate', access: 'read', method: 'GET', url: `https://${HOST}/v1/rates/{currency}`, headers: [{ key: 'X-Api-Key', value: `{{${SECRET}}}` }] });
     await add({ name: WRITE, description: 'Hold an FX quote', access: 'write', method: 'POST', url: `https://${HOST}/v1/holds`, headers: [] });
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-090' }) }));
-    await approveToolReview(id, N);
+    await approveToolReview(id, N, J);
 
     const browser = await chromium.launch();
     const errors = [];

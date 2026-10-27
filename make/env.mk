@@ -9,6 +9,9 @@ ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 # environment variable with a file assignment unless told to), so a wrapper or an exported shell variable still rules.
 -include $(ROOT)/.env
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null)
+# Per-developer keys outside the image (devcontainer). Same KEY=value shape as .env.
+-include $(ROOT)/.devcontainer/.env.local
+export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)
 
 # ISOLATED=1 runs a second stack beside the first: every port +1000, its own compose project and data volume, its own
 # logs and pids, so two checkouts or two sessions do not fight over :8700 or one database.
@@ -35,6 +38,10 @@ OPS_TOOLS_PORT ?= $(call port,8720)
 OPS_KB_PORT ?= $(call port,8740)
 OPS_FILES_PORT ?= $(call port,8750)
 OPS_DOCUMENTS_PORT ?= $(call port,8760)
+# The code runner (services/runner-service, c-531) and the API docs site. Without the offset an isolated stack's runner
+# took the shared stack's :8770, and the shared `make up` found that port healthy and called back the other stack.
+OPS_RUNNER_PORT ?= $(call port,8770)
+OPS_API_DOCS_PORT ?= $(call port,8799)
 OPS_MODELS_PORT ?= $(call port,8730)
 OPS_FAKE_OPENAI_PORT ?= $(call port,8746)
 OPS_PLATFORM_PORT ?= $(call port,8710)
@@ -59,6 +66,8 @@ $(call reset_inherited,OPS_TOOLS_PORT,$(call port,8720))
 $(call reset_inherited,OPS_KB_PORT,$(call port,8740))
 $(call reset_inherited,OPS_FILES_PORT,$(call port,8750))
 $(call reset_inherited,OPS_DOCUMENTS_PORT,$(call port,8760))
+$(call reset_inherited,OPS_RUNNER_PORT,$(call port,8770))
+$(call reset_inherited,OPS_API_DOCS_PORT,$(call port,8799))
 $(call reset_inherited,OPS_MODELS_PORT,$(call port,8730))
 $(call reset_inherited,OPS_FAKE_OPENAI_PORT,$(call port,8746))
 $(call reset_inherited,OPS_PLATFORM_PORT,$(call port,8710))
@@ -73,7 +82,7 @@ OPS_LOG_DIR := $(ROOT)/.logs$(if $(filter 1,$(ISOLATED)),/isolated)
 OPS_RUN_DIR := $(ROOT)/.run$(if $(filter 1,$(ISOLATED)),/isolated)
 
 export OPS_STACK OPS_COMPOSE_PROJECT OPS_CONSOLE_PORT OPS_EMBED_PORT OPS_CONSOLE_RUNTIME_PORT OPS_AGENTS_PORT OPS_TOOLS_PORT OPS_KB_PORT OPS_FILES_PORT \
-  OPS_DOCUMENTS_PORT OPS_MODELS_PORT OPS_FAKE_OPENAI_PORT \
+  OPS_DOCUMENTS_PORT OPS_RUNNER_PORT OPS_API_DOCS_PORT OPS_MODELS_PORT OPS_FAKE_OPENAI_PORT \
   OPS_PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT \
   OPS_OPA_PORT OPS_PG_PORT OPS_GREENMAIL_SMTP_PORT OPS_GREENMAIL_IMAP_PORT OPS_MAILPIT_SMTP_PORT OPS_MAILPIT_HTTP_PORT \
   OPS_LOG_DIR OPS_RUN_DIR
@@ -85,7 +94,8 @@ export OPS_PORT ?= $(OPS_AGENTS_PORT)
 export OPS_GATEWAY_PORT ?= $(OPS_TOOLS_PORT)
 # Where the other services find platform-service's key set and introspection; the internal port binds to localhost.
 export OPS_PLATFORM_URL ?= http://127.0.0.1:$(OPS_PLATFORM_PORT)
-export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
+# OPS_INFRA=external: postgres, opa, greenmail and mailpit already run as side containers (the
+# devcontainer compose project). Skip db-up/db-down and use those service names. Every other default stays.
 # Tests run on their own database, never the live ops_runtime: the live service's timer poller claims timers on any
 # database it shares with the tests. A caller's explicit OPS_DATABASE_URL still wins; read before the default below.
 # Exported, so a sub-make keeps the top-level choice instead of reading the exported live URL as explicit.
@@ -93,10 +103,24 @@ export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
 # share a test database, where one run's per-test cleanup waited on the other's locks and the run hung. test_db.py drops
 # the databases of runs that are over before it makes this one (scripts/scratch_db_sweep.py), as `make db-sweep` does.
 TEST_RUN := r$(shell echo $$PPID)_$(shell od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
-export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test$(if $(filter 1,$(ISOLATED)),_isolated)_$(TEST_RUN))
+ifeq ($(OPS_INFRA),external)
+  export OPS_OPA_URL ?= http://opa:8181
+  export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@postgres:5432/ops_runtime
+  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@postgres:5432/ops_test$(if $(filter 1,$(ISOLATED)),_isolated)_$(TEST_RUN))
+  export OPS_SMTP_HOST ?= mailpit
+  export OPS_GREENMAIL_HOST ?= greenmail
+  export OPS_MAILPIT_HOST ?= mailpit
+else
+  export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
+  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test$(if $(filter 1,$(ISOLATED)),_isolated)_$(TEST_RUN))
+  export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
+  export OPS_SMTP_HOST ?= 127.0.0.1
+  export OPS_GREENMAIL_HOST ?= 127.0.0.1
+  export OPS_MAILPIT_HOST ?= 127.0.0.1
+endif
 # Prefix for a test recipe: creates and migrates the test database, then runs the command against it.
 TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
-export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
+export OPS_INFRA
 $(call reset_inherited,OPS_PORT,$(OPS_AGENTS_PORT))
 $(call reset_inherited,OPS_GATEWAY_PORT,$(OPS_TOOLS_PORT))
 $(call reset_inherited,OPS_PLATFORM_URL,http://127.0.0.1:$(OPS_PLATFORM_PORT))

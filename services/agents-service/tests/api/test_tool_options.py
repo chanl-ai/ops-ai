@@ -13,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.routers import tool_catalog
-from tests.engine.test_lifecycle_rights import BUILDER, stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
+from tests.engine.test_lifecycle_rights import (  # noqa: F401  # a fixture
+    BUILDER,  # pyright: ignore[reportUnusedImport]
+    stack,  # pyright: ignore[reportUnusedImport]
+)
 
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 

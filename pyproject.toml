@@ -10,7 +10,7 @@ dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-che
 dev = [
     # Generates the Python SDK's models from the services' OpenAPI (sdk/generate.py); pinned so a regeneration changes
     # only what the documents changed.
-    "datamodel-code-generator==0.86.0",
+    "datamodel-code-generator==0.83.0",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.6",
@@ -31,6 +31,15 @@ dev = [
 [tool.uv]
 default-groups = ["dev"]
 package = false
+# uv never fetches a Python by itself: behind a mirror that is a download from the open internet. Use the image's or the
+# system Python 3.12, or run `uv python install 3.12` (UV_PYTHON_INSTALL_MIRROR points it at a mirror).
+python-downloads = "manual"
+# Every version is at least 30 days old (company mirrors block newer ones). `make deps-refresh` moves this date to
+# today minus 30 days. A security fix newer than that goes in exclude-newer-package with the advisory in the lock commit.
+exclude-newer = "2026-09-27T00:00:00Z"
+# Security exceptions (critical advisories, fixed versions younger than the cutoff): certifi 2026.10.19 fixes
+# PYSEC-2026-4320; pillow 13.0.0 fixes five critical GHSA ids (deploy/mirror-test/audit-baseline.txt, until removed).
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", pillow = "2026-10-17T00:00:00Z" }
 
 [tool.uv.workspace]
 members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service", "services/runner-service"]

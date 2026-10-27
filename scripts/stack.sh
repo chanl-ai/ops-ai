@@ -52,6 +52,12 @@ FAKE_BANK_PORT=8745
 # A restart must start a service the way the stack is already running: the dev .env (model and provider settings) is
 # loaded, and the sign-in mode defaults to the one recorded for the shared stack, not to dev.
 if [ -f ".env" ]; then set -a; . ".env" >/dev/null 2>&1 || true; set +a; fi
+if [ -f ".devcontainer/.env.local" ]; then set -a; . ".devcontainer/.env.local" >/dev/null 2>&1 || true; set +a; fi
+# Side containers: a laptop .env names a CA file and resolve map that are not in this filesystem.
+if [[ "${OPS_INFRA:-}" == external ]]; then
+  [[ -n "${OPS_EGRESS_CA_FILE:-}" && -f "${OPS_EGRESS_CA_FILE}" ]] || unset OPS_EGRESS_CA_FILE
+  unset OPS_EGRESS_RESOLVE
+fi
 AUTH=${OPS_STACK_AUTH:-$(cat ".run/stack.auth" 2>/dev/null || echo dev)}
 # Dev-only exception until Govern > Models takes provider keys (c-177, owner 2026-10-18): models-service reads a
 # connection's key from Secrets first and falls back to these settings in dev; outside dev it refuses them.
@@ -100,6 +106,9 @@ ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 
 # sender at smtp.harborpine.test reaches Mailpit's SMTP the same way (uc-200).
 GREENMAIL_IMAP=${OPS_GREENMAIL_IMAP_PORT:-3143}
 MAILPIT_SMTP=${OPS_MAILPIT_SMTP_PORT:-1025}
+SMTP_HOST=${OPS_SMTP_HOST:-127.0.0.1}
+GREENMAIL_HOST=${OPS_GREENMAIL_HOST:-127.0.0.1}
+MAILPIT_HOST=${OPS_MAILPIT_HOST:-127.0.0.1}
 MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # The services agents-service and its workflow worker both call, in one list: a worker missing one the API process has
 # fails every workflow step that needs it (OPS_FILES_URL, then OPS_KB_URL, each went missing from the worker once).
@@ -110,13 +119,20 @@ MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
 AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS_MODELS_KEY=${OPS_MODELS_KEY:-mk_dev_agents} OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
 dev_egress_resolve() {
-  IP=$(private_address) python3 -c 'import json,os
+  IP=$(private_address) GM_HOST=$GREENMAIL_HOST MP_HOST=$MAILPIT_HOST python3 -c 'import json,os,socket
+def host_ip(name, fallback):
+    if name in ("127.0.0.1", "localhost", ""):
+        return fallback
+    try:
+        return socket.getaddrinfo(name, None, socket.AF_INET)[0][4][0]
+    except OSError:
+        return fallback
 ip=os.environ["IP"]
-m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.harborpine.test"]=ip+":"+os.environ["GM"]; m["smtp.harborpine.test"]=ip+":"+os.environ["MP"]
+m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.harborpine.test"]=host_ip(os.environ.get("GM_HOST",""), ip)+":"+os.environ["GM"]; m["smtp.harborpine.test"]=host_ip(os.environ.get("MP_HOST",""), ip)+":"+os.environ["MP"]
 m["api.bank.test"]=ip+":"+os.environ["FB"]
 print(json.dumps(m,separators=(",",":")))' 2>/dev/null
 }
-MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SMTP_HOST=127.0.0.1 OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
+MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SMTP_HOST=$SMTP_HOST OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
 
 
 cmd_of() {
@@ -176,7 +192,7 @@ alive() {
   age=$(age_of "$pid") || return 1
   (($(date +%s) - age <= $(mtime_of "$file") + 5))
 }
-mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 # The auth mode a running service was started with. A file missing from before modes were recorded means dev.
 authfile() { echo "$RUN_DIR/$1.auth"; }
 started_auth() { cat "$(authfile "$1")" 2>/dev/null || echo dev; }
@@ -392,7 +408,7 @@ stop_moved() {
   # The recorded address can match while fakebank still listens on an earlier one (the route flipped after make up
   # wrote the file; health then reports STALE). Restart whenever this address does not answer on the bank port.
   if [[ -n "$was" && "$was" != "$now" ]] || [[ -n "$pinned" && "$pinned" != "$now" ]] \
-    || { ! nc -z -G 3 "$now" "$FAKE_BANK_PORT" 2>/dev/null && { alive fakebank || listener "$FAKE_BANK_PORT" >/dev/null; }; }; then
+    || { ! nc -z -w 3 "$now" "$FAKE_BANK_PORT" 2>/dev/null && { alive fakebank || listener "$FAKE_BANK_PORT" >/dev/null; }; }; then
     echo "this machine's private address is $now (was ${was:-unknown}); restarting the dev fakes that bind it"
     stop fakebank
     stop tools
@@ -480,8 +496,9 @@ owner_of() {
 # The Docker VM's disk, seen from a container of an image the stack already has: when it fills, PostgreSQL goes into
 # recovery and every service with it (2026-10-19). A warning only; OPS_DOCKER_DISK_WARN sets the percentage (80).
 docker_disk() {
+  command -v docker >/dev/null 2>&1 || return 0
   local used image=${OPS_DOCKER_DISK_IMAGE:-postgres:17-alpine}
-  used=$(docker run --rm --entrypoint df "$image" -P / 2>/dev/null | awk 'NR==2 {gsub("%", "", $5); print $5}')
+  used=$(docker run --rm --entrypoint df "$image" -P / 2>/dev/null | awk 'NR==2 {gsub("%", "", $5); print $5}') || true
   [[ -n "$used" ]] || return 0
   if (( used >= ${OPS_DOCKER_DISK_WARN:-80} )); then
     echo "  WARNING: the Docker disk is ${used}% full (warns from ${OPS_DOCKER_DISK_WARN:-80}%). make db-sweep drops finished runs' databases; docker system df shows the rest" >&2
@@ -551,7 +568,7 @@ health() {
         code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$(url_of "$svc")" || true)
         if [[ "$code" == 2* ]]; then state="ok ($code)"; else state=DOWN; failed=1; fi
         row "$svc" "$(port_of "$svc")" "$(url_of "$svc")" "$state" "$(owner_of "$svc" "$(port_of "$svc")")"
-      elif nc -z -G 3 "$(private_address)" "$(port_of "$svc")" 2>/dev/null; then
+      elif nc -z -w 3 "$(private_address)" "$(port_of "$svc")" 2>/dev/null; then
         row "$svc" "$(port_of "$svc")" "https (private address)" "ok (tcp)" "$(owner_of "$svc" "$(port_of "$svc")")"
       elif pid=$(listener "$(port_of "$svc")") && [[ -n "$pid" ]]; then
         # Listening, but not at this machine's address now: started before the network changed.
@@ -573,9 +590,20 @@ health() {
     fi
   fi
   if [[ -z "$only" ]]; then
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$OPA_PORT/health" || true)
-    if [[ "$code" == 2* ]]; then row opa "$OPA_PORT" "http://127.0.0.1:$OPA_PORT/health" "ok ($code)" compose; else row opa "$OPA_PORT" "http://127.0.0.1:$OPA_PORT/health" DOWN compose; failed=1; fi
-    if nc -z 127.0.0.1 "$PG_PORT" 2>/dev/null; then row postgres "$PG_PORT" "tcp://127.0.0.1:$PG_PORT" "ok (tcp)" compose; else row postgres "$PG_PORT" "tcp://127.0.0.1:$PG_PORT" DOWN compose; failed=1; fi
+    if [[ "${OPS_INFRA:-}" == external ]]; then
+      opa_health="${OPS_OPA_URL:-http://opa:8181}/health"
+      opa_port=8181
+      pg_host=postgres
+      pg_port=5432
+    else
+      opa_health="http://127.0.0.1:$OPA_PORT/health"
+      opa_port=$OPA_PORT
+      pg_host=127.0.0.1
+      pg_port=$PG_PORT
+    fi
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$opa_health" || true)
+    if [[ "$code" == 2* ]]; then row opa "$opa_port" "$opa_health" "ok ($code)" compose; else row opa "$opa_port" "$opa_health" DOWN compose; failed=1; fi
+    if nc -z "$pg_host" "$pg_port" 2>/dev/null; then row postgres "$pg_port" "tcp://$pg_host:$pg_port" "ok (tcp)" compose; else row postgres "$pg_port" "tcp://$pg_host:$pg_port" DOWN compose; failed=1; fi
   fi
   [[ -z "$only" ]] && docker_disk
   return "$failed"

@@ -166,14 +166,30 @@ function checkCommit(msgFile) {
   return bad;
 }
 
+/** Commits that owe no entry because nothing they did reaches a person (changelog-exempt.json at `ref`): each row
+ * names a commit by at least 7 characters of its sha and the reason, which a reviewer reads in the diff that adds it.
+ * Rows without a reason are ignored. */
+function readExempt(ref) {
+  const text = tryGit(['show', `${ref}:changelog-exempt.json`]);
+  if (!text) return [];
+  try {
+    const rows = JSON.parse(text);
+    return Array.isArray(rows) ? rows.filter((r) => String(r?.commit ?? '').length >= 7 && String(r?.reason ?? '').trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** The rule over commits already made, read against the changelog at `at`. */
 function checkShas(shas, at) {
   const start = gateStart();
   const has = cardsWithEntries(at);
   // A cardless commit is covered by an entry that names it in `commits`: its message cannot change once made.
   const covered = readChangelog(at).flatMap(({ entry }) => (Array.isArray(entry?.commits) ? entry.commits : []));
+  const exempt = readExempt(at).map((r) => String(r.commit));
   const bad = [];
   for (const sha of shas) {
+    if (exempt.some((c) => sha.startsWith(c))) continue;
     // Commits made before the gate landed are not held to it.
     if (start && tryGit(['merge-base', '--is-ancestor', start, sha]) === null) continue;
     const parents = git(['rev-list', '--parents', '-n', '1', sha]).trim().split(' ').length - 1;
@@ -289,6 +305,13 @@ function selfTest() {
     writeFileSync(join(dir, 'apps/kept.ts'), 'second\n');
     sh('git add apps && git commit -q --no-verify -m "docs(x): touch kept" -m "Card: c-905"');
     expect('repo.sh check refuses a feat whose files moved on, not back', shas(kept, sh('git rev-parse HEAD').stdout.trim()) === 1);
+    // A listed commit with a reason owes no entry; a row with no reason excuses nothing.
+    writeFileSync(join(dir, 'changelog-exempt.json'), JSON.stringify([{ commit: kept.slice(0, 8) }]));
+    sh('git add changelog-exempt.json && git commit -q --no-verify -m "chore: exempt without a reason"');
+    expect('repo.sh check refuses a commit listed without a reason', shas(kept, sh('git rev-parse HEAD').stdout.trim()) === 1);
+    writeFileSync(join(dir, 'changelog-exempt.json'), JSON.stringify([{ commit: kept.slice(0, 8), reason: 'a mock page, deleted' }]));
+    sh('git add changelog-exempt.json && git commit -q --no-verify -m "chore: exempt with a reason"');
+    expect('repo.sh check passes a commit listed with a reason', shas(kept, sh('git rev-parse HEAD').stdout.trim()) === 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

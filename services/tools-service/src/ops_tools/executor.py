@@ -39,7 +39,7 @@ from .auth import Authenticator, AuthFailed, Prepared
 from .egress import EgressDenied, EgressPolicy, for_tenant
 from .mocks import MockAnswers
 from .registry import Resolved
-from .secrets import SecretMissing, SecretOutOfScope, SecretResolver, scrub
+from .secrets import SecretMissing, SecretResolver, scrub
 from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
@@ -291,15 +291,11 @@ class _Secrets:
             )
         try:
             looked = await self.secrets.lookup(
-                module["tenant_id"], rest, tool=op["name"], actor=actor, team=module.get("team_id")
+                module["tenant_id"], module.get("team_id"), rest, tool=op["name"], actor=actor
             )
             return {**looked, **typed}
-        except SecretOutOfScope as e:
-            return _failure(
-                "SECRET_OUT_OF_SCOPE", f"The secret {', '.join(e.names)} is not available to this module's team."
-            )
         except SecretMissing as e:
-            return _failure("SECRET_MISSING", f"The secret {', '.join(e.names)} is not set for this tenant.")
+            return _failure("SECRET_MISSING", f"The secret {', '.join(e.names)} is not set for this module's team.")
 
 
 def scrubbed_values(secrets: dict[str, str]) -> list[str]:

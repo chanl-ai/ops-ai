@@ -29,7 +29,7 @@ def claims() -> dict[str, Any]:
 
 
 class Secrets:
-    async def lookup(self, _tenant: str, names: list[str], **_: Any) -> dict[str, str]:
+    async def lookup(self, _tenant: str, _team: str | None, names: list[str], **_: Any) -> dict[str, str]:
         return {n: f"value-of-{n}" for n in names}
 
 

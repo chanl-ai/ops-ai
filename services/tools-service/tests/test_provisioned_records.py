@@ -113,8 +113,11 @@ async def test_each_provisioned_record_is_found_again_by_its_template_id(
 
     secret = {"name": "LEDGER_KEY", "value": "k1", **TEMPLATE}
     _data(await c.post("/v1/secrets", json=secret, headers=provisioner(tenant)), 201)
-    _data(await c.post("/v1/secrets", json={"name": "TEAM_KEY", "value": "k2"}, headers=people["sam"]), 201)
-    listed = _data(await c.get("/v1/secrets", params={"templateId": "banking/core", "page": 1}, headers=people["sam"]))
+    # The provisioner acts in Platform, so its secret is Platform's; Sam, a Security admin, writes and reads those.
+    platform = {"teamId": "team_platform"}
+    _data(await c.post("/v1/secrets", json={"name": "TEAM_KEY", "value": "k2", **platform}, headers=people["sam"]), 201)
+    query = {"templateId": "banking/core", "page": 1, **platform}
+    listed = _data(await c.get("/v1/secrets", params=query, headers=people["sam"]))
     assert [(s["name"], s["templateId"]) for s in listed["data"]] == [("LEDGER_KEY", "banking/core")]
 
 
@@ -158,10 +161,12 @@ async def test_a_system_record_is_changed_by_an_admin_or_the_provisioner_not_a_b
     _data(await c.post("/v1/egress/hosts/remove", json={"value": HOST}, headers=people["sam"]))
     secret = {"name": "LEDGER_KEY", "value": "k1", **TEMPLATE}
     _data(await c.post("/v1/secrets", json=secret, headers=provisioner(tenant)), 201)
-    rotated = _data(await c.post("/v1/secrets/LEDGER_KEY/rotate", json={"value": "k2"}, headers=people["sam"]))
+    platform = {"teamId": "team_platform"}
+    rotated = _data(
+        await c.post("/v1/secrets/LEDGER_KEY/rotate", json={"value": "k2"}, params=platform, headers=people["sam"])
+    )
     assert (rotated["version"], rotated["protection"]) == (2, "system")
-    _data(await c.patch("/v1/secrets/LEDGER_KEY", json={"teams": ["team_platform"]}, headers=people["sam"]))
-    assert (await c.delete("/v1/secrets/LEDGER_KEY", headers=people["sam"])).status_code == 204
+    assert (await c.delete("/v1/secrets/LEDGER_KEY", params=platform, headers=people["sam"])).status_code == 204
 
 
 async def test_a_managed_module_is_edited_and_keeps_its_template(

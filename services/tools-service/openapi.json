@@ -1296,6 +1296,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Availableto"
           },
           "name": {
@@ -4588,6 +4589,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Availableto"
           },
           "name": {
@@ -5470,32 +5472,6 @@
         "title": "SchemaFieldIn",
         "type": "object"
       },
-      "ScopeIn": {
-        "additionalProperties": false,
-        "description": "The teams whose tool modules may read the secret; null or empty is every team.",
-        "properties": {
-          "teams": {
-            "anyOf": [
-              {
-                "items": {
-                  "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Teams"
-          }
-        },
-        "required": [
-          "teams"
-        ],
-        "title": "ScopeIn",
-        "type": "object"
-      },
       "SecretIn": {
         "additionalProperties": false,
         "properties": {
@@ -5520,6 +5496,18 @@
             ],
             "title": "Protection"
           },
+          "teamId": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teamid"
+          },
           "teams": {
             "anyOf": [
               {
@@ -5533,6 +5521,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Teams"
           },
           "templateId": {
@@ -5658,6 +5647,10 @@
             ],
             "title": "Rotatedat"
           },
+          "teamId": {
+            "title": "Teamid",
+            "type": "string"
+          },
           "teams": {
             "anyOf": [
               {
@@ -5670,6 +5663,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Teams"
           },
           "templateId": {
@@ -5699,7 +5693,8 @@
           "name",
           "version",
           "createdBy",
-          "createdAt"
+          "createdAt",
+          "teamId"
         ],
         "title": "SecretMeta",
         "type": "object"
@@ -12265,7 +12260,7 @@
     },
     "/v1/secrets": {
       "get": {
-        "description": "Every secret's metadata, as scripts and earlier callers read it; with `page`, one page of those whose name\nmatches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.",
+        "description": "The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose\nname matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.",
         "operationId": "secrets_list_secrets",
         "parameters": [
           {
@@ -12321,6 +12316,23 @@
                 }
               ],
               "title": "Templateid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teamid"
             }
           },
           {
@@ -12685,7 +12697,7 @@
     },
     "/v1/secrets/values": {
       "post": {
-        "description": "Internal (service token holding `secrets_egress:run`, c-221): the values of the tenant's workspace-wide\nsecrets, for a service that keeps no credential of its own (models-service's provider keys). A secret scoped to\nteams never leaves for another service, and every value read is audited as the calling service.",
+        "description": "Internal (service token holding `secrets_egress:run`, c-221): secret values for a service that keeps no\ncredential of its own (models-service's provider keys). Every secret belongs to a team and a team's secret\nnever leaves for another service (c-509), so this answers 404 until the owner decides where provider keys\nlive; models-service then reads the dev stack's keys from its settings.",
         "operationId": "secrets_secret_values",
         "parameters": [
           {
@@ -12835,6 +12847,23 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teamid"
             }
           },
           {
@@ -13002,202 +13031,6 @@
           "secrets"
         ],
         "x-ops-public": "sdk"
-      },
-      "patch": {
-        "description": "The teams whose tool modules may read it; the gateway refuses a call from any other team's module. Moving\nit is an edit where it is now and a create where it goes.",
-        "operationId": "secrets_scope_secret",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-api-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-team-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Team-Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-dev-user",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Dev-User"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScopeIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_SecretMeta_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Invalid request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not signed in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not allowed"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Conflicts with the current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Refused by a rule"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Over a budget or rate limit"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Server error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service unavailable"
-          }
-        },
-        "summary": "Scope Secret",
-        "tags": [
-          "secrets"
-        ],
-        "x-ops-public": "sdk"
       }
     },
     "/v1/secrets/{name}/rotate": {
@@ -13211,6 +13044,23 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teamid"
             }
           },
           {

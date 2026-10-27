@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
+from ops_identity.fastapi import DEV_TEAM
 from ops_store.team_scope import acting_as
 
 from ..connections.records import seed_rows
@@ -277,12 +278,15 @@ def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggreg
     }
 
 
-async def ensure_platform_tools(store: ModuleStore, *, tenant_id: str, at: datetime) -> Literal["present", "written"]:
+async def ensure_platform_tools(
+    store: ModuleStore, *, tenant_id: str, at: datetime, team_id: str | None = None
+) -> Literal["present", "written"]:
     """Writes the Platform tools module for the platform tools no module of the tenant holds, so a workflow's reply
     resolves in every install and not only where the dev seed wrote its mail module. A tool declared after the module
     was written is added to that copy (c-509), so send_acknowledgement reaches a team that already has one. It is a
-    workspace-level record: no team owns it (c-433), and every team reads and calls it."""
-    taken = await store.names_taken(tenant_id, list(WORKFLOW_TOOLS))
+    workspace-level record: no team owns it (c-433), and every team reads and calls it. `team_id` is the team the
+    lookup is for (the acting team when None): a tool another team holds in its own module is still missing here."""
+    taken = await store.names_taken(tenant_id, list(WORKFLOW_TOOLS), team_id)
     missing = [n for n in WORKFLOW_TOOLS if n not in taken]
     if not missing:
         return "present"
@@ -313,6 +317,18 @@ async def ensure_platform_tools(store: ModuleStore, *, tenant_id: str, at: datet
             raise
         return "present"
     return "written"
+
+
+async def _seed_team(connections: ConnectionStore, row: dict[str, Any], now: datetime) -> None:
+    """Moves a seeded connection nobody has changed (its first revision, written by the seed) to the team the seed now
+    gives it; one a person changed is left where it is."""
+    stored = await connections.get(str(row["tenant_id"]), str(row["id"]))
+    if stored is None or stored["team_id"] == row["team_id"]:
+        return
+    if stored["revision"] == 1 and stored["created_by"] == row["created_by"]:
+        await connections.change(
+            str(row["tenant_id"]), str(row["id"]), 1, {"team_id": row["team_id"]}, actor="dev seed", at=now
+        )
 
 
 def aggregates(
@@ -492,12 +508,22 @@ async def load(
     Runtime module the seed no longer writes is removed. Returns how many it added."""
     added = 0
     mods = aggregates(seed, tenant_id=tenant_id, now=now, catalog=catalog)
-    # The seed's integrations are connection records with the same ids (c-330), owned by its all-scope team; one
-    # already there is left as it is.
+    # The seed's integrations are connection records with the same ids (c-330), owned by the team the dev caller acts
+    # in. A connection serves its own team's modules only (c-509), so each other team holding a seeded module that
+    # uses one gets its own copy, `{id}_{team}`. One already there is left as it is, but an unedited seeded one still
+    # in another team moves to the seed's team.
     connections = ConnectionStore(store.engine)
-    everyone = next((t["id"] for t in seed.get("teams", []) if t["scope"] == "all"), "team_ops")
-    for row in seed_rows(seed, tenant_id, everyone, now):
-        await connections.create(row, actor="dev seed", at=now)
+    rows = {str(r["id"]): r for r in seed_rows(seed, tenant_id, DEV_TEAM, now)}
+    for row in rows.values():
+        if not await connections.create(row, actor="dev seed", at=now):
+            await _seed_team(connections, row, now)
+    for agg in mods:
+        row = rows.get(str(agg.get("connection_id") or ""))
+        if row is not None and agg["team_id"] != row["team_id"]:
+            copy = {**row, "id": f"{row['id']}_{agg['team_id']}", "team_id": agg["team_id"]}
+            if not await connections.create(copy, actor="dev seed", at=now):
+                await _seed_team(connections, copy, now)
+            agg["connection_id"] = copy["id"]
     # A module may only name listed hosts, so the seed lists the hosts its modules call first.
     egress = EgressStore(store.engine)
     for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):

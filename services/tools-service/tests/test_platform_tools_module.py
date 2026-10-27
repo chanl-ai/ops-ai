@@ -6,8 +6,10 @@ twice; an install's own edit of the module is overwritten. Runs on a fresh tenan
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
+from ops_tools.modules.seed import platform_module
 from ops_tools.registry import ToolRegistry
 from ops_tools.store.modules import ModuleStore
 
@@ -66,3 +68,26 @@ async def test_the_acknowledgement_runs_at_once_and_the_reply_still_waits(
     assert (ack.module["id"], ack.executor, ack.access) == (PLATFORM_MODULE, "local", "write")
     assert await registry.requires_approval("send_acknowledgement", tenant) is False
     assert await registry.requires_approval("send_reply", tenant) is True
+
+
+async def test_a_team_without_the_mail_module_still_replies_after_another_team_looked_first(
+    local_catalog: Any, store: ModuleStore, tenant: str
+) -> None:
+    """uc-223: the Platform team's mail module holds send_reply, so its lookup found the tool taken and the tenant was
+    marked checked; Operations, which cannot see that module, then found no send_reply at all ("tool is not
+    registered with the gateway") and its acknowledgement was never sent."""
+    mail = platform_module(["send_reply"], tenant_id=tenant, at=datetime.now(UTC))
+    mail = {
+        **mail,
+        "id": "mod_team_mail",
+        "team_id": "team_platform",
+        "name": "m365-mail",
+        "operations": [{**o, "id": f"mod_team_mail_op{i}"} for i, o in enumerate(mail["operations"])],
+        "versions": [{**v, "id": "mod_team_mail_v1"} for v in mail["versions"]],
+    }
+    await store.put(mail, expected_revision=None)
+    registry = ToolRegistry(local_catalog, store)
+    theirs = await registry.resolve("send_reply", tenant_id=tenant, team_id="team_platform")
+    assert theirs is not None and theirs.module is not None and theirs.module["id"] == "mod_team_mail", theirs
+    ours = await registry.resolve("send_reply", tenant_id=tenant, team_id="team_ops")
+    assert ours is not None and ours.module is not None and ours.module["id"] != "mod_team_mail", ours

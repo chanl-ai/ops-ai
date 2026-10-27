@@ -1,9 +1,20 @@
 # Builds app.yaml's images from this checkout (deploy/fly/Dockerfile, one target each), for development and the proofs.
 # A release package ships prebuilt images instead and has no copy of this file.
 #   docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/build.yaml --env-file <env file> up -d --build
+# Every download goes through a variable a company mirror can fill; an empty one keeps the public default
+# (docs/deploy/install.md, "Behind a company mirror" lists them).
 x-image: &image
   context: ../..
   dockerfile: deploy/fly/Dockerfile
+  args:
+    IMAGE_REGISTRY: ${OPS_BASE_IMAGE_PREFIX:-}
+    NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-}
+    COREPACK_NPM_REGISTRY: ${COREPACK_NPM_REGISTRY:-}
+    UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-}
+    UV_PYTHON_INSTALL_MIRROR: ${UV_PYTHON_INSTALL_MIRROR:-}
+    OPS_RUNNER_WASM_URL: ${OPS_RUNNER_WASM_URL:-}
+    APT_MIRROR: ${APT_MIRROR:-}
+    APK_MIRROR: ${APK_MIRROR:-}
 
 services:
   migrate: { build: { <<: *image, target: platform } }

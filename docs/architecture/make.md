@@ -67,6 +67,7 @@ Feedback button: run the ui-feedback collector (`node ~/.claude/skills/ui-feedba
 | Per-service variants take `SVC=` | `make logs SVC=agents`, `make restart SVC=tools` |
 | Generated per-service targets are `<verb>-<svc>` | `test-agents`, `verify-tools`, `run-console` |
 | `ISOLATED=1` runs a second stack on alternate ports | `make up ISOLATED=1` |
+| `OPS_INFRA=external` uses side containers | `make up OPS_INFRA=external` skips `db-up`/`db-down` and points the database, OPA and mail hosts at compose service names |
 | Any one port moved, the services and console follow | `make up OPS_AGENTS_PORT=8750` (or set it in the environment); every `OPS_*_PORT` in `make/env.mk` is a default, not a constant |
 | A target lives in one fragment only; others call it | `migrate` is in `db.mk`; `up` calls it after the schema step |
 | Every public target has a `## ` comment; `##@` starts a help group | `make help` reads them |
@@ -81,6 +82,7 @@ shell or secrets manager to `OPS_*`.
 | Name | Default | Set by | Read by |
 |---|---|---|---|
 | `ISOLATED` | unset | you | `make/env.mk` |
+| `OPS_INFRA` | unset (`external` in a devcontainer) | you or `.devcontainer/devcontainer.json` | `env.mk`, `db.mk`: skip `db-up`/`db-down`; set `OPS_DATABASE_URL`, `OPS_TEST_DATABASE_URL`, `OPS_OPA_URL`, `OPS_SMTP_HOST`, `OPS_GREENMAIL_HOST`, `OPS_MAILPIT_HOST` to the compose service names |
 | `OPS_STACK` | `shared` (`isolated`) | `env.mk` | `stack.sh` |
 | `OPS_COMPOSE_PROJECT` | `ops-runtime` (`ops-runtime-isolated`) | `env.mk` | `docker compose -p` |
 | `OPS_CONSOLE_PORT`, `OPS_CONSOLE_RUNTIME_PORT` | 3016, 3017 | `env.mk` | `stack.sh`, console Makefile |
@@ -147,6 +149,7 @@ The isolated stack also has its own compose project, so its own data volume.
 |---|---|
 | First setup | `make install` |
 | Start everything | `<wrapper> -- make up` |
+| Start inside a devcontainer | `make up OPS_INFRA=external` |
 | Is it up | `make health` |
 | Watch one service | `make logs SVC=agents` |
 | Restart after a settings change | `make restart SVC=agents` |

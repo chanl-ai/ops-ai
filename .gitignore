@@ -6,6 +6,7 @@ next-env.d.ts
 *.tsbuildinfo
 .env*
 !.env.example
+!.devcontainer/.env.local.example
 
 # Python
 .venv/
@@ -34,3 +35,6 @@ sdk/python/uv.lock
 /ops-ai.env
 /dba/
 /backups/
+
+# make deps-doctor output (constraints and npm overrides for one developer's mirror)
+.mirror/

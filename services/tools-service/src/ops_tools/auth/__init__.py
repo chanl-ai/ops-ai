@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..secrets import SecretMissing, SecretOutOfScope, SecretResolver
+from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import ConnectionStore
 from .kinds import TEST, kind_of, origin
 from .tokens import AuthFailed, Tokens
@@ -135,11 +135,10 @@ def certificate_of(settings: dict[str, Any], secrets: dict[str, str]) -> ClientC
     return ClientCertificate(digest, str(cert) if cert else None, key, str(ca) if ca else None)
 
 
-def may_use(connection: dict[str, Any], team_id: str | None, wide_teams: frozenset[str] = frozenset()) -> bool:
-    """A connection serves modules of its owning team and of the teams it is made available to. One owned by an
-    all-scope team (`wide_teams`) serves every team's modules, as such a team sees every team's modules."""
-    owner = connection["team_id"]
-    return owner in wide_teams or team_id == owner or team_id in (connection.get("available_to") or [])
+def may_use(connection: dict[str, Any], team_id: str | None) -> bool:
+    """A connection serves its own team's modules only (c-509): another team that needs the system holds its own
+    connection, with its own sign-in."""
+    return team_id is not None and connection["team_id"] == team_id
 
 
 class Authenticator:
@@ -148,13 +147,10 @@ class Authenticator:
         connections: ConnectionStore,
         secrets: SecretResolver | None,
         tokens: Tokens,
-        wide_teams: frozenset[str] = frozenset(),
     ) -> None:
-        """`wide_teams` are the all-scope teams (`Directory.wide_teams`), whose connections serve every team."""
         self.connections = connections
         self.secrets = secrets
         self.tokens = tokens
-        self.wide_teams = wide_teams
 
     async def prepare(
         self,
@@ -178,7 +174,7 @@ class Authenticator:
         if not conn["environments"]:
             return None
         name = conn["name"]
-        if not may_use(conn, module.get("team_id"), self.wide_teams):
+        if not may_use(conn, module.get("team_id")):
             raise AuthFailed("CONNECTION_OUT_OF_SCOPE", f"{name} is not available to this module's team.")
         if conn["status"] == "revoked":
             raise AuthFailed("CONNECTION_REVOKED", f"{name} is revoked; reconnect it before tools use it.")
@@ -198,7 +194,7 @@ class Authenticator:
                 f"{name} signs in to {urlsplit(base).hostname} only; this module calls {urlsplit(target).hostname}.",
             )
         names: dict[str, str] = dict(setting["secrets"] or {})
-        values = await self._secret_values(tenant_id, names, tool=tool, actor=actor)
+        values = await self._secret_values(tenant_id, str(conn["team_id"]), names, tool=tool, actor=actor)
         prepared = Prepared(str(connection_id), env, values=list(values.values()))
         kind = kind_of(str(conn["auth_kind"]))
         missing = [f.label for f in kind.fields if f.secret and f.required and f.name not in values]
@@ -218,14 +214,17 @@ class Authenticator:
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
-    async def _secret_values(self, tenant_id: str, names: dict[str, str], *, tool: str, actor: str) -> dict[str, str]:
-        """Each secret field's value, its use audited on the secret store as any secret's is."""
+    async def _secret_values(
+        self, tenant_id: str, team_id: str, names: dict[str, str], *, tool: str, actor: str
+    ) -> dict[str, str]:
+        """Each secret field's value from the connection's team, its use audited on the secret store as any
+        secret's is."""
         if not names:
             return {}
         if self.secrets is None:
             raise AuthFailed("SECRET_UNAVAILABLE", "This gateway has no secrets store, so no connection signs in.")
         try:
-            found = await self.secrets.lookup(tenant_id, list(names.values()), tool=tool, actor=actor)
-        except (SecretMissing, SecretOutOfScope) as e:
+            found = await self.secrets.lookup(tenant_id, team_id, list(names.values()), tool=tool, actor=actor)
+        except SecretMissing as e:
             raise AuthFailed("SECRET_MISSING", f"A secret part of this connection is not set ({e}).") from e
         return {fieldname: found[secret] for fieldname, secret in names.items() if secret in found}

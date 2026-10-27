@@ -8,7 +8,7 @@ Status: current. Id: `uc-042`. Service: `tools-service`. Layers: api.
 |---|---|
 | PostgreSQL :5477 and OPA | `make db-up` |
 | The fake bank on https | `docs/usecases/lib/fake_bank_https.py`, started by the script |
-| agents-service's workflows | The script starts agents-service; approvals name `dispute_email` |
+| agents-service | The script starts agents-service, which decides the module's security review |
 
 ## Steps and expected results
 
@@ -21,7 +21,6 @@ Status: current. Id: `uc-042`. Service: `tools-service`. Layers: api.
 | 4 | Open the first module | operations count 3/0, 1/1.0 and 1/0 (the write's run; its refusal and replay are not calls) |
 | 5 | Read its activity | 14 days; today 5 calls and 1 error, the rest 0; `denied24h` 1 |
 | 5b | List `/v1/executions` for the module and add the rows up by status | ok + error rows equal the calls, error rows the errors, denied rows `denied24h`; the replay is listed as `replayed` with `replayOf` |
-| 6 | Approve a 30-day test approval, then a 5-day one | approved, then expiring |
 
 Counts cover calls that reached the system (outcome `ok` or `error`) in the last 24 hours. Refusals, including a write
 refused because the same one is still running (409), are counted as denied and listed as `denied`; a replay returns
@@ -37,6 +36,7 @@ its calls. Days are UTC.
 
 ## Non-vacuous check
 
-Step 1 pairs with step 3, step 4's refused write with step 5's denied count, and step 6's two approvals with each
-other. `services/tools-service/tests/test_traffic.py` covers the 24-hour window and the module p95 with backdated rows,
+Step 1 pairs with step 3, and step 4's refused write with step 5's denied count. A module's approval state (approved,
+then expiring as its end nears) left this use case when a workflow's access request moved to its system workflow in
+Human Tasks (c-257): `services/tools-service/tests/test_tool_grants.py` checks the state, and uc-053 the grant. `services/tools-service/tests/test_traffic.py` covers the 24-hour window and the module p95 with backdated rows,
 which the api layer cannot make.

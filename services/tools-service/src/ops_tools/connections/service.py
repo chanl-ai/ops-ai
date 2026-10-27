@@ -126,7 +126,8 @@ class ConnectionService:
         }
 
     def _sees(self, who: Caller, conn: dict[str, Any]) -> bool:
-        return who.team.scope == "all" or conn["team_id"] == who.team.id
+        """A team reads its own connections only (c-509), an all-scope team included."""
+        return conn["team_id"] == who.team.id
 
     async def _get(self, who: Caller, connection_id: str) -> dict[str, Any]:
         conn = await self.store.get(who.tenant_id, connection_id)
@@ -136,8 +137,8 @@ class ConnectionService:
 
     # ── Views ─────────────────────────────────────────────────────────────
 
-    async def _secret_meta(self, tenant_id: str, names: list[str]) -> dict[str, dict[str, Any]]:
-        rows = {r["name"]: r for r in await self.secrets.listed(tenant_id) if r["name"] in names}
+    async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, dict[str, Any]]:
+        rows = {r["name"]: r for r in await self.secrets.listed(tenant_id, team_id) if r["name"] in names}
         return rows
 
     def _environment(
@@ -177,7 +178,8 @@ class ConnectionService:
             "status": status_of(conn, self.clock()),
             "statusDetail": conn.get("status_detail"),
             "teamId": conn["team_id"],
-            "availableTo": conn.get("available_to") or [],
+            # No other team uses a team's connection (c-509); kept in the answer for one release.
+            "availableTo": [],
             "usedBy": conn.get("used_by") or [],
             "environmentsSet": sorted(conn["environments"]),
             "revision": conn["revision"],
@@ -188,7 +190,7 @@ class ConnectionService:
             return out
         envs = cast(dict[str, dict[str, Any]], conn["environments"])
         names = [n for env in envs.values() for n in _names(env).values()]
-        meta = await self._secret_meta(who.tenant_id, names)
+        meta = await self._secret_meta(who.tenant_id, str(conn["team_id"]), names)
         tokens = {
             str(t["environment"]): t
             for t in await self.store.tokens(who.tenant_id, str(conn["id"]))
@@ -215,7 +217,7 @@ class ConnectionService:
 
     async def list(self, who: Caller, *, page: int, page_size: int, search: str) -> dict[str, Any]:
         self._can(who, "view")
-        teams = None if who.team.scope == "all" else [who.team.id]
+        teams = [who.team.id]
         total = await self.store.count(who.tenant_id, teams, search)
         page, offset = page_window(total, page, page_size)
         rows = await self.store.page(who.tenant_id, teams, search, offset, page_size)
@@ -241,7 +243,7 @@ class ConnectionService:
             "team_id": who.team.id,
             "name": name,
             "auth_kind": i["auth_kind"],
-            "available_to": i.get("available_to") or None,
+            "available_to": None,
             "status": "draft",
             "status_detail": None,
             "revision": 1,
@@ -262,8 +264,6 @@ class ConnectionService:
             if not i["name"].strip():
                 raise ValidationFailed("Name the connection.")
             values["name"] = i["name"].strip()
-        if "available_to" in i:
-            values["available_to"] = i["available_to"] or None
         await self._write(who, conn, i["revision"], values, detail={"fields": sorted(values)})
         return await self.detail(who, connection_id)
 
@@ -345,10 +345,12 @@ class ConnectionService:
         for k, v in values.items():
             name = names[k]
             blob = self.cipher.encrypt(v, context=context_of(who.tenant_id, name))
+            # A secret part belongs to the connection's team, as the connection does (c-509).
+            team = str(conn["team_id"])
             if not await self.secrets.create(
-                who.tenant_id, name, blob, actor=who.name, at=now, connection_id=str(conn["id"])
+                who.tenant_id, team, name, blob, actor=who.name, at=now, connection_id=str(conn["id"])
             ):
-                await self.secrets.rotate(who.tenant_id, name, blob, actor=who.name, at=now)
+                await self.secrets.rotate(who.tenant_id, team, name, blob, actor=who.name, at=now)
         if any(old.get(k) != settings.get(k) for k in TOKEN_SETTINGS) or {"clientSecret"} & set(values):
             await self.store.forget_token(who.tenant_id, str(conn["id"]), environment)
         return await self.detail(who, connection_id)
@@ -369,7 +371,7 @@ class ConnectionService:
             raise NotFound(f"Connection {connection_id}")
         for env in cast(dict[str, dict[str, Any]], conn["environments"]).values():
             for name in _names(env).values():
-                await self.secrets.delete(who.tenant_id, name, actor=who.name, at=self.clock())
+                await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=self.clock())
 
     async def connect_mcp(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
         """A connection for an MCP server, its sign-in found from the server (c-331): `oauth2_auth_code` with the
@@ -506,8 +508,13 @@ class ConnectionService:
         secret_name_ = _names(env).get("clientSecret")
         client_secret = None
         if secret_name_:
-            found, _ = await self.secrets.use(
-                who.tenant_id, [secret_name_], actor=who.name, tool=f"sign-in {conn['name']}", at=self.clock()
+            found = await self.secrets.use(
+                who.tenant_id,
+                str(conn["team_id"]),
+                [secret_name_],
+                actor=who.name,
+                tool=f"sign-in {conn['name']}",
+                at=self.clock(),
             )
             if secret_name_ in found:
                 client_secret = self.cipher.decrypt(

@@ -21,7 +21,7 @@ acknowledgement from the mailbox's own sender.
 |---|---|---|
 | 1 | Limit case attachments to PDF and CSV up to 1 MB; connect a fresh IMAP mailbox on GreenMail with an SMTP sender (Mailpit); publish levy_case, mail_document, mail_intake | All saved |
 | 2 | Mail a notice PDF, a debtors CSV, a 2 MB PDF and a .exe | The intake run stores the PDF and CSV by id; `skipped` lists the 2 MB file (`too_large`) and the .exe (`type_not_allowed`) |
-| 3 | Wait | Two document runs, each waiting on its acknowledgement; four court order cases: Marcus, Priya (twice, once per file) waiting for Hold or Flag, Jordan ended not matched |
+| 3 | Wait | Two document runs, each waiting on its acknowledgement; four court order cases: Marcus, Priya (twice, once per file) waiting for Hold or Flag, Jordan (no customer matched) waiting on Find the customer or close as not ours |
 | 4 | Maya approves the PDF's acknowledgement | One reply in Mailpit from the mailbox's address to the sender; the document run ends `replied` |
 | 5 | Mail a notice the model misreads | Its document run waits on Check the read; rejected, it ends `needs_manual_read` and no case opens |
 | 6 | Send the first message again (same Message-ID) | No new intake run, no new case |

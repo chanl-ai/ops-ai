@@ -29,7 +29,7 @@ await withUiStack(
       const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: name, name: `uc056-${op}`.replaceAll('_', '-'), type: 'http' }) }))).id;
       await json(await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: op, description: name, access: 'read', method: 'GET', url: `https://${HOST}/v1/x` }) }));
       await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-056' }) }));
-      await approveToolReview(id, N);
+      await approveToolReview(id, N, J);
       return id;
     };
     const mid = await publish(`Statements ${TAG}`, OP);

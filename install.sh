@@ -17,7 +17,7 @@ umask 077
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 COMPOSE_DIR=$ROOT/deploy/compose
-REGISTRY=ghcr.io/chanl-ai/ops-ai
+REGISTRY=${OPS_IMAGE_REGISTRY:-ghcr.io/chanl-ai/ops-ai}   # a company registry that mirrors the release images
 SECRET_NAME=MODEL_PROVIDER_KEY
 SERVICES="platform tools models kb files documents agents"
 MIN_DOCKER=24.0

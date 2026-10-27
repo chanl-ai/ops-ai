@@ -34,7 +34,7 @@ await withUiStack(
     const op = `get_statement_${TAG}`;
     await fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: op, description: '', access: 'read', method: 'GET', url: `https://${HOST}/v1/x` }) });
     const reviewed = (await (await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-053' }) })).json()).data;
-    await approveToolReview(id, N);
+    await approveToolReview(id, N, J);
     const workflows = (await (await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/workflows?pageSize=50`, { headers: J })).json()).data;
     const wf = (workflows.data ?? workflows)[0];
     const asked = await fetch(`${tools}/v1/tool-modules/${id}/approvals`, { method: 'POST', headers: J, body: JSON.stringify({ workflowId: wf.id, environment: 'test', operations: [op], expiresInDays: 30, justification: 'Statements for disputes' }) });

@@ -556,13 +556,10 @@ class SchemaFieldIn(TypedDict, closed=True):
     type: Literal["string", "number", "integer", "boolean", "object", "array"]
 
 
-class ScopeIn(TypedDict, closed=True):
-    teams: list[str] | None
-
-
 class SecretIn(TypedDict, closed=True):
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
+    teamId: NotRequired[str | None]
     teams: NotRequired[list[str] | None]
     templateId: NotRequired[str | None]
     value: str
@@ -1158,6 +1155,7 @@ class SecretMeta(TypedDict, closed=True):
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
     rotatedAt: NotRequired[str | None]
+    teamId: str
     teams: NotRequired[list[str] | None]
     templateId: NotRequired[str | None]
     usedBy: NotRequired[list[SecretUser]]

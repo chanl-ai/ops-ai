@@ -17,15 +17,8 @@ REDACTED = "[secret]"
 
 
 class SecretMissing(LookupError):
-    """A referenced secret the tenant does not have, or one that no longer decrypts. Names only, never values."""
-
-    def __init__(self, names: list[str]) -> None:
-        super().__init__(", ".join(names))
-        self.names = names
-
-
-class SecretOutOfScope(Exception):
-    """The calling module's team is not one the secret is limited to (c-093)."""
+    """A referenced secret the team does not have, or one that no longer decrypts. Names only, never values: whether
+    another team holds the name is not said."""
 
     def __init__(self, names: list[str]) -> None:
         super().__init__(", ".join(names))
@@ -41,13 +34,14 @@ class SecretResolver:
         self.cipher = cipher
 
     async def lookup(
-        self, tenant_id: str, names: list[str], *, tool: str, actor: str, team: str | None = None
+        self, tenant_id: str, team_id: str | None, names: list[str], *, tool: str, actor: str
     ) -> dict[str, str]:
-        """Each named secret's value, its use audited; SecretOutOfScope names any whose team scope leaves out `team`
-        (the calling module's), SecretMissing any the tenant lacks or cannot decrypt."""
-        found, refused = await self.store.use(tenant_id, names, actor=actor, tool=tool, at=datetime.now(UTC), team=team)
-        if refused:
-            raise SecretOutOfScope(refused)
+        """Each named secret's value from `team_id`'s own secrets (the calling module's, mailbox's or connection's
+        team), its use audited; SecretMissing names any the team lacks or cannot decrypt. A caller with no team has
+        no secrets: every secret belongs to a team (c-509)."""
+        if team_id is None:
+            raise SecretMissing(names)
+        found = await self.store.use(tenant_id, team_id, names, actor=actor, tool=tool, at=datetime.now(UTC))
         missing = [n for n in names if n not in found]
         if missing:
             raise SecretMissing(missing)

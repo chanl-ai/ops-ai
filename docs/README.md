@@ -150,6 +150,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/database.md` | The database for a DBA: roles and who runs what, the baseline for a fresh install, guarded upgrades between releases, drift, the start check, roll back and the proof |
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
 | `deploy/compose.md` | Ops AI on Docker Compose against the bank's PostgreSQL: the images, what runs, the facts that shape it, running from a clean clone, connecting a model, secrets as files, upgrade, back up and logs |
+| `deploy/devhost.md` | One container per developer on a shared machine: the repo's devcontainer, side databases and mail, Coder on Ubuntu, what is kept apart and what is not |
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
 | `deploy/demo-mailbox.md` | The staging demo mailbox notices@ops.mails.run: the Stalwart mail server on Fly, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |

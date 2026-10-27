@@ -15,7 +15,6 @@ from ops_service_kit.ids import input_hash
 from ops_tools.tokens import Binding, mint
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
-OTHER = {"X-Dev-User": "Priya Shah"}
 RUN = int(time.time())
 THREAD = f"gth_uc042_{RUN}"
 INPUT = {"accountId": "CHQ-2219"}
@@ -55,26 +54,6 @@ def row(gw: Any, module_id: str) -> dict[str, Any]:
 
 def op(detail: dict[str, Any], name: str) -> dict[str, Any]:
     return next(o for o in detail["operations"] if o["name"] == name)
-
-
-def approve(gw: Any, module_id: str, days: int) -> str:
-    asked = gw.post(
-        f"/v1/tool-modules/{module_id}/approvals",
-        json={
-            "workflowId": "dispute_email",
-            "environment": "test",
-            "operations": [OK],
-            "expiresInDays": days,
-            "justification": "Disputes read the account",
-        },
-    )
-    decided = gw.post(
-        f"/v1/tool-modules/{module_id}/approvals/{data(asked)['id']}/decide",
-        json={"decision": "approved"},
-        headers=OTHER,
-    )
-    check(f"the {days}-day approval is decided (200)", decided.status_code == 200, decided.text[:300])
-    return str((data(decided) or {}).get("status"))
 
 
 settings = {"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
@@ -179,15 +158,5 @@ with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}
         and replays == [ran_id],
         {"rows": by, "replays": replays},
     )
-
-    month = approve(gw, busy, 30)
-    state = row(gw, busy)["approvalState"]
-    check(
-        "a 30-day approval granted today is approved, not expiring",
-        month == "approved" and state == "approved",
-        [month, state],
-    )
-    approve(gw, busy, 5)
-    check("an approval with five days left makes the module expiring", row(gw, busy)["approvalState"] == "expiring")
 
 finish()

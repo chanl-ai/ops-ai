@@ -9,15 +9,30 @@
 #   runtime           Fly's one image running everything under deploy/host/ops_host.py (kept last: Fly builds it)
 # Per-service:  docker build -f deploy/fly/Dockerfile --target agents -t ops-ai/agents .   (deploy/compose/app.yaml)
 # Fly:          docker build -f deploy/fly/Dockerfile --build-arg OPS_PUBLIC_ORIGIN=<origin> .
+#
+# Behind a company package mirror (docs/deploy/install.md, "Behind a company mirror"): every download goes through a build argument, and an argument
+# left empty keeps the public default. IMAGE_REGISTRY prefixes every base image (end it with a slash); NPM_CONFIG_REGISTRY,
+# COREPACK_NPM_REGISTRY, UV_DEFAULT_INDEX, UV_PYTHON_INSTALL_MIRROR, OPS_RUNNER_WASM_URL, APT_MIRROR and APK_MIRROR the rest.
+
+ARG IMAGE_REGISTRY=
+FROM ${IMAGE_REGISTRY}node:22-bookworm-slim AS node-image
+FROM ${IMAGE_REGISTRY}caddy:2.10.2 AS caddy-image
+FROM ${IMAGE_REGISTRY}openpolicyagent/opa:1.21.1-static AS opa-image
+FROM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-image
 
 # The console's JavaScript is built on the build machine's own platform: `next build` under emulation (an arm64 laptop
 # building for amd64 Fly machines) dies with a segfault. Its output is platform-free apart from sharp, which only
 # next/image's optimizer loads; the console does not use it, so the console stage drops it.
-FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS console-deps
-# package.json names pnpm@10, which corepack rejects as not a full version.
-RUN npm install -g pnpm@10.19.0
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}node:22-bookworm-slim AS console-deps
+ARG NPM_CONFIG_REGISTRY=
+ARG COREPACK_NPM_REGISTRY=
 WORKDIR /app
+# The pnpm version is the one package.json names; corepack fetches it once here from COREPACK_NPM_REGISTRY, and pnpm
+# then installs from NPM_CONFIG_REGISTRY. Both stay in this build stage, which no shipped image copies from.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable \
+ && ${COREPACK_NPM_REGISTRY:+env COREPACK_NPM_REGISTRY=$COREPACK_NPM_REGISTRY} corepack prepare --activate \
+ && if [ -n "$NPM_CONFIG_REGISTRY" ]; then echo "registry=$NPM_CONFIG_REGISTRY" >> /root/.npmrc; fi
 COPY apps/console/package.json apps/console/
 COPY apps/embed/package.json apps/embed/
 COPY packages/usecase-runner/package.json packages/usecase-runner/
@@ -64,7 +79,7 @@ ARG OPS_VERSION=
 ARG OPS_COMMIT=
 RUN pnpm --filter @ops-ai/console exec next build
 
-FROM node:22-bookworm-slim AS console
+FROM node-image AS console
 WORKDIR /app
 # The traced server and the static assets it serves; .next-pristine stays as built and each start copies it to .next.
 COPY --from=console-build /app/apps/console/.next/standalone ./
@@ -81,23 +96,27 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3016/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "--experimental-strip-types", "--no-warnings", "/app/deploy/images/console-start.mjs"]
 
-FROM python:3.12-slim-bookworm AS python-base
+FROM ${IMAGE_REGISTRY}python:3.12-slim-bookworm AS python-base
+ARG APT_MIRROR=
+ARG UV_DEFAULT_INDEX=
+ARG OPS_RUNNER_WASM_URL=
 # tesseract for scanned pages in knowledge sources and documents (ops_ingest[ocr]).
-RUN apt-get update \
+RUN if [ -n "$APT_MIRROR" ]; then sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|http://security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; fi \
+ && apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr tesseract-ocr-eng \
  && apt-get clean && find /var/lib/apt/lists -type f -delete
-COPY --from=ghcr.io/astral-sh/uv:0.8.4 /uv /usr/local/bin/uv
+COPY --from=uv-image /uv /usr/local/bin/uv
 WORKDIR /app
 # Editable workspace installs: settings find each service's seed and policy files under the repo tree.
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PYTHON=/usr/local/bin/python3.12
 COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY services services
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 # runner-service's CPython for WASI (c-531), pinned by SHA-256 in settings: fetched at build, so no machine fetches it
 # when it starts.
-RUN python -m ops_runner.fetch
+RUN [ -n "$OPS_RUNNER_WASM_URL" ] || unset OPS_RUNNER_WASM_URL; python -m ops_runner.fetch
 
 # What every service image adds: the deploy scripts, a non-root user owning /data (files and knowledge bytes), and the
 # listen address every container needs so the others reach it.
@@ -154,18 +173,20 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["pyt
 CMD ["python", "-m", "ops_runner"]
 
 # tools-service's policy engine with its policy built in, so an install needs no copy of the repo.
-FROM openpolicyagent/opa:1.21.1-static AS opa
+FROM opa-image AS opa
 COPY services/tools-service/policy /policy
 USER 10001
 EXPOSE 8181
 CMD ["run", "--server", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"]
 
 # The one origin in front of the services (deploy/fly/Caddyfile, each upstream from OPS_UPSTREAM_*).
-FROM caddy:2.10.2 AS proxy
+FROM caddy-image AS proxy
 COPY deploy/fly/Caddyfile /etc/caddy/Caddyfile
 # The image gives caddy a file capability to bind ports below 1024; the proxy listens on 8080, and a binary with file
 # capabilities will not start where every capability is dropped (Kubernetes' drop ALL), so it is removed.
-RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap \
+ARG APK_MIRROR=
+RUN if [ -n "$APK_MIRROR" ]; then sed -i "s|https://dl-cdn.alpinelinux.org|$APK_MIRROR|g" /etc/apk/repositories; fi \
+ && apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap \
  && adduser -D -u 10001 ops && chown -R ops /config /data
 USER ops
 EXPOSE 8080
@@ -190,16 +211,18 @@ COPY deploy deploy
 # machine's own platform: the SQL is the same for every platform, and migrating under emulation only costs time.
 # uv for the build machine's platform: a plain COPY --from an image takes the target's, which runs under emulation and
 # fetches that platform's Python.
-FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.8.4 AS uv-build
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}ghcr.io/astral-sh/uv:0.8.4 AS uv-build
 
-FROM --platform=$BUILDPLATFORM postgres:17-bookworm AS db-scripts-build
+FROM --platform=$BUILDPLATFORM ${IMAGE_REGISTRY}postgres:17-bookworm AS db-scripts-build
+ARG UV_DEFAULT_INDEX=
+ARG UV_PYTHON_INSTALL_MIRROR=
 COPY --from=uv-build /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_LINK_MODE=copy UV_PYTHON_INSTALL_DIR=/opt/uv-python
 COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY services services
-RUN --mount=type=cache,target=/root/.cache/uv uv python install 3.12 && uv sync --frozen --no-dev --python 3.12 \
+RUN --mount=type=cache,target=/root/.cache/uv ${UV_PYTHON_INSTALL_MIRROR:+env UV_PYTHON_INSTALL_MIRROR=$UV_PYTHON_INSTALL_MIRROR} uv python install 3.12 && ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev --python 3.12 \
  && chmod -R a+rX /opt/uv-python
 COPY deploy deploy
 RUN mkdir -p /out/postgres && chown -R postgres /out
@@ -220,9 +243,9 @@ FROM python-base AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libstdc++6 \
  && apt-get clean && find /var/lib/apt/lists -type f -delete
-COPY --from=caddy:2.10.2 /usr/bin/caddy /usr/local/bin/caddy
-COPY --from=openpolicyagent/opa:1.21.1-static /opa /usr/local/bin/opa
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=caddy-image /usr/bin/caddy /usr/local/bin/caddy
+COPY --from=opa-image /opa /usr/local/bin/opa
+COPY --from=node-image /usr/local/bin/node /usr/local/bin/node
 COPY --from=console-fly /app/node_modules node_modules
 COPY --from=console-fly /app/apps/console apps/console
 COPY deploy deploy

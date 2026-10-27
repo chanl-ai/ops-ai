@@ -32,8 +32,10 @@ with no team, or code that means "every team".
 | Crossing | Where | Change |
 |---|---|---|
 | Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`, c-423), the no-team Platform tools module (c-433) | c-509: each team installs its own; keys are per team |
-| A tool's approver is the module's owning team | `services/agents-service/src/ops_agents/api/routers/reviews.py:83`, `registry.approval_policy` (`op.approver_team or module.team_id`) | c-509: the approver is a role in the run's team |
 | The dev header acts for every team at the request level | `ops_store.isolation.enter_caller` (reason `dev`) | c-509; inside agents-service the dev caller already acts in the one team its request names (c-507) |
+
+Removed by c-509: a tool's approver being the module's owning team. agents-service decides every held write in its
+run's team and ignores the approving team tools-service names, and the console no longer offers one.
 
 Removed by c-507: rows with no team (every team-owned table's team column is `NOT NULL` and the read policy has no
 null branch), task and case types shared across teams (each team holds its own copy, keyed by team), knowledge usage

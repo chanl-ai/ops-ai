@@ -435,7 +435,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           rateLimitPerMin: o.rateLimitPerMin,
           requiresApproval: o.requiresApproval,
           approvers: F.TWO_APPROVER_TOOLS.has(o.name) ? (2 as const) : (1 as const),
-          approverTeam: m.ownerTeam,
           amountMax: o.amountMax,
           idempotent: t.access !== 'read',
           // Last 24 hours as measured; hiding is staged and does not rewrite history.

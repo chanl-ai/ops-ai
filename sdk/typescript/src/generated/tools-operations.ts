@@ -249,7 +249,9 @@ export const toolsOperations = {
     "pathParams": [
       "name"
     ],
-    "query": [],
+    "query": [
+      "teamId"
+    ],
     "stream": false
   },
   "secrets_list_secrets": {
@@ -262,7 +264,8 @@ export const toolsOperations = {
       "page",
       "pageSize",
       "search",
-      "templateId"
+      "templateId",
+      "teamId"
     ],
     "stream": false
   },
@@ -274,18 +277,9 @@ export const toolsOperations = {
     "pathParams": [
       "name"
     ],
-    "query": [],
-    "stream": false
-  },
-  "secrets_scope_secret": {
-    "body": "json",
-    "headers": [],
-    "method": "PATCH",
-    "path": "/v1/secrets/{name}",
-    "pathParams": [
-      "name"
+    "query": [
+      "teamId"
     ],
-    "query": [],
     "stream": false
   },
   "send_policy_get_send_policy": {

@@ -4,10 +4,9 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { FormField, FormFieldGroup } from '@/components/shared/form-field';
+import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useCreateSecret, useRotateSecret } from '@/hooks/secrets-queries';
 import { useTeam } from '@/hooks/use-team';
@@ -20,31 +19,16 @@ export const usersText = (s: SecretMeta) => {
   return names.length > USED_BY_SHOWN ? `${names.slice(0, USED_BY_SHOWN).join(', ')} and ${names.length - USED_BY_SHOWN} more` : names.join(', ');
 };
 
-/** Which teams' tool modules may read a secret; none ticked is every team, as the gateway reads it. */
-export function TeamsField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const { teams } = useTeam();
-  return (
-    <FormFieldGroup label="Teams" optional hint="Only these teams' tool modules may read it; the gateway refuses the rest. None ticked is every team.">
-      {teams.map((t) => (
-        <label key={t.id} className="flex items-center gap-2 text-sm">
-          <Checkbox checked={value.includes(t.id)} onCheckedChange={(on) => onChange(on ? [...value, t.id] : value.filter((x) => x !== t.id))} aria-label={t.name} />
-          {t.name}
-        </label>
-      ))}
-    </FormFieldGroup>
-  );
-}
-
 /** Create (no `rotating`) or rotate one secret. The value field is write-only and cleared on every open. */
 export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: boolean; rotating: SecretMeta | null; onOpenChange: (open: boolean) => void; /** Called with the name once a new secret is saved, so a picker can use it. */ onSaved?: (name: string) => void }) {
   const create = useCreateSecret();
   const rotate = useRotateSecret();
   const [name, setName] = React.useState('');
   const [value, setValue] = React.useState('');
-  const [teams, setTeams] = React.useState<string[]>([]);
+  const { team } = useTeam();
   const [errors, setErrors] = React.useState<{ name?: string; value?: string; submit?: string }>({});
   React.useEffect(() => {
-    if (open) (setName(''), setValue(''), setTeams([]), setErrors({}));
+    if (open) (setName(''), setValue(''), setErrors({}));
   }, [open]);
   const pending = create.isPending || rotate.isPending;
   const submit = async () => {
@@ -52,7 +36,7 @@ export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: 
     setErrors(e);
     if (e.name || e.value) return;
     try {
-      const saved = rotating ? await rotate.mutateAsync({ name: rotating.name, value }) : await create.mutateAsync({ name, value, teams: teams.length ? teams : null });
+      const saved = rotating ? await rotate.mutateAsync({ name: rotating.name, value }) : await create.mutateAsync({ name, value });
       setValue('');
       toast.success(rotating ? `Rotated ${rotating.name}` : `Saved ${(saved as SecretMeta).name}`, { description: rotating ? 'The next call sends the new value.' : `Reference it in a header as {{${(saved as SecretMeta).name}}}.` });
       if (!rotating) onSaved?.((saved as SecretMeta).name);
@@ -88,7 +72,7 @@ export function SecretDialog({ open, rotating, onOpenChange, onSaved }: { open: 
         <FormField id="secret-value" label={rotating ? 'New value' : 'Value'} error={errors.value ?? errors.submit}>
           <Input id="secret-value" type="password" value={value} aria-invalid={!!(errors.value ?? errors.submit)} onChange={(e) => (setValue(e.target.value), setErrors({}))} autoComplete="new-password" />
         </FormField>
-        {!rotating && <TeamsField value={teams} onChange={setTeams} />}
+        {!rotating && team && <p className="text-xs text-muted-foreground">Saved in {team.name}: only its tool modules read it. Another team that calls the same system adds its own under the same name.</p>}
         {rotating && rotating.usedBy.length > 0 && <p className="text-xs text-muted-foreground">The next call of {usersText(rotating)} sends the new value.</p>}
       </div>
     </DialogShell>

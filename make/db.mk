@@ -5,14 +5,22 @@
 ##@ Database
 
 db-up: ## PostgreSQL, OPA and the test mail servers (GreenMail, Mailpit) in compose, waiting until up
+ifeq ($(OPS_INFRA),external)
+	@echo "OPS_INFRA=external: postgres, opa, greenmail and mailpit are side containers"
+else
 	@# --no-recreate: every checkout, worktree and verify export shares this compose project, and its OPA mounts the
 	@# policy folder by path; recreating from another checkout re-mounts OPA there and drops the review key the running
 	@# tools-service loaded. A changed compose file therefore needs `docker compose ... up -d --force-recreate`.
 	$(COMPOSE) up -d --wait --no-recreate postgres opa greenmail mailpit
+endif
 
 db-down: ## Stop compose (the shared stack keeps its data volume; ISOLATED=1 removes its own)
+ifeq ($(OPS_INFRA),external)
+	@echo "OPS_INFRA=external: leaving side containers running"
+else
 	@# An isolated stack is one session's: its volume goes with it, so a day of isolated runs does not fill the disk.
 	$(COMPOSE) down $(if $(filter isolated,$(OPS_STACK)),--volumes)
+endif
 
 db-sweep: ## Drop scratch databases of runs that are over (dead pid, no session); DRY_RUN=1 lists them
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/scratch_db_sweep.py $(if $(DRY_RUN),--dry-run)

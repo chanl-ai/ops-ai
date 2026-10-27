@@ -44,12 +44,10 @@ await withUiStack(
       // The row opens the operation's workbench (c-088); its access and approval policy is in the sheet it opens.
       await row.click();
       await page.getByTestId('workbench-policy').click({ timeout: 60_000 });
-      const policy = page.getByTestId('op-approval-policy');
-      await policy.waitFor({ timeout: 30_000 });
-      const policyBefore = await policy.innerText();
-      // The approving team defaults to the module's team; the sheet names it from the person's teams, so a name here
-      // (not an id) shows platform-service and tools-service agree on team ids.
-      check('the write shows its approving team by name and one approver', before === 0 && policyBefore === 'Approved by Operations', { before, policyBefore });
+      await page.getByLabel('Approvals per call').waitFor({ timeout: 30_000 });
+      // A held write is decided by its run's team (c-509): the sheet names no approving team and offers no picker.
+      const teamPicker = (await page.getByLabel('Approving team').count()) + (await page.getByTestId('op-approval-policy').count());
+      check('the write shows one approver and names no approving team', before === 0 && teamPicker === 0, { before, teamPicker });
 
       await page.getByLabel('Approvals per call').click();
       await page.getByRole('option', { name: 'Two different people' }).click();
@@ -62,15 +60,14 @@ await withUiStack(
       const op = res ? (await res.json()).data?.operations?.find((o) => o.name === OP) : undefined;
       check('Stage change sends two approvers and tools-service keeps them; no self-approval switch or field', res?.status() === 200 && sent.approvers === 2 && !('selfApproval' in sent) && !('approverTeam' in sent) && op?.approvers === 2 && !('selfApproval' in (op ?? {})) && op?.requiresApproval === true && selfSwitch === 0, { status: res?.status(), sent, selfSwitch, op: op && { approvers: op.approvers, requiresApproval: op.requiresApproval } });
 
-      const policyAfter = await policy.innerText();
       await page.keyboard.press('Escape');
       await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await row.getByText('Two approvals').waitFor({ timeout: 30_000 }).catch(() => undefined);
       const rowAfter = await row.getByText('Two approvals').count();
-      check('the operation shows two approvers in its row and its approving team in its sheet', rowAfter === 1 && policyAfter === 'Approved by Operations', { rowAfter, policyAfter });
+      check('the operation shows two approvers in its row', rowAfter === 1, { rowAfter });
 
       const live = (await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }))).operations.find((o) => o.name === OP);
-      check('a fresh read of the module returns the policy', live?.approvers === 2 && live?.approverTeam === 'team_ops' && !('selfApproval' in (live ?? {})), { approvers: live?.approvers, approverTeam: live?.approverTeam });
+      check('a fresh read of the module returns the policy', live?.approvers === 2 && !('selfApproval' in (live ?? {})), { approvers: live?.approvers });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

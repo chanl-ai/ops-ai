@@ -49,6 +49,8 @@ TOOLS_UNTIL_C509 = {
     "connections": "tools per team: c-509",
     "send_policies": "tools per team: c-509",
     "send_checks": "tools per team: c-509",
+    "tool_secrets": "tools per team: c-509",
+    "secret_audit": "tools per team: c-509",
 }
 # The account's background processes (docs/architecture/identity-and-tenancy.md, "The team is the workspace").
 BACKGROUND = {
@@ -62,9 +64,6 @@ ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND
 # Source lines allowed to mean "every team", each with its reason; the tools entries leave with c-509.
 ALLOWED_BRANCHES = {
     "services/platform-service/src/ops_platform/roles.py": "a person's own grants across the teams they belong to",
-    "services/tools-service/src/ops_tools/store/connections.py": "tools per team: c-509",
-    "services/tools-service/src/ops_tools/store/secrets.py": "tools per team: c-509",
-    "services/tools-service/src/ops_tools/secrets/routes.py": "tools per team: c-509",
     "packages/ops_engine/src/ops_engine/store/definitions.py": "background process: the engine's loops read every "
     "team's live definitions; a team reads its own and the background processes",
 }

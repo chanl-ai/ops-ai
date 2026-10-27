@@ -14,7 +14,13 @@ from ops_agents.api.worker import enter_run
 from ops_agents.store.tenancy import current_team
 from ops_engine.ports import ToolResult
 from ops_engine.worker import Worker
-from tests.engine.test_worker import CountingTools, drain, engine, start, worker  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_worker import (  # noqa: F401
+    CountingTools,  # pyright: ignore[reportUnusedImport]
+    drain,  # pyright: ignore[reportUnusedImport]
+    engine,  # pyright: ignore[reportUnusedImport]
+    start,  # pyright: ignore[reportUnusedImport]
+    worker,  # pyright: ignore[reportUnusedImport]
+)
 
 
 class TeamTools(CountingTools):

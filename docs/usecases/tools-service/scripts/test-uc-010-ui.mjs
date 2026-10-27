@@ -29,7 +29,7 @@ await withUiStack(
     await api('POST', `/v1/tool-modules/${id}/operations`, { name: OP, description: 'Monthly statement', access: 'read', method: 'GET', url: `https://${HOST}/v1/accounts/{accountId}/statements`, headers: [] });
     const reviewed = await api('POST', `/v1/tool-modules/${id}/reviews`, { note: 'uc-010 ui' });
     // Approved in Reviews, as Human Tasks does (c-163); Reviews applies it in tools-service.
-    const published = reviewed.data ? { status: 200, data: await approveToolReview(id, SECURITY) } : reviewed;
+    const published = reviewed.data ? { status: 200, data: await approveToolReview(id, SECURITY, JSONH) } : reviewed;
     // A draft's first approved review publishes 0.1.0; a major change after it makes 1.0.0.
     const start = published.data?.version;
     const nextMajor = start ? `${Number(start.split('.')[0]) + 1}.0.0` : undefined;

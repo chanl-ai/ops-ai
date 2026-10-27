@@ -80,7 +80,6 @@ BASELINE = {
     "origin_required": "embed origin from config",
     "origin_mismatch": "embed origin from config",
     "origin_not_allowed": "embed origin from config",
-    "secret_out_of_scope": "secrets hidden",
     "secret_refused": "secrets hidden",
 }
 # Where a refusal belongs: the one access check, the token checks under it, and store guards.

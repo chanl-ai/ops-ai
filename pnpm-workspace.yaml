@@ -2,3 +2,20 @@ packages:
   - apps/*
   - packages/*
   - sdk/typescript
+
+# Every version is at least 30 days old (43200 minutes); company mirrors block newer ones. A security fix newer than
+# that is listed in minimumReleaseAgeExclude with its advisory named in the lock commit.
+minimumReleaseAge: 43200
+# streamdown 2.7.0 (released 2026-09-30, matures 2026-10-30): chat-blocks.tsx needs its defaultComponents export, which
+# keeps the link-safety confirmation on replies (46448161). Remove this line after 2026-10-30.
+minimumReleaseAgeExclude:
+  - streamdown@2.7.0
+  - remend@1.4.0
+  # Security: next 16.4.1 fixes GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr; dompurify 3.4.17 fixes GHSA-cg2g-xh64-v4q7.
+  - next@16.4.1
+  - dompurify@3.4.17
+  - '@next/*'
+# Transitive versions younger than the age gate are held back to the newest older release.
+overrides:
+  'zod': 4.6.5
+  dompurify: 3.4.17
