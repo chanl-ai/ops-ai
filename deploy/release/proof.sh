@@ -32,7 +32,7 @@ if [ "$(docker info --format '{{.Architecture}}')" != x86_64 ]; then
   C="$C -f $WORK/emulation.yaml"
   {
     echo "services:"
-    for s in platform agents worker tools models kb files documents console fake-model; do
+    for s in platform agents worker tools models kb files documents runner console fake-model; do
       echo "  $s: { healthcheck: { timeout: 60s, interval: 20s, start_period: 300s, retries: 10 } }"
     done
     echo "  proxy: { image: $NATIVE/proxy:latest }"

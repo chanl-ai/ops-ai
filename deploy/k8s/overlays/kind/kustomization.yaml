@@ -15,6 +15,7 @@ images:
   - {name: ops-ai/kb, newTag: dev}
   - {name: ops-ai/files, newTag: dev}
   - {name: ops-ai/documents, newTag: dev}
+  - {name: ops-ai/runner, newTag: dev}
   - {name: ops-ai/opa, newTag: dev}
   - {name: ops-ai/console, newTag: dev}
   - {name: ops-ai/proxy, newTag: dev}
@@ -50,4 +51,5 @@ secretGenerator:
   - {name: ops-kb, envs: [kb.env]}
   - {name: ops-files, envs: [files.env]}
   - {name: ops-documents, envs: [documents.env]}
+  - {name: ops-runner, envs: [runner.env]}
   - {name: ops-migrate, envs: [migrate.env]}

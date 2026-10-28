@@ -76,7 +76,7 @@ VERSION=$(tr -d ' \n' <"$CLONE/deploy/release/version")
 say "clone at $SHA; deploy/release/version says $VERSION"
 
 say "2. no local copy of ghcr.io/chanl-ai/ops-ai/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
-for t in platform agents tools models kb files documents opa proxy console db-scripts; do
+for t in platform agents tools models kb files documents runner opa proxy console db-scripts; do
   docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" >/dev/null 2>&1 || true
 done
 [ -z "$(docker images -q --filter "reference=ghcr.io/chanl-ai/ops-ai/*:$VERSION")" ] || fail "an image for $VERSION is still here"
@@ -154,19 +154,19 @@ say "8. ./install.sh status"
 
 say "8b. an upgrade whose check fails rolls back: version $VERSION-broken, every image the same but a console that exits"
 BROKEN=$VERSION-broken
-for t in platform agents tools models kb files documents opa proxy; do
+for t in platform agents tools models kb files documents runner opa proxy; do
   docker tag "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN"
 done
 printf 'FROM ghcr.io/chanl-ai/ops-ai/console:%s\nCMD ["sh", "-c", "echo broken console; exit 3"]\n' "$VERSION" >"$WORK/Dockerfile.broken"
 docker build -q -t "ghcr.io/chanl-ai/ops-ai/console:$BROKEN" -f "$WORK/Dockerfile.broken" "$WORK" >/dev/null
 # shellcheck disable=SC2046
-docker save -o "$WORK/broken-images.tar" $(for t in platform agents tools models kb files documents opa proxy console; do echo "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN"; done)
+docker save -o "$WORK/broken-images.tar" $(for t in platform agents tools models kb files documents runner opa proxy console; do echo "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN"; done)
 set +e
 (cd "$CLONE" && ./install.sh upgrade --offline "$WORK/broken-images.tar") >"$LOG/rollback.txt" 2>&1
 code=$?
 set -e
 grep -v '^ \(Container\|Volume\|Network\|Image\)\b' "$LOG/rollback.txt"
-for t in platform agents tools models kb files documents opa proxy console; do docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN" >/dev/null; done
+for t in platform agents tools models kb files documents runner opa proxy console; do docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN" >/dev/null; done
 rm -f "$WORK/broken-images.tar"
 [ "$code" = 1 ] || fail "the broken upgrade exited $code, want 1"
 grep -q "rolled back to $VERSION" "$LOG/rollback.txt" || fail "the broken upgrade did not roll back"

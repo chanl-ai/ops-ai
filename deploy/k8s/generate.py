@@ -71,6 +71,17 @@ WORKLOADS = [
         memory="512Mi",
     ),
     Workload("tools", "tools", 8720, "/health", env={"OPS_SERVICE_SIGNING_KID": "svc-tools-1"}, secret="tools"),
+    # Each run gets a WASM store of up to its memory limit (256 MB by default), two at a time. The root filesystem is
+    # read-only, so wasmtime's compiled-module cache goes under /tmp.
+    Workload(
+        "runner",
+        "runner",
+        8770,
+        "/health",
+        env={"OPS_SERVICE_SIGNING_KID": "svc-runner-1", "OPS_RUNNER_COMPILED_DIR": "/tmp/wasmtime"},
+        secret="runner",
+        memory="1Gi",
+    ),
     Workload("models", "models", 8730, "/health", env={"OPS_SERVICE_SIGNING_KID": "svc-models-1"}, secret="models"),
     Workload("kb", "kb", 8740, "/health", env={"OPS_SERVICE_SIGNING_KID": "svc-kb-1"}, secret="kb", data=True),
     Workload(

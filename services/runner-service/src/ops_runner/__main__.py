@@ -10,14 +10,14 @@ from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings
 
 from .app import create_runner_app
-from .fetch import wasm_path
+from .fetch import compiled_dir, wasm_path
 from .wasm import WasmPython
 
 
 def main() -> None:
     settings = Settings()
     configure_logging()
-    runtime = WasmPython(wasm_path(settings), sha256=settings.runner_wasm_sha256, cache_dir=settings.runner_cache_dir)
+    runtime = WasmPython(wasm_path(settings), sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings))
     url = settings.tools_url or settings.gateway_url
     # Each call names the run's tenant and team itself; tools-service decides it as the caller its call token names.
     tools = (

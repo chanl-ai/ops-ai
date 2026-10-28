@@ -12,6 +12,7 @@ data:
   OPS_AGENTS_URL: http://agents:8700
   OPS_GATEWAY_URL: http://tools:8720
   OPS_TOOLS_URL: http://tools:8720
+  OPS_RUNNER_URL: http://runner:8770
   OPS_MODELS_URL: http://models:8730
   OPS_KB_URL: http://kb:8740
   OPS_FILES_URL: http://files:8750

@@ -16,6 +16,7 @@ The manifests are in `deploy/k8s/`, applied with `kubectl apply -k`; the images 
 |---|---|---|---|
 | platform, tools, models, kb, files, documents | that service's | its health path, each | `ops-settings`, `ops-origin`, its own Secret `ops-<service>` |
 | agents | agents | port open; `/health` (503 until a model is connected, which keeps it out of the Service); port open | as above |
+| runner | runner | `/health`, each | `ops-settings`, `ops-origin`, `ops-runner` (no database login); 1 GiB; wasmtime's compiled cache at `/tmp/wasmtime` (`OPS_RUNNER_COMPILED_DIR`) |
 | worker | agents, `python -m ops_agents.api.worker` | liveness: a database query | `ops-agents` |
 | opa | opa (policy built in) | `/health` | nothing |
 | console | console | `/login` | `ops-console` (the service URLs it writes in at start) |

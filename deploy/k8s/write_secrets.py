@@ -19,7 +19,9 @@ from typing import Any, cast
 from urllib.parse import quote
 
 HERE = Path(__file__).resolve().parent
-SERVICES = ("platform", "agents", "tools", "models", "kb", "files", "documents")
+SERVICES = ("platform", "agents", "tools", "models", "kb", "files", "documents", "runner")
+# Services with no tables, so no database login.
+NO_DATABASE = {"runner"}
 MODELS_KEYS = {"agents": "OPS_MODELS_KEY_AGENTS", "documents": "OPS_MODELS_KEY_DOCUMENTS"}
 
 
@@ -60,7 +62,9 @@ def main() -> None:
     uses = cast(dict[str, tuple[str, ...]], _load(HERE.parent / "images" / "service_keys.py", "service_keys").USES)
     kept = a.overlay / "keys.env"
     keys = _pairs(kept)
-    if not keys:
+    # A service added since the keys were made has no key in them, and the public keys must name every service, so
+    # the whole set is made again; every Secret below is rewritten from it.
+    if not all(f"OPS_SVC_KEY_{svc.upper()}" in keys for svc in SERVICES):
         keys = cast(dict[str, str], _load(HERE.parent / "fly" / "generate_keys.py", "generate_keys").generate())
         _write(kept, keys)
     logins, admin, models = _pairs(a.logins), _pairs(a.admin), _pairs(a.models)
@@ -71,7 +75,7 @@ def main() -> None:
 
     for svc in SERVICES:
         values = {
-            "OPS_DATABASE_URL": dsn(f"ops_{svc}_runtime"),
+            **({} if svc in NO_DATABASE else {"OPS_DATABASE_URL": dsn(f"ops_{svc}_runtime")}),
             "OPS_SERVICE_SIGNING_KEY": keys[f"OPS_SVC_KEY_{svc.upper()}"],
             "OPS_SERVICE_PUBLIC_KEYS": keys["OPS_SERVICE_PUBLIC_KEYS"],
             **{k: keys[k] for k in uses[svc]},

@@ -15,7 +15,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 REF=${1:?usage: package.sh <ref>}
 PREFIX=${IMAGE_PREFIX:-ghcr.io/chanl-ai/ops-ai}
 OUT=$(mkdir -p "${OUT:-$ROOT/dist}" && cd "${OUT:-$ROOT/dist}" && pwd)
-TARGETS="platform agents tools models kb files documents opa proxy console db-scripts"
+TARGETS="platform agents tools models kb files documents runner opa proxy console db-scripts"
 PLATFORM=linux/amd64
 SHA=$(git -C "$ROOT" rev-parse --verify "$REF^{commit}")
 if git -C "$ROOT" show-ref --verify --quiet "refs/tags/$REF"; then VERSION=$REF; else VERSION=$(git -C "$ROOT" rev-parse --short=8 "$SHA"); fi
