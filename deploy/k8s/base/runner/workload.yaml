@@ -1,0 +1,98 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runner
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: runner
+        image: ops-ai/runner
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: OPS_SERVICE_SIGNING_KID
+          value: svc-runner-1
+        - name: OPS_RUNNER_COMPILED_DIR
+          value: /tmp/wasmtime
+        resources:
+          requests:
+            cpu: 50m
+            memory: 1Gi
+          limits:
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        envFrom:
+        - configMapRef:
+            name: ops-settings
+        - configMapRef:
+            name: ops-origin
+        - secretRef:
+            name: ops-runner
+        ports:
+        - containerPort: 8770
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runner
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: runner
+  ports:
+  - name: http
+    port: 8770
+    targetPort: 8770

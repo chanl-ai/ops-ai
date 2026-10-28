@@ -10,6 +10,7 @@ resources:
   - agents/workload.yaml
   - worker/workload.yaml
   - tools/workload.yaml
+  - runner/workload.yaml
   - models/workload.yaml
   - kb/workload.yaml
   - files/workload.yaml

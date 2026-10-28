@@ -22,6 +22,10 @@ def wasm_path(settings: Settings) -> Path:
     return settings.runner_cache_dir / WASM_FILE
 
 
+def compiled_dir(settings: Settings) -> Path:
+    return settings.runner_compiled_dir or settings.runner_cache_dir / "compiled"
+
+
 def main() -> None:
     configure_logging()
     settings = Settings()

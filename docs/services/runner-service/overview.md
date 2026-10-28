@@ -7,9 +7,10 @@ Design: `the planning repo/docs/plans/ops-ai/data-gateway-spec.md` section c; th
 |---|---|
 | Purpose | Runs a code tool's Python function, `main(input)` returning JSON, in a sandbox that holds no network, no secrets and no grants of its own |
 | Owns | Nothing stored. A run's directory and pipes are deleted when it ends; the run's outcome and timings go on tools-service's call row |
-| Runtime | CPython 3.12 compiled to WASI (VMware Wasm Labs build, pinned by URL and SHA-256 in settings), run by wasmtime (`wasmtime==49.0.0`). `make -C services/runner-service wasm` fetches the 26 MB file into `OPS_RUNNER_CACHE_DIR`; the service refuses to start without it or on a SHA mismatch |
+| Runtime | CPython 3.12 compiled to WASI (VMware Wasm Labs build, pinned by URL and SHA-256 in settings), run by wasmtime (`wasmtime==50.0.1`). `make -C services/runner-service wasm` fetches the 26 MB file into `OPS_RUNNER_CACHE_DIR`; the service refuses to start without it or on a SHA mismatch |
 | Route | `POST /v1/runs` (service token only): `source`, `entry`, `input`, `limits`, `callToken`. Answers `ok`, `output` or `error`, `log` (last 8 KB of stderr and `print`), `calls`, `createMs`, `executeMs`, `trace` |
-| Settings | `runner_port` 8770, `runner_url`, `runner_wasm_url`, `runner_wasm_sha256`, `runner_cache_dir`, `runner_concurrency` (default 2), caps `runner_max_memory_mb` 1024, `runner_max_time_s` 60, `runner_max_calls` 100 |
+| Deploy | One image target, `runner` (`deploy/fly/Dockerfile`), fetches the build when the image is built. Compose: service `runner` in `deploy/compose/app.yaml`. Kubernetes: workload `runner` (`deploy/k8s/generate.py`), compiled cache under `/tmp`, 1 GiB. Fly: `[process.runner]`. tools-service reaches it at `OPS_RUNNER_URL` |
+| Settings | `runner_port` 8770, `runner_url`, `runner_wasm_url`, `runner_wasm_sha256`, `runner_cache_dir`, `runner_compiled_dir` (wasmtime's compiled-module cache, default `runner_cache_dir/compiled`), `runner_concurrency` (default 2), caps `runner_max_memory_mb` 1024, `runner_max_time_s` 60, `runner_max_calls` 100 |
 
 ## Walls
 

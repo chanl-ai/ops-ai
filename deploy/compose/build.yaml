@@ -21,6 +21,7 @@ services:
   platform: { build: { <<: *image, target: platform } }
   agents: { build: { <<: *image, target: agents } }
   tools: { build: { <<: *image, target: tools } }
+  runner: { build: { <<: *image, target: runner } }
   models: { build: { <<: *image, target: models } }
   kb: { build: { <<: *image, target: kb } }
   files: { build: { <<: *image, target: files } }

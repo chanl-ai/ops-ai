@@ -26,6 +26,7 @@ The files are in `deploy/compose/` and `deploy/images/`, and the image stages in
 | kb | kb | 8740 | `/api/kb/` | `/health` |
 | files | files | 8750 | `/api/files/` | `/health` |
 | documents | documents | 8760 | `/api/documents/` | `/health` |
+| runner | runner (code tools' functions on WASM; no database) | 8770 | tools-service only | `/health` |
 | opa | opa (OPA with `services/tools-service/policy`) | 8181 | tools-service only | none (a static binary image) |
 | console | console | 3016 | `/` | `/login` |
 | proxy | proxy (Caddy, `deploy/fly/Caddyfile`) | 8080, published as `OPS_PUBLIC_PORT` | the one origin | `/api/platform/v1/health` |
@@ -55,7 +56,7 @@ a superuser.
 
 ```
 git clone <repo> ops-ai && cd ops-ai
-for t in platform agents tools models kb files documents opa proxy console; do
+for t in platform agents tools models kb files documents runner opa proxy console; do
   docker build -f deploy/fly/Dockerfile --target $t -t ops-ai/$t:dev .
 done
 cp deploy/compose/app.env.example ~/ops-ai.env             # outside the repo; never commit it

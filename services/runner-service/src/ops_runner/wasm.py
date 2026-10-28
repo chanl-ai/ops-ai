@@ -47,7 +47,7 @@ def sha256_of(path: Path) -> str:
 class WasmPython:
     """One engine and one compiled module for the process; each run gets its own store, directory and pipes."""
 
-    def __init__(self, wasm: Path, *, sha256: str, cache_dir: Path) -> None:
+    def __init__(self, wasm: Path, *, sha256: str, compiled_dir: Path) -> None:
         if not wasm.is_file():
             raise SystemExit(f"The runner's Python build is missing at {wasm}: run `make runner-wasm`.")
         if (found := sha256_of(wasm)) != sha256:
@@ -55,10 +55,9 @@ class WasmPython:
         cfg = Config()
         cfg.epoch_interruption = True
         # wasmtime's compiled-module cache, in a directory the service owns: a systemd unit has no writable home.
-        compiled = cache_dir / "compiled"
-        compiled.mkdir(parents=True, exist_ok=True)
-        toml = cache_dir / "wasmtime-cache.toml"
-        toml.write_text(f'[cache]\ndirectory = "{compiled}"\n')
+        compiled_dir.mkdir(parents=True, exist_ok=True)
+        toml = compiled_dir / "wasmtime-cache.toml"
+        toml.write_text(f'[cache]\ndirectory = "{compiled_dir}"\n')
         cfg.cache = str(toml)
         self.engine = Engine(cfg)
         self.module: Module = Module.from_file(self.engine, str(wasm))  # pyright: ignore[reportUnknownMemberType]

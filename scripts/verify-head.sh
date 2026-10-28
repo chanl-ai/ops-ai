@@ -13,7 +13,18 @@ if [ -z "${QA_RUNNER:-}${QA_LOCAL:-}" ]; then
 fi
 root="$(git rev-parse --show-toplevel)"
 head="$(git -C "$root" rev-parse --short HEAD)"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/ops-ai-head.XXXXXX")"
+# Exports live outside $TMPDIR and /tmp: macOS deletes files there older than three days (dirhelper at 03:35, periodic
+# for /tmp), and an export's node_modules and .venv keep their packages' old mtimes, so the nightly ui pass lost
+# playwright-core mid-run and every later use case exited before its first step.
+base="${VERIFY_HEAD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/ops-ai/verify-head}"
+mkdir -p "$base"
+# A run the QA watchdog killed with SIGKILL never reached its cleanup: its pid file names a process that has gone.
+for pid_file in "$base"/ops-ai-head.*.pid; do
+  [ -f "$pid_file" ] || continue
+  kill -0 "$(cat "$pid_file")" 2>/dev/null || rm -rf "${pid_file%.pid}" "$pid_file"
+done
+tmp="$(mktemp -d "$base/ops-ai-head.XXXXXX")"
+echo $$ > "$tmp.pid"
 db_name="ops_test_head_$$"
 pg_port="${OPS_PG_PORT:-5477}"
 cleanup() {
@@ -26,7 +37,7 @@ async def drop():
             await c.execute(f'DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)')
     await c.close()
 asyncio.run(drop())" >/dev/null 2>&1 || true)
-  rm -rf "$tmp"
+  rm -rf "$tmp" "$tmp.pid"
 }
 trap cleanup EXIT
 git -C "$root" archive "$head" | tar -x -C "$tmp"

@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [ "${BUILD:-1}" = 1 ]; then
-  for target in console platform agents tools models kb files documents opa proxy; do
+  for target in console platform agents tools models kb files documents runner opa proxy; do
     echo "proof: building ops-ai/$target"
     docker build -q -f "$ROOT/deploy/fly/Dockerfile" --target "$target" -t "ops-ai/$target:dev" "$ROOT" >/dev/null
   done

@@ -10,7 +10,7 @@ Chat runs on OpenAI (gpt-5.5) as decided on 2026-10-10, so Pydantic AI is instal
 
 | Package | Version | Licence | Native | Network | Why flagged |
 |---|---|---|---|---|---|
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL | native code |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL | native code |
 | black | 26.5.1 | MIT | yes | No | native code |
 | certifi | 2026.10.19 | MPL-2.0 | no | No | weak copyleft (file-level) |
 | cffi | 2.1.1 | MIT-0 | yes | No | native code |
@@ -64,7 +64,7 @@ Chat runs on OpenAI (gpt-5.5) as decided on 2026-10-10, so Pydantic AI is instal
 | antlr4-python3-runtime | 4.13.2 | BSD | transitive (dev) | no | No | Required by moto |
 | anyio | 4.15.1 | MIT | direct | no | No | Required by anthropic, httpx, httpx2, langsmith, mcp, openai, pydantic-ai-slim, pydantic-graph, sse-starlette, starlette, watchfiles |
 | argcomplete | 3.7.2 | Apache Software License | transitive (dev) | no | No | Required by datamodel-code-generator |
-| asyncpg | 0.31.0 | Apache-2.0 | direct | yes | Only when called: connects to the configured PostgreSQL | PostgreSQL driver for the chat tables and the checkpointer (Apache-2.0, chosen over LGPL psycopg) |
+| asyncpg | 0.32.0 | Apache-2.0 | direct | yes | Only when called: connects to the configured PostgreSQL | PostgreSQL driver for the chat tables and the checkpointer (Apache-2.0, chosen over LGPL psycopg) |
 | attrs | 26.1.0 | MIT | transitive | no | No | Required by jsonschema, jsonschema-path, referencing |
 | aws-xray-sdk | 2.15.0 | Apache License 2.0 | transitive (dev) | no | No | Required by moto |
 | azure-core | 1.41.0 | MIT | transitive | no | No | Required by azure-identity, azure-storage-blob |
@@ -250,7 +250,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-types | 0.8.0 | MIT | no | No |
 | anthropic | 1.8.0 | MIT | no | Only when called: HTTPS to api.anthropic.com, and only when the model alias is a claude-* model |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | attrs | 26.1.0 | MIT | no | No |
 | azure-core | 1.41.0 | MIT | no | No |
 | azure-storage-blob | 12.30.3 | MIT License | no | Only when called: the configured Azure storage account |
@@ -354,7 +354,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | attrs | 26.1.0 | MIT | no | No |
 | beautifulsoup4 | 4.15.0 | MIT License | no | No |
 | certifi | 2026.10.19 | MPL-2.0 | no | No |
@@ -407,7 +407,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | azure-core | 1.41.0 | MIT | no | No |
 | azure-identity | 1.25.3 | MIT | no | No |
 | azure-storage-blob | 12.30.3 | MIT License | no | Only when called: the configured Azure storage account |
@@ -461,7 +461,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | beautifulsoup4 | 4.15.0 | MIT License | no | No |
 | certifi | 2026.10.19 | MPL-2.0 | no | No |
 | cffi | 2.1.1 | MIT-0 | yes | No |
@@ -508,7 +508,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | certifi | 2026.10.19 | MPL-2.0 | no | No |
 | cffi | 2.1.1 | MIT-0 | yes | No |
 | click | 8.5.0 | BSD-3-Clause | no | No |
@@ -544,7 +544,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | certifi | 2026.10.19 | MPL-2.0 | no | No |
 | cffi | 2.1.1 | MIT-0 | yes | No |
 | click | 8.5.0 | BSD-3-Clause | no | No |
@@ -584,7 +584,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-doc | 0.0.5 | MIT | no | No |
 | annotated-types | 0.8.0 | MIT | no | No |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | certifi | 2026.10.19 | MPL-2.0 | no | No |
 | cffi | 2.1.1 | MIT-0 | yes | No |
 | click | 8.5.0 | BSD-3-Clause | no | No |
@@ -622,7 +622,7 @@ The packages each service's image ships (its runtime dependencies and theirs, fr
 | annotated-types | 0.8.0 | MIT | no | No |
 | anthropic | 1.8.0 | MIT | no | Only when called: HTTPS to api.anthropic.com, and only when the model alias is a claude-* model |
 | anyio | 4.15.1 | MIT | no | No |
-| asyncpg | 0.31.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
+| asyncpg | 0.32.0 | Apache-2.0 | yes | Only when called: connects to the configured PostgreSQL |
 | attrs | 26.1.0 | MIT | no | No |
 | azure-core | 1.41.0 | MIT | no | No |
 | azure-storage-blob | 12.30.3 | MIT License | no | Only when called: the configured Azure storage account |

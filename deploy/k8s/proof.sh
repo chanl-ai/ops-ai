@@ -26,7 +26,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-IMAGES="platform agents tools models kb files documents opa proxy console"
+IMAGES="platform agents tools models kb files documents runner opa proxy console"
 REF=${REF:-HEAD}
 SRC=$ROOT
 if git -C "$ROOT" rev-parse --verify -q "$REF" >/dev/null; then
@@ -79,7 +79,7 @@ $SECRETS
 echo "proof: kubectl apply -k deploy/k8s/overlays/kind"
 kubectl --context kind-$CLUSTER apply -k "$OVERLAY" >/dev/null
 $KUBECTL wait --for=condition=complete job/migrate --timeout=300s
-for d in platform tools models kb files documents opa console proxy fake-model; do
+for d in platform tools models kb files documents runner opa console proxy fake-model; do
   $KUBECTL rollout status deploy/$d --timeout=300s >/dev/null
 done
 

@@ -35,11 +35,13 @@ package = false
 # system Python 3.12, or run `uv python install 3.12` (UV_PYTHON_INSTALL_MIRROR points it at a mirror).
 python-downloads = "manual"
 # Every version is at least 30 days old (company mirrors block newer ones). `make deps-refresh` moves this date to
-# today minus 30 days. A security fix newer than that goes in exclude-newer-package with the advisory in the lock commit.
+# today minus 30 days. A security fix, or a fix for a broken connection (owner, 2026-10-27), newer than that goes in
+# exclude-newer-package, named here with its reason.
 exclude-newer = "2026-09-27T00:00:00Z"
 # Security exceptions (critical advisories, fixed versions younger than the cutoff): certifi 2026.10.19 fixes
 # PYSEC-2026-4320; pillow 13.0.0 fixes five critical GHSA ids (deploy/mirror-test/audit-baseline.txt, until removed).
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", pillow = "2026-10-17T00:00:00Z" }
+# asyncpg 0.32.0: 0.31.0 cannot open a TLS connection to the staging Postgres (ConnectionResetError on every connect).
+exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", pillow = "2026-10-17T00:00:00Z", asyncpg = "2026-10-07T00:00:00Z" }
 
 [tool.uv.workspace]
 members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service", "services/runner-service"]

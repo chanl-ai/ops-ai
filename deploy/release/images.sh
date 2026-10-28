@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 PREFIX=${IMAGE_PREFIX:-ghcr.io/chanl-ai/ops-ai}
 # db-scripts holds the DBA's PostgreSQL scripts for the commit (deploy/fly/Dockerfile); install.sh --db-mode dba copies them out.
-TARGETS=${TARGETS:-platform agents tools models kb files documents opa proxy console db-scripts}
+TARGETS=${TARGETS:-platform agents tools models kb files documents runner opa proxy console db-scripts}
 SOURCE=https://github.com/chanl-ai/ops-ai
 SHA=$(git -C "$ROOT" rev-parse --verify "$REF^{commit}")
 WORK=$(mktemp -d)

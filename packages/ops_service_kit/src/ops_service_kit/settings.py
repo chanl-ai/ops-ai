@@ -180,6 +180,9 @@ class Settings(BaseSettings):
     )
     runner_wasm_sha256: str = "e5dc5a398b07b54ea8fdb503bf68fb583d533f10ec3f930963e02b9505f7a763"
     runner_cache_dir: Path = _REPO_ROOT / ".data" / "runner"
+    # wasmtime's compiled-module cache; unset, runner_cache_dir/compiled. Kubernetes points it under /tmp, since its
+    # read-only root filesystem leaves the build's folder unwritable.
+    runner_compiled_dir: Path | None = None
     runner_concurrency: int = 2
     # The most a code operation may ask for; its own limits default to 256 MB, 10 s and 20 calls.
     runner_max_memory_mb: int = 1024

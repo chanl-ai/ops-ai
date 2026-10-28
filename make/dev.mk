@@ -57,11 +57,11 @@ down: ## Stop what `make up` started, then compose (KEEP_DB=1 leaves compose run
 
 restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|files|platform|console for one), migrating each first
 	@# Each service's chain is applied between stop and start, as make up does, so a restart of newer code never
-	@# meets a table without its new columns. The console, the embed app and the API docs page have no database; the
-	@# worker uses agents-service's.
+	@# meets a table without its new columns. The console, the embed app, the API docs page and the runner have no
+	@# database; the worker uses agents-service's.
 	@if [ -n "$(SVC)" ]; then \
 		$(STACK) stop $(SVC) && \
-		{ case "$(SVC)" in console|worker|embed|apidocs) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate && $(STACK) note-migrations;; esac; } && \
+		{ case "$(SVC)" in console|worker|embed|apidocs|runner) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate && $(STACK) note-migrations;; esac; } && \
 		$(STACK) start $(SVC); \
 	else \
 		$(STACK) down && \
@@ -73,8 +73,11 @@ restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|f
 health: ## Probe every service, OPA and PostgreSQL; shows port, state and who owns the listener
 	@$(STACK) health
 
-logs: ## Follow one service's log: make logs SVC=agents|tools|console (FOLLOW=0 to print and exit)
+logs: ## Follow one service's log: make logs SVC=agents|tools|runner|console (FOLLOW=0 to print and exit)
 	@OPS_LOGS_FOLLOW=$(if $(FOLLOW),$(FOLLOW),1) $(STACK) logs $(SVC)
+
+runner-wasm: ## Fetch the code runner's pinned Python build into .data/runner and check its SHA-256 (make up does it too)
+	@$(MAKE) -s -C services/runner-service wasm
 
 seed-walk: ## Prove the seeded stack works: agents, pins, workflows, then a skill turn, a blocked turn and a v2 run (PASS/FAIL each)
 	@OPS_AGENTS_PORT=$(OPS_AGENTS_PORT) OPS_PLATFORM_PORT=$(OPS_PLATFORM_PORT) uv run python scripts/seed_walk.py
