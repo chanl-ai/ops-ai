@@ -1,6 +1,6 @@
 # A workflow waits for its children and uses their results
 
-Status: passing (2026-10-19). Id: `uc-402`. Service: `agents-service`. Layers: api. Card: c-263.
+Status: passing (2026-10-19). Id: `uc-402`. Service: `agents-service`. Layers: api, ui. Card: c-263.
 
 A letter arrives with three attachments. The parent workflow reads each in a child run of its own, two at a time, and
 then needs every child's result to go on. With Wait for them on, its Run workflow step pauses until every child has
@@ -29,6 +29,7 @@ The stack is agents-service with a workflow worker; neither workflow has a tool 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-402-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-402-ui.mjs` | passing (2026-10-28): the parent's page shows the Run workflow step once by done; its sheet lists each child's outcome in order with the counts |
 
 ## Non-vacuous check
 

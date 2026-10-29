@@ -1,7 +1,8 @@
 """`uv run --project .. python -m fake_openai <dir>` from services/models-service/scripts: the fake on 127.0.0.1.
 
 The port is FAKE_OPENAI_PORT, else `port` in <dir>/script.json, else 8746. It prints the setting models-service seeds
-its openai-local connection from."""
+its openai-local connection from. With FAKE_OPENAI_API_KEY set, a request that sends a credential must send that key
+(a provider connection naming a key proves the key reaches the provider)."""
 
 from __future__ import annotations
 
@@ -26,7 +27,8 @@ def main() -> None:
     # OPS_BIND_HOST takes it (deploy/fly/staging).
     host = os.environ.get("FAKE_OPENAI_HOST") or "127.0.0.1"
     host = "" if host == "*" else host
-    uvicorn.run(create_app(script), host=host, port=port, log_level="warning")
+    app = create_app(script, os.environ.get("FAKE_OPENAI_API_KEY") or None)
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":

@@ -48,5 +48,5 @@ review gate's refusal paired with Priya's approval. Steps 3 to 7 failed while th
 
 ## What this does not cover
 
-The real model reads the notice in `make demo-mailbox` on the shared stack (green on 2026-10-18 with gpt-5-mini); this
-use case runs on the fake. A Microsoft 365 mailbox is covered by tools and agents tests against a fake Graph (c-228).
+`make demo-walk` reads the notice on whatever model `make up DEMO_MODEL=` points document reads at; this use case
+runs on the fake. A Microsoft 365 mailbox is covered by tools and agents tests against a fake Graph (c-228).

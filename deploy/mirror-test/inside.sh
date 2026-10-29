@@ -23,6 +23,16 @@ for url in https://pypi.org/simple/ https://files.pythonhosted.org/ https://regi
   echo "no route to $url"
 done
 
+step "make setup's mirror answers, tested through Nexus before anything is installed"
+# Setup is the standard library apart from the database driver, so it runs here first; with nothing installed yet its
+# database line says to run make install, and its two mirror lines must pass through Nexus.
+printf 'RUNS_ON=docker\nDOCKER=no\nDATABASE=postgresql://ops:ops@nexus:5432/ops\nPYPI_MIRROR=%s\nNPM_MIRROR=%s\nIMAGE_REGISTRY=none\nMODEL_PROVIDER=fake\n' \
+  "$UV_DEFAULT_INDEX" "$NPM_CONFIG_REGISTRY" >/tmp/setup-answers.env
+SETUP_FILE=/tmp/setup.env PYTHONPATH=scripts:deploy/database python3 -m setup --answers /tmp/setup-answers.env >/tmp/setup.out || true
+cat /tmp/setup.out
+grep -q '^PASS  pypi mirror' /tmp/setup.out && grep -q '^PASS  npm mirror' /tmp/setup.out ||
+  { echo "FAIL: make setup did not pass the mirrors"; exit 1; }
+
 step "Python: the locked versions, installed from the mirror"
 bash scripts/install_via_mirror.sh
 

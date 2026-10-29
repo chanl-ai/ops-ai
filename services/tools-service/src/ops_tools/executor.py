@@ -614,7 +614,9 @@ class Executor:
         if resolved.executor == "code":
             if self.code is None:
                 return _failure("runner_unavailable", "This gateway has no code runner.")
-            return await self.code.run(op, args, key=key, caller=caller, environment=environment)
+            return await self.code.run(
+                op, args, key=key, caller=caller, environment=environment, module_team=module.get("team_id")
+            )
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, op["name"], args, environment)
         ):

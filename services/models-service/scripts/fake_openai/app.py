@@ -199,20 +199,33 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
     return Completion(text, prompt_tokens, len(text.split()))
 
 
-def create_app(script: Script) -> FastAPI:
+def create_app(script: Script, api_key: str | None = None) -> FastAPI:
+    """With `api_key`, a request that sends a credential must send that one, or it is refused as OpenAI refuses a wrong
+    key; a request with none is still answered, for the connections in the same stack that name no key."""
     app = FastAPI(title="Fake OpenAI", version="1.0.0")
+
+    def wrong_key(request: Request) -> JSONResponse | None:
+        sent = request.headers.get("authorization")
+        if api_key is None or sent is None or sent == f"Bearer {api_key}":
+            return None
+        error = {"message": "Incorrect API key provided.", "type": "invalid_request_error", "code": "invalid_api_key"}
+        return JSONResponse({"error": error}, status_code=401)
 
     @app.get("/health")
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
 
     @app.get("/v1/models")
-    async def list_models() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def list_models(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        if (refused := wrong_key(request)) is not None:
+            return refused
         rows = [{"id": m, "object": "model", "created": 0, "owned_by": "fake-openai"} for m in script.models]
         return {"object": "list", "data": rows}
 
     @app.post("/v1/chat/completions")
     async def completions(request: Request) -> Response:  # pyright: ignore[reportUnusedFunction]
+        if (refused := wrong_key(request)) is not None:
+            return refused
         body: dict[str, Any] = await request.json()
         model = str(body.get("model") or "unknown")
         done = await answer(script, model, body)

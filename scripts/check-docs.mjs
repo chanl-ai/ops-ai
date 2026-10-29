@@ -16,6 +16,8 @@ const ROOT_FILES = new Set(['README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING
 const BRIEF_NAMES = new Set(['README.md', 'CLAUDE.md', 'AGENTS.md']);
 // Agent working state, not documentation.
 const IGNORED = /^(\.codeloop|\.claude|\.cursor|shape|specs|evidence|services\/[^/]+\/seed)\//; // evidence/<nnn>/ holds a card's review and verify records, which belong to the card, not to docs/; a service's seed/ holds demo data (documents a knowledge base indexes), not documentation
+// Copilot's files, generated from docs/guide/skills/ by scripts/agent_skills.py (c-554); their source is the doc.
+const GENERATED = /^\.github\/(prompts\/[^/]+\.prompt\.md|copilot-instructions\.md)$/;
 const BRIEF_MAX_LINES = 40;
 
 const DATED = /(^|\/)\d{4}-\d{2}-\d{2}[-_.]/;
@@ -24,7 +26,7 @@ const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*\.(md|html|pdf|png|svg|gif|yaml)$/;
 
 const files = execFileSync('git', ['ls-files', '--cached'], { encoding: 'utf8' })
   .split('\n')
-  .filter((f) => f && !IGNORED.test(f) && existsSync(f));
+  .filter((f) => f && !IGNORED.test(f) && !GENERATED.test(f) && existsSync(f));
 
 const problems = [];
 const fail = (file, why) => problems.push(`${file}: ${why}`);

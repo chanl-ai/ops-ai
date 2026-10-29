@@ -1,6 +1,6 @@
 # A pause survives a restart
 
-Status: current. Id: `uc-005`. Service: `agents-service`. Layers: api.
+Status: current. Id: `uc-005`. Service: `agents-service`. Layers: api, ui.
 
 ## Preconditions
 
@@ -25,6 +25,7 @@ The script starts its own services on the scripted model; no model key is needed
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-005-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-005-ui.mjs` | passing (2026-10-28): a second stack on the same database shows the run waiting; a team admin opens it from All tasks and approves; the row finishes |
 
 ## Non-vacuous check
 

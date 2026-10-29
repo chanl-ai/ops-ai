@@ -52,7 +52,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-002 | agents-service | Write tool pauses and approval resumes with step-up | api, ui | passing |
 | uc-003 | agents-service | Simple workflow through the four thread calls | api, ui | passing |
 | uc-004 | agents-service | Complex workflow with fan-out, grade loop, review pause and send | api | passing |
-| uc-005 | agents-service | A pause survives a restart | api | passing |
+| uc-005 | agents-service | A pause survives a restart | api, ui | passing |
 | uc-006 | agents-service | SLA timer breach escalates | api | passing |
 | uc-007 | tools-service | A tool write without a token is refused | api | passing |
 | uc-008 | agents-service | A paused workflow is decided from the console | api, ui | passing |
@@ -173,7 +173,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-192 | agents-service | An email with a PDF in an IMAP mailbox (GreenMail) starts one workflow run through tools-service, the password a Secrets-page secret | api | passing |
 | uc-199 | agents-service | A builder connects a team mailbox, tests it, binds a workflow, pauses and resumes it; mail starts runs only while it runs | api, ui | passing |
 | uc-200 | agents-service | A send_reply naming a team mailbox leaves from its own sender (Mailpit), once per key; another team's call sends nothing | api | passing |
-| uc-209 | agents-service | A Start workflow step starts one live child per list item in the parent's team, keyed so a retry starts none twice; a test run's children are test runs | api | passing |
+| uc-209 | agents-service | A Start workflow step starts one live child per list item in the parent's team, keyed so a retry starts none twice; a test run's children are test runs | api, ui | passing |
 | uc-210 | agents-service | A court order notice in the court order mailbox runs on the workflow runner: one case per debtor, name-only debtors not matched, a 422 hold back to review, a redelivery opens nothing | api | passing |
 | uc-223 | agents-service | A PDF and a CSV mailed through GreenMail become court order cases in one child run each; refused files are skipped, a low read waits for a person, the reply leaves from the mailbox | api | passing |
 | uc-224 | agents-service | A person corrects a document read in Human Tasks and sees the reply and cases | ui | passing |
@@ -217,11 +217,11 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | passing |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | passing |
 | uc-251 | agents-service | A case reads assembled: typed fields in its case type's order, what it waits on and the drafted action, its run, workflow and file; decided on the task page, the action reads decided | api | passing |
-| uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api | passing |
-| uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api | passing |
+| uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
+| uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
 | uc-401 | agents-service | A never-run workflow's steps list their output fields by port, from type, settings, answer or operation; a misspelt mapping is warned on save | api | passing |
-| uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api | passing |
-| uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api | passing |
+| uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api, ui | passing |
+| uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api, ui | passing |
 | uc-331 | files-service | A file is read with Detect from the Files page | api, ui | passing |
 | uc-398 | console | A crafted PDF runs no script in the viewer | ui | current |
 | uc-399 | kb-service | People and services read knowledge usage, refs, search and workflow refs on one route each | api | passing |
@@ -243,3 +243,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-516 | agents-service | An account admin sees every background process and what it did; a builder is told the page is not theirs; a stopped worker reads late then stopped; a team sees only its own background jobs in Activity | ui | passing |
 | uc-526 | agents-service | Another team's records answer not found | api | passing |
 | uc-531 | tools-service | A builder adds a Python function tool that runs sandboxed: it reads two bound tools through ops.call, hands a secret by name that the bank receives and no log holds, and is stopped at an unbound tool, a socket, its time limit and its memory cap | api, ui | passing |
+| uc-532 | models-service | An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one | ui | passing |

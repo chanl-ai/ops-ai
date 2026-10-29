@@ -94,7 +94,7 @@ flowchart TB
 | Item | What holds | Status |
 |---|---|---|
 | Credentials for your systems | Entered once by a Security admin in the console; encrypted with AES-256-GCM under `OPS_SECRETS_KEY`, bound to the tenant and the credential's name; never returned by any API; scrubbed from answers and logs; every create, rotate, delete and use audited; limited to the teams it is shared with | Built |
-| The model provider's key | Stored the same way, by name; the AI gateway reads it at call time. Outside development the AI gateway refuses provider keys from its environment | Built |
+| The model provider's key | Saved by an account admin on Settings > Model providers, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment | Built |
 | Storage credentials | Sealed with the same key | Built |
 | Installation keys | One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under `/run/secrets` | Built |
 | A hardware or cloud key manager for these keys | | Planned |

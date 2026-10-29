@@ -1,4 +1,4 @@
-// Takes the README's screenshots and clips from the demo team that scripts/demo/seed_demo_team.py makes (c-389).
+// Takes the README's screenshots and clips from the sample team that scripts/sample_team.py installs (c-389).
 //
 //   node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/demo.env
 //   node docs/usecases/lib/capture_demo.mjs --origin https://<install> --env <people env> --only chat,cases
@@ -27,7 +27,7 @@ const ORIGIN = (args.origin ?? 'http://localhost:3016').replace(/\/$/, '');
 const OUT = resolve(ROOT, args.out ?? 'docs/media');
 const ONLY = args.only ? new Set(args.only.split(',')) : null;
 const VIEW = { width: 1280, height: 800 };
-const TEAM = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/team.json'), 'utf8'));
+const TEAM = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/sample-team.json'), 'utf8'));
 const LOCAL_PORTS = { platform: 8710, agents: 8700 };
 // Text that marks a screen as broken or as showing another run's leftovers: placeholder words, a failed render, and
 // the names use cases and probes give their records. The console's own words ("Test", "Test connection") are not on
@@ -75,7 +75,7 @@ const teams = rows(await api('platform', '/v1/teams', { token: leadToken }));
 // --team names the seeded team when it is not team.json's (the seed's --team, such as a second demo team).
 const TEAM_NAME = args.team ?? TEAM.team.name;
 const team = teams.find((t) => t.name === TEAM_NAME)?.id;
-if (!team) throw new Error(`${lead.email} is not in ${TEAM_NAME}; run scripts/demo/seed_demo_team.py first`);
+if (!team) throw new Error(`${lead.email} is not in ${TEAM_NAME}; run make sample-team first`);
 const as = { token: leadToken, team };
 
 const chatId = async (title) => rows(await api('agents', `/chat/threads?search=${encodeURIComponent(title)}`, as)).find((t) => t.title === title)?.id;

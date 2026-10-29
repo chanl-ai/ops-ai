@@ -6,7 +6,7 @@ A case owner opens a case and learns from its top whether the matter is handled:
 how the case's work began, one timer, and one feed of everything that happened in plain sentences. The feed is the run
 story's lines (`run_story.lines`, the run page's "What happened") for every run linked to the case plus the case's own
 events, so the run page and the case page say a step the same way. The use case runs three kinds of case on the demo
-stack with a worker: a card dispute James starts from its form (copy of `scripts/demo/workflows/card_dispute_intake.json`,
+stack with a worker: a card dispute James starts from its form (copy of `scripts/sample-team/workflows/card_dispute_intake.json`,
 Marcus Bell's Coastal Air fare, which the fake model assesses as due a credit and the bank's core matches), a tax levy
 that arrives by test email (copies of the seeded `levy_mail`, `levy_read_one` and `levy_case`, reading
 `TAXLEVY01.pdf`, a `tax_levy` case whose type names `respondBy` as its deadline and whose read gives it, written

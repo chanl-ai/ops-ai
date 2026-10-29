@@ -67,20 +67,20 @@ Walks and probes act in a test team and remove what they make where a route allo
 | `docs/usecases/lib/stg_click_walk.mjs` | The first admin's first team; it only reads | None needed |
 | `scripts/team_isolation_probe.py --seed` | The team given as B (use `team_319b708e5de1`) | Deletes what it seeded; a case has no delete route and stays |
 
-Reseed or refresh the demo team (every line FOUND on a second run):
+Install or refresh the demo team with the sample team installer (every line FOUND on a second run):
 
 ```
 OPS_DEMO_MEMBER_PASSWORD=<phone password> OPS_DEMO_TOOL_APPROVER_PASSWORD=<Security approver password> \
-uv run python scripts/demo/seed_demo_team.py --origin https://<your-app>-one.fly.dev --admin-env <env file> \
-  --team "Harbor & Pine Operations" --workflow-prefix northfield_ --no-levy --extras \
+uv run python scripts/sample_team.py install --origin https://<your-app>-one.fly.dev --admin-env <env file> \
+  --name "Harbor & Pine Operations" --workflow-prefix northfield_ --no-levy \
   --member admin@demo.example:admin --member builder@demo.example:builder --member approver@demo.example:approver \
   --tool-access mod_3a1fdc1ba8a4 --tool-access-team team_security \
   --tool-approver approver@<your-app>.example
 ```
 
 The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD`, `OPS_DEMO_MODEL_ALIAS=fake` and
-`OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the seed's own chats and runs make no real model call and the agents answer
-people on the real model afterwards. `scripts/demo/check_demo_team.py` proves each login's role in the team and that
+`OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the agents answer people on the real model once the install ends
+(`scripts/sample-team/admin.env.example`). `scripts/check_demo_team.py` proves each login's role in the team and that
 a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module
 (c-433); the platform tools need no grant, since no team owns them.
 

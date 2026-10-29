@@ -5,7 +5,7 @@ Status: current. Id: `uc-445`. Service: `console` on agents-service and files-se
 A person starts a workflow from the Workflows list without knowing a file id or a field key. Choosing a workflow opens
 its form at once; each field is labelled by its schema `title` (else its key in words), a `oneOf` of `{ const, title }`
 or an `enum` is a select, and a string field with `format: "file"` uploads a file or picks one from Files and sends the
-bare id. The use case runs copies of the demo card dispute (`scripts/demo/workflows/card_dispute_intake.json`) and the
+bare id. The use case runs copies of the demo card dispute (`scripts/sample-team/workflows/card_dispute_intake.json`) and the
 seeded `mail_document` notice workflow, read from those files at run time, so it checks the schemas the demo ships.
 
 ## Steps and expected results

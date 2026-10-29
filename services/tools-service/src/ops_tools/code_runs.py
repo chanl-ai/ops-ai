@@ -47,12 +47,23 @@ class CodeExecutor:
         self.runner = runner
         self.signer = signer
 
-    def token(self, op: dict[str, Any], code: dict[str, Any], caller: ToolCaller, key: str, env: str | None) -> str:
+    def token(
+        self,
+        op: dict[str, Any],
+        code: dict[str, Any],
+        caller: ToolCaller,
+        key: str,
+        env: str | None,
+        *,
+        module_team: str | None,
+    ) -> str:
         limits = cast(dict[str, Any], code.get("limits") or {})
         claims = {
             "purpose": PURPOSE,
             "tenant_id": caller.tenant_id,
             "team_id": caller.team_id,
+            # Whose secrets a handle reads: the function module's team, as for a tool call (c-509), never the caller's.
+            "module_team_id": module_team,
             "sub": caller.sub,
             "kind": caller.kind,
             "operation": op["name"],
@@ -72,6 +83,7 @@ class CodeExecutor:
         key: str,
         caller: ToolCaller,
         environment: str | None,
+        module_team: str | None,
     ) -> ToolOutcome:
         code = cast(dict[str, Any] | None, op.get("code"))
         if not code or not code.get("source"):
@@ -83,7 +95,7 @@ class CodeExecutor:
             "entry": code.get("entry") or "main",
             "input": args,
             "limits": code.get("limits") or {},
-            "callToken": self.token(op, code, caller, key, environment),
+            "callToken": self.token(op, code, caller, key, environment, module_team=module_team),
         }
         try:
             result = cast(
@@ -182,12 +194,14 @@ async def resolve_handles(
     try:
         values = await secrets.lookup(
             str(claims["tenant_id"]),
-            cast(str | None, claims.get("team_id")),
+            cast(str | None, claims.get("module_team_id")),
             sorted(set(handles.values())),
             tool=str(claims["operation"]),
             actor=str(claims["sub"]),
         )
     except SecretMissing as e:
-        raise Unprocessable(f"The secret {', '.join(e.names)} is not set for this team.", code="secret_missing") from e
+        raise Unprocessable(
+            f"The secret {', '.join(e.names)} is not set for this function's team.", code="secret_missing"
+        ) from e
     filled = {**args, **{arg: values[name] for arg, name in handles.items()}}
     return filled, list(values.values())

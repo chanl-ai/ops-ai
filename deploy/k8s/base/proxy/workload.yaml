@@ -43,6 +43,8 @@ spec:
           value: files:8750
         - name: OPS_UPSTREAM_DOCUMENTS
           value: documents:8760
+        - name: OPS_UPSTREAM_MODELS
+          value: models:8730
         - name: OPS_UPSTREAM_CONSOLE
           value: console:3016
         resources:

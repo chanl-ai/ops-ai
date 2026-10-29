@@ -67,12 +67,14 @@ WAITING: dict[str, set[str]] = {
         "tool_modules",
         "tool_secrets",
     },
+    # provider_keys (c-509) is filtered by tenant in its store; the database policy comes with the other model tables.
     "c-416": {
         "model_aliases",
         "model_call_log",
         "model_key_tenants",
         "model_keys",
         "provider_connections",
+        "provider_keys",
     },
 }
 

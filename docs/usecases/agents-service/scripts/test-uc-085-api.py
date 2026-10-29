@@ -12,9 +12,8 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
-from usecase_harness import DB, chat, check, data, demo, finish, turn_text
+from usecase_harness import chat, check, data, demo, finish, pg_url, turn_text
 
-PG = os.environ.get("OPS_PG_PORT", "5477")
 ADVISOR = "ag_advisor"
 GUARDRAIL = "gr_no_investment_advice"
 SKILL = "sk_hardship_triage"
@@ -29,7 +28,7 @@ def model_calls(tid: str) -> list[str]:
     """What each model request of the thread returned, in order: "classify" or "answer"."""
 
     async def go() -> list[Any]:
-        engine = create_async_engine(f"postgresql+asyncpg://ops:ops@localhost:{PG}/{DB}")
+        engine = create_async_engine(pg_url())
         async with engine.connect() as c:
             q = sa.text("select response from model_call_records where thread_id = :t order by created_at")
             rows = (await c.execute(q, {"t": tid})).scalars().all()
@@ -47,7 +46,7 @@ def journal(tid: str, kind: str) -> list[dict[str, Any]]:
     """The thread's run-event log entries of one type: the run journal."""
 
     async def go() -> list[Any]:
-        engine = create_async_engine(f"postgresql+asyncpg://ops:ops@localhost:{PG}/{DB}")
+        engine = create_async_engine(pg_url())
         async with engine.connect() as c:
             q = sa.text("select data from thread_events where thread_id = :t and type = :k order by seq")
             rows = (await c.execute(q, {"t": tid, "k": kind})).scalars().all()

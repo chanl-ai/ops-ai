@@ -13,6 +13,7 @@ import { createPlatformAccessHttp } from './platform-access-http';
 import { createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
 import { createDocumentsHttp, createExtractionsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
+import { createModelsHttp } from './models-http';
 import { createStorageHttp } from './storage-http';
 import { setIdentitySource } from './request-identity';
 import { clearChosenTeam } from './team-context';
@@ -26,6 +27,7 @@ const toolsUrl = process.env.NEXT_PUBLIC_OPS_TOOLS_API_URL;
 const knowledgeUrl = process.env.NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL;
 const filesUrl = process.env.NEXT_PUBLIC_OPS_FILES_API_URL;
 const documentsUrl = process.env.NEXT_PUBLIC_OPS_DOCUMENTS_API_URL;
+const modelsUrl = process.env.NEXT_PUBLIC_OPS_MODELS_API_URL;
 const embedUrl = process.env.NEXT_PUBLIC_OPS_EMBED_URL;
 const authProviderName = process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? 'mock';
 const onPlatform = authProviderName === 'platform' && Boolean(platformUrl);
@@ -40,6 +42,7 @@ const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || 
  * NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL for knowledge bases, sources and documents (kb-service),
  * NEXT_PUBLIC_OPS_FILES_API_URL for Files and storage settings (files-service),
  * NEXT_PUBLIC_OPS_DOCUMENTS_API_URL for document types (documents-service),
+ * NEXT_PUBLIC_OPS_MODELS_API_URL for the account's model provider keys (models-service),
  * NEXT_PUBLIC_OPS_EMBED_URL for the embed app that serves the chat loader in snippets.
  */
 function createApi(): OpsApi {
@@ -60,6 +63,7 @@ function createApi(): OpsApi {
   }
   if (knowledgeUrl) api = { ...api, ...createKnowledgeOnlyHttp(knowledgeUrl) };
   if (filesUrl) api = { ...api, files: { ...api.files, ...createFilesServiceHttp(filesUrl), storage: createStorageHttp(filesUrl) } };
+  if (modelsUrl) api = { ...api, providerKeys: createModelsHttp(modelsUrl) };
   if (documentsUrl) api = { ...api, files: { ...api.files, documentTypes: createDocumentsHttp(documentsUrl), extractions: createExtractionsHttp(documentsUrl) } };
   // No service owns notifications yet: once any area is on a real service, the mock feed is not shown beside it.
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };
@@ -119,6 +123,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/settings/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
   { prefix: '/settings/workspace/storage', served: Boolean(filesUrl) },
+  { prefix: '/settings/workspace/model-providers', served: Boolean(modelsUrl) },
   { prefix: '/files', served: Boolean(filesUrl) },
   { prefix: '/document-types', served: Boolean(documentsUrl) },
   { prefix: '/access', served: onPlatform },

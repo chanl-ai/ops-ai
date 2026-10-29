@@ -56,7 +56,8 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
     NEXT_PUBLIC_OPS_TOOLS_API_URL=${OPS_PUBLIC_ORIGIN}/api/tools \
     NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=${OPS_PUBLIC_ORIGIN}/api/kb \
     NEXT_PUBLIC_OPS_FILES_API_URL=${OPS_PUBLIC_ORIGIN}/api/files \
-    NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=${OPS_PUBLIC_ORIGIN}/api/documents
+    NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=${OPS_PUBLIC_ORIGIN}/api/documents \
+    NEXT_PUBLIC_OPS_MODELS_API_URL=${OPS_PUBLIC_ORIGIN}/api/models
 # The version What's new shows (next.config.ts): the build has no .git, so stg_deploy.sh passes the tag and commit.
 ARG OPS_VERSION=
 ARG OPS_COMMIT=
@@ -74,6 +75,7 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
     NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://ph-next-public-ops-knowledge-api-url.invalid \
     NEXT_PUBLIC_OPS_FILES_API_URL=http://ph-next-public-ops-files-api-url.invalid \
     NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://ph-next-public-ops-documents-api-url.invalid \
+    NEXT_PUBLIC_OPS_MODELS_API_URL=http://ph-next-public-ops-models-api-url.invalid \
     OPS_CONSOLE_STANDALONE=1
 ARG OPS_VERSION=
 ARG OPS_COMMIT=

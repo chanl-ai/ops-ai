@@ -13,15 +13,23 @@ import { readFileSync } from 'node:fs';
 const dot = (name) => `.${name}/`;
 const PRIVATE = [dot('codeloop'), dot('claude'), dot('cursor'), ['docs', 'agent-handoff.md'].join('/')];
 const NEVER_SENT = [...PRIVATE, 'shape/', 'evidence/'];
+// The developer skills generated from docs/guide/skills/ are the one part of the agent command sets that is published
+// (c-554), so a path under them is public and a file there is checked like any other.
+const PUBLISHED = [`${dot('claude')}skills/ops-`];
 // Ignore files name private folders on purpose; they point at nothing.
 const IGNORE_FILE = /(^|\/)\.[a-z]*ignore$|\.dockerignore$/;
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const MENTION = new RegExp(`(?<![\\w/.-])(?:\\.\\./)*(?:\\./)?(?:${PRIVATE.map(escape).join('|')})`, 'g');
 
 export function mentions(path, text) {
-  if (IGNORE_FILE.test(path) || NEVER_SENT.some((p) => path === p || (p.endsWith('/') && path.startsWith(p)))) return [];
+  const published = PUBLISHED.some((p) => path.startsWith(p));
+  if (IGNORE_FILE.test(path) || (!published && NEVER_SENT.some((p) => path === p || (p.endsWith('/') && path.startsWith(p))))) return [];
   const out = [];
-  for (const m of text.matchAll(MENTION)) out.push(`${path}:${text.slice(0, m.index).split('\n').length}  ${text.slice(m.index).split(/[\s`'")\],;]/)[0].slice(0, 70)}`);
+  for (const m of text.matchAll(MENTION)) {
+    const named = text.slice(m.index).replace(/^(\.\.\/)*(\.\/)?/, '');
+    if (PUBLISHED.some((p) => named.startsWith(p))) continue;
+    out.push(`${path}:${text.slice(0, m.index).split('\n').length}  ${text.slice(m.index).split(/[\s`'")\],;]/)[0].slice(0, 70)}`);
+  }
   return out;
 }
 
@@ -35,6 +43,9 @@ function selfTest() {
     ['.gitignore', board, 0],
     [`apps/x/${agents}settings.json`, `apps/x/${agents}settings.json`, 0],
     ['docs/a.md', 'evidenceDir("500", "uc")', 0],
+    ['docs/a.md', `Generated into \`${agents}skills/ops-run/SKILL.md\`.`, 0],
+    ['docs/a.md', `Not \`${agents}skills/spec/SKILL.md\`.`, 1],
+    [`${agents}skills/ops-run/SKILL.md`, `See ${board}specs/x`, 1],
   ];
   const bad = cases.filter(([p, t, n]) => mentions(p, t).length !== n);
   for (const c of bad) console.log(`FAIL ${c[0]}: ${JSON.stringify(c[1])} expected ${c[2]}`);

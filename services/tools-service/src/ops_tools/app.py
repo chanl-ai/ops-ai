@@ -18,7 +18,7 @@ from ops_access import can
 from ops_identity import Auth, CurrentService, Principal, install_auth
 from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
+from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
@@ -36,7 +36,7 @@ from .modules.directory import Directory
 from .modules.policy import WriteApprovals
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
 from .registry import Resolved, ToolRegistry
-from .secrets import SecretMissing, SecretResolver
+from .secrets import SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
 from .store.mocks import MockStore
@@ -116,14 +116,6 @@ class GrantableOperation(Out):
     output_shape: str | None = None
     module_id: str | None
     module_name: str
-
-
-class SecretValuesIn(_Wire):
-    names: list[str] = Field(min_length=1, max_length=50)
-
-
-class SecretValues(Out):
-    values: dict[str, str]
 
 
 class CallResult(Out):
@@ -267,25 +259,6 @@ def create_gateway_app(
     async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
         return {"processes": background_report(await LOCAL_BEATS.read(), "tools", time.time())}
-
-    @app.post(
-        "/v1/secrets/values", tags=["secrets"], response_model=Envelope[SecretValues], responses=error_responses()
-    )
-    async def secret_values(body: SecretValuesIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Internal (service token holding `secrets_egress:run`, c-221): secret values for a service that keeps no
-        credential of its own (models-service's provider keys). Every secret belongs to a team and a team's secret
-        never leaves for another service (c-509), so this answers 404 until the owner decides where provider keys
-        live; models-service then reads the dev stack's keys from its settings."""
-        can(caller, "secrets_egress", "run", what="secret values")
-        if secret_resolver is None:
-            raise ServiceUnavailable("This gateway reads no secrets.")
-        try:
-            found = await secret_resolver.lookup(
-                caller.tenant_id, None, list(dict.fromkeys(body.names)), tool="secrets.values", actor=caller.sub
-            )
-        except SecretMissing as e:
-            raise NotFound(f"Secret {', '.join(e.names)}") from e
-        return JSONResponse({"success": True, "data": {"values": found}})
 
     def team_view(caller: Principal) -> Callable[[Aggregate], bool] | None:
         """The modules a run of the caller's team may reach (c-433): its own, workspace-level ones, and those approved

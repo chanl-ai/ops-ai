@@ -52,7 +52,8 @@ change gets the scope by saving and publishing v2 and re-pinning it on `ag_advis
 
 Tests: `tests/unit/test_guardrails_kernel.py::test_a_topic_scope_pinned_on_the_agent_reaches_the_classifier_prompt`
 (pin snapshot → catalog → kernel → prompt) and `tests/api/test_guardrails.py::test_a_topic_scope_is_versioned_and_reaches_the_served_definition`.
-`make seed-walk` prints the provider and model that served each chat check, from models-service's call log.
+`make demo-walk` checks a pinned guardrail end to end on the sample team: a shares question is refused before any
+answer.
 
 An agent with a pinned guardrail, or a pinned skill that carries guardrails, never streams its answer: the stream shows
 "Checking the answer…" and sends the checked answer, or the message, once. An agent with neither streams as before

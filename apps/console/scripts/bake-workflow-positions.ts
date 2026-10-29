@@ -12,7 +12,7 @@ const types: EngineNodeType[] = JSON.parse(readFileSync(new URL('apps/console/sr
 // Each file keeps its own indentation, so a bake changes positions and nothing else.
 const FILES: [path: string, indent: number][] = [
   ['services/agents-service/seed/engine_workflows.json', 2],
-  ['scripts/demo/workflows/card_dispute_intake.json', 1],
+  ['scripts/sample-team/workflows/card_dispute_intake.json', 1],
 ];
 
 const bake = async (def: EngineDefinition) => applyLayout(def, await layoutDefinition(def, types));

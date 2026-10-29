@@ -1,0 +1,334 @@
+{
+  "$comment": "The sample team `make sample-team` installs (scripts/sample_team.py), one section per step in install order. Workflow definitions and function code are files beside this one, named by path.",
+  "team": {
+    "name": "Customer Operations",
+    "signInAs": "bootstrap admin",
+    "defaultAgent": "dispute"
+  },
+  "people": [
+    {
+      "key": "lead",
+      "name": "Alex Morgan",
+      "email": "alex.morgan@harborpine.example",
+      "role": "admin"
+    },
+    {
+      "key": "builder",
+      "name": "Jordan Ellis",
+      "email": "jordan.ellis@harborpine.example",
+      "role": "builder"
+    },
+    {
+      "key": "approver",
+      "name": "Riley Chen",
+      "email": "riley.chen@harborpine.example",
+      "role": "approver"
+    },
+    {
+      "key": "analyst",
+      "name": "Sam Okoro",
+      "email": "sam.okoro@harborpine.example",
+      "role": "approver"
+    }
+  ],
+  "templates": [
+    {
+      "kind": "caseType",
+      "id": "restraining_notice",
+      "version": 1
+    },
+    {
+      "kind": "caseType",
+      "id": "tax_levy",
+      "version": 1
+    },
+    {
+      "kind": "taskType",
+      "id": "acknowledgement",
+      "version": 1
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "disputes",
+      "name": "Card dispute handbook",
+      "source": "Card operations manual",
+      "description": "Time limits, provisional credit and the evidence each dispute reason needs.",
+      "color": "violet",
+      "documents": [
+        {
+          "name": "dispute-reasons-and-evidence.md",
+          "text": "# Dispute reasons and the evidence each needs\n\n## Goods or services not received\n\nThe cardholder states the expected delivery date and shows they contacted the merchant. Wait until 15 days after the expected delivery date before filing with the card network.\n\n## Duplicate charge\n\nBoth charges must show the same merchant, amount and date. No contact with the merchant is needed.\n\n## Unrecognised transaction\n\nBlock the card and issue a new one before filing. The cardholder confirms in writing that they did not make or allow the transaction; treat it as suspected fraud and send it to Fraud Operations.\n\n## Wrong amount\n\nThe cardholder provides the receipt or quote showing the agreed amount; the dispute is for the difference only.\n"
+        },
+        {
+          "name": "dispute-time-limits.md",
+          "text": "# Card dispute time limits\n\n## When a cardholder may dispute\n\nA cardholder may dispute a credit card transaction up to 120 days after the posting date. A debit card transaction may be disputed up to 90 days after the posting date. A dispute raised after these limits is declined, and the cardholder is told the date the limit passed.\n\n## When the bank must answer\n\nThe bank acknowledges a dispute within 2 business days and decides it within 45 days. A dispute that needs evidence from the merchant may take up to 90 days; the cardholder is told in writing when this applies.\n"
+        },
+        {
+          "name": "provisional-credit.md",
+          "text": "# Provisional credit\n\n## When to give it\n\nGive provisional credit for the disputed amount within 10 business days of receiving a complete dispute, for any dispute of 25.00 CAD or more on a personal card. A complete dispute names the transaction, the amount, the reason and, for goods not received, the expected delivery date.\n\n## Who approves it\n\nA dispute analyst may give provisional credit up to 1,000.00 CAD. Above 1,000.00 CAD, or on an account opened in the last 30 days, a team lead approves the credit before it posts.\n\n## If the dispute is lost\n\nThe provisional credit is reversed with 5 business days' notice to the cardholder, and the letter names the merchant's evidence.\n"
+        }
+      ]
+    },
+    {
+      "key": "onboarding",
+      "name": "Account opening handbook",
+      "source": "Branch onboarding manual",
+      "description": "Identity checks, business documents and opening timelines for new accounts.",
+      "color": "green",
+      "documents": [
+        {
+          "name": "business-account-documents.md",
+          "text": "# Documents for a business chequing account\n\n## Sole proprietor\n\nA sole proprietor provides their own identity documents, the business name registration (or a master business licence) and proof of the business address dated within the last 90 days.\n\n## Corporation\n\nA corporation provides its articles of incorporation, the most recent annual return, a resolution naming who may sign for the account, and identity documents for each signing officer.\n\n## Beneficial owners\n\nRecord every person who owns or controls 25 percent or more of the business, with their name, address, date of birth and the percentage they hold. An account cannot open until the beneficial ownership record is complete.\n"
+        },
+        {
+          "name": "opening-timelines.md",
+          "text": "# Account opening timelines\n\n## Personal accounts\n\nA personal chequing or savings account opens the same day once identity is verified. The debit card is mailed within 5 business days.\n\n## Business accounts\n\nA business chequing account opens within 2 business days of a complete application. Online banking access for the business is set up when the account opens; each additional user is added by a signing officer.\n\n## When an application stops\n\nAn application with a missing document waits 30 days, with a reminder to the applicant on day 7 and day 21, and then closes. The applicant is told what was missing.\n"
+        },
+        {
+          "name": "personal-account-identity.md",
+          "text": "# Identity checks for a personal account\n\n## Documents\n\nVerify identity with one government-issued photo document (passport, driver's licence or provincial identity card) that has not expired, or with two documents from different reliable sources, such as a utility bill and a bank statement, each showing the person's name and either their address or date of birth.\n\n## Remote opening\n\nA remote opening uses the identity verification service: the person photographs their document and takes a live selfie. A match score under 0.85 sends the application to a person for review before the account opens.\n\n## Records\n\nKeep the document type, number, issuing jurisdiction and expiry date on the customer record. Never keep a copy of the document in email.\n"
+        }
+      ]
+    },
+    {
+      "key": "levies",
+      "name": "Levy and garnishment procedures",
+      "source": "Legal orders manual",
+      "description": "What a restraining notice requires, which funds are exempt and how to answer the creditor.",
+      "color": "amber",
+      "documents": [
+        {
+          "name": "exempt-funds.md",
+          "text": "# Funds exempt from a levy\n\n## Exempt deposits\n\nGovernment benefit deposits made in the last 60 days are exempt and are never held: pension, disability, child benefit and employment insurance payments. The first 2,500.00 CAD in a personal account is also exempt.\n\n## How to apply the exemption\n\nWork out the exempt amount before placing the hold, and hold only what is above it. Record the exempt amount and its reason on the case.\n\n## Notifying the customer\n\nSend the customer the exemption notice within 2 business days of placing the hold, with the creditor's name and the case number.\n"
+        },
+        {
+          "name": "restraining-notice.md",
+          "text": "# Restraining notices and levies\n\n## What the notice requires\n\nA restraining notice or levy names a debtor and an amount. Hold funds in every deposit account the debtor owns, up to twice the amount the notice names, from the moment the notice is received. Joint accounts are held in full and the other holders are told.\n\n## Matching the debtor\n\nMatch the debtor on full name plus either the last four digits of their tax number or their address. A name alone is never a match; open a case for a person to check it instead.\n\n## Answering the creditor\n\nAnswer the creditor within 5 business days with the accounts found, the amount held and the date the hold was placed.\n"
+        }
+      ]
+    }
+  ],
+  "fakes": {
+    "modelAlias": "bank-assist",
+    "modelAliases": [
+      "default",
+      "guardrail-check",
+      "memory-extract",
+      "extract"
+    ],
+    "bank": {
+      "host": "api.bank.test",
+      "hostEnv": "OPS_FAKE_BANK_HOST",
+      "module": "northfield-core-banking",
+      "secret": "BANK_API_KEY"
+    },
+    "mail": {
+      "greenmailEnv": "OPS_GREENMAIL_HOST",
+      "mailpitEnv": "OPS_MAILPIT_HOST",
+      "imapHost": "mail.harborpine.test"
+    }
+  },
+  "skills": [
+    {
+      "name": "Dispute evidence checklist",
+      "useWhen": "A cardholder disputes a card transaction and the analyst asks what evidence the reason needs.",
+      "instructions": "Name the dispute reason first. Then list, from the Card dispute handbook, the evidence that reason needs, the posting-date limit (120 days credit, 90 days debit) and whether provisional credit applies. Cite the handbook section for each point and ask for anything missing before the dispute is filed.",
+      "ownerTeam": "Card operations"
+    },
+    {
+      "name": "Hold funds for a levy",
+      "useWhen": "A levy or garnishment notice names a customer and the team must work out what to hold.",
+      "instructions": "Confirm the debtor matches the customer by name plus the last four digits of the tax number or the address. Hold the lower of the amount the notice names and the available balance on accounts in the customer's sole name, leaving the exempt amount the Levy and garnishment procedures name. State the hold per account and what was left unheld, and why.",
+      "ownerTeam": "Legal orders"
+    }
+  ],
+  "guardrails": [
+    {
+      "name": "No legal advice",
+      "topics": [
+        "legal advice",
+        "whether to contest a court order"
+      ],
+      "message": "I can't give legal advice. A levy or court order is checked by the legal orders team; ask them, or the customer's own lawyer.",
+      "owner": "Legal orders"
+    },
+    {
+      "name": "No investment advice",
+      "topics": [
+        "investment advice",
+        "which fund or stock to buy"
+      ],
+      "message": "I can't recommend investments. A licensed advisor at the branch can help with that.",
+      "owner": "Retail banking"
+    }
+  ],
+  "agents": [
+    {
+      "key": "dispute",
+      "name": "Dispute Desk",
+      "role": "Helps card operations staff work a card dispute: checks the time limits, reads the cardholder's accounts and drafts the outcome",
+      "knowledge": [
+        "disputes"
+      ],
+      "tools": [
+        "search_customers",
+        "get_customer",
+        "list_accounts",
+        "list_transactions",
+        "add_customer_note"
+      ],
+      "starters": [],
+      "instructions": "You are Dispute Desk, the card operations team's assistant at Harbor & Pine Bank. You help a dispute analyst work one card dispute at a time.\n\nFor every dispute:\n1. Find the cardholder with search_customers, then read their accounts and the disputed transaction. Never guess an id.\n2. Check the dispute against the Card dispute handbook: the time limit for the card type, the reason and the evidence that reason needs. Cite the handbook for every rule you apply.\n3. Say whether provisional credit is due, for how much, and whether a team lead must approve it (over 1,000.00 CAD, or an account opened in the last 30 days).\n4. End with the next step for the analyst in one sentence.\n\nEvery rule you state (a time limit, a deadline, an amount, who approves, what evidence a reason needs) comes from the Card dispute handbook passages you are given, and you cite the handbook section for it. This holds for a quick question in the middle of a dispute as much as for a full review: never answer a policy question from general knowledge. Keep answers short and plain. Quote amounts with their currency. If the handbook does not cover the question, say so and suggest the analyst asks their team lead. Never promise the cardholder an outcome.",
+      "skills": [
+        "Dispute evidence checklist"
+      ],
+      "guardrails": [
+        "No investment advice"
+      ]
+    },
+    {
+      "key": "onboarding",
+      "name": "Account Opening Guide",
+      "role": "Answers branch staff's questions on opening personal and business accounts, from the onboarding handbook",
+      "knowledge": [
+        "onboarding"
+      ],
+      "tools": [],
+      "instructions": "You are Account Opening Guide, the assistant branch staff at Harbor & Pine Bank ask while they open a new account.\n\nAnswer from the Account opening handbook only, and cite it for each requirement. List documents as a short checklist the staff member can read out to the applicant. When the question is about a business, ask for the business type (sole proprietor, partnership or corporation) if it was not given, because the documents differ.\n\nNever approve or open an account yourself, and never ask for or repeat a full identity document number. If something is not in the handbook, say so and point the staff member to the onboarding team.",
+      "skills": [],
+      "guardrails": [
+        "No investment advice"
+      ]
+    },
+    {
+      "key": "levy",
+      "name": "Levy Desk",
+      "role": "Reads levy and restraining notices, finds the debtor's accounts and works out what the bank must hold",
+      "knowledge": [
+        "levies"
+      ],
+      "tools": [
+        "search_customers",
+        "get_customer",
+        "list_accounts",
+        "place_hold"
+      ],
+      "instructions": "You are Levy Desk, the legal orders team's assistant at Harbor & Pine Bank. You help a team member act on a levy or restraining notice.\n\nFor each notice: find the debtor with search_customers and match them as the Levy and garnishment procedures require (full name plus the last four digits of their tax number or their address; a name alone is never a match). Read their accounts, work out the exempt funds and the amount to hold, and cite the procedures for each rule.\n\nEvery rule you state (a limit, an exemption, a deadline, how to match a debtor) comes from the Levy and garnishment procedures passages you are given, with the section cited, even for a quick question; never answer one from general knowledge, and if the procedures do not cover it, say so. You never place a hold yourself: a person decides it in Human Tasks. Answer in short paragraphs, amounts with their currency, and end with what the team member should do next.",
+      "skills": [
+        "Hold funds for a levy"
+      ],
+      "guardrails": [
+        "No legal advice"
+      ]
+    }
+  ],
+  "codeModules": [
+    {
+      "key": "levy",
+      "name": "levy-calculations",
+      "displayName": "Levy calculations",
+      "system": "Levy rules",
+      "function": {
+        "name": "compute_levy_hold",
+        "description": "How much of a levy notice to hold, and on which account",
+        "access": "read",
+        "input": [
+          {
+            "name": "document",
+            "type": "object",
+            "required": true
+          },
+          {
+            "name": "accounts",
+            "type": "array",
+            "required": true
+          }
+        ],
+        "code": {
+          "file": "compute_levy_hold.py",
+          "bindings": [
+            "get_levy_rules"
+          ],
+          "secrets": [
+            "BANK_API_KEY"
+          ],
+          "limits": {
+            "timeS": 10,
+            "memoryMb": 256,
+            "calls": 5
+          }
+        }
+      }
+    }
+  ],
+  "documentTypes": [
+    {
+      "seed": "LEVY_NOTICE",
+      "id": "garnishment_notice",
+      "name": "Garnishment notice",
+      "description": "A court's notice of garnishment naming judgment debtors and the amount to hold for each."
+    }
+  ],
+  "mailbox": {
+    "name": "Legal orders",
+    "address": "legal-orders@harborpine.example",
+    "imap": "mail.harborpine.test:143",
+    "replySmtp": "smtp.harborpine.test:587",
+    "tls": false,
+    "secret": "LEGAL_ORDERS_MAILBOX_PASSWORD"
+  },
+  "workflows": [
+    {
+      "key": "dispute",
+      "file": "card_dispute_intake.json"
+    },
+    {
+      "key": "levy_debtor",
+      "seed": "levy_case",
+      "id": "levy_debtor",
+      "name": "Levy notice: one debtor",
+      "description": "One debtor a levy notice names: find the customer by name plus the last four digits or the address, open the levy case, then a person holds funds or flags the customer."
+    },
+    {
+      "key": "levy_document",
+      "seed": "mail_document",
+      "id": "levy_document",
+      "name": "Levy notice: read the document",
+      "description": "One levy notice: read every debtor it names, a person checks a read below the review floor, a levy case opens per debtor, and the sender gets an acknowledgement once a person approves it.",
+      "workflows": {
+        "levy_case": "levy_debtor"
+      },
+      "documentTypes": {
+        "levy_notice": "garnishment_notice"
+      }
+    },
+    {
+      "key": "levy_reply_debtor",
+      "file": "levy_reply_debtor.json",
+      "id": "levy_reply_debtor",
+      "story": "levy",
+      "name": "Levy notice: answer for one person",
+      "description": "One person a levy notice names: found at the bank or not, a hold worked out by code and approved by a person, and the sender answered once a person approves the reply."
+    },
+    {
+      "key": "levy_reply_document",
+      "file": "levy_reply_document.json",
+      "id": "levy_reply_document",
+      "story": "levy",
+      "name": "Levy notice: read and reply",
+      "description": "One emailed levy notice: read, the sender thanked at once, and each person it names answered in their own run."
+    },
+    {
+      "key": "levy_mail",
+      "seed": "mail_intake",
+      "id": "levy_mail_intake",
+      "name": "Levy notices by email",
+      "description": "Levy notices emailed to the legal orders mailbox: each attachment is stored in Files and read in its own run.",
+      "workflows": {
+        "mail_document": "levy_reply_document"
+      },
+      "needsMailbox": true
+    }
+  ]
+}

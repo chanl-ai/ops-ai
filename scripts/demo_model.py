@@ -28,7 +28,9 @@ from ops_identity.service_keys import dev_service_signer
 
 MODELS = os.environ.get("OPS_MODELS_URL") or f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
 FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or "http://127.0.0.1:8746/v1"
-OPENAI = "https://api.openai.com/v1"
+# OPENAI_BASE_URL: another OpenAI-compatible address, such as an Azure OpenAI resource's /openai/v1 (make setup
+# writes it).
+OPENAI = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
 PROVIDER = "openai-local"
 KEY_REF = "openai"
 # USD per million tokens (input, output) from OpenAI's price list, so the call log meters what the demo spends. An id

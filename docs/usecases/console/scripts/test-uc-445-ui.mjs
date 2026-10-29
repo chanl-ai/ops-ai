@@ -29,7 +29,7 @@ async function step(name, body) {
 
 /** The two workflows as the demo and the seed ship them, under this use case's ids and names. */
 function copies(agentId) {
-  const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
+  const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
   const seeded = JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).find((w) => w.id === 'mail_document');
   const { teamId: _team, ...notice } = structuredClone(seeded);
   // The seed marks the notice read as started only by the email intake (c-466); this use case starts it by hand.

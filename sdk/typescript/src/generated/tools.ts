@@ -1558,15 +1558,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[SecretValues] */
-        Envelope_SecretValues_: {
-            data: components["schemas"]["SecretValues"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[SendPolicyView] */
         Envelope_SendPolicyView_: {
             data: components["schemas"]["SendPolicyView"];
@@ -2725,18 +2716,6 @@ export interface components {
             operation: string;
             /** Staged */
             staged: boolean;
-        };
-        /** SecretValues */
-        SecretValues: {
-            /** Values */
-            values: {
-                [key: string]: string;
-            };
-        };
-        /** SecretValuesIn */
-        SecretValuesIn: {
-            /** Names */
-            names: string[];
         };
         /** SendPolicyIn */
         SendPolicyIn: {

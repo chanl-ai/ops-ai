@@ -14,6 +14,13 @@ docs follow. To run the stack first, follow the Quick start in `README.md`.
 | A spec or decision | `docs/README.md`, `docs/background/problem-statement.md`, `docs/architecture/overview.md` and the ADRs |
 | Backend design | `docs/architecture/README.md`, then `docs/architecture/service-map.md` |
 
+Claude Code and GitHub Copilot come with skills for this repository: run the stack, install the sample team, add a
+tool module or a workflow step type, write a use case, debug a service, work behind a mirror, pass the commit checks
+and switch the database. In Claude Code they are `/ops-run`, `/ops-sample-team` and the rest; in Copilot Chat, the
+prompts of the same names, with the rules in `.github/copilot-instructions.md`. Each is one page in
+`docs/guide/skills/`; change the page, run `python3 scripts/agent_skills.py`, and `make skills-proof` runs every
+skill's commands in a fresh devcontainer.
+
 Decision records in `docs/architecture/decisions/` are binding on the specs. A spec that needs a
 decision changed says so under "Open questions" and proposes a new or superseding ADR; it does not
 re-decide the matter inline.

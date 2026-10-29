@@ -42,7 +42,7 @@ await withUiStack(
     const james = as(await tokenFor(JAMES));
     const agentId = (await json(await fetch(`${agents}/v1/agents?pageSize=1`, { headers: james })))?.data?.[0]?.id;
     if (!agentId) throw new Error('setup: no agent in Operations');
-    const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
+    const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
     const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: james, body: JSON.stringify({ definition: { ...dispute, id: 'uc469_dispute', name: 'Card dispute intake (uc-469)' } }) });
     if (saved.status >= 300) throw new Error(`setup: saving the dispute answered ${saved.status} ${(await saved.text()).slice(0, 300)}`);
     const values = { cardholder: 'Marcus Bell', ssnLast4: '4471', merchant: 'Coastal Air', amount: '1,240.00', postedOn: '2026-10-16', cardType: 'credit', reason: 'Quoted 640.00 CAD and charged 1,240.00 CAD.' };

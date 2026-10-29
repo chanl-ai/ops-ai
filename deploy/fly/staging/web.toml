@@ -20,6 +20,7 @@ kill_timeout = 20
   OPS_UPSTREAM_KB = "<your-app>-kb.internal:8740"
   OPS_UPSTREAM_FILES = "<your-app>-files.internal:8750"
   OPS_UPSTREAM_DOCUMENTS = "<your-app>-documents.internal:8760"
+  OPS_UPSTREAM_MODELS = "<your-app>-models.internal:8730"
   OPS_UPSTREAM_CONSOLE = "<your-app>-console.internal:3016"
 
 [http_service]

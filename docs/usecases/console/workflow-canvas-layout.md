@@ -14,7 +14,7 @@ which drew the seed as stored before the bake and has no real page.
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
 | platform-service's dev seed | James Richardson; password `northfield-demo` |
-| The demo workflows | Saved by the script from `services/agents-service/seed/engine_workflows.json` and `scripts/demo/workflows/card_dispute_intake.json` |
+| The demo workflows | Saved by the script from `services/agents-service/seed/engine_workflows.json` and `scripts/sample-team/workflows/card_dispute_intake.json` |
 
 ## Steps and expected results
 

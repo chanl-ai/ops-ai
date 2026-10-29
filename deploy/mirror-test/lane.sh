@@ -44,7 +44,7 @@ say "== install both lockfiles through Nexus, in a container whose only network 
 log=$(mktemp)
 COPYFILE_DISABLE=1 tar -C "$ROOT" --null -T "$filelist" -cf - 2>/dev/null |
   compose run --rm -T installer sh -c 'tar -xf - -C /work 2>/dev/null; sh deploy/mirror-test/inside.sh' 2>&1 | tee "$log" |
-  grep -E '^(==|FAIL|no route|licences:|age:|INSTALL-THROUGH|[0-9]+ passed|# (tests|pass|fail) )|installed [0-9]+ packages|Done in'
+  grep -E '^(==|FAIL|PASS  |no route|licences:|age:|INSTALL-THROUGH|[0-9]+ passed|# (tests|pass|fail) )|installed [0-9]+ packages|Done in'
 grep -q '^INSTALL-THROUGH-MIRROR: PASS' "$log" || fail "the install through Nexus (full output: $log)"
 
 say "== Nexus served the install"

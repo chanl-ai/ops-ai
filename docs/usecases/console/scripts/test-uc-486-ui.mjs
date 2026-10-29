@@ -156,7 +156,7 @@ await withUiStack(
       };
       for (const id of ['mail_intake', 'mail_document', 'levy_case', 'complaint_triage']) await save(seed(id));
       const fiftySaved = await save(fiftySteps());
-      const card = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8'));
+      const card = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8'));
       const cardSaved = await save(card);
       // levy_case as a workflow created by API with no positions: the engine stores every step at {0, 0}.
       const levyDef = seed('levy_case');

@@ -87,8 +87,8 @@ $C run --rm --no-deps agents python /app/deploy/fly/connect_model.py --models-ur
 $C up -d
 ```
 
-A provider key is stored in Secrets (Settings > Secrets, as the Security admin) under the `--key-ref` name; outside
-development models-service refuses keys in its env.
+A provider key is saved on Settings > Model providers (an account admin: an admin on the Security team) under the
+`--key-ref` name; outside development models-service refuses keys in its env.
 
 ### Try it with a built-in database and the fake model
 

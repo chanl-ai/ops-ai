@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports seed-walk demo-model demo-reset demo-replies
+.PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo
 
 ##@ Stack (ISOLATED=1 for a second stack)
 
@@ -22,6 +22,8 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" || { \
 		echo "make up stopped: the database is ahead of this checkout (above). Nothing was changed."; exit 1; }
 	@$(MAKE) -s migrate || { echo "make up stopped: a migration failed (above). The database keeps what applied; fix the migration or run make reset-db."; exit 1; }
+	@# The first admin, through platform-service's bootstrap: its password is kept in .run/dev-admin.env for make sample-team.
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_admin.py
 	@# A migration that just landed makes every process started before it stale: stopped here, started below.
 	@$(STACK) stop-stale
 	@$(STACK) up
@@ -35,8 +37,7 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 		ALIAS=guardrail-check MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=gpt-5.5 MODEL=$(DEMO_CHAT_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=memory-extract MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
-		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
-		(cd services/documents-service && uv run --quiet python scripts/seed_document_types.py); fi
+		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; fi
 	@$(STACK) health
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first on the shared stack (CONFIRM=yes skips)
@@ -73,35 +74,19 @@ restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|f
 health: ## Probe every service, OPA and PostgreSQL; shows port, state and who owns the listener
 	@$(STACK) health
 
+sample-team: ## Install the sample team (scripts/sample-team/sample-team.json) as the first admin; a second run finds it (NAME= another team, EXPECT_FOUND=1 fails on anything made)
+	@MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install $(if $(NAME),--name "$(NAME)") $(if $(EXPECT_FOUND),--expect-found)
+
 logs: ## Follow one service's log: make logs SVC=agents|tools|runner|console (FOLLOW=0 to print and exit)
 	@OPS_LOGS_FOLLOW=$(if $(FOLLOW),$(FOLLOW),1) $(STACK) logs $(SVC)
 
 runner-wasm: ## Fetch the code runner's pinned Python build into .data/runner and check its SHA-256 (make up does it too)
 	@$(MAKE) -s -C services/runner-service wasm
 
-seed-walk: ## Prove the seeded stack works: agents, pins, workflows, then a skill turn, a blocked turn and a v2 run (PASS/FAIL each)
-	@OPS_AGENTS_PORT=$(OPS_AGENTS_PORT) OPS_PLATFORM_PORT=$(OPS_PLATFORM_PORT) uv run python scripts/seed_walk.py
+demo-walk: ## Walk the sample team: chat, guardrail, bank reads, a write a person approves, then an emailed levy notice to the second reply (PASS/FAIL each; re-runnable)
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_walk.py $(if $(NAME),--name "$(NAME)")
 
-demo-mailbox: ## Email a levy notice to the team mailbox and follow it to cases, a Human Task and the reply in Mailpit (PASS/FAIL each; re-runnable; LOW=1 sends a scan that a person checks first)
-	@LOW=$(LOW) uv run --quiet python scripts/demo_mailbox.py
-
-demo-replies: ## Email a levy notice to the demo mailbox and follow it to the automatic reply, the hold and the second reply (PASS/FAIL each; re-runnable)
-	@uv run --quiet python scripts/demo_replies.py
-
-demo-sweep: ## Every demo scenario on the shared stack (chat, guardrail, tools, write approval, workflow, workflow as a tool, mailbox), PASS/FAIL each
-	@uv run --quiet python scripts/demo_sweep.py
-
-demo-reset: ## Clear every run, chat, Human Task, case and received-email record left by demos, then reseed the bank module and demo knowledge; asks first on the shared stack (CONFIRM=yes skips)
-	@if [ "$(OPS_STACK)" = shared ] && [ "$(CONFIRM)" != yes ]; then \
-		printf 'Clear every run, chat and Human Task on the shared stack for every session? Type yes: '; read answer; \
-		[ "$$answer" = yes ] || { echo "demo-reset: nothing was changed"; exit 1; }; fi
-	@OPS_DATABASE_URL="$(OPS_DATABASE_URL)" uv run --quiet python scripts/demo_reset.py
-	@cd services/tools-service && uv run --quiet python scripts/reimport_bank_module.py --as j.richardson@harborpine.example \
-		--decide-as n.petrov@harborpine.example --secrets-as s.adeyemi@harborpine.example
-	@cd services/kb-service && uv run --quiet python scripts/seed_demo_knowledge.py --agents http://127.0.0.1:$(OPS_AGENTS_PORT) \
-		> $(ROOT)/.run/demo-knowledge.log || { tail -20 $(ROOT)/.run/demo-knowledge.log; exit 1; }
-	@tail -2 $(ROOT)/.run/demo-knowledge.log
-	@uv run --quiet python scripts/demo_reset.py --check
+demo: sample-team demo-walk ## Install the sample team, then walk it
 
 demo-model: ## Point the agents' chat alias at a cheap real OpenAI model (MODEL=gpt-5-nano), or back at the fake (MODEL=fake)
 	@MODEL=$(MODEL) uv run python scripts/demo_model.py

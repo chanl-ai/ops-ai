@@ -1,6 +1,7 @@
 """models-service's tables, in its own migration chain (`alembic_version_models`).
 
-A provider connection names its credential (`key_ref`) and never holds it. An alias has immutable versions; the
+A provider connection names its credential (`key_ref`) and never holds it: the credential is a row of provider_keys,
+the account's, sealed under the service's secrets key and set by an account admin. An alias has immutable versions; the
 newest version that is not retired serves calls. A model key belongs to one identity (a workflow, an agent, a person
 or a platform purpose) and carries its budget, its spend and a hash of its secret, plus the previous hash during a
 rotation's overlap. A model call row is metadata only: never a prompt or a completion.
@@ -23,8 +24,23 @@ provider_connections = sa.Table(
     sa.Column("name", sa.String(120), nullable=False, unique=True),
     sa.Column("type", sa.String(32), nullable=False),  # openai-compatible | anthropic | scripted
     sa.Column("base_url", sa.String(400)),
-    sa.Column("key_ref", sa.String(120)),  # the name Settings.model_provider_keys knows the credential by
+    sa.Column("key_ref", sa.String(120)),  # the provider_keys name of its credential
     sa.Column("created_at", sa.String(32), nullable=False),
+)
+
+# An account's model provider keys (owner, 2026-10-27): account admins set them, only this service reads them, and no
+# team sees one, so a new team needs no setup. A value is never returned once saved.
+provider_keys = sa.Table(
+    "provider_keys",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("name", sa.String(120), primary_key=True),
+    # AES-256-GCM over the value, the tenant and name as associated data (ops_policy.cipher).
+    sa.Column("ciphertext", sa.Text, nullable=False),
+    sa.Column("version", sa.Integer, nullable=False),
+    sa.Column("created_by", sa.String(320), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    sa.Column("rotated_at", sa.DateTime(timezone=True)),
 )
 
 model_aliases = sa.Table(

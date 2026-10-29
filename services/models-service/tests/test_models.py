@@ -146,6 +146,20 @@ async def test_a_key_over_its_rate_limit_is_refused(models: Models) -> None:
     assert codes == [200, 200, 429]
 
 
+async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
+    """make up creates alias gpt-5.5; a hyphen-only pattern refused it on a fresh database."""
+    body = {
+        "name": "gpt-5.5",
+        "providerId": "prov_scripted",
+        "modelId": "scripted-standard",
+        "clearedSensitivity": "internal",
+    }
+    r = await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)
+    assert r.status_code == 201, r.text
+    versions = (await models.client.get("/v1/models/aliases/gpt-5.5/versions", headers=SERVICE)).json()["data"]
+    assert versions[0]["modelId"] == "scripted-standard"
+
+
 async def test_alias_versions_are_immutable_and_the_newest_serves(models: Models) -> None:
     name = f"bank-test-{datetime.now(UTC).strftime('%H%M%S%f')}"
     body = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-a", "clearedSensitivity": "internal"}

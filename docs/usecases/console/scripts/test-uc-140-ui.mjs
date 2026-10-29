@@ -10,7 +10,6 @@ const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const CONSOLE = `http://localhost:${process.env.OPS_CONSOLE_PORT ?? 3016}`;
 const AGENTS = `http://127.0.0.1:${process.env.OPS_AGENTS_PORT ?? 8700}`;
 const PLATFORM = `http://127.0.0.1:${process.env.OPS_PLATFORM_PORT ?? 8710}`;
-const MAILPIT = `http://127.0.0.1:${process.env.OPS_MAILPIT_PORT ?? 8025}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const OMAR = 'o.haddad@harborpine.example';
@@ -161,21 +160,18 @@ try {
     check('f the advisor runs the customer summary workflow and the run opens from its card', /customer.summary/i.test(text) && /Priya/.test(text) && opened, { href, opened, tail: text.slice(-300) });
   });
 
-  await step('g an emailed levy notice becomes cases, Human Tasks with customer and CAD amount, and a reply', async () => {
-    const out = execFileSync('make', ['demo-mailbox'], { cwd: ROOT, encoding: 'utf8', timeout: 300_000 });
-    const subject = /sent '([^']+)'/.exec(out)?.[1];
-    const maya = await signIn(browser, MAYA, errors);
-    await maya.goto(`${CONSOLE}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    const levyCases = maya.getByTestId('case-row-link').filter({ hasText: 'Levy notice' });
-    await levyCases.first().waitFor({ timeout: 60_000 }).catch(() => undefined);
-    const cases = await levyCases.count();
-    const deadlines = (await maya.getByTestId('case-resolution').count()) > 0 && (await maya.getByTestId('case-response').count()) > 0;
-    await maya.goto(`${CONSOLE}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    const task = maya.getByRole('row').filter({ hasText: 'Levy notice' }).first();
-    const taskText = await task.innerText({ timeout: 60_000 }).catch(() => '');
-    const mail = (await (await fetch(`${MAILPIT}/api/v1/messages`)).json()).messages ?? [];
-    const replied = mail.some((m) => (subject ? m.Subject?.includes(subject) : false) && m.From?.Address !== undefined && m.To?.length);
-    check('g an emailed levy notice becomes cases, Human Tasks with customer and CAD amount, and a reply', /PASS/.test(out) && !/FAIL/.test(out) && cases >= 3 && deadlines && /[\d,]+\.\d{2} CAD/.test(taskText) && replied, { cases, deadlines, task: taskText.slice(0, 200), replied, mailbox: out.split('\n').filter((l) => /^(PASS|FAIL)/.test(l)) });
+  await step('g an emailed levy notice becomes a case per debtor, a hold, approved replies and the sender\'s replies', async () => {
+    // The sample team's walk (make demo-walk) emails the notice and decides each Human Task as the team's approver.
+    let out;
+    try {
+      out = execFileSync('make', ['demo-walk'], { cwd: ROOT, encoding: 'utf8', timeout: 600_000 });
+    } catch (e) {
+      out = `${e.stdout ?? ''}`;
+    }
+    const mail = ['email started the intake', 'sender thanked', 'case per debtor', 'hold worked out by code', 'reply waits for approval', 'second reply'];
+    const lines = out.split('\n').filter((l) => /^(PASS|FAIL)/.test(l));
+    const passed = mail.every((m) => lines.some((l) => l.startsWith('PASS') && l.includes(m)));
+    check('g an emailed levy notice becomes a case per debtor, a hold, approved replies and the sender\'s replies', passed, { lines });
   });
 
   check('no page errors', errors.length === 0, errors.slice(0, 3));

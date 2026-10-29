@@ -131,6 +131,8 @@ if [ -n "$ANSWERS" ]; then
       PUBLIC_URL|PORT|PROJECT|ORG_NAME|ADMIN_EMAIL|ADMIN_NAME|ADMIN_PASSWORD|DATABASE|DB_MODE|MODEL|MODEL_NAME|MODEL_API_KEY|\
       MODEL_INPUT_PRICE|MODEL_OUTPUT_PRICE|MODEL_BUDGET|VERSION|IMAGES|OFFLINE)
         case $F_SET in *" $key "*) ;; *) eval "A_$key=\$value" ;; esac ;;
+      # make setup's own answers (scripts/setup/), so one answers file serves both; it tested them, this run does not.
+      RUNS_ON|DOCKER|PYPI_MIRROR|NPM_MIRROR|IMAGE_REGISTRY|MODEL_PROVIDER|KUBE_OVERLAY) ;;
       *) die "answers file: unknown key $key" ;;
     esac
   done <"$ANSWERS"
@@ -451,7 +453,7 @@ questions() {
   if [ "$A_MODEL" != test ]; then
     ask MODEL_NAME "The provider's model id" ""
     [ -n "$A_MODEL_NAME" ] || die "name the provider's model with --model-name"
-    ask MODEL_API_KEY "The provider's API key (stored in Secrets, not in ops-ai.env)" "" secret
+    ask MODEL_API_KEY "The provider's API key (saved as the account's model provider key, not in ops-ai.env)" "" secret
     [ -n "$A_MODEL_API_KEY" ] || die "the provider key is required for $A_MODEL (--model-key-file)"
   fi
 }
@@ -509,7 +511,7 @@ connect_model() {
     fi
     ref=(--key-ref "$SECRET_NAME")
     prices=(--input-price "${A_MODEL_INPUT_PRICE:-0}" --output-price "${A_MODEL_OUTPUT_PRICE:-0}" --budget "${A_MODEL_BUDGET:-100}")
-    say "model: $model at $base, its key read from Secrets ($SECRET_NAME)"
+    say "model: $model at $base, its key the account's model provider key $SECRET_NAME"
   fi
   for kid in agents documents; do
     [ -z "$(getenv "OPS_MODELS_KEY_$(upper $kid)")" ] || continue

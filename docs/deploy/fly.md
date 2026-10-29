@@ -94,8 +94,8 @@ fly ssh console -a <your-app>-agents -C "python /app/deploy/fly/connect_model.py
 
 It runs on the agents app because it signs with agents-service's own key. Again with `--key-id purpose:documents`, also from the agents app. Each prints its key once; put them in a private file as
 `OPS_MODELS_KEY_AGENTS=` and `OPS_MODELS_KEY_DOCUMENTS=` lines, run `apps.py secrets ... --models <file>`, then deploy
-agents, worker and documents. For a real model an operator stores the provider key in Settings > Secrets as the Security
-admin and runs the same script with `--base-url <provider>/v1 --key-ref <secret name> --model <id>` and a budget.
+agents, worker and documents. For a real model an account admin saves the provider key on Settings > Model providers
+and an operator runs the same script with `--base-url <provider>/v1 --key-ref <key name> --model <id>` and a budget.
 
 ## Check, logs, roll back
 

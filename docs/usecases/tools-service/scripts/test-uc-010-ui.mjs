@@ -8,7 +8,8 @@ import { ROOT, TOOLS_PORT, approveToolReview, check, chromium, evidenceDir, fini
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const JSONH = { 'Content-Type': 'application/json' };
-const SECURITY = { ...JSONH, 'X-Dev-User': 'Nadia Petrov' };
+// A dev caller decides reviews only in the team it acts in, and the module's publish is Security's to decide.
+const SECURITY = { ...JSONH, 'X-Dev-User': 'Nadia Petrov', 'X-Team-Id': 'team_security' };
 const HOST = 'statements.bank.test';
 const TAG = Math.random().toString(36).slice(2, 6);
 const OP = `get_statement_${TAG}`;

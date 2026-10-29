@@ -34,7 +34,7 @@ ready = "http://127.0.0.1:8750/health"
 
 [process.models]
 command = ["/app/.venv/bin/python", "-m", "ops_models"]
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_MODELS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_MODELS}", OPS_SERVICE_SIGNING_KID = "svc-models-1" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_MODELS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_MODELS}", OPS_SERVICE_SIGNING_KID = "svc-models-1", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}" }
 ready = "http://127.0.0.1:8730/health"
 
 # The fake model: answers from committed rules and never calls a provider. Staging's only model connection, bound by

@@ -20,13 +20,17 @@ from decimal import Decimal
 from typing import Annotated, Any, cast
 
 import httpx
-from fastapi import Depends, FastAPI, Header, Query
+from fastapi import Depends, FastAPI, Header, Path, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_identity import Auth, current_service, install_auth
+from ops_access import Access
+from ops_identity import Auth, CurrentPrincipal, current_service, install_auth
 from ops_metering import Price, Usage, cost
+from ops_policy import AesGcmCipher, Cipher
+from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
@@ -46,9 +50,10 @@ from .schemas import (
     KeyRotated,
     KeySecret,
     ProviderCreated,
+    ProviderKeyOut,
     ProviderOut,
 )
-from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, Providers, cleared
+from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
 
 
 class _Wire(BaseModel):
@@ -67,6 +72,14 @@ class ProviderRebind(_Wire):
     key_ref: str | None = None
 
 
+class ProviderKeyIn(_Wire):
+    value: str = Field(min_length=1, max_length=4000)
+
+
+# The name a provider connection's `key_ref` gives: `OPENAI`, or `openai` as the dev stack names it.
+KEY_NAME = Path(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$")
+
+
 class AliasVersionIn(_Wire):
     provider_id: str
     model_id: str
@@ -80,7 +93,7 @@ class AliasVersionIn(_Wire):
 
 
 class AliasIn(AliasVersionIn):
-    name: str = Field(pattern="^[a-z0-9][a-z0-9-]{1,118}$")
+    name: str = Field(pattern="^[a-z0-9][a-z0-9.-]{1,118}$")
     kind: str = Field(default="chat", pattern="^(chat|embedding)$")
 
 
@@ -151,6 +164,16 @@ def _alias_view(r: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _provider_key_view(r: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "name": r["name"],
+        "version": r["version"],
+        "createdBy": r["created_by"],
+        "createdAt": r["created_at"].isoformat(),
+        "rotatedAt": _iso(r["rotated_at"]),
+    }
+
+
 def _key_refusal(key: Mapping[str, Any], now: datetime) -> tuple[int, str, str] | None:
     """Why a key may not spend right now: revoked, expired or at its budget. None when it may."""
     if key["status"] != "active":
@@ -169,12 +192,15 @@ def create_models_app(
     provider_secrets: Mapping[str, str] | None = None,
     overlap_seconds: int = 900,
     upstream: httpx.AsyncClient | None = None,
-    provider_keys: ProviderKeys | None = None,
+    cipher: Cipher | None = None,
+    keys_tenant: str | None = None,
+    security_team: str | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
-    `provider_keys` reads a connection's key from the Secrets store (c-177); without it only `provider_secrets` (the
-    dev stack's settings) answer."""
+    Provider keys are the accounts' own (`provider_keys`), sealed with `cipher` (the settings' secrets key by
+    default); `provider_secrets` are the dev stack's keys from settings, behind them. `keys_tenant` is the deployment's
+    tenant, whose key a call naming no tenant uses; `security_team` is where an account admin holds settings.manage."""
     http = upstream or httpx.AsyncClient(timeout=60)
 
     @asynccontextmanager
@@ -190,8 +216,20 @@ def create_models_app(
         generate_unique_id_function=operation_id,
     )
     install_error_handlers(app)
-    install_auth(app, auth or Auth.from_settings(Settings(), audience="models"))
-    keys = provider_keys or ProviderKeys(None, provider_secrets)
+    settings = Settings()
+    if settings.cors_origins:
+        # The console calls the provider key routes from the browser (Settings > Model providers).
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_methods=["GET", "PUT", "DELETE"],
+            allow_headers=["Content-Type", "Accept", "Authorization", "X-Team-Id"],
+            max_age=600,
+        )
+    install_auth(app, auth or Auth.from_settings(settings, audience="models"))
+    key_vault = ProviderKeyStore(db, cipher or AesGcmCipher(settings.secrets_key.get_secret_value()))
+    keys = ProviderKeys(key_vault, provider_secrets, tenant=keys_tenant or settings.model_keys_tenant)
+    access = Access(security_team=security_team or settings.security_team_id)
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
 
     # TODO(auth): every /v1/models/* route below takes a calling service's Ed25519 token (CurrentService), the same
@@ -253,6 +291,55 @@ def create_models_app(
         await providers.rebind(provider_id, body.base_url, body.key_ref)
         view = {"id": provider_id, "name": row["name"], "type": row["type"], "baseUrl": body.base_url}
         return ok({**view, "keyRef": body.key_ref})
+
+    def account_admin(p: CurrentPrincipal) -> str:
+        """settings.manage, held in the Security team: an account admin (owner, 2026-10-27). Returns the actor."""
+        access.can(p, "settings", "manage", what="model provider keys", code="admin_only")
+        return p.email or p.sub
+
+    key_errors = error_responses({403: "Not an account admin", 409: "A provider connection still uses the key"})
+
+    @app.get(
+        "/v1/provider-keys", tags=["provider-keys"], response_model=Envelope[list[ProviderKeyOut]], responses=key_errors
+    )
+    async def list_provider_keys(p: CurrentPrincipal) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The account's model provider keys by name; a value is never returned."""
+        account_admin(p)
+        return ok([_provider_key_view(r) for r in await key_vault.listed(p.tenant_id)])
+
+    @app.put(
+        "/v1/provider-keys/{name}",
+        tags=["provider-keys"],
+        response_model=Envelope[ProviderKeyOut],
+        responses=key_errors,
+    )
+    async def save_provider_key(  # pyright: ignore[reportUnusedFunction]
+        name: Annotated[str, KEY_NAME], body: ProviderKeyIn, p: CurrentPrincipal
+    ) -> JSONResponse:
+        """Saves a key under the name a provider connection's keyRef gives, or replaces its value. The next call
+        through a connection naming it uses the new value."""
+        by = account_admin(p)
+        saved, _ = await key_vault.save(p.tenant_id, name, body.value, by=by)
+        keys.forget(p.tenant_id, name)
+        return ok(_provider_key_view(saved))
+
+    @app.delete(
+        "/v1/provider-keys/{name}",
+        tags=["provider-keys"],
+        status_code=204,
+        response_class=Response,
+        responses=key_errors,
+    )
+    async def delete_provider_key(name: Annotated[str, KEY_NAME], p: CurrentPrincipal) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Deletes a key no provider connection names; 409 naming the connection that still does."""
+        account_admin(p)
+        using = [r["name"] for r in await providers.all() if r["key_ref"] == name]
+        if using:
+            raise Conflict(f"Provider connection {', '.join(using)} signs in with {name}.", code="key_in_use")
+        if not await key_vault.delete(p.tenant_id, name):
+            raise NotFound(f"Model provider key {name}")
+        keys.forget(p.tenant_id, name)
+        return Response(status_code=204)
 
     @app.get(
         "/v1/models/aliases",
@@ -499,7 +586,16 @@ def create_models_app(
             await log("ok", None, input_tokens=input_tokens, output_tokens=output_tokens, cost=spend, **version)
 
         ref = alias_row.get("key_ref")
-        provider_key = await keys.get(str(ref)) if ref else None
+        provider_key = await keys.get(str(ref), x_tenant_id) if ref else None
+        if ref and provider_key is None:
+            # Calling the provider without its key would only come back as its own 401, after a network round trip.
+            await log("error", "provider_key_missing", **version)
+            return refused(
+                503,
+                "provider_key_missing",
+                f"Alias {alias_name} signs in with model provider key {ref}, which the account has not saved. An "
+                "account admin adds it on Settings > Model providers.",
+            )
         try:
             provider = provider_for(alias_row, {str(ref): provider_key} if ref and provider_key else {}, http)
         except ProviderError as e:

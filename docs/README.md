@@ -171,6 +171,15 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
 | `guide/support.md` | The support contact (placeholder) |
+| `guide/skills/ops-run.md` | Developer skill for Claude Code and GitHub Copilot (ops-run): run the stack on a laptop, in the devcontainer or on a shared VM, on the fake or OpenAI; generated into `.claude/skills/ops-run/SKILL.md` and `.github/prompts/ops-run.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-sample-team.md` | Developer skill for Claude Code and GitHub Copilot (ops-sample-team): install the sample team and walk the demo; generated into `.claude/skills/ops-sample-team/SKILL.md` and `.github/prompts/ops-sample-team.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-tool-module.md` | Developer skill for Claude Code and GitHub Copilot (ops-tool-module): add a tool module, its secret and its host; generated into `.claude/skills/ops-tool-module/SKILL.md` and `.github/prompts/ops-tool-module.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-workflow-step.md` | Developer skill for Claude Code and GitHub Copilot (ops-workflow-step): add a workflow step type; generated into `.claude/skills/ops-workflow-step/SKILL.md` and `.github/prompts/ops-workflow-step.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-usecase.md` | Developer skill for Claude Code and GitHub Copilot (ops-usecase): write and run a use case; generated into `.claude/skills/ops-usecase/SKILL.md` and `.github/prompts/ops-usecase.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-debug.md` | Developer skill for Claude Code and GitHub Copilot (ops-debug): find why a service fails; generated into `.claude/skills/ops-debug/SKILL.md` and `.github/prompts/ops-debug.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
@@ -186,8 +195,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/strategy.md` | Console strategy: thin UI over a generated SDK, per-page audit with verdicts, the agentic core slice, chat on the thread calls, what to stop |
 | `console/tools-design.md` | Design of the tool module screens |
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
-| `console/mailbox-demo.md` | Runbook: `make up AUTH=platform` then `make demo-mailbox`, and the console pages to show the emailed court order notice on |
-| `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-sweep` |
+| `console/mailbox-demo.md` | Runbook: `make up`, `make sample-team` then `make demo-walk`, and the console pages to show the emailed levy notice on |
+| `console/demo-script.md` | The demo, scenario by scenario: where to go, what to type and what the viewer sees, each proven by `make demo-walk` |
 | `usecases/README.md` | Use case registry: how to run, rules (scripted model only, PASS needs evidence), layout, exit codes |
 | `usecases/agents-service/chat-turn-with-citation.md` | uc-001: chat turn with citation |
 | `usecases/agents-service/test-an-agent-on-a-real-thread.md` | uc-247: A builder tests an agent on a real chat thread the server marks test |
@@ -382,6 +391,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/wait-and-reminders.md` | uc-403: A workflow waits for a time or date and reminds a person |
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
+| `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |

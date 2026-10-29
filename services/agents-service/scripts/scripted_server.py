@@ -32,11 +32,16 @@ from ops_service_kit.logging import configure_logging  # noqa: E402
 from ops_service_kit.settings import Settings  # noqa: E402
 from tests.conftest import SEED, FakeGraphModels, scripted_model  # noqa: E402
 
-PG_PORT = int(os.environ.get("OPS_PG_PORT", "5477"))
+
+def pg_url(db: str, driver: str = "postgresql+asyncpg") -> str:
+    """make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external), else compose on OPS_PG_PORT."""
+    if os.environ.get("OPS_INFRA") == "external":
+        return f"{driver}://ops:ops@postgres:5432/{db}"
+    return f"{driver}://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{db}"
 
 
 async def ensure_database(name: str) -> None:
-    conn = await asyncpg.connect(f"postgresql://ops:ops@localhost:{PG_PORT}/postgres")
+    conn = await asyncpg.connect(pg_url("postgres", "postgresql"))
     try:
         if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", name):
             await conn.execute(f'CREATE DATABASE "{name}"')
@@ -54,7 +59,7 @@ def main() -> None:
     p.add_argument("--migrate-only", action="store_true", help="create and migrate the database, then exit")
     args = p.parse_args()
 
-    url = f"postgresql+asyncpg://ops:ops@localhost:{PG_PORT}/{args.db}"
+    url = pg_url(args.db)
     # Settings is the one place env is read, so the URL reaches both Alembic and the app through it.
     os.environ["OPS_DATABASE_URL"] = url
     asyncio.run(ensure_database(args.db))
