@@ -3,12 +3,12 @@
     uv run python scripts/perf/time_routes.py --origin http://localhost:3016 --admin-env .run/demo.env
     uv run python scripts/perf/time_routes.py --origin https://<staging host> --admin-env <file> --runs 9
 
-`--origin` and `--admin-env` are the seed's (scripts/demo/seed_demo_team.py): an origin that serves `/api/<service>/`,
-or a local console whose services sit on their own ports, and a file holding OPS_DEMO_ADMIN_EMAIL and
+`--origin` and `--admin-env` are the sample team installer's (scripts/sample_team.py): an origin that serves
+`/api/<service>/`, or a local console whose services sit on their own ports, and a file holding OPS_DEMO_ADMIN_EMAIL and
 OPS_DEMO_ADMIN_PASSWORD. The admin acts in `--team` (a name or id; default the demo team). Each route is called once to
 warm up, then `--runs` times in turn; the table gives each route's median and max in milliseconds and its status. The
-exit status is the number of routes whose median is over `--budget-ms` or that answered an error. The password is
-never printed.
+exit status is the number of routes whose median is over `--budget-ms` or that answered an error. The password is never
+printed.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "demo"))
-from seed_demo_team import data, read_env, service_urls, sign_in  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts"))
+from sample_team import data, read_env, service_urls, sign_in  # noqa: E402
 
 DEMO_TEAM = "Customer Operations"
 

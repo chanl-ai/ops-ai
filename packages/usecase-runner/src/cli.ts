@@ -6,7 +6,7 @@ import { coverage, formatCoverage } from './coverage.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
-import { dropDatabase, isolate, sweepFinished } from './isolation.ts';
+import { DB_VAR, dropDatabase, isolate, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
@@ -44,21 +44,36 @@ export async function test(
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
   if (deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
+  // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
+  // earlier script left behind name files that are gone, and kb-service's startup seed failed on them (c-553).
+  let current: string | undefined;
+  const databaseFor = ownedDb
+    ? async (run: (env: NodeJS.ProcessEnv) => Promise<Outcome>) => {
+        current = runDatabaseName();
+        try {
+          return await run({ ...env, [DB_VAR]: current });
+        } finally {
+          if (!(await deps.drop(root, env, current))) console.error(`could not drop ${current}; make usecase-reset drops leftovers`);
+          current = undefined;
+        }
+      }
+    : (run: (env: NodeJS.ProcessEnv) => Promise<Outcome>) => run(env);
   // A run stopped with Ctrl-C or a kill still drops the database it made; the sweep catches a run killed harder.
   const stop = (signal: NodeJS.Signals) => {
-    void (ownedDb ? deps.drop(root, env, ownedDb) : Promise.resolve(true)).finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+    void (current ? deps.drop(root, env, current) : Promise.resolve(true)).finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  console.log(`database ${env.OPS_USECASE_DB}${ownedDb ? ' (this run\'s, dropped at the end)' : ''}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
-  try {
-    return await runAll(root, targets, layerArg, env);
-  } finally {
-    if (ownedDb && !(await deps.drop(root, env, ownedDb))) console.error(`could not drop ${ownedDb}; make usecase-reset drops leftovers`);
-  }
+  console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
+  return await runAll(root, targets, layerArg, databaseFor);
 }
 
-async function runAll(root: string, targets: UseCase[], layerArg: string | undefined, env: NodeJS.ProcessEnv): Promise<number> {
+async function runAll(
+  root: string,
+  targets: UseCase[],
+  layerArg: string | undefined,
+  databaseFor: (run: (env: NodeJS.ProcessEnv) => Promise<Outcome>) => Promise<Outcome>,
+): Promise<number> {
   const outcomes: Outcome[] = [];
   for (const uc of targets) {
     const layers: Layer[] = layerArg ? [layerArg as Layer] : uc.layers;
@@ -73,15 +88,19 @@ async function runAll(root: string, targets: UseCase[], layerArg: string | undef
         continue;
       }
       console.log(`\n== ${uc.id} ${layer}: ${uc.title} (${r.path})`);
-      const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
-      const checks = parseChecks(output);
-      const v = verdict(code, checks);
-      outcomes.push({
-        id: uc.id,
-        layer,
-        status: v.pass ? 'PASS' : 'FAIL',
-        detail: v.pass ? `${checks.passed.length} checks passed` : `${v.reason}; ${checks.passed.length} passed, ${checks.failed.length} failed`,
-      });
+      outcomes.push(
+        await databaseFor(async (env) => {
+          const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
+          const checks = parseChecks(output);
+          const v = verdict(code, checks);
+          return {
+            id: uc.id,
+            layer,
+            status: v.pass ? 'PASS' : 'FAIL',
+            detail: v.pass ? `${checks.passed.length} checks passed` : `${v.reason}; ${checks.passed.length} passed, ${checks.failed.length} failed`,
+          };
+        }),
+      );
     }
   }
   console.log(`\n${summary(outcomes)}`);

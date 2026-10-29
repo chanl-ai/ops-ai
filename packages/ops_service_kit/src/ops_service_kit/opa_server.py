@@ -19,13 +19,20 @@ from pathlib import Path
 
 import httpx
 
+from ops_service_kit.settings import Settings
+
 # The directory compose mounts at /policy: gateway.rego and data.json (the registered identities).
 POLICY_DIR = Path(__file__).resolve().parents[4] / "services" / "tools-service" / "policy"
 IMAGE = "openpolicyagent/opa:1.21.1"
 
 
 def start() -> tuple[str, str]:
-    """Starts a container and returns (its id, its base URL) once OPA answers its health check."""
+    """Starts a container and returns (its id, its base URL) once OPA answers its health check. In the devcontainer
+    (OPS_INFRA=external) there is no docker to start one, so it returns the compose project's own OPA side container
+    with no id: that project is one person's, not shared across sessions."""
+    settings = Settings()
+    if settings.infra == "external":
+        return "", settings.opa_url
     # OPA 1.x listens on localhost inside the container by default, which a published port cannot reach.
     run = [
         *("docker", "run", "-d", "--rm", "-p", "127.0.0.1::8181", "-v", f"{POLICY_DIR}:/policy:ro", IMAGE),
@@ -49,6 +56,8 @@ def start() -> tuple[str, str]:
 
 
 def stop(cid: str) -> None:
+    if not cid:
+        return
     subprocess.run(["docker", "rm", "-f", cid], capture_output=True, check=False)
 
 

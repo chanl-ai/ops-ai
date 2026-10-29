@@ -118,6 +118,7 @@ WORKLOADS = [
             "OPS_UPSTREAM_KB": "kb:8740",
             "OPS_UPSTREAM_FILES": "files:8750",
             "OPS_UPSTREAM_DOCUMENTS": "documents:8760",
+            "OPS_UPSTREAM_MODELS": "models:8730",
             "OPS_UPSTREAM_CONSOLE": "console:3016",
         },
         memory="128Mi",

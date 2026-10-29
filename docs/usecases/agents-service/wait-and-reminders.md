@@ -1,6 +1,6 @@
 # A workflow waits for a time or date and reminds a person
 
-Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api. Card: c-277.
+Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api, ui. Card: c-277.
 
 A court order notice gives the bank a date to respond by. The workflow keeps that date itself: a Wait step pauses the run for
 a duration or until a date read from an earlier step, and goes on by `out` when the time has passed. A date already
@@ -32,6 +32,7 @@ The stack is agents-service with a workflow worker polling every 0.2 seconds; no
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-403-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-403-ui.mjs` | passing (2026-10-28): each run's page shows the Wait, the date outcomes and the approval; reminders are read from Activity; an admin decides in Human Tasks |
 
 ## Non-vacuous check
 

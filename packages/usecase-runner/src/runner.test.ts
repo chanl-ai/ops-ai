@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { test as runUseCases } from './cli.ts';
 import { coverage } from './coverage.ts';
 import { portBusy, serve, stackEnv } from './harness.ts';
-import { DB_VAR, isolate, PORT_VARS } from './isolation.ts';
+import { DB_VAR, isolate, pgUrl, PORT_VARS } from './isolation.ts';
 import { parseRegistry, RegistryError } from './registry.ts';
 import { EXIT, exitFor, parseChecks, verdict } from './report.ts';
 import { resolveScript } from './resolve.ts';
@@ -189,6 +189,37 @@ test('two runs at once each get their own database and ports, and each drops onl
   assert.deepEqual(codes, [EXIT.ok, EXIT.ok]);
   assert.equal(new Set(dropped).size, 2);
   for (const name of dropped) assert.match(name, /^ops_usecase_r\d+_[0-9a-f]{6}$/);
+});
+
+// Stands in for a harness script that reads what an earlier script left: it notes its database, and fails when that
+// database is one a script before it used.
+const USED = `
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+const log = new URL('../../../databases-used', import.meta.url);
+const db = process.env.OPS_USECASE_DB;
+const seen = existsSync(log) ? readFileSync(log, 'utf8').split('\\n') : [];
+appendFileSync(log, db + '\\n');
+console.log(seen.includes(db) ? 'FAIL ' + db + ' holds an earlier use case\\'s rows' : 'PASS ' + db + ' is new');
+`;
+
+test('each use case in a run gets its own database, dropped before the next one starts', async () => {
+  const root = repo();
+  for (const id of ['uc-001', 'uc-002']) writeFileSync(join(root, `docs/usecases/agents-service/scripts/test-${id}-api.mjs`), USED);
+  const parent = { ...process.env };
+  for (const k of [...PORT_VARS, DB_VAR]) delete parent[k];
+  const used = () => readFileSync(join(root, 'docs/databases-used'), 'utf8').trim().split('\n');
+  const dropped: { name: string; scriptsRun: number }[] = [];
+  const drop = async (_root: string, _env: NodeJS.ProcessEnv, name: string) => (dropped.push({ name, scriptsRun: used().length }), true);
+  assert.equal(await runUseCases(root, parseRegistry(TABLE), undefined, 'api', { parent, drop }), EXIT.ok);
+  const names = used();
+  assert.equal(new Set(names).size, 2, names.join());
+  assert.deepEqual(dropped, [{ name: names[0], scriptsRun: 1 }, { name: names[1], scriptsRun: 2 }]);
+});
+
+test("a database URL follows make/env.mk: the devcontainer's postgres side container, else this machine's port", () => {
+  assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', { OPS_INFRA: 'external', OPS_PG_PORT: '5477' }), 'postgresql+asyncpg://ops:ops@postgres:5432/ops_x');
+  assert.equal(pgUrl('postgres', 'postgresql', { OPS_PG_PORT: '6477' }), 'postgresql://ops:ops@localhost:6477/postgres');
+  assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', {}), 'postgresql+asyncpg://ops:ops@localhost:5477/ops_x');
 });
 
 test('explicit use-case ports and database win, are never dropped, and a chosen port is never a stack port', async () => {

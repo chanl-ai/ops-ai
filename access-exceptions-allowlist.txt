@@ -92,6 +92,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict guardrail_pinned 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
+* conflict key_in_use 0 state
 * conflict live_workflows 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state

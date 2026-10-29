@@ -24,7 +24,7 @@ API keys through introspection on the internal app, service tokens on internal r
 
 | Mount | Operations |
 |---|---|
-| Public :8710 | `GET /v1/health`, `GET /.well-known/jwks.json`, `POST /v1/auth/sign-in`, `GET /v1/auth/session`, `POST /v1/auth/refresh`, `POST /v1/auth/step-up`, `POST /v1/auth/sign-out`, `GET /v1/me`, `GET /v1/teams`, `GET /v1/settings/members`, `POST /v1/settings/members/invite`, `.../role`, `.../delete`, `GET /v1/api-keys`, `POST /v1/api-keys`, `POST /v1/api-keys/{id}/revoke`, `GET /v1/api-key-summaries` (service token with `settings:view`: every team's keys and their targets, for the Channels list), `GET /v1/audit`, `GET /v1/invites/{token}`, `POST /v1/invites/{token}/accept`, `POST /v1/auth/options`, `POST /v1/auth/sso/start`, `GET /v1/auth/oidc/callback`, `POST /v1/auth/saml/acs`, `GET /v1/auth/saml/metadata`, `POST /v1/auth/sso/complete`, `POST /v1/auth/step-up/sso/start`, `.../complete`, `POST /v1/auth/password/forgot`, `POST /v1/auth/password/reset`, `GET /v1/settings/sign-in/providers`, `PUT`/`DELETE /v1/settings/sign-in/providers/{id}`, `POST /v1/settings/sign-in/domains/{domain}/verify`, `GET /v1/settings/sign-in/secret-names`, `GET`/`POST /v1/settings/teams`, `PATCH /v1/settings/teams/{id}`, `POST /v1/settings/teams/{id}/archive`, `.../restore`, `GET /v1/settings/members/options`, `POST /v1/access/check`, `GET /v1/me/why`, `GET /v1/roles`, `GET /v1/roles/{id}`, `GET /v1/people/{id}/permissions` |
+| Public :8710 | `GET /v1/health`, `GET /.well-known/jwks.json`, `POST /v1/auth/sign-in`, `GET /v1/auth/session`, `POST /v1/auth/refresh`, `POST /v1/auth/step-up`, `POST /v1/auth/sign-out`, `GET /v1/me`, `GET /v1/teams`, `GET /v1/settings/members`, `POST /v1/settings/members/invite`, `.../role`, `.../delete`, `GET /v1/api-keys`, `POST /v1/api-keys`, `POST /v1/api-keys/{id}/revoke`, `GET /v1/api-key-summaries` (service token with `settings:view`: every team's keys and their targets, for the Channels list), `GET /v1/audit`, `GET /v1/invites/{token}`, `POST /v1/invites/{token}/accept`, `POST /v1/auth/options`, `POST /v1/auth/sso/start`, `GET /v1/auth/oidc/callback`, `POST /v1/auth/saml/acs`, `GET /v1/auth/saml/metadata`, `POST /v1/auth/sso/complete`, `POST /v1/auth/step-up/sso/start`, `.../complete`, `POST /v1/auth/password/forgot`, `POST /v1/auth/password/reset`, `GET /v1/settings/sign-in/providers`, `PUT`/`DELETE /v1/settings/sign-in/providers/{id}`, `POST /v1/settings/sign-in/domains/{domain}/verify`, `GET /v1/settings/sign-in/secret-names`, `GET`/`POST /v1/settings/teams`, `PATCH /v1/settings/teams/{id}`, `POST /v1/settings/teams/{id}/archive`, `.../restore`, `GET /v1/settings/members/options`, `POST /v1/access/check`, `GET /v1/me/why`, `GET /v1/roles`, `GET /v1/roles/{id}`, `GET /v1/people/{id}/permissions`, `POST /v1/workspace/transfer`, `.../leave`, `.../close`, `.../restore`, `POST /v1/settings/teams/{id}/leave`, `GET /v1/settings/teams/{id}/delete-check`, `DELETE /v1/settings/teams/{id}`, `GET /health/background` |
 | Internal :8711 | `POST /v1/auth/introspect` (service token, no tenant claim) |
 
 Every operation is typed in `services/platform-service/openapi.json`; `make -C services/platform-service
@@ -49,6 +49,8 @@ openapi-check` fails on drift.
 | `OPS_PLATFORM_SEED_FILE` | `services/platform-service/tests/fixtures/people.json` | Dev seed: `team_ops` with an admin, a builder and an approver |
 | `OPS_SERVICE_SIGNING_KEY`, `OPS_SERVICE_SIGNING_KID` | unset, `svc-dev` | A calling service's own key; required outside dev |
 | `OPS_SERVICE_PUBLIC_KEYS` | `{}` | `{kid: {"service", "x"}}`: the services the internal app trusts |
+| `OPS_WORKSPACE_RESTORE_DAYS`, `OPS_TEAM_DELETE_AFTER_DAYS` | 30, 30 | How long a closed workspace can be restored before the purge, and how long a team stays archived before it can be deleted (c-529); uc-529 sets the second to 0 |
+| `OPS_AGENTS_URL` | `http://127.0.0.1:$(OPS_PORT)` | Where platform-service reads what still runs in a team before a delete or close |
 
 ## Policies
 
@@ -109,6 +111,26 @@ case (`teams.name_key`). An archived team keeps what it owns, leaves its members
 its members no rights there and takes no new invitations; the Security team cannot be archived. Team admins manage
 members and roles on `/v1/settings/members/*` as before.
 
+## Workspace and team lifecycle
+
+The workspace's owner is the one person with the built-in role Owner in every team (`*`), the only role holding
+`workspace.manage` (c-529); a partial unique index keeps it to one. The first account admin becomes the maintainers when the
+workspace is seeded or bootstrapped, and migration 0026 chose the earliest one for workspaces made before it.
+
+| Action | Who | What happens |
+|---|---|---|
+| Transfer | The maintainers, to an account admin | The Owner assignment moves in one transaction under a lock on the tenant row; a lost race is 409 `owner_changed` |
+| Leave the workspace | Anyone but the maintainers (409 `owner_must_transfer`) | Every membership and assignment goes, sessions end, their keys stop; the account stays for a later invite |
+| Close (delete) | The maintainers, typing the name, with no run in progress | Status `closed`; every session but the maintainers' ends; every key is disabled with the close's own time, so restore re-enables only those. Everyone else is refused at sign-in, on every route and with a service token: 403 `workspace_closed` |
+| Restore | The maintainers, while `closed` | Status back to `active`; 409 `purged` once the purge has started |
+| Purge | The `workspace_lifecycle` background process, every 15 minutes | Workspaces closed longer than the window become `purging`, then `purged`: sessions, keys, assignments, members and sign-in settings go; tenants, users, teams, policies and audit entries stay |
+| Leave a team | A member; not its last admin (409 `last_admin`) | The membership and its assignments go |
+| Delete a team | An account admin, on an archived team past the window with no live workflow | Status `deleted`, name free again, members and assignments gone; the row stays for its audit entries |
+
+Closing a workspace and deleting a team first ask agents-service's `GET /v1/teams/usage` for the team (runs in progress,
+live workflow names). With no answer the action is refused with 503 `usage_unavailable`, never taken. Other services'
+records of a deleted team or purged workspace stay unreachable until each service purges them (the follow-up card).
+
 ## Access checks
 
 An admin checks one action for one person at `POST /v1/access/check` (c-150): the answer comes from the same `can()` the
@@ -123,7 +145,7 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 | Topic | Detail |
 |---|---|
 | Database role | The service connects as a login role that owns no table and is a member of `ops_platform_tenant`. Every transaction switches to that role; row-level security is forced on every table |
-| Pre-tenant lookups | Sign-in by email, a session by id, a key by prefix and an invite by token hash (migration 0004), and an email domain, a sign-in flow by state or handoff hash and a reset by token hash (migration 0010) are SECURITY DEFINER functions owned by the NOLOGIN role `ops_platform_lookup`, whose only right is SELECT through SELECT-only policies |
+| Pre-tenant lookups | Sign-in by email, a session by id, a key by prefix and an invite by token hash (migration 0004), an email domain, a sign-in flow by state or handoff hash and a reset by token hash (migration 0010), and the workspaces due for purge (migration 0026) are SECURITY DEFINER functions owned by the NOLOGIN role `ops_platform_lookup`, whose only right is SELECT through SELECT-only policies |
 | Migrator rights | Migration 0004 runs `ALTER FUNCTION … OWNER TO ops_platform_lookup`. The migrating role must be a superuser, or have CREATE on the schema and be a member of `ops_platform_lookup`. Compose's user is a superuser; a managed database usually needs the grant first |
 | Key rotation | Publish the new public key beside the old one in the key set, switch `OPS_PLATFORM_SIGNING_KEY` and its kid, and drop the old key after the token TTL. Verifiers refetch once on an unknown kid |
 | Sign-out reach | platform-service refuses a signed-out session at once; other services accept its token until it expires (15 minutes) |
@@ -137,6 +159,8 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 | Foreign keys ignore RLS | A single-column reference let a tenant's row point at another tenant's team; every reference carries `tenant_id` (migration 0002) |
 | String annotations and FastAPI | `api/app.py` has no `from __future__ import annotations`: its routes depend on functions local to the factory |
 | Test teams | Fixtures create teams with scope `owned`; a scope `all` team reads the whole tenant and would hide team scoping |
+| Policies survive a purge | The tenant role holds no DELETE on `policies` (migration 0011), so a purge keeps them |
+| An archived team's own pages | An archived team leaves every switcher, so it is deleted from Access › Teams, not its Team › General page |
 
 ## Not built yet
 

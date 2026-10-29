@@ -19,7 +19,6 @@ from typing import Any
 import httpx
 from usecase_harness import (
     AGENTS_DIR,
-    DB,
     KB_PORT,
     LOG_DIR,
     MODELS_PORT,
@@ -30,6 +29,7 @@ from usecase_harness import (
     data,
     demo,
     finish,
+    pg_url,
     turn_text,
 )
 
@@ -44,9 +44,8 @@ OPS = {"X-Team-Id": "team_ops"}
 def worker() -> Generator[subprocess.Popen[bytes]]:
     """A worker with the agents service's settings: the run's database, the gateway, models-service and kb-service."""
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
     env |= {
-        "OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}",
+        "OPS_DATABASE_URL": pg_url(),
         "OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         "OPS_MODELS_URL": f"http://127.0.0.1:{MODELS_PORT}",
         "OPS_MODELS_KEY": "mk_dev_agents",

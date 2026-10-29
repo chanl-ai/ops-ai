@@ -29,7 +29,7 @@ The scenarios of `docs/console/demo-script.md`, in its order. `UC140_FROM=c` res
 | d | He asks Wire Fraud Sentinel to hold wire W-88213; Maya then Omar approve in Human Tasks | Both decisions answer 2xx (step-up when asked) and the chat says the hold is placed |
 | e | He filters Workflows › Runs to Customer lookup (seed walk) and opens the newest | Its run page says succeeded with its steps |
 | f | He asks the advisor to run the customer summary workflow for Priya | The workflow tool card opens its run page |
-| g | `make demo-mailbox` emails a court order notice; Maya follows it | Every mailbox line PASS; three or more court order cases with both deadlines; a `Levy notice` task with the customer and a dollar amount; the reply in Mailpit |
+| g | `make demo-walk` emails a levy notice to the sample team's mailbox and decides its Human Tasks | Every email line PASS: the intake starts, the sender is thanked, a case per debtor, a hold worked out by code, each reply approved, the replies in Mailpit |
 
 ## Acceptance layers
 

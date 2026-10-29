@@ -56,6 +56,11 @@ gate sbom '(^|/)pyproject\.toml$|^uv\.lock$|^docs/architecture/dependencies\.md$
 gate cross-service '^services/[^/]+/(src|tests)/' \
   "a service imports another service; import it only in a tests/conftest.py the allowlist names" \
   "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider scripts/tests/test_no_cross_service_imports.py
+# The repo's code rules (environment reads only in settings, and the rest of check_standards) run on any staged Python in
+# a service or package: a rule-4 read in ops_service_kit passed the commit and turned HEAD red for every builder (3e8e5f71).
+gate standards '^(services|packages)/.*\.py$' \
+  "a code rule in services/agents-service/scripts/check_standards.py fails (above); fix the code" \
+  bash -c 'cd services/agents-service && "$0" scripts/check_standards.py' "$root/.venv/bin/python"
 # Python files in the commit get the same lint, format, type and inventory checks verify-head runs. They slipped past the
 # console-only gate above and turned HEAD red for every builder until someone fixed them forward.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)

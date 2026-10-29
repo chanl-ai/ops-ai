@@ -258,6 +258,7 @@ No model key is needed: `DEMO_MODEL=fake` puts every model alias on the fake mod
 
 ```bash
 git clone <this repository> ops-ai && cd ops-ai
+make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
 make up DEMO_MODEL=fake AUTH=platform    # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers
@@ -287,7 +288,7 @@ The images build from [`deploy/fly/Dockerfile`](deploy/fly/Dockerfile) and run u
 origin, against a PostgreSQL you provide or the one in `deploy/compose/try.yaml`:
 
 ```bash
-for t in platform agents tools models kb files documents opa proxy console; do
+for t in platform agents tools models kb files documents runner opa proxy console; do
   docker build -f deploy/fly/Dockerfile --target $t -t ops-ai/$t:dev .
 done
 cp deploy/compose/app.env.example ~/ops-ai.env     # fill it in; never commit it
@@ -298,19 +299,25 @@ docker compose -p ops-ai -f deploy/compose/app.yaml --env-file ~/ops-ai.env up -
 was proven on one machine. Kubernetes, a single VM and the release package for a bank's own servers are in
 [`docs/deploy/install-guide.md`](docs/deploy/install-guide.md).
 
-## Load the demo team
+Working with Claude Code or GitHub Copilot: the `ops-*` skills (`/ops-run`, `/ops-sample-team`, `/ops-debug` and
+six more) run these steps for you; `CONTRIBUTING.md` lists them.
 
-The team in the screenshots, on any install, through its public API:
+## Load the sample team
+
+The team in the screenshots, installed through the public API as its first admin, then walked end to end:
 
 ```bash
-cp scripts/demo/demo.env.example .run/demo.env   # a workspace admin's email and password; .run/ is git-ignored
-uv run python scripts/demo/seed_demo_team.py --origin http://localhost:3016 --admin-env .run/demo.env
-node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/demo.env
+make sample-team    # Customer Operations from scripts/sample-team/sample-team.json; a second run changes nothing
+make demo-walk      # chat, a blocked topic, bank reads, an approved hold, then an emailed levy notice to the replies
+node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/dev-admin.env
 ```
 
-The first command makes Customer Operations: four people, three handbooks, three agents, the card dispute and court order
-workflows with runs that passed, failed and wait, decided Human Tasks, worked cases and finished chats. A second run
-changes nothing. The second retakes every screenshot in `docs/media/`; `--clips` also records the clips.
+`make up` makes the first admin and keeps its password in `.run/dev-admin.env` (git ignores it). `make sample-team`
+installs four people, three handbooks, three agents with their skills and guardrails, the bank and code tools, the
+card dispute and levy workflows and the team mailbox, and points the agents' model alias at the fake model.
+`make demo-walk` prints PASS or FAIL per step and can run again; `make demo` runs both. The last command retakes every
+screenshot in `docs/media/`; `--clips` also records the clips. On another install, pass `--origin` and an admin env
+file (`scripts/sample-team/admin.env.example`) to `uv run python scripts/sample_team.py install`.
 
 ## Documentation
 

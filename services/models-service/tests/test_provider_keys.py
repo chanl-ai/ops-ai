@@ -1,58 +1,34 @@
-"""A provider connection's key comes from the Secrets store (c-177), by failure mode: the provider called without the
-key Secrets holds, the dev settings key winning over a key an admin saved, a rotation that never reaches the provider,
-a read of tools-service on every call, and a deployment outside dev still starting with keys in its settings.
-tools-service's secrets route is a fake here; its own tests cover it (tools-service tests/test_secret_values.py)."""
+"""An account's model provider keys (owner, 2026-10-27), by failure mode: the provider called without the key an admin
+saved, a replaced key that waits out the cache before it is used, a call that reaches the provider with no key at all,
+a value readable back or stored in the clear, a key set by someone who is not an account admin, another account's key
+used for this one's call, a key deleted while a connection still names it, the dev settings key winning over a saved
+one, and a deployment outside dev still starting with keys in its settings."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
 import pytest
+import sqlalchemy as sa
+from fastapi import Header, Request
 from pydantic import SecretStr
 
-from ops_identity import ServiceClient
-from ops_models.__main__ import provider_keys
+from ops_identity import Principal
+from ops_identity.fastapi import current_principal
+from ops_models.__main__ import dev_provider_keys
 from ops_models.app import create_models_app
-from ops_models.provider_keys import ProviderKeys
+from ops_models.store import provider_keys
+from ops_policy import AesGcmCipher
+from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 
 from .conftest import SERVICE, Models
 
-
-@dataclass
-class Secrets:
-    """tools-service's POST /v1/secrets/values for the deployment's tenant: what is stored, and each read."""
-
-    stored: dict[str, str]
-    reads: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-
-    def handle(self, request: httpx.Request) -> httpx.Response:
-        names = json.loads(request.content)["names"]
-        self.reads.append({"names": names, "auth": request.headers.get("authorization", "")})
-        missing = [n for n in names if n not in self.stored]
-        if missing:
-            body = {"success": False, "error": {"code": "not_found", "message": f"Secret {missing[0]} was not found."}}
-            return httpx.Response(404, json=body)
-        return httpx.Response(200, json={"success": True, "data": {"values": {n: self.stored[n] for n in names}}})
-
-    def client(self) -> ServiceClient:
-        http = httpx.AsyncClient(transport=httpx.MockTransport(self.handle), base_url="http://tools")
-        return ServiceClient.for_settings(
-            Settings(), http, service="models", audience="tools", scopes=["secrets_egress:run"], tenant=lambda: "local"
-        )
-
-
-class Clock:
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
+CIPHER = AesGcmCipher("cd" * 32)
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -67,73 +43,150 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
 
 
+def _people(tenant: str) -> Any:
+    """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
+    is the account admin); a request with a bearer token (a service) is resolved as usual."""
+
+    async def as_person(
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+        x_team_id: Annotated[str | None, Header()] = None,
+        x_role: Annotated[str | None, Header()] = None,
+    ) -> Principal:
+        if authorization:
+            return await current_principal(request, authorization=authorization)
+        team = x_team_id or "team_security"
+        return Principal(
+            kind="person",
+            sub="usr_nadia",
+            email="nadia@harborpine.example",
+            name="nadia",
+            tenant_id=tenant,
+            team_id=team,
+            team_ids=[team],
+            roles={team: x_role or "admin"},
+            scopes=[],
+            auth_method="session",
+        )
+
+    return as_person
+
+
 @dataclass
 class Rig:
-    complete: Any
+    client: httpx.AsyncClient
     seen: list[str | None]
-    secrets: Secrets
-    clock: Clock
+    tenant: str
+    key_name: str
+    alias: str
+    key_id: str
+    secret: str
+    models: Models
+
+    async def save(self, value: str, **headers: str) -> httpx.Response:
+        return await self.client.put(f"/v1/provider-keys/{self.key_name}", json={"value": value}, headers=headers)
+
+    async def complete(self, tenant: str | None = None) -> httpx.Response:
+        return await self.models.complete(self.secret, alias=self.alias, **{"X-Tenant-Id": tenant or self.tenant})
 
 
-async def _rig(models: Models, stored: dict[str, str], fallback: dict[str, str]) -> AsyncIterator[Rig]:
+async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[Rig]:
+    """A connection naming a fresh key, an alias on it and a model key, for a fresh tenant; `in_settings` is the dev
+    stack's value for that key from settings."""
     seen: list[str | None] = []
-    secrets, clock = Secrets(stored), Clock()
-    keys = ProviderKeys(secrets.client(), fallback, clock=clock)
-    app = create_models_app(models.engine, upstream=_provider(seen), provider_keys=keys)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://models") as client:
+    tenant, key_name = f"t_{uuid4().hex[:8]}", f"OPENAI_{uuid4().hex[:6].upper()}"
+    fallback = {key_name: in_settings} if in_settings else {}
+    app = create_models_app(models.engine, upstream=_provider(seen), cipher=CIPHER, provider_secrets=fallback)
+    app.dependency_overrides[current_principal] = _people(tenant)
+    hooks = {"response": [response_checker(app)]}
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
         conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        pid = await client.post("/v1/models/providers", json={**conn, "keyRef": "OPENAI_API_KEY"}, headers=SERVICE)
+        pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=SERVICE)
         alias = f"bank-keys-{uuid4().hex[:8]}"
-        version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-up"}
+        version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
         made = await client.post(
             "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE
         )
         assert made.status_code == 201, made.text
-        _, secret = await models.key(budget="5")
         on_app = Models(client, models.engine, app)
-
-        async def complete() -> httpx.Response:
-            return await on_app.complete(secret, alias=alias)
-
-        yield Rig(complete, seen, secrets, clock)
+        key_id, secret = await on_app.key(budget="5")
+        yield Rig(client, seen, tenant, key_name, alias, key_id, secret, on_app)
 
 
 @pytest.fixture
-async def saved(models: Models) -> AsyncIterator[Rig]:
-    """An admin saved the key in Secrets; the dev settings hold an older one under the same name."""
-    async for rig in _rig(models, {"OPENAI_API_KEY": "sk-from-secrets"}, {"OPENAI_API_KEY": "sk-from-env"}):
-        yield rig
+async def rig(models: Models) -> AsyncIterator[Rig]:
+    async for r in _rig(models):
+        yield r
 
 
-@pytest.fixture
-async def env_only(models: Models) -> AsyncIterator[Rig]:
-    """The dev stack's exception: nothing saved in Secrets yet, the key only in settings."""
-    async for rig in _rig(models, {}, {"OPENAI_API_KEY": "sk-from-env"}):
-        yield rig
+async def test_a_saved_key_signs_the_call_and_a_replacement_applies_on_the_next_call(rig: Rig) -> None:
+    saved = await rig.save("sk-first")
+    assert saved.status_code == 200, saved.text
+    assert (await rig.complete()).status_code == 200
+    replaced = await rig.save("sk-second")
+    assert replaced.json()["data"]["version"] == 2 and replaced.json()["data"]["rotatedAt"]
+    assert (await rig.complete()).status_code == 200
+    assert rig.seen == ["Bearer sk-first", "Bearer sk-second"], "the replacement is used at once, not after a minute"
 
 
-async def test_the_provider_gets_the_key_saved_in_secrets_not_the_settings_one(saved: Rig) -> None:
-    r = await saved.complete()
-    assert r.status_code == 200, r.text
-    assert saved.seen == ["Bearer sk-from-secrets"]
-    assert [x["names"] for x in saved.secrets.reads] == [["OPENAI_API_KEY"]]
-    assert saved.secrets.reads[0]["auth"].startswith("Bearer "), "read as this service, with its own token"
+async def test_a_connection_whose_key_is_not_saved_is_refused_without_calling_the_provider(rig: Rig) -> None:
+    r = await rig.complete()
+    assert r.status_code == 503, r.text
+    assert r.json()["error"]["code"] == "provider_key_missing"
+    assert rig.key_name in r.json()["error"]["message"]
+    assert rig.seen == []
+    assert [c["reason"] for c in await rig.models.calls(rig.key_id)] == ["provider_key_missing"]
 
 
-async def test_a_key_is_read_once_a_minute_and_a_rotation_applies_after_it(saved: Rig) -> None:
-    await saved.complete()
-    await saved.complete()
-    assert len(saved.secrets.reads) == 1, "the second call within the minute does not ask tools-service"
-    saved.secrets.stored["OPENAI_API_KEY"] = "sk-rotated"
-    saved.clock.now += 61
-    await saved.complete()
-    assert saved.seen[-1] == "Bearer sk-rotated" and len(saved.secrets.reads) == 2
+async def test_a_value_is_never_read_back_nor_stored_in_the_clear(rig: Rig) -> None:
+    saved = await rig.save("sk-do-not-show")
+    listed = await rig.client.get("/v1/provider-keys")
+    assert "sk-do-not-show" not in saved.text + listed.text
+    assert [k["name"] for k in listed.json()["data"]] == [rig.key_name]
+    async with rig.models.engine.connect() as c:
+        stored = await c.scalar(
+            sa.select(provider_keys.c.ciphertext).where(
+                provider_keys.c.tenant_id == rig.tenant, provider_keys.c.name == rig.key_name
+            )
+        )
+    assert stored and "sk-do-not-show" not in stored
 
 
-async def test_the_dev_stack_falls_back_to_its_settings_key_while_secrets_has_none(env_only: Rig) -> None:
-    r = await env_only.complete()
-    assert r.status_code == 200, r.text
-    assert env_only.seen == ["Bearer sk-from-env"]
+async def test_only_an_account_admin_sets_lists_or_deletes_a_key(rig: Rig) -> None:
+    team_admin = {"X-Team-Id": "team_ops", "X-Role": "admin"}
+    builder_of_security = {"X-Team-Id": "team_security", "X-Role": "builder"}
+    for who in (team_admin, builder_of_security):
+        assert (await rig.save("sk-x", **who)).status_code == 403
+        assert (await rig.client.get("/v1/provider-keys", headers=who)).status_code == 403
+        assert (await rig.client.delete(f"/v1/provider-keys/{rig.key_name}", headers=who)).status_code == 403
+    service = await rig.client.put(f"/v1/provider-keys/{rig.key_name}", json={"value": "sk-x"}, headers=SERVICE)
+    assert service.status_code in (401, 403), "a service token is not an account admin"
+    assert (await rig.client.get("/v1/provider-keys")).json()["data"] == []
+
+
+async def test_another_accounts_key_is_not_used_for_this_accounts_call(rig: Rig) -> None:
+    assert (await rig.save("sk-mine")).status_code == 200
+    r = await rig.complete(tenant=f"t_{uuid4().hex[:8]}")
+    assert r.status_code == 503 and rig.seen == []
+
+
+async def test_a_key_a_connection_names_is_not_deleted(rig: Rig) -> None:
+    await rig.save("sk-in-use")
+    r = await rig.client.delete(f"/v1/provider-keys/{rig.key_name}")
+    assert r.status_code == 409 and r.json()["error"]["code"] == "key_in_use"
+    other = f"SPARE_{uuid4().hex[:6].upper()}"
+    await rig.client.put(f"/v1/provider-keys/{other}", json={"value": "sk-spare"})
+    assert (await rig.client.delete(f"/v1/provider-keys/{other}")).status_code == 204
+    assert (await rig.client.delete(f"/v1/provider-keys/{other}")).status_code == 404
+
+
+async def test_the_dev_settings_key_answers_only_while_the_account_has_none(models: Models) -> None:
+    async for rig in _rig(models, in_settings="sk-from-env"):
+        assert (await rig.complete()).status_code == 200
+        await rig.save("sk-saved")
+        assert (await rig.complete()).status_code == 200
+        assert rig.seen == ["Bearer sk-from-env", "Bearer sk-saved"]
 
 
 def test_outside_dev_a_key_in_settings_stops_start_up() -> None:
@@ -142,4 +195,4 @@ def test_outside_dev_a_key_in_settings_stops_start_up() -> None:
         environment="production", model_provider_keys={"OPENAI_API_KEY": SecretStr("sk-env")}
     )
     with pytest.raises(SystemExit, match="OPENAI_API_KEY"):
-        provider_keys(settings)
+        dev_provider_keys(settings)

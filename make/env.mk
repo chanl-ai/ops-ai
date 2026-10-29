@@ -44,6 +44,8 @@ OPS_RUNNER_PORT ?= $(call port,8770)
 OPS_API_DOCS_PORT ?= $(call port,8799)
 OPS_MODELS_PORT ?= $(call port,8730)
 OPS_FAKE_OPENAI_PORT ?= $(call port,8746)
+# The fake bank (services/tools-service/scripts/fake_bank), reached as api.bank.test; each stack runs its own.
+OPS_FAKE_BANK_PORT ?= $(call port,8745)
 OPS_PLATFORM_PORT ?= $(call port,8710)
 OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
 OPS_OPA_PORT ?= $(call port,8181)
@@ -70,6 +72,7 @@ $(call reset_inherited,OPS_RUNNER_PORT,$(call port,8770))
 $(call reset_inherited,OPS_API_DOCS_PORT,$(call port,8799))
 $(call reset_inherited,OPS_MODELS_PORT,$(call port,8730))
 $(call reset_inherited,OPS_FAKE_OPENAI_PORT,$(call port,8746))
+$(call reset_inherited,OPS_FAKE_BANK_PORT,$(call port,8745))
 $(call reset_inherited,OPS_PLATFORM_PORT,$(call port,8710))
 $(call reset_inherited,OPS_PLATFORM_INTERNAL_PORT,$(call port,8711))
 $(call reset_inherited,OPS_OPA_PORT,$(call port,8181))
@@ -82,7 +85,7 @@ OPS_LOG_DIR := $(ROOT)/.logs$(if $(filter 1,$(ISOLATED)),/isolated)
 OPS_RUN_DIR := $(ROOT)/.run$(if $(filter 1,$(ISOLATED)),/isolated)
 
 export OPS_STACK OPS_COMPOSE_PROJECT OPS_CONSOLE_PORT OPS_EMBED_PORT OPS_CONSOLE_RUNTIME_PORT OPS_AGENTS_PORT OPS_TOOLS_PORT OPS_KB_PORT OPS_FILES_PORT \
-  OPS_DOCUMENTS_PORT OPS_RUNNER_PORT OPS_API_DOCS_PORT OPS_MODELS_PORT OPS_FAKE_OPENAI_PORT \
+  OPS_DOCUMENTS_PORT OPS_RUNNER_PORT OPS_API_DOCS_PORT OPS_MODELS_PORT OPS_FAKE_OPENAI_PORT OPS_FAKE_BANK_PORT \
   OPS_PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT \
   OPS_OPA_PORT OPS_PG_PORT OPS_GREENMAIL_SMTP_PORT OPS_GREENMAIL_IMAP_PORT OPS_MAILPIT_SMTP_PORT OPS_MAILPIT_HTTP_PORT \
   OPS_LOG_DIR OPS_RUN_DIR

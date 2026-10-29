@@ -49,6 +49,15 @@ DB = os.environ.get("OPS_USECASE_DB", "ops_usecase")
 LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", ROOT / ".logs")) / "usecase"
 TEAM = {"X-Team-Id": "team_all"}
 
+
+def pg_url(db: str = DB, driver: str = "postgresql+asyncpg") -> str:
+    """The URL of database `db` by make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external,
+    `postgres:5432`), or this machine's compose PostgreSQL on OPS_PG_PORT."""
+    if os.environ.get("OPS_INFRA") == "external":
+        return f"{driver}://ops:ops@postgres:5432/{db}"
+    return f"{driver}://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{db}"
+
+
 # Counts of this run's checks, read by finish().
 _tally = {"checked": 0, "failed": 0}
 
@@ -128,7 +137,8 @@ def _env() -> dict[str, str]:
     # The root .env, exported by make, routes the shared stack through models-service, and make exports the stack's
     # platform-service URL; a use case stack builds its own routes (or none), so the shared values never reach its
     # services. An inherited OPS_PLATFORM_URL made a stack without platform-service build policy readers that fail
-    # closed: every publish waited for a review.
+    # closed: every publish waited for a review. The shared stack's fake bank CA and name map are its own too (a use
+    # case's bank passes its own): in the devcontainer the .env CA is a host path, and tools-service failed at start.
     dropped = (
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -136,6 +146,8 @@ def _env() -> dict[str, str]:
         "OPS_MODELS_KEY",
         "OPS_MODELS_FAKE_OPENAI_URL",
         "OPS_PLATFORM_URL",
+        "OPS_EGRESS_CA_FILE",
+        "OPS_EGRESS_RESOLVE",
     )
     env = {k: v for k, v in os.environ.items() if k not in dropped}
     env.pop("VIRTUAL_ENV", None)
@@ -216,12 +228,7 @@ def agents(
 def engine_worker(name: str, env: dict[str, str] | None = None) -> Generator[subprocess.Popen[bytes]]:
     """The workflow worker on the use case database, polling every 0.2 s, logging to `.logs/usecase/worker-<name>.log`.
     `env` adds the services a use case's steps call (OPS_GATEWAY_URL, OPS_MODELS_URL, ...)."""
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    full = (
-        _env()
-        | {"OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}", "OPS_ENGINE_POLL_SECONDS": "0.2"}
-        | (env or {})
-    )
+    full = _env() | {"OPS_DATABASE_URL": pg_url(), "OPS_ENGINE_POLL_SECONDS": "0.2"} | (env or {})
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with (LOG_DIR / f"worker-{name}.log").open("ab") as fh:
         proc = subprocess.Popen(
@@ -254,8 +261,7 @@ def models(settings: dict[str, str] | None = None) -> Generator[str]:
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    env["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+    env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_MODELS_PORT"] = str(MODELS_PORT)
     env.update(settings or {})
     subprocess.run(
@@ -317,8 +323,7 @@ def kb(
                 capture_output=True,
             )  # fmt: skip
         env = _env()
-        pg = os.environ.get("OPS_PG_PORT", "5477")
-        env["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+        env["OPS_DATABASE_URL"] = pg_url()
         env["OPS_KB_PORT"] = str(KB_PORT)
         env["OPS_FILES_URL"] = files_url
         # A knowledge base's "used by" comes from agents-service (c-072 T007), on this run's port rather than the
@@ -344,8 +349,7 @@ def files(
     pending until a scanner posts a verdict."""
     port = FILES_PORT or free_port()
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    env["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+    env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_FILES_PORT"] = str(port)
     env["OPS_FILES_DIR"] = str(files_dir)
     env["OPS_FILES_SCANNING"] = scanning
@@ -373,8 +377,7 @@ def documents(
     `platform_url` they read the workspace floor there."""
     port = free_port()
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    env["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+    env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_DOCUMENTS_PORT"] = str(port)
     env["OPS_FILES_URL"] = files_url
     if models_url:
@@ -452,8 +455,7 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    env["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+    env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
     # A tool module review opens in agents-service's Reviews (c-163); a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
@@ -484,8 +486,7 @@ def platform(
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     settings = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
-    settings["OPS_DATABASE_URL"] = f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}"
+    settings["OPS_DATABASE_URL"] = pg_url()
     settings["OPS_PLATFORM_PORT"] = str(PLATFORM_PORT)
     settings["OPS_PLATFORM_INTERNAL_PORT"] = str(PLATFORM_INTERNAL_PORT)
     # The seed's own roles: use cases check what a builder or viewer may not do, so nobody is made Admin everywhere.

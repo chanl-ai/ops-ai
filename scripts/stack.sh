@@ -19,8 +19,16 @@ WORKERS=(worker)
 # in. Ahead of the services: tools-service trusts the fake bank's certificate, which the bank writes on its first start.
 FAKES=(fakeai models fakebank)
 # The shared stack starts all of it, so `make up` after a reboot is enough for `make demo-mailbox` and `make seed-walk`.
-# An isolated stack (use cases) brings its own fakes; it starts the worker only with OPS_STACK_WORKER=1.
+# An isolated stack (use cases) brings its own fakes; it starts the worker only with OPS_STACK_WORKER=1, and its fakes
+# and the worker with OPS_STACK_FAKES=1 (a fresh-database demo: make sample-team and make demo-walk need both).
+# OPS_INFRA=external: the fake bank is the compose sidecar aliased as api.bank.test, not a process in this container.
 if [[ "$STACK" == shared ]]; then
+  if [[ "${OPS_INFRA:-}" == external ]]; then
+    UP_SERVICES=(fakeai models "${SERVICES[@]}" worker)
+  else
+    UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
+  fi
+elif [[ "${OPS_STACK_FAKES:-0}" == 1 ]]; then
   UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
 elif [[ "${OPS_STACK_WORKER:-0}" == 1 ]]; then
   UP_SERVICES=("${SERVICES[@]}" worker)
@@ -48,19 +56,23 @@ FAKE_OPENAI_PORT=${OPS_FAKE_OPENAI_PORT:-8746}
 # Every service's API reference on one page (scripts/api_docs.py).
 API_DOCS_PORT=${OPS_API_DOCS_PORT:-8799}
 # Fixed in services/tools-service/scripts/fake_bank, which serves on this machine's private address, not loopback.
-FAKE_BANK_PORT=8745
+FAKE_BANK_PORT=${OPS_FAKE_BANK_PORT:-8745}
 # A restart must start a service the way the stack is already running: the dev .env (model and provider settings) is
 # loaded, and the sign-in mode defaults to the one recorded for the shared stack, not to dev.
 if [ -f ".env" ]; then set -a; . ".env" >/dev/null 2>&1 || true; set +a; fi
 if [ -f ".devcontainer/.env.local" ]; then set -a; . ".devcontainer/.env.local" >/dev/null 2>&1 || true; set +a; fi
+# An isolated stack's services reach its own models-service, fake model and fake bank: a laptop .env that names the
+# shared stack's sent an isolated run's model calls to the shared stack's aliases, real models included, and had its
+# tools-service trust the shared fake bank's certificate.
+if [[ "$STACK" == isolated ]]; then unset OPS_MODELS_URL OPS_MODELS_FAKE_OPENAI_URL OPS_EGRESS_CA_FILE; fi
 # Side containers: a laptop .env names a CA file and resolve map that are not in this filesystem.
 if [[ "${OPS_INFRA:-}" == external ]]; then
   [[ -n "${OPS_EGRESS_CA_FILE:-}" && -f "${OPS_EGRESS_CA_FILE}" ]] || unset OPS_EGRESS_CA_FILE
   unset OPS_EGRESS_RESOLVE
 fi
 AUTH=${OPS_STACK_AUTH:-$(cat ".run/stack.auth" 2>/dev/null || echo dev)}
-# Dev-only exception until Govern > Models takes provider keys (c-177, owner 2026-10-18): models-service reads a
-# connection's key from Secrets first and falls back to these settings in dev; outside dev it refuses them.
+# Dev-only exception (owner 2026-10-18): models-service reads a connection's key from the account's provider keys
+# (Settings > Model providers) first and falls back to these settings in dev; outside dev it refuses them.
 # `openai` is the credential name make demo-model binds openai-local to.
 if [[ -n "${OPENAI_API_KEY:-}" && -z "${OPS_MODEL_PROVIDER_KEYS:-}" ]]; then
   OPS_MODEL_PROVIDER_KEYS=$(python3 -c 'import json,os; print(json.dumps({"openai": os.environ["OPENAI_API_KEY"]}))')
@@ -129,7 +141,8 @@ def host_ip(name, fallback):
         return fallback
 ip=os.environ["IP"]
 m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.harborpine.test"]=host_ip(os.environ.get("GM_HOST",""), ip)+":"+os.environ["GM"]; m["smtp.harborpine.test"]=host_ip(os.environ.get("MP_HOST",""), ip)+":"+os.environ["MP"]
-m["api.bank.test"]=ip+":"+os.environ["FB"]
+bank=host_ip("api.bank.test", "")
+m["api.bank.test"]=(bank or ip)+":"+os.environ["FB"]
 print(json.dumps(m,separators=(",",":")))' 2>/dev/null
 }
 MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SMTP_HOST=$SMTP_HOST OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
@@ -152,9 +165,9 @@ cmd_of() {
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
     # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
-    models) echo "env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
+    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
-    fakebank) echo "uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
+    fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
     # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT uv run --directory services/kb-service python -m ops_kb" ;;
@@ -167,7 +180,7 @@ cmd_of() {
     console)
       local dist=.next
       [[ "$STACK" == isolated ]] && dist=.next-isolated
-      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_MODELS_API_URL=http://localhost:$MODELS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)
@@ -568,6 +581,16 @@ health() {
         code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$(url_of "$svc")" || true)
         if [[ "$code" == 2* ]]; then state="ok ($code)"; else state=DOWN; failed=1; fi
         row "$svc" "$(port_of "$svc")" "$(url_of "$svc")" "$state" "$(owner_of "$svc" "$(port_of "$svc")")"
+      elif [[ "${OPS_INFRA:-}" == external && "$svc" == fakebank ]]; then
+        # Sidecar aliased as api.bank.test; it does not listen on this container's address.
+        local bank="https://api.bank.test:$FAKE_BANK_PORT/openapi.json"
+        code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "$bank" || true)
+        if [[ "$code" == 2* ]]; then
+          row "$svc" "$(port_of "$svc")" "https://api.bank.test:$FAKE_BANK_PORT" "ok ($code)" "compose sidecar"
+        else
+          row "$svc" "$(port_of "$svc")" "https://api.bank.test:$FAKE_BANK_PORT" DOWN "compose sidecar"
+          failed=1
+        fi
       elif nc -z -w 3 "$(private_address)" "$(port_of "$svc")" 2>/dev/null; then
         row "$svc" "$(port_of "$svc")" "https (private address)" "ok (tcp)" "$(owner_of "$svc" "$(port_of "$svc")")"
       elif pid=$(listener "$(port_of "$svc")") && [[ -n "$pid" ]]; then

@@ -60,7 +60,15 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
           <ModuleMark name={row.original.displayName} />
           <div className="min-w-0">
             <div className="truncate font-medium">{row.original.displayName}</div>
-            <div className="truncate text-xs text-muted-foreground">Owner {row.original.ownerTeam}</div>
+            {/* On the name, not in Approval: Approval is not among the default columns, and a module whose secret is
+                not set fails every call that reads it. */}
+            {row.original.unsetSecrets ? (
+              <Link href="/settings/security/secrets" className="block truncate text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${row.original.id}`}>
+                {plural(row.original.unsetSecrets, 'secret')} not set
+              </Link>
+            ) : (
+              <div className="truncate text-xs text-muted-foreground">Owner {row.original.ownerTeam}</div>
+            )}
           </div>
         </div>
       ),
@@ -103,11 +111,7 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
         return (
           <div className="flex max-w-44 flex-col items-start gap-0.5">
             <ApprovalStateBadge state={m.approvalState} />
-            {m.unsetSecrets ? (
-              <Link href="/settings/security/secrets" className="text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${m.id}`}>
-                {plural(m.unsetSecrets, 'secret')} not set
-              </Link>
-            ) : m.drift ? (
+            {m.drift ? (
               <span className="text-xs text-warning-text">Server tools changed</span>
             ) : m.status !== 'published' ? (
               <span className="text-xs text-muted-foreground">{m.status === 'draft' ? 'Security review not requested' : 'Security review open'}</span>

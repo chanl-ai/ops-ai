@@ -67,7 +67,7 @@ the bundle and push it to their own registry, then set `OPS_IMAGE_PREFIX` in the
 |---|---|
 | Upgrade from one package to the next | No earlier package exists. `make db-upgrade-sql FROM=<running> TO=<new>` writes the upgrade (`database.md`); the next release adds it to `db/postgres/` |
 | Azure SQL and SQL Server | Scripts for review only: never applied to a server (c-345); the services do not run on SQL Server (c-337) |
-| A provider key for a real model | The proof connects the fake model only; a key is stored in Settings > Secrets and named with `connect_model.py --key-ref` (`compose.md`, "Connect a model") |
+| A provider key for a real model | The proof connects the fake model only; a key is saved on Settings > Model providers and named with `connect_model.py --key-ref` (`compose.md`, "Connect a model") |
 | Image signing, an SBOM per image, arm64 images | Not built |
 | The sign-in screens name the demo bank | `components/auth/auth-form-wrapper.tsx`, `login-form.tsx` and `signup/page.tsx` write "Harbor & Pine Bank" and "Harbor & Pine Ops AI" into the console, so every install shows them; the brand needs to come from a setting |
 | A real Azure Database for PostgreSQL server | The proof stands in for it with the admin's documented attributes; not yet run against one |

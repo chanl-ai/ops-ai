@@ -53,7 +53,7 @@ await withUiStack(
     const maya = as(await tokenFor(MAYA));
     const agentId = (await json(await fetch(`${agents}/v1/agents?pageSize=1`, { headers: james })))?.data?.[0]?.id;
     if (!agentId) throw new Error('setup: no agent in Operations');
-    const base = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
+    const base = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
     // The same dispute with its review offering options; an option named after a port takes that port, so the edges hold.
     const withOptions = structuredClone(base);
     withOptions.nodes.find((n) => n.id === 'review').parameters.options = [

@@ -23,6 +23,7 @@ kill_timeout = 20
   NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL = "https://<your-app>-web.fly.dev/api/kb"
   NEXT_PUBLIC_OPS_FILES_API_URL = "https://<your-app>-web.fly.dev/api/files"
   NEXT_PUBLIC_OPS_DOCUMENTS_API_URL = "https://<your-app>-web.fly.dev/api/documents"
+  NEXT_PUBLIC_OPS_MODELS_API_URL = "https://<your-app>-web.fly.dev/api/models"
 
 [checks.health]
   type = "http"

@@ -23,6 +23,16 @@ class ProviderOut(Out):
     key_ref: str | None
 
 
+class ProviderKeyOut(Out):
+    """A model provider key's name and history; its value is never returned once saved."""
+
+    name: str
+    version: int
+    created_by: str
+    created_at: str
+    rotated_at: str | None
+
+
 class ProviderCreated(Out):
     id: str
     name: str

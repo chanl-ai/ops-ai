@@ -9,3 +9,21 @@
 # (46448161). Both are 30 days old on 2026-10-30; remove these lines and the minimumReleaseAgeExclude entries then.
 streamdown  2.7.0, released 2026-09-30
 remend  1.4.0, streamdown 2.7.0's dependency
+
+# Versions younger than 30 days allowed by name in pyproject.toml exclude-newer-package and pnpm-workspace.yaml
+# (owner, 2026-10-27): security fixes, and asyncpg for a broken TLS connection to Fly Postgres. Remove each line when
+# its version turns 30 days old or the package moves on.
+certifi  2026.10.19, fixes PYSEC-2026-4320
+pillow  13.0.0, fixes five critical GHSA advisories
+asyncpg  0.32.0, 0.31.0 cannot open TLS to the staging Postgres
+dompurify  3.4.17, fixes GHSA-cg2g-xh64-v4q7
+next  16.4.1, fixes GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr
+@next/env  16.4.1, ships with next 16.4.1
+@next/swc-darwin-arm64  16.4.1, ships with next 16.4.1
+@next/swc-darwin-x64  16.4.1, ships with next 16.4.1
+@next/swc-linux-arm64-gnu  16.4.1, ships with next 16.4.1
+@next/swc-linux-arm64-musl  16.4.1, ships with next 16.4.1
+@next/swc-linux-x64-gnu  16.4.1, ships with next 16.4.1
+@next/swc-linux-x64-musl  16.4.1, ships with next 16.4.1
+@next/swc-win32-arm64-msvc  16.4.1, ships with next 16.4.1
+@next/swc-win32-x64-msvc  16.4.1, ships with next 16.4.1

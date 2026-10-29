@@ -1,8 +1,8 @@
-"""The email-to-reply levy workflows (c-532), scripts/demo/workflows/levy_reply_*.json, compiled and run on fakes, by
-failure mode: the thank-you waits for a person, or the people's runs start before it; a person with no account gets
-the hold path, or the no-account reply goes out without approval; exempt funds are sent to the hold review; the hold
-is placed or the hold reply sent before a person approves it, or with an amount other than the one worked out; a case
-the run answered stays open."""
+"""The email-to-reply levy workflows (c-532), scripts/sample-team/workflows/levy_reply_*.json, compiled and run on
+fakes, by failure mode: the thank-you waits for a person, or the people's runs start before it; a person with no
+account gets the hold path, or the no-account reply goes out without approval; exempt funds are sent to the hold
+review; the hold is placed or the hold reply sent before a person approves it, or with an amount other than the one
+worked out; a case the run answered stays open."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ops_engine.definition import parse, validate
 from ops_engine.journal import MemoryJournal
 from ops_engine.ports import Access, AgentRequest, AgentResult, EnginePorts, OpenedCase, StartedRun, ToolResult
 
-FILES = Path(__file__).parents[4] / "scripts" / "demo" / "workflows"
+FILES = Path(__file__).parents[4] / "scripts" / "sample-team" / "workflows"
 NAMES = {
     "agent:levy": "ag_levy",
     "workflow:levy_reply_debtor": "levy_reply_debtor",
@@ -29,7 +29,7 @@ NAMES = {
 
 
 def flow(name: str) -> Any:
-    """A demo workflow file with its placeholders filled as the demo seed fills them."""
+    """A sample team workflow file with its placeholders filled as the installer fills them."""
     text = (FILES / f"{name}.json").read_text()
     return parse(json.loads(re.sub(r"\{((?:agent|workflow|documentType):\w+)\}", lambda m: NAMES[m.group(1)], text)))
 

@@ -217,6 +217,7 @@ APPS: list[App] = [
             "NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL": f"{ORIGIN}/api/kb",
             "NEXT_PUBLIC_OPS_FILES_API_URL": f"{ORIGIN}/api/files",
             "NEXT_PUBLIC_OPS_DOCUMENTS_API_URL": f"{ORIGIN}/api/documents",
+            "NEXT_PUBLIC_OPS_MODELS_API_URL": f"{ORIGIN}/api/models",
         },
     ),
     App(
@@ -234,6 +235,7 @@ APPS: list[App] = [
             "OPS_UPSTREAM_KB": internal("kb", 8740),
             "OPS_UPSTREAM_FILES": internal("files", 8750),
             "OPS_UPSTREAM_DOCUMENTS": internal("documents", 8760),
+            "OPS_UPSTREAM_MODELS": internal("models", 8730),
             "OPS_UPSTREAM_CONSOLE": internal("console", 3016),
         },
     ),

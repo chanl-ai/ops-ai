@@ -44,6 +44,7 @@ from usecase_harness import (
     finish,
     kb,
     models,
+    pg_url,
     tools,
 )
 
@@ -95,9 +96,8 @@ def core_bank() -> Generator[dict[str, Any]]:
 @contextmanager
 def worker(files_url: str, models_url: str, documents_url: str) -> Generator[None]:
     """The workflow worker, reading the levy mailbox through tools-service and storing attachments in files-service."""
-    pg = os.environ.get("OPS_PG_PORT", "5477")
     env = _env() | {
-        "OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}",
+        "OPS_DATABASE_URL": pg_url(),
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,

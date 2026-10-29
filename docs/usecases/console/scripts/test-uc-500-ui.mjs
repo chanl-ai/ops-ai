@@ -32,7 +32,7 @@ const until = async (probe, ms = 180_000) => {
 
 /** The demo's card dispute and the seeded levy mail workflows under this use case's ids, each starting the next copy. */
 function copies(agentId) {
-  const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/demo/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
+  const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
   const ids = { levy_mail: 'uc500_mail', levy_read_one: 'uc500_read_one', levy_case: 'uc500_case' };
   const names = { levy_mail: 'Levy mail (uc-500)', levy_read_one: 'Read one levy document (uc-500)', levy_case: 'Levy case (uc-500)' };
   const levy = Object.keys(ids).map((seed) => {

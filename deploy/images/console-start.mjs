@@ -16,6 +16,7 @@ const URLS = [
   'NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL',
   'NEXT_PUBLIC_OPS_FILES_API_URL',
   'NEXT_PUBLIC_OPS_DOCUMENTS_API_URL',
+  'NEXT_PUBLIC_OPS_MODELS_API_URL',
 ];
 
 const missing = URLS.filter((name) => !/^https?:\/\/\S+$/.test(process.env[name] ?? ''));

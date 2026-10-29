@@ -9,7 +9,7 @@ USES: dict[str, tuple[str, ...]] = {
     "agents": ("OPS_REVIEW_KEY",),
     "tools": ("OPS_REVIEW_KEY", "OPS_SECRETS_KEY"),
     "files": ("OPS_SECRETS_KEY",),
-    "models": (),
+    "models": ("OPS_SECRETS_KEY",),
     "kb": (),
     "documents": (),
     "runner": (),

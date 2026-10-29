@@ -11,7 +11,6 @@ extraction_corrected_save, file_deleted_purge) are the ones agents-service ships
 from __future__ import annotations
 
 import hashlib
-import os
 import signal
 import subprocess
 import tempfile
@@ -36,6 +35,7 @@ from usecase_harness import (
     finish,
     kb,
     models,
+    pg_url,
 )
 
 RULES = AGENTS_DIR / "tests" / "fixtures" / "levy-extraction-fake-openai"
@@ -48,9 +48,8 @@ SETTLED = {"succeeded", "failed", "cancelled"}
 
 @contextmanager
 def worker(files_url: str, models_url: str, documents_url: str) -> Generator[None]:
-    pg = os.environ.get("OPS_PG_PORT", "5477")
     env = _env() | {
-        "OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}",
+        "OPS_DATABASE_URL": pg_url(),
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,

@@ -36,8 +36,8 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "demo"))
-from seed_demo_team import Session, data, items, service_urls, sign_in  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts"))
+from sample_team import Session, data, items, service_urls, sign_in  # noqa: E402
 
 # The services whose committed OpenAPI is probed, by the path prefix the origin serves them under.
 SERVICES = ("agents", "tools", "kb", "files", "documents", "platform")

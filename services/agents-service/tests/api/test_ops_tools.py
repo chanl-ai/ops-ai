@@ -28,7 +28,9 @@ from tests.api.test_team_default_agent import (  # noqa: F401
 )
 from tests.engine.test_lifecycle_rights import TENANT
 
-CARD_DISPUTE = json.loads((Path(__file__).parents[4] / "scripts/demo/workflows/card_dispute_intake.json").read_text())
+CARD_DISPUTE = json.loads(
+    (Path(__file__).parents[4] / "scripts/sample-team/workflows/card_dispute_intake.json").read_text()
+)
 
 
 def builder() -> Principal:

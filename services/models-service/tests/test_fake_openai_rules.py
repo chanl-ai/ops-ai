@@ -1,6 +1,7 @@
 """The fake OpenAI's rule set (scripts/fake_openai), by failure mode: a text rule answering as a tool call, an
 `after` rule firing on another tool's result or on another question, and a tool rule firing when the tool is not
-offered."""
+offered; a credential other than the fake's key answered, so a key that never reached the provider looks the same as
+one that did."""
 
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+import httpx
 
 APP = Path(__file__).resolve().parents[1] / "scripts" / "fake_openai" / "app.py"
 
@@ -254,3 +257,15 @@ async def test_the_atm_limit_presents_the_limits_as_rows_from_the_passage_then_c
         s, "default", {"messages": [user("What is the daily ATM withdrawal limit?")], "tools": offered}
     )
     assert not bare.tool_calls and "[1]" not in (bare.text or "")
+
+
+async def test_a_wrong_key_is_refused_and_the_right_key_or_none_is_answered() -> None:
+    mod = fake()
+    app = mod.create_app(script(mod), "sk-stub")
+    body = {"model": "gpt-4.1-mini", "messages": [user("wire transfer fee?")]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fake") as c:
+        wrong = await c.post("/v1/chat/completions", json=body, headers={"Authorization": "Bearer sk-other"})
+        right = await c.post("/v1/chat/completions", json=body, headers={"Authorization": "Bearer sk-stub"})
+        none = await c.post("/v1/chat/completions", json=body)
+    assert wrong.status_code == 401 and wrong.json()["error"]["code"] == "invalid_api_key"
+    assert right.status_code == 200 and none.status_code == 200

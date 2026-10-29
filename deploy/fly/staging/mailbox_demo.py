@@ -58,11 +58,11 @@ import httpx
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "services" / "tools-service" / "scripts"))
 sys.path.insert(0, str(ROOT / "services" / "documents-service" / "scripts"))
-sys.path.insert(0, str(ROOT / "scripts" / "demo"))
-import seed_demo_team as demo_seed  # noqa: E402
+sys.path.insert(0, str(ROOT / "scripts"))
+import sample_team as demo_seed  # noqa: E402
 from reimport_bank_module import ensure_module, ensure_secret, reimport  # noqa: E402
-from seed_demo_team import Refused, Session, decide, join_team, service_urls  # noqa: E402
-from seed_demo_team import sign_in as person  # noqa: E402
+from sample_team import Refused, Session, decide, join_team, service_urls  # noqa: E402
+from sample_team import sign_in as person  # noqa: E402
 from seed_document_types import seed as seed_document_types  # noqa: E402
 
 SECURITY = "team_security"
@@ -148,7 +148,7 @@ class Demo:
             self.approver = sign_in(self.urls["platform"], known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"])
 
     def person(self, who: str) -> Session:
-        """A signed-in person acting in the demo team, for the calls shared with scripts/demo/seed_demo_team.py
+        """A signed-in person acting in the demo team, for the calls shared with scripts/sample_team.py
         (upload, decide); a step-up asks for the password again, so it is kept on the session."""
         if who == "admin":
             email, password = self.admin_email, self.admin_password
@@ -304,11 +304,12 @@ class Demo:
         print(f"workflow {wid}: v{saved['version']} {asked.get('status')}, live v{live.get('liveVersion')}")
 
     def levy(self, mailbox: str | None, bank_host: str) -> None:
-        """The levy story's configuration in the team, from scripts/demo/team.json through the demo seed's own steps
-        (one definition of the team's levy workflows): the egress it needs, the garnishment notice document type, and
-        the levy workflows, published through the second person. The email intake is made only with a mailbox the team
-        has connected; the bank module, the platform tools and the task types are the workspace's already."""
-        spec = json.loads(demo_seed.TEAM_FILE.read_text())
+        """The levy story's configuration in the team, from scripts/sample-team/sample-team.json through the sample
+        team installer's own steps (one definition of the team's levy workflows): the egress it needs, the garnishment
+        notice document type, and the levy workflows, published through the second person. The email intake is made
+        only with a mailbox the team has connected; the bank module, the platform tools and the task types are the
+        workspace's already."""
+        spec = json.loads(demo_seed.MANIFEST.read_text())
         # Workflow and document type ids are the workspace's, one team each, and an id that has run is kept for good;
         # the team's copies carry its id's tail, so a second demo team does not collide with the first.
         tail = self.ops.removeprefix("team_")[:8]
@@ -428,8 +429,8 @@ class Demo:
 
 
 def agents_named(wf: dict[str, Any]) -> set[str]:
-    """The agent keys a team.json workflow file names by `{agent:<key>}`."""
-    text = (demo_seed.HERE / "workflows" / wf["file"]).read_text()
+    """The agent keys a sample team workflow file names by `{agent:<key>}`."""
+    text = (demo_seed.WORKFLOWS / wf["file"]).read_text()
     return set(re.findall(r"\{agent:(\w+)\}", text))
 
 

@@ -20,7 +20,6 @@ import httpx
 from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
-    DB,
     LOG_DIR,
     TEAM,
     TOOLS_PORT,
@@ -30,6 +29,7 @@ from usecase_harness import (
     core_bank,
     data,
     finish,
+    pg_url,
     publish_bank_module,
     sse,
     tools,
@@ -85,9 +85,8 @@ LEASE_TTL = "3"
 def worker(name: str, fault: dict[str, str] | None = None) -> Generator[subprocess.Popen[bytes]]:
     """One worker process on the run's database and gateway, with a short lease so a takeover takes seconds."""
     env = _env()
-    pg = os.environ.get("OPS_PG_PORT", "5477")
     env |= {
-        "OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:{pg}/{DB}",
+        "OPS_DATABASE_URL": pg_url(),
         "OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         "OPS_LEASE_TTL_SECONDS": LEASE_TTL,
         "OPS_ENGINE_POLL_SECONDS": "0.2",

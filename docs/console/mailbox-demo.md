@@ -1,25 +1,24 @@
 # Mailbox demo
 
-Status: current, 2026-10-20. The shared-stack runbook below is walked by `make demo-mailbox` (green 2026-10-18). The
-walk from your own inbox at the end has not been walked yet: it needs a real mailbox connected on the shared stack.
+Status: current. The local runbook below is walked by `make demo-walk` on the sample team (c-542). The walk from your
+own inbox further down has not been walked yet: it needs a real mailbox connected on the shared stack.
 
-An emailed court order notice (a court or authority ordering the bank to hold or pay a customer's funds) becomes
-cases, Human Tasks and a reply, on the shared stack and a real OpenAI model.
+An emailed levy notice (a court or authority ordering the bank to hold a customer's funds) becomes a case per debtor, a
+hold worked out by code and placed at the bank, and replies a person approves, on the local stack.
 
-1. `make up` starts the database, mail (GreenMail, Mailpit), every service, the workflow worker, models-service and
-   the fakes, signs people in through platform-service, binds the `default` model alias to real OpenAI gpt-5-mini (the
-   key from .env; `DEMO_MODEL=` picks another, `DEMO_MODEL=fake` keeps the fake) and prints a health table.
-2. `make demo-mailbox` emails a notice with a PDF attached to intake@harborpine.test and prints PASS or FAIL for each
-   step: run started, attachment in Files, fields read, court order cases, case opened, the acknowledge Human Task, the
-   reply in Mailpit.
-   Each run sends a new message, so it can be repeated. `make demo-mailbox LOW=1` sends a scan of the notice instead:
-   it is read by OCR, every field falls below the floor, and a "Check the debtors read" Human Task comes before any case.
-3. Show the result. Sign in at <http://localhost:3016> as m.okafor@harborpine.example (password `northfield-demo`):
-   Cases (one high-priority case per debtor, `Levy notice: <name> (<court case>)`), Workflows > Runs (the run URL is
-   printed last), Human Tasks (one `Levy notice` task per matched debtor and one `Find the customer or close as not ours` per debtor who
-   matches no customer, whose case reads `No customer matched: <name> (<court case>)`), Files (the PDF)
-   and the reply at <http://localhost:8025>.
-4. A FAIL on `stack` names what is down; run `make up` again and `make logs SVC=<name>` for the service.
+1. `make up DEMO_MODEL=fake` starts the database, mail (GreenMail, Mailpit), every service, the workflow worker,
+   models-service and the fakes, makes the first admin (its password in `.run/dev-admin.env`) and prints a health
+   table. `DEMO_MODEL=<model id>` reads documents and checks guardrails on a real OpenAI model instead.
+2. `make sample-team` installs Customer Operations from `scripts/sample-team/sample-team.json`: its people, handbooks,
+   agents, bank and code tools, the levy workflows and the mailbox legal-orders@harborpine.example on GreenMail.
+3. `make demo-walk` emails the notice with a PDF attached to that mailbox and prints PASS or FAIL per step: the intake
+   started, the sender thanked with no approval, the debtors read, a case per debtor, the hold worked out by code and
+   placed, each reply waiting for approval and then approved, and the replies in the sender's inbox in Mailpit. Each
+   run sends a new message, so it can be repeated.
+4. Show the result. Sign in at <http://localhost:3016> as the team's approver (riley.chen@harborpine.example, password
+   `OPS_DEMO_PASSWORD` in `.run/dev-admin.env`): Cases (one case per debtor), Workflows > Runs, Human Tasks, Files (the
+   PDF) and the replies at <http://localhost:8025>.
+5. A FAIL names the step; `make health` names what is down and `make logs SVC=<name>` shows the service.
 
 ## Court order mail, mixed kinds
 

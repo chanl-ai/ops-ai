@@ -14,7 +14,7 @@ import { fiftySteps, OFF_ORIGIN_SEEDS } from './layout.fixtures.ts';
 const ROOT = new URL('../../../../../../', import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, ROOT), 'utf8'));
 const TYPES: EngineNodeType[] = read('apps/console/src/components/workflows/layout/node-types.json');
-const SEEDS: EngineDefinition[] = [...read('services/agents-service/seed/engine_workflows.json'), read('scripts/demo/workflows/card_dispute_intake.json')];
+const SEEDS: EngineDefinition[] = [...read('services/agents-service/seed/engine_workflows.json'), read('scripts/sample-team/workflows/card_dispute_intake.json')];
 const seed = (id: string) => structuredClone(SEEDS.find((s) => s.id === id)!);
 
 type Rect = { id: string; x: number; y: number; w: number; h: number };

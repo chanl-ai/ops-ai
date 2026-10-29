@@ -291,6 +291,15 @@ the list query's plan. A court order notice read below the floor goes to Check t
 per debtor through the read's records: a read of several records has no single read's fields for the check to edit
 (`tests/engine/test_levy_definitions.py::test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor`, c-313).
 
+## Testing an agent and its replies
+
+| Part | Detail |
+|---|---|
+| Test thread | `POST /chat/threads` with `test: true` runs the agent's newest version, draft included; with `testVersion` a saved version instead, which is how the test panel's Compare asks two versions one question (c-284, c-286). Test threads are left out of counts and memory. |
+| Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish (c-286). |
+| Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide only while `requesterMayDecide` allows, as the starter does (tick 29). |
+| Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone (c-302); a stopping worker waits for it. |
+
 ## Microsoft 365 mailboxes
 
 A mailbox with `provider: graph` (c-228) holds the team's own app registration: `graphTenantId`, `graphClientId`, and

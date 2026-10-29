@@ -86,7 +86,7 @@ await withUiStack(
         await policy();
         const link = page.getByTestId('op-secrets').getByRole('link', { name: `${SECRET} not set` });
         const shown = await link.waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        check('2 the operation sheet names the secret as not set', shown && (await link.getAttribute('href')) === '/settings/secrets', { shown });
+        check('2 the operation sheet names the secret as not set', shown && (await link.getAttribute('href')) === '/settings/security/secrets', { shown, href: shown ? await link.getAttribute('href') : null });
       });
 
       // 3. A default that is not the field's type is refused, and the reason shows on that field (T002, T005).
@@ -153,7 +153,8 @@ await withUiStack(
 
       // 7. Once the secret is set the sheet says so and the list stops warning (T006).
       await step('7 setting the secret clears both warnings', async () => {
-        await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: SAM, body: JSON.stringify({ name: SECRET, value: 'k-uc090' }) });
+        // The module is Operations', so its secret is Operations' too: the team's builder saves it (secrets per team, c-509).
+        await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: SECRET, value: 'k-uc090' }) });
         await sheet(READ);
         await policy();
         const set = await page.getByTestId('op-secrets').getByText('Set', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);

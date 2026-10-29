@@ -199,7 +199,7 @@ TRANSACTIONS = [
     Transaction(
         id="TXN-9101", accountId="BUS-7781", date=date(2026, 10, 12), description="Supplier payment", amount=-4200.00
     ),
-    # The charges scripts/demo/team.json's dispute runs and chats name, so an agent asked about one finds it.
+    # The charges the sample team's dispute chats name, so an agent asked about one finds it.
     Transaction(
         id="TXN-9201", accountId="VISA-5521", date=date(2026, 10, 16), description="COASTAL AIR", amount=-1240.00
     ),

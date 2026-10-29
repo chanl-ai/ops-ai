@@ -24,7 +24,9 @@ CODE: dict[str, Any] = {
 
 
 def claims() -> dict[str, Any]:
-    token = CodeExecutor(None, SIGNER).token({"name": "check_limit", "access": "read"}, CODE, CALLER, "k1", "test")
+    token = CodeExecutor(None, SIGNER).token(
+        {"name": "check_limit", "access": "read"}, CODE, CALLER, "k1", "test", module_team="team_a"
+    )
     return run_claims(token, SIGNER)
 
 
@@ -45,7 +47,7 @@ def test_the_token_names_the_caller_and_what_the_function_may_use() -> None:
 
 def test_a_token_from_another_key_or_purpose_is_refused() -> None:
     forged = CodeExecutor(None, code_signer("another-key")).token(
-        {"name": "x", "access": "read"}, CODE, CALLER, "k", None
+        {"name": "x", "access": "read"}, CODE, CALLER, "k", None, module_team="team_a"
     )
     with pytest.raises(Unauthorized):
         run_claims(forged, SIGNER)
@@ -66,6 +68,26 @@ async def test_a_bound_secret_becomes_a_query_value_and_is_named_for_scrubbing()
     args, hide = await resolve_handles(claims(), read(), {"id": "A1", "apiKey": {"$secret": "BANK_KEY"}}, Secrets())  # pyright: ignore[reportArgumentType]
     assert args == {"id": "A1", "apiKey": "value-of-BANK_KEY"}
     assert hide == ["value-of-BANK_KEY"]
+
+
+async def test_a_function_reads_its_own_modules_team_secret_whoever_calls_it() -> None:
+    """A secret belongs to the function module's team (c-509), as for a tool call: a caller in another team, or a
+    service naming none, gets that team's value, never its own team's or nothing."""
+    asked: list[str | None] = []
+
+    class Recording:
+        async def lookup(self, _tenant: str, team: str | None, names: list[str], **_: Any) -> dict[str, str]:
+            asked.append(team)
+            return {n: f"{team}-{n}" for n in names}
+
+    for caller in (CALLER, ToolCaller(tenant_id="t1", team_id=None, sub="service:agents", kind="service")):
+        token = CodeExecutor(None, SIGNER).token(
+            {"name": "check_limit", "access": "read"}, CODE, caller, "k1", "test", module_team="team_cards"
+        )
+        handle = {"apiKey": {"$secret": "BANK_KEY"}}
+        args, _ = await resolve_handles(run_claims(token, SIGNER), read(), handle, Recording())  # pyright: ignore[reportArgumentType]
+        assert args == {"apiKey": "team_cards-BANK_KEY"}
+    assert asked == ["team_cards", "team_cards"]
 
 
 async def test_a_read_function_may_not_call_a_write() -> None:

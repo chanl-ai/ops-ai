@@ -67,6 +67,7 @@ def main() -> int:
     for label, name in (
         ("greenmail", os.environ.get("OPS_GREENMAIL_HOST", "")),
         ("mailpit", os.environ.get("OPS_MAILPIT_HOST", "")),
+        ("fake bank", "api.bank.test"),
     ):
         addr = host_ip(name)
         sidecar = f"{addr}/32" if addr else ""

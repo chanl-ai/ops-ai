@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
+import { pgUrl } from './isolation.ts';
 
 export { chromium } from 'playwright';
 
@@ -44,6 +45,9 @@ export const SIGNIN_SECRET = 'uc-oidc';
 const FAKE_OPENAI_PORT = Number(process.env.OPS_USECASE_FAKE_OPENAI_PORT ?? 8795);
 /** The committed fake-OpenAI rules (the levy's and the demo's); services/models-service/scripts/fake_openai reads `<folder>/script.json`. */
 const DEMO_RULES = 'services/models-service/seed/demo-fake-openai';
+/** The provider key the run's fake OpenAI expects from a connection that names one (FAKE_OPENAI_API_KEY): a use case
+ * saves it on Settings > Model providers and proves it reaches the provider. A stub, never a real key. */
+export const FAKE_OPENAI_KEY = 'sk-usecase-fake-openai';
 /** platform-service's dev seed: the demo's builder and Security approver, and the dev password. */
 const JAMES = 'j.richardson@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
@@ -294,6 +298,8 @@ export interface EngineWorker {
 
 /** The OPA tools-service writes its key and policy into: a container of its own, like ops_service_kit.opa_server. */
 async function startOpa(): Promise<{ url: string; stop: () => void }> {
+  // The devcontainer (OPS_INFRA=external) has no docker; its compose project's OPA is one person's, as in opa_server.py.
+  if (process.env.OPS_INFRA === 'external') return { url: process.env.OPS_OPA_URL ?? 'http://opa:8181', stop: () => {} };
   const policy = join(ROOT, 'services/tools-service/policy');
   const cid = execFileSync('docker', ['run', '-d', '--rm', '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.1', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
   const stopOpa = () => {
@@ -306,11 +312,22 @@ async function startOpa(): Promise<{ url: string; stop: () => void }> {
   try {
     const port = execFileSync('docker', ['port', cid, '8181/tcp'], { encoding: 'utf8' }).split('\n')[0]!.split(':').pop();
     const url = `http://127.0.0.1:${port}`;
-    for (let i = 0; i < 100; i++) {
+    // Waits on the health check until the container stops, not a fixed 10 s: under load a cold OPA took longer, which
+    // failed the use case before its first step though OPA came up seconds later.
+    const running = () => {
+      try {
+        return execFileSync('docker', ['inspect', '-f', '{{.State.Running}}', cid], { encoding: 'utf8' }).trim() === 'true';
+      } catch {
+        return false;
+      }
+    };
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
       if (await fetch(`${url}/health`).then((r) => r.ok, () => false)) return { url, stop: stopOpa };
-      await new Promise((r) => setTimeout(r, 100));
+      if (!running()) throw new Error(`OPA container ${cid.slice(0, 12)} stopped before it was healthy`);
+      await new Promise((r) => setTimeout(r, 250));
     }
-    throw new Error(`OPA container ${cid.slice(0, 12)} did not become healthy`);
+    throw new Error(`OPA container ${cid.slice(0, 12)} not healthy after 90s`);
   } catch (e) {
     stopOpa();
     throw e;
@@ -350,7 +367,8 @@ function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: {
  * wants either passes it in `extra`. */
 export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const inherited = { ...base };
-  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL']) delete inherited[key];
+  // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
+  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE']) delete inherited[key];
   const env = { ...inherited, ...extra };
   for (const key of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VIRTUAL_ENV']) delete env[key];
   return env;
@@ -361,7 +379,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
   const options: StackOptions = given.demo ? { ...given, platform: true, tools: { ...given.tools, bank: true, gateway: true } } : given;
   const env = stackEnv(process.env);
   const consoleUrl = `http://localhost:${CONSOLE_PORT}`;
-  const runDb = `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`;
+  const runDb = pgUrl(DB);
   let fakeOpenAi: ChildProcess | undefined;
   let modelsProc: ChildProcess | undefined;
   const modelsRoute: Record<string, string> = {};
@@ -370,9 +388,16 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     // run's database is created by the agents service's migrate step; models-service adds its own chain beside it.
     const agentsDir = join(ROOT, 'services/agents-service');
     await runToEnd('agents-migrate', ['uv', 'run', 'python', 'scripts/scripted_server.py', '--port', '0', '--db', DB, '--migrate-only'], agentsDir, env);
-    fakeOpenAi = await serve('fake-openai', FAKE_OPENAI_PORT, ['uv', 'run', '--project', '..', 'python', '-m', 'fake_openai', join(ROOT, options.fakeModelRules ?? DEMO_RULES)], join(ROOT, 'services/models-service/scripts'), stackEnv(process.env, { FAKE_OPENAI_PORT: String(FAKE_OPENAI_PORT) }), `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1/models`, 60_000);
+    fakeOpenAi = await serve('fake-openai', FAKE_OPENAI_PORT, ['uv', 'run', '--project', '..', 'python', '-m', 'fake_openai', join(ROOT, options.fakeModelRules ?? DEMO_RULES)], join(ROOT, 'services/models-service/scripts'), stackEnv(process.env, { FAKE_OPENAI_PORT: String(FAKE_OPENAI_PORT), FAKE_OPENAI_API_KEY: FAKE_OPENAI_KEY }), `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1/models`, 60_000);
     const modelsDir = join(ROOT, 'services/models-service');
-    const modelsEnv = stackEnv(process.env, { OPS_DATABASE_URL: runDb, OPS_MODELS_PORT: String(MODELS_PORT), OPS_MODELS_FAKE_OPENAI_URL: `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1` });
+    const modelsEnv = stackEnv(process.env, {
+      OPS_DATABASE_URL: runDb,
+      OPS_MODELS_PORT: String(MODELS_PORT),
+      OPS_MODELS_FAKE_OPENAI_URL: `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1`,
+      // The console calls its provider key routes (Settings > Model providers) as the signed-in account admin.
+      OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
+      ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
+    });
     await runToEnd('models-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], modelsDir, modelsEnv);
     modelsProc = await serve('models', MODELS_PORT, ['uv', 'run', 'python', '-m', 'ops_models'], modelsDir, modelsEnv, `http://127.0.0.1:${MODELS_PORT}/health`, 90_000);
     // models-service's dev seed: agents-service's own key.
@@ -435,7 +460,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       const log = openSync(logPath, 'a');
       const env = {
         ...agentsEnv,
-        OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+        OPS_DATABASE_URL: pgUrl(DB),
         OPS_ENGINE_POLL_SECONDS: '0.2',
         // The stack's files-service: the Email received trigger stores attachments there, and without it (or the
         // gateway) the worker leaves mailboxes unread.
@@ -484,7 +509,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       }
       opa = await startOpa();
       const toolsEnv = stackEnv(process.env, {
-        OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+        OPS_DATABASE_URL: pgUrl(DB),
         OPS_GATEWAY_PORT: String(TOOLS_PORT),
         OPS_OPA_URL: opa.url,
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
@@ -521,7 +546,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       const platformDir = join(ROOT, 'services/platform-service');
       // The agents service created the run's database on start; platform-service adds its own tables beside them.
       const platformEnv = stackEnv(process.env, {
-        OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+        OPS_DATABASE_URL: pgUrl(DB),
         OPS_PLATFORM_PORT: String(PLATFORM_PORT),
         OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT),
         // The seed's own roles: use cases check what a builder or viewer may not do, so nobody is Admin everywhere.
@@ -552,7 +577,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     const auth: Record<string, string> = options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {};
     const filesSvcDir = join(ROOT, 'services/files-service');
     const filesEnv = stackEnv(process.env, {
-      OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+      OPS_DATABASE_URL: pgUrl(DB),
       OPS_FILES_PORT: String(FILES_PORT),
       OPS_FILES_DIR: filesDir,
       OPS_FILES_SCANNING: 'off',
@@ -567,7 +592,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     // documents-service on the run's database, after files' chain (files_0006 drops the tables documents_0001 makes).
     const documentsDir = join(ROOT, 'services/documents-service');
     const documentsEnv = stackEnv(process.env, {
-      OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+      OPS_DATABASE_URL: pgUrl(DB),
       OPS_DOCUMENTS_PORT: String(DOCUMENTS_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
@@ -581,7 +606,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     // granted (docs/usecases/lib/seed_fixture_knowledge.py, through kb-service's API).
     const kbDir = join(ROOT, 'services/kb-service');
     const kbEnv = stackEnv(process.env, {
-      OPS_DATABASE_URL: `postgresql+asyncpg://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`,
+      OPS_DATABASE_URL: pgUrl(DB),
       OPS_KB_PORT: String(KB_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
       // A knowledge base's "used by" comes from agents-service (c-072 T007), on this run's port.
@@ -621,6 +646,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL: `http://127.0.0.1:${KB_PORT}`,
       NEXT_PUBLIC_OPS_FILES_API_URL: `http://127.0.0.1:${FILES_PORT}`,
       NEXT_PUBLIC_OPS_DOCUMENTS_API_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
+      ...(modelsRoute.OPS_MODELS_URL ? { NEXT_PUBLIC_OPS_MODELS_API_URL: modelsRoute.OPS_MODELS_URL } : {}),
       // The embed app the console's Preview frame loads, when the stack starts one.
       ...(options.embed ? { NEXT_PUBLIC_OPS_EMBED_URL: `http://localhost:${EMBED_PORT}` } : {}),
     };

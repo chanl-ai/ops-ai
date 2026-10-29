@@ -155,3 +155,40 @@ async def test_a_type_allowed_values_default_or_removed_field_change_is_major(ap
         staged = await _ok(await _patch(api, op, {"input": fields}))
         assert _change(staged, "update_address")["major"] is True, what
         await _ok(await api.call("DELETE", f"{MOD}/pending-changes"))
+
+
+async def test_a_teams_new_module_counts_its_unset_secret_until_that_team_saves_it(api: Api) -> None:
+    """uc-090's shape: a blank module made in Operations reads {{RATES_KEY}} in a header. The list counts it unset
+    while only another team holds a secret of that name, and stops once Operations saves it."""
+    host = await api.client.post(
+        "/v1/egress/hosts", json={"value": "rates.bank.test", "note": "uc-090"}, headers={"X-Team-Id": "team_security"}
+    )
+    assert host.status_code in (200, 201), host.text
+    made = await api.call(
+        "POST", "/blank", team="team_ops", json={"displayName": "Rates", "name": "uc090-rates", "type": "http"}
+    )
+    assert made.status_code == 201, made.text
+    mid = made.json()["data"]["id"]
+    op = {"name": "get_rate_uc090", "description": "A rate", "access": "read", "method": "GET"}
+    op |= {
+        "url": "https://rates.bank.test/v1/rates/{currency}",
+        "headers": [{"key": "X-Api-Key", "value": "{{RATES_KEY}}"}],
+    }
+    added = await api.call("POST", f"/{mid}/operations", team="team_ops", json=op)
+    assert added.status_code in (200, 201), added.text
+
+    async def unset() -> int:
+        listed = await _ok(await api.call("GET", "", team="team_ops"))
+        return next(r for r in listed["data"] if r["id"] == mid)["unsetSecrets"]
+
+    assert await unset() == 1
+    other = await api.client.post(
+        "/v1/secrets", json={"name": "RATES_KEY", "value": "k-sec"}, headers={"X-Team-Id": "team_security"}
+    )
+    assert other.status_code == 201, other.text
+    assert await unset() == 1, "Security's own RATES_KEY is not Operations'"
+    mine = await api.client.post(
+        "/v1/secrets", json={"name": "RATES_KEY", "value": "k-ops"}, headers={"X-Team-Id": "team_ops"}
+    )
+    assert mine.status_code == 201, mine.text
+    assert await unset() == 0

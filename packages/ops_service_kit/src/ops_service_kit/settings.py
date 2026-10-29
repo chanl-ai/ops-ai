@@ -197,11 +197,12 @@ class Settings(BaseSettings):
     # models_url, every model call runs through models-service on its alias, and no process needs a provider key
     # (ADR-0008). Unset, agents-service's turns use the direct provider and files-service cannot extract.
     models_key: SecretStr | None = None
-    # Provider credentials by the name a provider connection's `keyRef` gives, as JSON in OPS_MODEL_PROVIDER_KEYS.
-    # A connection stores only the name; the value never reaches the database.
+    # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
+    # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key
+    # here stops models-service's start-up.
     model_provider_keys: dict[str, SecretStr] = Field(default_factory=dict[str, SecretStr])
-    # The tenant whose workspace secrets hold the model provider keys models-service reads (c-177): one bank per
-    # deployment. "local" is the dev seed's tenant. Provider keys per tenant are a later card.
+    # The tenant whose provider keys a model call naming no tenant (no X-Tenant-Id) uses: one bank per deployment.
+    # "local" is the dev seed's tenant.
     model_keys_tenant: str = "local"
     # models-service dev seed: with this set (the fake OpenAI's /v1 URL, services/models-service/scripts/fake_openai),
     # it seeds connection openai-local at that URL and binds alias default to it. The row is the switch afterwards:
@@ -337,8 +338,6 @@ class Settings(BaseSettings):
             # sample's file with a reference; settings:view: the extractionFloor policy (c-256).
             # events:emit: it reports a person's correction as a service event, which saves it on the file (c-252).
             "documents": ["files:view", "files:edit", "settings:view", "events:emit"],
-            # secrets_egress:run: it reads its provider keys from tools-service's Secrets store (c-221, c-177).
-            "models": ["secrets_egress:run"],
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
             # workspace closed (c-529).
             "platform": ["workflows:view"],
@@ -349,6 +348,9 @@ class Settings(BaseSettings):
     embed_origins: list[str] = Field(default_factory=list[str])
     gateway_sub: str = "runtime:local"
     opa_url: str = "http://127.0.0.1:8181"
+    # make/env.mk's OPS_INFRA: "external" in the devcontainer, where PostgreSQL and OPA are compose side containers and
+    # there is no docker to start a private OPA (opa_server.py).
+    infra: str = ""
     # The review service signs approval tokens with this HMAC key; the gateway hands it to OPA, which verifies them.
     review_key: SecretStr = SecretStr(_DEV_REVIEW_KEY)
     review_token_ttl_seconds: int = 900
@@ -396,7 +398,7 @@ _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_K
 def require_keys(settings: Settings, *names: str) -> None:
     """Refuses to start a service outside dev while a key it uses still holds its public default. Called by each
     service that uses the key, so a service that does not use one is never handed it (`review_key`: agents-service and
-    its worker, tools-service; `secrets_key`: tools-service, files-service)."""
+    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service)."""
     if settings.environment == "dev":
         return
     for name in names:

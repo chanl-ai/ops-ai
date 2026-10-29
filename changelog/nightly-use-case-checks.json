@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-28",
+  "title": "Every flow is checked each night, in your devcontainer too",
+  "description": "The nightly checks now run each use case on its own fresh database and get past the first step again, so a page that broke during the day is named the next morning. Use cases also run inside the Ops AI devcontainer, against its own database and policy service.",
+  "tag": "fix",
+  "cards": [
+    "c-553"
+  ]
+}

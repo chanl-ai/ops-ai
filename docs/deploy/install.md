@@ -9,6 +9,39 @@ The install script installs Ops AI on one machine with Docker from a clone of th
 checks the result, and then upgrades, backs up, restores and reports on the same install. The steps it runs can also be
 done by hand (appendix below).
 
+## Set up with make setup
+
+`make setup` asks what this machine has, tests each answer live, and writes settings only for the answers that passed.
+It changes nothing else: it does not install, migrate or start anything, and it makes no team or record. Every check is
+the Python standard library except the database driver, so it runs before `make install`; the database check then says
+to run `make install` and setup again.
+
+| Question | Answers | What is tested | What is written when it passes |
+|---|---|---|---|
+| Where does it run | laptop, shared-vm, devcontainer, docker, kubernetes | nothing; it picks the file below | nothing |
+| Is Docker here | yes or no | `docker version` and `docker compose version` against install.sh's `MIN_DOCKER` and `MIN_COMPOSE` | nothing |
+| Database | `builtin` (our container), a PostgreSQL URL (Azure Database for PostgreSQL among them), Azure SQL | it connects, runs PostgreSQL 15 to 17, and has the row policy on for every tenant table it holds; an empty database passes, since the install applies the schema. Azure SQL fails as not supported in this version | `OPS_DATABASE_URL` for a URL; nothing for our container |
+| PyPI mirror | an index URL ending in `/simple`, or none | the file `uv.lock` pins for one package (httpx), as `make deps-doctor` checks every package | `UV_DEFAULT_INDEX` |
+| npm mirror | a registry URL, or none | the tarball `pnpm-lock.yaml` pins for one package (next) | `NPM_CONFIG_REGISTRY` |
+| Container registry | a prefix such as `registry.example/dockerhub/`, or none | its `/v2/` route; a 401 from the registry API passes and says to `docker login` | `OPS_BASE_IMAGE_PREFIX` |
+| Model provider | openai, azure-openai (an OpenAI-compatible base URL ending in `/openai/v1`), fake | `GET {base}/models/{model}`, 15 seconds, no retry: 200 passes, 401 says the key is refused, 404 that the model or base URL is wrong. It generates nothing; the fake makes no call | `DEMO_MODEL`, `OPENAI_API_KEY`, and `OPENAI_BASE_URL` for Azure OpenAI |
+
+| Runs | Settings file (mode 600) |
+|---|---|
+| laptop | `.env` |
+| shared-vm, devcontainer | `.devcontainer/.env.local` |
+| docker | `.env.install`, an answers file for `./install.sh --answers .env.install` (`DATABASE`, `MODEL`, `MODEL_NAME`, `MODEL_API_KEY`) |
+| kubernetes | the overlay's git-ignored `setup.env`; it prints the `write_secrets.py` and `kubectl apply -k` commands to run next |
+
+`SETUP_FILE=<path>` writes somewhere else. Each line is PASS or FAIL with the reason and never a password or key, and
+the exit status is the number of FAIL lines. A second run keeps a value edited by hand while the answer for that item
+is unchanged, and replaces it once the answer changes. `make setup ANSWERS=<file>` asks nothing: the file holds
+`KEY=value` lines, install.sh's keys plus `RUNS_ON`, `DOCKER`, `PYPI_MIRROR`, `NPM_MIRROR`, `IMAGE_REGISTRY`,
+`MODEL_PROVIDER` and `KUBE_OVERLAY`, so one file serves both. QA runs `make setup
+ANSWERS=scripts/setup/answers.qa.env` (our container, no mirrors, the fake model). Azure OpenAI is called as an
+OpenAI-compatible address with its key as a bearer token; whether every Azure deployment accepts that is
+**unverified** until one is tested.
+
 ## Install
 
 ```bash
@@ -48,8 +81,8 @@ What it does, in order:
    each service's schema version before going on. The DBA runs them as the server admin; the schema is owned by
    `ops_migrator`, and no container gets a login that may change it.
 4. Starts the database, migrations and services, connects the model, then starts the agents, worker, console and proxy,
-   waiting for every health check. A provider key is stored in Secrets through the API as `MODEL_PROVIDER_KEY`,
-   never in `ops-ai.env`; models-service reads it by that name.
+   waiting for every health check. A provider key is saved as the account's model provider key `MODEL_PROVIDER_KEY`
+   through models-service's API, never in `ops-ai.env`; models-service reads it by that name.
 5. Runs the check: health through the published port, the console's sign-in page, a sign-in as the first admin, one
    read from every service through the proxy, and agents' health (a model is connected). Then it prints the URL and
    how to sign in.
@@ -82,7 +115,7 @@ security); without the file the script stops and says to ask the DBA.
 | A rerun and a same-version upgrade change nothing | steps 5 and 6: `ops-ai.env` checksum and container ids unchanged |
 | Backup and restore | step 7: a table and a file made after the backup are gone after the restore |
 | A failed upgrade rolls back | step 8b: a release whose console exits; exit 1, back on the old version, status passes |
-| DBA mode, provider key through Secrets | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
+| DBA mode, provider key through Settings > Model providers | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
 | An upgrade across two releases that changes the schema | **unverified**: 0.1.0 is the first release. The auto path is the migrate job `compose.md` already proves; the DBA path renders Alembic's offline SQL from the recorded revisions (`deploy/install/install_api.py`) |
 | A Linux server | **unverified**: the proof ran on Docker Desktop for macOS |
 

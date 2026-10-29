@@ -1,6 +1,6 @@
 """install.sh's steps that need Python, run inside a service image on the install's own network (no Python on the host):
 
-    python install_api.py secret          sign in as the first admin and store the model provider's key in Secrets
+    python install_api.py secret          sign in as the first admin and save the account's model provider key
     python install_api.py schema          each service's schema version against this image's migration chains
     python install_api.py upgrade-sql DIR each chain's offline upgrade from the revision the database records to head
 
@@ -40,10 +40,11 @@ def dsn(chain: str) -> str:
 
 
 def secret() -> None:
-    """Writes the key through tools-service's Secrets route as the first admin, a Security admin: a new name is created,
-    an existing one rotated. models-service reads it by name (the connection's key_ref)."""
+    """Saves the key as the account's model provider key (models-service's provider keys) as the first admin, an
+    account admin: a new name is created, an existing one replaced. models-service reads it by name (the connection's
+    key_ref)."""
     platform = os.environ.get("OPS_PLATFORM_URL", "http://platform:8710")
-    tools = os.environ.get("OPS_TOOLS_URL", "http://tools:8720")
+    models = os.environ.get("OPS_MODELS_URL", "http://models:8730")
     name, value = env("OPS_INSTALL_SECRET_NAME"), env("OPS_INSTALL_SECRET_VALUE")
     with httpx.Client(timeout=20) as c:
         r = c.post(
@@ -54,15 +55,11 @@ def secret() -> None:
             sys.exit(f"install: the first admin's sign-in answered {r.status_code}")
         session = r.json()["data"]
         headers = {"Authorization": f"Bearer {session['token']}", "X-Team-Id": session["principal"]["teamId"]}
-        made = c.post(f"{tools}/v1/secrets", json={"name": name, "value": value}, headers=headers)
-        if made.status_code == 409:
-            made = c.post(f"{tools}/v1/secrets/{name}/rotate", json={"value": value}, headers=headers)
-            verb = "rotated"
-        else:
-            verb = "stored"
-        if made.status_code not in (200, 201):
-            sys.exit(f"install: storing secret {name} answered {made.status_code}: {made.text[:300]}")
-    print(f"install: model provider key {verb} in Secrets as {name}")
+        saved = c.put(f"{models}/v1/provider-keys/{name}", json={"value": value}, headers=headers)
+        if saved.status_code != 200:
+            sys.exit(f"install: saving model provider key {name} answered {saved.status_code}: {saved.text[:300]}")
+    version = saved.json()["data"]["version"]
+    print(f"install: model provider key {'saved' if version == 1 else 'replaced'} as {name}")
 
 
 async def recorded(url: str) -> list[str]:

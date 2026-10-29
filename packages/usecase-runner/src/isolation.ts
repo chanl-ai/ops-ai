@@ -7,6 +7,13 @@ import { join } from 'node:path';
 
 export const PORT_VARS = ['OPS_USECASE_AGENTS_PORT', 'OPS_USECASE_TOOLS_PORT', 'OPS_USECASE_MODELS_PORT', 'OPS_USECASE_CONSOLE_PORT', 'OPS_USECASE_PLATFORM_PORT', 'OPS_USECASE_PLATFORM_INTERNAL_PORT', 'OPS_USECASE_KB_PORT', 'OPS_USECASE_FAKE_OPENAI_PORT', 'OPS_USECASE_FILES_PORT', 'OPS_USECASE_DOCUMENTS_PORT', 'OPS_USECASE_EMBED_PORT', 'OPS_USECASE_IDP_PORT', 'OPS_USECASE_RUNNER_PORT'] as const;
 export const DB_VAR = 'OPS_USECASE_DB';
+
+/** The URL of database `db` by make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external,
+ * `postgres:5432`), or this machine's compose PostgreSQL on OPS_PG_PORT. */
+export function pgUrl(db: string, driver = 'postgresql+asyncpg', env: NodeJS.ProcessEnv = process.env): string {
+  if (env.OPS_INFRA === 'external') return `${driver}://ops:ops@postgres:5432/${db}`;
+  return `${driver}://ops:ops@localhost:${env.OPS_PG_PORT ?? 5477}/${db}`;
+}
 // The local stack's ports (make/env.mk), shared and ISOLATED=1. A run never takes one, even when the OS offers it.
 const STACK_VARS = ['OPS_CONSOLE_PORT', 'OPS_CONSOLE_RUNTIME_PORT', 'OPS_AGENTS_PORT', 'OPS_TOOLS_PORT', 'OPS_KB_PORT', 'OPS_OPA_PORT', 'OPS_PG_PORT', 'OPS_PLATFORM_PORT', 'OPS_PLATFORM_INTERNAL_PORT', 'OPS_FILES_PORT', 'OPS_DOCUMENTS_PORT'];
 const STACK_DEFAULTS = [3016, 3017, 8700, 8720, 8740, 8181, 5477, 8710, 8711, 8750, 8760].flatMap((p) => [p, p + 1000]);
@@ -41,16 +48,21 @@ export async function isolate(env: NodeJS.ProcessEnv): Promise<RunResources> {
     out[k] = String(port);
   }
   if (env[DB_VAR]) return { env: out };
-  // The scripts' scripted server creates it on first use (CREATE DATABASE when missing).
-  const name = `ops_usecase_r${process.pid}_${randomBytes(3).toString('hex')}`;
+  const name = runDatabaseName();
   out[DB_VAR] = name;
   return { env: out, ownedDb: name };
 }
 
+/** A database name this run owns; the scripts' scripted server creates it on first use (CREATE DATABASE when missing).
+ * The shape is what scripts/scratch_db_sweep.py and `make usecase-reset` drop. */
+export function runDatabaseName(): string {
+  return `ops_usecase_r${process.pid}_${randomBytes(3).toString('hex')}`;
+}
+
 const DROP = `
-import asyncio, os, sys, asyncpg
+import asyncio, sys, asyncpg
 async def main():
-    c = await asyncpg.connect(f"postgresql://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/postgres")
+    c = await asyncpg.connect(sys.argv[2])
     try:
         await c.execute(f'DROP DATABASE IF EXISTS "{sys.argv[1]}" WITH (FORCE)')
     finally:
@@ -61,7 +73,7 @@ asyncio.run(main())
 /** Drops a database this run created, through the agents-service project (it holds asyncpg). */
 export function dropDatabase(root: string, env: NodeJS.ProcessEnv, name: string): Promise<boolean> {
   return new Promise((done) => {
-    const argv = ['run', '--quiet', '--directory', join(root, 'services/agents-service'), 'python', '-c', DROP, name];
+    const argv = ['run', '--quiet', '--directory', join(root, 'services/agents-service'), 'python', '-c', DROP, name, pgUrl('postgres', 'postgresql', env)];
     const child = spawn('uv', argv, { env, stdio: ['ignore', 'ignore', 'inherit'] });
     child.on('error', () => done(false));
     child.on('close', (code) => done(code === 0));

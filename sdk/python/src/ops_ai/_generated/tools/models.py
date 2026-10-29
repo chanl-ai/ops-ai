@@ -584,14 +584,6 @@ class SecretUser(TypedDict, closed=True):
     staged: bool
 
 
-class SecretValues(TypedDict, closed=True):
-    values: dict[str, str]
-
-
-class SecretValuesIn(TypedDict, closed=True):
-    names: list[str]
-
-
 class SendPolicyIn(TypedDict, closed=True):
     text: str
 
@@ -948,11 +940,6 @@ class EnvelopeModuleApproval(TypedDict, closed=True):
 
 class EnvelopePageOut(TypedDict, closed=True):
     data: PageOut
-    success: Literal[True]
-
-
-class EnvelopeSecretValues(TypedDict, closed=True):
-    data: SecretValues
     success: Literal[True]
 
 

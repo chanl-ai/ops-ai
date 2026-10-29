@@ -1,6 +1,6 @@
 # A workflow's branches join before the next step
 
-Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api. Card: c-278.
+Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api, ui. Cards: c-278, c-553.
 
 A builder runs two checks at once, a limits check and a payee screening, and decides once both are back. One step
 connects to both branches, and a Join waits for them: the decision step after it runs once, with each branch's last
@@ -13,7 +13,7 @@ so saving that shape is warned.
 | Needs | How |
 |---|---|
 | PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-400 LAYER=api ISOLATED=1` |
+| The run | `make usecase-test UC=uc-400 LAYER=api ISOLATED=1` (or `LAYER=ui`, which also signs in through platform-service) |
 
 The stack is agents-service with a workflow worker; the workflow has no tool or model steps.
 
@@ -31,6 +31,7 @@ The stack is agents-service with a workflow worker; the workflow has no tool or 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-400-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-400-ui.mjs` | passing (2026-10-28): each run's page shows the Join and the decision once; the editor marks the plain meeting step |
 
 ## Non-vacuous check
 

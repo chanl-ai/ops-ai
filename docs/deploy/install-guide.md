@@ -66,8 +66,8 @@ What it does, in order:
    each service's schema version before going on. The DBA runs them as the server admin; the schema is owned by
    `ops_migrator`, and no container gets a login that may change it.
 4. Starts the database, migrations and services, connects the model, then starts the agents, worker, console and proxy,
-   waiting for every health check. A provider key is stored in Secrets through the API as `MODEL_PROVIDER_KEY`,
-   never in `ops-ai.env`; models-service reads it by that name.
+   waiting for every health check. A provider key is saved as the account's model provider key `MODEL_PROVIDER_KEY`
+   through models-service's API, never in `ops-ai.env`; models-service reads it by that name.
 5. Runs the check: health through the published port, the console's sign-in page, a sign-in as the first admin, one
    read from every service through the proxy, and agents' health (a model is connected). Then it prints the URL and
    how to sign in.
@@ -100,7 +100,7 @@ security); without the file the script stops and says to ask the DBA.
 | A rerun and a same-version upgrade change nothing | steps 5 and 6: `ops-ai.env` checksum and container ids unchanged |
 | Backup and restore | step 7: a table and a file made after the backup are gone after the restore |
 | A failed upgrade rolls back | step 8b: a release whose console exits; exit 1, back on the old version, status passes |
-| DBA mode, provider key through Secrets | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
+| DBA mode, provider key through Settings > Model providers | step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with `--admin-url-file` |
 | An upgrade across two releases that changes the schema | **unverified**: 0.1.0 is the first release. The auto path is the migrate job `compose.md` already proves; the DBA path renders Alembic's offline SQL from the recorded revisions (`deploy/install/install_api.py`) |
 | A Linux server | **unverified**: the proof ran on Docker Desktop for macOS |
 

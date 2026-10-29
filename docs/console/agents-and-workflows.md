@@ -53,21 +53,22 @@ They meet in two places: an agent can be a step in a workflow, and a published w
 | A process with one judgment step in the middle | A workflow with an agent step |
 | An agent should be able to start a governed process | The workflow as a tool for that agent |
 
-## See it work on the seeded stack
+## See it work on the sample team
 
-`make seed-walk` checks the shared stack through the API, on the fake model, and prints PASS or FAIL with the evidence
-for each step. It needs the stack up on the current code (`make up`) and a workflow worker
-(`scripts/stack.sh start worker`, or `make up` with `OPS_STACK_WORKER=1`).
+`make sample-team` installs a team with agents, skills, guardrails, knowledge, tools and workflows through the API, and
+`make demo-walk` checks it on the fake model, one PASS or FAIL line per step with its evidence. Both need the stack up
+on the current code (`make up`), which also starts the workflow worker.
 
-| It prints or runs | What a PASS shows |
+| It runs | What a PASS shows |
 |---|---|
-| Every agent with its pinned guardrails, skills and knowledge bases | The seeded advisor pins "No investment advice" v1 and "Hardship request triage" v1 |
-| The published workflows, v1 and v2, and the agents granted each as a tool | Which workflow each agent may start |
-| a. A chat turn to the advisor: a client lost her job, compare two savings products | The turn loaded the hardship skill and cites the Retail Product Sheet by page |
-| b. A chat turn asking whether to buy shares | The reply is the guardrail's message and names the guardrail and topic |
-| c. A v2 workflow run (a customer lookup the walk publishes if missing) | The run went through the queue to `succeeded`, with each step's port and output |
+| The install | The team has its four people, three agents and six live workflows |
+| A chat turn to the dispute agent about a duplicate charge | The turn loaded the Dispute evidence checklist skill and cites the Card dispute handbook |
+| A chat turn asking whether to buy shares | The reply is the guardrail's message and names the guardrail and topic |
+| A chat turn asking for a cardholder's accounts | search_customers and list_accounts answered from the fake bank |
+| A chat turn asking for a hold | The hold waits on an approval card; after the approver approves, the reply names the hold |
+| A levy notice emailed to the team mailbox | The workflows thank the sender, open a case per debtor, work out and place a hold, and send the replies a person approved |
 
-The exit status is the number of failed checks. A run that stays queued means no worker is running.
+The exit status is the number of failed steps.
 
 More: how runs are executed, [architecture/workflow-runner.md](../architecture/workflow-runner.md); the step types,
 [workflow nodes](../design/workflows/workflow-nodes.md); tools and approvals, [architecture/tool-lifecycle.md](../architecture/tool-lifecycle.md).

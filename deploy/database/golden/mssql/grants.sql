@@ -108,6 +108,7 @@ GO
 IF USER_ID(N'ops_models_runtime') IS NULL CREATE USER ops_models_runtime FOR LOGIN ops_models_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.provider_connections TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.provider_keys TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_keys TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_tenants TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_log TO ops_models_runtime;
