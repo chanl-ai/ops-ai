@@ -166,6 +166,16 @@ def _can(
     )
 
 
+def _not_a_plugin(m: Aggregate) -> None:
+    """A plugin's module (c-564) changes only with its installed package: no route edits, publishes, deletes or asks
+    access for it, whoever asks, admins included."""
+    if str(m.get("template_id") or "").startswith("plugin:"):
+        raise Forbidden(
+            f"{m['display_name']} is a plugin's tools; they change only when the plugin is upgraded.",
+            code="plugin_module",
+        )
+
+
 def _provisioned(who: Caller, i: dict[str, Any]) -> dict[str, Any]:
     """The template fields a create or patch carries (c-180), refused with `provisioner_only` unless the caller is a
     service token holding `tools:provision`: a person setting them could take a template's slot or lock others out."""
@@ -271,6 +281,19 @@ def _refuse_during_review(m: Aggregate, what: str) -> None:
     or another version on top would ride along unreviewed or leave the approval deciding nothing."""
     if any(v["status"] == "in_review" for v in m["versions"]):
         raise Conflict(f"A version is waiting for Security's review; {what} once it is decided.")
+
+
+def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
+    """A module takes only a connection whose sign-in it supports (c-558): `team` a team connection, `person` one each
+    person signs in to (the team backup included), `either` any; refused when the connection is chosen."""
+    given = str(conn.get("sign_in") or "team")
+    if module_sign_in == "either" or (module_sign_in == "team") == (given == "team"):
+        return
+    want = "the team's account" if module_sign_in == "team" else "each person's own account"
+    raise ValidationFailed(
+        f"This module signs in with {want}, and {conn['name']} does not. Pick another connection.",
+        code="sign_in_mismatch",
+    )
 
 
 class ModuleService:
@@ -410,6 +433,7 @@ class ModuleService:
             "reachable": m["reachable"] and status not in ("revoked", "needs_reconnect", "error"),
             "drift": m["drift"],
             "connection": ref_of(conn, now) if conn else None,
+            "signIn": m.get("sign_in") or "either",
             "updatedAt": _iso(m["updated_at"]),
         }
         if next_expiry is not None:
@@ -503,6 +527,8 @@ class ModuleService:
             "approverTeam": policy["approver_team"],
             "stepUp": policy["step_up"],
             "idempotent": o["access"] != "read",
+            "needsPerson": bool(o.get("needs_person")),
+            "scopes": list(o.get("scopes") or []),
             **_rates(t),
             "approvedWorkflows": len(
                 {a["workflow_id"] for a in approvals if a["status"] == "approved" and o["name"] in a["operations"]}
@@ -634,6 +660,7 @@ class ModuleService:
     async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
         """The module, when the caller may change it: a `system` module is the provisioner's alone (c-180)."""
         m = await self._find(who, module_id)
+        _not_a_plugin(m)
         _can(
             who,
             "tools",
@@ -901,6 +928,13 @@ class ModuleService:
             json.loads(BODY_VAR.sub("null", body))
         except json.JSONDecodeError as e:
             return f"The body is not a JSON template: {e.msg} at line {e.lineno}."
+        # A placeholder is filled in as JSON (text arrives with its own quotes), so one inside a string breaks every
+        # call. Filling it with "" shows which: that is still JSON where a value goes, and not inside a string.
+        for name in dict.fromkeys(BODY_VAR.findall(body)):
+            try:
+                json.loads(BODY_VAR.sub(lambda m, n=name: '""' if m.group(1) == n else "null", body))
+            except json.JSONDecodeError:
+                return f"Leave {{{{{name}}}}} out of quotes in the body: it is filled in as JSON, quotes included."
         return None
 
     def _http_operation(self, h: dict[str, Any], endpoint: str = "") -> tuple[dict[str, Any], str]:
@@ -992,6 +1026,7 @@ class ModuleService:
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
             if not may_use(conn, who.team.id):
                 raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
+            sign_in_fits(str(i.get("sign_in") or "either"), conn)
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
         if i["type"] == "code":
             # A code module's functions run on runner-service (c-531): no endpoint and no egress host of its own.
@@ -1033,6 +1068,7 @@ class ModuleService:
             "egress_hosts": [host] if host else [],
             "catalog_id": conn.get("catalog_id") if conn else None,
             "connection_id": conn["id"] if conn else None,
+            "sign_in": str(i.get("sign_in") or "either"),
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
         }
@@ -1083,6 +1119,11 @@ class ModuleService:
             m["display_name"] = patch["display_name"].strip()
         if patch.get("description") is not None:
             m["description"] = patch["description"].strip()
+        if patch.get("sign_in") is not None:
+            conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m["connection_id"] else None
+            if conn is not None:
+                sign_in_fits(str(patch["sign_in"]), conn)
+            m["sign_in"] = patch["sign_in"]
         m.update(_provisioned(who, patch))
         return await self._detail(await self._save(m), who.team, who)
 
@@ -1156,6 +1197,7 @@ class ModuleService:
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another one.")
             if not may_use(conn, m["team_id"]):
                 raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
+            sign_in_fits(str(m.get("sign_in") or "either"), conn)
             m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
         return await self._detail(await self._save(m), who.team, who)
 
@@ -1180,6 +1222,7 @@ class ModuleService:
                 out["skipped"].append({"id": module_id, "reason": "Not found"})
                 continue
             try:
+                _not_a_plugin(m)
                 # As a single delete: can() with the module's protection, so an admin removes a system module too.
                 _can(
                     who,
@@ -1312,6 +1355,19 @@ class ModuleService:
             detail = "Approving asks for a step-up" if step_up else "Approving no longer asks for a step-up"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
             o["step_up"] = step_up
+        # Off lets a run with nobody behind it sign in with the team's backup account, so Security reviews it.
+        needs_person = patch.get("needs_person")
+        if needs_person is not None and needs_person != bool(o.get("needs_person")):
+            detail = "Signs in as a person only" if needs_person else "No longer signs in as a person only"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not needs_person})
+            o["needs_person"] = needs_person
+        # Not reviewed: a scope only asks the person for more consent, and the system decides what a token may do.
+        scopes = patch.get("scopes")
+        if scopes is not None and list(dict.fromkeys(scopes)) != list(o.get("scopes") or []):
+            scopes = list(dict.fromkeys(scopes))
+            detail = f"Needs the scopes {', '.join(scopes)}" if scopes else "Needs no scopes beyond the connection's"
+            changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
+            o["scopes"] = scopes
         if patch.get("description") is not None and patch["description"].strip() != o["description"]:
             changes.append({"operation": name, "kind": "settings", "detail": "Description edited", "major": False})
             o["description"] = patch["description"].strip()
@@ -1557,6 +1613,7 @@ class ModuleService:
     async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         _can(who, "tools", "publish", what="tool modules", security_team=self.security_team)
         m = await self._find(who, module_id)
+        _not_a_plugin(m)
         reviewed_change = _differs_from_published(m)
         if not m["pending"] and not reviewed_change:
             raise ValidationFailed("There are no changes to publish.")
@@ -1645,6 +1702,7 @@ class ModuleService:
     async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         _can(who, "tools", "publish", what="tool modules", security_team=self.security_team)
         m = await self._find(who, module_id)
+        _not_a_plugin(m)
         if any(v["status"] == "in_review" for v in m["versions"]):
             raise Conflict("A security review is already open for this module.")
         if not m["operations"]:
@@ -1708,6 +1766,7 @@ class ModuleService:
     async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
         m = await self._find(who, module_id)
+        _not_a_plugin(m)
         if m["status"] == "draft":
             raise Conflict("Submit the module for security review before workflows can request it.")
         wf = (await self.workflows.all(who.tenant_id)).get(i["workflow_id"])

@@ -4,7 +4,7 @@ Status: current. These screens were approved on 2026-10-18. The real Channels pa
 are built to match them; a difference is a defect unless a new version is approved here.
 
 Approved build: console at `2214c5a1`, routes under `/preview/channels` on sample data, since deleted with every
-console preview page (c-517); the screenshots below are the approved record. Card c-242. The real pages are walked
+console preview page; the screenshots below are the approved record. Card an earlier change. The real pages are walked
 by uc-142 (`docs/usecases/console/channels-real.md`) and uc-199 (`docs/usecases/agents-service/connect-a-mailbox.md`).
 
 | Screen | Route | 1280 px | 400 px |
@@ -32,5 +32,5 @@ Known differences accepted, and the card that removes each:
 
 | Difference from the screens | Why | Removed by |
 |---|---|---|
-| An API key row serves "Any of <team>'s workflows", with no picker and no traffic | A key is not bound to one agent or workflow and leaves no stable mark on a run | c-246 (a key gets one target and its runs are counted) |
+| An API key row serves "Any of <team>'s workflows", with no picker and no traffic | A key is not bound to one agent or workflow and leaves no stable mark on a run | an earlier change (a key gets one target and its runs are counted) |
 | An email row always runs Latest, with no pin choice; when several workflows watch the address the row names the live one "and N more" | A workflow's trigger names the mailbox and runs the live version; nothing can pin it | None planned; accepted |

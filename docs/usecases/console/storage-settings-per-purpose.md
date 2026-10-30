@@ -1,12 +1,12 @@
 # A Security admin sets where each purpose stores its files and with which credential
 
-Status: current. Id: `uc-105`. Service: `console`. Layers: ui. Card: c-100.
+Status: current. Id: `uc-105`. Service: `console`. Layers: ui. Card: an earlier change.
 
 An admin on the Security team opens Settings, Storage and points each upload purpose at a target: the files
 service's own disk, S3 or Azure Blob, with a bucket or container, region, endpoint, credential by name and upload path.
 A credential's values go to files-service once, are kept encrypted and are never shown or returned again. A save is a
 new version, made with the Save button only, and every new or changed target is tested first. Design:
-[files-service design](../../services/files-service/overview.md); interview: c-100 Q1-Q5.
+[files-service design](../../services/files-service/overview.md); interview: an earlier change Q1-Q5.
 
 ## Preconditions
 
@@ -38,6 +38,6 @@ The script starts the stack with platform sign-in and files-service; no cloud ac
 
 ## Non-vacuous check
 
-Run against the page before c-116 T006, steps 3b (both checks), 6 and 7 failed (scanning read "Scanning is off, set by the deployment", no step list, "No credentials yet" under a failed request). Step 5 reads the settings back from files-service after the refused save. Skipping the probe in
+Run against the page before an earlier change T006, steps 3b (both checks), 6 and 7 failed (scanning read "Scanning is off, set by the deployment", no step list, "No credentials yet" under a failed request). Step 5 reads the settings back from files-service after the refused save. Skipping the probe in
 `StorageSettings.save` (`services/files-service/src/ops_files/settings.py`) saves version 2 and fails it, as
 `test_a_failing_probe_leaves_the_saved_version_unchanged` also shows.

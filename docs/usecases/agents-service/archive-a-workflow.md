@@ -1,6 +1,6 @@
 # A builder archives a workflow and restores it
 
-Status: passing (2026-10-19). Id: `uc-252`. Service: `agents-service`. Layers: api, ui. Card: c-274.
+Status: passing (2026-10-19). Id: `uc-252`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 Old and test workflows pile up on the Workflows list. A builder archives one they no longer need: it starts no run of
 any mode, a trigger no longer serves it, and it leaves both workflow lists, while its versions and runs are kept.

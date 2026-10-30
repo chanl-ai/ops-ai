@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-125`. Service: `console`. Layers: ui.
 
-Card c-173: 14 settings looked saved and reverted on reload because the console keeps them in the mock API (account,
+Card an earlier change: 14 settings looked saved and reverted on reload because the console keeps them in the mock API (account,
 sign-in, notifications, webhooks, API keys, gate policies, connection setup). Each such page or section now shows
 "Sample data, changes aren’t saved", switches off every control inside it (Save, add, delete, switches) and never claims
 "Saved as version N". Gate policies also carries the Preview badge. Source settings follow the stack: kb-service stores

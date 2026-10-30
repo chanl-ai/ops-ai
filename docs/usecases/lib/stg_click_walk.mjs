@@ -31,19 +31,38 @@ async function report(label) {
 
 // The shell renders only once the person's team is known (the session gate), so wait for the sidebar before reading it.
 await page.locator('[data-sidebar="sidebar"] a[href^="/"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
+// Sidebar groups (Agents, Data Hub, Govern) start folded and render no links until a person opens them; only a
+// group's heading unfolds it (a chat row's menu button also reads aria-expanded and would open its menu).
+// Opening one moves the rest, so each pass opens the first still folded.
+async function unfold() {
+  const folded = page.locator('[data-sidebar="sidebar"] [data-nav-group] > [data-sidebar="group-label"][aria-expanded="false"]');
+  for (let n = 0; n < 10 && (await folded.count()); n += 1) await folded.first().click({ timeout: 5_000 }).catch(() => {});
+}
+await unfold();
 const links = await page.locator('[data-sidebar="sidebar"] a[href^="/"], nav a[href^="/"]').evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute('href')))]);
+console.log(`walking ${links.length} sidebar links`);
 for (const href of links) {
-  await page.locator(`[data-sidebar="sidebar"] a[href="${href}"]`).first().click({ timeout: 10_000 });
+  await unfold();
+  // A section's own links (a chat's All chats) show only inside it; one not shown from here is opened by its address.
+  const link = page.locator(`[data-sidebar="sidebar"] a[href="${href}"]:visible, nav a[href="${href}"]:visible`).first();
+  if (await link.count()) {
+    await link.click({ timeout: 10_000 }).catch((e) => bad.push(`click failed: ${e.message.split('\n')[0].slice(0, 80)}`));
+  } else {
+    await page.goto(`${origin}${href}`, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch((e) => bad.push(`open failed: ${e.message.split('\n')[0].slice(0, 80)}`));
+  }
   // networkidle resolves before Next's client router updates the URL, so wait for the URL itself.
   const arrived = await page.waitForURL((u) => u.pathname + u.search === href, { timeout: 15_000 }).then(() => true, () => false);
   if (!arrived) bad.push(`STUCK on ${page.url().replace(origin, '')}`);
   await report(`nav ${href}`);
   // The URL changes before a list's rows arrive, so wait for the first row before deciding the page has none.
   const row = page.locator('main table tbody tr a[href^="/"], main [role="row"] a[href^="/"]').first();
-  await row.waitFor({ timeout: 8_000 }).catch(() => {});
+  await row.waitFor({ state: 'attached', timeout: 8_000 }).catch(() => {});
   if (await row.count()) {
     const to = await row.getAttribute('href');
-    await row.click({ timeout: 10_000 }).catch(() => {});
+    // A list row opens through an empty link stretched over the row (data-row-open), so a person clicks the row's cell;
+    // the link itself has no size to click.
+    const target = (await row.getAttribute('data-row-open')) ? row.locator('xpath=..') : row;
+    await target.click({ timeout: 10_000 }).catch((e) => bad.push(`click failed: ${e.message.split('\n')[0].slice(0, 80)}`));
     const there = await page.waitForURL((u) => u.pathname + u.search === to, { timeout: 15_000 }).then(() => true, () => false);
     if (!there) bad.push(`STUCK on ${page.url().replace(origin, '')}`);
     await report(`  row ${to}`);

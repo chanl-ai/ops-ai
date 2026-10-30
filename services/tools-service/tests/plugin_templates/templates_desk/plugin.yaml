@@ -1,0 +1,51 @@
+# A plugin that brings one template of each kind a team can install as its own copy (c-590).
+schema: ops-ai/plugin@2
+id: test.templates
+title: Case desk
+version: 0.2.0
+sdk: "1"
+connection:
+  kinds: [none]
+  sign_in: [team]
+  health_check: { path: "/desk/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.desk.test" }
+
+egress: ["{base_url}"]
+endpoint: "{base_url}/desk"
+tools:
+  - name: get_case
+    title: Read a case
+    access: read
+    input: { id: { type: string, pattern: "^[A-Z0-9-]+$" } }
+    request: { method: GET, path: "/cases/{id}" }
+  - name: close_case
+    title: Close a case
+    access: write
+    input: { id: { type: string, pattern: "^[A-Z0-9-]+$" } }
+    request: { method: POST, path: "/cases/{id}/close" }
+
+templates:
+  - kind: agent
+    id: case-helper
+    version: 2
+    path: templates/case-helper.yaml
+    requires:
+      tools: [get_case, close_case]
+      bind: [{ knowledge_base: "Case articles" }, { model_alias: chat }]
+  - kind: skill
+    id: close-politely
+    version: 1
+    path: templates/close-politely.yaml
+    requires:
+      tools: [close_case]
+  - kind: workflow
+    id: case-review
+    version: 1
+    path: templates/case-review.yaml
+    requires:
+      tools: [get_case]
+  - kind: document_type
+    id: case-letter
+    version: 1
+    path: templates/case-letter.yaml

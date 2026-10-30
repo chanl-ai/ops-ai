@@ -25,6 +25,16 @@ export function docTemplate(id: string, service: string, title: string): string 
 
 Status: draft. Id: \`${id}\`. Service: \`${service}\`. Layers: api.
 
+## Stories
+
+Four or five things a person does and sees work, in plain words, each on one layer. Its steps are rows of the steps
+table below, and "Proved by" is the one step whose check shows the story works. A script names each check by its step
+("2 the hold is placed"), so a run reports each story as works or broken, with the step that failed.
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | A <person> <does something> and <sees the result> | api | 1 | 1 |
+
 ## Preconditions
 
 | Needs | How |
@@ -55,7 +65,7 @@ from __future__ import annotations
 
 from usecase_harness import check, finish
 
-check("script written", False, "${id} has no steps yet")
+check("1 script written", False, "${id} has no steps yet")
 finish()
 `;
 

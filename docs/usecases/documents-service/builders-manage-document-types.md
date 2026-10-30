@@ -1,13 +1,13 @@
 # Builders manage document types, versions, samples and test runs in the console
 
-Status: passing. Id: `uc-243`. Service: `documents-service`. Layers: ui. Card: c-243.
+Status: passing. Id: `uc-243`. Service: `documents-service`. Layers: ui. Card: an earlier change.
 
 A builder lists the team's document types in Data Hub, opens one, saves a new version from the field table editor,
 adds a sample from the team's files with the value it should read, and runs a test that shows its estimate before
 anything runs and then matches, misses and accuracy per field. The pages read documents-service; write controls follow
 the server's `canCreate` and `canEdit`. The fake model answers what the restraining notice fixtures expect, so this
 proves the pages and their calls, not the model's accuracy. The read-only view (a role without `documents.edit`) is not
-reachable until RBAC lands: every member holds `documents.edit` (c-256), so it is not driven here.
+reachable until RBAC lands: every member holds `documents.edit`, so it is not driven here.
 
 ## Preconditions
 

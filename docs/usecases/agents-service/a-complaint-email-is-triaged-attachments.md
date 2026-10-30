@@ -7,8 +7,8 @@ A customer emails the complaints mailbox with a receipt attached. `complaint_tri
 run of `attachment_record` (the file is recognised as one of the team's document types, read, and the read kept on the
 file). It reads the complaint from the email text, puts the facts together, and asks an agent for a structured triage:
 urgency, category, and whether the customer asks for a hold. The urgency sets the case priority. With no case quoted a
-case opens. A requested hold starts `customer_hold` for the sender, and the customer gets a reply once the mail
-module's team approves it. Real mail both ways. Nothing is faked but the bank and the model.
+case opens. A requested hold starts `customer_hold` for the sender, and the customer gets a reply once a reviewer in
+the run's team approves it. Real mail both ways. Nothing is faked but the bank and the model.
 
 ## Preconditions
 
@@ -32,7 +32,7 @@ configuration that the use case makes through the documents API.
 | 4 | The hold it started | `customer_hold` matched the customer by the sender's address (no SSN given), worked out 2000, and waits at Approve the hold |
 | 5 | Wanjiru approves the reply | Reply to the customer (`reply:ok`), outcome `replied`, one more reply from `complaints@harborpine.test` in Mailpit; the run reads `waiting` with no finish time, because the hold it started still waits |
 | 6 | James opens the complaint's run page, then Maya and Priya approve the hold, each re-authenticating | The page says "Waiting on a run it started"; the hold ends `held` and the complaint run then reads `succeeded` |
-| 7 | `attachment_record` on a file that does not exist | `read:error`, the End Could not finish (marked failed): the run reads `failed` in the list with "Ended at Could not finish, an end marked as a failure", its page shows The run failed and the Result, and the editor shows the End's Counts as setting as `failed` |
+| 7 | `attachment_record` on a file that does not exist | `read:error`, the End Could not finish (marked failed): the run reads `failed` in the list with the step that failed and why, "Recognise and read it failed: File was not found. The run ended at Could not finish.", its page shows The run failed and the Result, and the editor shows the End's Counts as setting as `failed` |
 | 8 | Activity filtered to the complaint's case (`GET /v1/activity?case=`) | The case's own entries, the complaint run, the email that started it and the reply's decision; nothing of the hold's run |
 
 ## Acceptance layers

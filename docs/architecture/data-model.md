@@ -224,18 +224,18 @@ erDiagram
 | `registry_publish_requests` | A request to publish a version, decided by a second person. Moves to the reviews package | partial (moving) |
 | `registry_skills, registry_skill_versions` | Versioned procedures an agent loads when a request matches. A skill records who created it, once, so the right to delete it does not pass to whoever saved a draft last | built |
 | `registry_guardrails, registry_guardrail_versions` | Versioned checks on the question and the answer | built |
-| `graph_threads` | A conversation or job thread, with the overrides set for the thread. Its origin and owning team are planned `ix_graph_threads_team_updated` (tenant_id, team_id, updated_at) serves a team's thread list (0071, c-280). | partial |
+| `graph_threads` | A conversation or job thread, with the overrides set for the thread. Its origin and owning team are planned `ix_graph_threads_team_updated` (tenant_id, team_id, updated_at) serves a team's thread list (0071). | partial |
 | `chat_attachments` | A file attached to a chat message: who owns it, its type and size, and the text read from it, capped | built |
 | `chat_search` | A thread's title, agent, last reply and questions as plain columns, so search works on every supported database | built |
 | `registry_widgets, registry_widget_versions` | Widget templates an agent may show in chat, saved as versions and published through a review. The newest name is kept on the widget so a list searches and pages in the database | built |
 | `widget_deployments` | A chat widget served to pages on other origins: the agent and published version it is pinned to, the exact origins allowed, a paused flag and the team its conversations belong to. Sessions are signed tokens that expire after 15 minutes and are not stored | built |
 | `graph_versions` | The compiled graph a thread runs on | built |
-| `thread_events` | The event stream of a thread: messages, tool calls, approvals `ix_thread_events_tenant_team_position` (tenant_id, team_id, position) serves the team event poll; it replaced `ix_thread_events_team_position`, which led with the team id alone (0071, c-280). | built |
+| `thread_events` | The event stream of a thread: messages, tool calls, approvals `ix_thread_events_tenant_team_position` (tenant_id, team_id, position) serves the team event poll; it replaced `ix_thread_events_team_position`, which led with the team id alone (0071). | built |
 | `thread_inbox` | Messages that arrive while a run is busy, delivered in order | built |
 | `thread_leases` | Which process runs the thread now, with a generation number that fences out a stopped process | built |
 | `thread_budgets` | The model-call, token and cost caps of a thread, checked against what it has spent. A chat conversation gets its caps from its agent when it starts. When they are spent the conversation pauses, and its owner continues or a team admin raises them. An answer names the pause it answers, so a screen showing an older pause is refused | built |
 | `model_call_records` | Each model call a run made, for replay and cost | built |
-| `ops_checkpoints, ops_checkpoint_writes, ops_checkpoint_fences` | Run state after each step, so a run resumes from its last step after a crash. Gain run and step columns `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (migration 0071, c-280); like these tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite (c-337), so the diagram and the golden DDL do not show it. | built |
+| `ops_checkpoints, ops_checkpoint_writes, ops_checkpoint_fences` | Run state after each step, so a run resumes from its last step after a crash. Gain run and step columns `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (migration 0071); like these tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite, so the diagram and the golden DDL do not show it. | built |
 | `agent_runs` | One run of an agent: mode, status and reason, settings used, budget and usage | planned |
 | `agent_run_queue` | Background runs waiting for a worker | planned |
 | `agent_jobs` | A goal, a trigger and a budget; the agent works over many turns and ends with a report | planned |
@@ -309,16 +309,16 @@ erDiagram
 
 | Table | Holds | Status |
 |---|---|---|
-| `engine_definitions` | Workflow definitions by version. Each version has a stage: draft, live, paused or superseded. A draft goes live when its publish review is approved. `archived_at` and `archived_by` are set on every version of an archived workflow, which starts no run (migration 0070, c-274) `ix_engine_definitions_live` (tenant_id, workflow_id) WHERE stage = 'live', on PostgreSQL and SQL Server alike, serves service event listeners and the mailbox listener (0071, c-280). | built |
-| `engine_runs` | One run of a workflow version, with status and outcome. A run another run's step started has `created_by` = `run:<parent id>`, which is how a parent finds the runs it waits on. Indexes: `ix_engine_runs_parent_status` (tenant_id, created_by, status) finds a parent's unfinished runs, `ix_engine_runs_team_created` (tenant_id, team_id, created_at) and `ix_engine_runs_team_status_created` (tenant_id, team_id, status, created_at) serve the runs list (migrations 0065 and 0066; 0066 replaced `ix_engine_runs_created_by`) `ix_engine_runs_workflow_created` (tenant_id, workflow_id, created_at) serves the runs list filtered by one workflow (migration 0071, c-280). | built |
+| `engine_definitions` | Workflow definitions by version. Each version has a stage: draft, live, paused or superseded. A draft goes live when its publish review is approved. `archived_at` and `archived_by` are set on every version of an archived workflow, which starts no run (migration 0070) `ix_engine_definitions_live` (tenant_id, workflow_id) WHERE stage = 'live', on PostgreSQL and SQL Server alike, serves service event listeners and the mailbox listener (0071). | built |
+| `engine_runs` | One run of a workflow version, with status and outcome. A run another run's step started has `created_by` = `run:<parent id>`, which is how a parent finds the runs it waits on. Indexes: `ix_engine_runs_parent_status` (tenant_id, created_by, status) finds a parent's unfinished runs, `ix_engine_runs_team_created` (tenant_id, team_id, created_at) and `ix_engine_runs_team_status_created` (tenant_id, team_id, status, created_at) serve the runs list (migrations 0065 and 0066; 0066 replaced `ix_engine_runs_created_by`) `ix_engine_runs_workflow_created` (tenant_id, workflow_id, created_at) serves the runs list filtered by one workflow (migration 0071). | built |
 | `engine_steps` | The step journal: one row per node, iteration and attempt. Gains pack id, version, hash and an output reference | built |
-| `engine_work` | The work queue, claimed by workers under a lease Indexes: `ix_engine_work_due` (status, build, available_at) and `ix_engine_work_lease` (status, build, lease_expires_at), one per branch of the claim: due queued work, and claimed work whose lease lapsed (0071, c-280). | built |
+| `engine_work` | The work queue, claimed by workers under a lease Indexes: `ix_engine_work_due` (status, build, available_at) and `ix_engine_work_lease` (status, build, lease_expires_at), one per branch of the claim: due queued work, and claimed work whose lease lapsed (0071). | built |
 | `workflow_timers` | Waits and deadlines inside a workflow run | planned |
 | `installed_packs` | Node packs installed at deploy time from the allowlist, pinned by hash | planned |
 | `node_types` | The node types each pack provides, written at start-up | planned |
 | `task_types` | A Human Task type: the screen a review step or `POST /v1/tasks` names by id. Seeded types have no team; a team's own type is edited by that team. Holds the newest version and the published version, and where a copy came from. Row level security by tenant (migration 0063) | built |
 | `task_type_versions` | Each saved version of a task type as a JSON record. A published version never changes, so a task keeps the screen it opened with (migration 0063) | built |
-| `case_types` | The fields a case shows and their order, per tenant: a seeded type (owned by no team, copied to change) or a team's own, with its newest and newest published version (migration 0069, c-291) | built |
+| `case_types` | The fields a case shows and their order, per tenant: a seeded type (owned by no team, copied to change) or a team's own, with its newest and newest published version (migration 0069) | built |
 | `case_type_versions` | Each saved version of a case type: its fields, each with a key, label and type (the extraction field types, file or link). A case pins the published version it opened with (migration 0069) | built |
 | `task_assists` | What task assist wrote for a typed task when its step paused, one row per review step (`step_id` = run:node:iteration). A second write for the same step is refused, so a task costs one model call (migration 0064) | built |
 | `registry_workflows, registry_workflow_versions, registry_validations` | The first workflow registry, replaced by engine_definitions | retiring |
@@ -783,7 +783,7 @@ erDiagram
 | `document_type_samples, document_type_tests` | Files with the values a version should read, and priced test runs against them | built |
 | `document_type_examples` | What corrections teach a type: the field, the line its value was printed on and the corrected value, one per read and field, per team. Later reads are given the newest few; a field keeps its newest 10, and a deleted file's examples go with its reads. People see the line and value masked as their team masks personal data | built |
 | `documents_outbox` | Correction events written with the correction and relayed to agents-service; delivered and replaced rows are pruned after 7 days | built |
-| examples | Confirmed corrections as few-shot examples for the type | planned (planned, c-297) |
+| examples | Confirmed corrections as few-shot examples for the type | planned (planned) |
 
 ## Databases
 

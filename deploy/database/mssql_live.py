@@ -23,6 +23,8 @@ import sqlalchemy as sa
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata, chains
+from mssql import _OMIT as OMIT  # pyright: ignore[reportPrivateUsage]
+from mssql import chain_tables
 
 from ops_store.schema import tenant_scoped
 
@@ -51,10 +53,11 @@ def sqlcmd(database: str, script: Path, variables: dict[str, str] | None = None)
         raise SystemExit(f"{script.name}: sqlcmd failed\n{run.stdout[-3000:]}{run.stderr[-1500:]}")
 
 
-def engine(database: str) -> sa.Engine:
+def url(database: str, driver: str = "mssql+pyodbc") -> sa.URL:
+    """The administrator's URL for `database`; `mssql+aioodbc` for a service's async engine."""
     host, port = server().split(",")
-    url = sa.URL.create(
-        "mssql+pyodbc",
+    return sa.URL.create(
+        driver,
         username="sa",
         password=password(),
         host=host,
@@ -62,7 +65,10 @@ def engine(database: str) -> sa.Engine:
         database=database,
         query={"driver": "ODBC Driver 18 for SQL Server", "TrustServerCertificate": "yes"},
     )
-    return sa.create_engine(url)
+
+
+def engine(database: str) -> sa.Engine:
+    return sa.create_engine(url(database))
 
 
 def login_password() -> str:
@@ -97,16 +103,15 @@ def drop(database: str) -> None:
 
 
 def expected() -> tuple[dict[str, set[str]], set[str]]:
-    """Each table's columns from the store models, and the tables a tenant policy must cover."""
+    """Each table's columns as the bundle creates them (the store models shaped by mssql.py, which leaves PostgreSQL-
+    only columns such as a tsvector out), and the tables a tenant policy must cover."""
     columns: dict[str, set[str]] = {}
     scoped: set[str] = set()
     for chain in chains():
-        for md in chain_metadata(chain):
-            for t in md.tables.values():
-                # Columns mssql.py leaves out on SQL Server (PostgreSQL-only, such as a tsvector) are not expected.
-                columns[t.name] = {c.name for c in t.columns if not c.info.get("mssql_omit")}
-                if tenant_scoped(t):
-                    scoped.add(t.name)
+        for t in chain_tables(chain, chain_metadata(chain)).tables:
+            columns[t.name] = {c.name for c in t.columns if not c.info.get(OMIT)}
+            if tenant_scoped(t):
+                scoped.add(t.name)
     return columns, scoped
 
 

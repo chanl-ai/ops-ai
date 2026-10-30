@@ -1,6 +1,6 @@
 # A banker narrows the agent for a thread within its limits and attaches a file
 
-Status: current. Id: `uc-091`. Service: `console`. Layers: ui. Card: c-071.
+Status: current. Id: `uc-091`. Service: `console`. Layers: ui. Card: an earlier change.
 
 A banker opens a chat's settings and sees only what the agent's owner allows: a temperature range, added instructions
 and the tools that may be switched off. Switching a tool off means the model is not offered it; every turn records the

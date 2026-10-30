@@ -1,6 +1,6 @@
 # A bank page shows the full chat through the loader and the embed app
 
-Status: current. Id: `uc-119`. Service: `console`. Layers: ui. Card: c-158.
+Status: current. Id: `uc-119`. Service: `console`. Layers: ui. Card: an earlier change.
 
 A bank's intranet page loads the loader from the Ops AI host and passes a session its own server minted with the
 deployment's mint key. The chat opens in the embed app's iframe with the console's own components. The thread is made

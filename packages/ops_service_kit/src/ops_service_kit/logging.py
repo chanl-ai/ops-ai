@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging as _logging
+import sys
 from typing import Any
 
 
@@ -45,3 +46,16 @@ def quiet_request_logs() -> None:
 def configure_logging() -> None:
     _logging.basicConfig(level=_logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     quiet_request_logs()
+
+
+def request_logger() -> _logging.Logger:
+    """The `ops.request` logger (c-560): its own handler printing the bare message, and no propagation, so each line is
+    exactly one JSON object whatever format the service's root logger prints."""
+    logger = _logging.getLogger("ops.request")
+    if not logger.handlers:
+        handler = _logging.StreamHandler(sys.stderr)
+        handler.setFormatter(_logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(_logging.INFO)
+        logger.propagate = False
+    return logger

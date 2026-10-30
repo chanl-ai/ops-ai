@@ -30,7 +30,7 @@ Mailpit reachable through tools-service (`tools.mail`), and the bank stand-in th
 | 4 | Maya approves both checks on Human Tasks | Each run continues to its kind and ends `restraining_notice` / `tax_levy` |
 | 5 | Cases and terms | One case per document named from the read (`Restraining notice: Parker Demo (SYN-2026-0006)` and so on); TAXLEVY01's Calculate gives amount 7482.19 and 21 days to respond |
 | 6 | The webhook stand-in | One `levy.processed` payload per case |
-| 7 | The Messaging Platform team acknowledges | The parent ends `replied` and one more reply from `levies@harborpine.test` is in Mailpit |
+| 7 | Maya, in Operations (the run's team, which decides its held writes), acknowledges | The parent ends `replied` and one more reply from `levies@harborpine.test` is in Mailpit |
 
 ## Acceptance layers
 

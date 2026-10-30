@@ -87,8 +87,8 @@ await withUiStack(
   async (consoleUrl, stack) => {
     const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     const J = as(await tokenFor('j.richardson@harborpine.example'));
-    // The reply goes out through send_reply on the Messaging Platform team's mail module, so that team approves it.
-    const W = as(await tokenFor('w.kamau@harborpine.example'), 'team_platform');
+    // A review is decided in its run's team (Operations), whichever team's module the write it approves calls.
+    const W = as(await tokenFor('w.kamau@harborpine.example'));
     const M = as(await tokenFor('m.okafor@harborpine.example'));
     const P = as(await tokenFor('p.shah@harborpine.example'));
     const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50`, J))?.data ?? [];
@@ -147,7 +147,7 @@ await withUiStack(
       check('4 the hold it started found the customer by their address and waits for approval', (held?.waiting ?? {}).node === 'review' && has(held, ['search:ok', 'match:matched', 'calc:out', 'enough:true']).length === 0 && out(held, 'calc')?.hold === 2000 && out(held, 'match')?.match?.name === 'Marcus Bell', { status: held?.status, waiting: held?.waiting?.node, steps: path(held), calc: out(held, 'calc') });
     });
 
-    // 5. Human review approved by the mail module's team, then Call a tool (send_reply) and End.
+    // 5. Human review approved in the run's team, then Call a tool (send_reply) and End.
     await step('5 the approved reply leaves from the complaints mailbox', async () => {
       const replies = async () => {
         const found = await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${CUSTOMER}"`)}`)).json();
@@ -229,7 +229,7 @@ await withUiStack(
       } finally {
         await browser.close();
       }
-      const why = 'Ended at Could not finish, an end marked as a failure';
+      const why = 'Recognise and read it failed: File was not found. The run ended at Could not finish.';
       check('7 a run that ends at a failure End reads failed in the list, on its page and in the editor', ended?.status === 'failed' && has(ended, ['start:payload', 'read:error']).length === 0 && ended?.outcome === 'failed' && row?.status === 'failed' && row?.error === why && shown.alert?.includes(why) && shown.result === 'failed' && shown.end === 'Failed' && errors.length === 0, { status: ended?.status, steps: path(ended), row: row && { status: row.status, error: row.error }, shown, errors });
     });
 

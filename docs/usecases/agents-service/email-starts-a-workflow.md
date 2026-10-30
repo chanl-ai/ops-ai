@@ -1,6 +1,6 @@
 # An email in a watched mailbox starts a workflow
 
-Status: current. Id: `uc-150` (api), `uc-151` (ui). Service: `agents-service`. Layers: api, ui. Card: c-187.
+Status: current. Id: `uc-150` (api), `uc-151` (ui). Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 A builder picks Email received as a workflow's trigger and points it at a team mailbox. Once the workflow is live,
 the workflow worker reads the mailbox through `packages/ops_email`; each new message that matches the filters stores
@@ -35,6 +35,8 @@ failure modes (history, redelivery, two workers, Files first, filters, pause, a 
 |---|---|---|
 | api | `agents-service/scripts/test-uc-150-api.py` | passing |
 | ui | `console/scripts/test-uc-151-ui.mjs` | passing |
+
+In the console: uc-245's ui script: a team's mailbox is connected and tested, an email's PDF starts one run with the PDF in Files, and a redelivery starts none.
 
 ## Non-vacuous check
 

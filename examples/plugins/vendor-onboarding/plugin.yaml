@@ -1,0 +1,26 @@
+# The plugin manifest, in the format docs/plans/ops-ai/plugins.html proposes (status: proposed, not built).
+# Nothing in Ops AI reads this file yet: install.py reads it and installs each contribution through the public APIs.
+
+schema: ops-ai/plugin@1
+id: example.vendor-onboarding        # publisher id + name
+version: 0.1.0                       # for people; once packing exists, the bundle's digest is its identity
+title: Vendor onboarding
+summary: Checks a new supplier against a company registry, scores its risk in code and asks a person to approve it.
+products: [agentic, workflows]
+
+contributions:
+  - { kind: tool-module, id: vendor-registry, path: contributions/tool-modules/vendor-registry/module.yaml }
+  - { kind: code-module, id: vendor-scoring,  path: contributions/code-modules/vendor-scoring.yaml }
+  - { kind: agent,       id: vendor-reviewer, path: contributions/agents/vendor-reviewer.yaml }
+  - { kind: workflow,    id: vendor-onboarding, path: contributions/workflows/vendor-onboarding.yaml }
+
+# What the plugin needs and does not bring. Each is bound when a team installs it.
+requires:
+  - { kind: secret, name: VENDOR_REGISTRY_KEY, usedBy: [vendor-registry] }
+  - { kind: model,  id: reviewer-model, usedBy: [vendor-reviewer], capabilities: [chat] }
+  - { kind: role,   id: approver, description: Decides whether a new supplier is onboarded }
+
+# What it asks the deployment to allow, checked against the contributions at acceptance.
+permissions:
+  egress: [registry.vendors.test]
+  operations: { read: 3, write: 0, movesMoney: 0 }

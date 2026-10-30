@@ -59,7 +59,8 @@ from ..store.tenancy import current_team
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .event_log import designed_type
-from .review_text import call_label
+from .memory import fill_remembered
+from .review_text import call_label, humanize, object_rows, shown, tool_titles
 from .runs import graph_store
 
 CHAT_GRAPH = "agent_wrapper"
@@ -96,6 +97,8 @@ class AssistantBuilder:
     # never on the live stream, whose message goes to the person who asked.
     audit: bool = False
     ended: bool = False
+    # Plugin tools' titles (review_text.tool_titles), so a card names a tool as the tools list does.
+    titles: dict[str, str] = field(default_factory=dict[str, str])
 
     def _call(self, c: dict[str, Any]) -> ToolCall:
         status = str(c.get("status") or "")
@@ -109,7 +112,7 @@ class AssistantBuilder:
         return ToolCall(
             id=str(c["id"]),
             name=str(c.get("tool")),
-            label=call_label(self.catalog, c),
+            label=call_label(self.catalog, c, self.titles),
             server=str(c.get("server") or ""),
             input=_d(c.get("input")),
             output=output,
@@ -118,31 +121,37 @@ class AssistantBuilder:
             gated=gated,
         )
 
+    def _worded(self, text: str, tool: str) -> str:
+        title = self.titles.get(tool)
+        return text.replace(tool, title) if title and tool else text
+
     def _approval(self, interrupt: dict[str, Any]) -> ApprovalWidget:
         p = _d(interrupt.get("payload"))
         definition = self.catalog.tool(str(p.get("tool")))
         tpl = definition.approval if definition else None
-        values = {k: str(v) for k, v in _d(p.get("input")).items()}
+        args = _d(p.get("input"))
+        values = {k: str(v) for k, v in args.items()}
         decision = self.decisions.get(str(interrupt.get("id")))
         step = str(_d(p.get("call")).get("step"))
         state = decision["decision"] if decision else "awaiting_second" if self.approvals.get(step) else "pending"
         return ApprovalWidget(
             id=approval_widget_id(str(interrupt.get("id"))),
-            title=fill(tpl.title, values) if tpl else str(p.get("tool")),
+            title=fill(tpl.title, values) if tpl else self.titles.get(str(p.get("tool"))) or str(p.get("tool")),
             app=str(p.get("server") or ""),
             tool=str(p.get("tool")),
-            tool_label=call_label(self.catalog, {"tool": p.get("tool"), "input": p.get("input")}),
+            tool_label=call_label(self.catalog, {"tool": p.get("tool"), "input": p.get("input")}, self.titles),
             as_of=now_iso(),
             review_id=str(p.get("review_id")),
-            action=str(p.get("action") or ""),
-            summary=fill(tpl.summary, values) if tpl else str(p.get("needed") or ""),
+            action=self._worded(str(p.get("action") or ""), str(p.get("tool"))),
+            # The kernel words the wait with the operation's name; a titled tool reads by its title there too.
+            summary=fill(tpl.summary, values) if tpl else self._worded(str(p.get("needed") or ""), str(p.get("tool"))),
             # Without a template the reviewer sees every input the call will send, exactly as the model wrote it.
             # A row whose inputs the model left out says nothing, so it is left off rather than shown empty.
             fields=[
                 LabelValue(label=label, value=value) for label, v in tpl.fields if (value := fill(v, values)).strip()
             ]
             if tpl
-            else [LabelValue(label=k, value=v) for k, v in values.items()],
+            else [LabelValue(**row) for row in _input_rows(args)],
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
             step_up=bool(p.get("step_up")) or None,
@@ -198,7 +207,9 @@ class AssistantBuilder:
                             "id": f"wg_{call.id}",
                             "app": call.server,
                             "tool": call.name,
-                            "tool_label": call_label(self.catalog, {"tool": call.name, "input": call.input}),
+                            "tool_label": call_label(
+                                self.catalog, {"tool": call.name, "input": call.input}, self.titles
+                            ),
                             "as_of": m.at,
                         }
                     )
@@ -289,6 +300,18 @@ class AssistantBuilder:
         return self.apply(designed_type(e), e.get("data"))
 
 
+def _input_rows(args: dict[str, Any]) -> list[dict[str, str]]:
+    """Every input the call will send, as rows (c-565): a value as a person reads it, an object as one row per field,
+    so an approver never reads a raw object."""
+    rows: list[dict[str, str]] = []
+    for k, v in args.items():
+        if isinstance(v, dict):
+            rows += object_rows(humanize(k), cast(dict[str, Any], v))
+        elif (value := shown(v, money=False, currency=None)).strip():
+            rows.append({"label": humanize(k), "value": value})
+    return rows
+
+
 def approval_widget_id(interrupt_id: str) -> str:
     return f"wg_{interrupt_id[:24]}"
 
@@ -301,9 +324,12 @@ async def approvals_of(rt: Runtime, thread_id: str) -> dict[str, list[str]]:
     return await ReviewStore(graph_store(rt).engine).approvals_by_step(thread_id)
 
 
-async def messages_of(rt: Runtime, thread_ids: list[str], *, audit: bool = False) -> dict[str, list[ChatMessage]]:
+async def messages_of(
+    rt: Runtime, thread_ids: list[str], *, audit: bool = False, reader: str | None = None
+) -> dict[str, list[ChatMessage]]:
     """Current (non-superseded) messages per thread, rebuilt from runs and events. What a guardrail kept back or took
-    back (guardrail_audit) is left out unless `audit`, which only a caller allowed to view the audit may ask for."""
+    back (guardrail_audit) is left out unless `audit`, which only a caller allowed to view the audit may ask for. What
+    a reply remembered carries its text only for `reader` when it is that memory's person (memory.fill_remembered)."""
     store = graph_store(rt)
     out: dict[str, list[ChatMessage]] = {}
     if not thread_ids:
@@ -314,6 +340,8 @@ async def messages_of(rt: Runtime, thread_ids: list[str], *, audit: bool = False
         by_thread[r.thread_id].append(r)
     for tid in thread_ids:
         out[tid] = await _thread_messages(rt, tid, by_thread[tid], audit=audit)
+    # A reply's memory event holds ids only (c-557); what was remembered is read from the memories as they are now.
+    await fill_remembered(rt, [m for messages in out.values() for m in messages], reader)
     return out
 
 
@@ -321,6 +349,7 @@ async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, au
     runs = [r for r in await graph_store(rt).runs(thread_id) if r["kind"] in ("input", "resume", "recovery")]
     decisions = await decisions_of(rt, thread_id) if runs else {}
     approvals = await approvals_of(rt, thread_id) if runs else {}
+    titles = await tool_titles(rt) if runs else {}
     per_run: dict[str, list[Any]] = {}
     superseded: set[str] = set()
     feedback: dict[str, dict[str, Any] | None] = {}
@@ -356,7 +385,7 @@ async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, au
             # Who answered, so a reload after a handover still credits the agent that wrote each reply.
             answered = rt.catalog.agent_in_flight(str(given["agent_id"]))
             reply.agent_id, reply.agent_name = str(given["agent_id"]), answered.name if answered else None
-        builder = AssistantBuilder(rt.catalog, reply, decisions, approvals, audit=audit)
+        builder = AssistantBuilder(rt.catalog, reply, decisions, approvals, audit=audit, titles=titles)
         for e in per_run.get(run["id"], []):
             builder.apply(e.type, e.data, e.at)
         if not builder.ended and run["status"] != "running":

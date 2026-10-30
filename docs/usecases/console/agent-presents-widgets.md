@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-089`. Service: `console`. Layers: ui.
 
-The baseline for card c-082: today the kernel's built-in `present` tool lets the model turn facts already in the
+The baseline for card an earlier change: today the kernel's built-in `present` tool lets the model turn facts already in the
 conversation into a widget. No tool, connection or template is involved.
 
 ## Preconditions

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_service_kit.errors import Conflict
 from ops_store import Guarantee, isolation
 from ops_store.database import open_database
+from ops_store.dialect import db_now
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
@@ -87,6 +88,11 @@ kb_sources = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_sync_at", sa.DateTime(timezone=True)),
     sa.Column("last_run_status", sa.String(16)),
+    # A "tool" source's reading (c-564): plugin, source, its two tools, the connection, the schedule, the watermark and
+    # saved cursor of the last sync, and why it is paused; null for a file source.
+    sa.Column("config", sa.JSON),
+    # Held by the sync running now, so the schedule never starts a second one on the same source.
+    sa.Column("lease_until", sa.DateTime(timezone=True)),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -152,6 +158,11 @@ kb_items = sa.Table(
     sa.Column("verified_at", sa.DateTime(timezone=True)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("processed_at", sa.DateTime(timezone=True)),
+    # Read through a connection's tools (c-564): the system's change marker, the item this one is attached to, and its
+    # address in the system for a citation.
+    sa.Column("marker", sa.String(120)),
+    sa.Column("parent_id", sa.String(64)),
+    sa.Column("url", sa.Text),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -656,6 +667,28 @@ class KnowledgeStore:
                     kb_base_sources.c.source_id == source_id,
                 )
             )
+
+    async def remove_items(self, tenant: str, item_ids: list[str]) -> int:
+        """Drops documents a tool source no longer lists (c-564), with their versions and chunks."""
+        if not item_ids:
+            return 0
+        async with self._tx() as c:
+            for table, column in ((kb_chunks, kb_chunks.c.item_id), (kb_item_versions, kb_item_versions.c.item_id)):
+                await c.execute(sa.delete(table).where(table.c.tenant_id == tenant, column.in_(item_ids)))
+            q = sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id.in_(item_ids))
+            return (await c.execute(q)).rowcount
+
+    async def claim(self, tenant: str, source_id: str, *, until: Any) -> bool:
+        """Takes the source's sync lease until `until` when nobody holds it (or a holder's ran out): true when taken,
+        so two syncs of one source never run at once."""
+        s = kb_sources
+        free = sa.or_(s.c.lease_until.is_(None), s.c.lease_until < db_now())
+        async with self._tx() as c:
+            q = sa.update(s).where(s.c.tenant_id == tenant, s.c.id == source_id, free).values(lease_until=until)
+            return (await c.execute(q)).rowcount == 1
+
+    async def release(self, tenant: str, source_id: str) -> None:
+        await self.update_source(tenant, source_id, {"lease_until": None})
 
     async def add_run(self, row: dict[str, Any]) -> None:
         async with self._tx() as c:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from usecase_harness import EMAILS, agents, check, data, finish, new_thread, run, state
+from usecase_harness import EMAILS, TEAM, agents, check, data, finish, new_thread, run, state
 
 with agents() as api:
     tid = new_thread(api, "complex_workflow")
@@ -24,7 +24,7 @@ with agents() as api:
     check(
         "new process sees the same review", shown.get("kind") == "review" and shown.get("review_id") == review_id, shown
     )
-    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
+    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
     check("decided in the new process (200)", decided.status_code == 200, decided.text[:200])
     last = data(api.get(f"/v1/threads/{tid}/runs"))[-1]
     check("reply sent once after the restart", last["nodes"].count("send_reply") == 1, last["nodes"])

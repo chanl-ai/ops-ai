@@ -1,5 +1,5 @@
 import type { FilesApi } from './files-contract';
-import { createDocumentTypesHttp, createExtractionsRoutes } from './files-http';
+import { createDocumentTypesHttp, createExtractionsRoutes, createLayoutsRoutes } from './files-http';
 import { createTransport } from './http';
 
 /**
@@ -15,4 +15,10 @@ export function createDocumentsHttp(baseUrl: string): FilesApi['documentTypes'] 
 export function createExtractionsHttp(baseUrl: string): FilesApi['extractions'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return createExtractionsRoutes(get, send);
+}
+
+/** Layouts on documents-service (`/v1/documents/layout`): a file's pages, blocks and words with confidence. */
+export function createLayoutsHttp(baseUrl: string): FilesApi['layouts'] {
+  const { get, send } = createTransport(`${baseUrl}/v1`);
+  return createLayoutsRoutes(get, send);
 }

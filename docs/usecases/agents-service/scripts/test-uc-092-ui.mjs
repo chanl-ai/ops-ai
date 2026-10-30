@@ -42,7 +42,7 @@ await withUiStack(
       await page.waitForURL(`**/workflows/definitions/${id}`, { timeout: 60_000 });
       await page.getByTestId('definition-node').first().waitFor({ timeout: 60_000 });
       const stage = () => page.getByTestId('definition-stage').getAttribute('data-stage');
-      check('a new workflow is saved as a draft', (await stage()) === 'draft', await stage());
+      check('1 a new workflow is saved as a draft', (await stage()) === 'draft', await stage());
 
       // 2. Every built step type is edited in its generated form: one control per setting, the JSON closed.
       const latest = new Map();
@@ -58,7 +58,7 @@ await withUiStack(
         forms.push({ type: t.id, fields, expected: t.ui.order.length, jsonShown });
         await page.getByTestId('definition-node-delete').click();
       }
-      check('each built step type opens a generated form with one control per setting and no JSON editor in view', forms.length === latest.size && forms.length > 0 && forms.every((f) => f.fields === f.expected && !f.jsonShown), forms);
+      check('2 each built step type opens a generated form with one control per setting and no JSON editor in view', forms.length === latest.size && forms.length > 0 && forms.every((f) => f.fields === f.expected && !f.jsonShown), forms);
 
       // The agent, tool and step pickers read their choices from the platform, not from typed ids.
       const agentTypes = await (await api('/v1/workflows/option-sources?source=agents')).json();
@@ -69,7 +69,7 @@ await withUiStack(
       const offered = await page.getByRole('option').allInnerTexts();
       await page.keyboard.press('Escape');
       await page.getByTestId('definition-node-delete').click();
-      check('the agent field lists the published agents from the option source', agentTypes.data.length > 0 && agentTypes.data.every((a) => offered.some((o) => o.includes(a.label))) && toolTypes.status === 200, { offered, agents: agentTypes.data.map((a) => a.label), tools: toolTypes.status });
+      check('3 the agent field lists the published agents from the option source', agentTypes.data.length > 0 && agentTypes.data.every((a) => offered.some((o) => o.includes(a.label))) && toolTypes.status === 200, { offered, agents: agentTypes.data.map((a) => a.label), tools: toolTypes.status });
 
       // 3. The End step through its form: an outcome, and the output read from the run's input.
       await page.locator('[data-testid="definition-node"][data-node-id="done"]').dblclick();
@@ -87,14 +87,14 @@ await withUiStack(
       const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
       const done = stored.definition.nodes.find((n) => n.id === 'done');
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'draft', null, { timeout: 30_000 }).catch(() => undefined);
-      check('Save stores the form as version 2, a draft, with the outcome and a path as output', v2?.version === 2 && stored.stage === 'draft' && done?.parameters?.outcome === 'refunded' && done?.parameters?.output === '$.input.amount', { v2, stage: stored.stage, done: done?.parameters });
+      check('4 Save stores the form as version 2, a draft, with the outcome and a path as output', v2?.version === 2 && stored.stage === 'draft' && done?.parameters?.outcome === 'refunded' && done?.parameters?.output === '$.input.amount', { v2, stage: stored.stage, done: done?.parameters });
 
       // 4. Non-vacuous half: a draft starts no live run, from the API or the editor.
       const early = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
       await page.getByTestId('definition-start-run').click();
       const liveOff = await page.locator('#definition-run-live').isDisabled();
       await page.keyboard.press('Escape');
-      check('a draft is refused a live run (409 not_live) and the editor offers only a test run', early.status === 409 && (await early.json()).error?.code === 'not_live' && liveOff, { status: early.status, liveOff });
+      check('5 a draft is refused a live run (409 not_live) and the editor offers only a test run', early.status === 409 && (await early.json()).error?.code === 'not_live' && liveOff, { status: early.status, liveOff });
 
       // 5. Publish through Reviews: James asks, the version is in review, and he cannot approve it himself.
       await page.getByTestId('definition-publish').click();
@@ -105,24 +105,26 @@ await withUiStack(
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'in_review', null, { timeout: 30_000 }).catch(() => undefined);
       const reviewLink = await page.getByTestId('definition-review-link').getAttribute('href');
       const own = await api(`/reviews/${review?.id}/decision`, { method: 'POST', body: JSON.stringify({ decision: 'approved' }) });
-      check('the request is pending in Reviews, the version shows In review, and the requester cannot approve it (403)', review?.status === 'pending' && (await stage()) === 'in_review' && reviewLink?.includes(review.id) && own.status === 403, { state: review?.status, stage: await stage(), reviewLink, own: own.status });
+      check('6 the request is pending in Reviews, the version shows In review, and the requester cannot approve it (403)', review?.status === 'pending' && (await stage()) === 'in_review' && reviewLink?.includes(review.id) && own.status === 403, { state: review?.status, stage: await stage(), reviewLink, own: own.status });
 
       await page.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByPlaceholder('Search workflows…').fill(NAME.toLowerCase());
       const row = page.getByRole('row').filter({ hasText: NAME }).first();
       await row.waitFor({ timeout: 60_000 }).catch(() => undefined);
       const rowText = await row.innerText().catch(() => '');
-      check('the Workflows list shows it as a draft with version 2 awaiting approval', /Draft/.test(rowText) && /v2 awaiting approval/.test(rowText), rowText);
+      check('6 the Workflows list shows it in review with version 2 awaiting approval', /In review/.test(rowText) && /v2 awaiting approval/.test(rowText), rowText);
 
       const approved = await api(`/reviews/${review?.id}/decision`, { method: 'POST', body: JSON.stringify({ decision: 'approved' }) }, M);
       await page.goto(`${consoleUrl}/workflows/definitions/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('definition-stage').waitFor({ timeout: 60_000 });
-      check('Maya approves it (200) and version 2 is live', approved.status === 200 && (await stage()) === 'live', { approved: approved.status, stage: await stage() });
+      check('7 Maya approves it (200) and version 2 is live', approved.status === 200 && (await stage()) === 'live', { approved: approved.status, stage: await stage() });
 
       // 6. A live run reaches the End step, and its output is the run's result.
       const worker = await stack.startWorker();
       await page.getByTestId('definition-start-run').click();
       const liveChosen = await page.locator('#definition-run-live').getAttribute('data-state');
+      // The trigger declares no inputs, so its start form sends JSON from the JSON tab.
+      await page.getByTestId('run-input-json-tab').click();
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ amount: 42 }));
       await page.getByTestId('definition-start-run-submit').click();
       await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
@@ -130,8 +132,8 @@ await withUiStack(
       const shown = await result.waitFor({ timeout: 90_000 }).then(() => true, () => false);
       const resultText = shown ? await result.innerText() : '';
       const outcome = shown ? await result.getAttribute('data-outcome') : null;
-      const ended = await page.getByText(/Ended at Done with outcome refunded/).count();
-      check('the live run ends at Done and the page shows its output, 42, as the result', liveChosen === 'checked' && shown && outcome === 'refunded' && /\b42\b/.test(resultText) && ended === 1, { liveChosen, shown, outcome, resultText });
+      const ended = await page.getByText(/Ended at Done: refunded/i).count();
+      check('8 the live run ends at Done and the page shows its output, 42, as the result', liveChosen === 'checked' && shown && outcome === 'refunded' && /\b42\b/.test(resultText) && ended === 1, { liveChosen, shown, outcome, resultText });
 
       // 7. Pause stops live starts; resume lets them through again.
       await page.goto(`${consoleUrl}/workflows/definitions/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -144,11 +146,13 @@ await withUiStack(
       await page.getByTestId('definition-resume').click();
       await page.getByTestId('definition-pause-confirm').click();
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'live', null, { timeout: 30_000 }).catch(() => undefined);
-      check('paused, a live start is refused (409 workflow_paused); resumed, the version is live again', stagePaused === 'paused' && paused.status === 409 && pausedCode === 'workflow_paused' && (await stage()) === 'live', { stagePaused, status: paused.status, pausedCode, after: await stage() });
+      check('9 paused, a live start is refused (409 workflow_paused); resumed, the version is live again', stagePaused === 'paused' && paused.status === 409 && pausedCode === 'workflow_paused' && (await stage()) === 'live', { stagePaused, status: paused.status, pausedCode, after: await stage() });
 
       // 8. Cancel: a queued run is cancelled from its page and a worker never runs it.
       await worker.stop();
       await page.getByTestId('definition-start-run').click();
+      // The trigger declares no inputs, so its start form sends JSON from the JSON tab.
+      await page.getByTestId('run-input-json-tab').click();
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ amount: 7 }));
       await page.getByTestId('definition-start-run-submit').click();
       await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
@@ -161,7 +165,7 @@ await withUiStack(
       const run = (await (await api(`/v1/runs/${runId}`)).json()).data;
       await after.stop();
       const status = (await page.getByTestId('run-status').innerText()).toLowerCase();
-      check('Cancel run stops a queued run: the page says cancelled and a worker started afterwards runs no step', status === 'cancelled' && run?.status === 'cancelled' && run?.steps.length === 0 && (await page.getByTestId('run-cancel').count()) === 0, { status, api: run?.status, steps: run?.steps.length });
+      check('10 Cancel run stops a queued run: the page says cancelled and a worker started afterwards runs no step', status === 'cancelled' && run?.status === 'cancelled' && run?.steps.length === 0 && (await page.getByTestId('run-cancel').count()) === 0, { status, api: run?.status, steps: run?.steps.length });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

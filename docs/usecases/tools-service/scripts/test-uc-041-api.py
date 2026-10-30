@@ -25,7 +25,8 @@ def request(workflow: str) -> dict[str, Any]:
 
 with tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as gw:
     with agents() as api:
-        listed = api.get("/v1/internal/workflows", headers=service_headers("agents", service="tools"))
+        as_tools = service_headers("agents", service="tools", scopes=["workflows:view"])
+        listed = api.get("/v1/workflow-refs", headers=as_tools)
         rows = {w["id"]: w for w in data(listed)} if listed.status_code == 200 else {}
         check(
             "agents-service lists its workflows to a service token, the seeded ones owned by team_ops",
@@ -39,15 +40,12 @@ with tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as gw
             made.status_code == 201 and approval.get("workflowName") == rows.get("dispute_email", {}).get("name"),
             made.text[:200],
         )
-        decide = f"{MODULE}/approvals/{approval.get('id')}/decide"
-        own = gw.post(decide, json={"decision": "approved"})
-        check("the requester cannot decide it (403)", own.status_code == 403, own.text[:200])
-        other = gw.post(decide, json={"decision": "approved"}, headers={"X-Dev-User": "Maya Okafor"})
-        check(
-            "someone else in the module's owner team approves it",
-            other.status_code == 200 and data(other).get("status") == "approved",
-            other.text[:200],
-        )
+        # Decided by its system workflow run in Human Tasks, as uc-010 shows; the decision itself is uc-053's.
+        review_id = approval.get("reviewId", "")
+        expected = f"tool_access.requested:{approval.get('id')}"
+        check("the request names its workflow run", review_id == expected, review_id)
+        on_module = gw.post(f"{MODULE}/approvals/{approval.get('id')}/decide", json={"decision": "approved"})
+        check("the module page decides nothing (409)", on_module.status_code == 409, on_module.text[:200])
         call = gw.post(
             "/v1/calls",
             json={
@@ -74,10 +72,13 @@ with tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as gw
         orphan_id = data(orphan).get("id") if orphan.status_code == 201 else ""
         time.sleep(31)  # past the workflow list's 30 s cache, so tools-service sees the new workflow
         unknown = gw.post(f"{MODULE}/approvals", json=request(orphan_id))
+        # The grant is for the workflow's own team id even when the directory does not hold that team (c-423); it is
+        # never handed to every team. A workflow no team owns is still refused.
+        owner = {w["id"]: w for w in data(api.get("/v1/workflow-refs", headers=as_tools)) or []}.get(orphan_id, {})
         check(
-            "a workflow whose team tools-service has no record of fails closed (422 naming the team)",
-            unknown.status_code == 422 and "team_nobody" in unknown.text,
-            unknown.text[:200],
+            "a workflow of a team tools-service has no record of is granted for that team alone",
+            unknown.status_code == 201 and owner.get("teamId") == "team_nobody",
+            [unknown.status_code, owner],
         )
     time.sleep(31)  # agents-service is stopped; past the cache, the next lookup must reach it
     down = gw.post(f"{MODULE}/approvals", json=request("dispute_email"))

@@ -21,7 +21,7 @@ Status: current. Id: `uc-075`. Service: `console`. Layers: ui.
 | 5 | A second version of the file is uploaded under the same name and synced | the Changes page lists it |
 | 6 | Throughout | no knowledge call answers 404 and no page error |
 
-Step 5 uploads through kb-service directly: the source page has no "add files" control on c-056.
+Step 5 uploads through kb-service directly: the source page has no "add files" control on an earlier change.
 
 ## Acceptance layers
 

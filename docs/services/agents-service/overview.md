@@ -7,7 +7,7 @@ The agents service owns agents, workflows, their versions, chat and the runs tha
 SSE from a Pydantic AI agent loop (spec 15), gated writes that stop for approval and continue once approved, and
 citations from a keyword passage store. The tools an agent may hold are tools-service's published operations: `GET
 /v1/tools`, the grant check and every run read them from tools-service (`activities/tool_directory.py`), and every
-call, read or write, runs through its gateway's `/v1/calls` (c-048 G1). The stack's seeded agents, granted seeded
+call, read or write, runs through its gateway's `/v1/calls` (an earlier change G1). The stack's seeded agents, granted seeded
 operations, are in `services/agents-service/seed/chat_agents.json`; passages and the fixture tools the unit tests
 run on stay in `services/agents-service/tests/fixtures/seed/`.
 
@@ -18,7 +18,7 @@ run on stay in `services/agents-service/tests/fixtures/seed/`.
 | `src/ops_agents/api` | FastAPI app, routers (chat, graphs, reviews, timers), chat turns, leases and sweeper, timers, metering, journal |
 | `src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
 | `src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
-| `packages/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers (c-055 T021): the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
+| `packages/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers (an earlier change T021): the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
 | `migrations/` | Alembic history 0001 onward. It still holds the tools service's and review tables until migrations split per service |
 | `tests/` | API, unit, checkpointer, gateway and timer tests; `tests/fixtures/` is the only place fixture data lives |
 | `experiments/` | Experiment scripts; their write-ups are in `experiments/` next to this page |
@@ -84,7 +84,7 @@ demo volume and is the first thing to replace with stored columns.
 
 ## A case assembled for its page
 
-`GET /v1/cases/{id}` (c-291, `api/case_page.py`, `store/case_links.py`) returns the case assembled for the case page,
+`GET /v1/cases/{id}` (`api/case_page.py`, `store/case_links.py`) returns the case assembled for the case page,
 so the console joins nothing. It keeps every key the route returned before (`fields` as a name-to-value map, `events`,
 the clocks as seconds left) and adds:
 
@@ -98,7 +98,7 @@ the clocks as seconds left) and adds:
 | `actions` | A Human Task that would call a tool is a drafted action, with its status and approvals; it is decided on its task page | the same review views |
 | `links` | Its runs with their workflow names, the files their input named, the emails that started them, and cases linked to it or open for the same customer in its team (5 at most), each with an `allHrefs` entry | one query per list |
 | `workflow` | The workflow whose run opened the case | the opening run |
-| `activity` | The five newest lines of Activity filtered to the case, with the actor's name, and its total | `GET /v1/activity?case=` (c-341) |
+| `activity` | The five newest lines of Activity filtered to the case, with the actor's name, and its total | `GET /v1/activity?case=` |
 | `permissions` | `assign`, `changeStatus`, `close`, `note`, each from `can()` | the caller's roles in the case's team |
 
 A case reads in the same number of queries whatever it holds (`tests/api/test_case_page.py`, 1 run against 30). Not
@@ -106,7 +106,7 @@ yet: `edited` is false for every field, since case values are written only by wo
 size or scan result, which the viewer link shows.
 
 Case types (`/v1/case-types`, `store/case_types.py`) are versioned records like task types, on the same store
-(`store/typed_records.py`). Both are kept per team, keyed (tenant, team, id) since c-507: each team holds its own copy
+(`store/typed_records.py`). Both are kept per team, keyed (tenant, team, id) since an earlier change: each team holds its own copy
 of the seeded ones in `seed/task_types.json` and `seed/case_types.json`, made on the team's first read, and creates,
 saves and publishes its own with `workflows.create`, `edit` and `publish`; no team reads another team's types. An
 Open case step names one with `caseType`; the case pins its newest published version, and a type with none takes the
@@ -114,11 +114,11 @@ error port (`case_type_unknown`). uc-251 runs it end to end.
 
 ## Activity
 
-`GET /v1/activity` (c-201, `api/routers/activity.py`, `store/activity.py`) lists everything that happened as one
+`GET /v1/activity` (`api/routers/activity.py`, `store/activity.py`) lists everything that happened as one
 paged list, newest first: one SQL union over the tables that record each kind, so the console neither merges lists
 nor counts rows itself. Filters: `kind`, `status` and `source` (`type:id`) repeat; `team` is the selected team, `all`
 for every team the caller is in, or one of them; `since` and `until` bound `at`. `facets.kind` and `facets.status`
-count under the other filters, which is what a page's "View activity (n)" button reads. `case` (c-341) keeps one
+count under the other filters, which is what a page's "View activity (n)" button reads. `case` keeps one
 case's rows: its own entries, and every row about a run or chat it links (the run, the email that started it, decisions
 on its Human Tasks, its tool calls), in the case's team only; another team's case is 404.
 
@@ -131,8 +131,8 @@ on its Human Tasks, its tool calls), in the case's team only; another team's cas
 | `decision` | `engine_work` resume rows, `review_decisions` | done; `outcome` is the decision | reviews.view |
 | `case` | `case_events` with their case: opened, a run or chat added, a note, a field changed, a case linked (a `decision` entry is left out, since the decision is its own row) | done; `outcome` is the entry's kind | cases.view |
 | `tool_call` | `thread_events` tool_end (chats, agent runs); `engine_steps` whose node type calls the tool gateway (one row per attempt) | ok: done; gated: waiting; running; else failed | as the chat or agent run it is in; workflows.view for a workflow's |
-| `system_workflow` | `service_events` system_workflow.updated and update_available, with the update's publish request (c-317) | updated and approved: done; in review (pending, returned): waiting; rejected: skipped; update_available (a team's own version kept): waiting. `outcome` is the request's status now, or update_available; `ref` is the review while it waits, else the workflow | workflows.view in any team asked about: a shipped system workflow belongs to no team, so `teamId` is null |
-| `reminder` | `service_events` task.reminder (c-277), with the run | waiting while the run still waits, else done; `outcome` is reminded; the title names the step and the hours it had waited; `ref` is the review | reviews.view |
+| `system_workflow` | `service_events` system_workflow.updated and update_available, with the update's publish request | updated and approved: done; in review (pending, returned): waiting; rejected: skipped; update_available (a team's own version kept): waiting. `outcome` is the request's status now, or update_available; `ref` is the review while it waits, else the workflow | workflows.view in any team asked about: a shipped system workflow belongs to no team, so `teamId` is null |
+| `reminder` | `service_events` task.reminder, with the run | waiting while the run still waits, else done; `outcome` is reminded; the title names the step and the hours it had waited; `ref` is the review | reviews.view |
 
 Each row is `{id, kind, title, status, outcome, teamId, source {type, id, name}, actor {kind, id, name}, at, ref {kind,
 id}}`. A channel source is the record's id: an email's mailbox (`mbx_…`, the address when the record is gone) and a
@@ -147,14 +147,14 @@ has to look in the mailbox for it. Test:
 
 ## Channels
 
-`GET /v1/channels` (c-245, `api/routers/channel_list.py`, `store/channel_list.py`) lists each way work reaches an
+`GET /v1/channels` (`api/routers/channel_list.py`, `store/channel_list.py`) lists each way work reaches an
 agent or workflow, under the id of the record that holds it, with what it serves, a health dot and its traffic.
 
 | Type | Record | Serves | Health | Traffic counted from |
 |---|---|---|---|---|
 | `email` | mailbox `mbx_…` | the live workflows whose Email received trigger names it | warn when not read for 5 minutes | `trigger_events` |
 | `chat` | widget deployment `wd_…` | its agent, pinned or Latest | error with no allowed websites | `graph_threads.deployment_id` |
-| `api` | platform-service API key `key_…` (c-246) | the key's target, or none | error when disabled or expired, warn when expiring in under 14 days or not scoped | runs whose `created_by` and threads whose `meta.startedBy` is `key:<id>` |
+| `api` | platform-service API key `key_…` | the key's target, or none | error when disabled or expired, warn when expiring in under 14 days or not scoped | runs whose `created_by` and threads whose `meta.startedBy` is `key:<id>` |
 
 `PATCH /v1/channels/{id}` is the one route that renames, pauses or resumes a channel, or changes a chat channel's
 allowed websites or what it serves (a version, or Latest); `POST /v1/channels/{id}/retire` retires a chat channel, and
@@ -162,7 +162,7 @@ a retired one answers 409 `widget_retired` to any change. `POST /v1/channels` wi
 (the agent pinned at its published version, on exact origins) and answers 201 with its row. `GET /v1/channels` takes
 `agentId` (the channels serving that agent) and `includeRetired` (retired chat channels too, health `idle`, "Retired");
 a chat row carries `embed` with the agent, the version it answers from, its origins, when it retired and its active
-mint keys, and its conversations are `activity7d` and `lastActivityAt` (c-339). `POST` and `GET /v1/widget-deployments`
+mint keys, and its conversations are `activity7d` and `lastActivityAt`. `POST` and `GET /v1/widget-deployments`
 are deprecated aliases until the console's adapter moves; mint keys, server sessions and preview sessions stay there.
 
 API rows come from platform-service's `GET /v1/api-key-summaries` on every list; a revoked key is not listed, and a
@@ -172,7 +172,7 @@ of that workflow (on its pinned version, when it pins one) or a thread on that a
 
 ## Service events
 
-`POST /v1/events` (c-258, `api/routers/service_events.py`, `api/service_events.py`, `store/service_events.py`) is how
+`POST /v1/events` (`api/routers/service_events.py`, `api/service_events.py`, `store/service_events.py`) is how
 one service makes something happen without calling another: a service token with `events:emit` reports `{name, key,
 teamId, actor?, payload}`, and the tenant's handler for the event runs on that team with the payload as input. Run key
 `<name>:<key>`: a repeat returns the run, a repeat after it failed starts attempt n (`<name>:<key>:n`). With `actor`,
@@ -190,7 +190,7 @@ them at least once.
 
 ## Deciding and combining in a workflow
 
-`ops.flow.switch` (c-259) has one named way out per case, each a rule set in If's language (`eq`, `gt`, `contains`,
+`ops.flow.switch` has one named way out per case, each a rule set in If's language (`eq`, `gt`, `contains`,
 `exists`, `empty` over any mapping); the first case whose rules hold wins and `otherwise` takes the rest. A way it does
 not name cannot be wired, and a name used twice fails the definition's checks. `ops.data.combine` merges the same
 fields from named sources: each field takes the first source (in `fields[].from` order, else the sources' order) with a
@@ -202,7 +202,7 @@ read through Extract from file like an attachment. uc-226 runs all of it on one 
 
 ## Branches and the Join
 
-A step's way out may connect to several steps, which then run together: a fork. `ops.flow.join` (c-278) is where they
+A step's way out may connect to several steps, which then run together: a fork. `ops.flow.join` is where they
 meet. It has the one input every step has, taking a connection from each branch, and goes on once with
 `{<step id>: <that step's output>}` for each step connected to it; a step that took another way out or never ran is
 null. The compiler adds a Join as a LangGraph deferred node (`node_types.py` `deferred`, `compiler.py`), so it runs
@@ -214,7 +214,7 @@ uc-400.
 
 ## Step output shapes
 
-Each step declares its output by the port it leaves by, before the workflow has run (c-353): `ops_engine/shapes.py`
+Each step declares its output by the port it leaves by, before the workflow has run: `ops_engine/shapes.py`
 builds a JSON Schema per port from the type (Email received, Open case, End), the step's settings (a request's
 `inputSchema`, Set's values, an agent's `outputSchema`, an AI step's answer schema) or a lookup (Extract's document type
 fields; a tool's response schema, which tools-service keeps from an OpenAPI import, else infers from the example
@@ -226,7 +226,7 @@ declared shape; uc-401.
 
 ## Run workflow waiting for its children
 
-`ops.action.workflow` with `wait` on (c-263) pauses the parent until every child it started has ended, then leaves by
+`ops.action.workflow` with `wait` on pauses the parent until every child it started has ended, then leaves by
 `done` with `{workflowId, count, children: [{index, runId, outcome, output}], counts}` in item order; a failed child is
 a row with its outcome and the parent goes on. `batchSize` starts that many at once and the next as one ends.
 `timeoutHours` adds a `timeout` port, taken with the children that ended collected and the rest named (`waiting` run
@@ -239,7 +239,7 @@ delayed work. `RunPort.children` reads the children in one query by run key pref
 
 ## Wait and reminders
 
-`ops.flow.wait` (c-277) pauses a run for `seconds`, or with `mode: until` until an ISO date or date and time read from
+`ops.flow.wait` pauses a run for `seconds`, or with `mode: until` until an ISO date or date and time read from
 an earlier step (a date alone is midnight UTC, no offset is UTC), then goes on by `out` with `{seconds}` or `{until}`.
 A date already past goes on at once without pausing; a value that is not a date leaves by `error`, a port only until
 mode has, with `{error, code: not_a_date, value}`. The pause is an interrupt carrying `wakeAfterSeconds`; the worker
@@ -256,7 +256,7 @@ Tests: `tests/engine/test_wait_and_reminders.py`; uc-403.
 
 ## Archiving a workflow
 
-`POST /v1/workflows/definitions/{id}/archive` and `/restore` (c-274, `api/routers/engine.py`) set and clear `archived_at`
+`POST /v1/workflows/definitions/{id}/archive` and `/restore` (`api/routers/engine.py`) set and clear `archived_at`
 on every version of the workflow. An archived workflow starts no run, live, test or as a child: `RunStore.create`
 refuses it under the same lock a pause takes (409 `workflow_archived`). The mailbox listener and the channel list read
 live versions only when not archived, so a trigger no longer serves it. Both workflow lists leave it out unless
@@ -289,20 +289,32 @@ person and one for a run under way, so a parent that started hundreds of runs is
 the list query's plan. A court order notice read below the floor goes to Check the read in the court order read workflow
 (`Read one levy document`) and, approved, reaches its case
 per debtor through the read's records: a read of several records has no single read's fields for the check to edit
-(`tests/engine/test_levy_definitions.py::test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor`, c-313).
+(`tests/engine/test_levy_definitions.py::test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor`).
+
+## What a person's assistant remembers
+
+A person's memories belong to one team and reach every agent in it, unless a memory is kept to one agent.
+
+| Part | Detail |
+|---|---|
+| Learning | Beside each chat turn, one call on the `memory-extract` alias reads the last six messages with the person's words marked and their ten closest saved memories by the database's full-text search, and returns candidates with a kind, a quote, a confidence and a decision: new, same, replaces or conflicts. Only a quote from the person's own words in their latest message is kept, never pasted or quoted text, and only a preference, procedure, fact or person; one decision per memory a turn touches. A card number (Luhn), an IBAN (mod 97) or a US, UK or Canadian national id is never kept, whatever the model says (`api/memory_safety.py`). 0.8 and above is used at once, 0.5 to 0.8 waits as a suggestion, below that is dropped; "remember that ..." under 300 characters is kept once with the source `asked`: the model's reading of it, whether or not its quote includes the asking words, else the words as said. Only the person's own edit has the source `person`. A turn under 20 characters, a regenerate and a test chat learn nothing, and a reply waits for the extraction at most 10 s |
+| History | A change closes the old version and links the new one to it; a learned change to a memory the person confirmed or wrote is kept in conflict while the confirmed one stays in use. One memory per key is in use for a person, held by a per-person lock and a unique index |
+| Recall | Up to 5 standing preferences and procedures, then the best full-text matches for the question across all of the person's memories, ranked in SQL (PostgreSQL `ts_rank`; SQL Server `CONTAINSTABLE` where it has Full-Text Search, else a word count) and again by confidence, recency and kind, until 8 memories or 600 tokens counted as characters / 4 per line. Each answer's memory ids and why each was picked are recorded in `message_memory_use`; a thread keeps ids only, so a reload reads the text from the memory, and shows it only to the memory's person: anyone else allowed to read the thread sees that something was remembered, never what |
+| Taking it back | `/v1/me/memories`: forget (erased after 30 days unless taken back with `POST /{id}/undo`), undo of what a reply just saved (a replaced memory comes back), and `POST /{id}/erase`, which removes a memory and its earlier versions at once. The hourly `memory_cleanup` erases forgotten memories past their grace and suggestions unanswered after 14 days |
+| Not yet | Matching is by words, not meaning, until models-service serves embeddings; the SQL Server memory tests have not run yet on the test machine; team memory, the admin's memory policy and the console screens are later cards. gpt-5-mini makes 7 of 8 decisions right with the code rules above, the miss asking instead of replacing (`experiments/memory-decisions.md`) |
 
 ## Testing an agent and its replies
 
 | Part | Detail |
 |---|---|
-| Test thread | `POST /chat/threads` with `test: true` runs the agent's newest version, draft included; with `testVersion` a saved version instead, which is how the test panel's Compare asks two versions one question (c-284, c-286). Test threads are left out of counts and memory. |
-| Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish (c-286). |
+| Test thread | `POST /chat/threads` with `test: true` runs the agent's newest version, draft included; with `testVersion` a saved version instead, which is how the test panel's Compare asks two versions one question. Test threads are left out of counts and memory. |
+| Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish. |
 | Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide only while `requesterMayDecide` allows, as the starter does (tick 29). |
-| Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone (c-302); a stopping worker waits for it. |
+| Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone; a stopping worker waits for it. |
 
 ## Microsoft 365 mailboxes
 
-A mailbox with `provider: graph` (c-228) holds the team's own app registration: `graphTenantId`, `graphClientId`, and
+A mailbox with `provider: graph` holds the team's own app registration: `graphTenantId`, `graphClientId`, and
 `passwordSecret`, the name of the Secrets-page secret with the client secret; saving one without all three is 422
 `mailbox_incomplete`. The app needs the Mail.Read and Mail.Send application permissions with an admin's consent, scoped to
 the one mailbox with an application access policy
@@ -319,7 +331,7 @@ registration is what a team's mailbox uses.
 | 07 CD-11 AI SDK UI message stream | The console's `ChatStreamEvent` frames, which map one to one |
 | 15 §5 resume stream after approval | The approval request runs the continuation and stores it as a new message; the console re-fetches |
 | 13 step-up token verified | Any non-empty token is accepted and recorded on the interrupt |
-| c-057 `levy-hold` as a child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
+| an earlier change `levy-hold` as a child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
 | 07 CD-7 no self-approval | Not enforced: the dev auth mode has one user |
 | 17 §2 schema `runtime` | Tables in `public`, so the API tests run on SQLite |
 | 17 §4 generated `ops_contracts` | Hand-written models mirroring `apps/console/src/lib/types/chat.ts` |

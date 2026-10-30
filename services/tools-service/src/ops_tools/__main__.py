@@ -28,12 +28,13 @@ from .app import create_gateway_app
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
 from .code_runs import CodeExecutor, code_signer
+from .connections.connect_links import ConnectLinks
 from .connections.routes import connections_router
 from .connections.service import ConnectionService
 from .egress import EgressPolicy, OverrideResolver, egress_client, egress_transport
 from .egress_routes import egress_router
 from .expression_routes import expressions_router
-from .graph_mailbox import graph_clients
+from .graph_mailbox import cursor_key, graph_clients
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mock_routes import mocks_router
 from .modules.directory import Directory
@@ -45,6 +46,10 @@ from .modules.seed import load
 from .modules.service import ModuleService
 from .modules.workflows import AgentsWorkflows
 from .opa import OpaClient
+from .plugins.host import PluginHost
+from .plugins.routes import plugins_router
+from .plugins.switches import InstallSwitches
+from .plugins.templates import plugin_templates_router
 from .registry import ToolRegistry
 from .secrets import SecretResolver
 from .secrets.routes import secrets_router
@@ -56,9 +61,12 @@ from .store.egress import EgressStore
 from .store.event_relay import keep_relaying
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
+from .store.plugin_app_keys import PluginAppKeys
+from .store.plugin_bindings import PluginBindings
 from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
 from .store.send_policies import SendPolicies
+from .systems import Systems, systems_router
 from .tools import LocalToolRunner, ToolCaller
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
@@ -118,7 +126,13 @@ def main() -> None:
     # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
     connection_store = ConnectionStore(engine)
     tokens = Tokens(connection_store, cipher, egress_client(policy, ca_file=ca), policy)
-    authenticator = Authenticator(connection_store, secrets, tokens)
+    # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
+    links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
+    # The platform's own OAuth app secrets for plugins (c-565), sealed at the account; only with plugins on.
+    app_keys = PluginAppKeys(engine, cipher) if settings.plugins else None
+    authenticator = Authenticator(
+        connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
+    )
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
 
     def client(audience: str, base_url: str, scopes: list[str] | None = None) -> ServiceClient:
@@ -126,6 +140,17 @@ def main() -> None:
         http = httpx.AsyncClient(base_url=base_url, timeout=5)
         return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
 
+    # The installed plugins (c-565), read once at start: a failed one is reported on /v1/plugins and left out. Off
+    # (OPS_PLUGINS, the default until release) nothing is loaded, the plugin routes are not mounted and calls never
+    # reach a plugin.
+    plugins = PluginHost.when_on(
+        settings,
+        store,
+        PluginBindings(engine),
+        InstallSwitches(
+            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
+        ),
+    )
     modules = ModuleService(
         store,
         directory,
@@ -158,9 +183,30 @@ def main() -> None:
         resend_http=egress_client(policy, ca_file=ca),
         graph=graph,
     )
+    connection_service = ConnectionService(
+        connection_store,
+        SecretStore(engine),
+        cipher,
+        tokens,
+        directory,
+        egress=policy,
+        # A sign-in returns to the console's page, which hands the code to this service.
+        console_url=settings.console_url,
+        security_team=settings.security_team_id,
+        # An MCP server's sign-in is found from the server, through the egress client (c-331).
+        discovery=Discovery(egress_client(policy, ca_file=ca), policy),
+        # Test connection signs its read in as a call is, through the same egress client (c-558).
+        auth=authenticator,
+        http=egress_client(policy, ca_file=ca),
+        # A plugin's connection takes its instance from the token answer (c-564).
+        on_token=plugins.on_token if plugins else None,
+        app_secret=app_keys.value if app_keys else None,
+    )
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(catalog, store),
+        registry=ToolRegistry(catalog, store, plugins),
+        plugins=plugins,
+        cursor_key=cursor_key(settings.secrets_key.get_secret_value()),
         log=calls,
         # The mail provider settings pick (OPS_MAIL_PROVIDER); a missing secret stops start-up here. An SMTP password
         # named by OPS_SMTP_PASSWORD_SECRET is read from the Secrets page at each send, as send_reply.
@@ -223,22 +269,10 @@ def main() -> None:
             secrets_router(SecretStore(engine), cipher, modules=store),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
-            connections_router(
-                ConnectionService(
-                    connection_store,
-                    SecretStore(engine),
-                    cipher,
-                    tokens,
-                    directory,
-                    egress=policy,
-                    # A sign-in returns to the console's page, which hands the code to this service.
-                    console_url=settings.console_url,
-                    security_team=settings.security_team_id,
-                    # An MCP server's sign-in is found from the server, through the egress client (c-331).
-                    discovery=Discovery(egress_client(policy, ca_file=ca), policy),
-                ),
-                directory,
-            ),
+            *([plugins_router(plugins, connection_service, directory, app_keys)] if plugins and app_keys else []),
+            *([plugin_templates_router(plugins)] if plugins else []),
+            connections_router(connection_service, directory),
+            systems_router(Systems(connection_service, store, plugins, app_keys), directory),
         ),
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_level="info")

@@ -2,7 +2,7 @@
 # tests; these targets only call scripts/usecase.mjs, which runs one script per use case and layer. Scripts start the
 # agents service on the scripted model on their own ports, so no target here makes a real model call unless
 # APPROVED_REAL_CALLS=<n> is set.
-.PHONY: usecase-test usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
+.PHONY: usecase-test usecase-report usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
 
 # Each run picks free ports and creates its own database (ops_usecase_r<pid>_<hex>), dropped when it ends, so runs
 # from different sessions never collide. OPS_USECASE_{AGENTS,TOOLS,MODELS,CONSOLE}_PORT and OPS_USECASE_DB set in the
@@ -12,8 +12,14 @@ USECASE := node $(ROOT)/scripts/usecase.mjs
 
 ##@ Use cases
 
+# At most USECASE_SLOTS runs on this Mac at once (each starts its own stack); the rest wait for a slot.
+USECASE_SLOTS ?= 3
+usecase-test-run = python3 scripts/at-most.py $(USECASE_SLOTS) usecase -- $(USECASE)
 usecase-test: ## Run use cases: make usecase-test UC=<id> LAYER=api|sdk|cli|ui (both optional; needs make db-up)
-	@$(USECASE) test $(if $(UC),--uc $(UC)) $(if $(LAYER),--layer $(LAYER))
+	@$(usecase-test-run) test $(if $(UC),--uc $(UC)) $(if $(LAYER),--layer $(LAYER))
+
+usecase-report: ## Each use case's stories, works or broken, from its latest runs: make usecase-report UC=<id> (all with stories when unset)
+	@$(USECASE) report $(if $(UC),--uc $(UC))
 
 usecase-list: ## List the use case registry
 	@$(USECASE) list

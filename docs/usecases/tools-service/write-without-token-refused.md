@@ -24,6 +24,8 @@ The script starts its own services on the scripted model; no model key is needed
 |---|---|---|
 | api | `tools-service/scripts/test-uc-007-api.py` | passing |
 
+In the console: a chat write waits on an approval instead of running (uc-055's ui script, step 8; uc-086's, step 9); the gateway's refusal of a write with no token has no page of its own.
+
 ## Non-vacuous check
 
 `same write with an approval token runs (200)` paired with the refusal: if the gateway refused everything, or OPA were down, the paired success fails and the refusal is not mistaken for policy.

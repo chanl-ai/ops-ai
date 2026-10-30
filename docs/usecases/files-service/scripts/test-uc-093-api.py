@@ -58,9 +58,9 @@ def main() -> None:
         locked = f.post(f"/v1/files/{file_id}/download-url", headers=james)
         check("a file not yet scanned clean cannot be downloaded (423)", locked.status_code == 423, locked.text)
         verdict = {"fileId": file_id, "status": "clean", "engine": "clamav"}
-        refused = f.post("/v1/internal/files/scan-results", json=verdict, headers=kb)
+        refused = f.post("/v1/files/scan-results", json=verdict, headers=kb)
         check("a service without files:decide records no verdict", refused.status_code == 403, refused.status_code)
-        scanned = data(f.post("/v1/internal/files/scan-results", json=verdict, headers=scanner))
+        scanned = data(f.post("/v1/files/scan-results", json=verdict, headers=scanner))
         check("the scan hook records the scanner's verdict", scanned["scan"]["status"] == "clean", scanned)
         link = data(f.post(f"/v1/files/{file_id}/download-url", headers=james))
         content = f.get(link["url"], headers=james)

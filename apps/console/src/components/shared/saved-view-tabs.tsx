@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Plus, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
 import { Button } from '@/components/ui/button';
 
 export interface SavedViewTabPreset {
@@ -44,6 +45,12 @@ const triggerBase =
   'inline-flex h-[calc(100%-1px)] shrink-0 items-center justify-center gap-1.5 rounded-md border border-transparent px-2.5 py-1 text-sm font-medium whitespace-nowrap text-foreground transition-[color,box-shadow] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground [&_svg]:size-3.5 [&_svg]:shrink-0';
 const triggerActive = 'bg-card shadow-sm dark:bg-input/30 dark:text-foreground dark:border-input';
 
+/**
+ * A view's label with its count, or the label alone while the count has not loaded: a "0" shown before the list
+ * answers says there is nothing to do when there may be.
+ */
+export const countLabel = (label: string, count: number | undefined | null): string => (count == null ? label : `${label} · ${count}`);
+
 export function SavedViewTabs({
   presets,
   savedViews,
@@ -57,9 +64,14 @@ export function SavedViewTabs({
   className,
   ariaLabel = 'Views',
 }: SavedViewTabsProps) {
+  const strip = React.useRef<HTMLDivElement>(null);
+  const more = useMoreToTheRight(strip);
   return (
     <div className={cn('flex min-w-0 max-w-full items-center gap-2', className)}>
+      {/* The strip scrolls on a phone; the fade shows there are more views past the edge. */}
+      <div className="relative flex min-w-0 max-w-full">
       <div
+        ref={strip}
         role="tablist"
         aria-label={ariaLabel}
         className="inline-flex h-9 min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-[3px] text-muted-foreground [scrollbar-width:thin]"
@@ -122,6 +134,8 @@ export function SavedViewTabs({
             </div>
           );
         })}
+      </div>
+      <EdgeFade show={more} className="rounded-r-lg from-muted" data-testid="tabs-edge-fade" />
       </div>
 
       {canSave && (

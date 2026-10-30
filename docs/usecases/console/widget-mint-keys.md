@@ -1,6 +1,6 @@
 # A builder issues and revokes a widget's mint key
 
-Status: current. Id: `uc-116`. Service: `console`. Layers: ui. Card: c-131.
+Status: current. Id: `uc-116`. Service: `console`. Layers: ui. Card: an earlier change.
 
 The bank's server starts an embedded chat's session for the person signed in to the intranet. It does that with a mint
 key that belongs to one embed and can do nothing else. A builder of the agent's team creates the key from the embed's

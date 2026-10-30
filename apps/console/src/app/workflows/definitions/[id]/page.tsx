@@ -2,17 +2,15 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { SearchX, Workflow } from 'lucide-react';
+import { Workflow } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
-import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
 import { useCan, useCanBuild } from '@/hooks/me-queries';
 import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow, useValidateDefinition } from '@/hooks/engine-queries';
-import { ApiError } from '@/lib/api';
 import type { EngineDefinition } from '@/lib/types/engine';
 
 const shortDigest = (digest: string) => digest.replace(/^sha256:/, '').slice(0, 8);
@@ -52,7 +50,6 @@ export default function WorkflowDefinitionPage() {
   );
 
   const view = definition.data;
-  const notFound = definition.error instanceof ApiError && definition.error.status === 404;
 
   const header = {
     icon: Workflow,
@@ -94,10 +91,8 @@ export default function WorkflowDefinitionPage() {
     <PageLayout {...header}>
       {definition.isPending || nodeTypes.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} showToolbar />
-      ) : notFound ? (
-        <EmptyState icon={SearchX} title="No editable definition" description="This workflow has no version built from step types, so there is nothing to open here." action={{ label: 'Back to workflows', href: '/workflows' }} testId="definition-not-found" />
       ) : definition.isError ? (
-        <QueryError what="this workflow" error={definition.error} onRetry={() => definition.refetch()} retrying={definition.isFetching} />
+        <QueryError what="this workflow" error={definition.error} back={{ label: 'Back to workflows', href: '/workflows' }} onRetry={() => definition.refetch()} retrying={definition.isFetching} />
       ) : (
         nodeTypes.isError && <QueryError what="step types" error={nodeTypes.error} onRetry={() => nodeTypes.refetch()} retrying={nodeTypes.isFetching} />
       )}

@@ -31,6 +31,8 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.types import interrupt
 
+from ops_checkpointer import LeaseSupersededError
+
 from . import ai_steps
 from .definition import FALLBACK, MAPPING_PREFIX, TEXT_PATH, NodeInstance, WorkflowDefinition
 from .journal import Journal, StepRow, StepStatus
@@ -49,6 +51,10 @@ from .ports import (
 CHANNEL = "node:"
 INPUT = "input"
 DEFAULT_OPTIONS = {"approved": "approve", "rejected": "reject"}
+
+
+# The wait between attempts; tests replace it to record the backoff instead of sleeping through it.
+sleep = asyncio.sleep
 
 
 def channel(node_id: str) -> str:
@@ -76,6 +82,15 @@ class NodeFailedError(RuntimeError):
         super().__init__(plain)
         self.plain = plain
         self.detail = detail
+
+
+# What a run says when a write's result is uncertain (owner, c-561): it fails, and nothing sends the write again.
+UNCERTAIN = "the write may have run; check before retrying"
+
+
+class WriteUncertainError(NodeFailedError):
+    """A write that may have happened: the system timed out or answered 5xx after it was sent, the gateway lost the
+    call, or it was still running at the step's deadline. The run fails at once, never retried by a pass."""
 
 
 def technical(e: BaseException) -> str:
@@ -303,7 +318,7 @@ async def data_combine(call: NodeCall) -> Outcome:
         if len({json.dumps(_fact(v, numeric), default=str) for _, v in present}) > 1:
             conflicts.append({"field": field, "values": [{"source": n, "value": v} for n, v in present]})
     out = {"values": values, "sources": picked, "conflicts": conflicts, "hasConflicts": bool(conflicts)}
-    return Outcome("out", out)
+    return Outcome("disagree" if conflicts and call.params.get("onDisagreement") == "port" else "out", out)
 
 
 def _plain_text(value: Any) -> str:
@@ -374,12 +389,39 @@ def write_call(call: NodeCall, node_id: str) -> dict[str, Any]:
 TIMEOUT_CODES = frozenset({"UPSTREAM_TIMEOUT", "CONNECT_TIMEOUT"})
 
 
+# Gateway codes for a call that never reached the outside system (tools-service executor.py transport_failure), and
+# a 429 the system refused before acting: safe to send again (c-561).
+NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TLS_FAILED", "RATE_LIMITED"})
+
+
+def never_sent(error: Any) -> bool:
+    return isinstance(error, dict) and cast(dict[str, Any], error).get("code") in NEVER_SENT
+
+
+def sent_and_unanswered(error: Any) -> bool:
+    """Whether a gateway error says the call reached the outside system and no answer came back that says what it did:
+    it timed out after connecting, broke off, or answered 5xx (tools-service executor.py transport_failure and
+    status_failure). A write that ends this way may have happened (c-561)."""
+    if not isinstance(error, dict):
+        return False
+    e = cast(dict[str, Any], error)
+    code, status = e.get("code"), e.get("status")
+    if code == "UPSTREAM_TIMEOUT":
+        return True
+    return code == "UPSTREAM_ERROR" and (status is None or (isinstance(status, int) and status >= 500))
+
+
 def _error_code(output: Any) -> str | None:
     """The gateway's failure code in a tool's output (`{"error": {"code": ...}}`), or None."""
     if not isinstance(output, dict):
         return None
     error: Any = cast(dict[str, Any], output).get("error")
     return str(cast(dict[str, Any], error).get("code")) if isinstance(error, dict) else None
+
+
+def _step(key: str) -> str:
+    """`run:node:iteration` of a tool key `run:node:iteration:attempt`: the step a review approved, any attempt."""
+    return key.rsplit(":", 1)[0]
 
 
 async def gateway_call(call: NodeCall) -> Outcome:
@@ -391,11 +433,13 @@ async def gateway_call(call: NodeCall) -> Outcome:
         env = cast(Mapping[str, Any], cast(Mapping[str, Any], call.scope.get("nodes") or {}).get(str(reviewer)) or {})
         out = cast(Mapping[str, Any], env.get("out") or {})
         approved = cast(Mapping[str, Any], out.get("call") or {})
-        if approved.get("tool") == call.params.get("operation") and approved.get("step") == call.key:
+        if approved.get("tool") == call.params.get("operation") and _step(str(approved.get("step"))) == _step(call.key):
             arguments = dict(cast(Mapping[str, Any], approved.get("input") or {}))
-            # Minted here from the recorded approvals and sent at once; never written to state or the journal.
+            # Minted here from the recorded approvals and sent at once; never written to state or the journal. Bound
+            # to the key this attempt sends, so a write sent again under the next attempt's key keeps its approval.
             approval = cast(Mapping[str, Any] | None, out.get("approval"))
-            token = await call.ports.tools.mint(call.run_id, dict(approved), dict(approval)) if approval else None
+            bound = {**approved, "step": call.key}
+            token = await call.ports.tools.mint(call.run_id, bound, dict(approval)) if approval else None
         else:
             token = None
     result: ToolResult = await call.ports.tools.call(
@@ -407,6 +451,12 @@ async def gateway_call(call: NodeCall) -> Outcome:
     )
     if result.ok:
         return Outcome("ok", result.output)
+    if result.pending:
+        # The gateway is still running a call under this key: not an answer, so the step's reconcile decides (c-561).
+        raise WriteInDoubtError(f"{call.key} is already running at the gateway")
+    if result.not_sent:
+        # The gateway refused the key as abandoned: never ran under it. The step's reconcile confirms and re-sends.
+        raise WriteInDoubtError(f"{call.key} was abandoned at the gateway: {result.reason}")
     if result.refused:
         return Outcome("refused", {"reason": result.reason})
     if call.params.get("onTimeout") == "port" and _error_code(result.output) in TIMEOUT_CODES:
@@ -568,6 +618,16 @@ async def ai_extract(call: NodeCall) -> Outcome:
             "ocr": request["ocr"],
             "reviewBelow": request["reviewBelow"],
         }
+    # A full-text or proposed read (c-535) names no fields, type or Detect: the read itself says what comes back. A read
+    # that resolved to nothing (a read request that asked for none) is today's read.
+    read = call.params.get("read")
+    if read in ("text", "propose"):
+        request = {"read": read, "ocr": request["ocr"], "reviewBelow": request["reviewBelow"]}
+        if read == "propose":
+            request |= {k: call.params[k] for k in ("hint", "proposePages") if call.params.get(k) not in (None, "")}
+    for limit in ("maxPages", "maxTokens"):
+        if isinstance(call.params.get(limit), int):
+            request[limit] = call.params[limit]
     key = f"{call.run_id}:{call.node.id}:{call.iteration}"
     answer = await call.ports.documents.extract(call.run_id, file_id, request, key=key)
     status = answer.get("status")
@@ -993,6 +1053,20 @@ class Wrapper:
     journal: Journal
     definition: WorkflowDefinition | None = None
 
+    async def deadline(self, params: Mapping[str, Any]) -> float:
+        """The attempt's limit: the step's own `timeoutSeconds`, else the type's default, raised to how long the
+        gateway may take over the operation when that is longer (a code operation's run limit, c-561)."""
+        own = self.node.parameters.get("timeoutSeconds")
+        if own:
+            return float(own)
+        limit = float(self.type.timeout_seconds)
+        ask = getattr(self.ports.tools, "deadline", None)
+        if self.type.executor == "gateway.call" and ask is not None:
+            longest = await ask(str(params.get("operation")))
+            if longest:
+                limit = max(limit, float(longest))
+        return limit
+
     async def effects(self, params: Mapping[str, Any]) -> str:
         if self.type.executor == "gateway.call":
             access = await self.ports.tools.access(str(params.get("operation")))
@@ -1081,6 +1155,7 @@ class Wrapper:
         # after a crash is still a write that may have happened.
         # An idempotent write is keyed by its step, so it is retried like a read instead.
         reconciled = effects == "write" and not self.type.idempotent
+        policy = self.type.retry_policy() if effects == self.type.effects else RETRY_BY_EFFECTS[cast(Any, effects)]
         if (
             last is not None
             and last.status in ("running", "error")
@@ -1089,13 +1164,17 @@ class Wrapper:
         ):
             # A write that may have reached the gateway (its process died mid-call, or the call raised) is never sent
             # again: its own key decides what happened.
-            return await self.reconcile(last)
+            settled = await self.reconcile(
+                last, deadline_s=await self.deadline(params), may_resend=last.attempt < policy.attempts
+            )
+            if settled is not None:
+                return settled
+            # The gateway never ran it under that key and has blocked the key: the loop sends it as the next attempt.
         if last is not None and last.status == "running":
             await self.journal.finish(last, status="abandoned", port=None, output=None, error="its process died")
-        policy = self.type.retry_policy() if effects == self.type.effects else RETRY_BY_EFFECTS[cast(Any, effects)]
         attempt = (last.attempt if last else 0) + 1
         first = attempt
-        timeout = float(self.node.parameters.get("timeoutSeconds") or self.type.timeout_seconds)
+        timeout = await self.deadline(params)
         while True:
             r = row(attempt, effects)
             await self.journal.begin(r)
@@ -1105,16 +1184,27 @@ class Wrapper:
                 # Paused (c-263), not dead: the attempt is marked waiting so a resume continues it.
                 await self.journal.finish(r, status="waiting", port=None, output=None, error=None)
                 raise
+            except LeaseSupersededError:
+                # A newer owner has the run: this pass stops here, and the owner reconciles the row (c-561).
+                raise
             except Exception as e:
                 message = technical(e)
                 if reconciled:
                     # A timeout or a 5xx says nothing about whether the write happened; the gateway's record does.
-                    return await self.reconcile(r, cause=message)
+                    settled = await self.reconcile(
+                        r, cause=message, deadline_s=timeout, may_resend=attempt < policy.attempts
+                    )
+                    if settled is not None:
+                        return settled
+                    # Never received, its key now blocked: sent again under the next attempt's key (c-561).
+                    attempt += 1
+                    await sleep(policy.wait(attempt))
+                    continue
                 if attempt - first + 1 < policy.attempts:
                     await self.journal.finish(r, status="error", port=None, output=None, error=message)
                     await self.ports.hooks.after_step(run_id, nid, "error")
                     attempt += 1
-                    await asyncio.sleep(policy.wait(attempt - first + 1))
+                    await sleep(policy.wait(attempt - first + 1))
                     continue
                 if "error" in self.type.output_ports(self.node.parameters):
                     return await self.record(r, Outcome("error", {"error": message}), error=message)
@@ -1123,6 +1213,23 @@ class Wrapper:
                 tried = attempt - first + 1
                 detail = f"{nid} failed after {tried} attempts: {message}"
                 raise NodeFailedError(plain_failure(self.node.name or nid, e, tried), detail) from e
+            error = _error_of(outcome.out) if outcome.port == "error" else None
+            if reconciled and sent_and_unanswered(error):
+                # The system may have acted: the run stops here with the reason, and nothing sends it again (c-561).
+                message = technical_error(outcome.out)
+                await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
+                await self.ports.hooks.after_step(run_id, nid, "error")
+                raise WriteUncertainError(uncertain_failure(self.node.name or nid), message)
+            tried = attempt if reconciled else attempt - first + 1
+            if (never_sent(error) or (not reconciled and sent_and_unanswered(error))) and tried < policy.attempts:
+                # An outage, not an answer (c-561): a read is tried again; a write the system never got is sent again
+                # under the next attempt's key, its first key recorded as failed at the gateway.
+                message = technical_error(outcome.out)
+                await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
+                await self.ports.hooks.after_step(run_id, nid, "error")
+                attempt += 1
+                await sleep(policy.wait(tried + 1))
+                continue
             return await self.record(r, outcome)
 
     async def record(self, r: StepRow, outcome: Outcome, *, error: str | None = None) -> dict[str, Any]:
@@ -1133,15 +1240,42 @@ class Wrapper:
         await self.ports.hooks.after_step(r.run_id, r.node_id, status)
         return {channel(r.node_id): _envelope(replace(r, port=outcome.port, output=outcome.out))}
 
-    async def reconcile(self, dangling: StepRow, *, cause: str | None = None) -> dict[str, Any]:
+    async def reconcile(
+        self,
+        dangling: StepRow,
+        *,
+        cause: str | None = None,
+        deadline_s: float | None = None,
+        may_resend: bool = False,
+    ) -> dict[str, Any] | None:
         """A write whose outcome is unknown: the gateway's record under the attempt's own key decides. Found done
-        means the write happened; refused or failed is that port; absent means it never arrived, and the run takes the
-        error port rather than risk a second send. A call the gateway is still running is not yet known: the pass
-        stops with WriteInDoubtError and the worker tries the run again later, the row left as it is."""
+        means the write happened; refused or failed by its input is that port; absent means it never arrived, and the
+        run takes the error port rather than risk a second send. Lost, failed after reaching the system, or still
+        running past the step's deadline (from the attempt's start) is uncertain: the run fails with the reason
+        (c-561). Still running inside the deadline is not yet known: the pass stops with WriteInDoubtError and the
+        worker tries the run again later, the row left as it is. With `may_resend`, a write the gateway never ran under
+        the key (no record, which also blocks the key, or a record that it never reached the system) returns None:
+        the caller sends it again under the next attempt's key."""
         operation = str(cast(dict[str, Any], dangling.input or {}).get("operation") or "")
         found = await self.ports.tools.find(dangling.key, operation)
+        name = self.node.name or self.node.id
         if found is not None and found.pending:
+            if _past(dangling.started_at, deadline_s if deadline_s is not None else self.type.timeout_seconds):
+                message = f"{dangling.key} was still running at the gateway at the step's deadline"
+                await self.journal.finish(dangling, status="error", port=None, output=None, error=message)
+                raise WriteUncertainError(uncertain_failure(name), message)
             raise WriteInDoubtError(f"{dangling.key} is still running at the gateway")
+        if found is not None and not found.ok and not found.refused:
+            recorded: Any = found.output
+            if found.lost or sent_and_unanswered(_error_of(recorded)):
+                message = found.reason or technical_error(recorded)
+                await self.journal.finish(dangling, status="error", port=None, output=recorded, error=message)
+                raise WriteUncertainError(uncertain_failure(name), message)
+        if may_resend and (
+            found is None or (not found.ok and not found.refused and never_sent(_error_of(found.output)))
+        ):
+            await self.journal.finish(dangling, status="error", port=None, output=None, error=cause or "never received")
+            return None
         if found is not None and found.ok:
             outcome = Outcome("ok", found.output)
         elif found is not None and found.refused:
@@ -1150,6 +1284,40 @@ class Wrapper:
             reason = found.reason if found is not None else "the gateway has no record of the write"
             outcome = Outcome("error", {"error": found.output if found else None, "reason": reason, "cause": cause})
         return await self.record(dangling, outcome, error=cause if outcome.port == "error" else None)
+
+
+def _past(started_at: str | None, seconds: float) -> bool:
+    """Whether `seconds` have passed since an attempt began; an attempt with no start time has not."""
+    if not started_at:
+        return False
+    began = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - began).total_seconds() >= seconds
+
+
+def _error_of(out: Any) -> Any:
+    """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
+    error: Any = cast(dict[str, Any], out).get("error") if isinstance(out, dict) else None
+    while isinstance(error, dict):
+        layer = cast(dict[str, Any], error)
+        inner: Any = layer.get("error")
+        if "code" in layer or not isinstance(inner, dict):
+            break
+        error = cast(Any, inner)
+    return cast(Any, error)
+
+
+def technical_error(out: Any) -> str:
+    error = _error_of(out)
+    if isinstance(error, dict):
+        e = cast(dict[str, Any], error)
+        return f"{e.get('code') or 'error'}: {e.get('message') or ''}".strip()
+    return json.dumps(out)[:300]
+
+
+def uncertain_failure(step: str) -> str:
+    return f"{step}: {UNCERTAIN}."
 
 
 SECRET_KEYS = frozenset({"approvalToken", "approval_token"})

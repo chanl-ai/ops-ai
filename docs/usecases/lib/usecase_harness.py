@@ -30,6 +30,43 @@ import httpx
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
+
+def _exit_on(signum: int, _frame: object) -> None:
+    raise SystemExit(128 + signum)
+
+
+# Python ends on SIGTERM or SIGHUP without unwinding, so a killed script left every service it started running. Raised
+# as SystemExit, each context manager's finally stops what it started.
+signal.signal(signal.SIGTERM, _exit_on)
+signal.signal(signal.SIGHUP, _exit_on)
+
+
+def _start(
+    argv: list[str], *, cwd: Path, env: dict[str, str], stdin: Any = None, stdout: Any = None, stderr: Any = None
+) -> subprocess.Popen[bytes]:
+    """A process in its own group, so stopping it reaches what its wrapper (uv) started."""
+    return subprocess.Popen(argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True)
+
+
+def _stop(proc: subprocess.Popen[bytes], grace: float = 10) -> None:
+    """SIGTERM to the process's group, then SIGKILL to whatever outlived `grace` seconds. macOS answers EPERM rather
+    than ESRCH for a group whose members have all exited and wait to be reaped, so either error means it is gone."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        proc.poll()  # reaps the leader, which would otherwise keep its group alive as a zombie
+        try:
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            return
+        end = time.monotonic() + grace
+        while time.monotonic() < end:
+            proc.poll()
+            try:
+                os.killpg(proc.pid, 0)
+            except (ProcessLookupError, PermissionError):
+                return
+            time.sleep(0.2)
+
+
 ROOT = Path(__file__).resolve().parents[3]
 AGENTS_DIR = ROOT / "services" / "agents-service"
 AGENTS_PORT = int(os.environ.get("OPS_USECASE_AGENTS_PORT", "8790"))
@@ -163,17 +200,13 @@ def _serve(
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log = LOG_DIR / f"{name}-{port}.log"
     with log.open("ab") as fh:
-        proc = subprocess.Popen(argv, cwd=cwd, env=env, stdout=fh, stderr=subprocess.STDOUT)
+        proc = _start(argv, cwd=cwd, env=env, stdout=fh, stderr=subprocess.STDOUT)
     base = f"http://127.0.0.1:{port}"
     try:
         _wait(f"{base}{health}", proc, log)
         yield base
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop(proc)
 
 
 @contextmanager
@@ -231,17 +264,13 @@ def engine_worker(name: str, env: dict[str, str] | None = None) -> Generator[sub
     full = _env() | {"OPS_DATABASE_URL": pg_url(), "OPS_ENGINE_POLL_SECONDS": "0.2"} | (env or {})
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with (LOG_DIR / f"worker-{name}.log").open("ab") as fh:
-        proc = subprocess.Popen(
+        proc = _start(
             ["uv", "run", "python", "-m", "ops_agents.api.worker"], cwd=AGENTS_DIR, env=full, stdout=fh, stderr=fh
         )
     try:
         yield proc
     finally:
-        proc.send_signal(signal.SIGTERM)
-        try:
-            proc.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop(proc, grace=15)
 
 
 def until(what: Callable[[], Any], timeout: float = 60) -> Any:
@@ -724,7 +753,7 @@ def core_bank() -> Generator[dict[str, Any]]:
     env["OPS_FAKE_BANK_APP"] = "core"
     env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).parent), env.get("PYTHONPATH", "")])
     argv = ["uv", "run", "--quiet", "python", str(Path(__file__).with_name("fake_bank_serve.py"))]
-    proc = subprocess.Popen(argv, cwd=AGENTS_DIR, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    proc = _start(argv, cwd=AGENTS_DIR, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     try:
         assert proc.stdout is not None
         line = proc.stdout.readline()
@@ -734,11 +763,7 @@ def core_bank() -> Generator[dict[str, Any]]:
     finally:
         if proc.stdin:
             proc.stdin.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        _stop(proc)
 
 
 def publish_bank_module(gw: httpx.Client, host: str) -> str:

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { CircleStop, Workflow } from 'lucide-react';
+import { CircleStop, RotateCcw, Workflow } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { FieldRow } from '@/components/shared/field-row';
@@ -26,13 +26,27 @@ import { StartedBy } from '@/components/workflows/started-by';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StepSheet } from '@/components/workflows/run-journal/step-sheet';
 import { StepsTable } from '@/components/workflows/run-journal/steps-table';
-import { TERMINAL_RUN, useCancelEngineRun, useDefinition, useEngineRun, useNodeTypes } from '@/hooks/engine-queries';
+import { TERMINAL_RUN, useCancelEngineRun, useDefinition, useEngineRun, useNodeTypes, useRetryEngineRun } from '@/hooks/engine-queries';
 import { relativeTime } from '@/lib/format';
 
 /** An engine word ("not_matched", "approve") as a person reads it ("Not matched", "Approve"). */
 const words = (w: string) => w.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
+/** A Stuck run's reason ("Nothing is working on this run: no worker …") as a title and what follows it. */
+function stuckParts(reason: string): [string, string] {
+  const at = reason.indexOf(': ');
+  return at > 0 ? [reason.slice(0, at), reason.slice(at + 2).replace(/^./, (c) => c.toUpperCase())] : ['This run is stuck', reason];
+}
+
 /** One run of a v2 workflow, from the runner's journal: its steps with input, output, port, attempts and errors. */
+/** Where the run ended, without repeating the end step's name when its outcome reads the same ("Found: Found"). */
+function endedAt(name: string | null | undefined, outcome: string): string {
+  if (!name) return outcome;
+  return name.trim().toLowerCase() === outcome.trim().toLowerCase() ? `Ended at ${name}` : `Ended at ${name}: ${outcome}`;
+}
+
+const hasValue = (v: unknown): boolean => v != null && !(typeof v === 'object' && Object.keys(v as object).length === 0);
+
 export default function EngineRunPage() {
   const { runId } = useParams<{ runId: string }>();
   const query = useEngineRun(runId);
@@ -46,6 +60,8 @@ export default function EngineRunPage() {
   const cancel = useCancelEngineRun();
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelError, setCancelError] = React.useState<string>();
+  const retry = useRetryEngineRun();
+  const [retryError, setRetryError] = React.useState<string>();
   // The run that started it (`run:<id>`). The runs it started and the files it was given come with the run.
   const parentRun = run?.createdBy.startsWith('run:') ? run.createdBy.slice(4) : undefined;
   const files = run?.files ?? [];
@@ -73,12 +89,32 @@ export default function EngineRunPage() {
       badge={<RunStatus status={run.status} testId="run-status" />}
       backHref="/workflows/runs"
       actions={
-        // The server says who may cancel (the starter, an admin or a reviewer); the button follows it.
-        !TERMINAL_RUN.includes(run.status) && run.canCancel !== false && (
-          <Button variant="outline" onClick={() => setCancelOpen(true)} data-testid="run-cancel">
-            <CircleStop /> Cancel run
-          </Button>
-        )
+        <>
+          {/* The server says who may cancel (the starter, an admin or a reviewer); the button follows it. */}
+          {!TERMINAL_RUN.includes(run.status) && run.canCancel !== false && (
+            <Button variant="outline" onClick={() => setCancelOpen(true)} data-testid="run-cancel">
+              <CircleStop /> Cancel run
+            </Button>
+          )}
+          {/* No confirm: Retry never sends a recorded write again, so there is nothing to weigh. */}
+          {run.status === 'stuck' && run.canRetry && (
+            <LoadingButton
+              isLoading={retry.isPending}
+              loadingText="Retrying…"
+              data-testid="run-retry"
+              onClick={async () => {
+                setRetryError(undefined);
+                try {
+                  await retry.mutateAsync(run.id);
+                } catch (e) {
+                  setRetryError(e instanceof Error ? e.message : 'The run was not retried');
+                }
+              }}
+            >
+              <RotateCcw /> Retry
+            </LoadingButton>
+          )}
+        </>
       }
     >
       <RecordLayout
@@ -112,7 +148,22 @@ export default function EngineRunPage() {
           }
         >
           <div className="flex flex-col gap-6">
-            {run.error && (
+            {/* A refused Retry refetches the run; once it has moved on, the page shows where it is and the error goes. */}
+            {retryError && run.status === 'stuck' && (
+              <Alert variant="destructive" data-testid="run-retry-error">
+                <AlertTitle>Could not retry</AlertTitle>
+                <AlertDescription>{retryError}</AlertDescription>
+              </Alert>
+            )}
+            {run.status === 'stuck' && (
+              <Alert data-testid="run-stuck">
+                <AlertTitle>{stuckParts(run.error ?? '')[0]}</AlertTitle>
+                <AlertDescription>
+                  {stuckParts(run.error ?? '')[1]} Retry carries it on from its last recorded step; nothing it already sent is sent again.
+                </AlertDescription>
+              </Alert>
+            )}
+            {run.error && run.status !== 'stuck' && (
               <Alert variant="destructive">
                 <AlertTitle>The run failed</AlertTitle>
                 <AlertDescription>{run.error}</AlertDescription>
@@ -125,10 +176,11 @@ export default function EngineRunPage() {
               </Alert>
             )}
             {run.result && (
-              <Section title="Result" description={run.result.name ? `Ended at ${run.result.name}: ${run.outcomeText ?? run.result.outcome}` : (run.outcomeText ?? run.result.outcome)}>
+              <Section title="Result" description={endedAt(run.result.name, run.outcomeText ?? run.result.outcome)}>
                 <div data-testid="run-result" data-outcome={run.result.outcome}>
-                  {/* The story below tells what the run did; the result's own fields stay behind Raw. */}
-                  <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} />
+                  {/* The story below tells what the run did; the result's own fields stay behind Raw. An end with no
+                      output shows no value at all rather than "Nothing" above an empty Raw. */}
+                  {hasValue(run.result.output) && <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} />}
                 </div>
               </Section>
             )}

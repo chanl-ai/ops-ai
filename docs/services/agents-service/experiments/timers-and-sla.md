@@ -8,7 +8,7 @@ model). Script: `services/agents-service/experiments/e5_timers_and_sla.py` (no m
 
 A `timers` table and a poller give a `human` step durable warn, breach and max-wait timers, and a timeout resumes the
 thread under its lease into exactly one outcome set by the step: reassign, escalate or reject. `fire(thread, timer)`
-called in-process by the poller is the only fire path (the HTTP route was removed in c-168), idempotent on the timer id.
+called in-process by the poller is the only fire path (the HTTP route was removed in an earlier change), idempotent on the timer id.
 
 ## What holds
 

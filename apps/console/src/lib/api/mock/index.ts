@@ -42,6 +42,7 @@ import { createEgressMock } from './egress';
 import { createChannelsMock } from './channels';
 import { createEngineMock } from './engine';
 import { createSecretsMock } from './secrets';
+import { createConnectionsMock } from './connections';
 import { createWidgetsMock } from './widgets';
 import { createIntegrationsMock } from './integrations';
 import { MAILBOX_CONNECTION } from './integrations/seed';
@@ -596,11 +597,18 @@ export function createMockApi(): OpsApi {
         respond((m) => {
           const empty = m === 'empty';
           const open = empty ? [] : teamReviews().filter(isOpen).sort((a, b) => (a.slaMinutes ?? 0) - (b.slaMinutes ?? 0));
+          const mine = open.filter((r) => r.assignee === F.CURRENT_USER.email || r.assignee === me).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          const flight = empty ? [] : workflows.filter((w) => inTeam(w.owner)).flatMap((w) => runsOf(w.id)).filter((r) => r.status === 'running' || r.status === 'waiting_review').sort((a, b) => b.startedAt.localeCompare(a.startedAt));
           return {
             openReviews: open.length,
             overdueReviews: open.filter((r) => (r.slaMinutes ?? 0) < 0).length,
             urgentReviews: open.slice(0, 5),
             cases: empty ? { open: 0, breaching: 0, awaitingApproval: 0 } : cases.stats(),
+            counts: { waitingForMe: mine.length, runsInFlight: flight.length, casesDue: 0 },
+            waitingForMe: mine.slice(0, 5).map((r) => ({ id: r.id, title: r.title, workflowName: r.workflowName, caseId: null, createdAt: r.createdAt })),
+            runsInFlight: flight.slice(0, 5).map((r) => ({ id: r.id, workflowId: r.workflowId, subject: wfName(r.workflowId), state: r.status === 'running' ? ('running' as const) : ('waiting' as const), startedAt: r.startedAt })),
+            // Cases live in agents-service (c-128); the mock has none, so none are due.
+            casesDue: [],
           };
         }),
     },
@@ -1148,6 +1156,7 @@ export function createMockApi(): OpsApi {
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
     secrets: createSecretsMock({ me: F.CURRENT_USER.name, users: toolModules.secretUsers }),
+    connections: createConnectionsMock({ me: F.CURRENT_USER.name }),
     engine: createEngineMock(),
     channels: createChannelsMock(),
     integrations: integrationsApi,
@@ -1176,6 +1185,24 @@ export function createMockApi(): OpsApi {
       revokeKey: () => Promise.reject(new ApiError('Widget deployments need the agents service.', 501)),
       previewSession: () => Promise.reject(new ApiError('Preview needs the agents service.', 501)),
       scriptUrl: () => 'http://localhost:8600/embed/v1.js',
+    },
+    // Hosted forms are agents-service's; the mock lists none and refuses writes.
+    forms: {
+      list: () => respond(() => []),
+      create: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
+      rotate: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
+      update: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
+      memberForm: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
+      submitMember: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
+      pageUrl: (form) => form.url,
+    },
+    // Batches are agents-service's; the mock refuses them rather than pretend to start runs.
+    batches: {
+      dryRun: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),
+      start: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),
+      get: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
+      retryFailed: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
+      resultsCsv: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
     },
     // Guardrails live in agents-service only; the mock lists none and refuses writes rather than pretend to keep them.
     guardrails: {

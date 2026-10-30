@@ -1,6 +1,6 @@
 # Chat widgets
 
-Status: current, 2026-10-17. This is the design for card c-082, "A builder gives an agent widgets it can show in chat". The maintainers answered the card's five interview questions on 2026-10-17 (listed under Open questions). Phases P1 to P4 are built, and code is cited at commit `cd14ec5`. Use cases uc-089 and uc-095 prove the path. Planned items are marked. Sources: [chat](../console/chat.md) and the override model decision.
+Status: current, 2026-10-17. This is the design for card an earlier change, "A builder gives an agent widgets it can show in chat". The maintainers answered the card's five interview questions on 2026-10-17 (listed under Open questions). Phases P1 to P4 are built, and code is cited at commit `cd14ec5`. Use cases uc-089 and uc-095 prove the path. Planned items are marked. Sources: [chat](../console/chat.md) and the override model decision.
 
 A chat widget is a shaped answer drawn in the thread. A builder lays out a named widget from a fixed catalogue of primitives, binds it to JSON Pointer paths in a JSON Schema for its data, and publishes it after a second person approves it. An agent pins the widgets it may show and may be allowed to compose its own layouts from the same catalogue.
 
@@ -28,7 +28,7 @@ Why: a bank wants an answer about a held payment to look like its own hold revie
 
 Why this comparison: ChatKit's model (templates the model fills) and A2UI's model (composition from a catalogue) are both built, as the maintainers chose (Q2). MCP Apps iframes need governance of their own and stay last.
 
-## Generic kinds (c-176)
+## Generic kinds
 
 Status: current. `present` has a fourth form, `kind`, for generic widgets that look the same in any industry; the
 industry is in the data and its labels, never in the kind. Each kind is one JSON Schema in
@@ -64,7 +64,7 @@ converted in `apps/console/src/lib/widgets/kinds.ts`) and every kind inside a te
 `/dev/widgets-polish` shows each kind in two industries with its loading, empty and error states; uc-132 has the
 agent show all 17 in one chat.
 
-## Record cards (c-469)
+## Record cards
 
 The team's default agent finds a person's work with the Ops tools and answers with record cards: one card shape for a
 case, a Human Task, a workflow run and a workflow's start form. The widget kinds above stay for what an agent composes
@@ -103,8 +103,8 @@ Why: each phase was usable alone. The one later item, display-only data, changes
 | Item | Source | Status |
 |---|---|---|
 | Owner request for richer widgets, authoring, a per-agent list and proof that chat generates them | `research.md` (2026-10-17) | built |
-| c-055 widget architecture: shape parts | `docs/console/chat.md` | built |
-| Caller overrides narrow widgets (c-071) | Commit f92a54a; override model | built |
+| an earlier change widget architecture: shape parts | `docs/console/chat.md` | built |
+| Caller overrides narrow widgets | Commit f92a54a; override model | built |
 | Buttons that require a tool | Agreed by the maintainers on 2026-10-17, after the live demo looped on a "Release hold" button that had no tool behind it | built |
 | Interview Q1 to Q5 | `interview.md` | answered; see Open questions |
 
@@ -227,7 +227,7 @@ The existing `part` event carries a layout part, `{type: "widget", id, layout, t
 | `POST /v1/widgets/{id}/publish-requests` | Kind `widget`, id `WDP-`, decided in Reviews | `routers/widgets.py:100` |
 | `POST /v1/widgets/{id}/retire` | Refuses new pins | `routers/widgets.py:132` |
 | `PATCH /v1/agents/{id}` with `widgetPins` and `widgets` | Pins are snapshotted; 422 `widget_needs_tool` | `routers/agents.py:328-354` |
-| Overrides `switchableWidgetIds`, `widgetsOff`, `composeOff`, `widgetsPerTurn` | Narrow only (c-071) | `services/agents-service/src/ops_agents/activities/agent_limits.py:51,114-115`; `activities/overrides.py:49-51`; `activities/catalog.py:236-238` |
+| Overrides `switchableWidgetIds`, `widgetsOff`, `composeOff`, `widgetsPerTurn` | Narrow only | `services/agents-service/src/ops_agents/activities/agent_limits.py:51,114-115`; `activities/overrides.py:49-51`; `activities/catalog.py:236-238` |
 
 Why: one tool with three forms keeps the model's tool list short, and the registry routes follow the skills routes, so the console and Reviews reuse their patterns.
 

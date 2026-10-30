@@ -42,7 +42,7 @@ function crowded(rs: Rect[], column = COLUMN_GAP, row = ROW_GAP): string[] {
 }
 
 test('no two steps intersect, with the configured gaps, on every seed', async () => {
-  assert.equal(SEEDS.length, 12);
+  assert.equal(SEEDS.length, 13);
   for (const def of SEEDS) {
     const laid = await layoutDefinition(def, TYPES);
     assert.deepEqual(crowded(rects(def, laid.positions)), [], def.id);

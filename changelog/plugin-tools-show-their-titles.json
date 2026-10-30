@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-30",
+  "title": "Plugin tools show their titles",
+  "description": "A plugin's tools read by their own titles, such as Find cases or Update a record, in the tools picker, on the agent page and on approval cards in chat and Human Tasks, instead of their operation names. The picker's search finds a tool by its title too.",
+  "tag": "improved",
+  "switch": "NEXT_PUBLIC_OPS_PLUGINS",
+  "cards": [
+    "c-581"
+  ]
+}

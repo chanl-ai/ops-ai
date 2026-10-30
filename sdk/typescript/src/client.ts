@@ -173,6 +173,16 @@ export class Runs extends Resource {
   cancel(runId: string) {
     return this.raw.agents.workflows_cancel_engine_run({ path: { run_id: runId } });
   }
+
+  /** Queues a Stuck run again from its last recorded step; nothing it sent is sent again. */
+  retry(runId: string) {
+    return this.raw.agents.workflows_retry_engine_run({ path: { run_id: runId } });
+  }
+
+  /** Starts the run of an email the mailbox listener set aside, under the email's own run key. */
+  runSetAsideEmail(eventId: string) {
+    return this.raw.agents.workflows_run_set_aside_email({ path: { event_id: eventId } });
+  }
 }
 
 /** Human tasks. The API calls them reviews (`reviews_*`); the console and this SDK say task. */

@@ -31,6 +31,17 @@ class ExtractionRequest(Model):
     version: int | None = Field(default=None, ge=1)
     # Classify the file over the team's types first and read it with the kind found (c-249).
     detect: bool = False
+    # What comes back (c-535): the fields asked for (today's read), the full text from the cached layout with no model
+    # call, or fields the model proposes from the first `propose_pages` pages and then reads like any other.
+    read: Literal["fields", "text", "propose"] = "fields"
+    # What the document is, in a few words, for a proposed read ("a supplier invoice").
+    hint: str | None = Field(default=None, max_length=200)
+    propose_pages: int | None = Field(default=None, ge=1, le=20)
+    # Read only the first pages; every page when not given.
+    max_pages: int | None = Field(default=None, ge=1)
+    # A ceiling on the page text sent to the model (about 4 characters a token): pages past it are not read, and the
+    # answer says `partial`.
+    max_tokens: int | None = Field(default=None, ge=1)
 
 
 class CorrectionIn(Model):
@@ -83,7 +94,15 @@ class Extraction(Model):
     needs_review: list[Any] | None = None
     floor: float | None = None
     asked: list[dict[str, Any]] | None = Field(default=None, alias="schema")
-    pages: int | None = None
+    # How many pages an unreadable file has; a full-text read's pages, each {number, text, tables} (c-535).
+    pages: int | list[dict[str, Any]] | None = None
+    # A full-text read's text, page after page in reading order (c-535).
+    text: str | None = None
+    # A proposed read's fields in the document type's shape and a suggested name (c-535).
+    proposal: dict[str, Any] | None = None
+    # The pages read when a limit applied, and whether the token ceiling left pages unread (c-535).
+    read_pages: int | None = None
+    partial: bool | None = None
     error: ExtractionError | None = None
     corrections: list[dict[str, Any]] | None = None
     document_type: DocumentTypeRef | None = None
@@ -133,6 +152,8 @@ class DocumentTypeIn(Model):
     # How many checked reads of one layout offer a template (c-254), as on DocumentTypeVersionIn; 5 when not given.
     offer_at: int | None = Field(default=None, ge=2, le=1000)
     note: str | None = Field(default=None, max_length=500)
+    # The file a proposed read was made from (c-535), kept as the type's first sample.
+    sample_file_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class DocumentTypeVersionIn(Model):

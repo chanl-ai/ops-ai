@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-127`. Service: `console`. Layers: ui.
 
-Card c-181: a walk of the console found five layout defects, now rules in
+Card an earlier change: a walk of the console found five layout defects, now rules in
 [console UI standards](../../console/standards.md). This use case checks all five rules on
 live pages, one check per rule (rule 2 on two further pages).
 

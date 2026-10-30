@@ -119,11 +119,12 @@ export function TaskQueue({
                   }}
                 >
                   <ItemContent className="min-w-0 gap-0.5">
+                    {/* Title and customer wrap to two lines: in the narrow queue a one-line trim cut the amount and the customer. */}
                     <div className="flex min-w-0 items-baseline justify-between gap-2">
-                      <ItemTitle className="min-w-0 truncate">{r.title}</ItemTitle>
+                      <ItemTitle className="line-clamp-2 min-w-0 wrap-break-word" title={r.title}>{r.title}</ItemTitle>
                       {r.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums">{money(r.amount, r.currency)}</span>}
                     </div>
-                    <ItemDescription className="truncate">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
+                    <ItemDescription className="line-clamp-2 wrap-break-word">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
                     <SlaText minutes={r.slaMinutes} open={isOpen(r)} />
                   </ItemContent>
                 </button>

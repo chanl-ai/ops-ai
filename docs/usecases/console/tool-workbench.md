@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-101`. Service: `console`. Layers: ui.
 
-c-088: the tool side panel was too small, and its fields, secrets, mocks and transform
+an earlier change: the tool side panel was too small, and its fields, secrets, mocks and transform
 did not work well. An operation now opens on its own page, its definition on the left and a run on the right, and a run
 tries the draft mock and transform and a secret value typed for that run before anything is staged.
 
@@ -26,7 +26,7 @@ tries the draft mock and transform and a secret value typed for that run before 
 | 3b | After the run returns | the typed key is in no input and nowhere in the page's HTML (a controlled input writes its value into the `value` attribute) |
 | 4 | A transform that reads a missing field; Run against the mock | the reason shows under the Transform field and on the result; Output is the raw answer |
 | 5 | Stage changes | the PATCH carries the mock; the module lists "Mock response edited" as a minor unpublished change |
-| 6 | A viewer (Ravi) opens the same operation; a builder (James) opens it too | the viewer sees a View only notice, no Stage changes or Access and approval, and every field disabled; the builder never sees View only, not while the role loads; at 390px the viewer's Run tab is enabled and opens the run panel (c-125) |
+| 6 | A viewer (Ravi) opens the same operation; a builder (James) opens it too | the viewer sees a View only notice, no Stage changes or Access and approval, and every field disabled; the builder never sees View only, not while the role loads; at 390px the viewer's Run tab is enabled and opens the run panel |
 | 7 | Open the operation at 390px wide, then at 1440px | on the phone Definition and Run are tabs (Definition first) and Run is on screen after one tap; at 1440px both sit side by side and there are no tabs |
 
 The typed value is not stored, logged or returned: `services/tools-service/tests/test_workbench_runs.py` scans every

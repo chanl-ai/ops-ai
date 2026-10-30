@@ -352,7 +352,7 @@ async def test_a_write_received_but_not_finished_reads_as_running_by_its_key(
     gateway: Gateway, engine: AsyncEngine
 ) -> None:
     """The gateway claims a write's row (outcome running) when it receives the call, before the executor runs. A
-    workflow reconciling by key must see that as not yet known, never as done (the display status maps it to ok)."""
+    workflow reconciling by key must see that as not yet known, never as done; Executions shows it running (c-561)."""
     key = f"wfrun_{uuid4().hex[:8]}:hold:1:1"
     row: dict[str, Any] = {
         "id": new_id("call"),
@@ -374,7 +374,7 @@ async def test_a_write_received_but_not_finished_reads_as_running_by_its_key(
     }
     assert await CallLog(engine).claim(generation=None, **row) is None
     (found,) = await _executions(gateway, base="place_hold", key=key)
-    assert (found["outcome"], found["status"]) == ("running", "ok")
+    assert (found["outcome"], found["status"]) == ("running", "running")
 
 
 async def _abandon(gateway: Gateway, key: str) -> httpx.Response:

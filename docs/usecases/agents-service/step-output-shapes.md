@@ -1,6 +1,6 @@
 # A workflow's step outputs are known before it runs
 
-Status: passing (2026-10-19). Id: `uc-401`. Service: `agents-service`. Layers: api. Card: c-353.
+Status: passing (2026-10-19). Id: `uc-401`. Service: `agents-service`. Layers: api. Card: an earlier change.
 
 A builder mapping a later step's fields needs to know what each earlier step outputs, and until now saw it only on a
 past run. Every step type now declares its output by port: fixed by its type, built from its settings (a request's

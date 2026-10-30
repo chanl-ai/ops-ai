@@ -147,11 +147,14 @@ export interface ChatAttachment {
 }
 
 /** One memory a reply saved about the person (c-206); an episode has no key. */
+/** One memory a reply saved, confirmed or asked about. Key and value come only to the memory's person. */
 export interface RememberedItem {
   id: string;
-  kind: 'fact' | 'preference' | 'episode';
+  kind: 'preference' | 'procedure' | 'fact' | 'person' | 'case' | 'episode';
   key?: string | null;
-  value: string;
+  value?: string | null;
+  status?: 'active' | 'suggested' | 'conflict' | 'superseded' | 'forgotten' | null;
+  decision?: 'new' | 'same' | 'replaces' | 'conflicts' | null;
 }
 
 export interface GuardrailAudit {

@@ -211,25 +211,36 @@ class OpsReads:
         return _answer([{"type": "case", "id": case_id}], f"{row['subject']} ({row['status']})")
 
     async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
-        """`mine`: the open tasks waiting for the person, those assigned to them first, then the ones they may decide;
-        `team`: every open task of the team; `overdue`: those past their deadline."""
+        """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
+        open task of the team; `overdue`: those past their deadline. The answer states the counts Human Tasks shows
+        (Assigned to me, All open), so what the agent says always agrees with that page (c-552)."""
         which = str(args.get("which") or "mine")
         names = frozenset(n for n in (person.email, person.name) if n)
         view = {"mine": "open", "team": "open", "overdue": "overdue"}[which]
         rows = await hitl_facade.list_reviews(
             self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names, teams=reader_teams(person)
         )
+        counts = cast(dict[str, int], rows["viewCounts"])
         data = cast(list[dict[str, Any]], rows["data"])
+        mine, open_ = counts.get("mine", 0), counts.get("open", 0)
         if which == "mine":
             assigned = [r for r in data if r.get("assignee") in names]
-            decidable = [
-                r for r in data if r not in assigned and await hitl_facade.can_decide(self.rt, person, str(r["id"]))
-            ]
-            data = assigned + decidable
+            if assigned:
+                data = assigned
+                lead = f"{mine} assigned to you; {open_} open in your team."
+            else:
+                data = [r for r in data if await hitl_facade.can_decide(self.rt, person, str(r["id"]))]
+                lead = f"Nothing is assigned to you; {open_} open in your team" + (
+                    ", these you may decide." if data else "."
+                )
+        elif which == "team":
+            lead = f"{open_} open in your team."
+        else:
+            lead = f"{counts.get('overdue', 0)} past their deadline."
         data = data[:LIMIT]
         cards = [{"type": "task", "id": str(r["id"])} for r in data]
         named = "; ".join(str(r.get("title") or r["id"]) for r in data)
-        return _answer(cards, f"{len(data)} Human Task(s): {named}" if data else "No Human Task is waiting.")
+        return _answer(cards, f"{lead} {named}".strip() if data else lead)
 
     async def _get_human_task(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         task_id = str(args["taskId"])

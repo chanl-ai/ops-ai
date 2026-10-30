@@ -1,8 +1,8 @@
 # Tool lifecycle
 
 Status: current design, 2026-10-14. It describes the whole path a tool takes, from connecting a system to showing
-its calls, and marks each step built, broken or not built. It was written from the c-048 live walk on the shared
-stack, and card c-048 builds it. Service facts live in [tools-service](../services/tools-service/overview.md), pauses
+its calls, and marks each step built, broken or not built. It was written from the an earlier change live walk on the shared
+stack, and card an earlier change builds it. Service facts live in [tools-service](../services/tools-service/overview.md), pauses
 in [human in the loop](human-in-the-loop.md), and tokens in [identity and tenancy](identity-and-tenancy.md). This page
 links to them and does not repeat them.
 
@@ -21,12 +21,12 @@ Every step happens in the console as a named person. No step needs a direct API 
 | Connect: credential | Builder | Built (Secrets page) | Unchanged |
 | Connect: connection record | Builder | Console mock; import makes you pick one | Removed as a separate record. A module's endpoint plus its secret headers are its connection. The Connections page lists modules by endpoint from the registry |
 | Import | Builder | Built for OpenAPI and MCP. Every operation comes in as Write. A spec with no auth imports silently | Access is pre-set from the method (GET is Read, everything else is Write; HEAD is skipped because it answers no body), and the builder confirms each one in the dialog. A spec with no security scheme shows a warning naming the missing header. Each operation's example response becomes its stub |
-| Create, edit, delete | Builder | Built (c-027: call shape, transform, timeout; staged until publish) | Unchanged |
+| Create, edit, delete | Builder | Built (call shape, transform, timeout; staged until publish) | Unchanged |
 | Access classes | Builder | Read, Write and "Moves money" | **Read and Write only.** How many approvers a write needs is set on the operation (see "Write approval"), not implied by a class |
-| Security review | Owner requests, Security decides | Built (c-040) | Unchanged |
+| Security review | Owner requests, Security decides | Built | Unchanged |
 | Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval. Reads run for real. Writes answer from the stub |
 | Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team except the requester decides |
-| Grant to an agent | Builder | Built (c-048 G1): the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
+| Grant to an agent | Builder | Built (an earlier change G1): the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |
 | Call: write | Agent | Drafts an approval card. On the shared stack the approved call is refused (the token is not accepted) | The approved call runs once, with the token bound to its input |
 | Approve a write | Person | Only in the chat widget; never listed in Reviews | Listed in Reviews and decidable there or in the chat. The operation's approval policy applies |
@@ -43,7 +43,7 @@ to the call shape it goes through security review.
 | `selfApproval` | Whether the person whose chat drafted the call may approve it | Off. Dev may turn it on (`OPS_ALLOW_SELF_APPROVAL_IN_CHAT`) |
 
 The approvers come from the run's (or chat's) team: a held write is decided by people with `reviews.decide` there,
-whatever module the operation is on (c-509). An `approverTeam` an older caller still sends is accepted and ignored.
+whatever module the operation is on. An `approverTeam` an older caller still sends is accepted and ignored.
 The gateway and OPA read these fields from the registry, never from the caller. The two-approver rule that "Moves
 money" carried today becomes `approvers: 2`.
 
@@ -53,7 +53,7 @@ money" carried today becomes `approvers: 2`.
 |---|---|---|
 | Security review of a module | Module owner | Security team |
 | Workflow access to a module | Workflow owner | Module's team, not the requester |
-| Write approval, from a workflow run or a chat | The agent's call | The run's or chat's team, under the operation's policy (c-509) |
+| Write approval, from a workflow run or a chat | The agent's call | The run's or chat's team, under the operation's policy |
 | Agent or workflow publish | Builder | Another publisher (dev auto-approval is off on walk stacks) |
 
 The chat widget and the Reviews row decide the same review through the same decide call.

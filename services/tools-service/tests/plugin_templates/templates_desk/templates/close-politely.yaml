@@ -1,0 +1,4 @@
+name: Close a case politely
+use_when: The person asks to close a case
+instructions: |-
+  Before closing a case, say what will happen to it and ask the person to confirm. Then close it.

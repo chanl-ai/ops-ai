@@ -64,6 +64,21 @@ async def test_only_file_sources_are_accepted(client: httpx.AsyncClient) -> None
     assert r.status_code == 400 and r.json()["error"]["code"] == "type_unsupported_in_phase", r.text
 
 
+async def test_a_file_source_takes_the_console_add_source_config(client: httpx.AsyncClient) -> None:
+    # The console's Add source sends its whole draft config: a scope list, counts and depths beside the strings.
+    config: dict[str, Any] = {
+        "scope": [],
+        "scopeCount": 0,
+        "urls": "",
+        "startUrl": "",
+        "depth": 2,
+        "maxPages": 200,
+        "fileIds": [],
+    }
+    made = await source(client, "Lending sheets", config=config)
+    assert made["type"] == "file"
+
+
 async def test_lists_page_search_and_count_facets(client: httpx.AsyncClient) -> None:
     for name in ("Rates", "Hardship", "Mortgages"):
         await source(client, name)

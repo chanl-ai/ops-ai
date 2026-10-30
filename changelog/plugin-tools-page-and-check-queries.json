@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-30",
+  "title": "Plugin tools page results and check query values",
+  "description": "An agent using a plugin's search or listing tool gets one page of results and can ask for the next, and a knowledge sync reads every page, stopping at 200 a run and starting again when the system has forgotten a saved page. Every value a model puts into a plugin's query is checked against what the plugin allows and escaped, so it cannot change the query, and ops plugin test runs these tools the same way.",
+  "tag": "new",
+  "switch": "NEXT_PUBLIC_OPS_PLUGINS",
+  "cards": [
+    "c-581"
+  ]
+}

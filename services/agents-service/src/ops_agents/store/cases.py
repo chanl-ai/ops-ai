@@ -188,6 +188,7 @@ class CaseStore:
         priority: list[str] | None = None,
         customer_id: str | None = None,
         overdue: bool = False,
+        due_before: str | None = None,
         search: str | None = None,
         now: datetime | None = None,
         page: int = 1,
@@ -217,6 +218,15 @@ class CaseStore:
                     cases.c.paused_since.is_(None),
                     cases.c.status.not_in(("resolved", "closed")),
                     cases.c.resolution_due_at < at,
+                )
+            )
+        if due_before:
+            # Due by then and still the team's to act on: not resolved, and not paused waiting on the customer (c-552).
+            where.append(
+                sa.and_(
+                    cases.c.paused_since.is_(None),
+                    cases.c.status.not_in(("resolved", "closed")),
+                    cases.c.resolution_due_at < due_before,
                 )
             )
         async with tenant_tx(self.engine) as c:

@@ -4,7 +4,7 @@ Status: current. Id: `uc-133`. Service: `agents-service` and `console`. Layers: 
 
 A builder testing an agent saw one line of text back and could not tell whether it searched anything, called a tool
 or would have paused. Each test reply now carries a steps block: the knowledge it searched and cited, the tools it
-called and how each went, and where it would pause for a review, each saying so when there was nothing. Since c-285 the
+called and how each went, and where it would pause for a review, each saying so when there was nothing. Since an earlier change the
 test is a real chat in the agent page's right panel, and the steps are its Why tab; each case starts a new test, since a
 thread paused on an approval takes no new message.
 

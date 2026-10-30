@@ -1,6 +1,6 @@
 # A workflow uses AI steps without a saved agent
 
-Status: current. Ids: `uc-258` to `uc-262`. Service: `agents-service`. Layers: api. Card: c-298.
+Status: current. Ids: `uc-258` to `uc-262`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 Classify, Summarise, Extract from text and Draft are workflow steps that make one model call each, with the step's own
 instructions and model alias, no saved agent and no tools. Classify leaves by a category's port, or by `otherwise`
@@ -31,3 +31,4 @@ below its confidence floor. A team's AI steps are off until someone who may mana
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-258-api.py` to `test-uc-262-api.py` | `ISOLATED=1 make usecase-test UC=uc-258 LAYER=api` |
+| ui | `agents-service/scripts/test-uc-258-ui.mjs` to `test-uc-262-ui.mjs` | passing (2026-10-28): Priya turns AI steps on in Policies; each run page shows the step's port and its sheet shows what the step returned |

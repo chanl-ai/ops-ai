@@ -31,7 +31,7 @@ from ..store.tenancy import NoTenantError, current_team
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .engine_runs import start_run
-from .runs import config, execute, graph_store, pending, require_graphs, resolve
+from .runs import as_thread_team, config, execute, graph_store, pending, require_graphs, resolve
 from .workflow_registry import registry, thread_pin
 
 log = get_logger("ops_agents.api.child_runs")
@@ -138,9 +138,10 @@ async def write_children_back(rt: Runtime, parent_id: str, child_id: str) -> Non
         if not visited or snap.next:
             return  # not finished: its own run writes the state
         merged = children_view(values, row["meta"] or {})
-        await graph.aupdate_state(
-            config(parent_id, generation), {"children": merged}, as_node=visited[-1].split("@")[0]
-        )
+        with as_thread_team(row):
+            await graph.aupdate_state(
+                config(parent_id, generation), {"children": merged}, as_node=visited[-1].split("@")[0]
+            )
     finally:
         await leases.release(parent_id, run_id)
 

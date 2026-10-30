@@ -1,6 +1,6 @@
 # Channels mock
 
-Status: historical. The mock was deleted with every console preview page (c-517, 2026-10-22); the real pages are under
+Status: historical. The mock was deleted with every console preview page (2026-10-22); the real pages are under
 `/channels`, walked by uc-142 (`docs/usecases/console/channels-real.md`) and uc-199
 (`docs/usecases/agents-service/connect-a-mailbox.md`). What follows describes the mock as it was.
 
@@ -26,18 +26,18 @@ elsewhere). The walk is use case `uc-165` (`docs/usecases/console/channels-previ
 The connect form is one component in two shells (`_parts/connect-mailbox.tsx`): pick Gmail, Microsoft 365 or other
 IMAP, then sign-in, folder, a test and the replies sender (`_parts/mailbox-fields.tsx`, also the drawer's form).
 Credentials are never typed into the channel: each field names a secret picked from, or added to, the Secrets list
-(the settings mock's `SecretForm`). The agent's Channels tab (c-130) is unchanged and linked from the mailbox.
+(the settings mock's `SecretForm`). The agent's Channels tab is unchanged and linked from the mailbox.
 
 ## Server routes the real build needs
 
 | Route | Today | Needed for |
 |---|---|---|
-| `GET /v1/channels` | none; mailboxes are `OPS_EMAIL_MAILBOXES` in agents-service settings (c-187, c-192) | The list, joined in the service with status, last activity, last message and the workflows bound to each, so the page makes one call |
-| `POST /v1/channels/mailboxes`, `PATCH /v1/channels/mailboxes/{id}` | none; mailboxes change by editing settings | Connect and edit: provider, address, IMAP host or Graph tenant and client, the password's secret name (c-192's `passwordSecret`), folder, team |
+| `GET /v1/channels` | none; mailboxes are `OPS_EMAIL_MAILBOXES` in agents-service settings | The list, joined in the service with status, last activity, last message and the workflows bound to each, so the page makes one call |
+| `POST /v1/channels/mailboxes`, `PATCH /v1/channels/mailboxes/{id}` | none; mailboxes change by editing settings | Connect and edit: provider, address, IMAP host or Graph tenant and client, the password's secret name (an earlier change's `passwordSecret`), folder, team |
 | `POST /v1/channels/mailboxes/{id}/test` and the same on an unsaved body | tools-service `POST /v1/mailboxes/read` reads an IMAP mailbox for agents-service with a service token | Test connection: sign in, list folders, read the newest message without marking it read, the reason on failure |
 | `PATCH /v1/channels/{id}` with `paused` | `PATCH /v1/deployments/{id}` pauses a v1 deployment, not a mailbox | Pause and resume |
-| `GET /v1/workflows/option-sources?source=mailboxes` | built (c-187, `routers/engine.py`) from settings | The trigger's picker; it reads the channels list once that exists |
-| Bind | the live version's trigger node names the mailbox in `parameters.mailbox`; publishing binds it (c-187) | c-194 proposes `trigger_bindings` records, which give the mailbox page its workflow list without scanning definitions |
+| `GET /v1/workflows/option-sources?source=mailboxes` | built (`routers/engine.py`) from settings | The trigger's picker; it reads the channels list once that exists |
+| Bind | the live version's trigger node names the mailbox in `parameters.mailbox`; publishing binds it | an earlier change proposes `trigger_bindings` records, which give the mailbox page its workflow list without scanning definitions |
 
 The replies sender is per process today (`OPS_MAIL_PROVIDER`, `OPS_MAIL_FROM`, `packages/ops_email`). The mock puts a
 sender on each mailbox (SMTP, Resend or Microsoft 365, with its secret by name), which needs `EmailProviders` to build a

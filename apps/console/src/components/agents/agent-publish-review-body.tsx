@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { plural, relativeTime } from '@/lib/format';
 import type { Review } from '@/lib/types/domain';
 import type { EvalVersionSummary } from '@/lib/types/evals';
+import { countLabel } from '@/components/shared/saved-view-tabs';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -37,7 +38,7 @@ export function AgentPublishBody({ review }: { review: Review }) {
           </p>
         </div>
       </Section>
-      <Section title={`Changes · ${p.changes?.length ?? 0}`}>
+      <Section title={countLabel('Changes', p.changes?.length)}>
         {p.changes?.length ? (
           <ul className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm" data-testid="agent-publish-changes">
             {p.changes.map((c) => (

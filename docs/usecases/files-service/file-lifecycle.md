@@ -1,6 +1,6 @@
 # A member stores a file once and it is downloaded, held and deleted under its rules
 
-Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api. Card: c-087.
+Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api. Card: an earlier change.
 
 ## Preconditions
 
@@ -30,6 +30,8 @@ Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api. Card: c-08
 | Layer | Script | State |
 |---|---|---|
 | api | `files-service/scripts/test-uc-093-api.py` | passing |
+
+In the console: uc-112's ui script works the Files page on files-service: search, download through files-service, a guarded delete, and an admin's legal hold.
 
 ## Non-vacuous check
 

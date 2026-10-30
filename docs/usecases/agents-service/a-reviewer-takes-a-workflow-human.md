@@ -1,6 +1,6 @@
 # A reviewer takes a workflow Human Task and sees its deadline
 
-Status: passing. Id: `uc-225`. Service: `agents-service`. Layers: ui. Card: c-074.
+Status: passing. Id: `uc-225`. Service: `agents-service`. Layers: ui. Card: an earlier change.
 
 A workflow's review step waits in Human Tasks with the time left before its deadline. A reviewer takes it with Assign to
 me and finds it under Assigned to me; the person who started the run may not decide it, so may not take it either.

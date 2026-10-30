@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-30",
+  "title": "Connect systems that sign in with a certificate",
+  "description": "A connection can prove itself with its app's certificate instead of a client secret, as Microsoft Entra apps at banks require, or sign in as a service account the way DocuSign and Google ask. The private key is uploaded once and never shown again, and the connection shows the certificate's thumbprint and when it expires.",
+  "tag": "new",
+  "cards": [
+    "c-583"
+  ]
+}

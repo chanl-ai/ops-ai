@@ -18,7 +18,7 @@ Status: current. Id: `uc-074`. Service: `console`. Layers: ui.
 | 3 | Ask to look up CHQ-2219 | a `lookup_account` card in the success state; opening it shows the input |
 | 4 | Get a reply carrying a remote image | no request reaches the image's host; the image shows as "[Image blocked: balance chart]" |
 
-The thread view is composed from AI Elements blocks behind `components/shared/chat-blocks.tsx` (c-055 T002): the
+The thread view is composed from AI Elements blocks behind `components/shared/chat-blocks.tsx` (an earlier change T002): the
 conversation, messages and their actions, the streamed markdown response, the tool card and the message box.
 
 ## Acceptance layers

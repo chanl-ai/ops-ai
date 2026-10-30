@@ -210,43 +210,47 @@ export function FileUpload({
       </div>
     );
 
+  // A control that holds one file gives way to that file's row once it is chosen; removing it brings the zone back.
+  const full = !multiple && (listed.length > 0 || others.length > 0);
   return (
     <div className="flex flex-col gap-2" data-testid={testId}>
       {input}
-      <div
-        role="button"
-        tabIndex={disabled ? -1 : 0}
-        aria-disabled={disabled}
-        aria-label={`${title ?? (multiple ? 'Choose files' : 'Choose a file')}: ${rule}`}
-        onClick={() => !disabled && inputRef.current?.click()}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
+      {!full && (
+        <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-disabled={disabled}
+          aria-label={`${title ?? (multiple ? 'Choose files' : 'Choose a file')}: ${rule}`}
+          onClick={() => !disabled && inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
+              e.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
+          onDragOver={(e) => {
             e.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (!disabled) setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          if (!disabled) pick(e.dataTransfer.files);
-        }}
-        className={cn(
-          'flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-          over && 'border-primary bg-primary/5',
-          disabled && 'cursor-not-allowed opacity-60',
-        )}
-      >
-        <Upload className="size-5 text-muted-foreground" />
-        <span className="text-sm font-medium">{title ?? (multiple ? 'Drop files here or choose files' : 'Drop a file here or choose one')}</span>
-        <span className="text-xs text-muted-foreground">{rule}</span>
-        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-        {up.scanning && <span className="text-xs text-muted-foreground">Each file is scanned for malware before anyone can open it.</span>}
-      </div>
+            if (!disabled) setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            if (!disabled) pick(e.dataTransfer.files);
+          }}
+          className={cn(
+            'flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+            over && 'border-primary bg-primary/5',
+            disabled && 'cursor-not-allowed opacity-60',
+          )}
+        >
+          <Upload className="size-5 text-muted-foreground" />
+          <span className="text-sm font-medium">{title ?? (multiple ? 'Drop files here or choose files' : 'Drop a file here or choose one')}</span>
+          <span className="text-xs text-muted-foreground">{rule}</span>
+          {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+          {up.scanning && <span className="text-xs text-muted-foreground">Each file is scanned for malware before anyone can open it.</span>}
+        </div>
+      )}
       {rows}
     </div>
   );

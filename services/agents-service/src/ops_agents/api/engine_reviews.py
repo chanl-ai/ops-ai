@@ -556,13 +556,24 @@ def _risk(policies: list[WritePolicy]) -> str:
     return "medium" if any(p.access == "write" for p in policies) else "low"
 
 
+async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
+    """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and every run
+    waiting for a person however old, so a busy team never loses an open task from the list or its count (c-561)."""
+    store = _runs(rt)
+    recent = await store.list(team_id=current_team())
+    waiting = await store.list(team_id=current_team(), status="waiting", limit=None)
+    seen = {str(r["id"]) for r in recent}
+    rows = recent + [r for r in waiting if str(r["id"]) not in seen]
+    return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)
+
+
 async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     """Each review step of the selected team's runs (the one a run waits on as pending, and every decided one) as a
     row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
     and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
     review for the rows a page shows, so a count reads no more than its rows (c-451)."""
     try:
-        runs = await _runs(rt).list(team_id=current_team())
+        runs = await team_runs(rt)
     except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
         log.warning("engine_reviews_unavailable", error=type(e).__name__)
         return []
@@ -626,7 +637,7 @@ async def all_places(rt: Runtime) -> list[dict[str, Any]]:
     """all_views' reviews by id and status alone, in its order: a task's place in its queue (hitl_facade.queue_place)
     reads no task type, policy or wording."""
     try:
-        runs = await _runs(rt).list(team_id=current_team())
+        runs = await team_runs(rt)
     except DatabaseError as e:
         log.warning("engine_reviews_unavailable", error=type(e).__name__)
         return []

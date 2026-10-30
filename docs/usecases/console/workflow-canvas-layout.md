@@ -2,10 +2,10 @@
 
 Status: current. Id: `uc-486`. Service: `console`. Layers: ui.
 
-Card c-486: one layout module places workflow steps (ELK, ports at their drawn heights), and lines are routed around
+Card an earlier change: one layout module places workflow steps (ELK, ports at their drawn heights), and lines are routed around
 steps. The use case opens the demo workflows, the widest seed (`complaint_triage`) and fifty steps saved with no
 positions in the step editor, and a run's canvas, which lay out through the same module. The design mock it was first
-walked on (`/preview/workflow-layout`) was deleted in c-517; its checks run here on the real editor, except "Before",
+walked on (`/preview/workflow-layout`) was deleted in an earlier change; its checks run here on the real editor, except "Before",
 which drew the seed as stored before the bake and has no real page.
 
 ## Preconditions

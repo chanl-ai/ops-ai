@@ -1,10 +1,10 @@
 # Run and review controls show only to roles that can use them
 
-Status: current. Id: `uc-123`. Service: `console`. Layers: ui. Card: c-123.
+Status: current. Id: `uc-123`. Service: `console`. Layers: ui. Card: an earlier change.
 
 The server refuses a run start to anyone but a builder or admin, and a cancel or a decision to anyone the rules do not
-allow (c-122). The console hides those controls from the same people, reading the server's flags where the rule needs
-the record (c-123), so nobody presses a button that answers 403.
+allow. The console hides those controls from the same people, reading the server's flags where the rule needs
+the record, so nobody presses a button that answers 403.
 
 ## Preconditions
 

@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-112`. Service: `console`. Layers: ui.
 
-Card c-126: the Files page reads files-service. Views, counts, search and the uploaded range run in its query; the
+Card an earlier change: the Files page reads files-service. Views, counts, search and the uploaded range run in its query; the
 sheet shows what uses a file; delete goes through the delete guard; legal holds are for admins of the team.
 
 ## Preconditions

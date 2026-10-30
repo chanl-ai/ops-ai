@@ -1,0 +1,50 @@
+schema: ops-ai/plugin@2
+id: test.desk
+title: Desk
+version: 0.1.0
+sdk: "1"
+display:
+  logo: "https://desk.test/logo.svg"
+  category: Service desk
+  description: Cases and their notes in Desk.
+  docs_url: "https://desk.test/docs/oauth-app"
+connection:
+  kinds: [oauth2_auth_code]
+  authorize_url: "https://login.desk.test/authorize"
+  token_url: "https://login.desk.test/token"
+  scopes: [{ id: api, label: Read and change records, required: true }]
+  sign_in: [team]
+  from_token: { instance_url: instance_url }
+  token_hosts: [.my.desk.test]
+  health_check: { path: "/api/v{api_version}/limits" }
+settings:
+  instance_url: { type: string, from_token: true }
+  api_version: { type: string, default: "1", lockable: true }
+egress: ["{instance_url}"]
+endpoint: "{instance_url}/api/v{api_version}"
+tools:
+  - name: get_case
+    access: read
+    input: { id: { type: string } }
+    request: { method: GET, path: "/cases/{id}" }
+  - name: close_case
+    access: write
+    input: { id: { type: string } }
+    request: { method: PATCH, path: "/cases/{id}", body: '{"status": "closed"}' }
+  - name: list_things
+    access: read
+    knowledge: list_items
+    function: tests.plugin_desk.kb:list_things
+    input:
+      since: { type: string, required: false }
+      cursor: { type: string, required: false }
+  - name: get_thing
+    access: read
+    knowledge: get_item
+    input: { id: { type: string } }
+    request: { method: GET, path: "/things/{id}" }
+  - name: reach_out
+    access: read
+    function: tests.plugin_desk.kb:reach_out
+knowledge_sources:
+  - { name: things, title: Things, list: list_things, get: get_thing }

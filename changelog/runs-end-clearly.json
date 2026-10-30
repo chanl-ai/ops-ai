@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-29",
+  "title": "Every workflow run ends with a clear outcome",
+  "description": "A run nobody is working on shows as Stuck with its reason, and Retry resumes it without sending anything twice. A timed-out change, a short tools outage, a long Human Tasks list or an email that will not start no longer leaves a run silently broken.",
+  "tag": "fix",
+  "cards": ["c-561"]
+}

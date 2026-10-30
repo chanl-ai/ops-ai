@@ -18,6 +18,7 @@ from ...case_wording import entry
 from ...store.activity import Activity, Filters, Scope
 from ...store.cases import CaseNotFound, CaseStore
 from ...store.tenancy import current_team
+from ...store.trigger_events import SET_ASIDE_AFTER
 from ..actors import ActorView, actors
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
@@ -37,6 +38,7 @@ KindName = Literal[
     "agent_run",
     "chat",
     "email",
+    "form",
     "decision",
     "tool_call",
     "case",
@@ -48,6 +50,7 @@ StatusName = Literal["running", "waiting", "done", "failed", "skipped"]
 AREA = {
     "workflow_run": "workflows",
     "email": "workflows",
+    "form": "workflows",
     "agent_run": "agents",
     "decision": "reviews",
     "case": "cases",
@@ -62,7 +65,7 @@ SOURCE_TYPES = ("workflow", "agent", "channel", "case")
 
 
 class Source(Out):
-    type: Literal["workflow", "agent", "channel", "case", "process"]
+    type: Literal["workflow", "agent", "channel", "case", "process", "form"]
     id: str
     name: str
 
@@ -85,6 +88,8 @@ class ActivityRow(Out):
     outcome: str | None
     # The outcome as people read it ("Daily cap"), run_story.words over `outcome` (c-508); `outcome` stays the key.
     outcome_text: str | None = None
+    # Why, in a sentence, when the row has a reason of its own: an email skipped, set aside or over its cap.
+    detail: str | None = None
     team_id: str | None
     source: Source
     actor: ActorView
@@ -150,7 +155,7 @@ def _sources(raw: list[str]) -> tuple[tuple[str, str], ...]:
 
 
 def _actor(r: dict[str, Any], who: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    if r["kind"] == "email":
+    if r["kind"] in ("email", "form"):
         return {"kind": "sender", "id": r["actor"], "name": r["actor"]}
     if r["kind"] == "background":
         # The process did it; named as the Background page names it.
@@ -158,7 +163,31 @@ def _actor(r: dict[str, Any], who: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return who.get(str(r["actor"] or "")) or {"kind": "person", "id": "", "name": ""}
 
 
-def row_view(r: dict[str, Any], who: dict[str, dict[str, Any]], titles: dict[str, str] | None = None) -> dict[str, Any]:
+def email_detail(outcome: str, d: dict[str, Any]) -> str | None:
+    """An email's or a form submission's reason, from the detail its trigger event recorded (api/email_trigger.py,
+    routers/forms.py)."""
+    reason = str(d.get("reason") or "")
+    if outcome == "set_aside":
+        return f"Failed to start {SET_ASIDE_AFTER} times: {reason}" if reason else str(d.get("message") or "") or None
+    if outcome == "start_failed":
+        tried = f"Failed to start (try {d.get('attempt')} of {SET_ASIDE_AFTER})"
+        return f"{tried}: {reason}. It is tried again on the next read." if reason else None
+    if outcome == "daily_cap" and d.get("dailyCap") is not None:
+        return f"Not started: the daily cap of {d['dailyCap']} runs was reached."
+    return str(d.get("message") or "") or None
+
+
+def row_view(
+    r: dict[str, Any],
+    who: dict[str, dict[str, Any]],
+    titles: dict[str, str] | None = None,
+    details: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    detail = (
+        email_detail(str(r["outcome"] or ""), (details or {}).get(str(r["row_id"])) or {})
+        if r["kind"] in ("email", "form")
+        else None
+    )
     return {
         "id": f"{r['kind']}:{r['row_id']}",
         "kind": r["kind"],
@@ -166,6 +195,7 @@ def row_view(r: dict[str, Any], who: dict[str, dict[str, Any]], titles: dict[str
         "status": r["status"],
         "outcome": r["outcome"],
         "outcomeText": words(str(r["outcome"])) if r["outcome"] else None,
+        "detail": detail,
         "teamId": r["team_id"],
         "source": {"type": r["source_type"], "id": r["source_id"] or "", "name": r["source_name"] or ""},
         "actor": _actor(r, who),
@@ -221,7 +251,8 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
         case=case,
     )
     found = await Activity(rt.db).page(scope, filters, page=q.page, page_size=q.pageSize)
-    who = await actors(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] != "email"])
+    who = await actors(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] not in ("email", "form")])
     titles = await case_titles(rt, found.rows) | await call_titles(rt, found.rows)
-    listed = paged([row_view(r, who, titles) for r in found.rows], found.total, q.page, q.pageSize)
+    details = await Activity(rt.db).email_details(found.rows)
+    listed = paged([row_view(r, who, titles, details) for r in found.rows], found.total, q.page, q.pageSize)
     return ok(listed | {"facets": {"kind": found.by_kind, "status": found.by_status}})

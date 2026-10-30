@@ -1,0 +1,22 @@
+
+schema: ops-ai/plugin@2
+id: test.header-key
+title: Header key desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [api_key]
+  api_key: { placement: header, name: X-Desk-Key }
+  sign_in: [team]
+  health_check: { path: "/header-key/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+
+egress: ["{base_url}"]
+endpoint: "{base_url}/header-key"
+tools:
+  - name: get_record
+    title: Read a record
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }

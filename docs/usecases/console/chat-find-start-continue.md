@@ -1,6 +1,6 @@
 # A banker finds, starts and continues chats
 
-Status: current. Id: `uc-087`. Service: `console`. Layers: ui. Card: c-069.
+Status: current. Id: `uc-087`. Service: `console`. Layers: ui. Card: an earlier change.
 
 James chats with an agent the way he uses ChatGPT: he starts from a suggested prompt, regenerates an answer, stops a
 slow reply, retries a refused send, pages his chat list and finds an old chat by what he asked. The list's search and

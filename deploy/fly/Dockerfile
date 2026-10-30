@@ -36,6 +36,8 @@ RUN corepack enable \
 COPY apps/console/package.json apps/console/
 COPY apps/embed/package.json apps/embed/
 COPY packages/usecase-runner/package.json packages/usecase-runner/
+# The console calls services through the generated SDK (c-580); its `prepare` script builds it during the install.
+COPY sdk/typescript sdk/typescript
 RUN pnpm install --frozen-lockfile --filter @ops-ai/console...
 COPY apps/console apps/console
 # What's new and Coming next, read by next.config.ts into the build.

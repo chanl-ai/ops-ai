@@ -101,7 +101,8 @@ async def _combine(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     fields = [str(f.get("field")) for f in cast(list[Mapping[str, Any]], node.parameters.get("fields") or [])]
     # A source may give fields the step does not list, so its values stay open.
     values = opened(props={f: {} for f in fields})
-    return {"out": closed(("values", "sources", "conflicts", "hasConflicts"), props={"values": values})}
+    out = closed(("values", "sources", "conflicts", "hasConflicts"), props={"values": values})
+    return {"out": out, "disagree": out} if node.parameters.get("onDisagreement") == "port" else {"out": out}
 
 
 async def _match(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
@@ -148,6 +149,13 @@ async def _extract(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
         listed = await lookups.document_fields(str(typed["id"]), cast(int | None, typed.get("version")))
         fields = {str(f.get("key") or f.get("name")): {} for f in listed}
     read = opened(("extractionId",), props={"fields": opened(props=fields)})
+    kind = node.parameters.get("read")
+    if kind == "text":
+        # The full text and each page's text and tables (c-535): no fields.
+        read = closed(("extractionId", "fileId", "text", "pages"), ("readPages", "partial"))
+    elif kind == "propose":
+        # The keys of a proposed read are known only when the run reads the file, so `fields` stays open (c-535).
+        read = opened(("extractionId", "proposal"), props={"fields": opened(), "proposal": opened()})
     others = {
         "error": closed(("error", "code"), ("details",)),
         "timeout": closed(("waitedFor", "key", "seconds", "extractionId")),

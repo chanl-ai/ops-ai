@@ -14,7 +14,7 @@ import { QueueDone, TaskQueue } from '@/components/reviews/task-queue';
 import { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
 import { QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { taskView } from '@/components/tasks/task-regions';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -133,9 +133,9 @@ export default function HumanTasksPage() {
       <SavedViewTabs
         ariaLabel="Human Tasks views"
         presets={[
-          { id: 'open', label: `All open · ${counts?.open ?? 0}` },
-          { id: 'mine', label: `Assigned to me · ${counts?.mine ?? 0}` },
-          { id: 'overdue', label: `Past SLA · ${counts?.overdue ?? 0}` },
+          { id: 'open', label: countLabel('All open', counts?.open) },
+          { id: 'mine', label: countLabel('Assigned to me', counts?.mine) },
+          { id: 'overdue', label: countLabel('Past SLA', counts?.overdue) },
         ]}
         savedViews={[]}
         activePresetId={view}

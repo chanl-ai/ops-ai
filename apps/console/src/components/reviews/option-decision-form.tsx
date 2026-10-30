@@ -163,21 +163,23 @@ export function OptionDecisionForm({
     setPicked(undefined);
   }, [reviewId, optionsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   if (layout === 'panel') {
-    const chosen = options.find((o) => o.name === (picked ?? suggested)) ?? options[0];
-    if (!chosen) return null;
+    // Nothing is picked until the person picks: a preselected option made one click decide a task they had not read.
+    const chosen = options.find((o) => o.name === picked);
+    if (!options.length) return null;
     const send = () => {
+      if (!chosen) return;
       if (chosen.reason === 'required' && !reason.trim()) return setErrors((e) => ({ ...e, reason: `Add a reason to ${(chosen.label ?? label(chosen.name)).toLowerCase()}.` }));
       submit(chosen);
     };
     const choice = (
       <fieldset className="flex flex-col gap-3" data-testid="option-decision-form" data-layout="panel">
         <legend className="mb-2 text-sm font-medium">Your decision</legend>
-        <RadioGroup value={chosen.name} onValueChange={setPicked} className="gap-2">
+        <RadioGroup value={picked ?? ''} onValueChange={setPicked} className="gap-2">
           {options.map((o) => (
             <Label
               key={o.name}
               htmlFor={fieldId(reviewId, o.name)}
-              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal transition-colors hover:bg-accent/50 ${chosen.name === o.name ? 'border-primary bg-accent/40' : ''}`}
+              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal transition-colors hover:bg-accent/50 ${chosen?.name === o.name ? 'border-primary bg-accent/40' : ''}`}
               data-testid={`option-${o.name}`}
             >
               <RadioGroupItem id={fieldId(reviewId, o.name)} value={o.name} className="mt-0.5" />
@@ -201,15 +203,15 @@ export function OptionDecisionForm({
             </Label>
           ))}
         </RadioGroup>
-        {chosen.inputs?.length ? inputRows([chosen]) : null}
-        <FormField id={`option-reason-${reviewId}`} label="Reason" optional={chosen.reason !== 'required'} hint="Kept on the case with your name and the time." error={errors.reason}>
+        {chosen?.inputs?.length ? inputRows([chosen]) : null}
+        <FormField id={`option-reason-${reviewId}`} label="Reason" optional={chosen?.reason !== 'required'} hint="Kept on the case with your name and the time." error={errors.reason}>
           <Textarea id={`option-reason-${reviewId}`} rows={2} value={reason} onChange={(e) => (setReason(e.target.value), setErrors((x) => ({ ...x, reason: '' })))} placeholder="e.g. Balance confirmed with the branch" className="bg-card" data-testid="option-reason" />
         </FormField>
       </fieldset>
     );
     const decide = (
-      <LoadingButton type="button" className="w-full" isLoading={pending === chosen.name} disabled={!!pending || !!blocked?.[chosen.name]} onClick={send} data-testid="decide">
-        {chosen.label ?? label(chosen.name)}
+      <LoadingButton type="button" className="w-full" isLoading={!!chosen && pending === chosen.name} disabled={!chosen || !!pending || !!blocked?.[chosen.name]} onClick={send} data-testid="decide">
+        {chosen ? (chosen.label ?? label(chosen.name)) : 'Pick a decision'}
       </LoadingButton>
     );
     return <>{parts ? parts({ choice, decide }) : (<>{choice}{decide}</>)}</>;

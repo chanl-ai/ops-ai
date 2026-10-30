@@ -26,6 +26,7 @@ import json
 import re
 import ssl
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlsplit
@@ -33,9 +34,11 @@ from urllib.parse import parse_qsl, quote, quote_plus, urlsplit
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_identity import ActingForPerson
 
 from . import mcp, transform
 from .auth import Authenticator, AuthFailed, Prepared
+from .auth.tokens import scope_list
 from .egress import EgressDenied, EgressPolicy, for_tenant
 from .mocks import MockAnswers
 from .registry import Resolved
@@ -44,12 +47,15 @@ from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
     from .code_runs import CodeExecutor
+    from .plugins.executor import PluginExecutor
 
 # A single-brace argument placeholder; the inner braces of a `{{NAME}}` secret reference are not one.
 URL_VAR = re.compile(r"(?<!\{)\{([a-zA-Z0-9_]+)\}(?!\})")
 BODY_VAR = re.compile(r"\{\{\s*([a-z][a-zA-Z0-9_]*)\s*\}\}")
 ESCAPE = re.compile(r"%[0-9A-F]{2}")
 SECRET_REF = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
+# A query value's references: a secret (group 1) or an argument (group 2).
+QUERY_REF = re.compile(f"{SECRET_REF.pattern}|{URL_VAR.pattern}")
 REDACTED = "[redacted]"
 PYTHON_TYPES: dict[str, tuple[type, ...]] = {
     "string": (str,),
@@ -121,7 +127,10 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
 
 
 def auth_failure(e: AuthFailed) -> ToolOutcome:
-    return _failure(e.code, str(e), e.status, e.side)
+    outcome = _failure(e.code, str(e), e.status, e.side)
+    if e.details:
+        outcome.output["error"]["details"] = e.details
+    return outcome
 
 
 def _tls(e: BaseException) -> bool:
@@ -204,8 +213,8 @@ def build_request(
     module: dict[str, Any], op: dict[str, Any], args: dict[str, Any], secrets: dict[str, str] | None = None
 ) -> HttpRequest:
     """The request an operation makes. `secrets` resolves the `{{NAME}}` references; without it they stay as written,
-    which is enough to read the host. The path's own query (`?api_key={{KEY}}`) is sent alongside the arguments:
-    httpx would otherwise drop it in favour of `params`."""
+    which is enough to read the host. The path's own query (`?api_key={{KEY}}`, `?email={email}`) is sent alongside the
+    arguments it does not name: httpx would otherwise drop it in favour of `params`."""
     values = secrets or {}
 
     def secret(m: re.Match[str], encode: bool) -> str:
@@ -213,14 +222,25 @@ def build_request(
             return m.group(0)
         return quote(values[m.group(1)], safe="") if encode else values[m.group(1)]
 
+    def argument(name: str) -> str:
+        value = args.get(name)
+        return "" if value is None else str(value)
+
     template, _, query = (op.get("path") or "/").partition("?")
-    used = set(URL_VAR.findall(template))
+    used = set(URL_VAR.findall(template)) | set(URL_VAR.findall(query))
     # Secrets first, URL-encoded; then the caller's arguments, URL-encoded, so neither can form a reference.
     path = URL_VAR.sub(
         lambda m: quote(str(args.get(m.group(1), "")), safe=""), SECRET_REF.sub(lambda m: secret(m, True), template)
     )
     url = module["endpoint"].rstrip("/") + path
-    fixed = {k: SECRET_REF.sub(lambda m: secret(m, False), v) for k, v in parse_qsl(query, keep_blank_values=True)}
+    # One pass over each query value, so an argument's value is never read again as a reference: `{name}` takes the
+    # argument (left out when it is not given and is the whole value), `{{NAME}}` the secret.
+    fixed: dict[str, str] = {}
+    for k, v in parse_qsl(query, keep_blank_values=True):
+        whole = URL_VAR.fullmatch(v)
+        if whole and args.get(whole.group(1)) is None:
+            continue
+        fixed[k] = QUERY_REF.sub(lambda m: secret(m, False) if m.group(1) else argument(m.group(2)), v)
     rest = {k: v for k, v in args.items() if k not in used}
     method = op.get("method") or "GET"
     body: Any = None
@@ -253,11 +273,19 @@ class _Secrets:
         *,
         trial: Trial | None = None,
         stale_rotation: int | None = None,
+        acting_for: ActingForPerson | None = None,
     ) -> Prepared | None:
         if self.auth is None:
             return None
         prepared = await self.auth.prepare(
-            module, environment, tool=str(op["name"]), actor=actor, stale_rotation=stale_rotation
+            module,
+            environment,
+            tool=str(op["name"]),
+            actor=actor,
+            stale_rotation=stale_rotation,
+            acting_for=acting_for,
+            needs_person=bool(op.get("needs_person")),
+            scopes=scope_list(op.get("scopes")),
         )
         if prepared is not None and trial is not None:
             trial.note(f"Signed in through the connection ({prepared.environment})")
@@ -345,10 +373,13 @@ class HttpExecutor(_Secrets):
         secret_values: dict[str, str] | None = None,
         trial: Trial | None = None,
         environment: str | None = None,
+        acting_for: ActingForPerson | None = None,
+        on_answer: Callable[[Any], Any] | None = None,
     ) -> ToolOutcome:
         """With `trial` (the test console) the operation's own transform is not applied: the console applies its draft
         to `trial.raw`. `secret_values` are a test's typed values (_Secrets._resolve). `environment` is the run's (test
-        or production), which picks the connection's settings."""
+        or production), which picks the connection's settings. `on_answer` sees the answer before the transform, as
+        a plugin's paging reads the next page from it (plugins/executor.py)."""
         host = urlsplit(build_request(module, op, args).url).hostname
         if self.policy is None:
             return _failure("EGRESS_DENIED", "This gateway has no egress policy, so it calls no external system.")
@@ -360,7 +391,7 @@ class HttpExecutor(_Secrets):
         if isinstance(resolved, ToolOutcome):
             return resolved
         try:
-            prepared = await self._signed_in(module, op, environment, actor, trial=trial)
+            prepared = await self._signed_in(module, op, environment, actor, trial=trial, acting_for=acting_for)
         except AuthFailed as e:
             return auth_failure(e)
         req = build_request(module, op, args, resolved)
@@ -394,7 +425,9 @@ class HttpExecutor(_Secrets):
                 if trial is not None:
                     trial.note(f"{host} answered 401; signing in again once")
                 try:
-                    prepared = await self._signed_in(module, op, environment, actor, stale_rotation=prepared.rotation)
+                    prepared = await self._signed_in(
+                        module, op, environment, actor, stale_rotation=prepared.rotation, acting_for=acting_for
+                    )
                 except AuthFailed as e:
                     return auth_failure(e)
                 used = sorted({*used, *_scrub_set(resolved, prepared)})
@@ -417,11 +450,17 @@ class HttpExecutor(_Secrets):
         # Scrubbed before the transform as well as after: a template given a secret could re-encode it (reverse,
         # join, a key lookup into an error) past any scrub of the literal value.
         output = scrub(masked(output, op.get("masked_output") or []), used)
+        if on_answer is not None:
+            try:
+                output = on_answer(output)
+            except Exception as e:  # the caller's reading of the answer: the call fails, the gateway does not
+                return _failure("ANSWER_UNREADABLE", f"The answer from {host} could not be read ({type(e).__name__}).")
         if trial is not None:
             trial.raw = output
             return ToolOutcome(True, output)
         if op.get("response_transform"):
-            shaped, failed = await transform.apply(op["response_transform"], output)
+            # A plugin's transform also reads the team's merged settings (c-564); every other module's sees none.
+            shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
             # A transform that fails on a real answer still returns the answer, with why, instead of failing the call.
             output = shaped if failed is None else {"response": output, "transform_error": failed}
         # After the transform, so a template that repeats a header cannot carry a secret out.
@@ -559,6 +598,8 @@ class Executor:
         mcp_executor: McpExecutor | None = None,
         mocks: MockAnswers | None = None,
         code: CodeExecutor | None = None,
+        *,
+        plugins: PluginExecutor | None = None,
     ) -> None:
         """`mocks` answers a test call from the operation's mock answers (c-332); without it none is read. `code` runs
         a code operation's function on runner-service (c-531); without it a code operation fails."""
@@ -567,6 +608,8 @@ class Executor:
         self.mcp = mcp_executor or McpExecutor(http.client, http.policy, http.secrets, http.auth)
         self.mocks = mocks
         self.code = code
+        # A plugin's Python tools (c-564); without it they fail.
+        self.plugins = plugins
 
     async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
         """A test call answered as the system would have, before any egress (c-332): the same failures a real answer
@@ -623,4 +666,10 @@ class Executor:
             return await self._mocked(module, op, mock)
         if resolved.executor == "mcp":
             return await self.mcp.run(module, op, args, actor=actor, environment=environment)
-        return await self.http.run(module, op, args, actor=actor, environment=environment)
+        if resolved.executor == "plugin":
+            if self.plugins is None:
+                return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
+            return await self.plugins.run(
+                module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for
+            )
+        return await self.http.run(module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for)

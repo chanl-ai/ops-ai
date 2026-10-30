@@ -1,6 +1,16 @@
 # A workflow turns an uploaded invoice into fields a person can check
 
-Status: current. Id: `uc-124`. Service: `agents-service`. Layers: api. Card: c-157.
+Status: current. Id: `uc-124`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | James's invoice run ends OK, and its Extract sheet shows every field with a confidence and a page citation | ui | 1 | 1 |
+| S2 | An answer quoting a line that is not on its page ends at Review, that field scored 0 | ui | 2 | 2 |
+| S3 | Sam sets a 95% floor in Govern › Policies, and the same invoice now ends at Review with its amount to check | ui | 4 | 4 |
+| S4 | A scan with no text ends at Unreadable | ui | 5 | 5 |
+| S5 | The same through the API, with a field threshold of its own | api | 1-5 | 3 |
 
 An Extract from file step asks documents-service to read a file (its bytes from files-service) into the fields a
 workflow defines. Each field has a value, a confidence from the engine's own checks (the quote is on its page and says
@@ -33,6 +43,7 @@ The worker reads the floor per step from platform-service (`services/agents-serv
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-124-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-124-ui.mjs` | passing: the run page and the Extract step's sheet, Policies for the floor |
 
 ## Non-vacuous check
 

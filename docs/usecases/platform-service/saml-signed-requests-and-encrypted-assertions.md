@@ -31,6 +31,8 @@ identity team would import it. No model is called.
 |---|---|---|
 | api | `platform-service/scripts/test-uc-215-api.py` | passing |
 
+In the console: signing in by SSO is walked by uc-161's ui script (OIDC); signed requests and encrypted assertions are the SAML exchange and stay at the api layer.
+
 ## Non-vacuous check
 
 With the signature check after decryption, the encryption requirement and the key transport check removed, three

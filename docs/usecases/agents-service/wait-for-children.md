@@ -1,6 +1,6 @@
 # A workflow waits for its children and uses their results
 
-Status: passing (2026-10-19). Id: `uc-402`. Service: `agents-service`. Layers: api, ui. Card: c-263.
+Status: passing (2026-10-19). Id: `uc-402`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 A letter arrives with three attachments. The parent workflow reads each in a child run of its own, two at a time, and
 then needs every child's result to go on. With Wait for them on, its Run workflow step pauses until every child has

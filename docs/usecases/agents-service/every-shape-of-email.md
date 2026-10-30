@@ -1,6 +1,15 @@
 # A mailbox workflow takes every shape of email
 
-Status: passing. Id: `uc-226`. Service: `agents-service`. Layers: api. Card: c-259.
+Status: current. Id: `uc-226`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | An email with only text is read from its text: its run took the text-only way and ended at Text read | ui | 2 | 2 |
+| S2 | An email with two attachments lists a run per attachment on its page, each ending at Read | ui | 3 | 3 |
+| S3 | Maya opens the read check an email and its attachment disagree on, and sees both case numbers | ui | 4 | 4 |
+| S4 | The same through the API, with an email that has nothing to read | api | 1-5 | 5 |
 
 One workflow handles the shapes a team mailbox receives. A Switch reads what came in and picks one way: an
 attachment with text, several attachments, text only, or nothing readable. Text only is read from the text file the
@@ -30,6 +39,15 @@ trigger storing the text is `services/agents-service/tests/engine/test_email_tri
 The non-vacuous check is step 4: if Combine picked the attachment's case number silently, the run would end
 `combined` instead of waiting at the read check, and the check fails.
 
+## Acceptance layers
+
+| Layer | Script | State |
+|---|---|---|
+| api | `agents-service/scripts/test-uc-226-api.mjs` | passing |
+| ui | `agents-service/scripts/test-uc-226-ui.mjs` | failing at step 4 (2026-10-30): the read check's task draws only its header, since a review step's `summary` reaches no region, so Maya cannot see which case numbers disagree |
+
+Both scripts take the workflows and notices from `agents-service/scripts/uc226_mail.mjs`.
+
 ## Run
 
-`ISOLATED=1 make usecase-test UC=uc-226 LAYER=api`. Every extraction is the fake model; no real model call.
+`ISOLATED=1 make usecase-test UC=uc-226 LAYER=api` or `LAYER=ui`. Every extraction is the fake model; no real model call.

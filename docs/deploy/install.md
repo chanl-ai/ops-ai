@@ -3,7 +3,7 @@
 Status: current. Proven on one machine (macOS, Docker Desktop, linux/arm64 images); not yet run on a client's Linux
 server.
 
-<!-- Built by c-426; the proof is deploy/release/install_proof.sh, with evidence in the card's evidence folder. -->
+<!-- Built by an earlier change; the proof is deploy/release/install_proof.sh, with evidence in the card's evidence folder. -->
 
 The install script installs Ops AI on one machine with Docker from a clone of this repository, asks a few questions,
 checks the result, and then upgrades, backs up, restores and reports on the same install. The steps it runs can also be

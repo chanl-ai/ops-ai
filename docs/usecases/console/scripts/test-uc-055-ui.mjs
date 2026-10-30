@@ -3,6 +3,7 @@
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -52,17 +53,6 @@ async function chat(page, consoleUrl, text) {
   return res;
 }
 
-
-// Grants each operation through the agent page's tools picker (EntityPicker, c-135): open, search, pick.
-async function grantTools(page, ops) {
-  const picker = page.getByTestId('agent-tools-picker');
-  for (const op of ops) {
-    await picker.getByRole('button', { name: 'Grant tools' }).click({ timeout: 120_000 });
-    await page.getByPlaceholder('Search tools by name or system…').fill(op);
-    await page.getByRole('option', { name: new RegExp(`^${op}\\b`) }).first().click({ timeout: 60_000 });
-    await page.keyboard.press('Escape');
-  }
-}
 
 await withUiStack(
   async (consoleUrl, stack) => {
@@ -152,10 +142,9 @@ await withUiStack(
       // 6. Grant both operations to Branch Concierge, save the draft and publish it.
       await step('6 James grants both operations to Branch Concierge and publishes it', async () => {
         await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await grantTools(james, ['get_account', 'place_hold']);
-        await james.getByTestId('unsaved-bar').getByRole('button', { name: /^Save as v/ }).click();
-        const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}`, { timeout: 60_000 }));
-        await james.getByRole('dialog', { name: /^Save as v/ }).getByRole('button', { name: /^Save v/ }).click();
+        // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
+        const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
+        await grantTools(james, ['get_account', 'place_hold'], JAMES);
         const patchRes = await patched;
         const saved = patchRes ? (await patchRes.json()).data : undefined;
         await james.getByTestId('request-agent-publish').click({ timeout: 60_000 });
@@ -181,7 +170,8 @@ await withUiStack(
       await step('8 a chat write holds for approval', async () => {
         await chat(james, consoleUrl, 'call place_hold {"accountId": "CHQ-2219"}');
         heldThread = /\/chat\/([^/?#]+)/.exec(james.url())?.[1];
-        const card = await james.getByRole('button', { name: /^Approve/ }).last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
+        // The person who asked waits on someone else: the card names who decides, with no Approve of his own.
+        const card = await james.getByTestId('approval-waiting-on').last().waitFor({ timeout: 60_000 }).then(() => true, () => false) && (await james.getByRole('button', { name: /^Approve/ }).count()) === 0;
         const J = await headers(JAMES);
         const calls = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: J })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok');
         check('8 a chat write holds for approval', card && calls.length === 0, { card, sentWrites: calls.length, thread: heldThread });
@@ -190,13 +180,7 @@ await withUiStack(
       // 9. An approver on the module's team decides it in Reviews; the write runs once.
       await step('9 (c-048 T013) Maya approves the held write in Reviews and it runs once', async () => {
         const maya = await signIn(browser, consoleUrl, MAYA, errors);
-        await maya.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const row = maya.getByRole('row').filter({ hasText: 'place_hold' }).first();
-        const listed = await row.waitFor({ timeout: 60_000 }).then(() => true, () => false);
-        if (!listed) return check('9 (c-048 T013) Maya approves the held write in Reviews and it runs once', false, 'the held chat write is not listed in Reviews');
-        await row.click();
-        const form = maya.getByTestId('review-decision-form');
-        await form.waitFor({ timeout: 30_000 });
+        const form = await openHeldChatWrite(maya, consoleUrl, heldThread);
         const decided = armed(maya.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 }));
         await form.getByRole('button', { name: 'Approve', exact: true }).click();
         const res = await decided;
@@ -228,10 +212,11 @@ await withUiStack(
         const op = detail.operations.find((o) => o.name === 'get_account');
         const hid = await fetch(`${tools}/v1/tool-modules/${moduleId}/operations/${op.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ enabled: false }) });
         const pub = await fetch(`${tools}/v1/tool-modules/${moduleId}/versions`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'get_account hidden' }) });
-        // Hiding an operation a workflow is approved for is a major change: it opens a Security review, and calls and
-        // grants keep the published operation until Nadia approves (tools-service served_operations).
+        // Hiding an operation is a major change: it opens a Security review, and calls and grants keep the published
+        // operation until Nadia approves (tools-service served_operations). The module is read as its owner, since
+        // Security's own team does not see Operations' modules.
         const N = await headers(NADIA, 'team_security');
-        const waitingAgain = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: N })).json()).data?.versions ?? []).find((v) => v.status === 'in_review');
+        const waitingAgain = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data?.versions ?? []).find((v) => v.status === 'in_review');
         const approved = waitingAgain ? ((await approveToolReview(moduleId, N, J)).status === 'published' ? 200 : 'not published') : 'no review';
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
@@ -248,7 +233,7 @@ await withUiStack(
         const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
         const offered = ((await (await fetch(`${agents}/v1/tools`, { headers: J })).json()).data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
         const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
-        check('11 (c-048 T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && (approved === 200 || approved === 'no review') && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
+        check('11 (c-048 T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });
 
       check('no page errors', errors.length === 0, errors);

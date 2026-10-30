@@ -14,14 +14,16 @@ from typing import Any
 
 from langgraph.types import Command
 
-from ops_engine.store import RUN_PREFIX
+from ops_engine.store import RUN_PREFIX, reconciler
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
-from ops_store import background
+from ops_store import background, isolation
 from ops_store.background import HeartbeatStore
 
 from ..store.background import BackgroundJobs
+from ..store.engine import EngineTransactions
 from ..store.leases import LeaseHeldError
+from ..store.tenancy import RUN_RECONCILER
 from .deps import Runtime
 from .email_trigger import POLL_LEASE_PREFIX
 from .runs import config, execute, graph_store, require_graphs, resolve
@@ -118,3 +120,30 @@ async def sweep_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, 
     await background.run(
         "sweeper", once, stop=asyncio.Event(), store=beats, every_s=interval, waiting=waiting, first_in=interval
     )
+
+
+async def reconcile_runs(tx: EngineTransactions) -> list[str]:
+    """One pass of the run reconciler (c-561, ops_engine/store/reconciler.py): finds every tenant's workflow runs with
+    nothing behind them and gives each its state inside its own tenant. Returns the run ids it changed; one run that
+    fails to settle is logged and the rest go on."""
+    changed: list[str] = []
+    for finding in await reconciler.find(tx):
+        try:
+            with isolation.tenant_wide(RUN_RECONCILER, tenant_id=finding.tenant_id):
+                if await reconciler.settle(tx, finding):
+                    changed.append(finding.run_id)
+                    log.warning("engine_run_stuck", run=finding.run_id, action=finding.action, reason=finding.reason)
+        except Exception as e:
+            log.exception("engine_run_reconcile_failed", run=finding.run_id, error=type(e).__name__)
+    return changed
+
+
+async def reconcile_forever(
+    tx: EngineTransactions, stop: asyncio.Event, *, beats: HeartbeatStore, every_s: float = 60.0
+) -> None:
+    """The run reconciler as a listed background process (Background page), every minute in the workflow worker."""
+
+    async def once() -> int:
+        return len(await reconcile_runs(tx))
+
+    await background.run("run_reconciler", once, stop=stop, store=beats, every_s=every_s, first_in=every_s)

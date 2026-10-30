@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { buildCommit, buildTag, changelogSource, roadmapSource, uiFeedback } from '@/lib/api';
+import { buildCommit, buildTag, changelogSource, releaseSwitches, roadmapSource, uiFeedback } from '@/lib/api';
 import { type ChangelogEntry, hasUnseen, parseChangelog, parseRoadmap } from '@/lib/changelog';
 import { versionLabel } from '@/lib/version';
 
@@ -26,7 +26,7 @@ function readSeen(): string[] {
  * the dot shows on every load and opening still works.
  */
 export function useChangelog() {
-  const entries = React.useMemo<ChangelogEntry[]>(() => parseChangelog(changelogSource), []);
+  const entries = React.useMemo<ChangelogEntry[]>(() => parseChangelog(changelogSource, releaseSwitches), []);
   const roadmap = React.useMemo(() => parseRoadmap(roadmapSource), []);
   // Read after mount: the server render has no storage, and a dot that appears on hydration would mismatch.
   const [unseen, setUnseen] = React.useState(false);

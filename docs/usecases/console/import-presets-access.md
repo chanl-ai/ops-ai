@@ -27,9 +27,9 @@ import asks for no connection record.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-054-ui.mjs` | failing: step 5 waits on tools-service accepting a module with no `connectionId` (c-048 T006) |
+| ui | `console/scripts/test-uc-054-ui.mjs` | failing: step 5 waits on tools-service accepting a module with no `connectionId` (an earlier change T006) |
 
 ## Non-vacuous check
 
-Step 2 fails on the dialog before c-048 T007, which required a connection before Next; step 4 fails on tools-service
+Step 2 fails on the dialog before an earlier change T007, which required a connection before Next; step 4 fails on tools-service
 before T006, which imported every operation as Write.

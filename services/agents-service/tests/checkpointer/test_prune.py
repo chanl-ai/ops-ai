@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.graphs import graph_runs, graph_threads
 from ops_agents.store.journal import GraphJournal
-from ops_checkpointer import RLS_ROLE, AsyncpgSaver, Pool
+from ops_checkpointer import RLS_ROLE, CheckpointSaver
 
 pytestmark = pytest.mark.usefixtures("local_tenant")
 
@@ -24,7 +24,7 @@ async def engine(database_url: str) -> Any:
     await e.dispose()
 
 
-async def _history(saver: AsyncpgSaver, thread_id: str, steps: int) -> None:
+async def _history(saver: CheckpointSaver, thread_id: str, steps: int) -> None:
     config: Any = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
     for step in range(steps):
         cp = empty_checkpoint()
@@ -33,12 +33,12 @@ async def _history(saver: AsyncpgSaver, thread_id: str, steps: int) -> None:
         await saver.aput_writes(config, [("messages", f"m{step}")], task_id=f"task-{step}")
 
 
-async def _count(saver: AsyncpgSaver, thread_id: str) -> int:
+async def _count(saver: CheckpointSaver, thread_id: str) -> int:
     return len([t async for t in saver.alist({"configurable": {"thread_id": thread_id}})])
 
 
-async def test_prune_waits_for_closed_thread_and_journal_row(pool: Pool, engine: AsyncEngine) -> None:
-    saver = AsyncpgSaver(pool, tenant_id=f"p-{uuid4().hex}", team_id="team", role=RLS_ROLE)
+async def test_prune_waits_for_closed_thread_and_journal_row(db: AsyncEngine, engine: AsyncEngine) -> None:
+    saver = CheckpointSaver(db, tenant_id=f"p-{uuid4().hex}", team_id="team", role=RLS_ROLE)
     journal = GraphJournal(engine)
     thread_id, run_id, now = f"gth-{uuid4().hex[:12]}", f"run-{uuid4().hex[:12]}", "2026-10-10T00:00:00Z"
     await _history(saver, thread_id, 3)

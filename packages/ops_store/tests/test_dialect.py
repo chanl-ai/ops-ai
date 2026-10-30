@@ -88,6 +88,12 @@ def test_an_insert_that_ignores_a_taken_key_renders_on_both_databases() -> None:
     assert "WHERE NOT (EXISTS (SELECT" in ms and "WITH (UPDLOCK, HOLDLOCK)" in ms
 
 
+def test_an_ignored_insert_takes_a_database_expression_as_a_value_on_sql_server() -> None:
+    # A lease's times are the database's clock; SQL Server's form selects the row, so a value may be an expression.
+    ms = sql(insert_ignore(MS, work, {"id": "a", "due": db_epoch() + 30}, keys=["id"]), MS)
+    assert "DATEDIFF_BIG" in ms and "AS due" in ms
+
+
 def test_the_clock_is_the_database_s_on_both_databases() -> None:
     q = sa.select(db_now(), db_epoch(), db_after(sa.literal(5.0)))
     pg = sql(q, PG)

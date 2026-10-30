@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0011
+-- kb-service, stamped at kb_0012
 -- not on SQL Server yet: kb_chunks.tsv (TSVECTOR)
 -- not on SQL Server yet: index ix_kb_chunks_tsv
 CREATE TABLE kb_bases (
@@ -41,6 +41,8 @@ CREATE TABLE kb_sources (
 	created_at DATETIMEOFFSET NOT NULL, 
 	last_sync_at DATETIMEOFFSET NULL, 
 	last_run_status VARCHAR(16) NULL, 
+	config NVARCHAR(max) NULL, 
+	lease_until DATETIMEOFFSET NULL, 
 	CONSTRAINT kb_sources_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
@@ -107,6 +109,9 @@ CREATE TABLE kb_items (
 	verified_at DATETIMEOFFSET NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
 	processed_at DATETIMEOFFSET NULL, 
+	marker VARCHAR(120) NULL, 
+	parent_id VARCHAR(64) NULL, 
+	url VARCHAR(max) NULL, 
 	CONSTRAINT kb_items_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_item_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE, 
 	CONSTRAINT uq_kb_items_path UNIQUE (tenant_id, source_id, path)
@@ -231,5 +236,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0011');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0012');
 GO

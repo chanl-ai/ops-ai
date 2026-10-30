@@ -131,7 +131,8 @@ with ExitStack() as stack:
     )
     after = until(lambda: (c := case_of(api, run_id)) and not c.get("waiting") and c) or {}
     done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
-    lines = [a["text"] for a in (after.get("activity") or {}).get("recent") or []]
+    # The case tells its story as a feed of lines; the full list of one kind is the activity route below.
+    lines = [line["text"] for line in (after.get("feed") or {}).get("lines") or []]
     check(
         "4 approved on its task page, the case reads the action decided and nothing waiting",
         decided.status_code == 200
@@ -143,9 +144,8 @@ with ExitStack() as stack:
     listed = data(api.get(f"/v1/activity?case={after.get('id')}&kind=decision", headers=TEAM)) or {}
     check(
         "5 the decision is a line of the case's activity",
-        (listed.get("pagination") or {}).get("total") == 1
-        and after["activity"]["allHref"] == f"/activity?case={after['id']}",
-        {"recent": lines, "decisions": listed.get("pagination")},
+        (listed.get("pagination") or {}).get("total") == 1 and bool(lines),
+        {"feed": lines[:5], "decisions": listed.get("pagination")},
     )
 
 finish()

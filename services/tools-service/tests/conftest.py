@@ -30,6 +30,7 @@ from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_tools.app import create_gateway_app
 from ops_tools.auth import Authenticator, Tokens
 from ops_tools.auth.discovery import Discovery
+from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.connections.routes import connections_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress import EgressPolicy
@@ -258,7 +259,7 @@ def build_app(
     resolver = SecretResolver(SecretStore(engine), cipher)
     connections = ConnectionStore(engine)
     tokens = Tokens(connections, cipher, upstream, policy)
-    authenticator = Authenticator(connections, resolver, tokens)
+    authenticator = Authenticator(connections, resolver, tokens, ConnectLinks(connections, CONSOLE_URL))
     service = ModuleService(
         store,
         directory,
@@ -295,6 +296,8 @@ def build_app(
                     egress=policy,
                     console_url=CONSOLE_URL,
                     discovery=Discovery(upstream, policy) if upstream is not None else None,
+                    auth=authenticator,
+                    http=upstream,
                 ),
                 directory,
             ),

@@ -1650,6 +1650,45 @@
             ],
             "title": "Documenttypeid"
           },
+          "hint": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "maxPages": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxpages"
+          },
+          "read": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fields",
+                  "propose"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read"
+          },
           "typeName": {
             "anyOf": [
               {

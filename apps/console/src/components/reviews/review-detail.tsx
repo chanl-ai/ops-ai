@@ -67,8 +67,8 @@ function PublishRequestBody({ review }: { review: Review }) {
       )}
       <p className="text-xs text-muted-foreground">
         Approving publishes v{p.toVersion}. Deployments keep serving the version they are on until moved.{' '}
-        <Link href={`/workflows/${review.workflowId}?tab=tests`} className="underline underline-offset-2">
-          Open the workflow&apos;s tests
+        <Link href={`/workflows/definitions/${encodeURIComponent(review.workflowId)}`} className="underline underline-offset-2">
+          Open the workflow
         </Link>
         {' · '}
         <Link href="/assurance?tab=gates" className="underline underline-offset-2" data-testid="open-gate-in-assurance">

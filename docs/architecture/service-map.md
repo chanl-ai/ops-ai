@@ -19,9 +19,9 @@ after the console section it serves. `packages/` holds reusable libraries; `serv
 | `tools-service` | Data Hub: Tools, Connections; tool-call Activity | Tool egress: tool modules, connections (how each system is signed in to, per test and production, with their tokens), credentials, mock answers in test, OPA policy, approval-token checks, call log and dedupe | Prototype in `services/tools-service` |
 | `models-service` | AI gateway (`docs/plan/ai-gateway-console.md`) | Model egress: aliases, provider keys, per-key ledgers and budgets, logging, failover, in front of Portkey (ADR-0008) | First slice built in `services/models-service` on :8730 (`docs/services/models-service/overview.md`); opt-in through `OPS_MODELS_URL`, and `make up` does not start it |
 | `kb-service` | Data Hub: Knowledge bases, Wiki | Sources, ingestion, indexing, retrieval, citations, freshness | First slice built in `services/kb-service` on :8740 (`docs/services/kb-service/overview.md`), started by `make up`; uses `packages/ops_ingest` |
-| `files-service` | Data Hub: Files, uploads | File bytes: upload, download, type judged from the bytes, scanning, dedupe, retention, legal hold, WORM evidence | First slice on :8750 (c-087): uploads, proxy routes on the local backend, dedupe, downloads, legal holds, scan hook; client in `packages/ops_files_client` |
-| `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain (c-256), on `packages/ops_extract` ([documents service](../services/documents-service/overview.md)) |
-| `runner-service` | Data Hub: Tools (a code module's functions) | Runs a code tool's Python function in a sandbox: CPython on WASM, no network, no secrets, memory, time and call limits; `ops.call` goes back through tools-service as the caller | First slice on :8770 (c-531), started by `make up`; no database (`docs/services/runner-service/overview.md`) |
+| `files-service` | Data Hub: Files, uploads | File bytes: upload, download, type judged from the bytes, scanning, dedupe, retention, legal hold, WORM evidence | First slice on :8750: uploads, proxy routes on the local backend, dedupe, downloads, legal holds, scan hook; client in `packages/ops_files_client` |
+| `documents-service` | Data Hub: Document types; the file page's Preview and Extract; the Human Task read check | What is read from a file: page layout (text blocks with boxes), classify and split, extractions with cited positions, document types and their versions, samples, templates, corrections, per-field accuracy. Never holds bytes | Built on :8760 with its own migration chain, on `packages/ops_extract` ([documents service](../services/documents-service/overview.md)) |
+| `runner-service` | Data Hub: Tools (a code module's functions) | Runs a code tool's Python function in a sandbox: CPython on WASM, no network, no secrets, memory, time and call limits; `ops.call` goes back through tools-service as the caller | First slice on :8770, started by `make up`; no database (`docs/services/runner-service/overview.md`) |
 
 There is no human-in-the-loop service. Reviews, Cases and work items move into the `ops_hitl` package (planned), and
 schedule, webhook, email and poll triggers into the `ops_triggers` package (planned); agents-service serves both today.
@@ -44,19 +44,19 @@ Every call goes through a typed client with a service token and the caller's tea
 | agents-service (runs, channels) | files-service | An email attachment or chat upload is stored; a step reads a file | `ops_files_client` | `files:create`, `files:view` |
 | agents-service (Extract step, `extract_document` tool, read check) | documents-service | A workflow step or tool reads a document; a Human Task shows and corrects fields; a purge step removes what was read from a deleted file | `ops_documents_client` | `documents:view`, `documents:run`, `documents:delete` |
 | documents-service | files-service | Reads input bytes, and a sample's file reference; a file the caller's team cannot see is 404 | `ops_files_client` | `files:view`, `files:edit` (sample reference) |
-| documents-service | models-service | Classify, extract and the one re-read of failed fields on the model path, charged to the caller's team; page images only where the type version, the team's `pageImages` policy and the alias's image clearance all allow (c-295) | models client | `files:extract` purpose, budget per team (c-251) |
+| documents-service | models-service | Classify, extract and the one re-read of failed fields on the model path, charged to the caller's team; page images only where the type version, the team's `pageImages` policy and the alias's image clearance all allow | models client | `files:extract` purpose, budget per team |
 | documents-service | platform-service | Reads the workspace floor and the team's `pageImages` policy live on each read; an unreadable policy counts as off | service token | `settings:view` |
-| `file_deleted_purge` on `file.deleted` | documents-service | Retention and legal-hold deletes remove the derived layout, extractions and samples. files-service emits the event and calls nobody | service event (c-258) | `documents:delete` |
+| `file_deleted_purge` on `file.deleted` | documents-service | Retention and legal-hold deletes remove the derived layout, extractions and samples. files-service emits the event and calls nobody | service event | `documents:delete` |
 | any service | agents-service | Reports a service event; the tenant's handler for it runs (below) | `POST /v1/events`, through the `ops_store.outbox` relay | `events:emit` |
 | kb-service | files-service | Knowledge uploads are stored as files | `ops_files_client` | `files:write` |
-| agents-service | tools-service | Every tool call to a bank system, with its approval token and the run's environment (production for live runs and chats, test otherwise; c-330) | tools client | approval token per call |
-| agents-service | tools-service | A write's policy (access, approvers, step-up; the approving team it still answers is ignored, c-509) for each review it draws or decides, `GET /v1/tools/{name}`; read once per tool per request (`tool_access.one_read_per_tool`), so a changed policy applies from the next request | tools client | service token |
+| agents-service | tools-service | Every tool call to a bank system, with its approval token and the run's environment (production for live runs and chats, test otherwise) | tools client | approval token per call |
+| agents-service | tools-service | A write's policy (access, approvers, step-up; the approving team it still answers is ignored) for each review it draws or decides, `GET /v1/tools/{name}`; read once per tool per request (`tool_access.one_read_per_tool`), so a changed policy applies from the next request | tools client | service token |
 | agents-service, kb-service, documents-service | models-service | Every model call, with its alias and key | models client | key per identity |
-| tools-service | models-service | Check before sending: one judgement per payload and policy version of a write against the team's sending policy (c-300) | `ops_service_kit.model_calls.StructuredCalls` | its own key, `tools:check` |
+| tools-service | models-service | Check before sending: one judgement per payload and policy version of a write against the team's sending policy | `ops_service_kit.model_calls.StructuredCalls` | its own key, `tools:check` |
 | tools-service | platform-service | Reads `checkBeforeSend`, `toolWritesNeedApproval` and `requesterMayDecide` live on each call; an unreadable `checkBeforeSend` counts as on (register E39) | service token | `settings:view` |
-| outside assistants (Claude Code, Cursor) | tools-service | The team's read tools over MCP at `/mcp/test/{team}` through the same call path as `POST /v1/calls` (c-356) | MCP streamable HTTP | an API key or a person's token of that team holding `tools.run` |
-| an agent, an outside caller | agents-service | One workflow AI step's answer (Classify, Summarise, Extract from text, Draft) as a step would give it, under the team's `aiSteps` (c-298) | `POST /v1/ai-steps/{step}` | `workflows.run` in the team |
-| platform-service | agents-service | Before a team is deleted or its workspace closed: the team's runs in progress and the names of its live workflows, `GET /v1/teams/usage` for the token's team only. No answer refuses the delete or close (503 `usage_unavailable`) (c-529) | service token naming the team | `workflows:view` |
+| outside assistants (Claude Code, Cursor) | tools-service | The team's read tools over MCP at `/mcp/test/{team}` through the same call path as `POST /v1/calls` | MCP streamable HTTP | an API key or a person's token of that team holding `tools.run` |
+| an agent, an outside caller | agents-service | One workflow AI step's answer (Classify, Summarise, Extract from text, Draft) as a step would give it, under the team's `aiSteps` | `POST /v1/ai-steps/{step}` | `workflows.run` in the team |
+| platform-service | agents-service | Before a team is deleted or its workspace closed: the team's runs in progress and the names of its live workflows, `GET /v1/teams/usage` for the token's team only. No answer refuses the delete or close (503 `usage_unavailable`) | service token naming the team | `workflows:view` |
 | every service | platform-service | Identity tokens checked locally against its public keys | `ops_identity` | none |
 
 ### Service events
@@ -69,12 +69,12 @@ event nobody handles is recorded `unhandled`.
 
 | Event | Emitter | Handler | Status |
 |---|---|---|---|
-| `tool_access.requested` | tools-service (`services/tools-service/src/ops_tools/modules/review_events.py:12`) | `tool_access_request`: the workflow's tool access review (c-257) | built |
-| `module_review.requested` | tools-service | The tool module's publish review (c-257) | planned |
-| `file.deleted` | files-service | `file_deleted_purge`: purge what documents-service derived from the file | built (c-250) |
-| `file.read_requested` | files-service | `system_extract`: read the file and save what was read on it | built (c-250) |
-| `extraction.corrected` | documents-service | `extraction_corrected_save`: save the corrected read on its file, so the files list's Read as and to-check count follow it; sent only for the file's newest read | built (c-252) |
-| `task.requested` | agents-service itself, from `POST /v1/tasks` (`api/routers/tasks.py:41`), with a new key per post | `api_task`: a Human Review step on the posted task type; the task id is the run id | built (c-288) |
+| `tool_access.requested` | tools-service (`services/tools-service/src/ops_tools/modules/review_events.py:12`) | `tool_access_request`: the workflow's tool access review | built |
+| `module_review.requested` | tools-service | The tool module's publish review | planned |
+| `file.deleted` | files-service | `file_deleted_purge`: purge what documents-service derived from the file | built |
+| `file.read_requested` | files-service | `system_extract`: read the file and save what was read on it | built |
+| `extraction.corrected` | documents-service | `extraction_corrected_save`: save the corrected read on its file, so the files list's Read as and to-check count follow it; sent only for the file's newest read | built |
+| `task.requested` | agents-service itself, from `POST /v1/tasks` (`api/routers/tasks.py:41`), with a new key per post | `api_task`: a Human Review step on the posted task type; the task id is the run id | built |
 
 A service reports only the events this catalogue gives it (`EVENT_OWNERS` in agents-service `api/service_events.py`:
 tools-service `tool_access.`, `tool_module.` and `module_review.`; files-service `file.`; documents-service
@@ -88,7 +88,7 @@ thin calls on the documents API (review checklist §3, "A node or tool with no A
 ### Background processes
 
 Work that runs without a person asking is one list, `PROCESSES` in `packages/ops_store/src/ops_store/background.py`
-(c-516). Each process runs once for the account, finds its next job across teams, and does that job inside the job's
+(an earlier change). Each process runs once for the account, finds its next job across teams, and does that job inside the job's
 team. A loop starts only through `background.run`, which retries a failed pass after 1 s doubling to 60 s and writes a
 heartbeat at most every 10 s and on every error; `test_background_registry.py` fails on a loop not on the list.
 
@@ -106,14 +106,14 @@ its own tables and only reading the other services' `/health/background`; a team
 
 | Service | Built now | Next | Later |
 |---|---|---|---|
-| `platform-service` | Sign-in, teams, roles, audit, API keys, policies | Provider keys entered in the console (c-177), email invites | Notifications, usage, search |
-| `agents-service` | Agents, workflows, runs, chat, Activity, Human Tasks, Cases; channels (API with scoped keys, chat, email from IMAP, Gmail and Microsoft 365) on one channel API (`/v1/channels`: list, health, rename, pause, websites, serves, retire); service events and the seeded workflows that handle them | Chat channels are still created and listed on `/v1/widget-deployments` (c-245); Activity for a channel follows the runs its emails started | `ops_hitl` and `ops_triggers` move into packages; worker scales apart |
-| `tools-service` | Registry, imports, connections and their sign-in, secrets, egress, mock answers, limits, approval tokens | Grants (c-144) | Stands alone without agents fixtures |
-| `models-service` | Aliases, completions, refusals | Budget per team (c-251), keys from Secrets | Per-key ledger, failover |
+| `platform-service` | Sign-in, teams, roles, audit, API keys, policies | Provider keys entered in the console, email invites | Notifications, usage, search |
+| `agents-service` | Agents, workflows, runs, chat, Activity, Human Tasks, Cases; channels (API with scoped keys, chat, email from IMAP, Gmail and Microsoft 365) on one channel API (`/v1/channels`: list, health, rename, pause, websites, serves, retire); service events and the seeded workflows that handle them | Chat channels are still created and listed on `/v1/widget-deployments`; Activity for a channel follows the runs its emails started | `ops_hitl` and `ops_triggers` move into packages; worker scales apart |
+| `tools-service` | Registry, imports, connections and their sign-in, secrets, egress, mock answers, limits, approval tokens | Grants | Stands alone without agents fixtures |
+| `models-service` | Aliases, completions, refusals | Budget per team, keys from Secrets | Per-key ledger, failover |
 | `kb-service` | Sources, ingestion, retrieval with citations | Freshness | Wiki |
 | `files-service` | Storage, dedupe, holds, type from bytes, OCR for scans | Purge to documents on delete | Retention jobs, resumable uploads, virus scan |
-| `documents-service` | Extraction and document types, on :8760 with its own chain (c-256) | layout (c-247), cited boxes (c-252), templates (c-253, c-254), classify (c-249), file page (c-250), proof on the restraining-notice samples (c-255) | Tables (c-238), split (c-239), accuracy from corrections (c-240) |
-| `runner-service` | Python functions on WASM, `ops.call` to bound tools, secret handles (c-531) | none | TypeScript, curated packages, gVisor and Firecracker backends, test cases at publish |
+| `documents-service` | Extraction and document types, on :8760 with its own chain | layout, cited boxes, templates, classify, file page, proof on the restraining-notice samples | Tables, split, accuracy from corrections |
+| `runner-service` | Python functions on WASM, `ops.call` to bound tools, secret handles | none | TypeScript, curated packages, gVisor and Firecracker backends, test cases at publish |
 | `ops-host` | none | none | Starts any set of services in one process |
 
 Dev ports: platform 8710, agents 8700, tools 8720, models 8730, kb 8740, files 8750, documents 8760, runner 8770, console 3016.
@@ -189,13 +189,13 @@ network. Designed: `agents-service` still has `ops_agents.api`, `ops_agents.grap
 | `contracts` (`ops_contracts`) | API models, hand-written; generation from OpenAPI is designed | agents, console | Built |
 | `ops_service_kit` | Settings, errors, ids, logging | every service | Built; envelope, auth and embedding (`OPS_ENABLED_SERVICES`) are designed |
 | `ops_agent_kernel` | One agent turn, with its token usage (spec 15) | agents | Built |
-| `ops_checkpointer` | LangGraph checkpointer on asyncpg with tenant row-level security | agents | Built |
+| `ops_checkpointer` | LangGraph checkpointer on SQLAlchemy Core, on PostgreSQL and SQL Server, with tenant and team isolation | agents | Built |
 | `ops_metering` | Usage, prices, cost, totals and budget checks; no I/O | agents; models-service later | Built (E12) |
 | `ops_policy` | RFC 8785 input hash, approval-token signing and verification, step-up tokens | agents, tools | Built; the OPA client stays in tools-service |
 | `ops_storage` | Object storage protocol: filesystem, S3, Azure Blob (ADR-0010) | files | Built |
 | `ops_ingest` | Parsing, splitting, metadata, dedupe, source rules | kb | Built |
 | `usecase-runner` | Runs `docs/usecases` scripts and reports verdicts | `make usecase-test` | Built |
-| `ops_engine` | The workflow runner: node type registry, compiler to LangGraph, step journal, Postgres work queue, worker loop, leases with generation fencing, reconcile-by-key ([workflow-runner.md](workflow-runner.md)) | agents | Built in part (slice 1, c-061); runs inside agents-service |
+| `ops_engine` | The workflow runner: node type registry, compiler to LangGraph, step journal, Postgres work queue, worker loop, leases with generation fencing, reconcile-by-key ([workflow-runner.md](workflow-runner.md)) | agents | Built in part (slice 1); runs inside agents-service |
 | `ops_hitl` | Reviews, Cases, work items, decisions, approval-token minting | agents | Planned; the code lives in `agents-service` today |
 | `ops_triggers` | Schedule, webhook, email and poll triggers that start agent runs and workflow runs | agents | Planned |
 | `sdk-ts`, `sdk-py` | Generated clients | console, services | Designed |
@@ -225,7 +225,7 @@ SQL Server 2025 and Azure SQL are being added ([ADR-0017](decisions/database-sup
 | `ops-host` | One host that starts any set of services in one process |
 | Migrations per service | Done for tools: own chain (`alembic_version_tools`) adopting `gateway_calls` and `gateway_fences`; agents 0006 and 0008 still create them on a fresh database. Left: review tables, with `ops_hitl` |
 | `ops_service_kit` contents | Envelope, auth and wiring move in; the seed directory default stops pointing into agents tests |
-| `ops_engine` | Finish the runner slices after c-061 |
+| `ops_engine` | Finish the runner slices after an earlier change |
 | models-service | Per-key ledger behind the key-admission port, on `ops_metering` |
 | `deploy/vm`, `deploy/k8s` | Build the targets |
 

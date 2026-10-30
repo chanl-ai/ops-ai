@@ -1,6 +1,6 @@
 # A case shows the whole story of its matter and what is left
 
-Status: current. Id: `uc-500`. Service: `console` on agents-service. Layers: ui. Card: c-500.
+Status: current. Id: `uc-500`. Service: `console` on agents-service. Layers: ui. Card: an earlier change.
 
 A case owner opens a case and learns from its top whether the matter is handled: what is left, on whom and by when,
 how the case's work began, one timer, and one feed of everything that happened in plain sentences. The feed is the run

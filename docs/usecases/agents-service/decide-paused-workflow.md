@@ -28,7 +28,7 @@ The scripts start the agents service on the scripted model. The ui script also s
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-008-api.py` | passing |
-| ui | `agents-service/scripts/test-uc-008-ui.mjs` | passing |
+| ui | none | retired 2026-10-29: the console no longer shows the earlier workflow engine's runs; the api layer still covers it |
 
 ## Non-vacuous check
 

@@ -11,7 +11,7 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import LocalToolExecutor
 from ops_email import MailNotConfiguredError, MailSender, OutboundMessage
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ActingForPerson, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 
 from .modules.review_events import APPLY_ACCESS
@@ -32,13 +32,22 @@ class ToolCaller:
     kind: str
     # The people the call's approval token names, after the gateway verified it; empty for a call with none.
     approvers: tuple[str, ...] = ()
+    # The person the call acts for, from a verified acting-for token (c-558); None for a call with nobody behind it.
+    acting_for: ActingForPerson | None = None
 
     @classmethod
-    def of(cls, p: Any, *, approvers: tuple[str, ...] = ()) -> ToolCaller:
+    def of(cls, p: Any, *, approvers: tuple[str, ...] = (), acting_for: ActingForPerson | None = None) -> ToolCaller:
         """From an ops_identity Principal; a tenant is required, never defaulted."""
         if not p.tenant_id:
             raise ValueError("A tool call names no tenant.")
-        return cls(tenant_id=str(p.tenant_id), team_id=p.team_id, sub=str(p.sub), kind=str(p.kind), approvers=approvers)
+        return cls(
+            tenant_id=str(p.tenant_id),
+            team_id=p.team_id,
+            sub=str(p.sub),
+            kind=str(p.kind),
+            approvers=approvers,
+            acting_for=acting_for,
+        )
 
 
 class AccessDecisions(Protocol):

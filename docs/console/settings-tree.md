@@ -1,6 +1,6 @@
 # Settings tree mock
 
-Status: historical. The `/preview/settings` mock this page describes was deleted with every console preview page (c-517, 2026-10-22). The approved design, its screens and the S01 to S43 map are kept at the planning repo `docs/plans/ops-ai/settings-design.html`; the live tree is `src/lib/settings-tree.ts`.
+Status: historical. The `/preview/settings` mock this page describes was deleted with every console preview page (2026-10-22). The approved design, its screens and the S01 to S43 map are kept at the planning repo `docs/plans/ops-ai/settings-design.html`; the live tree is `src/lib/settings-tree.ts`.
 
 The settings standard was adopted from the UX review of 2026-10-17
 and asked for a mock before anything moves. `/preview/settings` draws the proposed tree on sample data. It runs on a
@@ -48,7 +48,7 @@ and `ui/resizable` are from the shadcn registry unchanged apart from import path
 
 ## Known gaps
 
-The mock stores nothing, so Save shows a message. Policies use the shape `GET` and `PUT /v1/policies` will serve (c-186):
+The mock stores nothing, so Save shows a message. Policies use the shape `GET` and `PUT /v1/policies` will serve:
 key, value, default, role, effect. The sample data lives in `src/app/preview/settings/_sample/`, not in the mock API
 layer, as `src/app/dev/knowledge-simple/sample.ts` does.
 

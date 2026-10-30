@@ -32,6 +32,8 @@ identity provider and no model is called.
 |---|---|---|
 | api | `platform-service/scripts/test-uc-163-api.py` | passing |
 
+In the console: the sign-in page offers SSO for an SSO workspace (uc-161's ui script); the refused password, provider answer and reused code stay at the api layer.
+
 ## Non-vacuous check
 
 `a password sign-in in the SAML-only workspace is refused`: with the workspace's password switch ignored, James

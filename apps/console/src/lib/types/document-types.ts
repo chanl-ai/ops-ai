@@ -82,6 +82,8 @@ export interface DocumentTypeInput extends DocumentTypeVersionInput {
   id?: string;
   name: string;
   description?: string;
+  /** The file a proposed read was made from, kept as the type's first sample. */
+  sampleFileId?: string;
 }
 
 export interface DocumentTypeSampleInput {

@@ -30,3 +30,5 @@ The agents service runs on the scripted model, which answers the memory extracti
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-134-api.py` | passing |
+
+In the console: uc-135's ui script: people see, correct, forget and export what an agent remembers about them, from the chat.

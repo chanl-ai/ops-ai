@@ -2,7 +2,7 @@
 # from the migration chains. SERVER is a throwaway server where scratch databases (and the chains' roles) are made;
 # nothing here defaults to the dev stack's database. DIALECT=postgresql (default) or mssql: SQL Server's scripts are
 # compiled from the store models (deploy/database/mssql.py) and need no SERVER; its drift needs a server (c-345).
-.PHONY: db-ddl db-upgrade-sql db-drift db-release db-scripts-proof db-ddl-golden
+.PHONY: db-ddl db-upgrade-sql db-drift db-release db-scripts-proof db-ddl-golden uc-sql-server
 
 DIALECT ?= postgresql
 REF ?= HEAD
@@ -32,3 +32,6 @@ db-ddl-golden: ## SQL Server DDL from this checkout's models into deploy/databas
 
 db-scripts-proof: ## The DBA scripts' proof on a throwaway PostgreSQL of its own (FROM=<older ref>)
 	sh $(ROOT)/deploy/database/proof.sh $(FROM)
+
+uc-sql-server: ## uc-565 on the SQL Server test machine, from a runner beside it; starts and stops the machine
+	bash $(ROOT)/deploy/fly/mssql/run-usecases.sh

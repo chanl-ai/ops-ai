@@ -31,5 +31,3 @@ The console starts workflows only: the built-in graphs left Start run on 2026-10
 ## Non-vacuous check
 
 `answer cites doc_wire_limits`: the citation comes from retrieval inside the run, so a graph that skipped the answer node or lost its state fails it.
-
-At the ui layer, `the run streamed (200)` and the checks after it: with the console's start call skipping `runs/stream`, the script stopped after 3 PASS lines and failed. The empty-question refusal pairs with the 201 that follows it. `the picker offers the service graphs that take no agent` failed with the console's graph list hard-coded to one workflow.

@@ -75,6 +75,24 @@ export function useCancelEngineRun() {
   });
 }
 
+/** Retry on a Stuck run (c-561): it is queued again and the page polls it on. */
+export function useRetryEngineRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => api.engine.retryRun(runId),
+    onSettled: (_r, _e, runId) => Promise.all([qc.invalidateQueries({ queryKey: ek.run(runId) }), qc.invalidateQueries({ queryKey: ['engine', 'runs'] })]),
+  });
+}
+
+/** Run again on an email the mailbox listener set aside (c-561); Activity lists the run it starts. */
+export function useRunSetAsideEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: string) => api.engine.runSetAsideEmail(eventId),
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['activity'] }), qc.invalidateQueries({ queryKey: ['engine', 'runs'] })]),
+  });
+}
+
 export function useStartEngineRun() {
   const qc = useQueryClient();
   return useMutation({

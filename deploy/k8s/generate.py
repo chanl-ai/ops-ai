@@ -131,6 +131,10 @@ INTERNAL_CLIENTS = ("agents", "tools", "models", "kb", "files", "documents")
 # Compose settings the overlay supplies (its ops-origin ConfigMap) or each service's Secret holds.
 ORIGIN_SETTINGS = {"OPS_CORS_ORIGINS", "OPS_CONSOLE_URL", "OPS_PLATFORM_PUBLIC_URL", "OPS_FILES_PUBLIC_URL"}
 SECRET_SETTINGS = {"OPS_SERVICE_PUBLIC_KEYS"}
+# Compose settings whose value differs on a cluster. Hosted forms count submissions per client address, read from
+# X-Forwarded-For past these proxies; the embed pod can sit on any of the usual pod networks, so the base trusts all
+# three, and an overlay narrows it to the embed pod's network when the cluster runs workloads it does not trust.
+CLUSTER_SETTINGS = {"OPS_FORMS_TRUSTED_PROXIES": '["10.0.0.0/8", "172.16.0.0/12", "127.0.0.1/32"]'}
 _DEFAULTED = re.compile(r"^\$\{\w+:-(.*)\}$")
 
 
@@ -152,7 +156,7 @@ def settings() -> dict[str, str]:
                 out[key] = m.group(1)
         else:
             raise SystemExit(f"generate: compose's {key} needs a value from its env file; give it one here")
-    return out
+    return out | {k: v for k, v in CLUSTER_SETTINGS.items() if k in out}
 
 
 def dump(docs: list[Any]) -> str:

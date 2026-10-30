@@ -3,7 +3,8 @@
 // 2 Coming next lists the roadmap; 3 after opening, a reload shows no dot; 4 with this browser's storage refusing the
 // seen list, the popover still opens, the dot comes back on reload and nothing throws; 5 What's new is a round button in
 // the bottom-right corner, not in the sidebar, and its popover names the version the console was built from (a release
-// tag, or main and a short commit); 6 at 375 px the popover fits the screen.
+// tag, or main and a short commit); 6 at 375 px the popover fits the screen; 8 an entry for a feature behind a release
+// switch that is off (plugins, a person's own sign-in) is not listed.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -12,11 +13,15 @@ import { ROOT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack 
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const SHOTS = evidenceDir('510', 'uc');
-// The newest entry as the console orders them: by date, then title.
-const entries = readdirSync(join(ROOT, 'changelog'))
+// The console's release switches stay off for this walk, as on a release that has not turned them on.
+for (const name of ['NEXT_PUBLIC_OPS_PLUGINS', 'NEXT_PUBLIC_OPS_PERSONAL_SIGNIN']) delete process.env[name];
+// The newest entry as the console orders them: by date, then title; an entry behind a release switch is not shown.
+const all = readdirSync(join(ROOT, 'changelog'))
   .filter((f) => f.endsWith('.json'))
   .map((f) => JSON.parse(readFileSync(join(ROOT, 'changelog', f), 'utf8')))
   .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+const entries = all.filter((e) => e.switch === undefined);
+const switched = all.filter((e) => e.switch !== undefined);
 const roadmap = JSON.parse(readFileSync(join(ROOT, 'roadmap.json'), 'utf8'));
 
 async function step(name, body) {
@@ -48,6 +53,8 @@ await withUiStack(
           dot && first.includes(entries[0].title) && !/\b(?:c|uc)-\d+\b/i.test(text) && !/\b(apps|services)\/|\.(tsx?|json|py)\b/.test(text),
           { dot, first, newest: entries[0].title },
         );
+        const leaked = switched.filter((e) => text.includes(e.title)).map((e) => e.title);
+        check('8 an entry for a feature behind a release switch that is off is not listed', switched.length > 0 && leaked.length === 0, { switched: switched.length, leaked });
       });
       await step('2 Coming next lists the roadmap', async () => {
         await popup.getByRole('tab', { name: 'Coming next' }).click();

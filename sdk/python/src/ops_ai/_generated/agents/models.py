@@ -166,6 +166,28 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class BatchIn(TypedDict):
+    dryRun: NotRequired[bool]
+    fileId: str
+    mode: NotRequired[Literal["live", "test"]]
+
+
+class BatchRow(TypedDict, closed=True):
+    attempt: int
+    error: NotRequired[str | None]
+    input: dict[str, Any]
+    outcome: NotRequired[str | None]
+    output: NotRequired[Any]
+    row: int
+    runId: NotRequired[str | None]
+    status: str
+
+
+class BatchStarted(TypedDict, closed=True):
+    id: str
+    total: int
+
+
 class BlockedBy(TypedDict, closed=True):
     name: str
     topic: str
@@ -375,6 +397,15 @@ class Clock(TypedDict, closed=True):
     state: Literal["running", "met", "breached", "paused"]
 
 
+class CopyRef(TypedDict, closed=True):
+    id: str
+    kind: Literal["agent", "skill", "workflow"]
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
 class CostTotals(TypedDict, closed=True):
     calls: int
     cost: str
@@ -502,6 +533,13 @@ class DraftedAction(TypedDict, closed=True):
     taskId: str
 
 
+class DryRun(TypedDict, closed=True):
+    ignored: list[str]
+    mapping: dict[str, str]
+    rows: int
+    sample: list[dict[str, Any]]
+
+
 class EmailLink(TypedDict, closed=True):
     at: str
     direction: Literal["in"]
@@ -571,6 +609,11 @@ class EnvelopeNoneType(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeUnionDryRunBatchStarted(TypedDict, closed=True):
+    data: DryRun | BatchStarted
+    success: Literal[True]
+
+
 class EnvelopeListAgentRun(TypedDict, closed=True):
     data: list[AgentRun]
     success: Literal[True]
@@ -623,6 +666,41 @@ class FileLink(TypedDict, closed=True):
 
 class Forgotten(TypedDict, closed=True):
     forgotten: int
+
+
+class FormFields(TypedDict, closed=True):
+    schema: dict[str, Any]
+    takesFiles: NotRequired[bool | None]
+
+
+class FormIn(TypedDict):
+    afterText: NotRequired[str]
+    dailyCap: NotRequired[int]
+    description: NotRequired[str]
+    expiresInDays: NotRequired[int]
+    mode: NotRequired[Literal["link", "members"]]
+    title: NotRequired[str | None]
+
+
+class FormPatch(TypedDict):
+    afterText: NotRequired[str | None]
+    dailyCap: NotRequired[int | None]
+    paused: NotRequired[bool | None]
+
+
+class FormView(TypedDict, closed=True):
+    afterText: str
+    dailyCap: int
+    description: str
+    expiresAt: str
+    id: str
+    mode: Literal["link", "members"]
+    paused: bool
+    slug: str
+    title: str
+    token: NotRequired[str | None]
+    url: str
+    workflowId: str
 
 
 class GraphBody(TypedDict, closed=True):
@@ -784,6 +862,26 @@ class InboxPosted(TypedDict, closed=True):
     seq: int | None
     status: str
     threadId: str
+
+
+class InstallInput(TypedDict, closed=True):
+    knowledgeBases: NotRequired[list[str]]
+    modelAlias: NotRequired[str | None]
+    name: NotRequired[str | None]
+    version: NotRequired[int | None]
+
+
+class Installation(TypedDict, closed=True):
+    copy: CopyRef
+    created: bool
+    needs: list[dict[str, str]]
+
+
+class Installed(TypedDict, closed=True):
+    changed: NotRequired[bool]
+    copies: int
+    newerAvailable: bool
+    version: int | None
 
 
 class KindRow(TypedDict, closed=True):
@@ -987,11 +1085,35 @@ class OptionsPage(TypedDict, closed=True):
     nextCursor: NotRequired[str | None]
 
 
-class OverviewCounts(TypedDict, closed=True):
-    cases: CaseCounts
-    openReviews: int
-    overdueReviews: int
-    urgentReviews: list[dict[str, Any]]
+class OverviewCaseRow(TypedDict, closed=True):
+    customerName: NotRequired[str | None]
+    id: str
+    resolutionDueAt: NotRequired[str | None]
+    status: str
+    subject: str
+
+
+class OverviewListCounts(TypedDict, closed=True):
+    casesDue: int
+    runsInFlight: int
+    waitingForMe: int
+
+
+class OverviewRunRow(TypedDict, closed=True):
+    id: str
+    startedAt: str
+    state: str
+    subject: str
+    workflowId: str
+
+
+class OverviewTaskRow(TypedDict, closed=True):
+    caseId: NotRequired[str | None]
+    createdAt: str
+    dueAt: NotRequired[str | None]
+    id: str
+    title: str
+    workflowName: NotRequired[str | None]
 
 
 class Pagination(TypedDict, closed=True):
@@ -1030,6 +1152,13 @@ class PortView(TypedDict, closed=True):
     connection: str
     label: str
     name: str
+
+
+class PublicForm(TypedDict, closed=True):
+    afterText: str
+    description: str
+    form: FormFields
+    title: str
 
 
 class PublishDecisionFields(TypedDict, closed=True):
@@ -1086,6 +1215,11 @@ class ReadField(TypedDict, closed=True):
     type: str
 
 
+class Received(TypedDict, closed=True):
+    received: bool
+    runId: NotRequired[str | None]
+
+
 class Ref(TypedDict, closed=True):
     id: str
     kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
@@ -1121,6 +1255,10 @@ class RetireInput(TypedDict, closed=True):
 class Retired(TypedDict, closed=True):
     id: str
     retiredAt: str
+
+
+class Retried(TypedDict, closed=True):
+    retried: int
 
 
 class RetryView(TypedDict, closed=True):
@@ -1421,7 +1559,7 @@ class SlaTimer(TypedDict, closed=True):
 class Source(TypedDict, closed=True):
     id: str
     name: str
-    type: Literal["workflow", "agent", "channel", "case", "process"]
+    type: Literal["workflow", "agent", "channel", "case", "process", "form"]
 
 
 class SsoStepUpInput(TypedDict, closed=True):
@@ -1471,6 +1609,11 @@ class StepUpToken(TypedDict, closed=True):
     token: str
 
 
+class Stopped(TypedDict, closed=True):
+    at: str
+    reason: str
+
+
 class StoryAttachment(TypedDict, closed=True):
     fileId: str
     name: str
@@ -1507,6 +1650,10 @@ class StoryTask(TypedDict, closed=True):
     reviewId: str
     state: str
     title: str
+
+
+class SubmitIn(TypedDict):
+    values: NotRequired[dict[str, Any]]
 
 
 class TaskAction(TypedDict, closed=True):
@@ -1596,6 +1743,28 @@ class TemperatureLimits(TypedDict, closed=True):
     min: float
 
 
+class TemplatePlugin(TypedDict, closed=True):
+    id: str
+    title: str
+    version: str
+
+
+class TemplateRequires(TypedDict, closed=True):
+    bind: list[dict[str, str]]
+    tools: list[str]
+
+
+class TemplateView(TypedDict, closed=True):
+    id: str
+    installed: Installed
+    kind: Literal["agent", "skill", "workflow"]
+    plugin: TemplatePlugin
+    requires: TemplateRequires
+    source: str
+    title: str
+    version: int
+
+
 class TestOutcome(TypedDict, closed=True):
     failure: NotRequired[str | None]
     passed: bool
@@ -1671,6 +1840,7 @@ class Tool(TypedDict, closed=True):
     name: str
     requiresApproval: bool
     server: str
+    title: NotRequired[str | None]
 
 
 class ToolCallView(TypedDict, closed=True):
@@ -1718,6 +1888,11 @@ class TypedTask(TypedDict, closed=True):
     regions: list[TaskRegion]
     type: TaskTypeRef
     warnings: list[TaskWarning]
+
+
+class UploadedFile(TypedDict, closed=True):
+    fileId: str
+    name: str
 
 
 class UsedIn(TypedDict, closed=True):
@@ -2089,6 +2264,20 @@ class BackgroundOut(TypedDict, closed=True):
     unreachable: list[str]
 
 
+class BatchView(TypedDict, closed=True):
+    failed: int
+    fileName: str
+    finished: int
+    id: str
+    mode: str
+    pending: int
+    rows: list[BatchRow]
+    running: int
+    stopped: NotRequired[Stopped | None]
+    total: int
+    workflowId: str
+
+
 class BulkResult(TypedDict, closed=True):
     skipped: list[BulkSkip]
     updated: list[str]
@@ -2267,6 +2456,11 @@ class EnvelopeBackgroundOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeBatchView(TypedDict, closed=True):
+    data: BatchView
+    success: Literal[True]
+
+
 class EnvelopeBulkResult(TypedDict, closed=True):
     data: BulkResult
     success: Literal[True]
@@ -2317,6 +2511,11 @@ class EnvelopeForgotten(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeFormView(TypedDict, closed=True):
+    data: FormView
+    success: Literal[True]
+
+
 class EnvelopeGraphPublished(TypedDict, closed=True):
     data: GraphPublished
     success: Literal[True]
@@ -2329,6 +2528,11 @@ class EnvelopeHealthStatus(TypedDict, closed=True):
 
 class EnvelopeInboxPosted(TypedDict, closed=True):
     data: InboxPosted
+    success: Literal[True]
+
+
+class EnvelopeInstallation(TypedDict, closed=True):
+    data: Installation
     success: Literal[True]
 
 
@@ -2352,8 +2556,8 @@ class EnvelopeOptionsPage(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeOverviewCounts(TypedDict, closed=True):
-    data: OverviewCounts
+class EnvelopePublicForm(TypedDict, closed=True):
+    data: PublicForm
     success: Literal[True]
 
 
@@ -2367,6 +2571,11 @@ class EnvelopeQueuePlace(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeReceived(TypedDict, closed=True):
+    data: Received
+    success: Literal[True]
+
+
 class EnvelopeResumeOut(TypedDict, closed=True):
     data: ResumeOut
     success: Literal[True]
@@ -2374,6 +2583,11 @@ class EnvelopeResumeOut(TypedDict, closed=True):
 
 class EnvelopeRetired(TypedDict, closed=True):
     data: Retired
+    success: Literal[True]
+
+
+class EnvelopeRetried(TypedDict, closed=True):
+    data: Retried
     success: Literal[True]
 
 
@@ -2432,6 +2646,11 @@ class EnvelopeThreadEventResult(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeUploadedFile(TypedDict, closed=True):
+    data: UploadedFile
+    success: Literal[True]
+
+
 class EnvelopeWidgetTemplateOut(TypedDict, closed=True):
     data: WidgetTemplateOut
     success: Literal[True]
@@ -2439,6 +2658,11 @@ class EnvelopeWidgetTemplateOut(TypedDict, closed=True):
 
 class EnvelopeWorkflowTestRun(TypedDict, closed=True):
     data: WorkflowTestRun
+    success: Literal[True]
+
+
+class EnvelopeListFormView(TypedDict, closed=True):
+    data: list[FormView]
     success: Literal[True]
 
 
@@ -2484,6 +2708,11 @@ class EnvelopeListRunJournalEntry(TypedDict, closed=True):
 
 class EnvelopeListTaskTypeView(TypedDict, closed=True):
     data: list[TaskTypeView]
+    success: Literal[True]
+
+
+class EnvelopeListTemplateView(TypedDict, closed=True):
+    data: list[TemplateView]
     success: Literal[True]
 
 
@@ -2613,6 +2842,17 @@ class NodeTypeView(TypedDict, closed=True):
     version: int
 
 
+class OverviewCounts(TypedDict, closed=True):
+    cases: CaseCounts
+    casesDue: list[OverviewCaseRow]
+    counts: OverviewListCounts
+    openReviews: int
+    overdueReviews: int
+    runsInFlight: list[OverviewRunRow]
+    urgentReviews: list[dict[str, Any]]
+    waitingForMe: list[OverviewTaskRow]
+
+
 class PublishRequestInfo(TypedDict, closed=True):
     changes: list[str]
     digest: str
@@ -2686,6 +2926,7 @@ class RunDecision(TypedDict, closed=True):
 
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRetry: NotRequired[bool | None]
     createdAt: str
     createdBy: str
     digest: str
@@ -2884,12 +3125,14 @@ class WorkflowDraft(TypedDict, closed=True):
 class ActivityRow(TypedDict, closed=True):
     actor: ActorView
     at: str
+    detail: NotRequired[str | None]
     id: str
     kind: Literal[
         "workflow_run",
         "agent_run",
         "chat",
         "email",
+        "form",
         "decision",
         "tool_call",
         "case",
@@ -3038,6 +3281,11 @@ class EnvelopeListResultWorkflowRun(TypedDict, closed=True):
 
 class EnvelopeMemoryExport(TypedDict, closed=True):
     data: MemoryExport
+    success: Literal[True]
+
+
+class EnvelopeOverviewCounts(TypedDict, closed=True):
+    data: OverviewCounts
     success: Literal[True]
 
 
@@ -3321,6 +3569,7 @@ class EnvelopeReviewList(TypedDict, closed=True):
 
 class RunDetail(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRetry: NotRequired[bool | None]
     children: NotRequired[list[RunChild]]
     createdAt: str
     createdBy: str

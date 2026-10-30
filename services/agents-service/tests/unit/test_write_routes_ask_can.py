@@ -24,6 +24,11 @@ EXEMPT = {
     ("ops_agents.api.routers.run_resume", "resume_step"): (
         "authenticated by the step's own resume token, bound to its run, step, pass and team (c-525)"
     ),
+    ("ops_agents.api.routers.forms", "submit_public"): "authenticated by the form's signed link token (c-535)",
+    ("ops_agents.api.routers.forms", "upload_public"): "authenticated by the form's signed link token (c-535)",
+    ("ops_agents.api.routers.forms", "submit_member"): (
+        "membership of the form's team is the check: a members-only form is the team's own start form (c-535, E47)"
+    ),
     ("ops_agents.api.routers.service_events", "emit_event"): (
         "a service token's events:emit scope, capped per service by Settings.service_scopes (c-258); no person calls it"
     ),

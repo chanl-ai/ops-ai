@@ -24,7 +24,7 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 | 5 | The invitee creates a key; Priya removes the invitee; the invitee reads `/v1/me` | 401 |
 | 6 | A service introspects the removed member's key | 401 |
 
-## UI layer (c-077)
+## UI layer
 
 A console signed in through platform-service, with tools-service beside it. Invited addresses carry a per-run suffix.
 

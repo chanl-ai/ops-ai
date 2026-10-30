@@ -85,7 +85,7 @@ A `when` compares one state field: `eq`, `ne`, `in` (a list), and `lt`, `le`, `g
 scalar state fields plus `email.sender`, `email.subject`, `email.body` and `decision.decision`
 (`definition.ROUTE_FIELDS`). A field with no value yet matches nothing, so the next route or the default is taken.
 
-Intake from a notice (c-057) adds three node kinds: `extract_records` (`schema`) reads the email and its attachments'
+Intake from a notice adds three node kinds: `extract_records` (`schema`) reads the email and its attachments'
 text layers into typed records (`records`, `record_count`); `match` (`search`, `customer`, `account`,
 `min_address_chars`) runs once per record, fanned out by Send, and names a customer a match only when the name matches
 and the address (a substring of at least `min_address_chars`) or the whole last four of the SSN matches, a name alone

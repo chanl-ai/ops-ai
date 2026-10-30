@@ -23,7 +23,7 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 | 4 | Priya removes the member | A `member.remove` entry |
 | 5 | Maya, made a viewer, reads `/v1/audit` | 403 |
 
-## UI layer (c-077)
+## UI layer
 
 | # | Step | Expected |
 |---|---|---|

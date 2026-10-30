@@ -242,30 +242,25 @@ async def test_a_dead_workers_claim_lapses_and_another_worker_finishes_the_run(e
     assert work[0]["attempts"] == 2 and work[0]["status"] == "done"
 
 
-class DoubtfulTools(CountingTools):
-    """Every write is in doubt at the gateway: its claim stays running."""
+class UncertainTools(CountingTools):
+    """Every write reaches the system, which times out: whether it acted is not known (c-561)."""
 
     async def access(self, operation: str) -> Access:
         return "write"
 
-    async def find(self, key: str, operation: str) -> ToolResult | None:
-        return ToolResult(False, pending=True, reason="still running")
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        error = {"code": "UPSTREAM_TIMEOUT", "message": "crm.test did not answer", "side": "upstream"}
+        return ToolResult(False, {"error": error}, reason="the operation returned an error")
 
 
-async def test_a_write_in_doubt_past_the_retry_cap_fails_the_run(engine: AsyncEngine) -> None:
-    from ops_engine.journal import StepRow  # noqa: PLC0415
-    from ops_engine.store import SqlJournal  # noqa: PLC0415
-    from ops_engine.store.tables import engine_work  # noqa: PLC0415
-    from ops_engine.worker import MAX_DOUBT_PASSES  # noqa: PLC0415
+async def test_an_uncertain_write_fails_the_run_on_its_first_pass_and_is_sent_once(engine: AsyncEngine) -> None:
+    from ops_engine.compiler import UNCERTAIN  # noqa: PLC0415
 
-    tenant, tools = f"t-{uuid4().hex[:8]}", DoubtfulTools()
+    tenant, tools = f"t-{uuid4().hex[:8]}", UncertainTools()
     run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
-    with tenant_scope(tenant):
-        await SqlJournal(EngineTransactions(engine)).begin(
-            StepRow(run_id, "lookup", 1, 1, "running", "write", f"{run_id}:lookup:1:1", input={})
-        )
-    async with engine.begin() as c:
-        await c.execute(engine_work.update().where(engine_work.c.run_id == run_id).values(attempts=MAX_DOUBT_PASSES))
     w = worker(engine, tools, InMemorySaver())
     claimed = None
     while (got := await w.queue.claim()) is not None:
@@ -276,8 +271,10 @@ async def test_a_write_in_doubt_past_the_retry_cap_fails_the_run(engine: AsyncEn
     await w.process(claimed)
     with tenant_scope(tenant):
         run = await RunStore(EngineTransactions(engine)).get(run_id) or {}
-    assert run["status"] == "failed" and "doubt" in str(run["error"]), run
-    assert not [k for k in tools.calls if k.startswith(run_id)], "never re-sent"
+        work = await RunStore(EngineTransactions(engine)).work(run_id)
+    assert run["status"] == "failed" and UNCERTAIN in str(run["error"]), run
+    assert work[0]["status"] == "failed", "no pass retries an uncertain write"
+    assert [k for k in tools.calls if k.startswith(run_id)] == [f"{run_id}:lookup:1:1"], "sent once"
 
 
 class TeamTools(CountingTools):
@@ -337,3 +334,32 @@ async def test_a_pass_acts_as_its_runs_team_whatever_team_the_claiming_loop_hold
     assert events.teams and set(events.teams) == {"team_a"}, events.teams
     assert tools.teams == ["team_a"]
     assert written and written[0]["type"] == "started"
+
+
+class BlippingTools(CountingTools):
+    """The tools service does not answer the access lookup: an error outside the step's own call."""
+
+    async def access(self, operation: str) -> Access:
+        raise RuntimeError("tools-service restarting")
+
+
+async def test_a_pass_that_fails_on_an_outage_is_tried_again_after_five_seconds_not_one(engine: AsyncEngine) -> None:
+    import time  # noqa: PLC0415
+
+    tenant, tools = f"t-{uuid4().hex[:8]}", BlippingTools()
+    run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
+    w = worker(engine, tools, InMemorySaver())
+    claimed = None
+    while (got := await w.queue.claim()) is not None:
+        if got.run_id == run_id:
+            claimed = got
+            break
+    assert claimed is not None
+    before = time.time()
+    await w.process(claimed)
+    with tenant_scope(tenant):
+        run = await RunStore(EngineTransactions(engine)).get(run_id) or {}
+        (work,) = await RunStore(EngineTransactions(engine)).work(run_id)
+    # The database's clock (epoch seconds) on this machine.
+    assert run["status"] == "queued", run
+    assert 4.0 <= float(work["available_at"]) - before <= 8.0, (work["available_at"], before)

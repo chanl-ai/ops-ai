@@ -1,6 +1,6 @@
 # Test the email trigger with a real Gmail mailbox
 
-Status: current (c-192, c-199). These steps run a workflow from mail sent to a spare Gmail address on the local stack. The
+Status: current. These steps run a workflow from mail sent to a spare Gmail address on the local stack. The
 IMAP path is proven on GreenMail (uc-192, uc-199); a real Gmail mailbox has not been run yet (**unverified**). If a step fails,
 the log line named under "If nothing happens" says why.
 

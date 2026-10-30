@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useIsSample } from '@/components/shared/sample-data';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { type VariantProps } from 'class-variance-authority';
@@ -68,6 +69,9 @@ export function LoadingButton({
   className,
   ...props
 }: LoadingButtonProps) {
+  // Inside a sample section nothing can be stored, so its Save and other actions are not drawn at all (PM test 10-29:
+  // a switched-off Save read as broken).
+  const sample = useIsSample();
   // Button is disabled when loading OR explicitly disabled
   const isDisabled = isLoading || disabled;
 
@@ -76,6 +80,7 @@ export function LoadingButton({
     ? loadingText || (typeof children === 'string' ? `${children}...` : children)
     : children;
 
+  if (sample) return null;
   return (
     <Button {...props} disabled={isDisabled} className={cn(className)}>
       {isLoading && showSpinner && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

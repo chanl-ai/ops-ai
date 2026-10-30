@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-30",
+  "title": "Plugins sign in every way a system asks",
+  "description": "A plugin can now sign in with an API key in a header or a query, a username and password, a fixed token, an OAuth client, each person's own account, or a client certificate. A team admin gives the key, password, token or certificate once when turning the plugin on, Test connection checks it, and no answer or log ever shows it back.",
+  "tag": "improved",
+  "switch": "NEXT_PUBLIC_OPS_PLUGINS",
+  "cards": [
+    "c-588"
+  ]
+}

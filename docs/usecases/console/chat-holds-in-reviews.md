@@ -32,4 +32,4 @@ The chat card and the Reviews row decide the same review through the same decide
 
 ## Non-vacuous check
 
-Step 3 fails on agents-service before c-048 T013, whose review list skipped chat-agent threads.
+Step 3 fails on agents-service before an earlier change T013, whose review list skipped chat-agent threads.

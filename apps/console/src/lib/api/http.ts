@@ -27,6 +27,7 @@ import { createModelRiskHttp } from './model-risk-http';
 import { createToolModulesHttp } from './tool-modules-http';
 import { createEgressHttp } from './egress-http';
 import { createSecretsHttp } from './secrets-http';
+import { createConnectionsHttp } from './connections-http';
 import { createIntegrationsHttp } from './integrations-http';
 import { createFilesHttp } from './files-http';
 import { createTemplatesHttp } from './templates-http';
@@ -34,6 +35,8 @@ import { createPromptsHttp } from './prompts-http';
 import { createGuardrailsHttp } from './guardrails-http';
 import { createSkillsHttp } from './skills-http';
 import { createWidgetDeploymentsHttp } from './widget-deployments-http';
+import { createBatchesHttp } from './batches-http';
+import { createFormsHttp } from './forms-http';
 import { createActivityHttp } from './activity-http';
 import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
@@ -153,8 +156,8 @@ export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'caseRecords' | 'activity' | 'overview'> {
-  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, caseRecords, activity, overview } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview'> {
+  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -166,6 +169,8 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     guardrails,
     widgets,
     widgetDeployments,
+    forms,
+    batches,
     caseRecords,
     activity,
     // Counted on the server from the same review list Human Tasks reads and the team's cases (c-129).
@@ -195,10 +200,16 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
   };
 }
 
-/** Tool modules, the egress allow-list, secrets and the gateway's call log (Activity) against tools-service under `/v1`. */
-export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets'> & { toolCalls: GovernanceApi['toolCalls'] } {
+/** Tool modules, the egress allow-list, secrets, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
+export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections'> & { toolCalls: GovernanceApi['toolCalls'] } {
   const t = createTransport(`${baseUrl}/v1`);
-  return { toolModules: createToolModulesHttp(t.get, t.send, t.qs), egress: createEgressHttp(t.get, t.send, t.qs), secrets: createSecretsHttp(t.get, t.send, t.qs), toolCalls: createExecutionsHttp(t.get) };
+  return {
+    toolModules: createToolModulesHttp(t.get, t.send, t.qs),
+    egress: createEgressHttp(t.get, t.send, t.qs),
+    secrets: createSecretsHttp(t.get, t.send, t.qs),
+    connections: createConnectionsHttp(t.get, t.send),
+    toolCalls: createExecutionsHttp(t.get),
+  };
 }
 
 /** Knowledge bases, sources, documents and changes on kb-service, which serves the same routes under /v1. */
@@ -232,7 +243,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },
     workflows: {
-      list: (p) => get(`/workflows?${qs(p)}`),
+      // The current engine's workflows only: the console no longer shows the earlier engine's (c-562).
+      list: (p) => get(`/workflows?${qs(p)}&engine=current`),
       get: (id) => get(`/workflows/${id}`),
       create: (i) => send('POST', '/workflows', i),
       validate: (id, graph, target) => send('POST', `/workflows/${id}/validate`, { graph, target }),
@@ -278,6 +290,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     toolModules: createToolModulesHttp(get, send, qs),
     egress: createEgressHttp(get, send, qs),
     secrets: createSecretsHttp(get, send, qs),
+    connections: createConnectionsHttp(get, send),
     integrations: createIntegrationsHttp(get, send, qs),
     files: createFilesHttp(get, send, qs),
     engine: createEngineHttp(get, send),
@@ -287,6 +300,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),
+    forms: createFormsHttp(get, send),
+    batches: createBatchesHttp(get, send, baseUrl),
     caseRecords: createCaseRecordsHttp(get, send),
     activity: createActivityHttp(get),
     guardrails: createGuardrailsHttp(get, send, qs),

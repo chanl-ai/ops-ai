@@ -16,6 +16,7 @@ Engine class, so engines made anywhere (services, tests, scripts) get it without
 
 from __future__ import annotations
 
+import time
 from functools import cache
 from typing import Any
 
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.util import await_
 
 from ops_service_kit.logging import get_logger
+from ops_service_kit.request_timing import current as current_request
 from ops_service_kit.settings import Settings
 
 log = get_logger(__name__)
@@ -36,6 +38,8 @@ Database = AsyncEngine
 
 # Set on a pooled connection once it has been used: a connection made for this checkout needs no test.
 _CHECKED_IN = "ops_checked_in"
+# The start of each statement running on a connection, for the request timing (c-560).
+_STARTED = "ops_statement_started"
 
 
 def open_database(url: str, **options: Any) -> Database:
@@ -62,7 +66,24 @@ def open_database(url: str, **options: Any) -> Database:
 
     event.listen(engine.sync_engine, "checkin", checked_in)
     event.listen(engine.sync_engine, "checkout", test_before_use)
+    event.listen(engine.sync_engine, "before_cursor_execute", _statement_started)
+    event.listen(engine.sync_engine, "after_cursor_execute", _statement_finished)
     return engine
+
+
+def _statement_started(conn: sa.Connection, *_: Any) -> None:
+    conn.info.setdefault(_STARTED, []).append(time.perf_counter())
+
+
+def _statement_finished(conn: sa.Connection, *_: Any) -> None:
+    started = conn.info.get(_STARTED)
+    if not started:
+        return
+    begun = started.pop()
+    # Counted to the request whose task ran the statement; a worker or poller statement has no request.
+    request = current_request()
+    if request is not None:
+        request.add_query((time.perf_counter() - begun) * 1000)
 
 
 # An attempt that stalled or was cut off; refused credentials or a missing database fail at once, every time.

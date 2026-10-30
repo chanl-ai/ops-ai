@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOTS = sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("services/*-service/src")])
 ORDER = [
     "ops_contracts",
+    # What a plugin is built with (c-565): imports no other ops package, so every service may import it.
+    "ops_plugin_sdk",
     "ops_pii",
     "ops_policy",
     "ops_service_kit",
@@ -76,6 +78,11 @@ PUBLIC_ROUTES = {
     "/embed/v1.js",
     # The embed app's pre-session read: agent name, pause and the origins for frame-ancestors (c-131).
     "/v1/widget/{deployment_id}/config",
+    # A hosted form's link (c-535): the signed token in `t` names the tenant, team and form and is checked against the
+    # form's hash; a person outside the console has no sign-in to show.
+    "/v1/forms/public/{slug}",
+    "/v1/forms/public/{slug}/submit",
+    "/v1/forms/public/{slug}/files",
 }
 
 

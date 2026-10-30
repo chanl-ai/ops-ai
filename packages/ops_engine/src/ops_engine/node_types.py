@@ -42,26 +42,36 @@ class Port:
 
 @dataclass(frozen=True)
 class Retry:
-    """`attempts` counts the first; `backoff` is the wait before the second and the cap, in seconds."""
+    """`attempts` counts the first; `backoff` is the wait before the second and the cap, in seconds. `waits`, when
+    given, is the wait before each retry in turn instead (the last repeats)."""
 
     attempts: int
     backoff: tuple[float, float] = (0.0, 0.0)
+    waits: tuple[float, ...] = ()
 
     def wait(self, attempt: int) -> float:
-        """Seconds to wait before `attempt` (2 for the first retry): doubling from the base up to the cap."""
+        """Seconds to wait before `attempt` (2 for the first retry)."""
+        if self.waits:
+            return self.waits[min(max(0, attempt - 2), len(self.waits) - 1)]
         base, cap = self.backoff
         return min(cap, base * 2 ** max(0, attempt - 2)) if base else 0.0
 
     def view(self) -> dict[str, Any]:
-        return {"attempts": self.attempts, "backoffSeconds": list(self.backoff)}
+        backoff = list(self.waits) if self.waits else list(self.backoff)
+        return {"attempts": self.attempts, "backoffSeconds": backoff}
+
+
+# An outage's backoff (owner, c-561): 5 s, then 30 s, so a service restart or a short blip is ridden out.
+OUTAGE_WAITS = (5.0, 30.0)
 
 
 # Section 4's table. Human steps are not retried: a re-run finds the same review.
 RETRY_BY_EFFECTS: dict[Effects, Retry] = {
     "none": Retry(3),
-    "read": Retry(3, (1.0, 30.0)),
+    "read": Retry(3, waits=OUTAGE_WAITS),
     "model": Retry(2),
-    "write": Retry(1),
+    # A write is sent again only when the gateway proves it never ran it, each time under a new attempt key (c-561).
+    "write": Retry(3, waits=OUTAGE_WAITS),
     "human": Retry(1),
 }
 
@@ -254,6 +264,10 @@ _CONDITION = {
 }
 
 
+# A setting that may also be a path into the run, resolved when the step runs.
+_A_PATH: dict[str, Any] = {"type": "string", "pattern": "^\\$\\."}
+
+
 def _f(label: str, widget: str, help: str | None = None, **extra: Any) -> dict[str, Any]:
     return {"label": label, "widget": widget, **({"help": help} if help else {}), **extra}
 
@@ -331,7 +345,7 @@ def _ai_step(
         outputs_from=outputs_from,
         extra_outputs=extra_outputs,
         parameters={"type": "object", "required": ["text", *required], "properties": {**_AI_COMMON, **own}},
-        timeout_seconds=60.0,
+        timeout_seconds=120.0,
         ui=_form(_AI_FORM[0], *form, *_AI_FORM[1:], _TIMEOUT),
     )
 
@@ -484,6 +498,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         effects="none",
         inputs=MAIN_IN,
         outputs=(Port("out"),),
+        # A step that asks for it leaves by `disagree` when the sources disagree, so a person can settle them (c-535).
+        optional_outputs=(("onDisagreement", "port", "disagree"),),
         parameters={
             "type": "object",
             "required": ["sources"],
@@ -514,6 +530,15 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         },
                     },
                 },
+                "onDisagreement": {
+                    "oneOf": [
+                        {"const": "continue", "title": "Go on, listing the disagreements"},
+                        {"const": "port", "title": "Leave by Disagree"},
+                    ],
+                    "default": "continue",
+                    "description": "When the sources disagree: go on by out with the disagreements listed, or a "
+                    "Disagree port of its own",
+                },
             },
         },
         ui=_form(
@@ -538,6 +563,10 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         ("type", _f("Type", "select")),
                     ),
                 ),
+            ),
+            (
+                "onDisagreement",
+                _f("When the sources disagree", "select", "Go on, listing the disagreements, or leave by Disagree"),
             ),
         ),
     ),
@@ -761,6 +790,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ),
         executor="gateway.call",
         effects="write",
+        # Owner's default (c-561); editable per step with timeoutSeconds.
+        timeout_seconds=60.0,
         inputs=MAIN_IN,
         outputs=(Port("ok"), Port("refused"), Port("error")),
         # A system that does not answer in time leaves by a port of its own when the step asks (c-332).
@@ -866,10 +897,31 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         parameters={
             "type": "object",
             "required": ["file"],
-            # The fields inline, a team's document type whose version holds them (c-236), or Detect (c-249).
-            "anyOf": [{"required": ["fields"]}, {"required": ["documentType"]}, {"required": ["detect"]}],
+            # The fields inline, a team's document type whose version holds them (c-236), Detect (c-249), or a full-text
+            # or proposed read, which names no fields (c-535).
+            "anyOf": [
+                {"required": ["fields"]},
+                {"required": ["documentType"]},
+                {"required": ["detect"]},
+                {"required": ["read"], "properties": {"read": {"enum": ["text", "propose"]}}},
+            ],
             "properties": {
                 "file": {"format": "file", "description": "The files-service file id: " + _MAPPING},
+                # What comes back (c-535). A path into the run takes the read a request asked for (the system extract
+                # workflow carries the Files page's choice).
+                "read": {
+                    "oneOf": [
+                        {"const": "fields", "title": "Fields"},
+                        {"const": "text", "title": "Full text"},
+                        {"const": "propose", "title": "Let the model propose the fields"},
+                        {"type": "string", "pattern": "^\\$\\."},
+                    ],
+                    "description": "Fields (the default), the full text with no model call, or proposed fields",
+                },
+                "hint": {"type": "string", "maxLength": 200, "description": "What the document is, to propose fields"},
+                "proposePages": {"anyOf": [{"type": "integer", "minimum": 1, "maximum": 20}, _A_PATH]},
+                "maxPages": {"anyOf": [{"type": "integer", "minimum": 1}, _A_PATH]},
+                "maxTokens": {"type": "integer", "minimum": 1},
                 "detect": {
                     "type": "boolean",
                     "description": "Classify the file over the team's document types and read it with the kind found",
@@ -925,6 +977,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         timeout_seconds=120.0,
         ui=_form(
             ("file", _f("File", "mapping", "The uploaded file's id")),
+            ("read", _f("What to read", "select", "Fields you name, the full text, or fields the model proposes")),
+            ("hint", _f("What is it?", "text", "For proposed fields: a few words, e.g. a supplier invoice")),
+            ("proposePages", _f("Propose from the first pages", "number", "5 if empty")),
+            ("maxPages", _f("Pages to read", "number", "Every page if empty")),
+            ("maxTokens", _f("Stop after (tokens)", "number", "Stops a long read early with what it read")),
             (
                 "detect",
                 _f("Detect the kind", "switch", "Read with the document type the file is; unsure goes to review"),

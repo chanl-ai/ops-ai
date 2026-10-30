@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 import { authProvider, isExpired, type ReauthInput, type Session } from '@/lib/auth';
+import { wipeSavedQueries } from '@/lib/query-cache';
 
 import { useLookups } from './queries';
 import { useSessionQuery } from './team-query';
@@ -59,10 +60,18 @@ export const ssoDomainFor = (email: string, domains: { domain: string; verified:
   return host ? domains.find((d) => d.verified && d.domain.toLowerCase() === host)?.domain : undefined;
 };
 
-/** Sign-in calls change who every query runs as, so a finished sign-in or sign-out drops cached data. */
+/** Sign-in calls change who every query runs as, so a finished sign-in or sign-out drops cached data, in memory and
+ * saved in the browser for anyone (c-560). */
 function useAuthWrite<A, R>(fn: (a: A) => Promise<R>, clear = false) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => (clear ? qc.clear() : undefined) });
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: async () => {
+      if (!clear) return;
+      qc.clear();
+      await wipeSavedQueries();
+    },
+  });
 }
 
 export const useSignInWithPassword = () => useAuthWrite(({ email, password }: { email: string; password: string }) => authProvider.signInWithPassword(email, password), true);

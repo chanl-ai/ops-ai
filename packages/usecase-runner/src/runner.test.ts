@@ -1,6 +1,6 @@
 // One test per way the runner could report a use case wrongly.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -113,7 +113,7 @@ test('new takes the next id, registers it, and its stub script fails until writt
   assert.match(readFileSync(join(root, 'docs/usecases/README.md'), 'utf8'), /\| uc-003 \| agents-service \| Thread list by graph \| api \| draft \|/);
   assert.match(readFileSync(join(root, 'docs/README.md'), 'utf8'), /usecases\/agents-service\/thread-list-by-graph\.md/);
   const stub = readFileSync(join(root, 'docs/usecases/agents-service/scripts/test-uc-003-api.py'), 'utf8');
-  assert.match(stub, /check\("script written", False/);
+  assert.match(stub, /check\("1 script written", False/);
 });
 
 test('the ui harness starts the services of the tree the runner was invoked from', () => {
@@ -141,6 +141,124 @@ test('a service that never gets healthy is stopped when the harness gives up, so
   assert.equal(await portBusy(port), false);
 });
 
+test('a run stopped by SIGTERM leaves no process of its stack, even a wrapper that ignores SIGTERM', async () => {
+  const port = await new Promise<number>((done) => {
+    const s = createServer().listen(0, '127.0.0.1', () => {
+      const p = (s.address() as { port: number }).port;
+      s.close(() => done(p));
+    });
+  });
+  const marker = `UCR_TEARDOWN_${process.pid}_${port}`;
+  // A service shaped like pnpm: it ignores SIGTERM and its server child keeps running under it. The marker is in each
+  // process's arguments, which ps shows; macOS does not show another process's environment.
+  const service = [
+    `// ${marker}`,
+    "process.on('SIGTERM', () => {});",
+    `require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000) // ${marker}'], { stdio: 'ignore' });`,
+    `require('node:http').createServer((q, r) => r.end('ok')).listen(${port}, '127.0.0.1');`,
+  ].join('\n');
+  const run = [
+    `import { serve } from ${JSON.stringify(new URL('./harness.ts', import.meta.url).href)};`,
+    `await serve('teardown', ${port}, [process.execPath, '-e', ${JSON.stringify(service)}], process.cwd(), process.env, 'http://127.0.0.1:${port}/', 10_000);`,
+    "console.log('ready');",
+    'setInterval(() => {}, 1000);',
+  ].join('\n');
+  const left = () => execFileSync('ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter((l) => l.includes(marker));
+  const child = spawn(process.execPath, ['--input-type=module', '-e', run], { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'inherit'] });
+  try {
+    await new Promise<void>((done, fail) => {
+      child.stdout!.on('data', (d: Buffer) => d.toString().includes('ready') && done());
+      child.once('exit', (code) => fail(new Error(`the run exited with ${code} before its service was ready`)));
+    });
+    assert.ok(left().length >= 3, 'the run, its service and the service child are running');
+    child.kill('SIGTERM');
+    await new Promise((r) => child.once('exit', r));
+    let still = left();
+    for (let i = 0; i < 20 && still.length; i++) await new Promise((r) => setTimeout(r, 250)), (still = left());
+    assert.deepEqual(still, []);
+  } finally {
+    child.kill('SIGKILL');
+    for (const line of left()) process.kill(Number(line.trim().split(' ')[0]), 'SIGKILL');
+  }
+});
+
+test('a Python use case stopped by SIGTERM leaves no process of its services, even one that ignores SIGTERM', async () => {
+  const port = await new Promise<number>((done) => {
+    const s = createServer().listen(0, '127.0.0.1', () => {
+      const p = (s.address() as { port: number }).port;
+      s.close(() => done(p));
+    });
+  });
+  const marker = `UCR_PY_TEARDOWN_${process.pid}_${port}`;
+  const dir = mkdtempSync(join(tmpdir(), 'ucr-py-'));
+  // The service ignores SIGTERM and starts a child of its own, as a wrapper does; the marker is in every argv.
+  writeFileSync(
+    join(dir, 'service.py'),
+    [
+      `# ${marker}`,
+      'import http.server, signal, subprocess, sys',
+      'signal.signal(signal.SIGTERM, signal.SIG_IGN)',
+      `subprocess.Popen([sys.executable, "-c", "import time  # ${marker}\\nwhile True: time.sleep(1)"])`,
+      'class H(http.server.BaseHTTPRequestHandler):',
+      '    def do_GET(self):',
+      '        self.send_response(200)',
+      '        self.end_headers()',
+      '    def log_message(self, *a):',
+      '        pass',
+      `http.server.HTTPServer(("127.0.0.1", ${port}), H).serve_forever()`,
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(dir, 'run.py'),
+    [
+      'import os, sys, time',
+      'from usecase_harness import _serve',
+      `with _serve("teardown", [sys.executable, ${JSON.stringify(join(dir, 'service.py'))}], ${port}, dict(os.environ)):`,
+      '    print("ready", flush=True)',
+      '    while True:',
+      '        time.sleep(1)',
+    ].join('\n'),
+  );
+  const root = new URL('../../../', import.meta.url).pathname;
+  const left = () => execFileSync('ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter((l) => l.includes(marker) || l.includes(join(dir, 'service.py')));
+  const child = spawn('uv', ['run', '--quiet', '--directory', join(root, 'services/agents-service'), 'python', join(dir, 'run.py')], {
+    env: { ...process.env, PYTHONPATH: join(root, 'docs/usecases/lib') },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  try {
+    await new Promise<void>((done, fail) => {
+      child.stdout!.on('data', (d: Buffer) => d.toString().includes('ready') && done());
+      child.once('exit', (code) => fail(new Error(`the script exited with ${code} before its service was ready`)));
+    });
+    assert.ok(left().length >= 2, 'the service and its child are running');
+    child.kill('SIGTERM');
+    await new Promise((r) => child.once('exit', r));
+    let still = left();
+    for (let i = 0; i < 60 && still.length; i++) await new Promise((r) => setTimeout(r, 250)), (still = left());
+    assert.deepEqual(still, []);
+  } finally {
+    child.kill('SIGKILL');
+    for (const line of left()) process.kill(Number(line.trim().split(' ')[0]), 'SIGKILL');
+  }
+});
+
+test('a Python service whose group holds only an exited process stops cleanly, as macOS refuses signals to it', () => {
+  // macOS answers EPERM, not ESRCH, to a signal for a group whose only members have exited and wait to be reaped.
+  const root = new URL('../../../', import.meta.url).pathname;
+  const script = [
+    'import subprocess, sys, time',
+    'from usecase_harness import _stop',
+    'proc = subprocess.Popen(["true"], start_new_session=True)',
+    'time.sleep(0.5)',
+    '_stop(proc, grace=2)',
+    'print("stopped", proc.returncode)',
+  ].join('\n');
+  const out = execFileSync('uv', ['run', '--quiet', '--directory', join(root, 'services/agents-service'), 'python', '-c', script], {
+    env: { ...process.env, PYTHONPATH: join(root, 'docs/usecases/lib') },
+    encoding: 'utf8',
+  });
+  assert.match(out, /stopped 0/);
+});
 
 test('a use case sets the agents service env, and model keys never reach it', () => {
   const env = stackEnv({ OPENAI_API_KEY: 'k', PATH: '/bin' }, { OPS_REGISTRY_AUTO_APPROVE: 'false', ANTHROPIC_API_KEY: 'x' });

@@ -55,6 +55,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "connections_disconnect": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/me/connections/{connection_id}",
+        "pathParams": ["connection_id"],
+        "query": ["environment"],
+        "stream": False,
+    },
     "connections_get_connection": {
         "body": None,
         "headers": [],
@@ -82,6 +91,33 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search"],
         "stream": False,
     },
+    "connections_list_systems": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/systems",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "connections_my_connections": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/me/connections",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "connections_open_connect_link": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/connections/connect-links/sign-in",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "connections_set_environment": {
         "body": "json",
         "headers": [],
@@ -105,6 +141,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "POST",
         "path": "/v1/connections/{connection_id}/sign-in",
+        "pathParams": ["connection_id"],
+        "query": [],
+        "stream": False,
+    },
+    "connections_test_connection": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/connections/{connection_id}/test",
         "pathParams": ["connection_id"],
         "query": [],
         "stream": False,
@@ -205,6 +250,60 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/health/background",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_delete_app_secret": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/plugins/{plugin_id}/app-secret",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_knowledge_sources": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/knowledge-sources",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_list_plugin_templates": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/plugin-templates",
+        "pathParams": [],
+        "query": ["kind"],
+        "stream": False,
+    },
+    "plugins_list_plugins": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/plugins",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_set_app_secret": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/plugins/{plugin_id}/app-secret",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_set_team_plugin": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/plugins/{plugin_id}/team",
+        "pathParams": ["plugin_id"],
         "query": [],
         "stream": False,
     },
@@ -545,6 +644,10 @@ class Operations:
         "Create Connection"
         return self._t.call(SERVICE, OPERATIONS["connections_create_connection"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def connections_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
+        "Open Connect Link"
+        return self._t.call(SERVICE, OPERATIONS["connections_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def connections_connect_mcp(self, body: McpConnectionIn) -> ConnectionDetail:
         "Connect Mcp"
         return self._t.call(SERVICE, OPERATIONS["connections_connect_mcp"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -595,6 +698,12 @@ class Operations:
     def connections_sign_out(self, connection_id: str, body: SignInIn) -> ConnectionDetail:
         "Sign Out"
         return self._t.call(SERVICE, OPERATIONS["connections_sign_out"], {"connection_id": connection_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def connections_test_connection(self, connection_id: str, body: ConnectionTestIn) -> ConnectionDetail:
+        "Test Connection"
+        return self._t.call(
+            SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     def egress_allow_list(self) -> AllowList:
         "Allow List"
@@ -671,6 +780,45 @@ class Operations:
         "Evaluate Formulas"
         return self._t.call(SERVICE, OPERATIONS["expressions_evaluate_formulas"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def plugins_knowledge_sources(self) -> list[KnowledgeSourceView]:
+        "Knowledge Sources"
+        return self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def connections_my_connections(self) -> list[MyConnection]:
+        "My Connections"
+        return self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
+        "Disconnect"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["connections_disconnect"],
+            {"connection_id": connection_id},
+            {"environment": environment},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
+        "List Plugin Templates"
+        return self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+
+    def plugins_list_plugins(self) -> PluginList:
+        "List Plugins"
+        return self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
+        "Set App Secret"
+        return self._t.call(SERVICE, OPERATIONS["plugins_set_app_secret"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def plugins_delete_app_secret(self, plugin_id: str) -> PluginView:
+        "Delete App Secret"
+        return self._t.call(SERVICE, OPERATIONS["plugins_delete_app_secret"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
+        "Set Team Plugin"
+        return self._t.call(SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def secrets_list_secrets(
         self,
         *,
@@ -709,6 +857,10 @@ class Operations:
     def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def connections_list_systems(self) -> list[SystemCard]:
+        "List Systems"
+        return self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -937,6 +1089,10 @@ class AsyncOperations:
         "Create Connection"
         return await self._t.call(SERVICE, OPERATIONS["connections_create_connection"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def connections_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
+        "Open Connect Link"
+        return await self._t.call(SERVICE, OPERATIONS["connections_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def connections_connect_mcp(self, body: McpConnectionIn) -> ConnectionDetail:
         "Connect Mcp"
         return await self._t.call(SERVICE, OPERATIONS["connections_connect_mcp"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -988,6 +1144,12 @@ class AsyncOperations:
         "Sign Out"
         return await self._t.call(
             SERVICE, OPERATIONS["connections_sign_out"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def connections_test_connection(self, connection_id: str, body: ConnectionTestIn) -> ConnectionDetail:
+        "Test Connection"
+        return await self._t.call(
+            SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def egress_allow_list(self) -> AllowList:
@@ -1065,6 +1227,49 @@ class AsyncOperations:
         "Evaluate Formulas"
         return await self._t.call(SERVICE, OPERATIONS["expressions_evaluate_formulas"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def plugins_knowledge_sources(self) -> list[KnowledgeSourceView]:
+        "Knowledge Sources"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def connections_my_connections(self) -> list[MyConnection]:
+        "My Connections"
+        return await self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
+        "Disconnect"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["connections_disconnect"],
+            {"connection_id": connection_id},
+            {"environment": environment},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
+        "List Plugin Templates"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+
+    async def plugins_list_plugins(self) -> PluginList:
+        "List Plugins"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
+        "Set App Secret"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_set_app_secret"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def plugins_delete_app_secret(self, plugin_id: str) -> PluginView:
+        "Delete App Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["plugins_delete_app_secret"], {"plugin_id": plugin_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
+        "Set Team Plugin"
+        return await self._t.call(
+            SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def secrets_list_secrets(
         self,
         *,
@@ -1107,6 +1312,10 @@ class AsyncOperations:
     async def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def connections_list_systems(self) -> list[SystemCard]:
+        "List Systems"
+        return await self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,

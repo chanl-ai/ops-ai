@@ -1,0 +1,47 @@
+schema: ops-ai/plugin@2
+id: test.pager
+title: Pager
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [none]
+  sign_in: [team]
+settings:
+  instance_url: { type: string, default: "https://alpha.my.pager.test" }
+egress: ["{instance_url}"]
+endpoint: "{instance_url}/api"
+tools:
+  - name: find_cases
+    title: Find cases
+    access: read
+    input:
+      status: { type: string, enum: [New, Escalated] }
+      since: { type: string, format: date-time, required: false, default: "1970-01-01T00:00:00Z" }
+      subject: { type: string, format: soql_string, required: false, default: "" }
+    request:
+      method: GET
+      path: /query
+      query:
+        q: >-
+          SELECT Id FROM Case WHERE Status = '{{status}}' AND Subject != '{{subject}}'
+          AND LastModifiedDate > {{since}}
+      paging: { rule: link, next: nextRecordsUrl }
+  - name: list_view
+    title: Records in a list view
+    access: read
+    input:
+      list_view: { type: string, format: salesforce_id }
+    request:
+      method: GET
+      path: "/views/{list_view}"
+      paging: { rule: token, next: nextPageToken, param: pageToken }
+  - name: search
+    title: Search records
+    access: read
+    input:
+      q: { type: string, format: sosl_term }
+    request:
+      method: GET
+      path: /search
+      query: { q: "FIND {{{q}}}" }
+      paging: { rule: offset, limit: 2, items: searchRecords }

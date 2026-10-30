@@ -48,7 +48,7 @@ screen is written for one of them.
 | Bad input | A value of the wrong kind is refused with 422 naming the field. A missing optional value falls back. A missing required step setting warns on save and never blocks it |
 | Many doubtful fields | The workflow or document type marks the key fields. They come first and must be checked; the rest can be accepted together |
 | Reject | Goes to the team's queue; the person deciding may name someone |
-| Who decides | Approve and Reject alike: a reviewer of the run's or thread's team, whatever writes the task holds (c-509). The task names that team (`decidingTeam`, with its name read live from platform-service) and says what approving does |
+| Who decides | Approve and Reject alike: a reviewer of the run's or thread's team, whatever writes the task holds. The task names that team (`decidingTeam`, with its name read live from platform-service) and says what approving does |
 | Old reviews | A review paused before its step named a task type still draws as one (`api/legacy_tasks.py`). If the workflow's live version now names a type on that step, the review uses it, with the step's params resolved against the run's steps; a list reads every listed run's steps in one query (`TaskReads.steps`). Otherwise what the review carries (a read, a reply, a write, a decision) picks a seeded type from `seed/legacy_task_types.json`. A step with options other than approve and reject keeps its options |
 | Screen | A full page: a header with the one question, a scrolling body with the evidence first and everything else collapsed under Details, and a fixed footer with the actions that never covers content. The list keeps a wider quick view. Regions render through the console's widget renderer, the same one chat uses. No engine words (gates, run ids, event names) appear on the page |
 
@@ -93,7 +93,7 @@ to people, notify and record the outcome.
 | Table | `timers(thread_id, timer_id, kind, node, interrupt_id, due_at, fired_at, cancelled_at, claimed_generation, claimed_at, attempts, failed_at)` |
 | Keying | By interrupt id and round, because LangGraph gives every interrupt raised in one task the same id (observed in 1.2.14, undocumented). The round separator is `.r`: a `#` in the fire URL truncated the path to a 404 |
 | Arming | `sync_timers` runs at the end of every `execute`, before the lease is released, so a poller never sees a waiting thread without its timers |
-| Firing | `fire(thread, timer)` is the only path, called in-process by the timer poller; no HTTP route fires a timer (c-168). Idempotent; returns `fired`, `duplicate`, `not_due`, `not_waiting`, `busy` or `retry`, or 409 when the timer will never fire |
+| Firing | `fire(thread, timer)` is the only path, called in-process by the timer poller; no HTTP route fires a timer. Idempotent; returns `fired`, `duplicate`, `not_due`, `not_waiting`, `busy` or `retry`, or 409 when the timer will never fire |
 | Under the lease | `fire` takes the thread's lease and re-checks in one transaction that the timer is due, open, and its interrupt and round still wait. A held lease means try again next poll |
 | Claim | A fenced claim replaces a row lock held for the step's duration, so `idle_in_transaction_session_timeout` no longer matters |
 | Retry cap | Three claims without the step finishing set `failed_at` and journal `sla.fire_failed` for a person |
@@ -113,7 +113,7 @@ a pause found again queues none twice (`packages/ops_engine/src/ops_engine/worke
 | Setting | What happens |
 |---|---|
 | `slaHours` with `onTimeout: expire` | A `timeout` row keyed by run, step and iteration, due after the deadline (the workspace's `reviewSlaHours` when unset). Due while the review still waits, it resumes the run by the `timeout` port; a review decided first drops it |
-| `remindEveryHours` | A `remind` row per reminder, keyed by run, step, iteration and count, timed from the review's `openedAt`. Due while the run still waits at the same pause (same interrupt id), it records a `reminded` run event and a `task.reminder` service event (Activity kind `reminder`), queues the next, and never resumes the run; a decided review takes none (c-277) |
+| `remindEveryHours` | A `remind` row per reminder, keyed by run, step, iteration and count, timed from the review's `openedAt`. Due while the run still waits at the same pause (same interrupt id), it records a `reminded` run event and a `task.reminder` service event (Activity kind `reminder`), queues the next, and never resumes the run; a decided review takes none |
 
 What a reminder does next, an email or a reassignment, is a workflow a team adds for `task.reminder`; none is shipped.
 Proof: `services/agents-service/tests/engine/test_review_deadline.py`, `test_wait_and_reminders.py`; uc-403.

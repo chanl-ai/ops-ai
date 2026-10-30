@@ -18,6 +18,9 @@ x-settings: &settings
   OPS_BIND_HOST: 0.0.0.0
   OPS_SERVICE_PUBLIC_KEYS: ${OPS_SERVICE_PUBLIC_KEYS:?run generate_keys.py and set the keys (app.env.example)}
   OPS_CORS_ORIGINS: '["${OPS_PUBLIC_ORIGIN:?set the origin people open, e.g. https://ops.bank.example}"]'
+  # A hosted form's submissions reach agents from the embed app over the compose network; the client address is the
+  # right-most X-Forwarded-For entry outside these (c-535).
+  OPS_FORMS_TRUSTED_PROXIES: '["172.16.0.0/12", "127.0.0.1/32"]'
   OPS_CONSOLE_URL: ${OPS_PUBLIC_ORIGIN}
   OPS_PLATFORM_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/platform
   OPS_FILES_PUBLIC_URL: ${OPS_PUBLIC_ORIGIN}/api/files

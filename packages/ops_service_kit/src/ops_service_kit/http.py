@@ -23,6 +23,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .errors import ApiError, TooManyRequests
 from .ids import new_id
 from .logging import get_logger
+from .request_timing import RequestTimingMiddleware, current_request_id
+from .settings import Settings
 
 log = get_logger("ops_service_kit.http")
 
@@ -179,7 +181,9 @@ def ok(data: Any, status: int = 200) -> JSONResponse:
 
 
 def error_body(status: int, code: str, message: str) -> dict[str, Any]:
-    return {"success": False, "error": {"code": code, "message": message, "status": status, "requestId": new_id("req")}}
+    # The request's own id, so a reported error leads to its log lines; minted when built outside a request.
+    request_id = current_request_id() or new_id("req")
+    return {"success": False, "error": {"code": code, "message": message, "status": status, "requestId": request_id}}
 
 
 class _UnhandledAsEnvelope:
@@ -217,6 +221,11 @@ def install_error_handlers(app: FastAPI) -> None:
     # a service calls them in.
     if not any(m.cls is _UnhandledAsEnvelope for m in app.user_middleware):
         app.user_middleware.append(Middleware(_UnhandledAsEnvelope))
+    # Just outside the envelope, so the request's id is still set when the 500 envelope is built.
+    if not any(m.cls is RequestTimingMiddleware for m in app.user_middleware):
+        at = next(i for i, m in enumerate(app.user_middleware) if m.cls is _UnhandledAsEnvelope)
+        timing = Middleware(RequestTimingMiddleware, enabled=Settings().request_timing, service=app.title)
+        app.user_middleware.insert(at, timing)
 
     @app.exception_handler(ApiError)
     async def api_error(_: Request, e: ApiError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

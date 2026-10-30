@@ -24,7 +24,7 @@ Status: current. Id: `uc-061`. Service: `console`. Layers: ui.
 | 7 | Switch daily spend to Table | columns date, groceries, transit |
 | 8 | Reload the thread | the same widgets, drawn from the stored parts |
 
-agents-service shapes each tool result into a part (c-055 T004); the console's widget registry picks the renderer
+agents-service shapes each tool result into a part (an earlier change T004); the console's widget registry picks the renderer
 (T005, T006). Neither side names a tool in a part.
 
 ## Acceptance layers

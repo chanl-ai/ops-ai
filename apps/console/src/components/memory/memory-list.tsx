@@ -8,6 +8,7 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
+import { labelOf } from '@/components/shared/readable-value';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,7 +104,7 @@ function MemoryRow({ memory: m }: { memory: Memory }) {
   const [confirm, setConfirm] = React.useState(false);
   const correct = useCorrectMemory();
   const forget = useForgetMemory();
-  const label = m.key ?? KIND[m.kind];
+  const label = m.key ? labelOf(m.key) : KIND[m.kind];
 
   const save = async () => {
     try {
@@ -118,7 +119,7 @@ function MemoryRow({ memory: m }: { memory: Memory }) {
     <Item variant="outline" size="sm" data-testid="memory-row" data-key={m.key ?? ''}>
       <ItemContent>
         <ItemTitle>
-          <span className="capitalize">{label}</span>
+          <span>{label}</span>
           <Badge variant="secondary">{KIND[m.kind]}</Badge>
           {m.source === 'person' && <Badge variant="outline">Corrected by you</Badge>}
         </ItemTitle>

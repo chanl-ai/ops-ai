@@ -4,7 +4,7 @@ Status: current. Id: `uc-138`. Service: `console`, `kb-service` and `files-servi
 
 The knowledge base page worked out from the team role whether to show its edit controls, the source page showed Delete
 and its settings to everyone, and the file sheet offered Delete to a chat-only member. Each detail now carries canEdit
-and canDelete from the write routes' own check (c-216), and the pages follow them.
+and canDelete from the write routes' own check, and the pages follow them.
 
 ## Preconditions
 

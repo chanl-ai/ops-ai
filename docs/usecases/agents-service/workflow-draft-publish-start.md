@@ -1,6 +1,6 @@
 # Create a workflow from draft JSON, validate, test, publish and start it
 
-Status: current. Id: `uc-019`. Service: `agents-service`. Layers: api, ui.
+Status: current. Id: `uc-019`. Service: `agents-service`. Layers: api.
 
 ## Preconditions
 
@@ -33,43 +33,18 @@ The script starts its own agents service on the scripted model; no model key is 
 | 12 | `POST …/test` on the router with subject `urgent`, then another subject | The review, then the default route |
 | 13 | `DELETE /v1/workflows/{id}`, then a new thread | 404 |
 
-In the console (ui layer), with Workflows and Cases pointed at the scripted agents service:
-
-| # | Step | Expected |
-|---|---|---|
-| 1 | `/workflows`, New workflow, Blank | `POST /v1/workflows` 201, a draft at v0; the editor opens on it |
-| 2 | `POST /v1/threads` on its id; the editor header | Refused; no Start run |
-| 3 | Test run | `POST …/test` 200, completed, the nodes it reached light up |
-| 4 | Add Classify and route, unconnected; publish that draft through the API | 422 `checks_failing`; the publish dialog lists "Every step is reachable" |
-| 5 | Delete the node, Publish… with a note | An approved `publish_request`; v1 |
-| 6 | Start run from the record with an email | A thread on the workflow id; the run opens in Cases, finished on v1 |
-| 7 | A second workflow whose branch has paths Urgent and Other and no default; Publish… | The branch node shows "needs a default route" |
-| 8 | In the branch inspector, default Other; Urgent when `email.subject` is "Urgent dispute" | The draft stores `routes.Urgent` and `defaultRoute`; validation passes and the node error clears |
-| 9 | Publish, then runs with subject "Urgent dispute" and another subject | The first ends at the Urgent path, the second at the default |
-
-Then a second stack under platform sign-in (James Richardson builder, Maya Okafor approver on team_ops) with
-`OPS_REGISTRY_AUTO_APPROVE=false`:
-
-| # | Step | Expected |
-|---|---|---|
-| 10 | James: Publish… on a new blank workflow | `publish_request` 201, pending |
-| 11 | James opens it in Reviews | The approve button reads "Another publisher approves" and is off; his decision through the API is 403 |
-| 12 | Maya: Return to requester with no reason, then with one | The form asks for a reason and sends nothing; then 200 `returned` |
-| 13 | Read the workflow | Still v0, draft |
+The console no longer offers these workflows: the earlier engine left it, so this use case has no ui layer.
+The current engine's publish through review is proved in the console by uc-092.
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-019-api.py` | passing |
-| ui | `agents-service/scripts/test-uc-019-ui.mjs` | passing |
 
 ## Non-vacuous check
 
 `the requester cannot approve it (403)` pairs with the second person's approval: removing the requester check fails
 the decide test in `test_publish_requests.py`. `an unknown agent fails validation and publish (422)` pairs with the passing validation and publish of the same graph
 with a real agent, so the pass is the agent pin's doing. Starting threads on the latest version instead of the
-pointer fails the registry test that moves the pointer back to v1. At the ui layer, `a draft workflow cannot be
-started` pairs with the started run after the console's publish, and the unreachable-step refusal pairs with the publish
-that follows deleting that step. James's disabled approve button depends on Reviews matching the signed-in person's
-email, which platform-mode requests record: matching by name only leaves the button on and fails step 11.
+pointer fails the registry test that moves the pointer back to v1.

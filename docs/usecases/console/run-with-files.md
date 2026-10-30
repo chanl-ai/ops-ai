@@ -1,6 +1,6 @@
 # A workflow runs from a form, with files attached
 
-Status: current. Id: `uc-233`. Service: `console` on agents-service and files-service. Layers: ui. Card: c-273.
+Status: current. Id: `uc-233`. Service: `console` on agents-service and files-service. Layers: ui. Card: an earlier change.
 
 A builder tests a workflow without writing JSON: Start run shows a form generated from the Request trigger's input
 schema, and a file input uploads files (to Files first) or picks ones already there. The run gets the files' ids.

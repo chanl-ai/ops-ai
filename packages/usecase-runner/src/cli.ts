@@ -1,15 +1,16 @@
-// Entry for scripts/usecase.mjs: list | show <id> | test [--uc <id>] [--layer <layer>] | coverage <service> |
-// new <service> "<title>". Exit codes are in report.ts (EXIT).
+// Entry for scripts/usecase.mjs: list | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
+// coverage <service> | new <service> "<title>". Exit codes are in report.ts (EXIT).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
-import { DB_VAR, dropDatabase, isolate, runDatabaseName, sweepFinished } from './isolation.ts';
+import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
+import { formatStories, loadRun, saveRun, storiesOf, StoryError, type SavedRun } from './stories.ts';
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -26,6 +27,8 @@ export interface TestDeps {
   drop: (root: string, env: NodeJS.ProcessEnv, name: string) => Promise<boolean>;
   /** Drops finished runs' scratch databases before this run starts; absent in the runner's own tests. */
   sweep?: (root: string, env: NodeJS.ProcessEnv) => Promise<boolean>;
+  /** Rebuilds a database the caller named whose chains are behind; absent in the runner's own tests. */
+  rebuild?: (root: string, env: NodeJS.ProcessEnv, name: string) => Promise<boolean>;
 }
 
 export async function test(
@@ -33,7 +36,7 @@ export async function test(
   registry: UseCase[],
   ucId: string | undefined,
   layerArg: string | undefined,
-  deps: TestDeps = { parent: process.env, drop: dropDatabase, sweep: sweepFinished },
+  deps: TestDeps = { parent: process.env, drop: dropDatabase, sweep: sweepFinished, rebuild: rebuildIfStale },
 ): Promise<number> {
   if (layerArg && !isLayer(layerArg)) {
     console.error(`unknown layer ${layerArg}; one of ${LAYERS.join(', ')}`);
@@ -44,6 +47,9 @@ export async function test(
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
   if (deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
+  if (!ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
+    console.error(`could not check ${env[DB_VAR]}'s migrations; a chain behind may stop the scripts at start`);
+  }
   // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
   // earlier script left behind name files that are gone, and kb-service's startup seed failed on them (c-553).
   let current: string | undefined;
@@ -92,6 +98,7 @@ async function runAll(
         await databaseFor(async (env) => {
           const { code, output } = await runScript(commandFor(root, r.path, r.runtime), env, root);
           const checks = parseChecks(output);
+          saveRun(root, { id: uc.id, layer, at: new Date().toISOString(), exit: code, checks });
           const v = verdict(code, checks);
           return {
             id: uc.id,
@@ -103,8 +110,25 @@ async function runAll(
       );
     }
   }
-  console.log(`\n${summary(outcomes)}`);
+  const stories = report(root, targets.filter((uc) => outcomes.some((o) => o.id === uc.id && o.status !== 'UNAVAILABLE')), layerArg as Layer | undefined);
+  console.log(`\n${stories ? `Stories\n${stories}\n\n` : ''}${summary(outcomes)}`);
   return exitFor(outcomes);
+}
+
+/**
+ * The stories block for each use case, from the latest saved run of each layer (only `layer` when given). A use case
+ * whose doc has no Stories table says so rather than being left out.
+ */
+export function report(root: string, targets: UseCase[], layer?: Layer): string {
+  return targets
+    .map((uc) => {
+      const { stories } = storiesOf(root, uc);
+      const shown = layer ? stories.filter((s) => s.layer === layer) : stories;
+      const runs: Partial<Record<Layer, SavedRun>> = {};
+      for (const l of new Set(shown.map((s) => s.layer))) runs[l] = loadRun(root, uc.id, l);
+      return formatStories(uc, shown, runs);
+    })
+    .join('\n\n');
 }
 
 export async function main(argv: string[], root: string): Promise<number> {
@@ -141,10 +165,16 @@ export async function main(argv: string[], root: string): Promise<number> {
       return EXIT.ok;
     }
     if (cmd === 'test') return await test(root, registry, flag(rest, 'uc'), flag(rest, 'layer'));
-    console.error(`unknown command ${cmd}; one of list, show, test, coverage, new`);
+    if (cmd === 'report') {
+      const ucId = flag(rest, 'uc');
+      const targets = ucId ? [findUseCase(registry, ucId)] : registry.filter((uc) => storiesOf(root, uc).stories.length);
+      console.log(targets.length ? report(root, targets) : 'no use case has a Stories table yet');
+      return EXIT.ok;
+    }
+    console.error(`unknown command ${cmd}; one of list, show, test, report, coverage, new`);
     return EXIT.usage;
   } catch (e) {
-    if (e instanceof RegistryError) {
+    if (e instanceof RegistryError || e instanceof StoryError) {
       console.error(e.message);
       return EXIT.usage;
     }

@@ -250,6 +250,10 @@ class TenantFiles:
             "documentTypeId": body.document_type_id,
             "version": body.version,
             "typeName": body.type_name,
+            # The system extract workflow passes these to its Extract step (c-535); null reads as today.
+            "read": body.read,
+            "hint": body.hint,
+            "maxPages": body.max_pages,
         }
         return _read_request(await ReadRequestsStore(self._files.engine).request(values, payload))
 

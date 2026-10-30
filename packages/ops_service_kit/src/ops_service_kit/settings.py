@@ -113,6 +113,18 @@ class Settings(BaseSettings):
     # how many runs one worker process runs at once.
     engine_poll_seconds: float = 0.5
     engine_concurrency: int = 4
+    # How often the worker's run reconciler (c-561) looks for runs nothing is working on and marks them Stuck.
+    engine_reconcile_seconds: float = Field(default=60.0, gt=0)
+    # One JSON line per request on the ops.request logger and a Server-Timing header (c-560); off by default because
+    # Server-Timing tells a caller how long internal work took.
+    request_timing: bool = False
+    # Plugins (c-565): tools-service loads installed plugins and serves their routes only with this on (OPS_PLUGINS),
+    # and kb-service reads knowledge through them. Off until the plugins release.
+    plugins: bool = False
+    # Plugin package folders tools-service loads beside the installed plugins, for a developer trying a plugin on a
+    # local stack before it is packaged, and for the built-in plugins repository on a dev stack:
+    # OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
+    plugin_paths: list[str] = Field(default_factory=list[str])
     # The most text one call to agents-service's AI step route reads (c-298, tick 31): the kernel caps a step at two
     # model calls, so this bounds what one outside call can spend.
     ai_step_max_text_chars: int = Field(default=50_000, ge=1)
@@ -123,6 +135,9 @@ class Settings(BaseSettings):
     # recorded steps, which is the failure the use case must catch.
     engine_fault_kill_after_node: str | None = None
     engine_fault_ignore_recorded: bool = False
+    # Fault injection for uc-567, never set on a real deployment: the mail listener fails to start the run of a message
+    # whose subject contains this, as a message that breaks a start would, so the use case sees it set aside.
+    email_fault_fail_subject: str | None = None
     # The tool gateway (E3). Unset keeps write tools in this process; set, every write tool and send_reply go to the
     # gateway, which runs them only when OPA accepts the call's approval token.
     gateway_url: str | None = None
@@ -346,6 +361,10 @@ class Settings(BaseSettings):
     # The embed app's own origins (apps/embed, c-158), such as https://ops.bank.example. A widget request from one of
     # them speaks for the bank page its session names; nothing in the request (Host, X-Forwarded-Host) can add one.
     embed_origins: list[str] = Field(default_factory=list[str])
+    # The proxies a hosted form's submission may pass through on its way here (c-535), as CIDRs: the client address is
+    # the right-most X-Forwarded-For entry outside them, so everyone behind the embed app is not counted as one address.
+    # Set per deploy: the compose network the embed app reaches agents from, or Caddy and the embed app on Fly.
+    forms_trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1/32"])
     gateway_sub: str = "runtime:local"
     opa_url: str = "http://127.0.0.1:8181"
     # make/env.mk's OPS_INFRA: "external" in the devcontainer, where PostgreSQL and OPA are compose side containers and
@@ -385,10 +404,22 @@ class Settings(BaseSettings):
         faults = self.engine_fault_kill_after_node is not None or self.engine_fault_ignore_recorded
         if self.environment not in ("dev", "test") and faults:
             raise ValueError("engine_fault_* settings are for dev and test only; they break crash recovery on purpose")
+        if self.environment not in ("dev", "test") and self.email_fault_fail_subject:
+            raise ValueError("email_fault_fail_subject is for dev and test only; it fails mail on purpose")
         if self.environment != "dev" and "seed_dir" not in self.model_fields_set:
             self.seed_dir = None
         if self.seed_dir is not None and not self.seed_dir.is_dir():
             raise ValueError(f"seed_dir {self.seed_dir} does not exist")
+        return self
+
+    @model_validator(mode="after")
+    def _plugin_scopes(self) -> Settings:
+        # kb-service reads a plugin's knowledge through tools-service (c-565). Its scope cap gains the two tools scopes
+        # only with plugins on, so with OPS_PLUGINS off a kb token can never act on a tool.
+        if self.plugins and "service_scopes" not in self.model_fields_set:
+            kb = self.service_scopes.get("kb", [])
+            extra = [s for s in ("tools:view", "tools:run") if s not in kb]
+            self.service_scopes = {**self.service_scopes, "kb": [*kb, *extra]}
         return self
 
 

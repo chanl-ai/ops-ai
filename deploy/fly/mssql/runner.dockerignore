@@ -1,0 +1,10 @@
+# The test-mssql target copies only these; the rest of a checkout (a .venv, .codeloop, docs) would be uploaded for nothing.
+*
+!pyproject.toml
+!uv.lock
+!packages
+!services
+!deploy
+**/.venv
+**/node_modules
+**/__pycache__

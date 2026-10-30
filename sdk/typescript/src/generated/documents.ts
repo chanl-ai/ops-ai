@@ -614,6 +614,8 @@ export interface components {
             pageImages: boolean;
             /** Reviewbelow */
             reviewBelow?: number | null;
+            /** Samplefileid */
+            sampleFileId?: string | null;
             /** Templates */
             templates?: {
                 [key: string]: unknown;
@@ -910,9 +912,19 @@ export interface components {
             /** Outcome */
             outcome?: ("ok" | "review" | "unreadable" | "unknown") | null;
             /** Pages */
-            pages?: number | null;
+            pages?: number | {
+                [key: string]: unknown;
+            }[] | null;
+            /** Partial */
+            partial?: boolean | null;
             /** Path */
             path?: ("template" | "model") | null;
+            /** Proposal */
+            proposal?: {
+                [key: string]: unknown;
+            } | null;
+            /** Readpages */
+            readPages?: number | null;
             /** Records */
             records?: {
                 [key: string]: unknown;
@@ -933,6 +945,8 @@ export interface components {
             /** Templateid */
             templateId?: string | null;
             templateMiss?: components["schemas"]["TemplateMiss"] | null;
+            /** Text */
+            text?: string | null;
         };
         /** ExtractionError */
         ExtractionError: {
@@ -962,16 +976,30 @@ export interface components {
             }[] | null;
             /** Fileid */
             fileId: string;
+            /** Hint */
+            hint?: string | null;
             /**
              * Many
              * @default false
              */
             many: boolean;
+            /** Maxpages */
+            maxPages?: number | null;
+            /** Maxtokens */
+            maxTokens?: number | null;
             /**
              * Ocr
              * @default false
              */
             ocr: boolean;
+            /** Proposepages */
+            proposePages?: number | null;
+            /**
+             * Read
+             * @default fields
+             * @enum {string}
+             */
+            read: "fields" | "text" | "propose";
             /** Reviewbelow */
             reviewBelow?: number | null;
             /** Version */

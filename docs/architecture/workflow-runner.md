@@ -1,6 +1,6 @@
 # Workflow runner
 
-Status: agreed design, 2026-10-16; slice 1 is card c-061. The runner is built on LangGraph, made resilient with a step
+Status: agreed design, 2026-10-16; slice 1 is card an earlier change. The runner is built on LangGraph, made resilient with a step
 journal, a Postgres queue and worker processes. Node types and instances, the catalogue, and the runner options
 weighed with their sources: [workflow nodes](../design/workflows/workflow-nodes.md). This page replaces the 2026-10-15 proposal.
 
@@ -44,10 +44,10 @@ The engine reaches everything outside it through ports, so it can move to its ow
 |---|---|
 | State | One channel per node instance holding a small envelope `{port, stepId, iteration, out}`; outputs over 8 KB are meant to live in the journal with a reference in the envelope (not built yet: outputs are held whole) |
 | Out ports | Conditional edges reading the envelope's port; an unconnected out port fails publish |
-| Fork and Join | A port connected to several steps runs them together; `ops.flow.join` is a LangGraph deferred node, so it runs once, after every branch that can still arrive, with each branch's output by step id (null for one an If or Switch sent elsewhere). A step two branches meet at without a Join runs once per branch, and validate warns (c-278) |
+| Fork and Join | A port connected to several steps runs them together; `ops.flow.join` is a LangGraph deferred node, so it runs once, after every branch that can still arrive, with each branch's output by step id (null for one an If or Switch sent elsewhere). A step two branches meet at without a Join runs once per branch, and validate warns |
 | Loop | Planned: `Send` per item into a body subgraph, then a join |
-| Start workflow | Starts a child run per item, keyed by run, step, iteration and item, so a retry starts none twice. Without wait it goes on by `started` once they commit. With wait it pauses on an interrupt; each child's end queues a resume naming that pause (`RunStore.settle_parents`), the step reads the children's states in one query, starts the next batch, and goes on by `done` with every outcome and output in item order (outputs read once, then), or by `timeout` after `timeoutHours` (c-263) |
-| Wait | Pauses on an interrupt for `seconds`, or until a date read from a step (a past date goes on at once, one that is not a date leaves by `error`); the worker queues one delayed wake keyed by run, step and iteration, so no worker is held (c-277) |
+| Start workflow | Starts a child run per item, keyed by run, step, iteration and item, so a retry starts none twice. Without wait it goes on by `started` once they commit. With wait it pauses on an interrupt; each child's end queues a resume naming that pause (`RunStore.settle_parents`), the step reads the children's states in one query, starts the next batch, and goes on by `done` with every outcome and output in item order (outputs read once, then), or by `timeout` after `timeoutHours` |
+| Wait | Pauses on an interrupt for `seconds`, or until a date read from a step (a past date goes on at once, one that is not a date leaves by `error`); the worker queues one delayed wake keyed by run, step and iteration, so no worker is held |
 | Human review | Opens the review (upsert on run, node, iteration), then one `interrupt`; the chosen option is the port. A deadline (`slaHours`, `onTimeout: expire`) and reminders (`remindEveryHours`) are delayed work on the same pause ([human in the loop](human-in-the-loop.md)) |
 | Agent | Calls `AgentPort.turn` with ids derived from run, node and iteration, so tool keys repeat on a re-run; output checked against the node's schema |
 
@@ -55,7 +55,7 @@ The engine reaches everything outside it through ports, so it can move to its ow
 
 A run's data stays real, so a later step (a Send) gets the real address an earlier step found. Masking is where people
 read: the run page (`GET /v1/workflows/runs/{id}`) and its event stream mask every input, output, error and decision
-value when the team's `aiStepsMaskPersonalData` is on, the default (c-321, `routers/engine.py` `_values_masked`). An
+value when the team's `aiStepsMaskPersonalData` is on, the default (`routers/engine.py` `_values_masked`). An
 Agent step and an AI step store real values whatever the agent's `redactPii` says; `redactPii` masks the agent's chats.
 Review and task views show real values, because reviewers verify them.
 
@@ -119,7 +119,7 @@ open, because the write it approves reads nothing from the run, is a failed step
 
 Each run pins its definition version and digest; each node instance pins its type version; each work row carries the
 engine build, and a worker claims only its own build's rows. An archived workflow (`archived_at` on every version,
-c-274) starts no run of any mode and leaves the lists; runs already started finish on their pinned version. Definitions with `schemaVersion: 1` keep compiling on the
+an earlier change) starts no run of any mode and leaves the lists; runs already started finish on their pinned version. Definitions with `schemaVersion: 1` keep compiling on the
 v1 compiler until no open thread pins one.
 
 ## 8 Proof

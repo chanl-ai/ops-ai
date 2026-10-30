@@ -18,6 +18,7 @@ include make/docs.mk
 include make/sdk.mk
 include make/usecase.mk
 include make/experiments.mk
+include make/git.mk
 
 ##@ General
 

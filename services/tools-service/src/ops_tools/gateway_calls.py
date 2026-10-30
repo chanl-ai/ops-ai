@@ -14,11 +14,13 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import Principal
+from ops_identity import ActingForPerson, Principal
 from ops_policy import input_hash
 from ops_service_kit.errors import ApiError
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.logging import get_logger
 
+from .auth import SIGNED_WITH
 from .auth.kinds import TEST
 from .executor import Executor, invalid_fields
 from .limits import amount_refusal
@@ -32,6 +34,8 @@ from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
 from .tokens import claims_of
 from .tools import ToolCaller
+
+log = get_logger("ops_tools.gateway_calls")
 
 API, MCP = "api", "mcp"
 
@@ -47,6 +51,8 @@ class CallRequest:
     # thread, step, act and environment, as POST /v1/calls' runContext carries them.
     run_context: dict[str, Any] = field(default_factory=dict[str, Any])
     approval_token: str | None = None
+    # The person the call acts for, from a verified acting-for token (c-558); never from `run_context`.
+    acting_for: ActingForPerson | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,9 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if resolved is None or resolved.operation is None or resolved.module is None:
         return None
     op, module = resolved.operation, resolved.module
+    if module.get("plugin_off"):
+        # A plugin off for the install or the team (c-564): refused before approval, so no write waits for a person.
+        return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), []
     if not op["enabled"]:
         return 403, "operation_hidden", f"{op['name']} is hidden in {module['display_name']}", []
     if module["status"] != "published":
@@ -150,6 +159,16 @@ class GatewayCalls:
         self.all_writes_wait = all_writes_wait
         self.clock = clock
 
+    async def _run(self, resolved: Resolved, tool: str, args: dict[str, Any], **kw: Any) -> ToolOutcome:
+        """The executor's outcome, or a failed one when it raises. A write's row was claimed as running, and a row left
+        running answers every retry "already running", so the run's step could neither finish nor fail."""
+        try:
+            return await self.executor.run(resolved, tool, args, **kw)
+        except Exception as e:
+            # The exception's text can carry a filled request or a secret, so only its class is kept.
+            log.exception("gateway_call_failed", tool=tool, error=type(e).__name__)
+            return ToolOutcome(False, {"error": {"code": "CALL_FAILED", "message": f"{tool} failed before an answer."}})
+
     async def call(
         self,
         caller: Principal,
@@ -170,7 +189,11 @@ class GatewayCalls:
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
 
-        resolved = await self.registry.resolve(req.tool, tenant_id=caller.tenant_id, team_id=caller.team_id)
+        # The call's environment, live or test, picks a plugin's instance before anything runs (c-580).
+        environment = str(req.run_context.get("environment") or TEST)
+        resolved = await self.registry.resolve(
+            req.tool, tenant_id=caller.tenant_id, team_id=caller.team_id, environment=environment
+        )
         access = resolved.access if resolved else "unknown"
         digest = input_hash(req.input)
         ctx = req.run_context
@@ -193,6 +216,7 @@ class GatewayCalls:
             "connection_id": resolved.module.get("connection_id") if resolved and resolved.module else None,
             "channel": channel,
             "client_name": client_name,
+            "acting_for": req.acting_for.email if req.acting_for else None,
         }
 
         async def over_rate() -> Refused | None:
@@ -202,7 +226,7 @@ class GatewayCalls:
                 return None
             op = resolved.operation
             limit = int(op["rate_limit_per_min"])
-            spent = await self.counters.spend(caller.tenant_id, op["name"], limit)
+            spent = await self.counters.spend(caller.tenant_id, op.get("rate_key") or op["name"], limit)
             if spent.allowed:
                 return None
             reason = f"rate limit of {limit} calls a minute reached for {op['name']}"
@@ -293,14 +317,17 @@ class GatewayCalls:
         if access not in WRITES:
             if (limited := await over_rate()) is not None:
                 return limited
-            outcome = await self.executor.run(
+            signing = SIGNED_WITH.set(None)
+            outcome = await self._run(
                 resolved or Resolved(access, "local"),
                 req.tool,
                 args,
                 key=req.key,
-                caller=ToolCaller.of(caller),
+                caller=ToolCaller.of(caller, acting_for=req.acting_for),
                 environment=ctx.get("environment"),
             )
+            row["credential"] = SIGNED_WITH.get()
+            SIGNED_WITH.reset(signing)
             if hide:
                 outcome = ToolOutcome(outcome.ok, scrub(outcome.output, hide), outcome.view)
             failed = _error_of(outcome)
@@ -336,14 +363,17 @@ class GatewayCalls:
         if (limited := await over_rate()) is not None:
             return limited
         approvers = tuple(_approvers(req.approval_token))
-        outcome = await self.executor.run(
+        signing = SIGNED_WITH.set(None)
+        outcome = await self._run(
             resolved or Resolved(access, "local"),
             req.tool,
             req.input,
             key=req.key,
-            caller=ToolCaller.of(caller, approvers=approvers),
+            caller=ToolCaller.of(caller, approvers=approvers, acting_for=req.acting_for),
             environment=ctx.get("environment"),
         )
+        credential = SIGNED_WITH.get()
+        SIGNED_WITH.reset(signing)
         failed = _error_of(outcome)
         await self.log.finish(
             call_id,
@@ -352,5 +382,6 @@ class GatewayCalls:
             view=outcome.view,
             latency_ms=elapsed(),
             error=failed,
+            credential=credential,
         )
         return Allowed(call_id, outcome.ok, outcome.output, outcome.view)

@@ -4768,5 +4768,273 @@
         }
       }
     ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "two_source_match",
+    "teamId": "team_ops",
+    "name": "Match a notice to the bank",
+    "description": "Compare what a notice says with what the bank holds for the same account: both sources meet at a Join, Combine facts lists any field they disagree on, and a person settles a disagreement. The /wf-builder skill adapts this example.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.request",
+        "typeVersion": 1,
+        "name": "Request",
+        "parameters": {
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "string",
+                "title": "Account",
+                "description": "The account the notice is about"
+              },
+              "noticeAmount": {
+                "type": "number",
+                "title": "Amount on the notice"
+              },
+              "bankAmount": {
+                "type": "number",
+                "title": "Amount at the bank"
+              }
+            },
+            "required": [
+              "account",
+              "noticeAmount",
+              "bankAmount"
+            ]
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "notice",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "What the notice says",
+        "parameters": {
+          "values": {
+            "account": "$.input.account",
+            "balance": "$.input.noticeAmount"
+          }
+        },
+        "position": {
+          "x": 384,
+          "y": -38
+        }
+      },
+      {
+        "id": "bank",
+        "type": "ops.data.set",
+        "typeVersion": 1,
+        "name": "What the bank holds",
+        "parameters": {
+          "values": {
+            "account": "$.input.account",
+            "balance": "$.input.bankAmount"
+          }
+        },
+        "position": {
+          "x": 384,
+          "y": 105
+        }
+      },
+      {
+        "id": "join",
+        "type": "ops.flow.join",
+        "typeVersion": 1,
+        "name": "Both sources read",
+        "parameters": {
+          "waitFor": "all"
+        },
+        "position": {
+          "x": 768,
+          "y": 33
+        }
+      },
+      {
+        "id": "combine",
+        "type": "ops.data.combine",
+        "typeVersion": 1,
+        "name": "Compare the sources",
+        "parameters": {
+          "sources": [
+            {
+              "name": "bank",
+              "values": "$.nodes.bank.out"
+            },
+            {
+              "name": "notice",
+              "values": "$.nodes.notice.out"
+            }
+          ],
+          "fields": [
+            {
+              "field": "balance",
+              "type": "money"
+            }
+          ],
+          "onDisagreement": "port"
+        },
+        "position": {
+          "x": 1152,
+          "y": 33
+        }
+      },
+      {
+        "id": "matched",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Matched",
+        "parameters": {
+          "outcome": "matched",
+          "output": "$.nodes.combine.out.values"
+        },
+        "position": {
+          "x": 1536,
+          "y": -38
+        }
+      },
+      {
+        "id": "review",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Settle the disagreement",
+        "parameters": {
+          "title": "The notice and the bank disagree on {$.input.account}",
+          "summary": {
+            "disagreements": "$.nodes.combine.out.conflicts",
+            "taken": "$.nodes.combine.out.values"
+          }
+        },
+        "position": {
+          "x": 1536,
+          "y": 105
+        }
+      },
+      {
+        "id": "settled",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Settled",
+        "parameters": {
+          "outcome": "settled",
+          "output": "$.nodes.combine.out.values"
+        },
+        "position": {
+          "x": 1920,
+          "y": 69
+        }
+      },
+      {
+        "id": "sent_back",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Sent back",
+        "parameters": {
+          "outcome": "sent_back"
+        },
+        "position": {
+          "x": 1920,
+          "y": 212
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "notice",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "bank",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "notice",
+          "port": "out"
+        },
+        "to": {
+          "node": "join",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "bank",
+          "port": "out"
+        },
+        "to": {
+          "node": "join",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "join",
+          "port": "out"
+        },
+        "to": {
+          "node": "combine",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "combine",
+          "port": "out"
+        },
+        "to": {
+          "node": "matched",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "combine",
+          "port": "disagree"
+        },
+        "to": {
+          "node": "review",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "approve"
+        },
+        "to": {
+          "node": "settled",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "review",
+          "port": "reject"
+        },
+        "to": {
+          "node": "sent_back",
+          "port": "in"
+        }
+      }
+    ]
   }
 ]

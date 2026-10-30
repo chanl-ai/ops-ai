@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
@@ -17,6 +17,9 @@ from ops_store.team_scope import acting_team
 from .modules.seed import PLATFORM_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.modules import Aggregate, ModuleStore, served_operations
+
+if TYPE_CHECKING:
+    from .plugins.host import PluginHost
 
 WRITES = {"write"}
 JSON_TYPES = {"string", "number", "integer", "boolean", "object", "array"}
@@ -85,11 +88,13 @@ class Resolved:
 
 
 class ToolRegistry:
-    def __init__(self, catalog: Catalog, modules: ModuleStore | None = None) -> None:
+    def __init__(self, catalog: Catalog, modules: ModuleStore | None = None, plugins: PluginHost | None = None) -> None:
         """Serves every tenant: each lookup names the tenant of the caller it is for. The Platform tools module the
         registry writes for a tenant that has none belongs to no team (c-433)."""
         self.catalog = catalog
         self.modules = modules
+        # The installed plugins (c-564): each one's module, seen and called through the calling team's binding.
+        self.plugins = plugins
         # Teams whose platform tools this process has made sure of, by tenant; a restart checks again, which writes
         # nothing. Per team: a tool one team holds in its own module (the Platform team's mail module) is not another
         # team's, so a check made for one team says nothing about the next.
@@ -117,6 +122,7 @@ class ToolRegistry:
             return [
                 {
                     "name": t.name,
+                    "title": None,
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
@@ -130,11 +136,19 @@ class ToolRegistry:
                 for t in self.catalog.tools
             ]
         await self._platform_tools(tenant_id)
+        if self.plugins is not None:
+            await self.plugins.ensure(tenant_id, datetime.now(UTC))
         rows: list[dict[str, Any]] = []
         # A person's grant list reads their team's modules; another service's, every team's (`all_teams`).
         modules = await (self.modules.all(tenant_id) if sees is not None else self.modules.all_teams(tenant_id))
         for module in modules:
             if module["status"] != "published" or module["drift"] or (sees is not None and not sees(module)):
+                continue
+            # With plugins off (OPS_PLUGINS) a module a plugin left from an earlier start is listed to nobody, as the
+            # gateway refuses its every call.
+            if self.plugins is None and str(module.get("template_id") or "").startswith("plugin:"):
+                continue
+            if self.plugins is not None and not await self.plugins.visible(tenant_id, acting_team(), module):
                 continue
             for op in served_operations(module):
                 if not op["enabled"]:
@@ -142,6 +156,8 @@ class ToolRegistry:
                 rows.append(
                     {
                         "name": op["name"],
+                        # What people see in place of the name; a plugin's manifest gives it (c-581), others have none.
+                        "title": self.plugins.title_of(module, op["name"]) if self.plugins is not None else None,
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),
@@ -161,17 +177,36 @@ class ToolRegistry:
 
     async def described(
         self, tool: str, tenant_id: str, team_id: str | None = None
-    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
-        """access_for, policy_for and output_schema_for of `tool`, from one resolve: a review list asks this once per
-        tool, and resolving three times read the tool's module three times (c-451)."""
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None, float | None]:
+        """access_for, policy_for, output_schema_for and the deadline of `tool`, from one resolve: a review list asks
+        this once per tool, and resolving three times read the tool's module three times (c-451)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
-        return self._access(tool, resolved), self._policy(tool, resolved), self._output(resolved)
+        return (
+            self._access(tool, resolved),
+            self._policy(tool, resolved),
+            self._output(resolved),
+            self.deadline(resolved),
+        )
 
     @staticmethod
     def _access(tool: str, resolved: Resolved | None) -> str:
         if resolved is not None:
             return resolved.access
         return WORKFLOW_TOOLS.get(tool, ("unknown", True))[0]
+
+    @staticmethod
+    def deadline(resolved: Resolved | None) -> float | None:
+        """How long the gateway may take over one call of the operation, in seconds: a code operation's run limit and
+        the runner's margin, else the operation's or module's timeout and a margin for signing in and the egress check.
+        The engine's step waits at least this long before it calls a write uncertain (c-561)."""
+        if resolved is None or resolved.operation is None or resolved.module is None:
+            return None
+        op, module = resolved.operation, resolved.module
+        if op.get("executor") == "code":
+            limits = cast(dict[str, Any], cast(dict[str, Any], op.get("code") or {}).get("limits") or {})
+            return float(limits.get("timeS", 10)) + 15.0
+        limit_ms = op.get("timeout_ms") or module.get("timeout_ms")
+        return float(limit_ms) / 1000 + 5.0 if limit_ms else None
 
     async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
         """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
@@ -222,11 +257,17 @@ class ToolRegistry:
         # {"ok": true} is the stub an import writes when the document gives no example.
         return inferred(stub) if stub not in (None, {"ok": True}) else None
 
-    async def resolve(self, tool: str, *, tenant_id: str, team_id: str | None = None) -> Resolved | None:
+    async def resolve(
+        self, tool: str, *, tenant_id: str, team_id: str | None = None, environment: str = "production"
+    ) -> Resolved | None:
+        """`environment` picks a plugin module's instance and hosts for a call (c-580); a listing or an access check,
+        which shows the same tools either way, takes production's."""
         if self.modules is None:
             access = self.access(tool)
             return None if access == "unknown" else Resolved(access, "local")
         # The calling service's tenant, from its service token; the team from the run or the person.
+        if self.plugins is not None:
+            await self.plugins.ensure(tenant_id, datetime.now(UTC))
         found = await self.modules.operation_named(tenant_id, tool, team_id)
         if found is None and tool in PLATFORM_MODULE_TOOLS:
             await self._platform_tools(tenant_id, team_id)
@@ -236,4 +277,14 @@ class ToolRegistry:
             # platform's own, and the gateway runs it only for its system workflow.
             return Resolved(WORKFLOW_TOOLS[tool][0], "local") if tool in SYSTEM_ONLY else None
         module, op = found
+        if (
+            self.plugins is not None
+            and module.get("template_id", "")
+            and str(module["template_id"]).startswith("plugin:")
+        ):
+            # One binding lookup per call (c-564): the team's connection, endpoint and egress hosts, and a rate window
+            # of the team's own, since windows are kept per tenant and operation.
+            team = team_id if team_id is not None else acting_team()
+            module = await self.plugins.for_call(tenant_id, team, module, environment)
+            op = {**op, "rate_key": f"{op['name']}@{team}"}
         return Resolved(op["access"], op["executor"], module, op)

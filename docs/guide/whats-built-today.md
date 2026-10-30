@@ -65,7 +65,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Capability | Status |
 |---|---|
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
-| Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, client certificate | Built |
+| Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
 | Each person connecting their own account | Planned |
 | Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits | Built |
 | The outbound allow-list, the encrypted credential store, the call log | Built |

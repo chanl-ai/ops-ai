@@ -1,12 +1,12 @@
 # A chat shows when its budget is spent and the person continues
 
-Status: current. Id: `uc-108`. Service: `console`. Layers: ui. Card: c-103.
+Status: current. Id: `uc-108`. Service: `console`. Layers: ui. Card: an earlier change.
 
 Every chat conversation starts with its agent's per-conversation caps (model calls and cost; empty fields are the
 platform defaults of 200 calls and 5.00, never unlimited). When a cap is reached, the next turn pauses and the chat
 shows a card with what was spent, taken from the server's ledger. The conversation's owner continues it, which adds
 one more allotment; an admin of its team can raise the caps for that conversation. The server checks who does which.
-Design: [chat](../../console/chat.md), interview: c-103 Q1-Q5.
+Design: [chat](../../console/chat.md), interview: an earlier change Q1-Q5.
 
 ## Preconditions
 

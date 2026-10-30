@@ -1,6 +1,6 @@
 # An agent is granted and calls a published tools-service operation
 
-Status: passing. Id: `uc-048`. Service: `agents-service`. Layers: api. Card: c-048 (G1).
+Status: passing. Id: `uc-048`. Service: `agents-service`. Layers: api. Card: an earlier change (G1).
 
 ## Preconditions
 
@@ -29,6 +29,8 @@ use case checks the plumbing, not a model's choice; no provider is called.
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-048-api.py` | passing |
+
+In the console: uc-055's and uc-086's ui scripts: the operation is granted from the agent page's tools picker, and a chat read runs it through the gateway.
 
 ## Non-vacuous check
 

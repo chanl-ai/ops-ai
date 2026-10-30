@@ -10,8 +10,8 @@ export interface Memory {
   key: string | null;
   value: string;
   confidence: number;
-  /** `extraction` from a chat turn, `person` when they corrected it. */
-  source: 'extraction' | 'person';
+  /** `extraction` learned from a chat turn, `asked` when they said "remember that", `person` when they corrected it. */
+  source: 'extraction' | 'asked' | 'person';
   sourceThreadId: string | null;
   createdAt: string;
 }

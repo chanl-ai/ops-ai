@@ -347,13 +347,13 @@
       "type": "object"
     },
     "retry": {
-      "attempts": 1,
+      "attempts": 3,
       "backoffSeconds": [
-        0.0,
-        0.0
+        5.0,
+        30.0
       ]
     },
-    "timeoutSeconds": 30.0,
+    "timeoutSeconds": 60.0,
     "ui": {
       "fields": {
         "approvalToken": {
@@ -794,7 +794,7 @@
         0.0
       ]
     },
-    "timeoutSeconds": 60.0,
+    "timeoutSeconds": 120.0,
     "ui": {
       "fields": {
         "categories": {
@@ -904,7 +904,7 @@
         0.0
       ]
     },
-    "timeoutSeconds": 60.0,
+    "timeoutSeconds": 120.0,
     "ui": {
       "fields": {
         "instructions": {
@@ -999,6 +999,19 @@
           "required": [
             "detect"
           ]
+        },
+        {
+          "properties": {
+            "read": {
+              "enum": [
+                "text",
+                "propose"
+              ]
+            }
+          },
+          "required": [
+            "read"
+          ]
         }
       ],
       "properties": {
@@ -1087,9 +1100,30 @@
           "description": "The files-service file id: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
           "format": "file"
         },
+        "hint": {
+          "description": "What the document is, to propose fields",
+          "maxLength": 200,
+          "type": "string"
+        },
         "many": {
           "description": "One record per thing the document names, as `records`",
           "type": "boolean"
+        },
+        "maxPages": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
+          ]
+        },
+        "maxTokens": {
+          "minimum": 1,
+          "type": "integer"
         },
         "ocr": {
           "type": "boolean"
@@ -1099,6 +1133,40 @@
           "enum": [
             "error",
             "port"
+          ]
+        },
+        "proposePages": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
+          ]
+        },
+        "read": {
+          "description": "Fields (the default), the full text with no model call, or proposed fields",
+          "oneOf": [
+            {
+              "const": "fields",
+              "title": "Fields"
+            },
+            {
+              "const": "text",
+              "title": "Full text"
+            },
+            {
+              "const": "propose",
+              "title": "Let the model propose the fields"
+            },
+            {
+              "pattern": "^\\$\\.",
+              "type": "string"
+            }
           ]
         },
         "reviewBelow": {
@@ -1151,10 +1219,25 @@
           "label": "File",
           "widget": "mapping"
         },
+        "hint": {
+          "help": "For proposed fields: a few words, e.g. a supplier invoice",
+          "label": "What is it?",
+          "widget": "text"
+        },
         "many": {
           "help": "The document names several (debtors, line items): one record each",
           "label": "Several records",
           "widget": "switch"
+        },
+        "maxPages": {
+          "help": "Every page if empty",
+          "label": "Pages to read",
+          "widget": "number"
+        },
+        "maxTokens": {
+          "help": "Stops a long read early with what it read",
+          "label": "Stop after (tokens)",
+          "widget": "number"
         },
         "ocr": {
           "help": "Off by default; OCR'd fields score lower",
@@ -1164,6 +1247,16 @@
         "onTimeout": {
           "help": "Leave by Error, or by a Timeout way of its own",
           "label": "If the read takes longer",
+          "widget": "select"
+        },
+        "proposePages": {
+          "help": "5 if empty",
+          "label": "Propose from the first pages",
+          "widget": "number"
+        },
+        "read": {
+          "help": "Fields you name, the full text, or fields the model proposes",
+          "label": "What to read",
           "widget": "select"
         },
         "reviewBelow": {
@@ -1184,6 +1277,11 @@
       },
       "order": [
         "file",
+        "read",
+        "hint",
+        "proposePages",
+        "maxPages",
+        "maxTokens",
         "detect",
         "documentType",
         "fields",
@@ -1293,7 +1391,7 @@
         0.0
       ]
     },
-    "timeoutSeconds": 60.0,
+    "timeoutSeconds": 120.0,
     "ui": {
       "fields": {
         "documentType": {
@@ -1408,7 +1506,7 @@
         0.0
       ]
     },
-    "timeoutSeconds": 60.0,
+    "timeoutSeconds": 120.0,
     "ui": {
       "fields": {
         "instructions": {
@@ -1462,7 +1560,13 @@
       }
     ],
     "label": "Combine facts",
-    "optionalOutputs": [],
+    "optionalOutputs": [
+      {
+        "parameter": "onDisagreement",
+        "port": "disagree",
+        "value": "port"
+      }
+    ],
     "outputs": [
       {
         "connection": "main",
@@ -1504,6 +1608,20 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "onDisagreement": {
+          "default": "continue",
+          "description": "When the sources disagree: go on by out with the disagreements listed, or a Disagree port of its own",
+          "oneOf": [
+            {
+              "const": "continue",
+              "title": "Go on, listing the disagreements"
+            },
+            {
+              "const": "port",
+              "title": "Leave by Disagree"
+            }
+          ]
         },
         "sources": {
           "items": {
@@ -1567,6 +1685,11 @@
           "label": "Fields",
           "widget": "list"
         },
+        "onDisagreement": {
+          "help": "Go on, listing the disagreements, or leave by Disagree",
+          "label": "When the sources disagree",
+          "widget": "select"
+        },
         "sources": {
           "help": "In order of trust: a field takes the first source that has it",
           "item": {
@@ -1591,7 +1714,8 @@
       },
       "order": [
         "sources",
-        "fields"
+        "fields",
+        "onDisagreement"
       ]
     },
     "version": 1

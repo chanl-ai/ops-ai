@@ -1,6 +1,6 @@
 # A court order notice from the mailbox becomes customer cases a reviewer holds or flags
 
-Status: retired 2026-10-18 (c-212): the v1 court order flow and its mailbox deployment are gone; uc-210 (`levy-on-the-runner.md`) covers the court order notice on the workflow runner. Kept as the record of what the v1 flow did. Id: `uc-076`. Service: `agents-service`. Layers: api. Card: c-057 (T006).
+Status: retired 2026-10-18: the v1 court order flow and its mailbox deployment are gone; uc-210 (`levy-on-the-runner.md`) covers the court order notice on the workflow runner. Kept as the record of what the v1 flow did. Id: `uc-076`. Service: `agents-service`. Layers: api. Card: an earlier change (T006).
 
 ## Preconditions
 

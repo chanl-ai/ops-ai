@@ -1,6 +1,14 @@
 # A court order notice runs on the workflow runner from its mailbox
 
-Status: current. Id: `uc-210`. Service: `agents-service` (the worker runs ops_engine). Layers: api. Card: c-210.
+Status: current. Id: `uc-210`. Service: `agents-service` (the worker runs ops_engine). Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | Maya holds the notice's amount on Marcus Bell's task; the bank refuses it and the same task comes back to her | ui | 4 | 4 |
+| S2 | The task offers Hold an amount, so Maya can hold 1500 instead | ui | 5 | 5 |
+| S3 | The same from the mailbox through the API: three cases, a hold the bank refuses back on review, a flag, no second intake | api | 1-7 | 5 |
 
 A garnishment notice in the court order mailbox starts the court order intake workflow (`levy_intake`), which reads every debtor from the PDF (Extract from
 file, Several records) and starts one `levy_case` per debtor. A case finds the customer at the bank (Match: the name,
@@ -32,3 +40,13 @@ which this use case publishes into its own database.
 Step 3's Jordan check fails when a name alone matches (`packages/ops_engine/tests/test_match_step.py`, seen failing
 with the Any rules removed). Step 4 fails when a failed hold ends the case or the second decision is sent without its
 approval (`test_review_loop.py`, seen failing with the approved call ignored).
+
+## Acceptance layers
+
+| Layer | Script | State |
+|---|---|---|
+| api | `agents-service/scripts/test-uc-210-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-210-ui.mjs` | S1 passes; S2 fails (2026-10-30): a workflow review sends no step option's inputs to its task (engine_reviews option_view), so Hold draws no amount field and a reviewer cannot hold less than the notice |
+
+The mailbox that starts the case is walked in the console by uc-245's ui script; this ui script starts the levy case as
+the intake would.

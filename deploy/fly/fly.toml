@@ -1,8 +1,9 @@
 # Ops AI staging: one machine runs every service, the worker, the console, OPA, the fake model and Caddy
 # (deploy/fly/processes.toml). Deploy with `make stg-deploy` (deploy/fly/stg_deploy.sh); runbook
 # docs/deploy/fly-staging.md. Secrets (database logins, keys, the first admin, the model keys) are Fly secrets staged by
-# `deploy/fly/staging/apps.py one-secrets`; only non-secret settings live here.
-app = "<your-app>-one"
+# `deploy/fly/staging/apps.py one-secrets`; only non-secret settings live here. `<your-app>` is STG_APP from
+# staging.env (deploy/fly/staging.env.example); stg_deploy.sh fills it in and passes -a.
+app = "<your-app>"
 primary_region = "ewr"
 kill_signal = "SIGTERM"
 kill_timeout = 30
@@ -13,7 +14,7 @@ kill_timeout = 30
   build-target = "runtime"
   [build.args]
     # The console's service URLs are baked into the build; this is the origin the app is served on.
-    OPS_PUBLIC_ORIGIN = "https://<your-app>-one.fly.dev"
+    OPS_PUBLIC_ORIGIN = "https://<your-app>.fly.dev"
 
 [deploy]
   # Every chain as the database's superuser (OPS_DATABASE_URL), then the first admin; a failure stops the deploy.
@@ -34,14 +35,16 @@ kill_timeout = 30
   OPS_DOCUMENTS_URL = "http://127.0.0.1:8760"
   OPS_MODELS_URL = "http://127.0.0.1:8730"
   OPS_OPA_URL = "http://127.0.0.1:8181"
-  OPS_CORS_ORIGINS = '["https://<your-app>-one.fly.dev"]'
-  OPS_CONSOLE_URL = "https://<your-app>-one.fly.dev"
-  OPS_PLATFORM_PUBLIC_URL = "https://<your-app>-one.fly.dev/api/platform"
+  OPS_CORS_ORIGINS = '["https://<your-app>.fly.dev"]'
+  # Caddy fronts every service on this machine; a form's client address is the X-Forwarded-For entry it added (c-535).
+  OPS_FORMS_TRUSTED_PROXIES = '["127.0.0.1/32"]'
+  OPS_CONSOLE_URL = "https://<your-app>.fly.dev"
+  OPS_PLATFORM_PUBLIC_URL = "https://<your-app>.fly.dev/api/platform"
   # File and knowledge-base bytes stay on the volume, so both survive a redeploy.
   OPS_FILES_DIR = "/data/files"
   OPS_KB_FILES_DIR = "/data/kb-files"
   # files-service builds upload and download URLs on its public base.
-  OPS_FILES_PUBLIC_URL = "https://<your-app>-one.fly.dev/api/files"
+  OPS_FILES_PUBLIC_URL = "https://<your-app>.fly.dev/api/files"
   # No scanner runs here: the inline test engine marks clean files clean; `hook` would leave every upload pending.
   OPS_FILES_SCANNING = "eicar"
   OPS_MAILBOX_SOURCE = "none"
@@ -59,7 +62,7 @@ kill_timeout = 30
   force_https = true
   # Idle, Fly's proxy stops the machine; the next request starts it, and the host brings every process up again
   # (wake time in docs/deploy/fly-staging.md). Stopped, only the volume and the root filesystem are billed.
-  auto_stop_machines = "stop"
+  auto_stop_machines = "suspend"
   auto_start_machines = true
   min_machines_running = 0
 

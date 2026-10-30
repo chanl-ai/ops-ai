@@ -17,15 +17,17 @@ from typing import Any, cast
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from ops_agents.api.email_trigger import Bound, EmailTriggers, SourceFor, run_key
+from ops_agents.api.email_trigger import Bound, EmailTriggers, SourceFor, run_again, run_key
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.trigger_events import TriggerEvents, trigger_events
 from ops_email import message_key
 from ops_email.testing import FileMailSource, fake_folder
 from ops_engine.store import DefinitionStore, RunStore
@@ -119,6 +121,22 @@ class Env:
             Leases(self.db, owner=owner, ttl=30),
             idle_seconds=self.settings.email_idle_seconds,
         )
+
+    def files_client(self) -> FilesClient:
+        http = httpx.AsyncClient(base_url="http://files", transport=httpx.MockTransport(self.files))
+        return FilesClient(ServiceClient(http, dev_service_signer(), "agents", "files"))
+
+    async def events(self) -> list[dict[str, Any]]:
+        """The workflow's trigger list, newest first."""
+        with tenant_scope(TENANT):
+            rows, _ = await TriggerEvents(self.db).page("levy_intake", team_id=TEAM, page=1, page_size=50)
+        return rows
+
+    async def kept(self, event_id: str) -> str | None:
+        """The message a set-aside event keeps for Run again."""
+        async with self.db.connect() as c:
+            t = trigger_events
+            return await c.scalar(sa.select(t.c.item).where(t.c.id == event_id))
 
     def drop(self, item: dict[str, Any], folder: str = "") -> None:
         where = self.inbox / folder if folder else self.inbox
@@ -407,3 +425,89 @@ async def test_an_email_with_no_attachment_carries_its_text_as_a_file(env: Env) 
     assert run["input"]["attachments"] == [] and run["input"]["bodyFile"]["name"] == "email-body.txt", run["input"]
     [stored] = env.files.stored.values()
     assert (stored["purpose"], stored["bytes"].decode()) == ("email_body", NOTICE["body"]["content"])
+
+
+async def test_a_message_that_fails_three_polls_is_set_aside_and_run_again_starts_it(env: Env) -> None:
+    # Its attachment's upload never leaves "in progress": the message fails every read, and before c-561 the mailbox
+    # read nothing after it.
+    await env.publish()
+    await env.listener().poll_all()
+    env.files.refuse = {"scan.tif": (409, "upload_in_progress")}
+    env.drop(mail(1, attachments=NOTICE["attachments"] + [attachment("scan.tif", "image/tiff", b"II*")]))
+    env.drop(mail(2))
+    for _ in range(2):
+        await env.listener().poll_all()
+        assert await env.runs() == [], "the message after it waits while it is tried again"
+    await env.listener().poll_all()
+    [run] = await env.runs()
+    assert run["input"]["messageId"] == "notice-2@court.example", "the mailbox reads on past it"
+    events = await env.events()
+    assert [e["outcome"] for e in reversed(events)] == ["start_failed", "start_failed", "set_aside", "started"]
+    [aside] = [e for e in events if e["outcome"] == "set_aside"]
+    assert "item" not in aside and "upload_in_progress" in aside["detail"]["reason"], aside
+    assert aside["detail"]["message"].startswith("This email was set aside after 3 failed reads"), aside["detail"]
+    assert await env.kept(aside["id"]), "the message is kept for Run again"
+    # A failure Run again meets says so and keeps the message.
+    with tenant_scope(TENANT), pytest.raises(Exception, match="upload_in_progress"):
+        await run_again(env.db, env.files_client(), aside["id"], by="nadia@bank.example")
+    assert await env.kept(aside["id"])
+    env.files.refuse = {}
+    with tenant_scope(TENANT):
+        started = await run_again(env.db, env.files_client(), aside["id"], by="nadia@bank.example")
+    assert started.run is not None and started.created
+    assert started.run["input"]["messageId"] == "notice-1@court.example"
+    assert started.run["run_key"] == aside["event_key"], "under the message's own run key"
+    assert await env.kept(aside["id"]) is None, "raw mail is not held once its run started"
+    assert len(await env.runs()) == 2
+
+
+async def test_a_set_aside_message_is_forgotten_after_30_days(env: Env) -> None:
+    await env.publish()
+    await env.listener().poll_all()
+    env.files.refuse = {"scan.tif": (409, "upload_in_progress")}
+    env.drop(mail(1, attachments=NOTICE["attachments"] + [attachment("scan.tif", "image/tiff", b"II*")]))
+    env.drop(mail(3, attachments=NOTICE["attachments"] + [attachment("scan.tif", "image/tiff", b"II*")], subject="x"))
+    for _ in range(6):
+        await env.listener().poll_all()
+    old, recent = sorted((e for e in await env.events() if e["outcome"] == "set_aside"), key=lambda e: e["recorded_at"])
+    async with env.db.begin() as c:
+        t = trigger_events
+        await c.execute(t.update().where(t.c.id == old["id"]).values(recorded_at="2020-01-01T00:00:00.000Z"))
+    await env.listener().poll_all()
+    assert await env.kept(old["id"]) is None and await env.kept(recent["id"])
+
+
+async def test_a_message_whose_text_cannot_be_encoded_is_set_aside_too(env: Env) -> None:
+    # Graph hands on a broken emoji as a lone surrogate; the message's key, made from its text, cannot be computed.
+    await env.publish()
+    await env.listener().poll_all()
+    env.drop(mail(1, body={"contentType": "text", "content": "Hold the account \ud83d please"}))
+    env.drop(mail(2))
+    for _ in range(3):
+        await env.listener().poll_all()
+    [run] = await env.runs()
+    assert run["input"]["messageId"] == "notice-2@court.example"
+    assert [e["outcome"] for e in reversed(await env.events())] == [
+        "start_failed",
+        "start_failed",
+        "set_aside",
+        "started",
+    ]
+
+
+async def test_a_message_the_fault_names_fails_to_start_and_the_fault_is_refused_outside_dev(env: Env) -> None:
+    # The dev and test only fault uc-567 uses to set an email aside on a real stack, where no mail fails by itself.
+    from pydantic import SecretStr, ValidationError  # noqa: PLC0415
+
+    prod = {"environment": "production", "auth_mode": "platform", "review_key": SecretStr("k" * 32)}
+    with pytest.raises(ValidationError, match="email_fault_fail_subject"):
+        Settings(**prod, secrets_key=SecretStr("a" * 64), email_fault_fail_subject="garnishment")  # pyright: ignore[reportArgumentType]
+    await env.publish()
+    listener = env.listener()
+    listener.starts.fail_subject = "garnishment"
+    await listener.poll_all()
+    env.drop(mail(1))
+    for _ in range(3):
+        await listener.poll_all()
+    assert await env.runs() == []
+    assert [e["outcome"] for e in reversed(await env.events())] == ["start_failed", "start_failed", "set_aside"]

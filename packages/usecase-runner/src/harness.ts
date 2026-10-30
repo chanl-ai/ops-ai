@@ -53,6 +53,8 @@ const JAMES = 'j.richardson@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
 // The Security team's admin: only they change egress and secrets (c-079).
 const SAM = 's.adeyemi@harborpine.example';
+// The workspace admin, who can make teams: the sample team installer signs in as them.
+const WANJIRU = 'w.kamau@harborpine.example';
 const DEMO_PASSWORD = 'northfield-demo';
 const CONSOLE_DIST_DIR = `node_modules/.cache/next-usecase-${CONSOLE_PORT}`;
 // The run's own tsconfig, beside its build directory, relative to apps/console.
@@ -180,13 +182,82 @@ async function waitFor(url: string, child: ChildProcess, timeoutMs: number): Pro
   throw new Error(`${url} not ready after ${timeoutMs / 1000}s; see ${LOG_DIR}`);
 }
 
+/**
+ * The process group of every service a stack started that may still be running, and what else the run must undo
+ * (its OPA container). A run ended by a signal skips withUiStack's finally, and a pnpm wrapper ignores SIGTERM; either
+ * left the stack running for hours. So a signal or the process's exit stops each group, SIGKILL for what outlived a
+ * SIGTERM, and runs each cleanup. A SIGKILL to the run itself still leaves the stack: nothing in the process runs.
+ */
+const groups = new Set<number>();
+const cleanups = new Set<() => void>();
+
+function track(child: ChildProcess): ChildProcess {
+  if (child.pid) groups.add(child.pid);
+  trapEnd();
+  return child;
+}
+
+/** macOS answers EPERM, not ESRCH, for a group whose members have all exited and wait to be reaped: gone either way. */
+function groupAlive(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** SIGKILL to every group still running, then the run's cleanups; synchronous, so it can run on exit. */
+function killLeft(): void {
+  for (const pgid of groups) {
+    if (groupAlive(pgid)) {
+      try {
+        process.kill(-pgid, 'SIGKILL');
+      } catch {
+        // gone between the check and the kill
+      }
+    }
+    groups.delete(pgid);
+  }
+  for (const undo of cleanups) undo();
+  cleanups.clear();
+}
+
+/** Waits up to `ms` for every group sent SIGTERM to exit, then kills what is left. */
+async function settle(ms: number): Promise<void> {
+  for (const end = Date.now() + ms; [...groups].some(groupAlive) && Date.now() < end; ) await new Promise((r) => setTimeout(r, 200));
+  killLeft();
+}
+
+let trapped = false;
+function trapEnd(): void {
+  if (trapped) return;
+  trapped = true;
+  process.on('exit', killLeft);
+  const codes: Partial<Record<NodeJS.Signals, number>> = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+  for (const [signal, code] of Object.entries(codes) as [NodeJS.Signals, number][]) {
+    process.once(signal, () => {
+      for (const pgid of groups) signalGroup(pgid, 'SIGTERM');
+      void settle(5_000).finally(() => process.exit(code));
+    });
+  }
+}
+
+function signalGroup(pgid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pgid, signal);
+  } catch {
+    // already gone
+  }
+}
+
 export async function serve(name: string, port: number, argv: string[], cwd: string, env: NodeJS.ProcessEnv, ready: string, timeoutMs: number): Promise<ChildProcess> {
   // A stack stopped just before (a script with two stacks) frees its ports a moment after the signal.
   for (let i = 0; i < 40 && (await portBusy(port)); i++) await new Promise((r) => setTimeout(r, 250));
   if (await portBusy(port)) throw new Error(`port ${port} is already in use; stop that process or set OPS_USECASE_*_PORT`);
   mkdirSync(LOG_DIR, { recursive: true });
   const log = openSync(join(LOG_DIR, `${name}-${port}.log`), 'a');
-  const child = spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ['ignore', log, log], detached: true });
+  const child = track(spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ['ignore', log, log], detached: true }));
   try {
     await waitFor(ready, child, timeoutMs);
   } catch (e) {
@@ -199,11 +270,7 @@ export async function serve(name: string, port: number, argv: string[], cwd: str
 
 function stop(child: ChildProcess): void {
   // Each service runs in its own process group so the wrapper (uv, pnpm) and the server it started stop together.
-  try {
-    process.kill(-child.pid!, 'SIGTERM');
-  } catch {
-    // already gone
-  }
+  signalGroup(child.pid!, 'SIGTERM');
 }
 
 /** Runs a command to its end, its output in the use-case log; rejects on a non-zero exit. */
@@ -211,7 +278,8 @@ function runToEnd(name: string, argv: string[], cwd: string, env: NodeJS.Process
   mkdirSync(LOG_DIR, { recursive: true });
   const log = openSync(join(LOG_DIR, `${name}.log`), 'a');
   return new Promise((done, fail) => {
-    const child = spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ['ignore', log, log] });
+    // Its own group too, so a run killed mid-migration stops the migration with it.
+    const child = track(spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ['ignore', log, log], detached: true }));
     child.on('error', fail);
     child.on('close', (code) => (code === 0 ? done() : fail(new Error(`${name} exited with ${code}; see ${LOG_DIR}`))));
   });
@@ -246,6 +314,11 @@ export interface StackOptions {
     mail?: boolean;
     /** Start runner-service (c-531) beside tools-service, so a code operation runs its Python on WASM. */
     runner?: boolean;
+    /**
+     * More tools-service settings, applied last: how it reaches an outside system the use case started itself (its
+     * CA file and OPS_EGRESS_RESOLVE), as the fake Salesforce of uc-558 gives them.
+     */
+    env?: Record<string, string>;
   };
   /**
    * The banker demo on the run's own stack: platform sign-in, tools-service with the fake bank as the agents'
@@ -259,6 +332,14 @@ export interface StackOptions {
    * for a use case whose model calls the demo does not answer (documents' Detect, say).
    */
   fakeModelRules?: string;
+  /**
+   * The demo stack, with mail, plus the sample team installed in one call by scripts/sample_team.py (`make sample-team`, without the
+   * levy story), as the workspace admin: its team, people, agents and workflows. Opt-in, since no default seed reads it
+   * and it adds about 8 s to a run.
+   */
+  sampleTeam?: boolean;
+  /** Console switches baked into its build, such as `{ NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: '1' }` (c-558). */
+  consoleSwitches?: Record<string, string>;
   /** Also start the embed app (apps/embed) on its own port, its `/v1` and loader routed to the run's agents service. */
   embed?: boolean;
   /**
@@ -296,19 +377,45 @@ export interface EngineWorker {
   exited: Promise<number | null>;
 }
 
-/** The OPA tools-service writes its key and policy into: a container of its own, like ops_service_kit.opa_server. */
+/** Removes the containers of runs whose process is gone, labelled as ops_service_kit.harness_containers labels them. */
+function reapHarnessContainers() {
+  const listed = execFileSync('docker', ['ps', '--filter', 'label=ops.harness.owner', '--format', '{{.ID}} {{.Label "ops.harness.owner"}}'], { encoding: 'utf8' });
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === 'EPERM';
+    }
+  };
+  const orphans = listed
+    .split('\n')
+    .map((l) => l.split(' '))
+    .filter(([cid, pid]) => cid && /^\d+$/.test(pid ?? '') && !alive(Number(pid)))
+    .map(([cid]) => cid!);
+  if (orphans.length) execFileSync('docker', ['rm', '-f', ...orphans], { stdio: 'ignore' });
+}
+
+/** The OPA tools-service writes its key and policy into: a container of its own, like ops_service_kit.opa_server.
+ * `--rm` and the run's finally miss a run stopped by a signal, which left an OPA running per killed run; so the
+ * container carries this process's pid, a signal or the process's exit removes it (trapEnd), and each start removes
+ * the containers of runs that died without either. */
 async function startOpa(): Promise<{ url: string; stop: () => void }> {
   // The devcontainer (OPS_INFRA=external) has no docker; its compose project's OPA is one person's, as in opa_server.py.
   if (process.env.OPS_INFRA === 'external') return { url: process.env.OPS_OPA_URL ?? 'http://opa:8181', stop: () => {} };
   const policy = join(ROOT, 'services/tools-service/policy');
-  const cid = execFileSync('docker', ['run', '-d', '--rm', '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.1', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
+  reapHarnessContainers();
+  const cid = execFileSync('docker', ['run', '-d', '--rm', '--label', `ops.harness.owner=${process.pid}`, '-p', '127.0.0.1::8181', '-v', `${policy}:/policy:ro`, 'openpolicyagent/opa:1.21.1', 'run', '--server', '--addr', '0.0.0.0:8181', '--log-level', 'error', '/policy'], { encoding: 'utf8' }).trim();
   const stopOpa = () => {
+    cleanups.delete(stopOpa);
     try {
       execFileSync('docker', ['rm', '-f', cid], { stdio: 'ignore' });
     } catch {
       // already gone
     }
   };
+  cleanups.add(stopOpa);
+  trapEnd();
   try {
     const port = execFileSync('docker', ['port', cid, '8181/tcp'], { encoding: 'utf8' }).split('\n')[0]!.split(':').pop();
     const url = `http://127.0.0.1:${port}`;
@@ -348,6 +455,7 @@ function privateAddress(): string {
 function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: { settings: Record<string, string>; range: string; host: string }; child: ChildProcess }> {
   const env = { ...stackEnv(process.env), PYTHONPATH: [join(ROOT, 'docs/usecases/lib'), process.env.PYTHONPATH].filter(Boolean).join(':') };
   const child = spawn('uv', ['run', '--quiet', '--directory', join(ROOT, 'services/agents-service'), 'python', join(ROOT, 'docs/usecases/lib/fake_bank_serve.py')], { env: app === 'core' ? { ...env, OPS_FAKE_BANK_APP: 'core' } : env, stdio: ['pipe', 'pipe', 'inherit'], detached: true });
+  track(child);
   return new Promise((done, fail) => {
     let out = '';
     child.stdout!.on('data', (d: Buffer) => {
@@ -374,9 +482,27 @@ export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
   return env;
 }
 
+/**
+ * A use case's own tools-service settings beside the fake bank's: both name hosts to dial and a CA to trust, so the
+ * host maps are joined and the two CAs written to one bundle, or the later would hide the bank.
+ */
+function withBank(bank: Record<string, string>, extra: Record<string, string>): Record<string, string> {
+  const out = { ...extra };
+  if (bank.OPS_EGRESS_RESOLVE && extra.OPS_EGRESS_RESOLVE) {
+    out.OPS_EGRESS_RESOLVE = JSON.stringify({ ...JSON.parse(bank.OPS_EGRESS_RESOLVE), ...JSON.parse(extra.OPS_EGRESS_RESOLVE) });
+  }
+  if (bank.OPS_EGRESS_CA_FILE && extra.OPS_EGRESS_CA_FILE) {
+    const bundle = join(mkdtempSync(join(tmpdir(), 'usecase-ca-')), 'ca.pem');
+    writeFileSync(bundle, `${readFileSync(bank.OPS_EGRESS_CA_FILE, 'utf8')}\n${readFileSync(extra.OPS_EGRESS_CA_FILE, 'utf8')}`);
+    out.OPS_EGRESS_CA_FILE = bundle;
+  }
+  return out;
+}
+
 /** The agents service on the scripted model plus a console whose chat calls it. Stops both when `body` returns. */
 export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) => Promise<T>, given: StackOptions = {}): Promise<T> {
-  const options: StackOptions = given.demo ? { ...given, platform: true, tools: { ...given.tools, bank: true, gateway: true } } : given;
+  // The sample team's mailbox signs in to compose's mail servers, so it needs tools-service to reach them.
+  const options: StackOptions = given.demo || given.sampleTeam ? { ...given, demo: true, platform: true, tools: { ...given.tools, bank: true, gateway: true, ...(given.sampleTeam ? { mail: true } : {}) } } : given;
   const env = stackEnv(process.env);
   const consoleUrl = `http://localhost:${CONSOLE_PORT}`;
   const runDb = pgUrl(DB);
@@ -427,6 +553,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       // documents-service starts below; a workflow save pins its document types there and a worker's Extract from
       // file step reads through it (c-256). Workers inherit this environment.
       OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
+      // A test email or a set-aside email's Run again stores the email's files in Files from the API process itself.
+      OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
       ...modelsRoute,
       // The embed app's origin is configuration: agents-service trusts no request header to name it (c-158).
       // The console's origin too: a preview session (c-232) is minted for the console's own frame.
@@ -469,7 +597,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         ...extra,
       };
       const start = readFileSync(logPath, 'utf8').length;
-      const child = spawn('uv', ['run', 'python', '-m', 'ops_agents.api.worker'], { cwd: join(ROOT, 'services/agents-service'), env, stdio: ['ignore', log, log], detached: true });
+      const child = track(spawn('uv', ['run', 'python', '-m', 'ops_agents.api.worker'], { cwd: join(ROOT, 'services/agents-service'), env, stdio: ['ignore', log, log], detached: true }));
       workers.push(child);
       const exited = new Promise<number | null>((done) => child.on('exit', (code) => done(code)));
       for (let i = 0; i < 240 && !readFileSync(logPath, 'utf8').slice(start).includes('engine_worker_started'); i++) {
@@ -522,8 +650,11 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         OPS_MAIL_FAKE_OUT_DIR: mkdtempSync(join(tmpdir(), 'usecase-mail-out-')),
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
         ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
+        // Connect links and the sign-in's return page are the run's console (c-558).
+        OPS_CONSOLE_URL: consoleUrl,
         ...bankSettings,
         ...(options.tools.runner ? { OPS_RUNNER_URL: `http://127.0.0.1:${RUNNER_PORT}` } : {}),
+        ...withBank(bankSettings, options.tools.env ?? {}),
       });
       if (options.tools.runner) {
         // The runner calls back to this run's tools-service for each bound call; the pinned Python build is fetched once.
@@ -635,6 +766,21 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       await runToEnd('demo-bank-module', ['uv', 'run', 'python', 'scripts/reimport_bank_module.py', '--tools', `http://127.0.0.1:${TOOLS_PORT}`, '--platform', `http://127.0.0.1:${PLATFORM_PORT}`, '--agents', `http://127.0.0.1:${AGENTS_PORT}`, '--as', JAMES, '--decide-as', NADIA], join(ROOT, 'services/tools-service'), demoEnv);
       await runToEnd('demo-knowledge', ['uv', 'run', 'python', 'scripts/seed_demo_knowledge.py', '--kb', `http://127.0.0.1:${KB_PORT}`, '--files', `http://127.0.0.1:${FILES_PORT}`, '--platform', `http://127.0.0.1:${PLATFORM_PORT}`, '--agents', `http://127.0.0.1:${AGENTS_PORT}`], kbDir, demoEnv);
     }
+    if (options.sampleTeam) {
+      // The installer exits with its FAIL count, so a partial install stops the run before its first step.
+      const dir = mkdtempSync(join(tmpdir(), 'sample-team-'));
+      const adminEnv = join(dir, 'admin.env');
+      writeFileSync(adminEnv, `OPS_DEMO_ADMIN_EMAIL=${WANJIRU}\nOPS_DEMO_ADMIN_PASSWORD=${DEMO_PASSWORD}\nOPS_DEMO_PASSWORD=${DEMO_PASSWORD}\n`, { mode: 0o600 });
+      const ports = {
+        OPS_PLATFORM_PORT: PLATFORM_PORT, OPS_AGENTS_PORT: AGENTS_PORT, OPS_TOOLS_PORT: TOOLS_PORT, OPS_KB_PORT: KB_PORT,
+        OPS_FILES_PORT: FILES_PORT, OPS_DOCUMENTS_PORT: DOCUMENTS_PORT, OPS_MODELS_PORT: MODELS_PORT, OPS_FAKE_OPENAI_PORT: FAKE_OPENAI_PORT,
+      };
+      try {
+        await runToEnd('sample-team', ['uv', 'run', '--quiet', 'python', 'scripts/sample_team.py', 'install', '--origin', consoleUrl, '--admin-env', adminEnv, '--no-levy'], ROOT, stackEnv(process.env, Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, String(v)]))));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
     committedTsconfig = readFileSync(join(ROOT, 'apps/console/tsconfig.json'), 'utf8');
     const publicEnv: Record<string, string> = {
       NEXT_PUBLIC_OPS_CHAT_API_URL: `http://127.0.0.1:${AGENTS_PORT}`,
@@ -649,6 +795,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       ...(modelsRoute.OPS_MODELS_URL ? { NEXT_PUBLIC_OPS_MODELS_API_URL: modelsRoute.OPS_MODELS_URL } : {}),
       // The embed app the console's Preview frame loads, when the stack starts one.
       ...(options.embed ? { NEXT_PUBLIC_OPS_EMBED_URL: `http://localhost:${EMBED_PORT}` } : {}),
+      // A console switch the use case turns on (NEXT_PUBLIC_*); part of the build's key, so it gets its own build.
+      ...options.consoleSwitches,
     };
     // Production build by default: built once per source hash and stack shape, then a copy per run (console-build.ts).
     // OPS_USECASE_CONSOLE=dev keeps `next dev`, for a run that needs hot reload or a page the build omits.
@@ -757,5 +905,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     stop(agents);
     if (modelsProc) stop(modelsProc);
     if (fakeOpenAi) stop(fakeOpenAi);
+    // A wrapper that ignores SIGTERM (pnpm) outlives the stop above; what is still running after a grace is killed.
+    await settle(10_000);
   }
 }

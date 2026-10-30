@@ -42,6 +42,8 @@ class OperationRef:
     output_shape: str | None = None
     # Approving a call asks for a step-up: set on the operation, or two approvers.
     step_up: bool = False
+    # What people see in place of the name: a plugin tool's manifest title (c-581); None for any other tool.
+    title: str | None = None
 
     def grant(self) -> ToolGrant:
         return ToolGrant(
@@ -102,6 +104,7 @@ class ToolsOperations:
                 approvers=int(o.get("approvers") or 1),
                 output_shape=o.get("outputShape"),
                 step_up=bool(o.get("stepUp")) or int(o.get("approvers") or 1) > 1,
+                title=o.get("title"),
             )
             for o in rows
         ]

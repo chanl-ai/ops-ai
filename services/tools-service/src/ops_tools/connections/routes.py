@@ -18,8 +18,12 @@ from .schemas import (
     ConnectionKinds,
     ConnectionList,
     ConnectionPatchIn,
+    ConnectionTestIn,
+    ConnectLinkIn,
+    Environment,
     EnvironmentIn,
     McpConnectionIn,
+    MyConnection,
     NewConnectionIn,
     SignInCompleteIn,
     SignInIn,
@@ -49,6 +53,26 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
     @r.post("/v1/connections", response_model=Envelope[ConnectionDetail], status_code=201)
     async def create_connection(body: NewConnectionIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.create(who, body.model_dump()), 201)
+
+    @r.get("/v1/me/connections", response_model=Envelope[list[MyConnection]])
+    async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The caller's own sign-ins on their team's connections (c-558): Your connections in the person menu."""
+        return ok(await service.mine(who))
+
+    @r.delete("/v1/me/connections/{connection_id}", status_code=204, response_class=Response)
+    async def disconnect(  # pyright: ignore[reportUnusedFunction]
+        connection_id: str, environment: Environment, who: Annotated[Caller, Depends(caller)]
+    ) -> Response:
+        """Disconnect: deletes the caller's own sign-in in `environment`, revoking it at the system when the
+        connection names a revocation address, so their next call asks them to connect again."""
+        await service.disconnect(who, connection_id, environment)
+        return Response(status_code=204)
+
+    # Before the routes under /v1/connections/{connection_id}, which would take "connect-links" as an id.
+    @r.post("/v1/connections/connect-links/sign-in", response_model=Envelope[SignInStart])
+    async def open_connect_link(body: ConnectLinkIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Starts the sign-in a connect link asks for, for the one person it was made for (c-558)."""
+        return ok(await service.open_link(who, body.link))
 
     @r.post("/v1/connections/mcp", response_model=Envelope[ConnectionDetail], status_code=201)
     async def connect_mcp(body: McpConnectionIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -83,7 +107,7 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
         connection_id: str, body: SignInIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Where to send the person's browser; it returns to the console's sign-in page with a code and state."""
-        return ok(await service.start_sign_in(who, connection_id, body.environment))
+        return ok(await service.start_sign_in(who, connection_id, body.environment, body.account))
 
     @r.post("/v1/connections/{connection_id}/sign-in/complete", response_model=Envelope[ConnectionDetail])
     async def complete_sign_in(  # pyright: ignore[reportUnusedFunction]
@@ -91,6 +115,14 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
     ) -> JSONResponse:
         """The console hands back the code and state; only the person who started may finish, once."""
         return ok(await service.complete_sign_in(who, connection_id, body.state, body.code))
+
+    @r.post("/v1/connections/{connection_id}/test", response_model=Envelope[ConnectionDetail])
+    async def test_connection(  # pyright: ignore[reportUnusedFunction]
+        connection_id: str, body: ConnectionTestIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Reads the environment's test address signed in with the caller's own account or the team's, and stores the
+        result as the connection's `health` (c-558). A failed test answers 200 with the failure in `health`."""
+        return ok(await service.test(who, connection_id, body.environment, body.account))
 
     @r.post("/v1/connections/{connection_id}/sign-out", response_model=Envelope[ConnectionDetail])
     async def sign_out(  # pyright: ignore[reportUnusedFunction]

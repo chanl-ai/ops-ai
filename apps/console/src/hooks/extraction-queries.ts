@@ -22,6 +22,26 @@ export const useFileExtractions = (fileId: string) =>
     refetchInterval: (q) => (running(q.state.data?.data[0]?.status) ? 1500 : false),
   });
 
+/**
+ * The file's layout for its Text tab: the cached one, or read now when there is none (a scanned page through OCR). The
+ * read can take a minute on a long scan, so it is asked for once per visit and never retried on its own.
+ */
+export const useFileLayout = (fileId: string) =>
+  useTeamQuery({
+    queryKey: ['files', 'layout', fileId],
+    queryFn: async () => {
+      try {
+        return await api.files.layouts.get(fileId, { ocr: true });
+      } catch (e) {
+        if ((e as { status?: number }).status !== 404) throw e;
+        return api.files.layouts.read(fileId, { ocr: true });
+      }
+    },
+    enabled: !!fileId,
+    staleTime: Infinity,
+    retry: false,
+  });
+
 export interface ReadResult {
   runId: string;
   /** The run's status when the console stopped waiting: finished, or waiting at a Human Task for a person. */

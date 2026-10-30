@@ -2,7 +2,7 @@
 
 Status: current. What tools-service does, its screens, API, data and sequences.
 
-Status: current for c-330 (connections and the one executor), c-331 (MCP sign-in), c-332 (mock answers) and c-356 (the MCP server, slice 1: a team's reads over MCP with an API key). The tools service is the one way out for tool calls: a call resolves through the registry, passes the gateway's checks, signs in through its module's connection for the run's environment, and goes out through the egress client. Full product design: the tools system design in the planning notes, outside this repo.
+Status: current for an earlier change (connections and the one executor), an earlier change (MCP sign-in), an earlier change (mock answers) and an earlier change (the MCP server, slice 1: a team's reads over MCP with an API key). The tools service is the one way out for tool calls: a call resolves through the registry, passes the gateway's checks, signs in through its module's connection for the run's environment, and goes out through the egress client. Full product design: the tools system design in the planning notes, outside this repo.
 
 ## Flow
 
@@ -36,15 +36,15 @@ Content and components only; the console's builder composes them (purple tags ar
 | GET · PATCH · DELETE `/v1/connections/{id}` | Detail with each environment's settings, which secret parts are set, who signed in, activity; rename or make available to teams (409 on a stale revision); delete refused 409 `connection_in_use` | view; manage | `connections/routes.py` | built |
 | PUT `/v1/connections/{id}/environments/{env}` | One environment's settings, checked against the kind, and secret parts, written once into the secret store | connections.manage (a person) | `connections/routes.py` | built |
 | POST `…/sign-in`, `…/sign-in/complete`, `…/sign-out` | Authorization code with PKCE S256: the address to send the browser to; the code and state the console hands back (once, ten minutes, the same person); forget the token | connections.manage | `connections/routes.py` | built |
-| POST `/v1/connections/mcp` | An MCP server by its address: sign-in found from the server, client registered when offered and none given, a connection named after the server (c-331) | connections.manage | `connections/routes.py` | built |
-| POST `/v1/tool-modules/discover` | An MCP source with `connectionId` lists the tools with the connection's token; without sign-in, 400 `sign_in_required` (c-331) | tools.create | `modules/routes.py` | built |
+| POST `/v1/connections/mcp` | An MCP server by its address: sign-in found from the server, client registered when offered and none given, a connection named after the server | connections.manage | `connections/routes.py` | built |
+| POST `/v1/tool-modules/discover` | An MCP source with `connectionId` lists the tools with the connection's token; without sign-in, 400 `sign_in_required` | tools.create | `modules/routes.py` | built |
 | POST `/v1/calls` | `runContext.environment` added (test or production; absent is test) | service token | `app.py` | built |
 | GET `/v1/executions` | Each row adds `environment` and `connectionId` | signed in | `modules/routes.py` | built |
 | GET `/v1/secrets` | Each row adds `connectionId`; rotate, scope and delete of a connection's part are 409 `connection_secret` | as before | `secrets/routes.py` | built |
-| GET · POST `/v1/tool-modules/{id}/operations/{op}/mocks`, PATCH · DELETE `…/mocks/{mockId}` | An operation's mock answers in test: name, match, status, body, headers, delayMs, timeout, default (c-332) | tools.view; changes tools.edit | `mock_routes.py` | built |
-| POST `/mcp/test/{team}` | MCP over streamable HTTP, stateless: `tools/list` gives the team's published reads with schemas and `readOnlyHint`; `tools/call` runs one gateway call (the function `POST /v1/calls` calls) in test; a write is refused without a person; the log row keeps `channel` mcp and the client's name (c-356) | API key or person token of the team, `tools.run` | `mcp_server.py`, `gateway_calls.py` | built |
-| POST `/mcp/production/{team}` | 403 `production_off` until a team turns production on (c-363) | as above | `mcp_server.py` | built |
-| GET `/v1/executions` | Each row adds `channel` (api or mcp) and `clientName` (c-356) | signed in | `modules/executions.py` | built |
+| GET · POST `/v1/tool-modules/{id}/operations/{op}/mocks`, PATCH · DELETE `…/mocks/{mockId}` | An operation's mock answers in test: name, match, status, body, headers, delayMs, timeout, default | tools.view; changes tools.edit | `mock_routes.py` | built |
+| POST `/mcp/test/{team}` | MCP over streamable HTTP, stateless: `tools/list` gives the team's published reads with schemas and `readOnlyHint`; `tools/call` runs one gateway call (the function `POST /v1/calls` calls) in test; a write is refused without a person; the log row keeps `channel` mcp and the client's name | API key or person token of the team, `tools.run` | `mcp_server.py`, `gateway_calls.py` | built |
+| POST `/mcp/production/{team}` | 403 `production_off` until a team turns production on | as above | `mcp_server.py` | built |
+| GET `/v1/executions` | Each row adds `channel` (api or mcp) and `clientName` | signed in | `modules/executions.py` | built |
 | POST `/v1/connections/{id}/test` | Test connection: egress, token, one probe | connections.manage |   | planned |
 
 ## Data

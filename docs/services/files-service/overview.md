@@ -1,6 +1,6 @@
 # Files
 
-Status: first slice built (c-087). files-service runs on :8750 (`make up` starts it as `files`) with its own
+Status: first slice built. files-service runs on :8750 (`make up` starts it as `files`) with its own
 PostgreSQL tables and migration chain, tenant and team scoped routes, platform tokens verified locally, and a typed
 client for other services (`packages/ops_files_client`). The local backend works on the dev stack through proxy
 routes; S3 and Azure Blob sign upload and download URLs and move bytes through obstore, covered by unit tests on
@@ -110,7 +110,7 @@ make usecase-test UC=uc-094         # another team's file is 404 everywhere
 | Size is checked again in `complete_upload` on every backend | An Azure SAS cannot bind the request length, and S3-compatible stores differ in what they verify |
 | The digest is computed by streaming the stored object | A client-declared digest is a claim; dedupe on a claim would let a caller who knows another file's hash obtain it |
 | Dedupe returns the existing file and discards the new upload | Matches the console's `CompletedUpload.deduplicated`. The second upload's name, purpose and retention class are not kept; the caller adds its reference to the returned file |
-| A file a document type is tested against has the purpose `document_type_sample` (c-379), shown as "Document type sample" | The documents seed uploaded its samples as case attachments, so Files showed 66 sample PDFs as email attachments. Dedupe keeps the first upload's purpose, so re-running the seed cannot relabel them; `files_0010` gives the purpose to case and chat attachments kept only by `test_set` references (documents-service's sample references). When a sample's bytes are uploaded again with another purpose (a mailed attachment), dedupe gives the file that purpose (c-380); an attachment uploaded again as a sample stays the attachment |
+| A file a document type is tested against has the purpose `document_type_sample`, shown as "Document type sample" | The documents seed uploaded its samples as case attachments, so Files showed 66 sample PDFs as email attachments. Dedupe keeps the first upload's purpose, so re-running the seed cannot relabel them; `files_0010` gives the purpose to case and chat attachments kept only by `test_set` references (documents-service's sample references). When a sample's bytes are uploaded again with another purpose (a mailed attachment), dedupe gives the file that purpose; an attachment uploaded again as a sample stays the attachment |
 | `delete` on S3 removes every version of the key | In a versioned bucket (Object Lock requires versioning) a plain delete adds a delete marker and the bytes remain |
 | Retention is never shortened, including S3 governance mode | S3 lets a caller with `s3:BypassGovernanceRetention` shorten governance retention; the service never uses that permission, which keeps the three backends identical |
 

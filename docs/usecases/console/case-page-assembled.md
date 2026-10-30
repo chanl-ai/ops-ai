@@ -1,9 +1,9 @@
 # A case page says what it is about, what it waits on and what is next
 
-Status: current. Id: `uc-256`. Service: `console`. Layers: ui. Card: c-292.
+Status: current. Id: `uc-256`. Service: `console`. Layers: ui. Card: an earlier change.
 
 A case is opened by a workflow and then waits on people. Its page reads one assembled call (`GET /v1/cases/{id}`,
-c-291) and shows the case's header and next action, its fields in the case type's order, the Human Task it waits on,
+an earlier change) and shows the case's header and next action, its fields in the case type's order, the Human Task it waits on,
 the action that task carries, its linked records and its newest activity. The page joins nothing in the browser.
 
 ## Preconditions

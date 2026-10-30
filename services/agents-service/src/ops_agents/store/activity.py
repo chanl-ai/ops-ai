@@ -9,6 +9,7 @@ union inside one transaction. Which teams a kind is read in is decided by the ca
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Literal, cast
 
@@ -25,6 +26,7 @@ from .agent_registry import publish_requests
 from .background import background_jobs
 from .cases import case_events, cases
 from .events import thread_events
+from .form_links import form_links
 from .graphs import graph_threads
 from .mailboxes import mailboxes
 from .reviews import review_decisions
@@ -38,6 +40,7 @@ Kind = Literal[
     "agent_run",
     "chat",
     "email",
+    "form",
     "decision",
     "tool_call",
     "case",
@@ -50,6 +53,7 @@ KINDS: tuple[Kind, ...] = (
     "agent_run",
     "chat",
     "email",
+    "form",
     "decision",
     "tool_call",
     "case",
@@ -202,6 +206,15 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
 def _emails(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """An email names its channel by the mailbox record's id and name; by its address when the record is gone."""
     e, m = trigger_events, mailboxes
+    # One row per message: its newest event. Each read of a message records one, so a message that failed to start
+    # twice and was then set aside would otherwise list three rows that read as three emails (c-561 PM test).
+    later = trigger_events.alias("later")
+    newer = sa.select(later.c.id).where(
+        later.c.tenant_id == e.c.tenant_id,
+        later.c.workflow_id == e.c.workflow_id,
+        later.c.event_key == e.c.event_key,
+        later.c.recorded_at > e.c.recorded_at,
+    )
     address = sa.func.substr(e.c.source, len("email:") + 1)
     joined = e.outerjoin(m, sa.and_(m.c.tenant_id == e.c.tenant_id, m.c.address == address))
     return (
@@ -221,7 +234,39 @@ def _emails(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
             sa.func.coalesce(e.c.run_id, e.c.id).label("ref_id"),
         )
         .select_from(joined)
-        .where(e.c.tenant_id == current_tenant(), _in_teams(e.c.team_id, teams))
+        .where(
+            e.c.tenant_id == current_tenant(),
+            _in_teams(e.c.team_id, teams),
+            e.c.source.like("email:%"),
+            ~sa.exists(newer),
+        )
+    )
+
+
+def _form_submissions(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
+    """A hosted form's submissions (c-535): each one started its run or says why not (the daily cap, the rate). The
+    form names its channel by its id and title; the sender is the client address, or the member who sent it."""
+    e, f = trigger_events, form_links
+    form_id = sa.func.substr(e.c.source, len("form:") + 1)
+    joined = e.outerjoin(f, sa.and_(f.c.tenant_id == e.c.tenant_id, f.c.id == form_id))
+    return (
+        sa.select(
+            sa.literal("form").label("kind"),
+            e.c.id.label("row_id"),
+            sa.func.coalesce(sa.func.nullif(e.c.subject, ""), "(a form)").label("title"),
+            sa.case((e.c.outcome == "started", "done"), else_="skipped").label("status"),
+            e.c.outcome.label("outcome"),
+            e.c.team_id.label("team_id"),
+            sa.literal("form").label("source_type"),
+            form_id.label("source_id"),
+            sa.func.coalesce(f.c.title, form_id).label("source_name"),
+            e.c.sender.label("actor"),
+            e.c.recorded_at.label("at"),
+            sa.case((e.c.run_id.is_not(None), "run"), else_="form").label("ref_kind"),
+            sa.func.coalesce(e.c.run_id, e.c.id).label("ref_id"),
+        )
+        .select_from(joined)
+        .where(e.c.tenant_id == current_tenant(), _in_teams(e.c.team_id, teams), e.c.source.like("form:%"))
     )
 
 
@@ -531,6 +576,8 @@ def union(scope: Scope) -> sa.Subquery:
             parts.append(_threads(kind, scope))
     if "email" in scope.teams:
         parts.append(_emails(scope.teams["email"]))
+    if "form" in scope.teams:
+        parts.append(_form_submissions(scope.teams["form"]))
     if "decision" in scope.teams:
         parts.append(_workflow_decisions(scope.teams["decision"]))
         parts.append(_agent_decisions(scope.teams["decision"]))
@@ -593,6 +640,24 @@ class Activity:
                 for event_id, data in (await c.execute(q)).all():
                     d = cast(dict[str, Any], data) if isinstance(data, dict) else {}
                     out[str(event_id)] = {"tool": str(d.get("tool") or "tool"), "input": d.get("input") or {}}
+        return out
+
+    async def email_details(self, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Each email row's recorded detail (why it was skipped, set aside or capped), keyed by the row's id, in one
+        query. The rows were read in the caller's scope; this read follows their ids within the caller's teams."""
+        ids = [str(r["row_id"]) for r in rows if r["kind"] in ("email", "form")]
+        if not ids:
+            return {}
+        e = trigger_events
+        q = sa.select(e.c.id, e.c.detail).where(e.c.tenant_id == current_tenant(), e.c.id.in_(ids), team_visible(e))
+        out: dict[str, dict[str, Any]] = {}
+        async with tenant_tx(self.engine) as c:
+            for event_id, raw in (await c.execute(q)).all():
+                try:
+                    detail = json.loads(raw or "{}")
+                except ValueError:
+                    detail = {}
+                out[str(event_id)] = cast(dict[str, Any], detail) if isinstance(detail, dict) else {}
         return out
 
     async def page(self, scope: Scope, filters: Filters, *, page: int, page_size: int) -> Page:

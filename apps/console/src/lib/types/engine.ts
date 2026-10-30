@@ -200,6 +200,8 @@ export interface EngineRun {
   startedBy?: { kind: 'run' | 'trigger' | 'agent' | 'person' | 'key'; id: string; name: string; runId?: string };
   /** Whether the signed-in person may cancel it now (runs/cancel, from agents-service); absent from the mock. */
   canCancel?: boolean;
+  /** Whether the signed-in person may retry it now: it is Stuck and they may cancel it (c-561). */
+  canRetry?: boolean;
   workflowId: string;
   version: number;
   digest: string;

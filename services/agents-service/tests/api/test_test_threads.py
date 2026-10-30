@@ -130,9 +130,9 @@ async def test_an_edit_between_test_messages_is_what_the_next_one_runs(stack: tu
 
 async def test_a_test_thread_remembers_nothing(stack: tuple[AsyncClient, Recorder]) -> None:
     c, recorder = stack
-    await _say(c, BUILDER, ok(await _thread(c, BUILDER, test=False), 201)["id"], "I prefer email.")
+    await _say(c, BUILDER, ok(await _thread(c, BUILDER, test=False), 201)["id"], "I prefer to hear back by email.")
     assert recorder.extractions == 1
-    await _say(c, BUILDER, ok(await _thread(c, BUILDER, test=True), 201)["id"], "I prefer email.")
+    await _say(c, BUILDER, ok(await _thread(c, BUILDER, test=True), 201)["id"], "I prefer to hear back by email.")
     assert recorder.extractions == 1
 
 

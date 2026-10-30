@@ -82,10 +82,11 @@ await withUiStack(
       const listed = await runRow.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const runNow = await json(await fetch(`${agents}/v1/runs/${started.runId}`, { headers: J }));
       const shownStatus = listed ? (await runRow.getByTestId('runner-run-status').innerText()).trim().toLowerCase() : '';
-      const graphTab = await page.getByTestId('runs-kind-graph').count();
+      // One list of the current engine's runs: no engine tabs (c-562).
+      const engineTabs = await page.locator('[data-testid^=runs-kind-]').count();
       if (listed) await runRow.click();
       const opened = listed ? await page.waitForURL(`**/workflows/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false) : false;
-      check('5 Workflows › Runs lists a canvas workflow’s run with its status, beside a Graph tab, and the row opens it', listed && shownStatus === runNow.status.replace(/_/g, ' ') && graphTab === 1 && opened, { runId: started.runId, listed, shownStatus, serverStatus: runNow.status, graphTab, opened });
+      check('5 Workflows › Runs lists a workflow’s run with its status in one list, and the row opens it', listed && shownStatus === runNow.status.replace(/_/g, ' ') && engineTabs === 0 && opened, { runId: started.runId, listed, shownStatus, serverStatus: runNow.status, engineTabs, opened });
       // The search box asks the server (Cases is paged there) and finds a case by its subject.
       await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('row').filter({ hasText: due.id }).waitFor({ timeout: 60_000 });

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { Separator } from '@/components/ui/separator';
@@ -21,9 +22,16 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
         <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
           {crumbs.map((c, i) => (
-            <span key={`${i}-${c}`} className="flex items-center gap-1.5">
+            // On a phone the trail keeps its links and the page; a label with no page of its own (a group) is dropped.
+            <span key={`${i}-${c.label}`} className={`flex min-w-0 items-center gap-1.5 ${!c.href && i > 0 && i < crumbs.length - 1 ? 'max-sm:hidden' : ''}`} title={c.label}>
               {i > 0 && <span className="text-muted-foreground/40">/</span>}
-              <span className={i === crumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'}>{c}</span>
+              {c.href ? (
+                <Link href={c.href} className={`truncate underline-offset-4 hover:underline ${i === crumbs.length - 1 ? 'font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {c.label}
+                </Link>
+              ) : (
+                <span className={`truncate ${i === crumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'}`}>{c.label}</span>
+              )}
             </span>
           ))}
         </nav>

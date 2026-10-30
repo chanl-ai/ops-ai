@@ -15,6 +15,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from jsonschema import Draft202012Validator
 
 
@@ -57,6 +58,38 @@ def typed(op: dict[str, Any]) -> bool:
     return False
 
 
+# One contract per distinct app for the whole test session. Every API test builds a fresh app, and building the
+# document (app.openapi(), then a pattern per route) took 1.1 s on agents-service's app, so a suite spent minutes on it.
+_CONTRACTS: dict[tuple[Any, ...], Contract] = {}
+
+
+def app_shape(app: FastAPI) -> tuple[Any, ...]:
+    """What an app's response contract is built from: each API route's path, methods, handler, response model, status
+    code and extra documented responses. Two apps share a contract only when all of it matches; a model built per app
+    (a different class each time) makes the shapes differ, so that app gets its own contract."""
+    return tuple(
+        (
+            r.path,
+            tuple(sorted(r.methods or ())),
+            r.endpoint,
+            r.response_model,
+            r.status_code,
+            repr(sorted((str(k), repr(v)) for k, v in (r.responses or {}).items())),
+            r.include_in_schema,
+        )
+        for r in app.routes
+        if isinstance(r, APIRoute)
+    )
+
+
+def contract_for(app: FastAPI) -> Contract:
+    """The app's contract, built once for every app of the same shape."""
+    key = app_shape(app)
+    if key not in _CONTRACTS:
+        _CONTRACTS[key] = Contract(app)
+    return _CONTRACTS[key]
+
+
 def response_checker(app: FastAPI) -> Any:
     contract: list[Contract] = []
 
@@ -65,7 +98,7 @@ def response_checker(app: FastAPI) -> Any:
             return
         await response.aread()
         if not contract:
-            contract.append(Contract(app))
+            contract.append(contract_for(app))
         request = response.request
         contract[0].check(request.method, request.url.path, response.status_code, response.json())
 

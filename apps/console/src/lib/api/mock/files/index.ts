@@ -18,7 +18,7 @@ import type {
   UploadRequest,
   UploadTicket,
 } from '@/lib/types/files';
-import type { Extraction } from '@/lib/types/extractions';
+import type { DocumentLayout, Extraction } from '@/lib/types/extractions';
 import type { AuditEntry } from '@/lib/types/governance';
 import { pageOptions } from '../../options';
 
@@ -360,6 +360,27 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
   };
 
   const extractions: { key: string; row: Extraction }[] = [];
+  // Files whose layout was read: the cached layout answers only after a read, as documents-service's does.
+  const laidOut = new Set<string>();
+  /** A layout from the file's text, or three short sample pages; every 13th word is read with low confidence. */
+  const layoutOf = (f: Stored): DocumentLayout => {
+    const sample = [
+      ['Statement of account', 'Account holder: Sample Customer · Account ending 0000', 'Opening balance 1,250.00 · Closing balance 1,102.40', 'Payments received this period: 3'],
+      ['Transactions', '02 Mar Card payment, grocery store 42.10', '09 Mar Transfer to savings 100.00', '15 Mar Direct debit, utility company 5.50'],
+      ['Notes', 'Questions about this statement can be raised within 60 days.', 'This page is a sample for the design preview.'],
+    ];
+    const lines = f.content?.split('\n').filter((l) => l.trim()) ?? [];
+    const pages = lines.length ? Array.from({ length: Math.ceil(lines.length / 40) }, (_, i) => lines.slice(i * 40, i * 40 + 40)) : sample;
+    let n = 0;
+    const words: DocumentLayout['words'] = [];
+    const blocks = pages.flatMap((texts, p) =>
+      texts.map((text, i) => {
+        for (const w of text.split(/\s+/).filter(Boolean)) words.push({ page: p + 1, text: w, box: [0.1, 0.1 + i * 0.05, 0.2, 0.13 + i * 0.05], conf: ++n % 13 === 0 ? 0.55 : 0.97 });
+        return { id: `b${p + 1}-${i}`, page: p + 1, kind: i === 0 ? ('title' as const) : ('line' as const), text, box: [0.08, 0.08 + i * 0.05, 0.92, 0.14 + i * 0.05], order: i };
+      }),
+    );
+    return { engine: 'mock', pages: pages.map((_, i) => ({ number: i + 1, width: 612, height: 792, source: lines.length ? 'text' : 'ocr' })), blocks, words };
+  };
   const api: FilesApi = {
     createUpload: (input) =>
       respond(() => {
@@ -664,6 +685,22 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         if (f) f.references = f.references.filter((r) => r.id !== refId);
       },
     }),
+
+    layouts: {
+      get: (fid) =>
+        respond(() => {
+          const f = find(fid);
+          if (!inTeam(f.team)) return notFound('File');
+          return laidOut.has(f.id) ? layoutOf(f) : notFound('Layout');
+        }),
+      read: (fid) =>
+        respond(() => {
+          const f = find(fid);
+          if (!inTeam(f.team)) return notFound('File');
+          laidOut.add(f.id);
+          return layoutOf(f);
+        }),
+    },
 
     // A read answers at once with two fields, one under the floor, so the page shows a field to check.
     extractions: {

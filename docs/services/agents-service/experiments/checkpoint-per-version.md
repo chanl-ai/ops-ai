@@ -1,8 +1,9 @@
 # Checkpoints per channel version against whole-state checkpoints
 
-Status: measured, not adopted, 2026-10-11. Script `services/agents-service/experiments/checkpoint_channel_blobs.py`
-(scratch database `ops_blobsize`, E4's dispute workflow with stubbed models, no model calls). The variant,
-`experiments/channel_blob_saver.py`, stays in experiments and out of `ops_checkpointer`.
+Status: measured, not adopted, 2026-10-11. Run with E4's dispute workflow and stubbed models on a scratch database
+(`ops_blobsize`), no model calls. Its script and the variant saver were built on the asyncpg checkpointer and were
+removed when the checkpointer moved to SQLAlchemy Core; `git show 8d793955:services/agents-service/experiments/`
+lists them.
 
 ## Verdict
 

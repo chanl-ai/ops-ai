@@ -19,6 +19,9 @@ import { isLayoutPart } from '@/lib/types/widgets';
 import { CitationPopover, SourcesList } from './citation-popover';
 import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
+import { ConnectionRequiredCard, connectionRequired } from './connection-required-card';
+import { rememberedLine } from '@/components/memory/remembered-line';
+import { usePersonalSignIn } from '@/hooks/connections-queries';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
 import { ChatWidgetView } from './widgets';
@@ -132,6 +135,7 @@ export function AssistantMessage({
   /** Opens What I remember from the line saying what this reply saved (c-206); absent in someone else's chat. */
   onOpenMemory?: () => void;
 }) {
+  const personalSignIn = usePersonalSignIn();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
   const [reason, setReason] = React.useState(FEEDBACK_REASONS[0]);
   const [comment, setComment] = React.useState('');
@@ -151,6 +155,8 @@ export function AssistantMessage({
       )}
       {message.toolCalls?.map((c) => {
         const cards = opsCards(c);
+        const need = personalSignIn ? connectionRequired(c) : null;
+        if (need) return <ConnectionRequiredCard key={c.id} call={c} need={need} onReply={readOnly ? undefined : onReply} />;
         return cards ? <OpsCallCards key={c.id} call={c} cards={cards} readOnly={cardsReadOnly} /> : <ToolCallCard key={c.id} call={c} />;
       })}
       {message.widgets?.map((w) => (
@@ -190,7 +196,7 @@ export function AssistantMessage({
       {message.remembered?.length && settled ? (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="saved-to-memory">
           <Brain className="size-3" />
-          Saved to memory: {message.remembered.map((r) => (r.key ? `${r.key}: ${r.value}` : r.value)).join(' · ')}
+          {rememberedLine(message.remembered)}
           {onOpenMemory && (
             <button type="button" onClick={onOpenMemory} className="underline-offset-4 hover:text-foreground hover:underline" data-testid="open-memory">
               What I remember

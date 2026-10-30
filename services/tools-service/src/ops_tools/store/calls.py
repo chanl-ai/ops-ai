@@ -56,6 +56,9 @@ gateway_calls = sa.Table(
     # (c-330); null for a call that used no connection.
     sa.Column("environment", sa.String(16)),
     sa.Column("connection_id", sa.String(64)),
+    # Whom a verified acting-for token named (an email), and whose sign-in signed the call: person or team (c-558).
+    sa.Column("acting_for", sa.String(320)),
+    sa.Column("credential", sa.String(16)),
     # The route that took the call, api (POST /v1/calls) or mcp, and the client's own name for itself over MCP, a claim
     # shown as one (c-356); null on rows older than the columns.
     sa.Column("channel", sa.String(16)),

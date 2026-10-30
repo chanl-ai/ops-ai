@@ -4,7 +4,7 @@
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_all', 'Content-Type': 'application/json' };
+const TEAM = { 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 
@@ -22,6 +22,8 @@ await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
+    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -43,11 +45,11 @@ await withUiStack(async (consoleUrl) => {
     await page.keyboard.press('Escape');
 
     await send(page, 'Look up CHQ-2219');
-    const card = page.getByTestId('chat-tool-call').filter({ hasText: 'lookup_account' }).last();
+    const card = page.getByTestId('chat-tool-call').filter({ hasText: 'Lookup account' }).last();
     const shown = await card.waitFor({ timeout: 60_000 }).then(() => true, () => false);
     await page.getByText('Here is what I found.').last().waitFor({ timeout: 60_000 }).catch(() => undefined);
     const state = await card.getAttribute('data-state').catch(() => null);
-    await card.getByText('lookup_account').click();
+    await card.getByText('Lookup account').click();
     const params = await card.getByText('Parameters').waitFor({ timeout: 10_000 }).then(() => true, () => false);
     // The input is highlighted asynchronously (Shiki), so wait for it rather than read it at once.
     const input = await card.getByText(/CHQ-2219/).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);

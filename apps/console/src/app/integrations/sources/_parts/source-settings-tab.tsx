@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Lock, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ConnectionChip } from '@/components/integrations/integration-meta';
@@ -16,6 +16,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { SampleData } from '@/components/shared/sample-data';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,20 +50,35 @@ const pick = (s: SourceDetail): Draft => ({
   notifyOnFailure: s.notifyOnFailure,
 });
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// What kb-service stores of a source (SourcePatch: name, collection, owner, sensitivity, tags; owner is not on this tab).
+// The rest it drops without a word, so those settings show here read only until it stores them.
+const STORED = ['name', 'collection', 'sensitivity', 'tags'] as const;
+const listed = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 const scheduleFor = (kind: Schedule['kind']): Schedule =>
   kind === 'manual' ? { kind } : kind === 'daily' ? { kind, time: '02:00' } : kind === 'weekly' ? { kind, day: 'Mon', time: '03:00' } : kind === 'monthly' ? { kind, day: 1, time: '03:00' } : { kind: 'webhook', safetyNetDaily: true };
+
+/** A setting the service does not store: shown, and off while `on`. */
+function Fixed({ on, children }: { on: boolean; children: React.ReactNode }) {
+  return (
+    <fieldset disabled={on} className="contents" data-testid={on ? 'source-setting-not-stored' : undefined}>
+      {children}
+    </fieldset>
+  );
+}
 
 /** Every source setting on one page, saved together; ingestion changes mark the source for a re-index. */
 export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; onDelete: () => void }) {
   const update = useUpdateSource(source.id);
   // kb-service stores these settings; on the mock they would revert on reload, so the section says so and goes read-only.
-  const Gate: React.ComponentType<{ children: React.ReactNode }> = useKnowledgeIsSample() ? SampleData : React.Fragment;
+  const sample = useKnowledgeIsSample();
+  const Gate: React.ComponentType<{ children: React.ReactNode }> = sample ? SampleData : React.Fragment;
   const saved = React.useMemo(() => pick(source), [source]);
   const [d, setD] = React.useState<Draft>(saved);
   React.useEffect(() => {
     setD(pick(source));
   }, [source.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = !same(d, saved);
+  const changed = STORED.filter((k) => !same(d[k], saved[k]));
+  const dirty = sample ? !same(d, saved) : changed.length > 0;
   const meta = sourceTypeMeta(source.type);
   const nameError = d.name.trim().length < 2 || d.name.trim().length > 80 ? 'Name it in 2 to 80 characters.' : undefined;
 
@@ -81,6 +97,12 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
     const pipelineChanged = !same(d.parsing, saved.parsing) || !same(d.ingest, saved.ingest) || !same(d.metadataMapping, saved.metadataMapping);
     const rulesChanged = !same(d.rules, saved.rules);
     try {
+      if (!sample) {
+        // Only what the service stores is sent, and the message names exactly that.
+        await update.mutateAsync(Object.fromEntries(changed.map((k) => [k, d[k]])) as SourcePatch);
+        toast.success(`Saved the ${listed([...changed])}`);
+        return;
+      }
       await update.mutateAsync(d);
       toast.success('Settings saved', {
         description: pipelineChanged ? 'Chunks were built with the old ingestion settings and stay in use until they are rebuilt.' : rulesChanged ? 'Rules apply now: matching items are excluded, and items they no longer exclude wait for the next sync.' : undefined,
@@ -98,6 +120,12 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
   return (
     <div className="flex max-w-4xl flex-col gap-4">
       <Gate>
+      {!sample && (
+        <Alert data-testid="source-settings-not-stored">
+          <Lock />
+          <AlertTitle>Only the name, collection, sensitivity and tags can be saved yet; the other settings show what this source uses.</AlertTitle>
+        </Alert>
+      )}
       <SettingsSection title="Connection and scope" description="What this source fetches">
         <div>
           <FieldRow label="Type" value={meta.label} />
@@ -108,17 +136,22 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
           <FormField id="set-name" label="Name" error={nameError}>
             <Input id="set-name" value={d.name} onChange={(e) => set('name', e.target.value)} aria-invalid={!!nameError} />
           </FormField>
-          <FormField id="set-scope" label={meta.scopeLabel} hint="Changing scope makes the next sync list every item.">
-            <Textarea id="set-scope" rows={2} value={d.scopeSummary} onChange={(e) => set('scopeSummary', e.target.value)} />
-          </FormField>
+          <Fixed on={!sample}>
+            <FormField id="set-scope" label={meta.scopeLabel} hint="Changing scope makes the next sync list every item.">
+              <Textarea id="set-scope" rows={2} value={d.scopeSummary} onChange={(e) => set('scopeSummary', e.target.value)} />
+            </FormField>
+          </Fixed>
         </div>
       </SettingsSection>
 
       <SettingsSection title="Ingestion" description="How items become chunks. Saving a change marks the source for a re-index.">
-        <IngestForm idPrefix="set" ingest={d.ingest} parsing={d.parsing} onIngest={(v) => set('ingest', v)} onParsing={(v) => set('parsing', v)} showApproval />
+        <Fixed on={!sample}>
+          <IngestForm idPrefix="set" ingest={d.ingest} parsing={d.parsing} onIngest={(v) => set('ingest', v)} onParsing={(v) => set('parsing', v)} showApproval />
+        </Fixed>
       </SettingsSection>
 
       <SettingsSection title="Rules and metadata" description="Any include rule admits an item; exclude rules win. Rules apply when saved.">
+        <Fixed on={!sample}>
         {d.rules.length === 0 && <p className="text-sm text-muted-foreground">No rules. Every item in scope is indexed.</p>}
         {source.governance.excluded > 0 && (
           <p className="text-xs text-muted-foreground">
@@ -159,10 +192,12 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
         </Button>
         <Label className="pt-2">Metadata</Label>
         <MetadataMappingEditor value={d.metadataMapping} onChange={(v) => set('metadataMapping', v)} model={d.ingest.model} required={source.requiredMetadata} />
+        </Fixed>
         <div className="grid gap-4 pt-2 sm:grid-cols-2">
           <FormField id="set-tags" label="Tags on every item" optional>
             <TagInput id="set-tags" value={d.tags} onChange={(v) => set('tags', v)} placeholder="e.g. policy" />
           </FormField>
+          <Fixed on={!sample}>
           <FormField id="set-title" label="Title from">
             <Select value={d.titleFrom} onValueChange={(v) => set('titleFrom', v as Draft['titleFrom'])}>
               <SelectTrigger id="set-title" className="w-full bg-background">
@@ -175,6 +210,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
               </SelectContent>
             </Select>
           </FormField>
+          </Fixed>
           <FormField id="set-collection" label="Collection" hint="The department boundary a knowledge base can be limited to.">
             <Input id="set-collection" className="bg-background" value={d.collection} onChange={(e) => set('collection', e.target.value)} placeholder="e.g. Lending" />
           </FormField>
@@ -194,6 +230,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
       </SettingsSection>
 
       <SettingsSection title="Permissions and schedule" description="Who can see its items and when it syncs">
+        <Fixed on={!sample}>
         <RadioGroup
           value={d.permissions.mode}
           onValueChange={(v) => set('permissions', v === 'selected' ? { mode: 'selected', principals: [] } : { mode: v as 'inherit' | 'workspace' })}
@@ -316,6 +353,7 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
           </Label>
           <Switch id="set-notify" checked={d.notifyOnFailure} onCheckedChange={(v) => set('notifyOnFailure', v)} />
         </div>
+        </Fixed>
       </SettingsSection>
 
       <DangerZone items={[{ title: 'Delete this source', description: `Removes ${plural(source.itemCount, 'item')}, the sync history and their chunks from every knowledge base that reads it.`, action: 'Delete source', onClick: onDelete, destructive: true }]} />

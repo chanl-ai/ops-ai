@@ -25,7 +25,7 @@ The script starts its own services on the scripted model; no model key is needed
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-005-api.py` | passing |
-| ui | `agents-service/scripts/test-uc-005-ui.mjs` | passing (2026-10-28): a second stack on the same database shows the run waiting; a team admin opens it from All tasks and approves; the row finishes |
+| ui | none | retired 2026-10-29: the console no longer shows the earlier workflow engine's runs; the api layer still covers it |
 
 ## Non-vacuous check
 

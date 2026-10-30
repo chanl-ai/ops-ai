@@ -168,15 +168,19 @@ async def list_workflows(
     sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "asc",
     startable: bool = False,
     takes_files: Annotated[bool, Query(alias="takesFiles")] = False,
+    engine_kind: Annotated[Literal["all", "current"], Query(alias="engine")] = "all",
 ) -> JSONResponse:
     """The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-    `start` says how it starts (c-466)."""
+    `start` says how it starts (c-466). `engine=current` leaves out the earlier engine's workflows before the page,
+    the total and the status counts are taken, since the console no longer shows them (c-562)."""
     counts = await counts_24h(rt)
     # A graph workflow of the earlier engine starts from its input form, with no file field.
-    rows: list[dict[str, Any]] = [
-        {**await _view(rt, r["id"], counts), "start": V1_START} for r in await registry(rt).rows()
-    ]
+    rows: list[dict[str, Any]] = (
+        []
+        if engine_kind == "current"
+        else [{**await _view(rt, r["id"], counts), "start": V1_START} for r in await registry(rt).rows()]
+    )
     # v2 runner definitions join here, so the console lists both kinds from one page of one request.
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     rows += await engine.v2_workflow_rows(rt, since)

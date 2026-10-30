@@ -1,6 +1,6 @@
 # Sign-in library
 
-Status: current. The protocols behind password, OIDC and SAML sign-in (c-188); platform-service is the one consumer.
+Status: current. The protocols behind password, OIDC and SAML sign-in; platform-service is the one consumer.
 Tested against the local fake identity provider only; no real identity provider has been tried (**unverified**).
 
 | Part | Where | What it checks |

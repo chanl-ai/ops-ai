@@ -1,6 +1,6 @@
 # An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one
 
-Status: passing. Id: `uc-532`. Service: `models-service`. Layers: ui. Card: c-509.
+Status: passing. Id: `uc-532`. Service: `models-service`. Layers: ui. Card: an earlier change.
 
 Model provider keys belong to the account (2026-10-27): an account admin (an admin on the Security team) saves
 them on Settings > Workspace > Model providers, models-service keeps them sealed in its own `provider_keys` table and is

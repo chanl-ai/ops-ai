@@ -1,8 +1,7 @@
 # Staging on one Fly machine
 
-Status: current (c-387). Staging runs from one image on one Fly app, `<your-app>-one`, at
-https://<your-app>-one.fly.dev, against the staging database `<your-app>-db`. Deployed from 4d5a9e56 on
-2026-10-20 by `make stg-deploy`: every process up and the click walk 41 of 41 OK, the first row of each list opened. The fourteen per-service apps of `deploy/fly.md` are stopped, not
+Status: current. A staging copy can run from one image on one Fly app, `<your-app>`, at
+https://<your-app>.fly.dev, against a database app `<app-prefix>-db`. Measurements below come from one deploy by `make stg-deploy`: every process up and the click walk 41 of 41 OK, the first row of each list opened. The fourteen per-service apps of `deploy/fly.md` are stopped, not
 deleted, and stay the layout production can use. Files: `deploy/fly/`, `deploy/host/`.
 
 ## What runs
@@ -26,14 +25,14 @@ restarts one that exits, and stops the machine when one exits more than five tim
 | console | `next start` | 3016 | `/` |
 | caddy | `caddy run` (`deploy/fly/Caddyfile`), started last | 8080 | the origin |
 
-The bank stand-in stays its own app, `<your-app>-bank` (stopped): workflows call it as an outside system at its
+The bank stand-in stays its own app, `<app-prefix>-bank` (stopped by default): workflows call it as an outside system at its
 public URL. Start it with `fly machine start` before a court order run.
 
 ## Logins and keys
 
 The machine holds every value the per-service apps held, staged by
-`uv run python deploy/fly/staging/apps.py one-secrets --db ~/.config/ops-ai/staging-db-url.txt --admin
-~/.config/ops-ai/staging-admin.env --logins ~/.config/ops-ai/staging-logins.env --models ~/.config/ops-ai/staging-models.env`
+`uv run python deploy/fly/staging/apps.py one-secrets --db <private-dir>/staging-db-url.txt --admin
+<private-dir>/staging-admin.env --logins <private-dir>/staging-logins.env --models <private-dir>/staging-models.env`
 (values never printed).
 
 | Secret | Who gets it |
@@ -51,13 +50,13 @@ A process gets only what its `env` table names (`deploy/host/tests/test_ops_host
 ## The demo team and the test teams
 
 Staging has one tenant ("Ops AI staging"); platform-service has no route that makes a second one, so the boundary is
-the team. A team is the data boundary: another team's records answer 404 on every route (c-407, c-423).
+the team. A team is the data boundary: another team's records answer 404 on every route.
 
 | Team | Id | What it holds | Who belongs |
 |---|---|---|---|
-| Harbor & Pine Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@<your-app>.example (viewer), the seed's four bank staff, the first admin |
-| Security | `team_security` | The workspace Security team: egress, secrets, the bank module and the platform tools; test leftovers from earlier walks | The first admin, approver@<your-app>.example, admin@demo.example (admin, for the mailbox and its secret) |
-| Customer Operations | `team_319b708e5de1` | A test team: c-383's first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
+| Harbor & Pine Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@example.com (viewer), the seed's four bank staff, the first admin |
+| Security | `team_security` | The workspace Security team: egress, secrets, the bank module and the platform tools; test leftovers from earlier walks | The first admin, approver@example.com, admin@demo.example (admin, for the mailbox and its secret) |
+| Customer Operations | `team_319b708e5de1` | A test team: an earlier change's first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
 
 Walks and probes act in a test team and remove what they make where a route allows:
 
@@ -71,22 +70,28 @@ Install or refresh the demo team with the sample team installer (every line FOUN
 
 ```
 OPS_DEMO_MEMBER_PASSWORD=<phone password> OPS_DEMO_TOOL_APPROVER_PASSWORD=<Security approver password> \
-uv run python scripts/sample_team.py install --origin https://<your-app>-one.fly.dev --admin-env <env file> \
+uv run python scripts/sample_team.py install --origin https://<your-app>.fly.dev --admin-env <env file> \
   --name "Harbor & Pine Operations" --workflow-prefix northfield_ --no-levy \
   --member admin@demo.example:admin --member builder@demo.example:builder --member approver@demo.example:approver \
   --tool-access mod_3a1fdc1ba8a4 --tool-access-team team_security \
-  --tool-approver approver@<your-app>.example
+  --tool-approver approver@example.com
 ```
 
 The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD`, `OPS_DEMO_MODEL_ALIAS=fake` and
 `OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the agents answer people on the real model once the install ends
 (`scripts/sample-team/admin.env.example`). `scripts/check_demo_team.py` proves each login's role in the team and that
 a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module
-(c-433); the platform tools need no grant, since no team owns them.
+(an earlier change); the platform tools need no grant, since no team owns them.
 
-Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types): c-437.
+Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types): an earlier change.
 
 ## Deploy
+
+App names are not in the repo. `make stg-deploy`, `stg-rollback` and `stg-health` read them from
+`~/.config/ops-ai/staging.env` (or `$OPS_STAGING_CONFIG/staging.env`); copy `deploy/fly/staging.env.example` there and
+fill in `STG_APP`, `STG_DB_APP` and `STG_APP_PREFIX`. A missing file stops the command with a message naming the example.
+The deploy refuses any app whose name does not start with `STG_APP_PREFIX` (default `<your-app>`). The `.toml` files
+carry `<your-app>` or `<app-prefix>` placeholders; the deploy fills them in and passes `-a`.
 
 ```
 make stg-deploy              # REF=<sha> deploys another commit; SKIP_BUILD=1 reuses the pushed image
@@ -98,11 +103,11 @@ non-zero on any failure:
 
 | Step | What it does | Measured on 4d5a9e56 |
 |---|---|---|
-| Build | The `runtime` target on Fly's remote builder, pushed as `registry.fly.io/<your-app>-one:<sha>` | 31 s with the builder's cache, 177 s without |
+| Build | The `runtime` target on Fly's remote builder, pushed as `registry.fly.io/<your-app>:<sha>` | 31 s with the builder's cache, 177 s without |
 | Deploy | The release command (`deploy/fly/release.sh`) migrates every chain as the superuser and makes the first admin; then the machine is replaced in place | 58 s |
 | Grants | `grants.sql` from `make db-ddl` at REF on a throwaway local PostgreSQL 18, applied through `fly proxy` as the superuser | 38 s (49 s pulling the image) |
 | Health | Polls `ops_host.py --check` over `fly ssh` until every process is up | 10 s |
-| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `~/.config/ops-ai/staging-admin.env` | 136 s, 41 OK |
+| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env` | 136 s, 41 OK |
 
 Build to every process up: about 2 minutes 20 seconds; with the walk, 4 minutes 33 seconds. The per-service deploy
 took about 21 minutes across 14 apps.
@@ -118,17 +123,21 @@ deployed here with `make stg-deploy REF=<that commit>` by `.github/workflows/rel
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still tagged but not deployed |
 | Go back to main | Clear `STAGING_HOLD` and run the workflow by hand with `main`, or wait for the next merge |
 
-The deploy job needs three repository secrets and is skipped with a notice while any is missing:
+The deploy job needs three repository secrets and two repository variables, and is skipped with a notice while any is
+missing. The variables are the app names, written into `staging.env` on the runner:
 
-| Secret | Value |
+| Secret or variable | Value |
 |---|---|
-| `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>-one` (build, deploy, ssh) and `<your-app>-db` (the grants proxy) |
-| `STAGING_DB_URL` | The contents of `~/.config/ops-ai/staging-db-url.txt` |
-| `STAGING_ADMIN_ENV` | The contents of `~/.config/ops-ai/staging-admin.env` |
+| `vars.STG_APP` | `<your-app>` |
+| `vars.STG_DB_APP` | `<app-prefix>-db` |
+| `vars.STG_APP_PREFIX` | Optional: `<app-prefix>`; names must start with it (default `<your-app>`) |
+| `FLY_API_TOKEN` | Two deploy tokens joined by a comma: `<your-app>` (build, deploy, ssh) and `<app-prefix>-db` (the grants proxy) |
+| `STAGING_DB_URL` | The contents of `<private-dir>/staging-db-url.txt` |
+| `STAGING_ADMIN_ENV` | The contents of `<private-dir>/staging-admin.env` |
 
 ```
-fly tokens create deploy -a <your-app>-one -n "github ops-ai staging" -x 8760h
-fly tokens create deploy -a <your-app>-db -n "github ops-ai staging grants" -x 8760h
+fly tokens create deploy -a <your-app> -n "github ops-ai staging" -x 8760h
+fly tokens create deploy -a <app-prefix>-db -n "github ops-ai staging grants" -x 8760h
 ```
 
 Not yet run on GitHub: the comma-joined token and `fly ssh console` with a deploy token are checked on the first run.
@@ -147,7 +156,7 @@ come for a few minutes, and the worker's timers do not run while it is stopped.
 
 ## Cost
 
-Fly's ewr list prices (https://docs.fly.io/about/pricing): 2.19 USD a month per shared vCPU and 6.00 USD per GB of RAM
+Fly's list prices (https://docs.fly.io/about/pricing): 2.19 USD a month per shared vCPU and 6.00 USD per GB of RAM
 beyond 256 MB per vCPU. shared-cpu-2x with 4 GB is 25.38 USD a month if it never stops; stopped, only the volume
 (0.15 USD per GB) and the root filesystem (0.15 USD per GB) are billed, so staging costs about 3.5 US cents per hour it
 runs. The database stays at about 3.70 USD a month. The per-service apps came to about 34 USD a month always on at the
@@ -158,14 +167,14 @@ same prices (nine 256 MB and four 512 MB machines). **Unverified** against an in
 The models-service connection points at the fake on this machine, bound once after the first deploy:
 
 ```
-fly ssh console -a <your-app>-one -C 'sh -c "cd /app && OPS_SERVICE_SIGNING_KEY=\$OPS_SVC_KEY_AGENTS \
+fly ssh console -a <your-app> -C 'sh -c "cd /app && OPS_SERVICE_SIGNING_KEY=\$OPS_SVC_KEY_AGENTS \
   OPS_SERVICE_SIGNING_KID=svc-agents-1 /app/.venv/bin/python deploy/fly/connect_model.py \
   --models-url http://127.0.0.1:8730 --base-url http://127.0.0.1:8746/v1 --alias default --model fake-chat \
   --input-price 1 --output-price 1 --budget 5 --key-id purpose:agents"'
 ```
 
-The existing keys stay. The per-service apps, if started again, need the same command run on `<your-app>-agents`
-with `--base-url http://<your-app>-fake.internal:8746/v1`.
+The existing keys stay. The per-service apps, if started again, need the same command run on `<app-prefix>-agents`
+with `--base-url http://<app-prefix>-fake.internal:8746/v1`.
 
 ## Facts that shape it
 
@@ -181,15 +190,15 @@ with `--base-url http://<your-app>-fake.internal:8746/v1`.
 
 | Task | Command |
 |---|---|
-| Logs | `fly logs -a <your-app>-one`; each line starts with `[<process>]` |
+| Logs | `fly logs -a <your-app>`; each line starts with `[<process>]` |
 | Roll back | `REF=<older sha> SKIP_BUILD=1 make stg-deploy` when that sha's image was pushed. Migrations do not roll back: roll back only to an image whose chains the database already has |
-| Stop | `fly machine stop <id> -a <your-app>-one`; the next request starts it |
+| Stop | `fly machine stop <id> -a <your-app>`; the next request starts it |
 
 ## Not covered
 
 | Item | State |
 |---|---|
-| Files uploaded before the move | Copied on 2026-10-20 (c-406): `<your-app>-files` started, `/data/files/objects` tarred out over `fly ssh`, unpacked into the machine's `/data/files` without overwriting, the old machine stopped again. Before the copy their downloads answered 502 |
+| Files uploaded before the move | Copied once when moving to one machine: `<app-prefix>-files` started, `/data/files/objects` tarred out over `fly ssh`, unpacked into the machine's `/data/files` without overwriting, the old machine stopped again. Before the copy their downloads answered 502 |
 | One process for the Python services | Measured before staging moved to one machine |
 | Outgoing mail | `OPS_MAIL_PROVIDER=none` |
 | The embed app | Not in the image |

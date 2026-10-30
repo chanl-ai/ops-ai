@@ -12,6 +12,8 @@ export interface ActivityRow {
   outcome: string;
   /** The outcome as people read it ("Daily cap"), worded by the API; `outcome` stays the key. */
   outcomeText?: string | null;
+  /** Why, in a sentence, when the row has a reason of its own (an email skipped, set aside or over its cap). */
+  detail?: string | null;
   teamId: string;
   source: { type: 'workflow' | 'agent' | 'channel' | 'tool' | 'case' | 'process'; id: string; name: string };
   /** Who or what did it, by name: a person, a mail trigger or sender, another run (with its run id), an agent or a key. */

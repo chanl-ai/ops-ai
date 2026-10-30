@@ -229,10 +229,19 @@ class MintKeyInput(WireModel):
 WHAT = "this widget deployment"
 # The isolation context of a widget request: its tenant and team come from the deployment its key or session names.
 WIDGET = "widget"
+# A mint key, a widget session or the embed app's config request names a tenant and a deployment but no team, and a
+# team scope with no team reads no team's rows; the deployment is read across the tenant's teams, then its team entered.
+WIDGET_LOOKUP = "widget_lookup"
 
 
 def _key_store(rt: Runtime) -> WidgetKeys:
     return WidgetKeys(graph_store(rt).engine)
+
+
+async def _named_deployment(rt: Runtime, deployment_id: str) -> dict[str, Any] | None:
+    """The deployment a widget credential names, in its tenant, whichever team owns it."""
+    with isolation.tenant_wide(WIDGET_LOOKUP):
+        return await _store(rt).get(deployment_id)
 
 
 def _key_view(k: dict[str, Any]) -> dict[str, Any]:
@@ -341,7 +350,7 @@ async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[s
         raise Unauthorized("That mint key has expired; create a new one.", code="widget_key_expired")
     if key["deployment_id"] != deployment_id:
         raise Forbidden("That mint key is for another widget deployment.", code="widget_key_other_deployment")
-    row = await _store(rt).get(deployment_id)
+    row = await _named_deployment(rt, deployment_id)
     if row is None:
         raise NotFound("Widget deployment")
     isolation.enter(tenant, str(row["team_id"]), kind=WIDGET)
@@ -437,7 +446,8 @@ async def listed_deployment(
         raise Unauthorized("This widget has no session; it starts one when it loads.")
     isolation.enter(tenant, None, kind=WIDGET)
     console = normal_origin(rt.settings.console_url) if rt.settings.console_url else None
-    return _listed(request, await _store(rt).get(deployment_id), session_token, rt.settings.embed_origins, console)
+    row = await _named_deployment(rt, deployment_id)
+    return _listed(request, row, session_token, rt.settings.embed_origins, console)
 
 
 Listed: TypeAlias = Annotated[dict[str, Any], Depends(listed_deployment)]  # noqa: UP040
@@ -566,7 +576,7 @@ async def public_config(
     (its preview), or a server holding this deployment's mint key; anything else is 403. It names no team or tenant,
     and an unknown deployment, or one in another tenant, is 404."""
     isolation.enter(tenant, None, kind=WIDGET)
-    row = await _store(rt).get(deployment_id)
+    row = await _named_deployment(rt, deployment_id)
     if row is None:
         raise NotFound("Widget")
     origin = request.headers.get("origin")

@@ -22,7 +22,7 @@ Status: current. Id: `uc-073`. Service: `console`. Layers: ui.
 | 6 | Approve the decision | the recorded action carries the hold id; the card reads Approved |
 
 The page's actions are recorded on the page, not sent to a service. The same parts go through the real chat stream in
-uc-061 once agents-service emits widget parts (c-055 T004, T007).
+uc-061 once agents-service emits widget parts (an earlier change T004, T007).
 
 ## Acceptance layers
 

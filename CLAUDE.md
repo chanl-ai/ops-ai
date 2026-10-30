@@ -40,7 +40,7 @@ name.
 | `packages/contracts` | `ops_contracts`: Pydantic models mirroring `apps/console/src/lib/types/chat.ts` by hand until generated |
 | `packages/ops_service_kit` | Settings (the only place env is read), errors, ids, logging |
 | `packages/ops_agent_kernel` | One agent turn on Pydantic AI: context, loop, interrupts and resume, stream events (spec 15) |
-| `packages/ops_checkpointer` | LangGraph checkpointer on asyncpg with tenant row-level security |
+| `packages/ops_checkpointer` | LangGraph checkpointer on SQLAlchemy Core, on PostgreSQL and SQL Server, with tenant and team isolation |
 | `packages/ops_storage` | Object storage protocol with filesystem, S3 and Azure Blob backends (ADR-0010) |
 | `packages/ops_ingest` | Parsing, splitting, metadata, dedupe and source rules for knowledge ingestion |
 

@@ -14,27 +14,32 @@ from __future__ import annotations
 import asyncio
 import binascii
 import contextlib
+import dataclasses
 import hashlib
+import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
+import httpx
+
 from ops_access import can
-from ops_email import CursorRefusedError, EmailFilter, InboundMessage, MailSource, drain
+from ops_email import CursorRefusedError, EmailFilter, InboundAttachment, InboundMessage, MailSource, drain
 from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
-from ops_service_kit.errors import Unprocessable
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
 from ..store.background import BackgroundJobs
-from ..store.engine import AsyncEngine, EngineTransactions
+from ..store.engine import AsyncEngine, DatabaseUnreachable, EngineTransactions
 from ..store.leases import LeaseHeldError, Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
 from ..store.poll_cursors import PollCursor, PollCursors
 from ..store.tenancy import MAIL_LISTENER
-from ..store.trigger_events import Outcome, TriggerEvent, TriggerEvents
+from ..store.trigger_events import KEEP_SET_ASIDE_DAYS, SET_ASIDE_AFTER, Outcome, TriggerEvent, TriggerEvents
 from .auth import Principal, caller_of
 from .engine_runs import start_run
 from .mailbox_gateway import is_idle
@@ -128,6 +133,42 @@ def run_key(fingerprint: str) -> str:
     return "email:" + hashlib.sha256(fingerprint.encode()).hexdigest()[:40]
 
 
+def event_key(msg: InboundMessage) -> str:
+    """The message's run key, or, for text that cannot be encoded (a provider's lone surrogate), a key from its escaped
+    form: such a message never starts a run, but its failed reads are still counted and it is set aside."""
+    try:
+        return run_key(msg.fingerprint)
+    except UnicodeEncodeError:
+        return "email:" + hashlib.sha256(json.dumps(dataclasses.asdict(msg)).encode()).hexdigest()[:40]
+
+
+def outage(e: Exception) -> bool:
+    """An error no one message causes: files-service or the database out of reach or refusing this service's own token.
+    It holds every message alike, so it is retried for as long as it lasts and never sets a message aside."""
+    if isinstance(e, FilesRefused):
+        return e.status >= 500 or e.status in (401, 403, 408, 429)
+    return isinstance(e, (httpx.TransportError, OSError, *DatabaseUnreachable))
+
+
+def kept(msg: InboundMessage) -> str:
+    """A message as read, for Run again: the parsed message, so no mailbox is read again and no provider's parser is
+    needed to start it."""
+    return json.dumps(dataclasses.asdict(msg))
+
+
+def message_of(item: str) -> InboundMessage:
+    d = json.loads(item)
+    return InboundMessage(
+        **(
+            d
+            | {
+                "references": tuple(d["references"]),
+                "attachments": tuple(InboundAttachment(**a) for a in d["attachments"]),
+            }
+        )
+    )
+
+
 @dataclass
 class PollResult:
     workflow_id: str
@@ -197,6 +238,8 @@ class EmailStarts:
         self.db = db
         self.files = files
         self.events = TriggerEvents(db)
+        # Settings.email_fault_fail_subject, set by the mail listener in dev and test only.
+        self.fail_subject: str | None = None
 
     async def start(
         self,
@@ -209,6 +252,8 @@ class EmailStarts:
     ) -> Started:
         """Stores the attachments in Files, then starts the run. `by` is the person who wrote a test email and `via`
         what they wrote it in; mail read from a mailbox is started by `trigger:email:<mailbox>`."""
+        if self.fail_subject and self.fail_subject in msg.subject:
+            raise RuntimeError(f"email_fault_fail_subject: the start of {msg.key} fails on purpose")
         key = run_key(msg.fingerprint)
         runs = RunStore(EngineTransactions(self.db))
         if (existing := await runs.by_key(b.workflow, key)) is not None:
@@ -313,19 +358,21 @@ class EmailStarts:
         *,
         run_id: str | None = None,
         detail: dict[str, Any] | None = None,
+        item: str | None = None,
     ) -> None:
         await self.events.add(
             TriggerEvent(
                 team_id=b.team,
                 workflow_id=b.workflow,
                 source=f"email:{b.binding.mailbox}",
-                event_key=run_key(msg.fingerprint),
+                event_key=event_key(msg),
                 sender=msg.sender,
                 subject=msg.subject,
                 received_at=msg.received_at,
                 outcome=outcome,
                 run_id=run_id,
                 detail=detail,
+                item=item,
             )
         )
 
@@ -354,6 +401,8 @@ class EmailTriggers:
         self.leases = leases
         self.idle_seconds = idle_seconds
         self.cursors = PollCursors(db)
+        # When each binding last dropped its set-aside messages past KEEP_SET_ASIDE_DAYS; once an hour is enough.
+        self._forgot: dict[str, float] = {}
         self.events = TriggerEvents(db)
         self.mailboxes = MailboxStore(db)
         # The mail listener's heartbeat (c-516); the worker sets it and the job log on `starts`, tests leave them off.
@@ -461,6 +510,10 @@ class EmailTriggers:
 
     async def _poll(self, b: Bound, result: PollResult) -> None:
         binding_id = f"email:{b.workflow}"
+        if time.monotonic() - self._forgot.get(binding_id, -3600.0) >= 3600:
+            cutoff = datetime.now(UTC) - timedelta(days=KEEP_SET_ASIDE_DAYS)
+            await self.events.forget_before(b.workflow, cutoff.isoformat())
+            self._forgot[binding_id] = time.monotonic()
         source = self.source(b)
         at = await self.cursors.get(binding_id)
         here = (b.binding.mailbox.lower(), b.binding.folder.lower())
@@ -480,7 +533,19 @@ class EmailTriggers:
                     result.skipped += 1
                     await self._record(b, msg, "filtered", detail={"failed": failed})
                     return
-                run_id = await self._start(b, msg)
+                try:
+                    run_id = await self._start(b, msg)
+                except Exception as e:
+                    # A failure the message itself causes is tried on the next reads, then set aside so the mail
+                    # behind it is read; until then the cursor stays before it. A later message failing keeps the
+                    # cursor before this one too, so a set-aside message is read again and passed over.
+                    if outage(e):
+                        raise
+                    failed, aside = await self.events.failures(b.workflow, event_key(msg))
+                    if not aside and not await self._failed(b, msg, e, failed + 1):
+                        raise
+                    result.skipped += 1
+                    return
                 if run_id:
                     result.started.append(run_id)
 
@@ -493,6 +558,21 @@ class EmailTriggers:
                 cursor = await source.cursor_now()
                 await self._skipped_since_last_read(b)
         await self.cursors.save(binding_id, PollCursor(b.binding.mailbox, b.binding.folder, cursor))
+
+    async def _failed(self, b: Bound, msg: InboundMessage, e: Exception, n: int) -> bool:
+        """Records failed read `n` of the message; True when that was its last and it is set aside."""
+        reason = f"{type(e).__name__}: {str(e)[:300]}"
+        log.warning("email_start_failed", workflow=b.workflow, message=msg.key, attempt=n, error=type(e).__name__)
+        if n < SET_ASIDE_AFTER:
+            await self._record(b, msg, "start_failed", detail={"reason": reason, "attempt": n})
+            return False
+        detail = {
+            "reason": reason,
+            "message": f"This email was set aside after {n} failed reads, so the mail after it is read. Run it again "
+            "once the cause is fixed.",
+        }
+        await self.starts.record(b.target, msg, "set_aside", detail=detail, item=kept(msg))
+        return True
 
     async def _start(self, b: Bound, msg: InboundMessage) -> str | None:
         """Starts the run for one new message. Returns the run id when this call created it."""
@@ -531,6 +611,26 @@ class EmailTriggers:
                 },
             )
         )
+
+
+async def run_again(db: AsyncEngine, files: FilesClient, event_id: str, *, by: str) -> Started:
+    """Starts a set-aside message's run on its workflow's live version, under the message's run key, as `by`; its kept
+    copy is dropped once the run exists. A failure is raised as it happened and the copy stays for another try."""
+    events = TriggerEvents(db)
+    row = await events.set_aside(event_id)
+    if row is None:
+        raise NotFound(f"Set-aside email {event_id}")
+    stored = await DefinitionStore(EngineTransactions(db)).live(str(row["workflow_id"]))
+    binding = binding_of(stored["definition"]) if stored is not None else None
+    if stored is None or binding is None:
+        raise Conflict(
+            "This workflow no longer starts from email, so the email cannot run.", code="not_email_triggered"
+        )
+    target = Target(stored, binding, str(row["team_id"]))
+    started = await EmailStarts(db, files).start(target, message_of(str(row["item"])), by=by, via="start:email")
+    if started.run is not None:
+        await events.forget(event_id)
+    return started
 
 
 def today() -> str:

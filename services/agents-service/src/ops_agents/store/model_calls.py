@@ -16,13 +16,13 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_metering import MICRO, Totals
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
 
 from .base import metadata
 
@@ -79,10 +79,11 @@ class ModelCallLedger:
     async def record(self, call: ModelCall) -> bool:
         """Writes the record; False when a response for the same task and request is already there."""
         values = {"id": new_id("mc"), "created_at": now_iso(), **call.__dict__}
-        insert = (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(model_call_records)
-        stmt = insert.values(**values)
-        if call.request_hash is not None:
-            stmt = stmt.on_conflict_do_nothing(index_elements=["thread_id", "task", "request_hash"])
+        stmt: sa.Executable = (
+            insert_ignore(self.engine, model_call_records, values, keys=["thread_id", "task", "request_hash"])
+            if call.request_hash is not None
+            else model_call_records.insert().values(**values)
+        )
         try:
             async with self.engine.begin() as c:
                 return (await c.execute(stmt)).rowcount != 0

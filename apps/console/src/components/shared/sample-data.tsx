@@ -1,17 +1,27 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { FlaskConical } from 'lucide-react';
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 
-/** The banner a page shows while no service stores what it edits. */
+const InSample = createContext(false);
+
+/** True inside a sample section: its cards show their values read only, with no Save or other action. */
+export const useIsSample = () => useContext(InSample);
+
+/**
+ * Lets the page around a sample section know one is on screen, so the page header says in words that parts of it are
+ * sample data, whatever its area's own state (PageLayout provides it).
+ */
+export const SampleOnPage = createContext<((change: 1 | -1) => void) | null>(null);
+
+/** The one line a page or section shows while no service stores what it edits. */
 export function SampleDataNote() {
   return (
     <Alert data-testid="sample-data-notice">
       <FlaskConical />
-      <AlertTitle>Sample data, changes aren’t saved</AlertTitle>
-      <AlertDescription>No service stores this page yet. What you see is an example, and its controls stay off until one does.</AlertDescription>
+      <AlertTitle>Sample data: no service stores this yet, so it is shown read only.</AlertTitle>
     </Alert>
   );
 }
@@ -22,10 +32,17 @@ export function SampleDataNote() {
  * a page cannot offer a Save that reverts on reload. `contents` keeps the fieldset out of the layout.
  */
 export function SampleDataGate({ children }: { children: ReactNode }) {
+  const report = useContext(SampleOnPage);
+  useEffect(() => {
+    report?.(1);
+    return () => report?.(-1);
+  }, [report]);
   return (
-    <fieldset disabled className="contents" data-testid="sample-data-gate">
-      {children}
-    </fieldset>
+    <InSample.Provider value>
+      <fieldset disabled className="contents" data-testid="sample-data-gate">
+        {children}
+      </fieldset>
+    </InSample.Provider>
   );
 }
 

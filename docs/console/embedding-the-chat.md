@@ -24,7 +24,7 @@ and the person is identified by a short session the bank's server mints for them
 In the console, open the agent's **Channels** tab and choose **Embed on a page** (or Deployments > New deployment > Chat
 widget, which asks for the agent), and list every page origin that will embed it, for example
 `https://intranet.harborpine.example`. The snippet it then shows is steps 2 and 3 below with the deployment and tenant
-filled in (c-224). Only an exact origin is accepted (scheme, host and port; no wildcards and
+filled in. Only an exact origin is accepted (scheme, host and port; no wildcards and
 no paths). The API is `POST /v1/widget-deployments` with `{ name, agentId, origins }`; it answers the deployment id
 (`wd_…`).
 

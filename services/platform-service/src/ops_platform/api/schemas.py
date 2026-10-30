@@ -37,6 +37,17 @@ class Introspect(In):
     api_key: str = Field(min_length=1, max_length=200)
 
 
+class ActingForIn(In):
+    """The person a tool call acts for, by the email a run or chat turn records; the team is the service token's."""
+
+    email: str = Field(min_length=3, max_length=320)
+
+
+class ActingForOut(Out):
+    token: str
+    expires_at: str
+
+
 class KeyTarget(Out):
     """What an API key may start (c-246). `version` pins a workflow version; null runs the live one."""
 
@@ -660,7 +671,7 @@ class PolicyOut(Out):
     default: bool | int | float | dict[str, Any] | None
     changed_by: str
     effect: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins"]
     title: str
 
 

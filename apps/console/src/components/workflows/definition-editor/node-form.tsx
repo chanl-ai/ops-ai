@@ -57,18 +57,43 @@ const without = (p: Params, key: string, value: unknown): Params => {
  * reads and writes the same parameter object a JSON edit would, and the server checks every save against the
  * type's schema whatever produced it.
  */
-export function NodeSettingsForm({ form, schema: raw, value, steps, idPrefix, onChange, errors }: { form: NodeForm; schema: Record<string, unknown>; value: Params; steps: StepRefs; idPrefix: string; onChange: (next: Params) => void; /** The server's check messages by parameter name, each shown under its field. */ errors?: Record<string, string> }) {
+export function NodeSettingsForm({
+  form,
+  schema: raw,
+  value,
+  steps,
+  idPrefix,
+  onChange,
+  errors,
+  hiddenChoices,
+  testIds,
+}: {
+  form: NodeForm;
+  schema: Record<string, unknown>;
+  value: Params;
+  steps: StepRefs;
+  idPrefix: string;
+  onChange: (next: Params) => void;
+  /** The server's check messages by parameter name, each shown under its field. */
+  errors?: Record<string, string>;
+  /** Choices a select leaves out, by parameter name: those behind a console switch that is off. */
+  hiddenChoices?: Record<string, string[]>;
+  /** A control's test id, by parameter name. */
+  testIds?: Record<string, string>;
+}) {
   const schema = raw as Schema;
   const required = new Set(schema.required ?? []);
   return (
     <div className="flex flex-col gap-4" data-testid="node-settings-form">
       {form.order.map((name) => {
         const spec = form.fields[name];
-        const field = schema.properties?.[name] ?? {};
+        const declared = schema.properties?.[name] ?? {};
+        const hide = hiddenChoices?.[name];
+        const field = hide?.length && declared.oneOf ? { ...declared, oneOf: declared.oneOf.filter((o) => o.const === undefined || !hide.includes(String(o.const))) } : declared;
         const id = `${idPrefix}-${name}`;
         return (
           <FormField key={name} id={id} label={spec.label} optional={!required.has(name)} hint={spec.help} error={errors?.[name]}>
-            <FieldControl id={id} spec={spec} schema={field} value={value[name]} steps={steps} onChange={(v) => onChange(without(value, name, v))} />
+            <FieldControl id={id} spec={spec} schema={field} value={value[name]} steps={steps} onChange={(v) => onChange(without(value, name, v))} testId={testIds?.[name]} />
           </FormField>
         );
       })}
@@ -76,7 +101,7 @@ export function NodeSettingsForm({ form, schema: raw, value, steps, idPrefix, on
   );
 }
 
-function FieldControl({ id, spec, schema, value, steps, onChange }: { id: string; spec: NodeFormField; schema: Schema; value: unknown; steps: StepRefs; onChange: (v: unknown) => void }) {
+function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id: string; spec: NodeFormField; schema: Schema; value: unknown; steps: StepRefs; onChange: (v: unknown) => void; testId?: string }) {
   switch (spec.widget) {
     case 'text':
       return <Input id={id} value={typeof value === 'string' ? value : ''} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
@@ -89,7 +114,7 @@ function FieldControl({ id, spec, schema, value, steps, onChange }: { id: string
     case 'switch':
       return <Switch id={id} checked={value === true} onCheckedChange={(c) => onChange(c)} />;
     case 'select':
-      return <EnumSelect id={id} schema={schema} value={value} onChange={onChange} />;
+      return <EnumSelect id={id} schema={schema} value={value} onChange={onChange} testId={testId} />;
     case 'source':
       return <SourceSelect id={id} source={spec.source} value={value} steps={steps} onChange={onChange} />;
     case 'mapping':
@@ -105,14 +130,14 @@ function FieldControl({ id, spec, schema, value, steps, onChange }: { id: string
   }
 }
 
-function EnumSelect({ id, schema, value, onChange }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void }) {
+function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void; testId?: string }) {
   // A saved value the choices do not list (a path) stays shown as itself.
   const listed = schemaChoices(schema);
   const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value }] : listed;
   const fallback = schema.default !== undefined ? `Default (${String(schema.default)})` : 'Not set';
   return (
     <Select value={typeof value === 'string' ? value : NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
-      <SelectTrigger id={id} className="w-full" data-field={id}>
+      <SelectTrigger id={id} className="w-full" data-field={id} data-testid={testId}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

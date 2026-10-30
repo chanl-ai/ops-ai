@@ -39,8 +39,10 @@ from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
 from ..store.tenancy import ENGINE_PASS
+from .acting_for import CallPeople, acting_for_tokens
 from .ai_steps_gate import RunTeamRules
 from .app import instance_owner, required_client, service_client
+from .batches import start_forever as start_batches_forever
 from .email_trigger import EmailTriggers
 from .engine_agents import kernel_agents
 from .engine_cases import RunCases
@@ -62,10 +64,13 @@ from .mailbox_gateway import mailbox_client, mailbox_source
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
 from .service_events import reminders
+from .sweeper import reconcile_forever
 from .task_type_seeds import StoredTaskTypes
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[3] / "migrations"
+# The tools client's limit, above any tool step's deadline (a code operation's run limit is at most a few minutes).
+GATEWAY_TIMEOUT_S = 600.0
 
 log = get_logger("ops_agents.api.worker")
 
@@ -77,9 +82,12 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         gateway: GatewayClient | None = None
         http: httpx.AsyncClient | None = None
         if settings.gateway_url:
-            http = httpx.AsyncClient(base_url=settings.gateway_url, timeout=30)
+            # Longer than any step's deadline: the step's own deadline ends a call, not the client (c-561).
+            http = httpx.AsyncClient(base_url=settings.gateway_url, timeout=GATEWAY_TIMEOUT_S)
             stack.push_async_callback(http.aclose)
-            gateway = GatewayClient(required_client(settings, http, "tools", timeout=30))
+            gateway = GatewayClient(required_client(settings, http, "tools", timeout=GATEWAY_TIMEOUT_S))
+            # Each tool call acts for the run's starter, proven by a token platform-service signs (c-558).
+            gateway.people = CallPeople.on(acting_for_tokens(settings, http), db)
         kb_http: httpx.AsyncClient | None = None
         if settings.kb_url:
             kb_http = httpx.AsyncClient(base_url=settings.kb_url, timeout=10)
@@ -165,6 +173,16 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
                 seconds=seconds,
             ),
         )
+        # The run reconciler (c-561) beside the worker: runs nothing is behind are marked Stuck within a minute or so.
+        reconciling = asyncio.create_task(
+            reconcile_forever(
+                EngineTransactions(db), stop, beats=heartbeats(db), every_s=settings.engine_reconcile_seconds
+            )
+        )
+        stack.push_async_callback(lambda: asyncio.wait_for(reconciling, None))
+        # Batches (c-535): each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
+        starting = asyncio.create_task(start_batches_forever(db, stop))
+        stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))
@@ -230,6 +248,7 @@ def email_listener(settings: Settings, db: AsyncEngine, owner: str, stack: Async
         idle_seconds=settings.email_idle_seconds,
     )
     triggers.beat, triggers.starts.jobs = background.Beat("mail_listener", heartbeats(db)), BackgroundJobs(db)
+    triggers.starts.fail_subject = settings.email_fault_fail_subject
     return triggers
 
 

@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-170`. Service: `console`. Layers: ui.
 
-Card c-178 with c-186: the console's Govern > Policies (`/settings/policies`) lists the workspace policies from
+Card an earlier change with an earlier change: the console's Govern > Policies (`/settings/policies`) lists the workspace policies from
 `GET /v1/policies`, one card each with its effect line and its choices, and saves one with `PUT /v1/policies/{key}`.
 Whether the person may change them comes from `GET /v1/me/permissions` (settings.manage in the acting team), not from a
 role named in the console. Without platform-service the page draws sample policies and says so.

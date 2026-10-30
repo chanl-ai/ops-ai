@@ -21,7 +21,6 @@ from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
     LOG_DIR,
-    TEAM,
     TOOLS_PORT,
     _env,  # pyright: ignore[reportPrivateUsage]
     agents,
@@ -35,7 +34,10 @@ from usecase_harness import (
     tools,
 )
 
-MAYA = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
+# Operations: the team publish_bank_module puts the bank module in, so the workflow, its runs, the secret and Maya's
+# review all sit in the team that owns the tool.
+OPS = {"X-Team-Id": "team_ops"}
+MAYA = {**OPS, "X-Dev-User": "m.okafor@harborpine.example"}
 DEFINITION = """
 schemaVersion: 2
 id: uc081_refund_check
@@ -118,7 +120,7 @@ def until(what: Callable[[], Any], timeout: float = 60) -> Any:
 
 
 def run_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
-    return data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}
+    return data(api.get(f"/v1/runs/{run_id}", headers=OPS)) or {}
 
 
 def status_is(api: httpx.Client, run_id: str, *wanted: str) -> Callable[[], dict[str, Any] | None]:
@@ -130,7 +132,7 @@ def status_is(api: httpx.Client, run_id: str, *wanted: str) -> Callable[[], dict
 
 
 def start_run(api: httpx.Client, key: str) -> str:
-    res = api.post("/v1/runs", json={"workflowId": "uc081_refund_check", "input": PAYLOAD, "runKey": key}, headers=TEAM)
+    res = api.post("/v1/runs", json={"workflowId": "uc081_refund_check", "input": PAYLOAD, "runKey": key}, headers=OPS)
     check(f"run {key} is accepted (202)", res.status_code == 202, res.text[:300])
     return str(data(res)["runId"])
 
@@ -148,13 +150,13 @@ def main() -> None:
         api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
         gw.post("/v1/egress/hosts", json={"value": bank["host"], "note": "uc-081"})
         gw.post("/v1/egress/ranges", json={"value": bank["range"], "note": "uc-081"})
-        gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"})
+        gw.post("/v1/secrets", json={"name": "BANK_API_KEY", "value": "dev-bank-key"}, headers=OPS)
         publish_bank_module(gw, bank["host"])
 
-        created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
+        created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=OPS)
         check("the YAML definition is stored (201) with every check passing", created.status_code == 201, created.text)
         # A saved version is a draft; dev auto-approve takes its publish request live, as a reviewer would.
-        live = api.post("/v1/workflows/definitions/uc081_refund_check/publish-requests", json={}, headers=TEAM)
+        live = api.post("/v1/workflows/definitions/uc081_refund_check/publish-requests", json={}, headers=OPS)
         check("its publish request is approved and the version is live", data(live)["status"] == "approved", live.text)
 
         # 1. No worker: the run is queued and stays queued.
@@ -167,7 +169,7 @@ def main() -> None:
         with worker("a"):
             waiting = until(status_is(api, first, "waiting"))
             check("a worker runs it to the human review", waiting is not None, run_of(api, first))
-            events = sse(api.get(f"/v1/runs/{first}/events", params={"follow": "false"}, headers=TEAM).text)
+            events = sse(api.get(f"/v1/runs/{first}/events", params={"follow": "false"}, headers=OPS).text)
             types = [e["type"] for e in events]
             check(
                 "the run's events stream from the log: started, node steps, waiting_review",
@@ -176,7 +178,7 @@ def main() -> None:
             )
             last = events[-1]["seq"] if events else 0
             again = sse(
-                api.get(f"/v1/runs/{first}/events", params={"follow": "false", "after": last}, headers=TEAM).text
+                api.get(f"/v1/runs/{first}/events", params={"follow": "false", "after": last}, headers=OPS).text
             )
             check("re-attaching after the last seq returns nothing old", again == [], again)
             review = api.get(f"/reviews/{first}", headers=MAYA)

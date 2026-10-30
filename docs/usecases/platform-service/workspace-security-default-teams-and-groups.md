@@ -28,6 +28,8 @@ URLs, an OIDC client secret named `uc-oidc`, and the local fake identity provide
 |---|---|---|
 | api | `platform-service/scripts/test-uc-212-api.py` | passing |
 
+In the console: Settings › Sign-in and its policies are walked by uc-213's and uc-220's ui scripts; default teams and group mapping stay at the api layer.
+
 ## Non-vacuous check
 
 `Sam no longer holds it in team_security`: with the re-mirroring removed, Sam keeps Security admin and the check fails.

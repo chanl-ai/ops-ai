@@ -1,6 +1,6 @@
 # A builder copies a task type and an API caller opens typed Human Tasks
 
-Status: current. Id: `uc-254`. Service: `agents-service`. Layers: api. Card: c-288.
+Status: current. Id: `uc-254`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 A Human Task's screen comes from a task type: a versioned record of params, regions and actions. Five general types
 are seeded and read-only; a team copies one to change it. A workflow review step or `POST /v1/tasks` names a type and
@@ -30,3 +30,4 @@ is decided in Human Tasks like any other, and the caller reads the decision from
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-254-api.py` | `ISOLATED=1 make usecase-test UC=uc-254 LAYER=api` |
+| ui | `agents-service/scripts/test-uc-254-ui.mjs` | passing (2026-10-28): Human Tasks asks the pinned version's question with its facts and actions; Priya declines it and the caller reads it back |

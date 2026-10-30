@@ -149,7 +149,8 @@ with (
     cards = [w for e in events for w in widgets(e) if w.get("tool") == WRITE]
     check(
         "the approval card shows the input the call will send",
-        bool(cards) and cards[-1].get("fields") == [{"label": "accountId", "value": ACCOUNT}],
+        # The card labels each input in words, as the reviewer reads it, not by its key.
+        bool(cards) and cards[-1].get("fields") == [{"label": "Account id", "value": ACCOUNT}],
         cards or [e.get("type") for e in events],
     )
     check(

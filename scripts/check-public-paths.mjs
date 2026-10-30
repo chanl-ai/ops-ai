@@ -4,7 +4,8 @@
 // scripts/ops-ai/repo.sh, public_view.py) refuses a snapshot that does; this check refuses the commit first, with the
 // same rule: such a path standing on its own, in any tracked file outside those folders. Cite docs/ instead. The paths
 // are assembled below, never written out, so this file passes its own check and the publish step's.
-// Usage: check-public-paths.mjs [--self-test]
+// Usage: check-public-paths.mjs [--self-test] [file...]   (files given: only those; scripts/verify-staged.sh passes a
+// commit's staged files, so a one-file commit does not read every tracked file)
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -14,8 +15,9 @@ const dot = (name) => `.${name}/`;
 const PRIVATE = [dot('codeloop'), dot('claude'), dot('cursor'), ['docs', 'agent-handoff.md'].join('/')];
 const NEVER_SENT = [...PRIVATE, 'shape/', 'evidence/'];
 // The developer skills generated from docs/guide/skills/ are the one part of the agent command sets that is published
-// (c-554), so a path under them is public and a file there is checked like any other.
-const PUBLISHED = [`${dot('claude')}skills/ops-`];
+// (c-554), so a path under them is public and a file there is checked like any other: the ops-* skills and `usecase`,
+// the one skill scripts/agent_skills.py names without the prefix (UNPREFIXED there).
+const PUBLISHED = [`${dot('claude')}skills/ops-`, `${dot('claude')}skills/usecase/`];
 // Ignore files name private folders on purpose; they point at nothing.
 const IGNORE_FILE = /(^|\/)\.[a-z]*ignore$|\.dockerignore$/;
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -53,7 +55,8 @@ function selfTest() {
 }
 
 if (process.argv.includes('--self-test')) process.exit(selfTest() ? 0 : 1);
-const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 << 20 }).split('\0').filter(Boolean);
+const named = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const files = named.length ? named : execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 << 20 }).split('\0').filter(Boolean);
 const hits = [];
 for (const f of files) {
   let text;

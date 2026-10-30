@@ -1,6 +1,6 @@
 # Admins see roles, a person's effective access and why an action is refused
 
-Status: current. Id: `uc-267`. Service: `console`. Layers: ui. Card: c-150.
+Status: current. Id: `uc-267`. Service: `console`. Layers: ui. Card: an earlier change.
 
 An admin answers access questions on screen: what a role allows, what a person can do and which role grants it, and
 (later steps) whether one action is allowed and why a button is locked.

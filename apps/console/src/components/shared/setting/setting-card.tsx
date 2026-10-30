@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { Lock } from 'lucide-react';
 
 import { LoadingButton } from '@/components/shared/loading-button';
+import { useIsSample } from '@/components/shared/sample-data';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 /**
@@ -51,7 +52,10 @@ export function SettingCard({
     e.preventDefault();
     if (!locked && dirty) void onSave?.();
   };
-  const hasFooter = help || footerEnd || onSave || locked;
+  // A sample card offers no Save or action at all: a control that cannot store anything reads as broken when it is
+  // only switched off.
+  const sample = useIsSample();
+  const hasFooter = help || ((footerEnd || onSave || locked) && !sample);
   return (
     <form id={id} onSubmit={submit} className="scroll-mt-20" data-testid={id ? `setting-${id}` : undefined}>
       <Card className={tone === 'danger' ? 'gap-0 border-destructive/40' : 'gap-0'}>
@@ -72,7 +76,7 @@ export function SettingCard({
         {hasFooter && (
           <CardFooter className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/40 px-6 py-3">
             <div className="min-w-0 text-xs text-muted-foreground">{help}</div>
-            {footerEnd ??
+            {sample ? null : footerEnd ??
               (locked ? (
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="setting-lock">
                   <Lock className="size-3.5" /> Only {requiredRole ? `a ${requiredRole}` : 'an admin'} can change this

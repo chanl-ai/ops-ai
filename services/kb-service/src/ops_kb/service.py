@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from ops_access import can, require_provisioner
@@ -26,6 +26,7 @@ from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned
 from .retrieval import Passage, Retriever
 from .store import KnowledgeStore
+from .tool_sources import ToolReader, source_config, sync_tool_source
 
 # Keyword search is what the demo adapter runs (Postgres full-text, docs/services/kb-service/overview.md); the other
 # fields are the console's defaults for a new knowledge base.
@@ -71,9 +72,11 @@ DEFAULT_INGEST: dict[str, Any] = {
     "model": "bank-standard",
     "approval": {"status": "not_needed", "approvedSteps": []},
 }
-SOURCE_TYPES_IN_PHASE = ("file",)
+SOURCE_TYPES_IN_PHASE = ("file", "tool")
 SENSITIVITIES = ("internal", "confidential", "restricted")
 MAX_PAGE_SIZE = 100
+# How long a tool source's sync holds its lease; a sync that dies frees it when this passes.
+LEASE = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
@@ -171,21 +174,38 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
 
 
 class KnowledgeService:
-    def __init__(self, store: KnowledgeStore, files: FileIntake, retriever: Retriever, agents: AgentDirectory) -> None:
+    def __init__(
+        self,
+        store: KnowledgeStore,
+        files: FileIntake,
+        retriever: Retriever,
+        agents: AgentDirectory,
+        tools: ToolReader | None = None,
+    ) -> None:
+        """`tools` reads "tool" sources through tools-service's gateway (c-564); without it none can be made."""
         self.store = store
         self.files = files
         self.retriever = retriever
         self.agents = agents
+        self.tools = tools
 
     # ── Serialising ──────────────────────────────────────────────────────
 
     def _source(self, s: dict[str, Any], used_by: list[str]) -> dict[str, Any]:
+        tool = s["type"] == "tool"
+        cfg: dict[str, Any] = dict(s.get("config") or {})
         return {
             "id": s["id"],
             "type": s["type"],
             "name": s["name"],
-            "scopeSummary": f"{len(s['file_ids'])} uploaded files",
-            "config": {"fileIds": s["file_ids"]},
+            "scopeSummary": f"{cfg.get('plugin')} {cfg.get('source')}"
+            if tool
+            else f"{len(s['file_ids'])} uploaded files",
+            "config": (
+                {k: cfg.get(k) for k in ("plugin", "source", "listTool", "getTool", "connectionId", "paused")}
+                if tool
+                else {"fileIds": s["file_ids"]}
+            ),
             "parsing": {"ocr": False, "tables": False, "vision": False},
             "ingest": DEFAULT_INGEST,
             "rules": [],
@@ -193,7 +213,7 @@ class KnowledgeService:
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
-            "schedule": {"kind": "manual"},
+            "schedule": cfg.get("schedule") or {"kind": "manual"},
             "deletedAtSource": "remove",
             "staleAfterDays": 365,
             "notifyOnFailure": True,
@@ -546,6 +566,9 @@ class KnowledgeService:
             "last_sync_at": None,
             "last_run_status": None,
         }
+        if kind == "tool":
+            # Read through a connection's tools (c-564): what tools-service declares for the team, checked now.
+            row["config"] = await source_config(self.tools, who, i)
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
         row["file_ids"] = [f for f, _ in names]
@@ -630,7 +653,22 @@ class KnowledgeService:
 
     async def sync(self, who: Who, source_id: str, *, full: bool = False, retry: bool = False) -> dict[str, Any]:
         s = await self._changeable_source(who, source_id)
+        if s["type"] == "tool":
+            return await self.sync_tool(who, s, full=full, trigger="full" if full else "manual")
         return await self._sync(who, s, full=full, retry=retry)
+
+    async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
+        """A tool source's sync (c-564) under its lease, so a manual sync and the schedule never run it at once."""
+        if self.tools is None:
+            raise Conflict("This service reads no tools, so the source cannot sync.", code="tools_unavailable")
+        if s["status"] == "paused":
+            raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
+        if not await self.store.claim(who.tenant_id, str(s["id"]), until=datetime.now(UTC) + LEASE):
+            raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
+        try:
+            return _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
+        finally:
+            await self.store.release(who.tenant_id, str(s["id"]))
 
     async def _sync(self, who: Who, s: dict[str, Any], *, full: bool, retry: bool) -> dict[str, Any]:
         """Reads every file of the source and indexes what changed: a new name is a new document, a known name with
@@ -791,17 +829,22 @@ class KnowledgeService:
         mime: str,
         data: bytes,
         digest: str,
+        path: str | None = None,
+        extra: dict[str, Any] | None = None,
+        title_given: str | None = None,
     ) -> dict[str, Any]:
+        """`path` keys the document in its source (a file's name, or the system's id for a tool source), `extra`
+        adds a tool source's marker, parent and address, and `title_given` is the system's own title for it."""
         now = datetime.now(UTC)
         item_id = existing["id"] if existing else new_id("itm")
         version = (existing["version"] + 1) if existing else 1
         chunks: list[dict[str, Any]] = []
         error: tuple[str, str] | None = None
         warning: str | None = None
-        title, pages = name, None
+        title, pages = title_given or name, None
         try:
             doc = parse(data, filename=name, mime_type=mime)
-            title, pages = doc.title or name, doc.source.page_count
+            title, pages = title_given or doc.title or name, doc.source.page_count
             result = split(doc, INGEST)
             for n, c in enumerate(result.chunks):
                 chunks.append(
@@ -832,7 +875,7 @@ class KnowledgeService:
             "tenant_id": who.tenant_id,
             "id": item_id,
             "source_id": s["id"],
-            "path": name,
+            "path": path or name,
             "title": title,
             "mime": mime,
             "size": len(data),
@@ -848,6 +891,7 @@ class KnowledgeService:
             "owner": s["owner"],
             "created_at": existing["created_at"] if existing else now,
             "processed_at": now,
+            **(extra or {}),
         }
         version_row = {
             "tenant_id": who.tenant_id,

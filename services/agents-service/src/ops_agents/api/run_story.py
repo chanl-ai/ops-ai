@@ -295,6 +295,9 @@ def state_of(child: dict[str, Any], ending: str | None, last: str | None, open_t
         return f"Failed at {last}" if last else "Failed"
     if status == "cancelled":
         return "Cancelled"
+    if status == "stuck":
+        # Nothing is behind it (c-561): the run page says why and offers Retry and Cancel.
+        return "Stuck"
     if open_task:
         return "Waiting for a person"
     if status == "waiting":

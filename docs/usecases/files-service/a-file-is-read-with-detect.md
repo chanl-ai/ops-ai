@@ -1,6 +1,6 @@
 # A file is read with Detect from the Files page
 
-Status: passing. Id: `uc-331`. Service: `files-service`. Layers: api, ui. Card: c-335.
+Status: passing. Id: `uc-331`. Service: `files-service`. Layers: api, ui. Card: an earlier change.
 
 A person asks the Files page to read a file without choosing its document type. files-service accepts the read request
 with no type, and the system extract workflow reads the file with Detect: documents-service classifies it over the

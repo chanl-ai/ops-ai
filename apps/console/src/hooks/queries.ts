@@ -39,7 +39,8 @@ export const qk = {
   workflowVersions: (id: string) => ['workflow', id, 'versions'] as const,
 };
 
-export const useOverview = () => useTeamQuery({ queryKey: qk.overview, queryFn: api.overview.get });
+// The sidebar reads it on every page (its count and the Human Tasks badge), so moving between pages reuses the answer.
+export const useOverview = () => useTeamQuery({ queryKey: qk.overview, queryFn: api.overview.get, staleTime: 30_000 });
 /** The demo brand from the console's env, when one is set. */
 export const useBrand = () => brand;
 

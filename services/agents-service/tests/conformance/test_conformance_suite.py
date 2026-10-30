@@ -28,7 +28,7 @@ from ops_agents.activities import gateway as gw
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.api.routing import route_thread
-from ops_agents.api.runs import execute, resolve
+from ops_agents.api.runs import as_thread_team, execute, resolve
 from ops_agents.api.sweeper import recover
 from ops_agents.api.timers import fire
 from ops_agents.graphs.common import kernel_turn
@@ -249,11 +249,12 @@ async def test_an_edit_after_approval_voids_the_old_token(adapter: Adapter) -> N
     run_id = new_id("run")
     generation = await leases.acquire(tid, run_id)
     row, graph = await resolve(adapter.rt, tid)
-    await graph.aupdate_state(
-        {"configurable": {"thread_id": tid, "lease_generation": generation}},
-        {"draft": payload["draft"] + " Edited after approval."},
-        as_node="grade",
-    )
+    with as_thread_team(row):
+        await graph.aupdate_state(
+            {"configurable": {"thread_id": tid, "lease_generation": generation}},
+            {"draft": payload["draft"] + " Edited after approval."},
+            as_node="grade",
+        )
     store = adapter.rt.graph_store
     assert store is not None
     assert await store.start_run(run_id, tid, "input", "2026-10-10T00:00:00Z", {"edit": True}, generation=generation)
@@ -459,11 +460,13 @@ async def test_a_paused_worker_cannot_write_after_takeover(adapter: Adapter) -> 
     await asyncio.sleep(0.7)  # the worker is paused past its lease (SIGSTOP)
     new = await Leases(engine, owner="new-owner", ttl=30).acquire(tid, "run_new")
     saver = adapter.rt.saver
-    await saver.araise_fence(tid, new)
-    snapshot = await saver.aget_tuple({"configurable": {"thread_id": tid, "checkpoint_ns": ""}})
-    stale = {"configurable": {"thread_id": tid, "checkpoint_ns": "", "lease_generation": paused}}
-    with pytest.raises(LeaseSupersededError):
-        await saver.aput(stale, snapshot.checkpoint, snapshot.metadata, {})
+    row, _ = await resolve(adapter.rt, tid)
+    with as_thread_team(row):
+        await saver.araise_fence(tid, new)
+        snapshot = await saver.aget_tuple({"configurable": {"thread_id": tid, "checkpoint_ns": ""}})
+        stale = {"configurable": {"thread_id": tid, "checkpoint_ns": "", "lease_generation": paused}}
+        with pytest.raises(LeaseSupersededError):
+            await saver.aput(stale, snapshot.checkpoint, snapshot.metadata, {})
     store = adapter.rt.graph_store
     assert store is not None
     with pytest.raises(LeaseSupersededError):

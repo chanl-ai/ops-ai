@@ -1,6 +1,6 @@
 # A workflow's branches join before the next step
 
-Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api, ui. Cards: c-278, c-553.
+Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api, ui. Cards: an earlier change, an earlier change.
 
 A builder runs two checks at once, a limits check and a payee screening, and decides once both are back. One step
 connects to both branches, and a Join waits for them: the decision step after it runs once, with each branch's last
@@ -41,5 +41,5 @@ missing from the Join's output; without the meeting check, every step after the 
 
 ## What this does not cover
 
-Continuing when the first branch finishes, and for-each batches with keep-going (c-263). A Join waits for every step
+Continuing when the first branch finishes, and for-each batches with keep-going. A Join waits for every step
 of the run that can still run, not only its own branches.

@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-115`. Service: `console`. Layers: ui.
 
-c-097, owner feedback (mid-2): a run opens on the workflow's own canvas, read-only, each step marked passed, failed or
+an earlier change, owner feedback (mid-2): a run opens on the workflow's own canvas, read-only, each step marked passed, failed or
 skipped, with its input and output one click away, so a failure is found in seconds instead of in the step table.
 
 ## Preconditions

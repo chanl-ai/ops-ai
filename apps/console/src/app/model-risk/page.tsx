@@ -13,7 +13,7 @@ import { PageLayout } from '@/components/page-layout';
 import { toastBulk } from '@/components/shared/bulk';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
@@ -165,11 +165,11 @@ export default function ModelRiskPage() {
           <SavedViewTabs
             ariaLabel="Model views"
             presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}` },
-              { id: 'needs_validation', label: `Needs validation · ${counts?.needs_validation ?? 0}`, icon: ShieldAlert },
-              { id: 'due_30d', label: `Due for review in 30 days · ${counts?.due_30d ?? 0}`, icon: CalendarClock },
-              { id: 'open_findings', label: `With open findings · ${counts?.open_findings ?? 0}`, icon: AlertTriangle },
-              { id: 'expired', label: `Expired · ${counts?.expired ?? 0}` },
+              { id: 'all', label: countLabel('All', counts?.all) },
+              { id: 'needs_validation', label: countLabel('Needs validation', counts?.needs_validation), icon: ShieldAlert },
+              { id: 'due_30d', label: countLabel('Due for review in 30 days', counts?.due_30d), icon: CalendarClock },
+              { id: 'open_findings', label: countLabel('With open findings', counts?.open_findings), icon: AlertTriangle },
+              { id: 'expired', label: countLabel('Expired', counts?.expired) },
             ]}
             savedViews={[]}
             activePresetId={view}

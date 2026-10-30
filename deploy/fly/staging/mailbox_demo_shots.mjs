@@ -1,6 +1,6 @@
 // Screenshots of a mailbox demo walk in a deployed console (docs/console/mailbox-demo.md, "On Fly staging"): the case,
 // the Human Task and the run, headless through the use-case harness, and any 4xx/5xx or page error on each.
-//   STG_ORIGIN=https://<your-app>-one.fly.dev STG_EMAIL=... STG_PASSWORD=... [STG_TEAM=<team id>] OUT=<dir> \
+//   STG_ORIGIN=https://<your-app>.fly.dev STG_EMAIL=... STG_PASSWORD=... [STG_TEAM=<team id>] OUT=<dir> \
 //   node deploy/fly/staging/mailbox_demo_shots.mjs cases/<case id> reviews/<run id>:review:1 workflows/runs/<run id>
 // Exits with the number of pages that failed.
 import { mkdirSync } from 'node:fs';

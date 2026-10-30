@@ -1,6 +1,6 @@
 # A workflow's tool step reaches its error and timeout ports on mock answers
 
-Status: passing. Id: `uc-397`. Service: `tools-service`. Layers: api. Card: c-332.
+Status: passing. Id: `uc-397`. Service: `tools-service`. Layers: api. Card: an earlier change.
 
 A builder sets an operation's mock answers in test: a status and body, a timeout or a delay, each optionally matching
 input values, one the default. The one executor answers a call that says `environment: test` from the first mock that
@@ -29,6 +29,8 @@ port of its own.
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-397-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-397 LAYER=api` (2026-10-19) |
+
+In the console: an operation's page edits one Mock response, which its test panel answers from (uc-055's ui script, step 5). Error, timeout and matching mock answers have no editor yet, so this use case stays at the api layer.
 
 ## Non-vacuous check
 

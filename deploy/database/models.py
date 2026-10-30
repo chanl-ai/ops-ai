@@ -18,13 +18,9 @@ import sqlalchemy as sa
 
 CHAINS_FILE = Path(__file__).resolve().parents[1] / "images" / "chains"
 # Packages a chain migrates besides its own service's store: agents-service's chain holds the workflow engine's tables.
-HOSTED: dict[str, tuple[str, ...]] = {"agents": ("ops_engine.store",)}
-# Tables a chain creates that no metadata defines yet, and why. The checkpointer writes them with raw SQL on asyncpg
-# (JSONB, arrays); its rewrite onto SQLAlchemy Core (c-337) gives them metadata and removes them from here. Their
-# indexes are outside metadata with them: ix_ops_checkpoints_run (agents 0071) is a JSON expression index.
-EXCLUDED: dict[str, frozenset[str]] = {
-    "agents": frozenset({"ops_checkpoints", "ops_checkpoint_writes", "ops_checkpoint_fences"}),
-}
+HOSTED: dict[str, tuple[str, ...]] = {"agents": ("ops_engine.store", "ops_checkpointer.tables")}
+# Tables a chain creates that no metadata defines yet, and why. None today.
+EXCLUDED: dict[str, frozenset[str]] = {}
 
 
 def chains() -> list[str]:

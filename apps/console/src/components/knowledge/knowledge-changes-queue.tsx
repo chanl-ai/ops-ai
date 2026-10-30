@@ -11,7 +11,7 @@ import { ChangeDetailBody } from '@/components/knowledge/changes/change-detail';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { useKnowledgeChange, useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
 import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -60,10 +60,10 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
       <SavedViewTabs
         ariaLabel="Change views"
         presets={[
-          { id: 'mine', label: `Changes · ${counts?.mine ?? 0}`, icon: UserCheck },
-          { id: 'open', label: `All open · ${counts?.open ?? 0}`, icon: Inbox },
-          { id: 'conflicts', label: `Conflicts · ${counts?.conflicts ?? 0}`, icon: AlertTriangle },
-          { id: 'resolved', label: `Decided · ${counts?.resolved ?? 0}`, icon: CheckCircle2 },
+          { id: 'mine', label: countLabel('Changes', counts?.mine), icon: UserCheck },
+          { id: 'open', label: countLabel('All open', counts?.open), icon: Inbox },
+          { id: 'conflicts', label: countLabel('Conflicts', counts?.conflicts), icon: AlertTriangle },
+          { id: 'resolved', label: countLabel('Decided', counts?.resolved), icon: CheckCircle2 },
         ]}
         savedViews={[]}
         activePresetId={view}

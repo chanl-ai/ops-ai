@@ -16,7 +16,7 @@ import { StopRowClick } from '@/components/shared/form-field';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Button } from '@/components/ui/button';
@@ -172,7 +172,7 @@ export default function AuditPage() {
         <div className="flex flex-col gap-4">
           <SavedViewTabs
             ariaLabel="Audit views"
-            presets={VIEWS.map((v) => ({ id: v.id, label: `${v.label} · ${counts?.[v.id] ?? 0}`, icon: v.icon }))}
+            presets={VIEWS.map((v) => ({ id: v.id, label: countLabel(v.label, counts?.[v.id]), icon: v.icon }))}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}

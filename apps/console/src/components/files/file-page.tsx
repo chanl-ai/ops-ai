@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { useCan } from '@/hooks/me-queries';
 import { useFileExtractions } from '@/hooks/extraction-queries';
 import { useFile } from '@/hooks/file-queries';
+import { useDocumentReads } from '@/hooks/use-switches';
 import type { Extraction } from '@/lib/types/extractions';
 import type { FileDetail } from '@/lib/types/files';
 
@@ -48,6 +49,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
   const canRecord = useCan('files', 'create');
   const canExtract = canRead === true && canRecord === true;
   const canCorrect = useCan('documents', 'edit') === true;
+  const reads = useDocumentReads();
   const [extracting, setExtracting] = React.useState(false);
   // The run the last Extract started rides in the address (?run=), so the tab it lands on links it and a reload keeps it.
   const params = useSearchParams();
@@ -83,6 +85,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
           tabs={[
             { href: base, label: 'Preview' },
             { href: `${base}/fields`, label: fieldCount ? `Fields · ${fieldCount}` : 'Fields' },
+            ...(reads ? [{ href: `${base}/text`, label: 'Text', testId: 'file-text-tab' }] : []),
             { href: `${base}/versions`, label: `Versions · ${f.versions.length}` },
             { href: `${base}/activity`, label: rows.length ? `Activity · ${rows.length}` : 'Activity' },
           ]}
@@ -111,7 +114,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
         </Alert>
       )}
       {children({ file: f, extractions: rows, latest, openExtract: () => setExtracting(true), canExtract, canCorrect })}
-      <ExtractDialog open={extracting} onOpenChange={setExtracting} fileId={f.id} fileName={f.name} onDone={(run) => router.push(`${base}/fields?${new URLSearchParams({ run: run.runId, ...(run.status === 'waiting' ? { waiting: '1' } : {}) })}`)} />
+      <ExtractDialog open={extracting} onOpenChange={setExtracting} fileId={f.id} fileName={f.name} onDone={(run) => router.push(`${base}/fields?${new URLSearchParams({ run: run.runId, ...(run.status === 'waiting' ? { waiting: '1' } : {}) })}`)} onFullText={() => router.push(`${base}/text`)} />
     </PageLayout>
   );
 }

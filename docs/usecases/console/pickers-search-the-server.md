@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-113`. Service: `console`. Layers: ui.
 
-Card c-135: the agent page's knowledge and tools pickers are `EntityPicker` over `/options` routes, so the search runs
+Card an earlier change: the agent page's knowledge and tools pickers are `EntityPicker` over `/options` routes, so the search runs
 on the service and nothing is capped by what the browser loaded. Knowledge is stored by knowledge base id.
 
 ## Preconditions

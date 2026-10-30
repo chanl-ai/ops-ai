@@ -6,10 +6,12 @@ same functions word every workflow's review, so nothing here knows one use case.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from contextvars import ContextVar
 from typing import Any, cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_service_kit.errors import ApiError
 
 from .deps import Runtime
 
@@ -58,8 +60,20 @@ def shown(value: Any, *, money: bool, currency: str | None) -> str:
     return "" if value is None else str(value)
 
 
+def object_rows(label: str, value: dict[str, Any]) -> list[dict[str, str]]:
+    """An object the call sends as rows a person reads (c-565): one row per field, named "Fields · Status", so an
+    approver sees each value the call would change rather than a raw object, or nothing at all."""
+    rows: list[dict[str, str]] = []
+    for k, v in value.items():
+        shown_v = shown(v, money=False, currency=None)
+        if shown_v:
+            rows.append({"label": f"{label} · {humanize(str(k))}", "value": shown_v})
+    return rows
+
+
 # Each operation the tool directory lists, by name: its input schema and description.
-Operations = dict[str, tuple[dict[str, Any], str]]
+# Each operation's input schema, description and title (a plugin tool's, c-581; None for others).
+Operations = dict[str, tuple[dict[str, Any], str, str | None]]
 _UNREAD: Any = object()
 
 
@@ -95,7 +109,8 @@ async def operations(rt: Runtime) -> Operations | None:
         return seen[id(rt)]
     try:
         found: Operations | None = {
-            op.name: (dict(op.input_schema or {}), str(op.description or ""))
+            # A directory that predates titles (or a test's stand-in) has none.
+            op.name: (dict(op.input_schema or {}), str(op.description or ""), getattr(op, "title", None))
             for op in await rt.directory().operations()
         }
     except (ServiceCallError, ServiceUnreachable):
@@ -109,12 +124,22 @@ def _operation(rt: Runtime, tool: str, ops: Operations | None) -> tuple[dict[str
     """The operation's input schema and description from the tool directory, or the catalog's; empty when neither
     knows the tool. With the registry down the catalog's schema, or the call's own keys, word it instead of failing."""
     if ops and tool in ops:
-        return ops[tool]
+        return ops[tool][:2]
     d = rt.catalog.tool(tool)
     return (dict(d.input_schema), d.description) if d else ({}, "")
 
 
-def call_label(catalog: Any, call: dict[str, Any]) -> str:
+async def tool_titles(rt: Runtime) -> dict[str, str]:
+    """Each titled operation's title (a plugin tool's, c-581) for a chat card's wording; none while the directory
+    cannot be read, so a card then reads by the operation's name rather than failing the reply."""
+    try:
+        ops = await operations(rt)
+    except ApiError:
+        return {}
+    return {name: title for name, (_, _, title) in (ops or {}).items() if title}
+
+
+def call_label(catalog: Any, call: dict[str, Any], titles: Mapping[str, str] | None = None) -> str:
     """The call's action in words, short ("Hold 2,140.55 on CHQ-2219", "Look up accounts"): the catalogue's approval
     action filled from the call, else the operation's name made readable. Needs no directory read, so a chat widget
     words its call as describe_call's `label` does."""
@@ -126,6 +151,8 @@ def call_label(catalog: Any, call: dict[str, Any]) -> str:
         filled = _PLACEHOLDER.sub(lambda m: values.get(_norm(m.group(1)), m.group(0)), template.action)
         if not _PLACEHOLDER.search(filled):
             return filled
+    if titles and tool in titles:
+        return titles[tool]
     return humanize(tool) if tool else "Run the step"
 
 
@@ -143,7 +170,8 @@ async def describe_call(
     account's currency. `ops` is the directory already read (describe_calls); unread, it is read for this call."""
     tool = str(call.get("tool") or "")
     args = cast(dict[str, Any], call.get("input") or {})
-    schema, description = _operation(rt, tool, await operations(rt) if ops is _UNREAD else ops)
+    ops_now = cast(Operations | None, await operations(rt) if ops is _UNREAD else ops)
+    schema, description = _operation(rt, tool, ops_now)
     props = cast(dict[str, Any], schema.get("properties") or {})
     titles = {
         _norm(k): str(cast(dict[str, Any], p).get("title") or humanize(k))
@@ -179,8 +207,15 @@ async def describe_call(
         for k, v in args.items()
         if values.get(_norm(k)) and not _MACHINE_ID.match(values[_norm(k)]) and not _object(v)
     ]
-    label = humanize(tool) if tool else "Run the step"
+    named = ops_now[tool][2] if ops_now and tool in ops_now else None
+    label = named or (humanize(tool) if tool else "Run the step")
     sentence = f"{label}: " + ", ".join(f"{f['label'].lower()} {f['value']}" for f in fields) if fields else label
+    # An object the call writes (a record's changed fields) is what the approver decides on: its fields are rows of
+    # the card, though never part of the sentence.
+    for k, v in args.items():
+        if _object(v):
+            rows = object_rows(titles.get(_norm(k), humanize(k)), cast(dict[str, Any], v))
+            fields += [r for r in rows if not _MACHINE_ID.match(r["value"])]
     return {"label": label, "sentence": sentence, "consequence": f"{said}." if said else None, "fields": fields}
 
 

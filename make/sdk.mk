@@ -1,5 +1,7 @@
 # The Python and TypeScript SDKs in sdk/ (docs/sdk/): the generated layer, its drift check and the SDKs' tests.
 
+# The sdk/ folder exists, so without .PHONY `make sdk` reports it up to date and generates nothing.
+.PHONY: sdk sdk-verify sdk-check
 sdk: ## Regenerate the SDKs' generated layer after a route changes (sdk/generate.py)
 	uv run python sdk/generate.py
 

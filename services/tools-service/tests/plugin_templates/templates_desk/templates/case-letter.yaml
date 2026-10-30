@@ -1,0 +1,5 @@
+name: Case letter
+description: A letter about a case, with its number and date
+fields:
+  - { key: case_number, label: Case number, type: text, required: true, keyField: true }
+  - { key: letter_date, label: Letter date, type: date, required: true }

@@ -95,7 +95,7 @@ code runs them on LangGraph on PostgreSQL; workflows move to the `ops_engine` ru
 | Area | Runs today | Planned |
 |---|---|---|
 | Runtime API | Threads with external keys, runs with SSE, state, run journal, migrate, route-to-people; agents and workflows as drafts that validate, test and publish with a second person's approval; pointers; `GET /v1/tools`; model aliases | Reviews in `ops_hitl`, cancel, event re-attach, webhooks ([api.md](api.md)) |
-| Engine | LangGraph 1.2.14 called directly, `durability="sync"`; the 13-test conformance suite passes on it. `packages/ops_engine` slice 1 (c-061): compiler to LangGraph, step journal, work queue, worker loop | The rest of the `ops_engine` runner: leases with generation fencing and reconcile-by-key for every workflow step |
+| Engine | LangGraph 1.2.14 called directly, `durability="sync"`; the 13-test conformance suite passes on it. `packages/ops_engine` slice 1: compiler to LangGraph, step journal, work queue, worker loop | The rest of the `ops_engine` runner: leases with generation fencing and reconcile-by-key for every workflow step |
 | Durability | Leases with generations, sweeper, fences in checkpointer, journal, timers and tools-service | Work queue for enqueued input, stored event log with per-thread `seq` |
 | Human steps | Interrupts naming the gated call, decide-then-resume from the console's Reviews, approvals minting HMAC tokens, verified step-up, SLA timers | Reviews in `ops_hitl`, decide as the only resume path, asymmetric tokens |
 | Cost | A usage row per graph model call, thread and deployment budgets that pause the thread, `cost` and `budget` in state | Per-key ledger in models-service for every caller; metering for chat routes |

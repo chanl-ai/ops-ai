@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-29",
+  "title": "Memories stay private and old ones are still found",
+  "description": "A card number, IBAN or national id is never kept as a memory, and only you see what the assistant remembered about you, even where an admin can read the conversation. Your assistant searches all of your memories by their words, so something you said months ago is still found, and asking it to remember something saves it once.",
+  "tag": "new",
+  "cards": [
+    "c-563"
+  ]
+}

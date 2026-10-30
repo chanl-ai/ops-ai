@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-111`. Service: `platform-service`. Layers: ui.
 
-c-099, owner feedback (smaller-1): the console lost its sign-in on restarts. The cause was `make up` dropping the
+an earlier change, owner feedback (smaller-1): the console lost its sign-in on restarts. The cause was `make up` dropping the
 whole database whenever any service's migration chain differed from the code, which deleted platform-service's
 sessions. `make up` now migrates every chain in place and stops, naming the chain, only when the database is ahead of
 the code; only `make reset-db` (or `make up RESET=1`) wipes.

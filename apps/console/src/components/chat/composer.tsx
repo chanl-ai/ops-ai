@@ -89,6 +89,35 @@ export interface MentionOption {
 // "@" at the start or after a space, then the name typed so far, at the end of the text.
 const MENTION = /(^|\s)@([\w-]*)$/;
 
+// A chat's unsent draft, kept in this tab only, so signing in again after the session ends brings it back (c-552).
+const DRAFT = 'ops.chat.draft.';
+const readDraft = (key?: string) => {
+  if (!key) return '';
+  try {
+    return window.sessionStorage.getItem(DRAFT + key) ?? '';
+  } catch {
+    return '';
+  }
+};
+const writeDraft = (key: string | undefined, text: string) => {
+  if (!key) return;
+  try {
+    if (text) window.sessionStorage.setItem(DRAFT + key, text);
+    else window.sessionStorage.removeItem(DRAFT + key);
+  } catch {
+    // No storage: the draft lasts until the page goes, as before.
+  }
+};
+
+/** Forgets every kept draft; signing out calls it, so a shared machine never shows the last person's words. */
+export function clearChatDrafts() {
+  try {
+    for (const k of Object.keys(window.sessionStorage)) if (k.startsWith(DRAFT)) window.sessionStorage.removeItem(k);
+  } catch {
+    // No storage, nothing kept.
+  }
+}
+
 export function Composer({
   onSend,
   streaming,
@@ -100,6 +129,7 @@ export function Composer({
   canAttach = true,
   mentions,
   onMention,
+  draftKey,
 }: {
   onSend: (text: string, attachments: ChatAttachment[]) => void;
   streaming: boolean;
@@ -114,8 +144,17 @@ export function Composer({
   /** Agents offered after @; choosing one calls `onMention` and removes the @name from the text. */
   mentions?: MentionOption[];
   onMention?: (agent: MentionOption) => void;
+  /** Keeps the unsent text under this key for the tab (the chat's id, or "new" on Chat's home). */
+  draftKey?: string;
 }) {
-  const [text, setText] = React.useState('');
+  const [text, setTextState] = React.useState('');
+  React.useEffect(() => {
+    setTextState(readDraft(draftKey));
+  }, [draftKey]);
+  const setText = (next: string) => {
+    setTextState(next);
+    writeDraft(draftKey, next);
+  };
   const attach = useAttachChatFile();
   const [files, setFiles] = React.useState<UploadItem[]>([]);
   // Remounting the upload control clears it after a send.

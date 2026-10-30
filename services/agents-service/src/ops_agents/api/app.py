@@ -50,6 +50,7 @@ from ..store.mailboxes import MailboxRow, MailboxStore
 from ..store.tenancy import LOCAL_TENANT, SEED, current_team, current_tenant
 from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
+from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .approval_renewal import ApprovalRenewal
 from .child_runs import ChildRuns
@@ -72,11 +73,13 @@ from .routers import (
     activity,
     agents,
     background,
+    batches,
     case_records,
     cases,
     channel_list,
     chat,
     events,
+    forms,
     graph_list,
     graphs,
     health,
@@ -86,6 +89,7 @@ from .routers import (
     reviews,
     service_events,
     step_up,
+    templates,
     tool_catalog,
     workflows,
 )
@@ -337,6 +341,7 @@ def create_app(
         rt.knowledge_bases = knowledge
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)
+            gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
         # Published versions and the registry are database rows: they load, list and publish with no model key.
         rt.graph_store = GraphStore(db)
         async with AsyncExitStack() as stack:
@@ -488,6 +493,9 @@ def create_app(
     mount(task_routes.router, "Reviews")
     mount(ai_step_routes.router, "Workflows")
     mount(activity.router, "Activity")
+    mount(forms.router, "Forms")
+    mount(templates.router, "Templates")
+    mount(batches.router, "Batches")
     mount(background.router, "Background")
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")

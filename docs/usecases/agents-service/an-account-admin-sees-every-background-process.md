@@ -1,6 +1,6 @@
 # An account admin sees every background process and what it did
 
-Status: passing. Id: `uc-516`. Service: `agents-service`. Layers: ui. Card: c-516.
+Status: passing. Id: `uc-516`. Service: `agents-service`. Layers: ui. Card: an earlier change.
 
 An account admin opens Govern > Background and sees every listed background process with its state, last run and
 last error, and the latest jobs each did for a team. A builder is told the page is for account admins, and the API

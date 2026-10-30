@@ -1,4 +1,4 @@
-import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, Repeat, ShieldCheck, User, XCircle } from 'lucide-react';
+import { Ban, Bot, CheckCircle2, Clock, Cpu, Database, Loader2, Repeat, ShieldCheck, User, XCircle } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { money } from '@/lib/format';
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
 export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', completion: 'Model call' };
 export const APPROVAL_LABEL: Record<ApprovalKind, string> = { person: 'Person', policy: 'Policy', none: 'None' };
-export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay' };
+export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay', running: 'Running' };
 
 export const options = <K extends string>(labels: Record<K, string>) => (Object.entries(labels) as [K, string][]).map(([value, label]) => ({ value, label }));
 
@@ -56,6 +56,7 @@ const STATUS: Record<CallStatus, { icon: typeof CheckCircle2; cls: string }> = {
   denied: { icon: Ban, cls: 'text-destructive' },
   awaiting_approval: { icon: Clock, cls: 'text-warning-text' },
   replayed: { icon: Repeat, cls: 'text-muted-foreground' },
+  running: { icon: Loader2, cls: 'text-muted-foreground' },
 };
 
 /** A replay names the call it repeated, so a row is never read as a second call that ran. */

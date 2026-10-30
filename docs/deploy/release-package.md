@@ -3,7 +3,7 @@
 Status: current. Proven end to end; not yet installed on a client's machines. The guide inside the package is the
 [install guide](install-guide.md).
 
-<!-- Built by c-385; the proof is deploy/release/proof.sh. -->
+<!-- Built by an earlier change; the proof is deploy/release/proof.sh. -->
 
 A client team runs Ops AI on its own Linux machines with Docker, often with no internet access from those machines, and
 its DBA applies every schema change. The release package carries everything that needs: prebuilt images, compose files,
@@ -66,11 +66,11 @@ the bundle and push it to their own registry, then set `OPS_IMAGE_PREFIX` in the
 | Item | State |
 |---|---|
 | Upgrade from one package to the next | No earlier package exists. `make db-upgrade-sql FROM=<running> TO=<new>` writes the upgrade (`database.md`); the next release adds it to `db/postgres/` |
-| Azure SQL and SQL Server | Scripts for review only: never applied to a server (c-345); the services do not run on SQL Server (c-337) |
+| Azure SQL and SQL Server | Scripts for review only: never applied to a server; the services do not run on SQL Server |
 | A provider key for a real model | The proof connects the fake model only; a key is saved on Settings > Model providers and named with `connect_model.py --key-ref` (`compose.md`, "Connect a model") |
 | Image signing, an SBOM per image, arm64 images | Not built |
 | The sign-in screens name the demo bank | `components/auth/auth-form-wrapper.tsx`, `login-form.tsx` and `signup/page.tsx` write "Harbor & Pine Bank" and "Harbor & Pine Ops AI" into the console, so every install shows them; the brand needs to come from a setting |
 | A real Azure Database for PostgreSQL server | The proof stands in for it with the admin's documented attributes; not yet run against one |
 | The bundle's proxy and opa images on this proof host | Not exercised: the proof host is arm64, where Go amd64 binaries abort under QEMU (`fatal error: taggedPointerPack`), so the proof runs those two as native builds of the same Dockerfile stages at the package's commit and gives health checks 60 s. The other eight images ran from the bundle. An amd64 VM runs the bundle's files unchanged |
-| The migrate job without a DBA after `first_admin.sh` was split out of `migrate.sh` | Not rerun by c-385; the DBA path ran `first_admin.sh` alone. Fly's `release.sh` and the Kubernetes Job call `migrate.sh` |
+| The migrate job without a DBA after `first_admin.sh` was split out of `migrate.sh` | Not rerun by an earlier change; the DBA path ran `first_admin.sh` alone. Fly's `release.sh` and the Kubernetes Job call `migrate.sh` |
 | INSTALL.md's first line | Carries the repo's status line, which names the proof script and the card; a client-facing first line is still to come |

@@ -1,6 +1,6 @@
 # A file is read on its own page
 
-Status: current. Id: `uc-227`. Service: `console` on files-service and documents-service. Layers: ui. Card: c-262.
+Status: current. Id: `uc-227`. Service: `console` on files-service and documents-service. Layers: ui. Card: an earlier change.
 
 A builder checks a document at file level before any workflow uses it: the file's own page shows its pages, Extract
 reads it with a document type, and each field shows its value, confidence and the text it came from, with doubtful

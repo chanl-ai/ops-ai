@@ -20,7 +20,12 @@ from .tenancy import current_tenant, tenant_tx
 
 # cursor_reset: no message. The mailbox refused the stored read position, so mail that arrived since the last read was
 # skipped and reading starts again at the folder's end.
-Outcome = Literal["started", "duplicate", "filtered", "daily_cap", "cursor_reset"]
+# start_failed: starting the message's run raised; the next read tries it again. set_aside: it failed SET_ASIDE_AFTER
+# reads, so reading went on past it and the row keeps the message for Run again (c-561).
+Outcome = Literal["started", "duplicate", "filtered", "daily_cap", "cursor_reset", "start_failed", "set_aside"]
+SET_ASIDE_AFTER = 3
+# How long a set-aside message is kept for Run again: raw mail is not held for ever.
+KEEP_SET_ASIDE_DAYS = 30
 
 trigger_events = sa.Table(
     "trigger_events",
@@ -40,6 +45,9 @@ trigger_events = sa.Table(
     sa.Column("run_id", sa.String(64)),
     sa.Column("detail", sa.Text(), nullable=False),
     sa.Column("recorded_at", sa.String(32), nullable=False),
+    # A set-aside message as read (c-561), JSON, for Run again; cleared once its run starts or after 30 days. Never
+    # listed: it holds the whole mail, attachments included.
+    sa.Column("item", sa.Text()),
     sa.Index("ix_trigger_events_workflow", "tenant_id", "workflow_id", "recorded_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -57,6 +65,11 @@ class TriggerEvent:
     outcome: Outcome
     run_id: str | None = None
     detail: dict[str, Any] | None = None
+    item: str | None = None
+
+
+# Every column but the kept message: what the trigger list shows.
+LISTED = [c for c in trigger_events.c if c.name != "item"]
 
 
 class TriggerEvents:
@@ -79,6 +92,7 @@ class TriggerEvents:
             "run_id": e.run_id,
             "detail": json.dumps(e.detail or {}),
             "recorded_at": now_iso(),
+            "item": e.item,
         }
         async with tenant_tx(self.engine) as c:
             await c.execute(trigger_events.insert().values(**values))
@@ -106,8 +120,62 @@ class TriggerEvents:
             t.c.workflow_id == workflow_id,
             team_visible(t),
         )
-        q = sa.select(t).where(*where).order_by(t.c.recorded_at.desc(), t.c.id.desc())
+        q = sa.select(*LISTED).where(*where).order_by(t.c.recorded_at.desc(), t.c.id.desc())
         async with tenant_tx(self.engine) as c:
             total = int((await c.execute(sa.select(sa.func.count()).select_from(t).where(*where))).scalar_one())
             rows = (await c.execute(q.limit(page_size).offset((page - 1) * page_size))).mappings().all()
         return [dict(r) | {"detail": json.loads(r["detail"] or "{}")} for r in rows], total
+
+    async def failures(self, workflow_id: str, event_key: str) -> tuple[int, bool]:
+        """The reads on which starting this message's run failed, and whether it was set aside."""
+        t = trigger_events
+        q = sa.select(
+            sa.func.count().filter(t.c.outcome == "start_failed"), sa.func.count().filter(t.c.outcome == "set_aside")
+        ).where(
+            t.c.tenant_id == current_tenant(),
+            t.c.workflow_id == workflow_id,
+            t.c.event_key == event_key,
+            t.c.outcome.in_(("start_failed", "set_aside")),
+            team_visible(t),
+        )
+        async with tenant_tx(self.engine) as c:
+            failed, aside = (await c.execute(q)).one()
+        return int(failed), int(aside) > 0
+
+    async def set_aside(self, event_id: str) -> dict[str, Any] | None:
+        """A set-aside event the caller's team may see, with its kept message; None when there is none, or its message
+        was already run or forgotten."""
+        t = trigger_events
+        q = sa.select(t).where(
+            t.c.tenant_id == current_tenant(),
+            t.c.id == event_id,
+            t.c.outcome == "set_aside",
+            t.c.item.is_not(None),
+            team_visible(t),
+        )
+        async with tenant_tx(self.engine) as c:
+            row = (await c.execute(q)).mappings().one_or_none()
+        return dict(row) if row is not None else None
+
+    async def forget(self, event_id: str) -> None:
+        """Drops the kept message once its run has started."""
+        t = trigger_events
+        async with tenant_tx(self.engine) as c:
+            await c.execute(t.update().where(t.c.tenant_id == current_tenant(), t.c.id == event_id).values(item=None))
+
+    async def forget_before(self, workflow_id: str, before: str) -> None:
+        """Drops the messages the workflow set aside before `before`."""
+        t = trigger_events
+        async with tenant_tx(self.engine) as c:
+            await c.execute(
+                t.update()
+                .where(
+                    t.c.tenant_id == current_tenant(),
+                    t.c.workflow_id == workflow_id,
+                    t.c.recorded_at < before,
+                    t.c.outcome == "set_aside",
+                    t.c.item.is_not(None),
+                    team_visible(t),
+                )
+                .values(item=None)
+            )

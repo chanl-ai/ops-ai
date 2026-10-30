@@ -24,6 +24,10 @@ class ToolResult:
     reason: str | None = None
     # Only from find(): the gateway has the call and is still running it, so its outcome is not known yet.
     pending: bool = False
+    # Only from find(): the gateway's claim expired without an answer, so the write may have run (c-561).
+    lost: bool = False
+    # The gateway refused the key as abandoned: the call never ran under it and never will (c-561).
+    not_sent: bool = False
 
 
 class ToolPort(Protocol):

@@ -51,6 +51,19 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "connections_disconnect": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/me/connections/{connection_id}",
+    "pathParams": [
+      "connection_id"
+    ],
+    "query": [
+      "environment"
+    ],
+    "stream": false
+  },
   "connections_get_connection": {
     "body": null,
     "headers": [],
@@ -84,6 +97,33 @@ export const toolsOperations = {
     ],
     "stream": false
   },
+  "connections_list_systems": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/systems",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "connections_my_connections": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/me/connections",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "connections_open_connect_link": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/connections/connect-links/sign-in",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "connections_set_environment": {
     "body": "json",
     "headers": [],
@@ -112,6 +152,17 @@ export const toolsOperations = {
     "headers": [],
     "method": "POST",
     "path": "/v1/connections/{connection_id}/sign-in",
+    "pathParams": [
+      "connection_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "connections_test_connection": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/connections/{connection_id}/test",
     "pathParams": [
       "connection_id"
     ],
@@ -229,6 +280,68 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/health/background",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "plugins_delete_app_secret": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/plugins/{plugin_id}/app-secret",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "plugins_knowledge_sources": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/knowledge-sources",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "plugins_list_plugin_templates": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/plugin-templates",
+    "pathParams": [],
+    "query": [
+      "kind"
+    ],
+    "stream": false
+  },
+  "plugins_list_plugins": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/plugins",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "plugins_set_app_secret": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/plugins/{plugin_id}/app-secret",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "plugins_set_team_plugin": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/plugins/{plugin_id}/team",
+    "pathParams": [
+      "plugin_id"
+    ],
     "query": [],
     "stream": false
   },

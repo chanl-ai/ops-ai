@@ -530,7 +530,7 @@ export function RecentRunsCard({ runs, loading }: { runs?: AgentRun[]; loading: 
 }
 
 /** Rail card: where the agent runs, and which agent version each workflow is pinned to. */
-export function UsedInCard({ agent, onCreateChat, creating }: { agent: Agent; onCreateChat: () => void; creating: boolean }) {
+export function UsedInCard({ agent }: { agent: Agent }) {
   // Its own one-step workflow publishes with the agent, so it is never behind.
   const behind = agent.usedIn.filter((u) => !u.own && u.pinnedVersion < agent.version);
   return (
@@ -540,12 +540,7 @@ export function UsedInCard({ agent, onCreateChat, creating }: { agent: Agent; on
       </CardHeader>
       <CardContent className="flex flex-col gap-3 px-4">
         {agent.usedIn.length === 0 ? (
-          <>
-            <p className="text-sm text-muted-foreground">Not in any workflow, so nothing can reach it yet.</p>
-            <Button size="sm" variant="outline" onClick={onCreateChat} disabled={creating} className="self-start">
-              <Plus className="size-3.5" /> Create chat workflow
-            </Button>
-          </>
+          <p className="text-sm text-muted-foreground">Not in any workflow yet. Add it to a workflow's agent step on the canvas, or deploy it to a channel.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {agent.usedIn.map((u) => (

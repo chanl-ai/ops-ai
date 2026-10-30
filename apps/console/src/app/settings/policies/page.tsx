@@ -13,10 +13,13 @@ import { SettingCard } from '@/components/shared/setting/setting-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
+import { useRealConnections, useSaveSendPolicy, useSendPolicy } from '@/hooks/systems-queries';
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
+import { relativeTime } from '@/lib/format';
 import type { PolicyKind, PolicyValue, WorkspacePolicy } from '@/lib/types/workspace-policies';
 import { toast } from 'sonner';
 
@@ -102,6 +105,56 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
   );
 }
 
+/**
+ * The team's sending policy (c-580): the plain words Check before sending reads a write against. Each save is a new
+ * version; a run is checked against the newest one when its write is about to go out.
+ */
+function SendPolicyCard({ locked }: { locked: boolean }) {
+  const policy = useSendPolicy();
+  const save = useSaveSendPolicy();
+  const saved = policy.data?.text ?? '';
+  const [text, setText] = React.useState(saved);
+  React.useEffect(() => {
+    setText(saved);
+  }, [saved]);
+  const v = policy.data;
+  const submit = async () => {
+    try {
+      const out = await save.mutateAsync({ text: text.trim() });
+      toast.success(`Saved the sending policy, version ${out.version}`, { description: 'The next write a run sends is checked against it.' });
+    } catch (e) {
+      toast.error('Couldn’t save the sending policy', { description: (e as Error).message });
+    }
+  };
+  return (
+    <SettingCard
+      id="send-policy"
+      title="Sending policy"
+      description="What Check before sending reads each write against, in plain words: what a reply or a record must never say or do."
+      help={v ? `Version ${v.version}, saved by ${v.savedBy} ${relativeTime(v.savedAt)}` : policy.isPending ? 'Loading…' : 'Not written yet'}
+      locked={locked}
+      onSave={submit}
+      saving={save.isPending}
+      dirty={text.trim() !== saved.trim() && Boolean(text.trim())}
+    >
+      {policy.isError ? (
+        <QueryError what="the sending policy" error={policy.error} onRetry={() => policy.refetch()} retrying={policy.isFetching} />
+      ) : (
+        <Textarea
+          id="send-policy-text"
+          aria-label="Sending policy"
+          rows={5}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Never promise a refund, or any money back, in a case or a reply."
+          className="bg-card"
+          disabled={locked}
+        />
+      )}
+    </SettingCard>
+  );
+}
+
 /** Govern › Policies: one card per workspace policy, read from and saved to platform-service (GET and PUT /v1/policies). */
 export default function PoliciesPage() {
   const policies = useWorkspacePolicies();
@@ -109,6 +162,7 @@ export default function PoliciesPage() {
   const sample = usePoliciesAreSample();
   // The resolved team: its id is what the server files a per-team policy under.
   const { team } = useTeam();
+  const sendPolicy = useRealConnections();
   return (
     <SettingsPageLayout section="Policies" description="Who may decide what, and which publishes need a review. Every default is open." sample={sample}>
       <Note title="Every default is open">A policy you have not set behaves as its default. A change applies to new requests; open ones keep the rule they were made under.</Note>
@@ -125,8 +179,13 @@ export default function PoliciesPage() {
         <QueryError what="the policies" error={policies.error} onRetry={() => policies.refetch()} retrying={policies.isFetching} />
       ) : (
         <div className="flex flex-col gap-4" data-testid="policy-cards">
-          {policies.data.map((p) => (
-            <PolicyCard key={p.key} policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
+          {/* The install's plugins (c-564) are switched through the API; they have no editor on this page yet. */}
+          {policies.data.filter((p) => p.kind !== 'plugins').map((p) => (
+            <React.Fragment key={p.key}>
+              <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
+              {/* The words Check before sending reads, right after the switch that turns it on. */}
+              {sendPolicy && p.key === 'checkBeforeSend' && <SendPolicyCard locked={!(p.changedBy in (editor.data?.cells ?? {})) || sample} />}
+            </React.Fragment>
           ))}
         </div>
       )}

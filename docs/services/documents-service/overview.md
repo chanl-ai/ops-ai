@@ -1,9 +1,9 @@
 # Documents service
 
-Status: first slice built (c-256). documents-service runs on :8760 (`make up` starts it as `documents`) with its own
-tables and migration chain (`alembic_version_documents`). It serves the extraction API (c-235) and document types,
-their versions, samples and capped test runs (c-236), the layout (c-247), classify (c-249), and boxes on every
-extracted field (c-252). Templates (c-253, c-254) are planned. Design: this page.
+Status: first slice built. documents-service runs on :8760 (`make up` starts it as `documents`) with its own
+tables and migration chain (`alembic_version_documents`). It serves the extraction API and document types,
+their versions, samples and capped test runs, the layout, classify, and boxes on every
+extracted field. Templates are planned. Design: this page.
 
 | Item | Detail |
 |---|---|
@@ -30,9 +30,9 @@ The service map that applies to every service is `docs/architecture/service-map.
 
 | Route | Scope for a service | What it does |
 |---|---|---|
-| `POST /v1/documents/layout` | `documents:run` | `{fileId, ocr?}`: the file's layout, read on the first ask and cached by tenant, content digest, layout engine version and OCR choice: pages, blocks in reading order with table cells, words with confidence, boxes as page fractions (c-247) |
+| `POST /v1/documents/layout` | `documents:run` | `{fileId, ocr?}`: the file's layout, read on the first ask and cached by tenant, content digest, layout engine version and OCR choice: pages, blocks in reading order with table cells, words with confidence, boxes as page fractions |
 | `GET /v1/documents/layout/{fileId}?page=&ocr=` | `documents:view` | The cached layout or one page of it; 404 until it is read |
-| `GET /v1/documents/extractions?fileId=` | `documents:view` | A file's extractions by the caller's team, newest first, paged (c-250) |
+| `GET /v1/documents/extractions?fileId=` | `documents:view` | A file's extractions by the caller's team, newest first, paged |
 | `POST /v1/documents/extractions` | `documents:run` | `{fileId, fields or documentTypeId, version?, many, ocr, reviewBelow}`. A small file answers 200 when done; a larger one 202, to poll. `Idempotency-Key` returns the same extraction |
 | `GET /v1/documents/extractions/{id}` | `documents:view` | The extraction, with fields, `needsReview`, floor and corrections |
 | `PATCH /v1/documents/extractions/{id}/fields/{key}` | `documents:edit` | A correction; the original value and confidence are kept |
@@ -45,14 +45,14 @@ People are checked against the `documents` permission area: view to read, run to
 type or correct a field; delete is for services. Built-in roles: admin
 holds every action; builder, reviewer and viewer hold view, edit and run (platform migration 0023).
 
-The console's Data Hub > Document types (`/document-types`, c-243) lists the team's types and opens one on a version
+The console's Data Hub > Document types (`/document-types`) lists the team's types and opens one on a version
 picker with Fields, Samples and Tests tabs; its write controls follow `canCreate` and `canEdit`, so with every member
 holding `documents.edit` no one sees it read-only until RBAC lands. Proof: uc-243
 (`docs/usecases/documents-service/builders-manage-document-types.md`); page row in `docs/console/page-plan.md`.
 
 ## Workflows that use it
 
-Subsystems compose through workflows (c-250); no service calls another to make something happen.
+Subsystems compose through workflows; no service calls another to make something happen.
 
 | Workflow | Started by | Steps |
 |---|---|---|
@@ -61,7 +61,7 @@ Subsystems compose through workflows (c-250); no service calls another to make s
 | `extraction_corrected_save` | documents-service's `extraction.corrected`, written with a person's correction of the file's newest read | Save data on file with the corrected read; a corrected field no longer counts as waiting |
 
 A workflow records what a file was read as with its Save data on file step (`PUT /v1/files/{id}/data`), never the
-Extract from file step itself (c-378). The step takes the type's name from the read's `documentType`, which
+Extract from file step itself. The step takes the type's name from the read's `documentType`, which
 documents-service names, so a workflow need not pass one. Each seeded workflow that reads a file of a document type
 (`mail_document`, `levy_intake`, `levy_read_one`, `system_extract`, `attachment_record`) saves the read on its ok and
 review paths; without one Files says "Not read" while the Fields tab shows the read. A read with fields of its own
@@ -77,7 +77,7 @@ Save data run with the final read. Delivered and superseded rows are pruned afte
 
 ## What an extraction reads
 
-Extraction reads the file's cached layout, not a second parse (c-247). Page text lists blocks in reading order with
+Extraction reads the file's cached layout, not a second parse. Page text lists blocks in reading order with
 titles and headings on lines of their own; a two-cell table row (a label and its value) becomes two lines, and a wider
 row (a spreadsheet or CSV record) stays one line joined by ` | `. Words far apart on one line (a two-column caption)
 are separate lines. An OCR'd field scores at the mean recognition confidence of its quote's words instead of a flat
@@ -85,12 +85,12 @@ are separate lines. An OCR'd field scores at the mean recognition confidence of 
 
 Each field whose quote is found on its page carries `boxes`, one `{page, x, y, w, h}` per printed line as fractions
 of the page from the top left, narrowed to the value's words when the quote includes a label, and `blocks`, the layout
-block or table cell ids they sit in (c-252, `ops_extract.boxes`). A quote not on its page, a file without word boxes
-(DOCX, HTML, text) and reads made before c-252 carry none. On a page OCR turned upright or straightened (c-294), each
+block or table cell ids they sit in (`ops_extract.boxes`). A quote not on its page, a file without word boxes
+(DOCX, HTML, text) and reads made before an earlier change carry none. On a page OCR turned upright or straightened, each
 word's box is mapped back through those turns, so it lies where the word is printed on the scan as uploaded
 (layout-3). On five real court order reads every quoted field was boxed.
 
-A document type version may hold layout templates (c-253): per template page, anchor labels with the box each is
+A document type version may hold layout templates: per template page, anchor labels with the box each is
 printed in and one zone per field, boxes as page fractions. Before the model, each template is matched against the
 file's layout: a page matches when every required anchor is found within 0.03 of its box and 80% of its anchors are
 found; the anchors' mean offset moves the zones, and each zone's words are scored by the same field checks as a model
@@ -102,7 +102,7 @@ does not name `templates` carries the latest version's forward; one reading a fi
 `needsRebuild: true` and never matched. Naming `templates` (even `[]`) replaces them. The seed is create-only: a type
 that exists is left as people left it.
 
-A builder gets a template without drawing it (c-254). `POST /v1/document-types/{id}/templates/suggest
+A builder gets a template without drawing it. `POST /v1/document-types/{id}/templates/suggest
 {extractionIds}` drafts one from the team's finished reads of the type: each field's zone covers its boxes, widened
 for a longer value, and its anchor is the nearest label words to the left on the same line or on the line above, never
 a value's words; across several reads an anchor is kept only where every file prints it in the same place. The answer
@@ -116,7 +116,7 @@ layout per offered group; a read saved before that gets its fingerprint on the f
 A document type version sets `dateOrder`, how a numeric date reads: `MDY` (03/04/2026 is March 4, the default, for US
 documents) or `DMY`.
 
-A version may carry checks across its fields (c-296), from two kinds: `sum` (`fields` must add up to `equals`
+A version may carry checks across its fields, from two kinds: `sum` (`fields` must add up to `equals`
 within `tolerance`, 0.01 by default) and `before` (the `earlier` date must not come after the `later`). A check runs
 only when every field it names has a value. After scoring, every field a rule rejected (its type, now named
 `rejected: "type"`, its pattern, emptyWhen, or a check) is asked again in one model call naming only those fields and
@@ -126,7 +126,7 @@ goes to review with `rejected` naming the rule (`check:<id>` for a check) and th
 still sends the file to the model. A new version that does not name `checks` carries the latest forward, dropping one
 naming a field it lacks.
 
-A version may let reads show the model the page image (c-295, `pageImages`, off by default). The image carries
+A version may let reads show the model the page image (`pageImages`, off by default). The image carries
 everything printed on the page to the model provider, so three settings must all allow it: the version (turning it on
 needs `documents.manage`, held by team admins; a later version carries it forward), the team's `pageImages` policy
 (per team, read live from platform-service, off for a team that set nothing, changed under `settings.manage` in the
@@ -139,7 +139,7 @@ Every call that carried an image is listed on the read as `imageCalls` (`step`, 
 in models-service's call log (`images`). An alias not cleared makes the read go on text-only with `imageRefused` saying
 why. Image tokens are not in the test estimate. A value read only from the image has no quote, so it gets no box.
 
-Corrections teach the type (c-297). A person's correction of a read of a document type keeps an example: the field,
+Corrections teach the type. A person's correction of a read of a document type keeps an example: the field,
 the line its value was printed on (the read's quote for it) and the corrected value, for that tenant, team and type
 (`document_type_examples`, documents_0010), only when that line shows the corrected value (`ops_extract.checks.in_quote`):
 a wrong read often cites the wrong line, and pairing it with the right value teaches every later read a false one. A
@@ -152,13 +152,13 @@ policy masks personal data (masked when the policy cannot be read); the stored e
 `DELETE /v1/document-types/{id}/examples/{exampleId}` (documents.edit) removes one. A field keeps its newest 10
 examples (`EXAMPLES_KEPT_PER_FIELD`), and a purge of a deleted file removes the examples its reads taught.
 
-A field may be marked `keyField: true` (c-303): a review shows key fields first and requires them checked. The mark
+A field may be marked `keyField: true`: a review shows key fields first and requires them checked. The mark
 is a boolean, refused otherwise when the version is saved, and every read's `schema` carries it.
 
 A field may carry two rules, checked before scoring: `pattern`, a regular expression the whole value must match, and
 `emptyWhen`, phrases that mean the document gives no value. A value that breaks one is emptied, kept as
 `extractedValue`, marked `rejected` and sent to review. Before them, `clean` lists cleanup rules run on the model's
-text (c-287): `trimPunctuation` (a trailing comma after a name), `lastFour` (the last four digits of a masked number),
+text: `trimPunctuation` (a trailing comma after a name), `lastFour` (the last four digits of a masked number),
 `stripLabel` (a leading "Case reference: "). What the model said stays as `extractedValue`, and `cleaned` names the
 rules that changed it. On the court order fixtures' stored reads at default effort they take 59/65 values right to 63/65. The test estimate prices each call at the type's last 20
 measured extractions, then the tenant's, then a fixed guess (`basis`).
@@ -175,8 +175,8 @@ at the Models port.
 ## Sample documents as requirements
 
 The restraining-notice samples (transcribed from photographs of synthetic test documents, which stay out of this repo)
-are fixtures in `services/documents-service/tests/fixtures/restraining/` (c-248). Each row is a requirement on the
-reader and one check in the proof use case (c-255).
+are fixtures in `services/documents-service/tests/fixtures/restraining/`. Each row is a requirement on the
+reader and one check in the proof use case.
 
 | File | What it is |
 |---|---|
@@ -192,7 +192,7 @@ reader and one check in the proof use case (c-255).
 Invented, so not in any photo: TEST003's page 2 (the defendant's full SSN and a second party's number), the case
 numbers cut off in the TEST001, TEST004 and TEST011 photos, and every variant. The photos stay out of ops-ai.
 
-| Sample | Requirement | Check (c-255) |
+| Sample | Requirement | Check |
 |---|---|---|
 | TEST001 | The garnishee address comes from the "TO" block when another bank address appears on the page | `garnishee_address` equals the TO block |
 | TEST003 (page 2 invented) | A record spanning pages stays one record: the masked SSN on page 1 and the full SSN on page 2 belong to one debtor | Both values in one record, each citing its own page |
@@ -210,12 +210,12 @@ numbers cut off in the TEST001, TEST004 and TEST011 photos, and every variant. T
 A `restraining_notice` document type (19 fields) is seeded with the 16 text PDFs as its samples
 (`scripts/seed_document_types.py`); each field's description carries its provenance rule, such as "counsel from the
 attorney signature block only". TEST009's two case groups are not samples of it: a flat type holds one debtor, and
-the groups wait for tables (c-238).
+the groups wait for tables.
 
 ## Baseline accuracy (model path)
 
 restraining_notice v1 tested on its 16 text samples on the shared stack, 2026-10-18, alias `extract` on gpt-5-mini,
-no templates, after c-260 (headings in page text). 180 expected values in all.
+no templates, after an earlier change (headings in page text). 180 expected values in all.
 
 | Measure | Value |
 |---|---|
@@ -250,19 +250,19 @@ counts each expected value compared as a test run compares it.
 | Model, stored reads (5 court order, read before the cleanup rules) | 5 | 59/65 (91%) | from the stored calls, about 25 s | from the stored calls, about $0.0055 |
 | Template, suggested from one model read of each master form that is not a court order | 14 | 90/91 (99%) | 0.02 s on a text PDF or a cached scan layout; 0.42 s the first time a scan is OCR'd | none |
 
-Page images (c-295), `experiments/measure_page_images.py`, 2026-10-19: two OCR'd court order scans read 24/25 text-only and
+Page images, `experiments/measure_page_images.py`, 2026-10-19: two OCR'd court order scans read 24/25 text-only and
 25/25 with the page image (the restraining notice's `notice_kind` was the miss), one image each, $0.0056 and $0.0043 a
 read against $0.0044 and $0.0042 text-only. The invoice scan read by its template with a review threshold of 0.99 sent 7
 crops on its re-read and read 7/7 for $0.0024. 5 calls, $0.021 in all; `pageImages` was turned off again after.
 
-Corrections teaching the type (c-297), `experiments/measure_type_examples.py`, 2026-10-19, stopped after 5 of 10 calls
+Corrections teaching the type, `experiments/measure_type_examples.py`, 2026-10-19, stopped after 5 of 10 calls
 when the shared stack went down: the restraining notice scan read `notice_kind` as the synthetic-document banner, and
 its correction taught that banner line as where `Notice of tax levy` is printed; another restraining notice read after
 it fell from 11/11 to 9/11, `notice_kind` read as a tax order. That finding is why a correction now teaches only when
 its cited line shows the corrected value; that correction would teach nothing. **Unverified:** no rerun since the fix,
 so the gain from examples is not yet measured.
 
-After c-294 (scans turned upright and straightened from 1.75 degrees before OCR, layout-2) the four invoice and
+After an earlier change (scans turned upright and straightened from 1.75 degrees before OCR, layout-2) the four invoice and
 statement scans, shifted and skewed, read 26/26 on the template path, about 0.9 s each for a first OCR, with no model
 call (2026-10-19, read again on the shared stack); the skewed invoice's due date was the template's one miss before.
 

@@ -32,6 +32,7 @@ from ops_agents.store.tenancy import (
 )
 from ops_checkpointer import open_saver
 from ops_service_kit.ids import new_id, now_iso
+from ops_store import isolation
 
 SRC = Path(__file__).parents[2] / "src" / "ops_agents"
 TABLES = (graph_threads, graph_runs, thread_events, review_decisions, review_approvals)
@@ -129,7 +130,15 @@ def test_only_the_two_loops_reach_past_rls() -> None:
                 system_users.add(path.relative_to(SRC).as_posix())
     assert callers == {"api/tenant_tasks.py"}
     # store/background.py: the Background page, a central background process's view, reads every team's jobs (c-516).
-    assert system_users == {"store/graphs.py", "store/engine.py", "store/memories.py", "store/background.py"}
+    # store/batches.py: the batch starter, in the workflow worker, finds every tenant's pending rows and starts each
+    # inside its own tenant and team (api/batches.py), as the engine's claim loop does with runs (c-535).
+    assert system_users == {
+        "store/graphs.py",
+        "store/engine.py",
+        "store/memories.py",
+        "store/background.py",
+        "store/batches.py",
+    }
     # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}
     assert tenants_users == {"api/memory_retention.py"}
@@ -159,7 +168,6 @@ async def test_two_threads_worked_by_one_sweep_each_get_their_own_tenant(engine:
 async def test_a_sweep_works_a_thread_as_its_own_team(engine: AsyncEngine) -> None:
     """The sweeper and the timer poller act as the claimed thread's team, not for its whole tenant (c-429)."""
     from ops_agents.api.tenant_tasks import as_thread_tenant  # noqa: PLC0415
-    from ops_store import isolation  # noqa: PLC0415
 
     tenant, thread_id = f"a-{uuid4().hex[:8]}", new_id("gth")
     with tenant_scope(tenant):
@@ -187,12 +195,12 @@ async def test_one_compiled_graph_stores_each_tenants_checkpoints_under_that_ten
     builder.add_node("inc", inc)
     builder.add_edge(START, "inc")
     builder.add_edge("inc", END)
-    async with open_saver(database_url, tenant_id=current_tenant, team_id="local") as saver:
+    async with open_saver(database_url) as saver:
         graph: Any = builder.compile(checkpointer=saver)
         thread_a, thread_b = f"t-{uuid4().hex}", f"t-{uuid4().hex}"
-        with tenant_scope(a):
+        with isolation.scope(a, "team"):
             await graph.ainvoke({"n": 0}, {"configurable": {"thread_id": thread_a}})
-        with tenant_scope(b):
+        with isolation.scope(b, "team"):
             await graph.ainvoke({"n": 0}, {"configurable": {"thread_id": thread_b}})
             assert (await graph.aget_state({"configurable": {"thread_id": thread_a}})).values == {}
         with tenant_scope(a):

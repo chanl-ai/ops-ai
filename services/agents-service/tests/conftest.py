@@ -19,6 +19,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     RetryPromptPart,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -54,22 +55,46 @@ _CALL = re.compile(r"\bcall (\w+) (\{.*\})", re.S)
 # <value>" a guess below the confidence floor. The scripted model answers the extractor's schema with them.
 _FACT = re.compile(r"(maybe )?my ([a-z ]{2,40}?) is ([^.,;]+)", re.I)
 _PREFER = re.compile(r"\bI prefer ([^.,;]+)", re.I)
+# A real model quotes the whole of a "remember that ..." message, the asking words included.
+_REMEMBER_THAT = re.compile(r"^\s*remember\b", re.I)
+# A saved memory as the extraction prompt lists it: "[id] kind key: value".
+_SAVED = re.compile(r"^\[(\S+)\] \w+ ([^:\n]+): (.+)$", re.M)
 
 
 def remembered(text: str) -> dict[str, Any]:
+    """The scripted extraction: what the person's last message says, quoted, decided against the saved memories
+    listed with the same key (c-557)."""
+    block = text.split("</remember>", 1)[0]
+    said = next((line[len("person: ") :] for line in reversed(block.splitlines()) if line.startswith("person: ")), "")
+    saved = {m.group(2): (m.group(1), m.group(3)) for m in _SAVED.finditer(text)}
+    whole = said.strip() if _REMEMBER_THAT.match(said) else None
     found: list[dict[str, Any]] = [
         {
             "kind": "fact",
             "key": m.group(2).strip(),
             "value": m.group(3).strip(),
+            "quote": whole or m.group(0).strip(),
             "confidence": 0.3 if m.group(1) else 0.9,
         }
-        for m in _FACT.finditer(text)
+        for m in _FACT.finditer(said)
     ]
     found += [
-        {"kind": "preference", "key": "prefers", "value": m.group(1).strip(), "confidence": 0.9}
-        for m in _PREFER.finditer(text)
+        {
+            "kind": "preference",
+            "key": "prefers",
+            "value": m.group(1).strip(),
+            "quote": whole or m.group(0),
+            "confidence": 0.9,
+        }
+        for m in _PREFER.finditer(said)
     ]
+    for f in found:
+        if f["key"] in saved:
+            ref, value = saved[f["key"]]
+            # A real model has answered "same" for a changed preference; the scripted one does too, so the store's
+            # own check on "same" is what keeps the change.
+            same = value == f["value"] or f["kind"] == "preference"
+            f |= {"decision": "same" if same else "replaces", "ref": ref}
     return {"memories": found}
 
 
@@ -103,6 +128,15 @@ def structured(info: AgentInfo, args: dict[str, Any]) -> ModelResponse:
     if info.model_request_parameters.output_mode == "native":
         return ModelResponse(parts=[TextPart(json.dumps(args))])
     return ModelResponse(parts=[ToolCallPart("final_result", args)])
+
+
+def _prompt_text(messages: list[ModelMessage]) -> str:
+    """The instructions and system prompt the model was given, where recalled memories go."""
+    parts = [str(m.instructions or "") for m in messages if isinstance(m, ModelRequest)]
+    parts += [
+        p.content for m in messages if isinstance(m, ModelRequest) for p in m.parts if isinstance(p, SystemPromptPart)
+    ]
+    return " ".join(parts)
 
 
 def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -142,6 +176,15 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if (action := _ACTION.search(text)) and action.group(1) in tools:
         pairs = [p.split(": ", 1) for p in action.group(2).split(", ") if ": " in p]
         return ModelResponse(parts=[ToolCallPart(action.group(1), {k.strip(): v.strip() for k, v in pairs})])
+    # A summary in the format the person's recalled preference names (c-563), so a use case sees which memory the
+    # reply was given. An explicit "call <tool> <json>" below wins, though its arguments say summary (a case-summary).
+    if "summary" in text.lower() and "<remember>" not in text and not _CALL.search(text):
+        prompt = _prompt_text(messages).lower()
+        if "bullet" in prompt:
+            return ModelResponse(parts=[TextPart("- Two cases are open.\n- One review is waiting.")])
+        if "numbered" in prompt:
+            return ModelResponse(parts=[TextPart("1. Two cases are open.\n2. One review is waiting.")])
+        return ModelResponse(parts=[TextPart("Two cases are open and one review is waiting.")])
     # The chat home's first start (c-469): the team's default agent lists the person's Human Tasks.
     if "what needs me" in text.lower() and "my_human_tasks" in tools:
         return ModelResponse(parts=[ToolCallPart("my_human_tasks", {"which": "mine"})])

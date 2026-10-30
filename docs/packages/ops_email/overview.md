@@ -1,6 +1,6 @@
 # Email library
 
-Status: current. Mail in and out behind two protocols, with providers picked by settings (c-187). The Graph
+Status: current. Mail in and out behind two protocols, with providers picked by settings. The Graph
 provider is tested on a mock transport only; it has not run against a tenant (**unverified**).
 
 | Part | Where | What it does |

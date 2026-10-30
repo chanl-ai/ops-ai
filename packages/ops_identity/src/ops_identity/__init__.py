@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .acting_for import HEADER as ACTING_FOR_HEADER
+from .acting_for import ActingForPerson, ActingForTokens
 from .client import ServiceCallError, ServiceClient, ServiceUnreachable
 from .fastapi import (
     Auth,
@@ -22,6 +24,9 @@ from .resolve import Identity, ServiceAuth, mint_service_token
 from .service_keys import dev_service_signer, service_signer, service_verifiers
 
 __all__ = [
+    "ACTING_FOR_HEADER",
+    "ActingForPerson",
+    "ActingForTokens",
     "Auth",
     "CurrentCaller",
     "CurrentPrincipal",

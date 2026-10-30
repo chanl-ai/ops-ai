@@ -13,6 +13,7 @@ leaves engine threads (RUN_PREFIX) alone.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, suppress
@@ -26,7 +27,7 @@ from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.logging import get_logger
 from ops_store import background
 
-from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, technical
+from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, WriteUncertainError, technical
 from .definition import parse
 from .journal import RunCancelledError
 from .node_types import TypeRegistry
@@ -36,10 +37,11 @@ from .store.clock import now_iso
 
 log = get_logger("ops_engine.worker")
 
-MAX_PASSES = 3
+MAX_PASSES = 4
+# The wait before a failed pass is tried again (owner, c-561): an outage such as a service restart is ridden out.
+PASS_WAITS = (5.0, 30.0, 120.0)
 # A write still in doubt after this many passes (backoff capped at 30 s, so about ten minutes) fails its run for a
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.
-MAX_DOUBT_PASSES = 20
 RECURSION_LIMIT = 100
 
 # A failure that no step reported: the engine itself, its database or a definition that no longer compiles.
@@ -111,6 +113,34 @@ def ending(values: dict[str, Any]) -> dict[str, Any] | None:
             if e.get("port") == "" and isinstance(out, dict) and "outcome" in out:
                 return cast(dict[str, Any], out)
     return None
+
+
+# The ways a step leaves when it did not do its job: what a failure End names as the reason the run failed.
+FAILING_PORTS = ("error", "refused", "unreadable", "timeout")
+# An error as the engine records it, "DocumentNotFound: 404 not_found: File was not found.": the exception's name and
+# the service's status and code are for builders, who read them on the step; the run's reason keeps the message.
+_ENGINE_PREFIX = re.compile(r"^(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+: )?(?:\d{3} [a-z]+(?:_[a-z]+)*: )?")
+_ERROR_CODE = re.compile(r"^[a-z]+(?:_[a-z]+)*$")
+# Error codes a step can end with and nothing else, in the words a person reads.
+_PLAIN_CODES = {
+    "not_found": "it was not found",
+    "forbidden": "it was not allowed",
+    "unauthorized": "the service did not accept the sign-in",
+    "timeout": "it took too long to answer",
+    "rate_limited": "the service was busy and asked to wait",
+    "model_rate_limited": "the model was busy and asked to wait",
+    "budget_exhausted": "the team's model budget ran out",
+    "unavailable": "the service could not be reached",
+    "service_unavailable": "the service could not be reached",
+}
+
+
+def plain_error(text: str) -> str:
+    """A step's error as the run's reason reads it: the message without the engine's prefix, a bare code in words."""
+    said = _ENGINE_PREFIX.sub("", text.strip()).rstrip(".").strip() or text.strip().rstrip(".")
+    if _ERROR_CODE.match(said):
+        return _PLAIN_CODES.get(said, said.replace("_", " "))
+    return said
 
 
 class Worker:
@@ -222,20 +252,17 @@ class Worker:
         except (ClaimLostError, LeaseSupersededError) as e:
             log.warning("engine_claim_lost", run=run["id"], work=work.id, error=str(e))
         except WriteInDoubtError as e:
-            # Whether the write happened is not known yet; never re-sent, the run is tried again later.
+            # Whether the write happened is not known yet; never re-sent, the run is tried again later. The step ends
+            # the wait itself at its deadline (WriteUncertainError), so no pass count caps it (c-561).
             log.warning("engine_write_in_doubt", run=run["id"], work=work.id, error=str(e))
             with suppress(LeaseSupersededError):
-                if work.attempts > MAX_DOUBT_PASSES:
-                    message = f"a write is still in doubt after {work.attempts} passes; a person must settle it: {e}"
-                    await self.runs.update(
-                        run["id"], generation=generation, status="failed", error=message, finished_at=now_iso()
-                    )
-                    await self._event(run, generation, "failed", None, {"message": message})
-                    await self.queue.done(work, status="failed", error=message)
-                    await self.runs.settle_parents(run)
-                else:
-                    await self.runs.update(run["id"], generation=generation, status="queued", error=str(e))
-                    await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
+                await self.runs.update(run["id"], generation=generation, status="queued", error=str(e))
+                await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
+        except WriteUncertainError as e:
+            # A write that may have run: the run fails now with the reason, and no pass sends it again (c-561).
+            log.warning("engine_write_uncertain", run=run["id"], work=work.id, error=e.detail)
+            with suppress(LeaseSupersededError):
+                await self._fail(run, generation, work, e.plain, e.detail)
         except Exception as e:
             # The run's error is what people read on the run page; the technical text goes on the event and the
             # work row (and on the step's own row for a step that failed).
@@ -244,15 +271,9 @@ class Worker:
             with suppress(LeaseSupersededError):
                 if work.attempts < MAX_PASSES:
                     await self.runs.update(run["id"], generation=generation, status="queued", error=message)
-                    await self.queue.release(work, float(2 ** (work.attempts - 1)), error=detail)
+                    await self.queue.release(work, PASS_WAITS[min(work.attempts, len(PASS_WAITS)) - 1], error=detail)
                 else:
-                    await self.runs.update(
-                        run["id"], generation=generation, status="failed", error=message, finished_at=now_iso()
-                    )
-                    await self._event(run, generation, "failed", None, {"message": message, "detail": detail})
-                    await self.queue.done(work, status="failed", error=detail)
-                    await self._drop_checkpoints(run["id"])
-                    await self.runs.settle_parents(run)
+                    await self._fail(run, generation, work, message, detail)
         finally:
             watching.cancel()
             beat.cancel()
@@ -272,6 +293,14 @@ class Worker:
 
     async def _event(self, run: dict[str, Any], generation: int, type_: str, node: str | None, data: Any) -> None:
         await self.host.events.append(run["id"], run["team_id"], type_, node, data, generation=generation)
+
+    async def _fail(self, run: dict[str, Any], generation: int, work: Work, message: str, detail: str) -> None:
+        """Ends the run as failed: `message` for people, `detail` on its event and work row."""
+        await self.runs.update(run["id"], generation=generation, status="failed", error=message, finished_at=now_iso())
+        await self._event(run, generation, "failed", None, {"message": message, "detail": detail})
+        await self.queue.done(work, status="failed", error=detail)
+        await self._drop_checkpoints(run["id"])
+        await self.runs.settle_parents(run)
 
     async def _drop_checkpoints(self, run_id: str) -> None:
         """The journal is the record the console reads; an ended run's checkpoints are not needed. A failed delete
@@ -422,10 +451,12 @@ class Worker:
             return
         payload = cast(dict[str, Any], interrupt.value)
         n = int(asked.get("n") or 1)
-        node = str(payload.get("node"))
+        node, iteration = str(payload.get("node")), int(payload.get("iteration") or 1)
+        if await self.queue.leaving(run["id"], interrupt.id, node, iteration):
+            return  # decided, but the decision's row is queued behind this one
         reminder: dict[str, Any] = {
             "node": node,
-            "iteration": int(payload.get("iteration") or 1),
+            "iteration": iteration,
             "n": n,
             "title": payload.get("title"),
             "openedAt": payload.get("openedAt"),
@@ -435,6 +466,29 @@ class Worker:
         if self.host.remind is not None:
             await self.host.remind(run, reminder)
         await self._next_reminder(run, payload, interrupt.id, n + 1)
+
+    async def _why_failed(self, run: dict[str, Any], end: str) -> str:
+        """Why a run that reached a failure End failed: the last step that left by a way of failing (error, refused,
+        unreadable, timeout) with its own error and how many attempts it took, then where the run ended. With no such
+        step the End is the reason, and says so."""
+        failing = [
+            s
+            for s in await self.runs.steps(str(run["id"]))
+            if s.get("port") in FAILING_PORTS and s.get("node_type") != "ops.flow.end"
+        ]
+        if not failing:
+            return f"Ended at {end}, an end marked as a failure"
+        step = failing[-1]
+        stored = await self.definitions.get(str(run["workflow_id"]), int(run["version"]))
+        definition = cast(dict[str, Any], (stored or {}).get("definition") or {})
+        nodes = cast(list[dict[str, Any]], definition.get("nodes") or [])
+        named = (str(n.get("name")) for n in nodes if n.get("id") == step["node_id"] and n.get("name"))
+        name = next(named, step["node_id"])
+        out = cast(dict[str, Any], step.get("output") or {}) if isinstance(step.get("output"), dict) else {}
+        said = plain_error(str(out.get("reason") or out.get("error") or step.get("error") or step["port"]))
+        tries = sum(1 for s in failing if s["node_id"] == step["node_id"] and s["iteration"] == step["iteration"])
+        attempts = f" after {tries} attempts" if tries > 1 else ""
+        return f"{name} failed{attempts}: {said}. The run ended at {end}."
 
     async def _finished(self, run: dict[str, Any], generation: int, graph: Any, cfg: dict[str, Any]) -> None:
         values = cast(dict[str, Any], (await graph.aget_state(cfg)).values or {})
@@ -447,7 +501,7 @@ class Worker:
             failed=failed,
             outcome=outcome,
             output=end.get("output"),
-            error=f"Ended at {end.get('name')}, an end marked as a failure" if failed else None,
+            error=await self._why_failed(run, str(end.get("name") or "")) if failed else None,
         )
         await self._event(run, generation, "finished", None, {"outcome": outcome, "status": status})
         await self._drop_checkpoints(run["id"])

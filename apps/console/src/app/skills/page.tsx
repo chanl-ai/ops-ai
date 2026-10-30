@@ -16,7 +16,7 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { announcePublish } from '@/components/shared/publish-result';
@@ -265,13 +265,13 @@ export default function SkillsPage() {
           <SavedViewTabs
             ariaLabel="Skill views"
             presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}` },
-              { id: 'published', label: `Published · ${counts?.published ?? 0}` },
-              { id: 'always', label: `Always on · ${counts?.always ?? 0}`, icon: Pin },
-              { id: 'drafts', label: `Drafts · ${counts?.drafts ?? 0}` },
-              { id: 'in_review', label: `In review · ${counts?.in_review ?? 0}`, icon: Inbox },
-              { id: 'deprecated', label: `Deprecated · ${counts?.deprecated ?? 0}`, icon: Archive },
-              { id: 'unused', label: `Unused · ${counts?.unused ?? 0}`, icon: Users },
+              { id: 'all', label: countLabel('All', counts?.all) },
+              { id: 'published', label: countLabel('Published', counts?.published) },
+              { id: 'always', label: countLabel('Always on', counts?.always), icon: Pin },
+              { id: 'drafts', label: countLabel('Drafts', counts?.drafts) },
+              { id: 'in_review', label: countLabel('In review', counts?.in_review), icon: Inbox },
+              { id: 'deprecated', label: countLabel('Deprecated', counts?.deprecated), icon: Archive },
+              { id: 'unused', label: countLabel('Unused', counts?.unused), icon: Users },
             ]}
             savedViews={[]}
             activePresetId={view}

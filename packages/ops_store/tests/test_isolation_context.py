@@ -74,20 +74,15 @@ class _Recorder:
         self.sent.append((str(stmt), dict(params or {})))
 
 
-async def test_sql_server_sets_and_clears_all_three_keys() -> None:
+async def test_sql_server_sets_and_clears_all_three_keys_in_one_batch_each() -> None:
     conn = _Recorder()
     with isolation.scope("tenant-a", "team-a"):
         await isolation.enter_transaction(conn, isolation.current())  # pyright: ignore[reportArgumentType]
     await isolation.leave_transaction(conn)  # pyright: ignore[reportArgumentType]
-    sets = [(p["k"], p["v"]) for s, p in conn.sent if "sp_set_session_context" in s]
-    assert sets == [
-        ("tenant_id", "tenant-a"),
-        ("team_id", "team-a"),
-        ("scope", "team"),
-        ("tenant_id", None),
-        ("team_id", None),
-        ("scope", None),
-    ]
+    [(sets, entered), (_, left)] = conn.sent
+    assert all(f"@key = N'{k}', @value = :{k}" in sets for k in ("tenant_id", "team_id", "scope"))
+    assert entered == {"tenant_id": "tenant-a", "team_id": "team-a", "scope": "team"}
+    assert left == {"tenant_id": None, "team_id": None, "scope": None}
 
 
 def _widened(caplog: pytest.LogCaptureFixture) -> list[tuple[int, str]]:

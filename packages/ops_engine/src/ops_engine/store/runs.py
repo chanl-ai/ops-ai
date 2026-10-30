@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.team_scope import team_visible
 
 from .clock import db_now, now_iso
@@ -120,8 +121,14 @@ class RunStore:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def list(
-        self, *, workflow_id: str | None = None, status: str | None = None, team_id: str | None = None, limit: int = 200
+        self,
+        *,
+        workflow_id: str | None = None,
+        status: str | None = None,
+        team_id: str | None = None,
+        limit: int | None = 200,
     ) -> list[dict[str, Any]]:
+        """The newest runs first, at most `limit` of them; None reads every one (Human Tasks' waiting runs, c-561)."""
         q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs))
         if workflow_id:
             q = q.where(engine_runs.c.workflow_id == workflow_id)
@@ -129,7 +136,9 @@ class RunStore:
             q = q.where(engine_runs.c.status == status)
         if team_id:
             q = q.where(engine_runs.c.team_id == team_id)
-        q = q.order_by(engine_runs.c.created_at.desc()).limit(limit)
+        q = q.order_by(engine_runs.c.created_at.desc())
+        if limit is not None:
+            q = q.limit(limit)
         async with self.tx.tenant_tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
@@ -283,6 +292,26 @@ class RunStore:
             )
         return status
 
+    async def settle_ended(self, run_id: str) -> bool:
+        """A run whose own graph ended (outcome set) and is not yet done takes the status the runs it started leave
+        it: waiting or running while one goes on, succeeded once none does. Its Stuck reason, if any, is cleared.
+        False when it changed nothing (already settled, cancelled or failed)."""
+        r = engine_runs
+        at = now_iso()
+        async with self.tx.tenant_tx() as c:
+            mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
+            found = (await c.execute(locked(sa.select(r).where(mine), r))).first()
+            if found is None or found.outcome is None or found.status in TERMINAL:
+                return False
+            status = await self._children_left(c, run_id) or "succeeded"
+            if status == found.status:
+                return False
+            finished = at if status in TERMINAL else None
+            await c.execute(
+                r.update().where(mine).values(status=status, error=None, finished_at=finished, updated_at=at)
+            )
+        return True
+
     async def settle_parents(self, run: dict[str, Any]) -> None:
         """After `run` changed status: the run that started it, once its own graph has ended (its outcome is set),
         takes the status its unfinished runs leave it, and succeeds when none is left; then the same for that run's
@@ -389,6 +418,35 @@ class RunStore:
                     .values(status="done", error=f"run cancelled ({reason})")
                 )
         return await self.get(run_id), changed
+
+    async def retry(self, run_id: str) -> tuple[dict[str, Any] | None, bool]:
+        """Queues a Stuck run again (c-561): its set-aside work rows are closed and one new row goes on under the
+        current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
+        continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
+        last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run not Stuck."""
+        at = now_iso()
+        r, w = engine_runs, engine_work
+        async with self.tx.tenant_tx() as c:
+            mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
+            found = (await c.execute(locked(sa.select(r).where(mine), r))).first()
+            if found is None:
+                return None, False
+            if found.status != "stuck":
+                return await self.get(run_id), False
+            await c.execute(r.update().where(mine).values(status="queued", error=None, updated_at=at))
+            await c.execute(
+                w.update()
+                .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status.in_(("stuck", "queued")))
+                .values(status="done", error="replaced by Retry", lease_expires_at=None)
+            )
+        waiting = cast(dict[str, Any] | None, found.waiting)
+        queue = WorkQueue(self.tx, owner="retry", ttl=0)
+        if waiting:
+            payload = {"resume": {"retry": True}, "node": waiting.get("node"), "iteration": waiting.get("iteration")}
+            await queue.enqueue(run_id, "resume", f"retry:{run_id}:{at}", payload)
+        else:
+            await queue.enqueue(run_id, "retry", f"retry:{run_id}:{at}")
+        return await self.get(run_id), True
 
     async def steps(self, run_id: str) -> list[dict[str, Any]]:
         """Every attempt of every node, in the order they started."""

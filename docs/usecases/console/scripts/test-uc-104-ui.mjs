@@ -5,7 +5,7 @@
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_all', 'Content-Type': 'application/json' };
+const TEAM = { 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
 const TAG = Math.random().toString(36).slice(2, 6);
 const NAME = `No tips ${TAG}`;
 const armed = (p) => (p.catch(() => undefined), p);
@@ -24,6 +24,8 @@ await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
+    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
 
@@ -65,10 +67,9 @@ await withUiStack(async (consoleUrl) => {
     const pin = page.getByTestId('guardrail-pin').filter({ hasText: NAME });
     const link = await pin.getByTestId('guardrail-pin-link').getAttribute('href');
     await pin.getByRole('combobox', { name: `${NAME} version` }).click();
+    // The agent page saves each edit into its draft by itself; the version pick is the last edit, so its save holds v1.
+    const patched = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`) && (r.request().postData() ?? '').includes(`"guardrailId":"${g.id}","version":1`), { timeout: 60_000 }));
     await page.getByRole('option', { name: 'v1', exact: true }).click();
-    await page.getByTestId('save-agent-button').click();
-    const patched = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
-    await page.getByRole('dialog').last().getByRole('button', { name: /^Save/ }).last().click();
     const res = await patched;
     const after = await api(`/v1/agents/${agent.id}`);
     const pins = (after.guardrailPins ?? []).map((p) => `${p.guardrailId}@${p.version}`);

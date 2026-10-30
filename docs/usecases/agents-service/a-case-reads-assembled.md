@@ -1,6 +1,15 @@
 # A case reads assembled
 
-Status: passing (2026-10-19). Id: `uc-251`. Service: `agents-service`. Layers: api. Card: c-291.
+Status: passing (2026-10-19). Id: `uc-251`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | James opens the case and reads its fields in the complaint type's order, the amount as money | ui | 1 | 1 |
+| S2 | The case says what it waits on, links the task, and lists the drafted action as pending | ui | 2 | 2 |
+| S3 | Maya follows that link and approves on the task page; the case then reads nothing left and the action decided | ui | 4 | 4 |
+| S4 | The same through the API, with the case's run, workflow and file, and its decision in Activity | api | 0-5 | 5 |
 
 A fee dispute workflow, configuration in the script and nothing in code, opens a case of the seeded `complaint` case
 type and waits on a person to approve waiving the fee. One call, `GET /v1/cases/{id}`, returns the case assembled for
@@ -26,13 +35,14 @@ The stack is agents-service and tools-service (the tool gateway) with a workflow
 | 2 | The same read | One waiting task, the next action pointing at it, one drafted action `pending` linking the same task |
 | 3 | The same read | `links.runs` holds the run, `workflow` names Fee dispute (uc-251), `links.files` holds dispute-letter.pdf |
 | 4 | Approve the task on its page (`POST /reviews/{id}/decision`), read the case again | Nothing waiting, no next action, the action `approved` |
-| 5 | `GET /v1/activity?case={id}&kind=decision` | One decision; `activity.allHref` opens Activity filtered to the case |
+| 5 | `GET /v1/activity?case={id}&kind=decision` | One decision; the case's feed tells its story |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-251-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-251-ui.mjs` | passing: the case page as James reads it, the task as Maya decides it |
 
 ## Non-vacuous check
 
@@ -42,4 +52,4 @@ unit test `tests/api/test_case_page.py::test_the_case_says_what_it_waits_on_unti
 ## What this does not cover
 
 Whether the fee is waived after approval: the gateway's binding of `cardAccount` to the case is the tool's own check,
-covered by tools-service. The case page in the console is c-292.
+covered by tools-service. The case page in the console is an earlier change.

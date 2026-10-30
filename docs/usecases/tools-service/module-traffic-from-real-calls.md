@@ -34,9 +34,11 @@ its calls. Days are UTC.
 |---|---|---|
 | api | `tools-service/scripts/test-uc-042-api.py` | passing |
 
+In the console: the module's Activity tab lists the real calls with actor, decision and outcome (uc-086's ui script, step 11).
+
 ## Non-vacuous check
 
 Step 1 pairs with step 3, and step 4's refused write with step 5's denied count. A module's approval state (approved,
 then expiring as its end nears) left this use case when a workflow's access request moved to its system workflow in
-Human Tasks (c-257): `services/tools-service/tests/test_tool_grants.py` checks the state, and uc-053 the grant. `services/tools-service/tests/test_traffic.py` covers the 24-hour window and the module p95 with backdated rows,
+Human Tasks: `services/tools-service/tests/test_tool_grants.py` checks the state, and uc-053 the grant. `services/tools-service/tests/test_traffic.py` covers the 24-hour window and the module p95 with backdated rows,
 which the api layer cannot make.

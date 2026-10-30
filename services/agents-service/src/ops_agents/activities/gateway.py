@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, cast
 
 import httpx
@@ -34,6 +34,8 @@ class RunContext:
     # Which of a connection's environments the call uses (c-330): live runs and chats production, test runs and test
     # chats test. None says nothing, and the gateway then uses test.
     environment: str | None = None
+    # The engine run making the call, whose starter the call acts for (c-558); None outside a run.
+    run_id: str | None = None
 
 
 TEST, PRODUCTION = "test", "production"
@@ -59,6 +61,7 @@ def current_run_context() -> RunContext:
             act="graph",
             generation=configurable.get("lease_generation"),
             environment=environment_of(configurable.get("engine_mode")),
+            run_id=configurable.get("run_id"),
         )
     except (ImportError, RuntimeError):
         return RunContext(thread=None)
@@ -70,7 +73,7 @@ def acting_as(act: str, environment: str | None = None) -> Generator[None]:
     and lease generation, in `environment` when given, else the run's."""
     base = current_run_context()
     env = environment or base.environment
-    token = RUN_CONTEXT.set(RunContext(thread=base.thread, act=act, generation=base.generation, environment=env))
+    token = RUN_CONTEXT.set(replace(base, act=act, environment=env))
     try:
         yield
     finally:
@@ -97,6 +100,12 @@ class TokenRenewer(Protocol):
         ...
 
 
+class ActingForHeaders(Protocol):
+    """Whom a call acts for, as the header tools-service verifies (api/acting_for.py)."""
+
+    async def headers(self, ctx: RunContext, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]: ...
+
+
 class GatewayClient:
     def __init__(self, tools: ServiceClient) -> None:
         """`tools` calls tools-service as this service, naming the tenant of the run it calls for; tools-service takes
@@ -104,6 +113,8 @@ class GatewayClient:
         self.tools = tools
         # Set by the agents service once it runs: renews an approval token that expired between decision and call.
         self.renewer: TokenRenewer | None = None
+        # Set by the agents service once it runs: the token naming whom each call acts for (c-558).
+        self.people: ActingForHeaders | None = None
 
     @property
     def http(self) -> httpx.AsyncClient:
@@ -184,6 +195,8 @@ class GatewayClient:
         ctx = current_run_context()
         # The lease generation travels as a header; the gateway fences writes on it (E2b).
         headers = {"X-Lease-Generation": str(ctx.generation)} if ctx.generation is not None else {}
+        if self.people is not None:
+            headers |= await self.people.headers(ctx, tenant_id=self.tools.tenant(), team_id=self.tools.team())
         body = {
             "tool": tool,
             "input": arguments,

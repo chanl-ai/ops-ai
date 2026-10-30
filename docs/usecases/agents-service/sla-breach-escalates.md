@@ -16,7 +16,7 @@ The script starts its own services on the scripted model; no model key is needed
 | # | Step | Expected |
 |---|---|---|
 | 1 | Publish a one-step workflow whose human step has `sla: 1s`, `onTimeout: escalate`, `escalateTo: supervisors`; start a thread | Run paused on the human step; a breach timer is open |
-| 2 | Post to the old fire route with a service token | 404 or 405: no HTTP route fires a timer (c-168) |
+| 2 | Post to the old fire route with a service token | 404 or 405: no HTTP route fires a timer |
 | 3 | Read the review before the deadline | No change: the review stays with tier1 |
 | 4 | Wait past the deadline while the timer poller runs | The review is with supervisors and marked escalated; events end `sla.breach`, `sla.escalated` |
 

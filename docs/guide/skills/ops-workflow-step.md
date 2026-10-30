@@ -1,6 +1,6 @@
 # ops-workflow-step: add a workflow step type
 
-Status: current. Proven by `make skills-proof` (c-554).
+Status: current. Proven by `make skills-proof`.
 
 skill: ops-workflow-step
 description: Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use when someone needs a step that no existing type can be configured to do.

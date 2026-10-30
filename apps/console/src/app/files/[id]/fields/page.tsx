@@ -3,6 +3,7 @@
 import { FileFields } from '@/components/files/file-reads';
 import { FilePage } from '@/components/files/file-page';
 import { useDocumentType } from '@/hooks/document-type-queries';
+import { plural } from '@/lib/format';
 
 /** A file's Fields tab: the newest read, one row per field with its value, confidence and quote. */
 export default function FileFieldsPage() {
@@ -13,7 +14,7 @@ export default function FileFieldsPage() {
           {latest?.documentType && (
             <p className="text-xs text-muted-foreground" data-testid="file-read-line">
               Read as <TypeName id={latest.documentType.id} fallback={file.data?.typeName} /> v{latest.documentType.version}
-              {latest.pages ? ` · ${latest.pages === 1 ? '1 page' : `${latest.pages} pages`}` : ''}
+              {typeof latest.pages === 'number' && latest.pages ? ` · ${plural(latest.pages, 'page')}` : ''}
             </p>
           )}
           <FileFields latest={latest} fileName={file.name} onExtract={openExtract} canExtract={canExtract} canEdit={canCorrect} />

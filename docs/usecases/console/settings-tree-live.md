@@ -2,10 +2,10 @@
 
 Status: current. Id: `uc-152`. Service: `console`. Layers: ui.
 
-Card c-178 (build): the settings mock was approved (uc-126, retired with the mock in c-517; the design is the planning repo `docs/plans/ops-ai/settings-design.html`). The real pages move to its
+Card an earlier change (build): the settings mock was approved (uc-126, retired with the mock in an earlier change; the design is the planning repo `docs/plans/ops-ai/settings-design.html`). The real pages move to its
 tree a page at a time. Inside settings the app sidebar is replaced by the settings sidebar (back arrow, Find, Workspace,
 Team and Govern groups, My account at the foot); a moved page answers at its new route and its old route redirects.
-Policies stay on their current page until `GET` and `PUT /v1/policies` exist (c-186).
+Policies stay on their current page until `GET` and `PUT /v1/policies` exist.
 
 ## Preconditions
 

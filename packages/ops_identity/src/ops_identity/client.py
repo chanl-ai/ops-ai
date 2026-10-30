@@ -22,6 +22,7 @@ import httpx
 
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.request_timing import current_request_id
 from ops_service_kit.settings import Settings
 
 from .resolve import mint_service_token
@@ -89,7 +90,11 @@ class ServiceClient:
             scopes=self.scopes or None,
             team_id=team if team is not None else self.team(),
         )
-        return {token_header: f"Bearer {token}"}
+        headers = {token_header: f"Bearer {token}"}
+        # The request this call is made for, so the callee's log lines join the caller's (c-560).
+        if (request_id := current_request_id()) is not None:
+            headers["X-Request-Id"] = request_id
+        return headers
 
     async def request(
         self,

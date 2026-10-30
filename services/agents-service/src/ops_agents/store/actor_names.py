@@ -13,11 +13,13 @@ from ops_store import Guarantee
 from ops_store.team_scope import team_visible
 
 from .agent_registry import registry_agent_versions, registry_agents
+from .form_links import form_links
 from .mailboxes import mailboxes
 from .tenancy import current_tenant, tenant_tx
 
 # What a run of a workflow version with no name is called where people read it: never its id (c-508).
 UNNAMED_WORKFLOW = "a workflow run"
+FORM = "form:"
 
 
 class ActorNames:
@@ -36,6 +38,14 @@ class ActorNames:
                     m.c.tenant_id == current_tenant(), m.c.address.in_(addresses), team_visible(m)
                 )
                 names |= {("trigger", str(a)): str(n) for a, n in (await c.execute(q)).all()}
+                # A hosted form's link run (`trigger:form:<id>`, c-535) is named by the form's title.
+                forms = {a.removeprefix(FORM) for a in addresses if a.startswith(FORM)}
+                if forms:
+                    f = form_links
+                    q = sa.select(f.c.id, f.c.title).where(
+                        f.c.tenant_id == current_tenant(), f.c.id.in_(forms), team_visible(f)
+                    )
+                    names |= {("trigger", f"{FORM}{i}"): str(n) for i, n in (await c.execute(q)).all()}
             if run_ids:
                 r, d = engine_runs, engine_definitions
                 named = r.outerjoin(

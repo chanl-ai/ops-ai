@@ -2,7 +2,7 @@
 
 Status: current. What documents-service reads from a file, its screens, API, data, sequences and the workflows that use it.
 
-The documents service turns a PDF that arrives by email, API, chat or upload into checked fields, each tied to the place on the page it came from. A person corrects what is wrong, and those corrections make the next read of the same kind of document better. It is one subsystem among several: it reads input bytes through the files client, answers what a document says, and does nothing else. Opening a review, storing the result on the file, purging on delete and every other "what next" is a workflow's job. Status: current, 2026-10-19. Built in documents-service on :8760 through `documents_0008`: extraction, document types with templates, checks and key fields, layouts, classification, corrections with their event, purge, and page images (c-295). Examples from corrections are built (c-297); accuracy (c-240) and the page image route for the viewer are planned. Services and who calls whom: [service map](../../architecture/service-map.md).
+The documents service turns a PDF that arrives by email, API, chat or upload into checked fields, each tied to the place on the page it came from. A person corrects what is wrong, and those corrections make the next read of the same kind of document better. It is one subsystem among several: it reads input bytes through the files client, answers what a document says, and does nothing else. Opening a review, storing the result on the file, purging on delete and every other "what next" is a workflow's job. Status: current, 2026-10-19. Built in documents-service on :8760 through `documents_0008`: extraction, document types with templates, checks and key fields, layouts, classification, corrections with their event, purge, and page images. Examples from corrections are built; accuracy and the page image route for the viewer are planned. Services and who calls whom: [service map](../../architecture/service-map.md).
 
 ## Flow
 
@@ -41,32 +41,32 @@ These wireframes fix what each screen shows and which existing component builds 
 
 ## API
 
-Every route answers in the platform envelope, checks the caller's team, and returns 404 for a file or extraction the caller cannot see. Built routes are in documents-service on :8760 since c-256.
+Every route answers in the platform envelope, checks the caller's team, and returns 404 for a file or extraction the caller cannot see. Built routes are in documents-service on :8760 since an earlier change.
 
 | Method and path | Does | Who may | Today | Card |
 |---|---|---|---|---|
-| `POST /v1/documents/extractions` | Read a file: `{fileId, fields \| documentTypeId, version?, many?, ocr?, reviewBelow?}`. 200 with the answer for a small file, 202 to poll for a larger one; an Idempotency-Key repeat returns the first. Fields below the floor are listed in `needsReview`; opens nothing | `documents.run` | built | c-235, c-256 |
-| `GET /v1/documents/extractions/{id}` | Status, fields with value, confidence, quote and page; each found quote carries `boxes` ({page, x, y, w, h}, page fractions, one per line, narrowed to the value) and `blocks`; path and template id follow with templates | `documents.view` | built; boxes c-252 | c-235, c-252 |
-| `PATCH /v1/documents/extractions/{id}/fields/{key}` | Correct one field; the original value and confidence are kept and the field leaves `needsReview`. On the file's newest read it writes `extraction.corrected` to the outbox, due 5 s later; a further correction in that time replaces it (the replaced row is never sent), so a person fixing several fields starts one save of the final read | `documents.edit` | built | c-235, c-169, c-252 |
-| `POST /v1/documents/layout` | `{fileId}`: the file's layout, computed on the first ask and cached by tenant, file digest and layout engine version: pages, blocks and table cells with ids, boxes as page fractions and reading order, words with confidence | `documents.run` | built | c-247 |
-| `GET /v1/documents/layout/{fileId}?page=N` | The cached layout, or one page of it | `documents.view` | built | c-247 |
-| `GET /v1/documents/layout/{fileId}/pages/{n}.png` | Page image for the viewer | `documents.view` | planned | c-250 |
-| `POST /v1/documents/classifications` | `{fileId, ocr?}`: which of the team's document types the file is, from the model over each type's name and description: `{typeId, name, confidence, reason, needsReview, floor}`, `typeId` null when none fits. An extraction with `detect` classifies first and reads with the kind found; an unknown or unsure kind is answered with no fields and `needsReview: ["documentType"]`. Per-page grouping and templates are planned | `documents.run` | built | c-249 |
-| `PUT /v1/files/{id}/data` (files-service) | What was read from the file: type id and name, version, template or model, fields to check, extraction; files lists, filters (`readAs`, `readPath`) and counts on it (files 0007) | `files:edit` (workflow run identity); people with `files.create` until the setData step writes it | built | c-250 |
-| `POST /v1/files/{id}/read-requests`, `GET …/read-requests/{key}` (files-service) | A person asks for the file to be read with a document type; files-service reports `file.read_requested` and the system extract workflow runs as that person; the request names its run once delivered | `files.create` | built | c-250 |
-| `GET /v1/documents/extractions?fileId=` | A file's extractions by the caller's team, newest first, paged; the file page's Fields tab | `documents.view` | built | c-250 |
-| `GET · POST /v1/document-types`, `GET /v1/document-types/{id}` | List with server flags `canCreate`, `canEdit`; create; read | builder writes, viewer reads | built | c-236, c-243 |
-| `POST /v1/document-types/{id}/versions`, `GET …/versions/{v}` | New immutable version: fields (type, rules, `keyField`), review floor, date order, templates, checks across fields (sum, before), and `pageImages`. Templates, checks and `pageImages` left out carry forward from the latest version. Turning `pageImages` on needs `documents.manage` | builder | built | c-236 |
-| `POST · DELETE /v1/document-types/{id}/samples` | Samples with expected values | builder | built | c-236, c-248 |
-| `GET …/versions/{v}/test-estimate`, `POST …/versions/{v}/test-runs`, `GET …/test-runs/{id}` | Priced test of a version on its samples (at most 20), field by field; the estimate uses measured token use from c-247 | builder | built | c-236, c-247 |
-| `POST /v1/document-types/{id}/versions` with `templates` | A version's layout templates are part of its body, as its fields are: anchors and zones per template page, checked at save (zones name the version's fields, boxes inside the page). Extraction tries them before the model and answers `path`, `templateId` or `templateMiss` | builder | built | c-253 |
-| `POST /v1/document-types/{id}/templates/suggest`, `GET /v1/document-types/{id}/template-offers` | A draft template from the team's finished reads (zones from field boxes, anchors from the nearest stable labels) and how it reads each of them; offers list groups of 5 or more checked model reads sharing a layout fingerprint that no current template reads, grouped on the fingerprint each model read stores when it finishes (one layout read per offered group). The count is the version's `offerAt`: 5 unless set, at least 2, carried forward (`documents_0009`). Nothing is saved until a builder posts the draft as a new version | builder; offers viewer | built | c-254 |
-| `GET /v1/document-types/{id}/accuracy` | Per-field accuracy split by template and model path; template hit rate as a cost number | viewer | planned | c-240 |
-| `POST /v1/documents/purge` | Remove the extractions and samples the token's team derived from a deleted file; 409 while files-service still serves the file; idempotent. Called by the workflow on `file.deleted` | `documents:delete`, services only (workflow run identity) | built | c-256, c-250 |
+| `POST /v1/documents/extractions` | Read a file: `{fileId, fields \| documentTypeId, version?, many?, ocr?, reviewBelow?}`. 200 with the answer for a small file, 202 to poll for a larger one; an Idempotency-Key repeat returns the first. Fields below the floor are listed in `needsReview`; opens nothing | `documents.run` | built | an earlier change, an earlier change |
+| `GET /v1/documents/extractions/{id}` | Status, fields with value, confidence, quote and page; each found quote carries `boxes` ({page, x, y, w, h}, page fractions, one per line, narrowed to the value) and `blocks`; path and template id follow with templates | `documents.view` | built; boxes an earlier change | an earlier change, an earlier change |
+| `PATCH /v1/documents/extractions/{id}/fields/{key}` | Correct one field; the original value and confidence are kept and the field leaves `needsReview`. On the file's newest read it writes `extraction.corrected` to the outbox, due 5 s later; a further correction in that time replaces it (the replaced row is never sent), so a person fixing several fields starts one save of the final read | `documents.edit` | built | an earlier change, an earlier change, an earlier change |
+| `POST /v1/documents/layout` | `{fileId}`: the file's layout, computed on the first ask and cached by tenant, file digest and layout engine version: pages, blocks and table cells with ids, boxes as page fractions and reading order, words with confidence | `documents.run` | built | an earlier change |
+| `GET /v1/documents/layout/{fileId}?page=N` | The cached layout, or one page of it | `documents.view` | built | an earlier change |
+| `GET /v1/documents/layout/{fileId}/pages/{n}.png` | Page image for the viewer | `documents.view` | planned | an earlier change |
+| `POST /v1/documents/classifications` | `{fileId, ocr?}`: which of the team's document types the file is, from the model over each type's name and description: `{typeId, name, confidence, reason, needsReview, floor}`, `typeId` null when none fits. An extraction with `detect` classifies first and reads with the kind found; an unknown or unsure kind is answered with no fields and `needsReview: ["documentType"]`. Per-page grouping and templates are planned | `documents.run` | built | an earlier change |
+| `PUT /v1/files/{id}/data` (files-service) | What was read from the file: type id and name, version, template or model, fields to check, extraction; files lists, filters (`readAs`, `readPath`) and counts on it (files 0007) | `files:edit` (workflow run identity); people with `files.create` until the setData step writes it | built | an earlier change |
+| `POST /v1/files/{id}/read-requests`, `GET …/read-requests/{key}` (files-service) | A person asks for the file to be read with a document type; files-service reports `file.read_requested` and the system extract workflow runs as that person; the request names its run once delivered | `files.create` | built | an earlier change |
+| `GET /v1/documents/extractions?fileId=` | A file's extractions by the caller's team, newest first, paged; the file page's Fields tab | `documents.view` | built | an earlier change |
+| `GET · POST /v1/document-types`, `GET /v1/document-types/{id}` | List with server flags `canCreate`, `canEdit`; create; read | builder writes, viewer reads | built | an earlier change, an earlier change |
+| `POST /v1/document-types/{id}/versions`, `GET …/versions/{v}` | New immutable version: fields (type, rules, `keyField`), review floor, date order, templates, checks across fields (sum, before), and `pageImages`. Templates, checks and `pageImages` left out carry forward from the latest version. Turning `pageImages` on needs `documents.manage` | builder | built | an earlier change |
+| `POST · DELETE /v1/document-types/{id}/samples` | Samples with expected values | builder | built | an earlier change, an earlier change |
+| `GET …/versions/{v}/test-estimate`, `POST …/versions/{v}/test-runs`, `GET …/test-runs/{id}` | Priced test of a version on its samples (at most 20), field by field; the estimate uses measured token use from an earlier change | builder | built | an earlier change, an earlier change |
+| `POST /v1/document-types/{id}/versions` with `templates` | A version's layout templates are part of its body, as its fields are: anchors and zones per template page, checked at save (zones name the version's fields, boxes inside the page). Extraction tries them before the model and answers `path`, `templateId` or `templateMiss` | builder | built | an earlier change |
+| `POST /v1/document-types/{id}/templates/suggest`, `GET /v1/document-types/{id}/template-offers` | A draft template from the team's finished reads (zones from field boxes, anchors from the nearest stable labels) and how it reads each of them; offers list groups of 5 or more checked model reads sharing a layout fingerprint that no current template reads, grouped on the fingerprint each model read stores when it finishes (one layout read per offered group). The count is the version's `offerAt`: 5 unless set, at least 2, carried forward (`documents_0009`). Nothing is saved until a builder posts the draft as a new version | builder; offers viewer | built | an earlier change |
+| `GET /v1/document-types/{id}/accuracy` | Per-field accuracy split by template and model path; template hit rate as a cost number | viewer | planned | an earlier change |
+| `POST /v1/documents/purge` | Remove the extractions and samples the token's team derived from a deleted file; 409 while files-service still serves the file; idempotent. Called by the workflow on `file.deleted` | `documents:delete`, services only (workflow run identity) | built | an earlier change, an earlier change |
 
 ## Data
 
-Every table carries `tenant_id` under row-level security, and team-owned rows carry `team`. The extraction and document type tables are built in `documents_0001` (c-256), layouts in `documents_0002` (c-247), the date order in `documents_0003`, the event outbox in `documents_0004` (c-252), templates in the version body in `documents_0005` (c-253), checks in `documents_0006` (c-296), page images in `documents_0007` (c-295) each read's layout fingerprint in `documents_0008` and the version's template offer count in `documents_0009` (c-254). Examples are planned (c-297). The file itself stays in files-service and is referenced by id and digest only.
+Every table carries `tenant_id` under row-level security, and team-owned rows carry `team`. The extraction and document type tables are built in `documents_0001`, layouts in `documents_0002`, the date order in `documents_0003`, the event outbox in `documents_0004`, templates in the version body in `documents_0005`, checks in `documents_0006`, page images in `documents_0007` each read's layout fingerprint in `documents_0008` and the version's template offer count in `documents_0009`. Examples are planned. The file itself stays in files-service and is referenced by id and digest only.
 
 ```mermaid
 erDiagram
@@ -106,9 +106,9 @@ erDiagram
     json result "fields, boxes, path, templateId, imageCalls, rereadTokens"
     string key_hash "idempotency"
     string type_id
-    int input_tokens "measured, c-247"
-    int output_tokens "measured, c-247"
-    string layout_fingerprint "model reads, c-254"
+    int input_tokens "measured, an earlier change"
+    int output_tokens "measured, an earlier change"
+    string layout_fingerprint "model reads, an earlier change"
   }
   EXTRACTION_CORRECTIONS {
     int id PK
@@ -133,9 +133,9 @@ erDiagram
     bool many
     float review_below
     string date_order "MDY or DMY"
-    json templates "anchors and zones per page (c-253)"
-    json checks "sum and before (c-296)"
-    bool page_images "off unless documents.manage (c-295)"
+    json templates "anchors and zones per page"
+    json checks "sum and before"
+    bool page_images "off unless documents.manage"
     int offer_at "reads that offer a template, 5 unless set"
   }
   DOCUMENTS_OUTBOX {
@@ -186,7 +186,7 @@ erDiagram
 | templates, checks, page_images (version columns) | built documents 0005 to 0007 | Part of an immutable version, carried forward when a new version leaves them out; a carried template that reads a dropped field is flagged needsRebuild and never matched, and only carry-forward may set that flag |
 | documents_outbox | built documents 0004 | Written in the correction's transaction; delivered at least once; delivered and replaced rows are pruned after 7 days |
 | extractions.layout_fingerprint | built documents 0008 | Stored when a model read finishes, so template offers never read files again; no table of suggestions is kept, offers are grouped on request |
-| document_type_examples | built documents 0010 | One per read and field, from a person's correction whose cited line shows the corrected value; a type's model reads are given the 3 newest per field, 12 at most; a field keeps its newest 10; a purge of a deleted file removes its reads' examples; listed with line and value masked as the team masks personal data, removable (c-297) |
+| document_type_examples | built documents 0010 | One per read and field, from a person's correction whose cited line shows the corrected value; a type's model reads are given the 3 newest per field, 12 at most; a field keeps its newest 10; a purge of a deleted file removes its reads' examples; listed with line and value masked as the team masks personal data, removable |
 
 ## Sequences
 
@@ -326,24 +326,24 @@ flowchart TB
   class SV proposed
 ```
 
-The email trigger stores the body as a text file (c-259). It keeps one reading path: the body is read like any attachment, so its fields carry positions and corrections the same way.
+The email trigger stores the body as a text file. It keeps one reading path: the body is read like any attachment, so its fields carry positions and corrections the same way.
 
 ### Nodes
 
 | Node | What it does | Behind it | State |
 |---|---|---|---|
-| Email received | Starts a run per message; attachments stored in Files first; filters on sender, subject, has an attachment | mailbox channel, files API | built; body as a text file built (c-259) |
+| Email received | Starts a run per message; attachments stored in Files first; filters on sender, subject, has an attachment | mailbox channel, files API | built; body as a text file built |
 | Request | Starts a run from an API call, a button or a service event | run API | built |
 | Extract from file | Reads one file with a document type (pinned version) or detects it | documents API | built |
 | Set fields | Maps and renames values from earlier steps; no model | engine only | built |
 | If | Two ways out (true, false) by rules: equals, greater, contains, exists, empty | engine only | built |
-| Switch | Several named ways out, one rule set each, first match wins, an "otherwise" way. The function node: it decides what happens next without a model | engine only | built (c-259) |
-| Combine facts | Merges the same fields from several sources by a precedence per field; keeps each value's source; lists disagreements instead of picking silently | engine only | built (c-259) |
+| Switch | Several named ways out, one rule set each, first match wins, an "otherwise" way. The function node: it decides what happens next without a model | engine only | built |
+| Combine facts | Merges the same fields from several sources by a precedence per field; keeps each value's source; lists disagreements instead of picking silently | engine only | built |
 | Match | Finds candidates that match a record by field rules | engine only | built |
 | Run workflow | Runs another workflow, once or once per item of a list ("for each"), and collects the results | run API | built |
 | Agent | Asks an agent; with an output schema its answer can feed If or Switch, which is how a model makes a judgement call in a workflow | agents API | built |
 | Human review | Pauses for a person; each option is a way out; deadline and timeout way | Human Tasks | built |
-| Save data on file | Writes the read fields onto the file, so Files lists and filters by them | files API `PUT /v1/files/{id}/data` | planned (proposed) (c-250) |
+| Save data on file | Writes the read fields onto the file, so Files lists and filters by them | files API `PUT /v1/files/{id}/data` | planned (proposed) |
 | Open case, Add to case | Opens or adds to a long-lived case | cases API | built |
 | Call a tool | Calls a tool operation through the tools gateway | tools API | built |
 | End | Finishes with an outcome and output | engine only | built |
@@ -368,7 +368,7 @@ Run workflow takes a list and starts one child run per item (up to its limit), s
 
 ## Samples
 
-The samples are synthetic restraining notices as PDFs, each built to test one hard case. Text PDFs are the main fixtures; one or two are also kept as scanned copies. Each case becomes a design rule and one check in the proof use case (c-255). Pages made up beyond what the originals show are marked as invented.
+The samples are synthetic restraining notices as PDFs, each built to test one hard case. Text PDFs are the main fixtures; one or two are also kept as scanned copies. Each case becomes a design rule and one check in the proof use case. Pages made up beyond what the originals show are marked as invented.
 
 | Sample | Tests | Design rule |
 |---|---|---|

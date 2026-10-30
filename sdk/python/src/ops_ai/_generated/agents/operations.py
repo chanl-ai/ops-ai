@@ -451,6 +451,42 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "batches_batch_page": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/batches/{batch_id}",
+        "pathParams": ["batch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "batches_batch_results": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/batches/{batch_id}/results.csv",
+        "pathParams": ["batch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "batches_retry_batch": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/batches/{batch_id}/retry",
+        "pathParams": ["batch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "batches_start_batch": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/workflows/{workflow_id}/batches",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
     "cases_add_event": {
         "body": "json",
         "headers": [],
@@ -703,6 +739,87 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "forms_create_form": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/workflows/{workflow_id}/forms",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "forms_member_form": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/forms/{slug}/members",
+        "pathParams": ["slug"],
+        "query": [],
+        "stream": False,
+    },
+    "forms_public_form": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/forms/public/{slug}",
+        "pathParams": ["slug"],
+        "query": ["t"],
+        "stream": False,
+    },
+    "forms_rotate_form": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/forms/{form_id}/rotate",
+        "pathParams": ["form_id"],
+        "query": [],
+        "stream": False,
+    },
+    "forms_submit_member": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/forms/{slug}/members",
+        "pathParams": ["slug"],
+        "query": [],
+        "stream": False,
+    },
+    "forms_submit_public": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/forms/public/{slug}/submit",
+        "pathParams": ["slug"],
+        "query": ["t"],
+        "stream": False,
+    },
+    "forms_update_form": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/forms/{form_id}",
+        "pathParams": ["form_id"],
+        "query": [],
+        "stream": False,
+    },
+    "forms_upload_public": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/forms/public/{slug}/files",
+        "pathParams": ["slug"],
+        "query": ["t", "name"],
+        "stream": False,
+    },
+    "forms_workflow_forms": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/{workflow_id}/forms",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
     "graphs_list_graphs": {
         "body": None,
         "headers": [],
@@ -748,6 +865,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "memory_erase_memory": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/me/memories/{memory_id}/erase",
+        "pathParams": ["memory_id"],
+        "query": [],
+        "stream": False,
+    },
     "memory_export_memories": {
         "body": None,
         "headers": [],
@@ -782,6 +908,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/me/memories",
         "pathParams": [],
         "query": ["agentId"],
+        "stream": False,
+    },
+    "memory_undo_memory": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/me/memories/{memory_id}/undo",
+        "pathParams": ["memory_id"],
+        "query": [],
         "stream": False,
     },
     "reviews_assign": {
@@ -935,6 +1070,24 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/task-types/{type_id}/draft",
         "pathParams": ["type_id"],
         "query": [],
+        "stream": False,
+    },
+    "templates_install_template": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/templates/{source}/{template_id}/install",
+        "pathParams": ["source", "template_id"],
+        "query": [],
+        "stream": False,
+    },
+    "templates_list_templates": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/templates",
+        "pathParams": [],
+        "query": ["kind"],
         "stream": False,
     },
     "threads_approve": {
@@ -1222,7 +1375,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "startable", "takesFiles"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "startable", "takesFiles", "engine"],
         "stream": False,
     },
     "workflows_move_pointer": {
@@ -1315,6 +1468,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_retry_engine_run": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/{run_id}/retry",
+        "pathParams": ["run_id"],
+        "query": [],
+        "stream": False,
+    },
     "workflows_route_fields": {
         "body": None,
         "headers": [],
@@ -1330,6 +1492,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/ai-steps/{step}",
         "pathParams": ["step"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_run_set_aside_email": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/set-aside-emails/{event_id}/run",
+        "pathParams": ["event_id"],
         "query": [],
         "stream": False,
     },
@@ -1709,6 +1880,18 @@ class Operations:
         "Background Processes"
         return self._t.call(SERVICE, OPERATIONS["background_background_processes"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def batches_batch_page(self, batch_id: str) -> BatchView:
+        "Batch Page"
+        return self._t.call(SERVICE, OPERATIONS["batches_batch_page"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def batches_batch_results(self, batch_id: str) -> Any:
+        "Batch Results"
+        return self._t.call(SERVICE, OPERATIONS["batches_batch_results"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def batches_retry_batch(self, batch_id: str) -> Retried:
+        "Retry Batch"
+        return self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def cases_list_case_types(self) -> list[CaseTypeView]:
         "List Case Types"
         return self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1865,6 +2048,36 @@ class Operations:
             SERVICE, OPERATIONS["threads_team_stream"], {}, {"after": after, "follow": follow}, {}, None
         )  # type: ignore[no-any-return]
 
+    def forms_public_form(self, slug: str, *, t: str | None = None) -> PublicForm:
+        "Public Form"
+        return self._t.call(SERVICE, OPERATIONS["forms_public_form"], {"slug": slug}, {"t": t}, {}, None)  # type: ignore[no-any-return]
+
+    def forms_upload_public(self, slug: str, *, t: str | None = None, name: str | None = None) -> UploadedFile:
+        "Upload Public"
+        return self._t.call(
+            SERVICE, OPERATIONS["forms_upload_public"], {"slug": slug}, {"t": t, "name": name}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def forms_submit_public(self, slug: str, body: SubmitIn, *, t: str | None = None) -> Received:
+        "Submit Public"
+        return self._t.call(SERVICE, OPERATIONS["forms_submit_public"], {"slug": slug}, {"t": t}, {}, body)  # type: ignore[no-any-return]
+
+    def forms_update_form(self, form_id: str, body: FormPatch) -> FormView:
+        "Update Form"
+        return self._t.call(SERVICE, OPERATIONS["forms_update_form"], {"form_id": form_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def forms_rotate_form(self, form_id: str) -> FormView:
+        "Rotate Form"
+        return self._t.call(SERVICE, OPERATIONS["forms_rotate_form"], {"form_id": form_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def forms_member_form(self, slug: str) -> PublicForm:
+        "Member Form"
+        return self._t.call(SERVICE, OPERATIONS["forms_member_form"], {"slug": slug}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def forms_submit_member(self, slug: str, body: SubmitIn) -> Received:
+        "Submit Member"
+        return self._t.call(SERVICE, OPERATIONS["forms_submit_member"], {"slug": slug}, {}, {}, body)  # type: ignore[no-any-return]
+
     def graphs_list_graphs(self) -> list[GraphInfo]:
         "List Graphs"
         return self._t.call(SERVICE, OPERATIONS["graphs_list_graphs"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1977,6 +2190,14 @@ class Operations:
         "Forget Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def memory_erase_memory(self, memory_id: str) -> Any:
+        "Erase Memory"
+        return self._t.call(SERVICE, OPERATIONS["memory_erase_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def memory_undo_memory(self, memory_id: str) -> Any:
+        "Undo Memory"
+        return self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2032,6 +2253,10 @@ class Operations:
         "Start Engine Run"
         return self._t.call(SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
+        "Run Set Aside Email"
+        return self._t.call(SERVICE, OPERATIONS["workflows_run_set_aside_email"], {"event_id": event_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def workflows_start_by_hand(self, body: StartInput) -> RunStarted:
         "Start By Hand"
         return self._t.call(SERVICE, OPERATIONS["workflows_start_by_hand"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -2054,6 +2279,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def workflows_retry_engine_run(self, run_id: str) -> RunRow:
+        "Retry Engine Run"
+        return self._t.call(SERVICE, OPERATIONS["workflows_retry_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def workflows_resume_step(self, run_id: str, step: str, body: ResumeBody) -> ResumeOut:
         "Resume Step"
@@ -2140,6 +2369,21 @@ class Operations:
     def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"
         return self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+        "List Templates"
+        return self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+
+    def templates_install_template(self, source: str, template_id: str, body: InstallInput) -> Installation:
+        "Install Template"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["templates_install_template"],
+            {"source": source, "template_id": template_id},
+            {},
+            {},
+            body,
+        )  # type: ignore[no-any-return]
 
     def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
         "List Threads"
@@ -2292,6 +2536,7 @@ class Operations:
         sort_order: str | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
+        engine: str | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return self._t.call(
@@ -2306,6 +2551,7 @@ class Operations:
                 "sortOrder": sort_order,
                 "startable": startable,
                 "takesFiles": takes_files,
+                "engine": engine,
             },
             {},
             None,
@@ -2428,6 +2674,10 @@ class Operations:
             SERVICE, OPERATIONS["workflows_delete_workflow"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def batches_start_batch(self, workflow_id: str, body: BatchIn) -> Any:
+        "Start Batch"
+        return self._t.call(SERVICE, OPERATIONS["batches_start_batch"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def workflows_save_draft(self, workflow_id: str, body: GraphBody) -> WorkflowDraft:
         "Save Draft"
         return self._t.call(SERVICE, OPERATIONS["workflows_save_draft"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -2435,6 +2685,14 @@ class Operations:
     def workflows_discard_draft(self, workflow_id: str) -> Any:
         "Discard Draft"
         return self._t.call(SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+        "Workflow Forms"
+        return self._t.call(SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:
+        "Create Form"
+        return self._t.call(SERVICE, OPERATIONS["forms_create_form"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def channels_workflow_live(self, workflow_id: str) -> Live:
         "Workflow Live"
@@ -2784,6 +3042,18 @@ class AsyncOperations:
         "Background Processes"
         return await self._t.call(SERVICE, OPERATIONS["background_background_processes"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def batches_batch_page(self, batch_id: str) -> BatchView:
+        "Batch Page"
+        return await self._t.call(SERVICE, OPERATIONS["batches_batch_page"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def batches_batch_results(self, batch_id: str) -> Any:
+        "Batch Results"
+        return await self._t.call(SERVICE, OPERATIONS["batches_batch_results"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def batches_retry_batch(self, batch_id: str) -> Retried:
+        "Retry Batch"
+        return await self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def cases_list_case_types(self) -> list[CaseTypeView]:
         "List Case Types"
         return await self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2950,6 +3220,36 @@ class AsyncOperations:
             SERVICE, OPERATIONS["threads_team_stream"], {}, {"after": after, "follow": follow}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def forms_public_form(self, slug: str, *, t: str | None = None) -> PublicForm:
+        "Public Form"
+        return await self._t.call(SERVICE, OPERATIONS["forms_public_form"], {"slug": slug}, {"t": t}, {}, None)  # type: ignore[no-any-return]
+
+    async def forms_upload_public(self, slug: str, *, t: str | None = None, name: str | None = None) -> UploadedFile:
+        "Upload Public"
+        return await self._t.call(
+            SERVICE, OPERATIONS["forms_upload_public"], {"slug": slug}, {"t": t, "name": name}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def forms_submit_public(self, slug: str, body: SubmitIn, *, t: str | None = None) -> Received:
+        "Submit Public"
+        return await self._t.call(SERVICE, OPERATIONS["forms_submit_public"], {"slug": slug}, {"t": t}, {}, body)  # type: ignore[no-any-return]
+
+    async def forms_update_form(self, form_id: str, body: FormPatch) -> FormView:
+        "Update Form"
+        return await self._t.call(SERVICE, OPERATIONS["forms_update_form"], {"form_id": form_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def forms_rotate_form(self, form_id: str) -> FormView:
+        "Rotate Form"
+        return await self._t.call(SERVICE, OPERATIONS["forms_rotate_form"], {"form_id": form_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def forms_member_form(self, slug: str) -> PublicForm:
+        "Member Form"
+        return await self._t.call(SERVICE, OPERATIONS["forms_member_form"], {"slug": slug}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def forms_submit_member(self, slug: str, body: SubmitIn) -> Received:
+        "Submit Member"
+        return await self._t.call(SERVICE, OPERATIONS["forms_submit_member"], {"slug": slug}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def graphs_list_graphs(self) -> list[GraphInfo]:
         "List Graphs"
         return await self._t.call(SERVICE, OPERATIONS["graphs_list_graphs"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3066,6 +3366,14 @@ class AsyncOperations:
         "Forget Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def memory_erase_memory(self, memory_id: str) -> Any:
+        "Erase Memory"
+        return await self._t.call(SERVICE, OPERATIONS["memory_erase_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def memory_undo_memory(self, memory_id: str) -> Any:
+        "Undo Memory"
+        return await self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return await self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3121,6 +3429,12 @@ class AsyncOperations:
         "Start Engine Run"
         return await self._t.call(SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
+        "Run Set Aside Email"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_run_set_aside_email"], {"event_id": event_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def workflows_start_by_hand(self, body: StartInput) -> RunStarted:
         "Start By Hand"
         return await self._t.call(SERVICE, OPERATIONS["workflows_start_by_hand"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -3145,6 +3459,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def workflows_retry_engine_run(self, run_id: str) -> RunRow:
+        "Retry Engine Run"
+        return await self._t.call(SERVICE, OPERATIONS["workflows_retry_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def workflows_resume_step(self, run_id: str, step: str, body: ResumeBody) -> ResumeOut:
         "Resume Step"
@@ -3235,6 +3553,21 @@ class AsyncOperations:
     async def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"
         return await self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+        "List Templates"
+        return await self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+
+    async def templates_install_template(self, source: str, template_id: str, body: InstallInput) -> Installation:
+        "Install Template"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["templates_install_template"],
+            {"source": source, "template_id": template_id},
+            {},
+            {},
+            body,
+        )  # type: ignore[no-any-return]
 
     async def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
         "List Threads"
@@ -3387,6 +3720,7 @@ class AsyncOperations:
         sort_order: str | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
+        engine: str | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return await self._t.call(
@@ -3401,6 +3735,7 @@ class AsyncOperations:
                 "sortOrder": sort_order,
                 "startable": startable,
                 "takesFiles": takes_files,
+                "engine": engine,
             },
             {},
             None,
@@ -3527,6 +3862,12 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_delete_workflow"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def batches_start_batch(self, workflow_id: str, body: BatchIn) -> Any:
+        "Start Batch"
+        return await self._t.call(
+            SERVICE, OPERATIONS["batches_start_batch"], {"workflow_id": workflow_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def workflows_save_draft(self, workflow_id: str, body: GraphBody) -> WorkflowDraft:
         "Save Draft"
         return await self._t.call(
@@ -3538,6 +3879,16 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
+
+    async def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+        "Workflow Forms"
+        return await self._t.call(
+            SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:
+        "Create Form"
+        return await self._t.call(SERVICE, OPERATIONS["forms_create_form"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def channels_workflow_live(self, workflow_id: str) -> Live:
         "Workflow Live"

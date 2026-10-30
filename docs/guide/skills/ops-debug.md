@@ -1,6 +1,6 @@
 # ops-debug: find why a service fails
 
-Status: current. Proven by `make skills-proof` (c-554).
+Status: current. Proven by `make skills-proof`.
 
 skill: ops-debug
 description: Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page errors, a make target fails, or a service will not start.

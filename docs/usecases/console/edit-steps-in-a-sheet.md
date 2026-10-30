@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-122`. Service: `console`. Layers: ui.
 
-c-165 (split from c-096), owner feedback (mid-1): a step and the trigger open in a sheet beside the canvas that leaves
+an earlier change (split from an earlier change), owner feedback (mid-1): a step and the trigger open in a sheet beside the canvas that leaves
 the canvas usable, and steps are added from a floating panel with a tab per group and a search across every group.
 
 ## Preconditions

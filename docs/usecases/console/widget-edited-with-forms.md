@@ -1,6 +1,6 @@
 # A builder edits a widget with forms
 
-Status: current. Id: `uc-103`. Service: `console`. Layers: ui. Card: c-110.
+Status: current. Id: `uc-103`. Service: `console`. Layers: ui. Card: an earlier change.
 
 A widget's data fields, sample data and layout are edited with forms: a fields table, one input per field for the
 sample, and the layout as nested blocks whose values are fixed or taken from a data field. JSON stays as the advanced

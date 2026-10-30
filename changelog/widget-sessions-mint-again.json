@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-30",
+  "title": "Embedded chat widgets start sessions again",
+  "description": "A bank's server could not mint a widget session with its deployment's key, and the widget page could not load its settings, because the deployment was not found. Both work again, and each still reads only the one deployment its key or session names.",
+  "tag": "fix",
+  "cards": ["c-553"]
+}

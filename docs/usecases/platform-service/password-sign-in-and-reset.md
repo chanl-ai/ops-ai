@@ -1,8 +1,16 @@
 # Password sign-in and reset
 
-Status: current. Id: `uc-160`. Service: `platform-service`. Layers: api.
+Status: current. Id: `uc-160`. Service: `platform-service`. Layers: api, ui (ui layer an earlier change).
 
 ## Preconditions
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | Ravi asks for a reset on Forgot password, and one link is mailed to him | ui | 1 | 1 |
+| S2 | The link opens the reset page, which takes his new password | ui | 3 | 3 |
+| S3 | He signs in with the new password, and the demo password no longer works | ui | 5 | 5 |
 
 | Needs | How |
 |---|---|
@@ -31,6 +39,7 @@ identity provider and no model is called.
 | Layer | Script | State |
 |---|---|---|
 | api | `platform-service/scripts/test-uc-160-api.py` | passing |
+| ui | `platform-service/scripts/test-uc-160-ui.mjs` | passing: Forgot password, the reset page and the sign-in page |
 
 ## Non-vacuous check
 

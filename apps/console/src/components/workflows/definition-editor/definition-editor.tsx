@@ -573,7 +573,7 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
         onChange={(patch) => opened && change((d) => patchNode(d, opened.id, patch, typeOf(opened)))}
         onDelete={() => opened && removeNodes(new Set([opened.id]))}
       />
-      <StartDefinitionRunDialog open={runOpen} onOpenChange={setRunOpen} workflowName={def.name || def.id} latestVersion={lifecycle.version} liveVersion={lifecycle.liveVersion} paused={lifecycle.paused} onStart={startRun} startForm={lifecycle.startForm} onStartForm={startByHand} />
+      <StartDefinitionRunDialog open={runOpen} onOpenChange={setRunOpen} workflowId={def.id} workflowName={def.name || def.id} latestVersion={lifecycle.version} liveVersion={lifecycle.liveVersion} paused={lifecycle.paused} onStart={startRun} startForm={lifecycle.startForm} onStartForm={startByHand} />
       <PublishDefinitionDialog
         open={publishOpen}
         onOpenChange={setPublishOpen}
