@@ -98,7 +98,8 @@ class OneTool:
 
 
 def keeps_reading(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-    return ModelResponse(parts=[ToolCallPart("get_customer", {})])
+    # A new customer each time: the kernel answers a repeated identical call from its first result instead.
+    return ModelResponse(parts=[ToolCallPart("get_customer", {"customerId": f"C-{len(messages)}"})])
 
 
 async def port_on(model: Any, tools: Any, *, spec: dict[str, Any] | None = None) -> tuple[KernelAgents, str]:

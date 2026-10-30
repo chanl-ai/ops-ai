@@ -4,6 +4,9 @@ calls)."""
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 import httpx
@@ -28,6 +31,7 @@ from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
 from .files import FileIntake, file_intake
+from .schedule import keep_syncing
 from .schemas import (
     AddedDocuments,
     AddedFile,
@@ -63,6 +67,7 @@ from .schemas import (
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
 from .store.fulltext import PostgresFullTextRetriever
+from .tool_sources import ToolReader
 
 
 class Health(Out):
@@ -108,19 +113,47 @@ def _agents_service(settings: Settings) -> AgentsUsage:
     )
 
 
+def _tools_service(settings: Settings) -> ToolReader | None:
+    """tools-service's gateway, for "tool" sources (c-564): the declared sources and one call per list page or item."""
+    # Plugins are off until their release (OPS_PLUGINS): kb-service then calls no tools route at all.
+    if not settings.plugins or not settings.tools_url:
+        return None
+    http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)
+    client = ServiceClient.for_settings(
+        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run"], timeout=60
+    )
+    return ToolReader(client)
+
+
 def create_kb_app(
     engine: AsyncEngine,
     *,
     auth: Auth | None = None,
     files: FileIntake | None = None,
     agents: AgentDirectory | None = None,
+    tools: ToolReader | None = None,
+    schedule: bool = True,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
     no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
     Settings().agents_url."""
-    app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id)
+    reader = tools or _tools_service(Settings())
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+        # The knowledge schedule (c-564) runs only where tool sources can be read.
+        stop = asyncio.Event()
+        beat = asyncio.create_task(keep_syncing(service, stop)) if reader is not None and schedule else None
+        try:
+            yield
+        finally:
+            stop.set()
+            if beat is not None:
+                await asyncio.wait({beat}, timeout=5)
+
+    app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)
     install_auth(app, auth or Auth.from_settings(Settings(), audience="kb"))
     # The console calls this service from its own origin, so the browser preflights every request; without this
@@ -139,6 +172,7 @@ def create_kb_app(
         files or file_intake(Settings()),
         PostgresFullTextRetriever(engine),
         agents or _agents_service(Settings()),
+        reader,
     )
     errors = error_responses()
 

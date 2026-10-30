@@ -130,6 +130,17 @@ MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # The embed app's origin is configuration (c-158): without it agents-service refuses every widget send from the console's
 # Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
 AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS_MODELS_KEY=${OPS_MODELS_KEY:-mk_dev_agents} OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
+# The CA tools-service trusts: the fake bank's, plus OPS_EGRESS_EXTRA_CA when a demo brings its own outside system
+# (the fake Salesforce of c-565), bundled into one file since tools-service reads one.
+egress_ca() {
+  local bank=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt}
+  if [[ -n "${OPS_EGRESS_EXTRA_CA:-}" && -f "$OPS_EGRESS_EXTRA_CA" ]]; then
+    cat "$bank" "$OPS_EGRESS_EXTRA_CA" >"$RUN_ABS/egress-ca.pem" 2>/dev/null
+    echo "$RUN_ABS/egress-ca.pem"
+  else
+    echo "$bank"
+  fi
+}
 dev_egress_resolve() {
   IP=$(private_address) GM_HOST=$GREENMAIL_HOST MP_HOST=$MAILPIT_HOST python3 -c 'import json,os,socket
 def host_ip(name, fallback):
@@ -159,7 +170,7 @@ cmd_of() {
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt} OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=$(egress_ca) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions (c-531): Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
@@ -170,7 +181,8 @@ cmd_of() {
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
     # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
-    kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT uv run --directory services/kb-service python -m ops_kb" ;;
+    # Plugin knowledge sources are read through tools-service's gateway, when OPS_PLUGINS is on (c-565).
+    kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
     # files-service delivers its service events (file.deleted, file.read_requested) to agents-service (c-250).
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
@@ -209,7 +221,10 @@ mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 # The auth mode a running service was started with. A file missing from before modes were recorded means dev.
 authfile() { echo "$RUN_DIR/$1.auth"; }
 started_auth() { cat "$(authfile "$1")" 2>/dev/null || echo dev; }
-listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1; }
+# Each reader below takes a command's whole output before it picks from it. Under pipefail a reader that stops early
+# (`| head -1`, `grep -q`) leaves the writer to die of SIGPIPE, the pipe answers 141, and set -e ends the script:
+# `start worker` stopped this way whenever two old workers were alive (scripts/tests/test_stack_pipes.py).
+listener() { local out; out=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null) || return; echo "${out%%$'\n'*}"; }
 
 # Env of a pid: Linux /proc, else ps eww (macOS). Used to tell this stack's leftovers from an isolated stack's.
 pid_env() {
@@ -223,12 +238,16 @@ pid_env() {
 
 # Pids whose command matches $1 and whose env names this stack's files-service, so an isolated worker is left alone.
 stack_cmd_pids() {
-  local needle=$1 pid
+  local needle=$1 pid seen
   for pid in $(pgrep -f "$needle" || true); do
-    pid_env "$pid" | grep -Fq "OPS_FILES_URL=http://127.0.0.1:$FILES_PORT" && echo "$pid"
+    seen=$(pid_env "$pid" || true)
+    [[ "$seen" == *"OPS_FILES_URL=http://127.0.0.1:$FILES_PORT"* ]] && echo "$pid"
   done
   return 0
 }
+
+# The first of this stack's workers, or nothing.
+stack_worker_leftover() { local pids; pids=$(stack_cmd_pids "ops_agents.api.worker"); echo "${pids%%$'\n'*}"; }
 
 stop_pids() {
   local pid
@@ -302,7 +321,7 @@ start() {
   # were still claiming work and the mail listener's lease after make up, c-532).
   if [[ "$svc" == worker ]]; then
     local leftover
-    leftover=$(stack_cmd_pids "ops_agents.api.worker" | head -1)
+    leftover=$(stack_worker_leftover)
     if [[ -n "$leftover" ]]; then
       echo "$leftover" >"$(pidfile "$svc")"
       echo "$AUTH" >"$(authfile "$svc")"

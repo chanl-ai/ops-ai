@@ -32,6 +32,8 @@ provider key is read. No real model is called.
 |---|---|---|
 | api | `agents-service/scripts/test-uc-028-api.py` | passing |
 
+In the console: uc-018's ui script: the agent's Model list offers exactly the aliases publish accepts. Routing and models-service's call log have no console page, so the rest stays at the api layer.
+
 ## Non-vacuous check
 
 `the test turn ran on the agent's alias, bank-reasoning, through models-service`: with the kernel's per-alias model

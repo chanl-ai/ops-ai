@@ -37,6 +37,8 @@ sys.path.insert(0, str(ROOT))
 LOGS = ROOT / ".logs"
 DB = "ops_e2b"
 URL = f"postgresql+asyncpg://ops:ops@localhost:5477/{DB}"
+# The team the experiment's threads are written under; the Runtime writes each run under its thread's team.
+E2B_TEAM = "local"
 DSN = f"postgresql://ops:ops@localhost:5477/{DB}"
 EMAIL: dict[str, Any] = json.loads((ROOT / "tests" / "fixtures" / "seed" / "dispute_emails.json").read_text())[1]
 TTL, SWEEP = 4, 1
@@ -112,10 +114,10 @@ async def late_checkpoint(thread: str, generation: int) -> str:
     """The checkpoint write a stalled A would make on waking, through the same saver the Runtime uses."""
     from langgraph.checkpoint.base import empty_checkpoint  # noqa: PLC0415
 
-    from ops_agents.graphs.checkpointer import LOCAL_TEAM, LOCAL_TENANT  # noqa: PLC0415
+    from ops_agents.graphs.checkpointer import LOCAL_TENANT  # noqa: PLC0415
     from ops_checkpointer import LeaseSupersededError, open_saver  # noqa: PLC0415
 
-    async with open_saver(URL, tenant_id=LOCAL_TENANT, team_id=LOCAL_TEAM) as saver:
+    async with open_saver(URL, tenant_id=LOCAL_TENANT, team_id=E2B_TEAM) as saver:
         cfg: Any = {"configurable": {"thread_id": thread, "checkpoint_ns": "", "lease_generation": generation}}
         try:
             await saver.aput(cfg, empty_checkpoint(), {"source": "loop", "step": 99, "parents": {}}, {})

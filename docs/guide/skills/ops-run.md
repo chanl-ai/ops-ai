@@ -1,6 +1,6 @@
 # ops-run: run Ops AI on a laptop, in the devcontainer or on the shared VM
 
-Status: current. Proven by `make skills-proof` (c-554).
+Status: current. Proven by `make skills-proof`.
 
 skill: ops-run
 description: Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use when someone asks to start, stop or set up Ops AI, or which make target runs it.

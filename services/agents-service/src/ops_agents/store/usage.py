@@ -7,13 +7,13 @@ from decimal import Decimal
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.graphs.metering import CallSite
 from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, cost, exhausted
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.dialect import upsert
 
 from .base import metadata
 from .model_calls import ModelCall, ModelCallLedger
@@ -115,14 +115,7 @@ class UsageLedger:
             "updated_at": now_iso(),
         }
         async with self.engine.begin() as c:
-            dialect = postgresql if c.dialect.name == "postgresql" else sqlite
-            insert = dialect.insert(thread_budgets).values(**values)
-            await c.execute(
-                insert.on_conflict_do_update(
-                    index_elements=[thread_budgets.c.thread_id],
-                    set_={k: v for k, v in values.items() if k != "thread_id"},
-                )
-            )
+            await c.execute(upsert(c, thread_budgets, values, keys=["thread_id"]))
 
     async def update_budget(self, thread_id: str, budget: Budget) -> None:
         current = await self.budget(thread_id) or Budget()

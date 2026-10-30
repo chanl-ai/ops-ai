@@ -3,16 +3,21 @@
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Clock, CloudOff, Users } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQueryClient } from '@tanstack/react-query';
+
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { WhatsNew } from '@/components/shared/whats-new';
 import { AppSidebar } from '@/components/app-sidebar';
+import { readSidebarOpen } from '@/components/shell/sidebar-open';
+import { resetChosenSignOut, signOutWasChosen } from '@/components/shell/session-end';
 import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 import { AuthFormWrapper, AuthHeading } from '@/components/auth/auth-form-wrapper';
 import { ClientGate } from '@/components/client-gate';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { SiteHeader } from '@/components/site-header';
+import { DialogShell } from '@/components/shared/dialog-shell';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
 import { useTeam, useTeamReady } from '@/hooks/use-team';
@@ -69,6 +74,18 @@ function Guarded({ children }: { children: React.ReactNode }) {
   // Pages render, and team queries run (hooks/team-query.ts), only once the current team is one the person holds. A team
   // remembered in this tab from an earlier sign-in, or the console default, gives way to their own team or their first.
   const teamReady = useTeamReady();
+  // A sidebar the person folded stays folded on the next load (c-552). Only their own toggles are kept (app-sidebar.tsx), not a
+  // page's temporary fold, which also writes the sidebar's cookie.
+  const [sidebarWasOpen] = React.useState(() => readSidebarOpen());
+  // The session ended while the person was in: its lifetime passed (`expired`), or a refresh was refused and no one chose
+  // Sign out. The page stays, under a sign-in dialog that keeps what they were typing (c-552).
+  const wasIn = React.useRef<{ name?: string } | null>(null);
+  if (status === 'signed_in' && teamReady) wasIn.current = { name: session?.user.name };
+  React.useEffect(() => {
+    if (status === 'signed_in') resetChosenSignOut();
+  }, [status]);
+  const ended = status === 'expired' || (status === 'signed_out' && !!wasIn.current && !signOutWasChosen());
+  const expired = ended;
   const teamIds = teams.map((t) => t.id).join(',');
   React.useEffect(() => {
     if (status !== 'signed_in' || teamReady || !teamIds) return;
@@ -76,17 +93,20 @@ function Guarded({ children }: { children: React.ReactNode }) {
     if (pick) setCurrentTeamId(pick);
   }, [status, teamReady, teamIds]);
   React.useEffect(() => {
-    if (status === 'signed_out' || teamsStatus === 401) router.replace(`/login?next=${encodeURIComponent(here)}`);
+    // An ended session keeps the page under its sign-in dialog (c-552), so its sign-out and 401s do not send the person away.
+    if (!ended && (status === 'signed_out' || teamsStatus === 401)) router.replace(`/login?next=${encodeURIComponent(here)}`);
     if (needsMfa) router.replace(`/mfa/setup?next=${encodeURIComponent(here)}`);
-  }, [status, needsMfa, teamsStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, needsMfa, teamsStatus, ended]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (status === 'expired') return <SessionExpired name={session?.user.name} next={here} />;
+  // Before the person was ever in (no teams read yet) there is no page to keep: the full-page card says the session ended.
+  if (expired && !wasIn.current) return <SessionExpired name={session?.user.name} next={here} />;
   if (status === 'signed_in' && unreachable) return <ServicesUnavailable />;
-  if (status !== 'signed_in' || needsMfa) return <Loading />;
-  if (!teamsPending && !teamsError && teams.length === 0) return <NoTeam />;
-  if (!teamReady) return <Loading />;
+  if ((status !== 'signed_in' && !expired) || needsMfa) return <Loading />;
+  // An ended session reads no teams; the page it had stays mounted under the dialog.
+  if (!expired && !teamsPending && !teamsError && teams.length === 0) return <NoTeam />;
+  if (!expired && !teamReady) return <Loading />;
   return (
-    <SidebarProvider style={{ '--header-height': 'calc(var(--spacing) * 14)', '--sidebar-width': '14rem' } as React.CSSProperties}>
+    <SidebarProvider defaultOpen={sidebarWasOpen} style={{ '--header-height': 'calc(var(--spacing) * 14)', '--sidebar-width': '14rem' } as React.CSSProperties}>
       {/* Inside settings the app sidebar is replaced by the settings sidebar. */}
       {inSettings(pathname) ? <SettingsSidebar variant="inset" tree={LIVE_TREE} /> : <AppSidebar variant="inset" />}
       <SidebarInset className="h-[calc(100svh-1rem)] min-w-0 overflow-hidden">
@@ -99,15 +119,41 @@ function Guarded({ children }: { children: React.ReactNode }) {
           }
         />
         <div className="@container/main flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+          <ServicesDownBanner />
           <ClientGate fallback={<Loading />}>{children}</ClientGate>
         </div>
       </SidebarInset>
       <WhatsNew />
+      {expired && <SessionEndedDialog name={session?.user.name ?? wasIn.current?.name} next={here} />}
     </SidebarProvider>
   );
 }
 
 /** Shown in place of the console when the session lifetime has passed; nothing behind it renders. */
+/**
+ * True while a read on screen failed because the services did not answer, from its first failed try (a failed read is
+ * still retrying) until a try succeeds.
+ */
+function useServicesDown(): boolean {
+  const cache = useQueryClient().getQueryCache();
+  return React.useSyncExternalStore(
+    (changed) => cache.subscribe(changed),
+    () => cache.getAll().some((q) => q.getObserversCount() > 0 && ((q.state.status === 'error' && isUnreachable(q.state.error)) || (q.state.fetchFailureCount > 0 && isUnreachable(q.state.fetchFailureReason)))),
+    () => false,
+  );
+}
+
+/** Above any page whose reads the services are not answering: the page keeps what it has and asks again by itself. */
+function ServicesDownBanner() {
+  if (!useServicesDown()) return null;
+  return (
+    <Alert className="mx-6 mt-4 w-auto lg:mx-8" data-testid="services-down">
+      <CloudOff />
+      <AlertDescription>Ops AI can’t reach its services right now. Your work is safe, and this page asks again by itself.</AlertDescription>
+    </Alert>
+  );
+}
+
 /** Every page's data is out of reach: said once, with a retry that asks again for everything on screen. */
 export function ServicesUnavailable() {
   const qc = useQueryClient();
@@ -117,7 +163,7 @@ export function ServicesUnavailable() {
       <div className="w-full max-w-sm">
         <AuthFormWrapper showPanel={false}>
           <div className="flex flex-col gap-6" data-testid="services-unavailable">
-            <AuthHeading icon={<CloudOff className="size-6" />} title="Ops AI can’t reach its services right now" description="Your work is safe. Try again in a moment; if it keeps happening, tell your administrator." />
+            <AuthHeading icon={<CloudOff className="size-6" />} title="Ops AI can’t reach its services right now" description="Your work is safe. This page asks again by itself every few seconds; if it keeps happening, tell your administrator." />
             <LoadingButton
               className="w-full"
               isLoading={retrying}
@@ -148,6 +194,42 @@ function NoTeam() {
         </AuthFormWrapper>
       </div>
     </div>
+  );
+}
+
+/**
+ * Over the page when the session lifetime passes (c-552): the page stays behind it, dimmed, and nothing new loads (queries
+ * pause) until the person signs in again. Sign in again keeps the session's storage, so the chat's unsent draft comes
+ * back on the same page; only Sign out in the person menu forgets it.
+ */
+function SessionEndedDialog({ name, next }: { name?: string; next: string }) {
+  const router = useRouter();
+  React.useEffect(() => {
+    onlineManager.setOnline(false);
+    return () => onlineManager.setOnline(true);
+  }, []);
+  return (
+    <DialogShell
+      open
+      onOpenChange={() => undefined}
+      size="sm"
+      showCloseButton={false}
+      onEscapeKeyDown={(e) => e.preventDefault()}
+      onInteractOutside={(e) => e.preventDefault()}
+      data-testid="session-ended-dialog"
+      title={
+        <span className="flex items-center gap-2">
+          <Clock className="size-5 text-muted-foreground" /> Your session has ended
+        </span>
+      }
+      footer={
+        <LoadingButton isLoading={false} onClick={() => router.replace(`/login?next=${encodeURIComponent(next)}`)} data-testid="session-sign-in-again">
+          Sign in again
+        </LoadingButton>
+      }
+    >
+      <p className="text-sm text-muted-foreground">{`${name ? `${name}, you` : 'You'} were signed out after the workspace’s session limit. Sign in again to pick up where you left off; anything you were typing is kept.`}</p>
+    </DialogShell>
   );
 }
 

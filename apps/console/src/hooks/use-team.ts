@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { setCurrentTeamId, teamStore } from '@/lib/api/team-context';
+import { wipeSavedQueries } from '@/lib/query-cache';
 import type { TeamInput, TeamRef } from '@/lib/types/team';
 
 import { useSessionQuery } from './team-query';
@@ -36,6 +37,8 @@ export function useTeam() {
   const switchTeam = React.useCallback(
     (id: string) => {
       if (id === teamStore.get()) return;
+      // Nothing saved for the old team outlives the switch (c-560).
+      void wipeSavedQueries();
       setCurrentTeamId(id);
       // Teams are not team-scoped; everything else is answered for the new team.
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== TEAMS_KEY[0] });

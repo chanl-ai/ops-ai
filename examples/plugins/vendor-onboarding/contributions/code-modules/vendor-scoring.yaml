@@ -1,0 +1,28 @@
+# A code module: one Python function, run in the sandbox.
+#
+# The YAML says what the function is called, what it takes, what it may reach and how much it may use. The logic is in
+# the Python file `source` names. This is the body tools-service's POST /v1/tool-modules accepts with `type: code`.
+
+name: vendor-scoring
+displayName: Vendor scoring
+system: Vendor risk
+description: Scores a new supplier from its registry record and a sanctions screen.
+type: code
+
+function:
+  name: score_vendor
+  description: How risky a new supplier is, with the reasons, from its registry record and a sanctions screen
+  access: read
+  input:
+    - { name: vendor, type: object, required: true }
+    - { name: company, type: object, required: false }
+    - { name: policy, type: object, required: false }
+  code:
+    source: ../functions/score_vendor.py
+    entry: main
+    # The only tools the function may call with ops.call. @tool-module/<id>#<operation> is a reference into this
+    # plugin; the installer replaces it with the operation's name in the team.
+    bindings:
+      - "@tool-module/vendor-registry#screen_vendor"
+    secrets: []
+    limits: { timeS: 10, memoryMb: 128, calls: 3 }

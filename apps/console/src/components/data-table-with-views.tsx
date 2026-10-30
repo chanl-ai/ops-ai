@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { DataTablePagination, ServerPaginationProps } from './data-table-pagination';
+import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
 import { RowOpen } from '@/components/shared/row-open';
 import {
   DataTableToolbar,
@@ -272,9 +273,10 @@ export function DataTableWithViews<TData, TValue>({
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
   });
-  // The first visible name column, pinned on a phone with the select box before it.
+  // The first visible name column, pinned on a phone with the select box before it; a list that marks none pins its
+  // first data column, so a phone always leads with what the row is.
   const visible = table.getVisibleLeafColumns();
-  const pinnedName = visible.find((c) => (c.columnDef.meta as ColumnMeta | undefined)?.kind === 'name')?.id;
+  const pinnedName = (visible.find((c) => (c.columnDef.meta as ColumnMeta | undefined)?.kind === 'name') ?? visible.find((c) => !['select', 'recordId', 'actions'].includes(c.id) && (c.columnDef.meta as ColumnMeta | undefined)?.kind !== 'id'))?.id;
   const hasSelect = visible[0]?.id === 'select';
   const pinOf = (id: string): 'select' | 'name' | null => (!pinnedName ? null : id === pinnedName ? 'name' : id === 'select' && hasSelect ? 'select' : null);
 
@@ -295,6 +297,8 @@ export function DataTableWithViews<TData, TValue>({
 
   // Imperative selection clear — parent bumps selectionResetKey after a bulk
   // action so the checkboxes don't linger on rows that shifted under a refetch.
+  const tableBox = React.useRef<HTMLDivElement>(null);
+  const moreColumns = useMoreToTheRight(tableBox, '[data-slot=table-container]');
   const didMountResetRef = React.useRef(false);
   React.useEffect(() => {
     if (selectionResetKey === undefined) return;
@@ -423,7 +427,9 @@ export function DataTableWithViews<TData, TValue>({
           className="rounded-md border bg-card flex flex-col overflow-hidden"
           data-testid="table-view"
         >
-          <div className="flex-1 min-h-0">
+          {/* The fade tells a phone that more columns sit past the edge; it goes once the table is scrolled to its end. */}
+          <div className="relative flex-1 min-h-0" ref={tableBox}>
+            <EdgeFade show={moreColumns} className="z-[2]" data-testid="table-edge-fade" />
             <Table>
               {/* The first name column is pinned on a phone, and so is the select box before it. */}
               <TableHeader className="sticky top-0 z-10 bg-background">

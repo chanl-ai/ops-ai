@@ -12,7 +12,8 @@ if [ -z "${QA_RUNNER:-}${QA_LOCAL:-}" ]; then
   exec "$(dirname "$0")/qa.sh" wait
 fi
 root="$(git rev-parse --show-toplevel)"
-head="$(git -C "$root" rev-parse --short HEAD)"
+# VERIFY_REF checks another commit the same way: the commits a push sends (.githooks/pre-push), a snapshot (repo.sh).
+head="$(git -C "$root" rev-parse --short "${VERIFY_REF:-HEAD}")"
 # Exports live outside $TMPDIR and /tmp: macOS deletes files there older than three days (dirhelper at 03:35, periodic
 # for /tmp), and an export's node_modules and .venv keep their packages' old mtimes, so the nightly ui pass lost
 # playwright-core mid-run and every later use case exited before its first step.

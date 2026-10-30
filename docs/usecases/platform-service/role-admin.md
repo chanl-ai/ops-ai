@@ -11,7 +11,7 @@ Status: current. Id: `uc-219`. Service: `platform-service`, agents-service, cons
 
 platform-service runs with the dev seed's own roles (`OPS_SEED_EVERYONE_ADMIN` off) and agents-service verifies its
 tokens. The person checked is never a seeded one: an admin invites them through the product and they accept with a
-password (c-218). No model is called.
+password. No model is called.
 
 ## Steps and expected results
 

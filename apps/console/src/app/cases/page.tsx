@@ -84,6 +84,8 @@ export default function CasesPage() {
           <DataTableWithViews
             key={view}
             columns={caseRecordColumns}
+            // Both deadlines are what this list is for, so they stay shown past the table's default of five columns.
+            initialColumnVisibility={{ response: true, resolution: true }}
             data={rows}
             getRowId={(r) => r.id}
             searchColumn="subject"

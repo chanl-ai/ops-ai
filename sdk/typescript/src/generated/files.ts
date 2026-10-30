@@ -1081,6 +1081,12 @@ export interface components {
         ReadRequestIn: {
             /** Documenttypeid */
             documentTypeId?: string | null;
+            /** Hint */
+            hint?: string | null;
+            /** Maxpages */
+            maxPages?: number | null;
+            /** Read */
+            read?: ("fields" | "propose") | null;
             /** Typename */
             typeName?: string | null;
             /** Version */

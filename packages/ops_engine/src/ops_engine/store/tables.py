@@ -67,7 +67,7 @@ engine_runs = sa.Table(
     # The caller's key for what started the run; a repeated key returns the first run.
     sa.Column("run_key", sa.String(200), nullable=False),
     sa.Column("mode", sa.String(8), nullable=False),
-    # queued, running, waiting, succeeded, failed, cancelled
+    # queued, running, waiting, stuck (nothing behind it, c-561), succeeded, failed, cancelled
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("input", sa.JSON),
     sa.Column("outcome", sa.String(64)),
@@ -129,7 +129,7 @@ engine_work = sa.Table(
     sa.Column("payload", sa.JSON),
     # One row per thing that happened: a second decision of the same review finds the first.
     sa.Column("dedupe_key", sa.String(240), nullable=False),
-    # queued, claimed, done, failed
+    # queued, claimed, done, failed, stuck (set aside by the reconciler until Retry, c-561)
     sa.Column("status", sa.String(16), nullable=False),
     # The engine build that may claim the row (workflow-runner.md section 7).
     sa.Column("build", sa.String(32), nullable=False),
@@ -138,6 +138,8 @@ engine_work = sa.Table(
     sa.Column("claimed_by", sa.String(120)),
     sa.Column("lease_expires_at", sa.Float()),
     sa.Column("attempts", sa.Integer, nullable=False, server_default="0"),
+    # Claims that lapsed because their worker died, not claims given back (c-561): more than five marks the run Stuck.
+    sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "dedupe_key", name="uq_engine_work_dedupe"),

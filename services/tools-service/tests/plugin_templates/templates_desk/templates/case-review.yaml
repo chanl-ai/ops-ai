@@ -1,0 +1,18 @@
+schemaVersion: 2
+id: case_review
+name: Case review
+description: Reads a case and asks a person to review it.
+nodes:
+  - { id: start, type: ops.trigger.request, typeVersion: 1, name: Request, parameters: { inputSchema: { type: object, required: [caseId], properties: { caseId: { type: string, title: Case } } } } }
+  - { id: read, type: ops.action.tool, typeVersion: 1, name: Read the case, parameters: { operation: templates_get_case, input: { id: "$.input.caseId" } } }
+  - { id: review, type: ops.flow.humanReview, typeVersion: 1, name: Review the case, parameters: { title: "Review case {$.input.caseId}", summary: "$.nodes.read.out" } }
+  - { id: done, type: ops.flow.end, typeVersion: 1, name: Reviewed, parameters: { outcome: reviewed } }
+  - { id: back, type: ops.flow.end, typeVersion: 1, name: Sent back, parameters: { outcome: sent_back } }
+  - { id: failed, type: ops.flow.end, typeVersion: 1, name: Not read, parameters: { outcome: not_read, result: failed } }
+connections:
+  - { from: { node: start, port: payload }, to: { node: read, port: in } }
+  - { from: { node: read, port: ok }, to: { node: review, port: in } }
+  - { from: { node: read, port: refused }, to: { node: failed, port: in } }
+  - { from: { node: read, port: error }, to: { node: failed, port: in } }
+  - { from: { node: review, port: approve }, to: { node: done, port: in } }
+  - { from: { node: review, port: reject }, to: { node: back, port: in } }

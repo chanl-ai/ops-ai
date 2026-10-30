@@ -155,10 +155,11 @@ export const SITE = [
       { group: 'Console', icon: 'monitor', entries: [{ rest: 'console' }] },
       { group: 'Use cases', icon: 'list-checks', entries: [{ rest: 'usecases' }] },
       { group: 'Libraries', icon: 'package', entries: [{ rest: 'packages' }] },
+      { group: 'Agent skills', icon: 'sparkles', entries: [{ rest: 'guide/skills' }] },
       {
         group: 'Team environments',
         icon: 'cloud',
-        entries: ['deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
+        entries: ['deploy/devhost.md', 'deploy/fly.md', 'deploy/fly-staging.md', 'deploy/docs-site.md', 'deploy/demo-mailbox.md'],
       },
     ],
   },

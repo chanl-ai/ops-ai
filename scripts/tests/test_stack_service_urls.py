@@ -53,3 +53,27 @@ def test_an_isolated_stack_reaches_its_own_models_service_whatever_the_env_file_
     assert "OPS_MODELS_URL=http://127.0.0.1:9730" in agents, agents
     assert "OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:9746/v1" in models, models
     assert f"OPS_EGRESS_CA_FILE={tmp_path}/.run/fake-bank/bank.crt" in tools, tools
+
+
+def test_kb_reaches_tools_service_for_plugin_knowledge_sources() -> None:
+    """With plugins on, a plugin knowledge source is read through tools-service: kb-service without its address
+    refuses the source with tools_unavailable on the stack while it works in tests (c-565)."""
+    assert urls("kb").get("OPS_TOOLS_URL") == urls("runner")["OPS_TOOLS_URL"]
+
+
+def test_a_demos_own_ca_is_trusted_beside_the_fake_banks(tmp_path: Path) -> None:
+    """tools-service reads one CA file: a demo's outside system (the fake Salesforce) with its own CA failed TLS on
+    every call unless that CA is bundled with the fake bank's (c-565)."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
+    bank, extra = tmp_path / ".run/fake-bank/bank.crt", tmp_path / "extra.crt"
+    bank.parent.mkdir(parents=True)
+    bank.write_text("BANK\n")
+    extra.write_text("EXTRA\n")
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "OPS_STACK": "isolated"}
+    env |= {"OPS_EGRESS_EXTRA_CA": str(extra)}
+    out = subprocess.run(
+        ["bash", "scripts/stack.sh", "cmd", "tools"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True
+    ).stdout
+    ca = Path(re.findall(r"OPS_EGRESS_CA_FILE=(\S+)", out)[0])
+    assert ca.parent.parent == tmp_path and ca.read_text() == "BANK\nEXTRA\n", ca

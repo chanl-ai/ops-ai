@@ -4,8 +4,8 @@
 docs/usecases/agents-service/imap-mailbox-starts-a-workflow.md.
 
 Runs against the shared stack (`OPS_STACK_AUTH=platform make up`, which also starts GreenMail and Mailpit in
-compose). The steps a bank's admins take for a real mailbox, on GreenMail: Sam puts the mailbox password on the
-Secrets page for team_ops and lists the mail host and its address on the Egress page; James binds a workflow to
+compose). The steps a bank's admins take for a real mailbox, on GreenMail: James puts the mailbox password on
+Operations' Secrets page, Sam lists the mail host and its address on the Egress page, and James binds a workflow to
 intake@harborpine.test; an email with a PDF is sent to GreenMail over SMTP; the worker reads it over IMAP through
 tools-service and starts one run with the PDF in Files. No model call is made."""
 
@@ -74,15 +74,17 @@ james = headers("j.richardson@harborpine.example", "team_ops")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, headers=james, timeout=30)
 
-made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password", "teamId": "team_ops"}, headers=sam)
+# A secret belongs to the team that uses it and that team's builders keep it: James, for Operations. Sam, Security's
+# admin, keeps egress.
+made = tools.post("/v1/secrets", json={"name": SECRET, "value": "app-password"}, headers=james)
 if made.status_code == 409:
-    made = tools.post(f"/v1/secrets/{SECRET}/rotate", json={"value": "app-password"}, headers=sam)
+    made = tools.post(f"/v1/secrets/{SECRET}/rotate", json={"value": "app-password"}, headers=james)
 host = tools.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-192 GreenMail"}, headers=sam)
 rng = tools.post(
     "/v1/egress/ranges", json={"value": f"{private_address()}/32", "note": "uc-192 GreenMail"}, headers=sam
 )
 check(
-    "1 Sam puts the mailbox password on the Secrets page and lists the mail host and its address",
+    "1 James puts the mailbox password on Operations' Secrets page; Sam lists the mail host and its address",
     made.status_code in (200, 201) and host.status_code in (200, 201, 409) and rng.status_code in (200, 201, 409),
     f"{made.status_code} {host.status_code} {rng.status_code} {made.text[:200]}",
 )
@@ -143,7 +145,8 @@ try:
     send(f"Notice of garnishment {RUN}", f"<notice-{RUN}@COURT.example>")  # the same message delivered again
     time.sleep(float(os.environ.get("OPS_EMAIL_POLL_SECONDS", "3")) * 3)
     check("7 a redelivery started no second run", len(runs()) == 1, runs())
-    secret = next((s for s in tools.get("/v1/secrets", headers=sam).json()["data"] if s["name"] == SECRET), {})
+    # A secret belongs to its team, so Operations' own list shows its use; Security's list holds only its own.
+    secret = next((s for s in tools.get("/v1/secrets", headers=james).json()["data"] if s["name"] == SECRET), {})
     check(
         "8 tools-service read the secret (its use is recorded) and no response carried the password",
         bool(secret.get("lastUsedAt")) and "app-password" not in str(detail) and "app-password" not in str(secret),

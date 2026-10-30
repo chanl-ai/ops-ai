@@ -322,9 +322,13 @@ def create_documents_app(
     async def create_type(body: DocumentTypeIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A document type and its version 1; the name is unique in the team."""
         try:
-            made = await document_types.create(who, body.model_dump(mode="json", by_alias=True))
+            asked = body.model_dump(mode="json", by_alias=True, exclude={"sample_file_id"})
+            made = await document_types.create(who, asked)
         except NameTakenError as e:
             raise Conflict(f"A document type named {body.name} or with id {body.id} exists.", code="name_taken") from e
+        if body.sample_file_id:
+            # A proposal saved from a read (c-535) keeps the file it was read from as the type's first sample.
+            await document_types.add_sample(who, str(made["id"]), {"fileId": body.sample_file_id, "expected": {}})
         return ok(made, 201)
 
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])

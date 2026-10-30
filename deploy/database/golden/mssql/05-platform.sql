@@ -268,7 +268,7 @@ CREATE TABLE signin_domains (
 	token VARCHAR(64) NOT NULL, 
 	verified_at VARCHAR(40) NULL, 
 	CONSTRAINT signin_domains_pkey PRIMARY KEY (domain, tenant_id), 
-	CONSTRAINT fk_signin_domains_provider FOREIGN KEY(tenant_id, provider_id) REFERENCES signin_providers (tenant_id, id) ON DELETE CASCADE, 
+	CONSTRAINT fk_signin_domains_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_domains_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
 GO
@@ -286,7 +286,7 @@ CREATE TABLE signin_identities (
 	last_used_at VARCHAR(40) NOT NULL, 
 	CONSTRAINT signin_identities_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_signin_identities_subject UNIQUE (tenant_id, provider_id, subject), 
-	CONSTRAINT fk_signin_identities_provider FOREIGN KEY(tenant_id, provider_id) REFERENCES signin_providers (tenant_id, id) ON DELETE CASCADE, 
+	CONSTRAINT fk_signin_identities_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT fk_signin_identities_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT signin_identities_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
@@ -312,7 +312,7 @@ CREATE TABLE signin_flows (
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
-	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(tenant_id, provider_id) REFERENCES signin_providers (tenant_id, id) ON DELETE CASCADE, 
+	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
 	CONSTRAINT signin_flows_state_hash_key UNIQUE (state_hash)
 );

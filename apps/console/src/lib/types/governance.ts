@@ -11,7 +11,8 @@ export type CallOperation = 'read' | 'write' | 'completion';
 /** How a write was authorised: a person's approval token, a gate policy that auto-approves, or none (reads, model calls). */
 export type ApprovalKind = 'person' | 'policy' | 'none';
 /** `replayed`: the same approved write sent again; it ran nothing and returned the first call's result (`replayOf`). */
-export type CallStatus = 'ok' | 'error' | 'denied' | 'awaiting_approval' | 'replayed';
+/** `running`: a write the gateway received and has not finished; whether it happened is not known yet (c-561). */
+export type CallStatus = 'ok' | 'error' | 'denied' | 'awaiting_approval' | 'replayed' | 'running';
 
 export interface CallApproval {
   kind: ApprovalKind;

@@ -1,6 +1,6 @@
 # Pages wait for the person's team, and a record in another team says so
 
-Status: current. Id: `uc-505`. Service: `console` with `platform-service` sign-in. Layers: ui. Card: c-505.
+Status: current. Id: `uc-505`. Service: `console` with `platform-service` sign-in. Layers: ui. Card: an earlier change.
 
 Pages used to render as soon as a person was signed in, so their first requests could go out for a team they do not
 hold: one remembered in the tab from an earlier sign-in, or the console default. A case opened straight after sign-in

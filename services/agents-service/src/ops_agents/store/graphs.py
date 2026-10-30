@@ -9,10 +9,10 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore, locked
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
@@ -154,27 +154,24 @@ class GraphStore:
     ) -> tuple[dict[str, Any], bool]:
         """The thread for `external_key`, created when there is none, in one transaction: the insert either wins or
         conflicts on the unique key, and the conflict path reads the existing row. Returns (row, created)."""
-        insert = (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(graph_threads)
-        stmt = (
-            insert.values(
-                id=thread_id,
-                graph=graph,
-                meta=meta,
-                team_id=team_id,
-                created_at=now,
-                updated_at=now,
-                status="idle",
-                version=version,
-                digest=digest,
-                external_key=external_key,
-                deployment_id=deployment_id,
-                parent_thread_id=parent_thread_id,
-            )
-            .on_conflict_do_nothing(index_elements=["tenant_id", "external_key"])
-            .returning(graph_threads.c.id)
-        )
+        values = {
+            "id": thread_id,
+            "graph": graph,
+            "meta": meta,
+            "team_id": team_id,
+            "created_at": now,
+            "updated_at": now,
+            "status": "idle",
+            "version": version,
+            "digest": digest,
+            "external_key": external_key,
+            "deployment_id": deployment_id,
+            "parent_thread_id": parent_thread_id,
+            "tenant_id": current_tenant(),
+        }
         async with tenant_tx(self.engine) as c:
-            created = (await c.execute(stmt)).first() is not None
+            stmt = insert_ignore(c, graph_threads, values, keys=["tenant_id", "external_key"])
+            created = (await c.execute(stmt)).rowcount == 1
             row = (
                 (
                     await c.execute(
@@ -437,7 +434,7 @@ class GraphStore:
         async with tenant_tx(self.engine) as c:
             q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
             if lock:
-                q = q.with_for_update()
+                q = locked(q, graph_threads)
             meta: Any = (await c.execute(q)).scalar_one_or_none()
             values: dict[str, Any] = {"meta": {**(meta or {}), **patch}}
             if updated_at is not None:

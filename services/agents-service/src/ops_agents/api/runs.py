@@ -3,8 +3,9 @@ heartbeat, the journal and the event shape `{event, runId, seq, node?, data?}`."
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import aclosing
+from contextlib import AbstractContextManager, aclosing, suppress
 from typing import Any, cast
 
 from ops_agents.graphs.definition import ROUTE_NODE, WorkflowDefinition
@@ -12,6 +13,8 @@ from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.errors import ApiError, Conflict, NotFound
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
+from ops_store.isolation import Isolation
 
 from ..store.events import EventLog
 from ..store.graphs import GraphStore
@@ -96,6 +99,56 @@ async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     return row, rt.workflows.get(d)
 
 
+def as_thread_team(row: dict[str, Any]) -> AbstractContextManager[Isolation]:
+    """The thread's team, for a write to its state outside a run (a parent's state after its child ends). Every
+    checkpoint is in exactly one team, its thread's, whoever the caller is."""
+    return isolation.scope(isolation.tenant(), str(row["team_id"]))
+
+
+class _Failed:
+    def __init__(self, error: BaseException) -> None:
+        self.error = error
+
+
+_DONE = object()
+
+
+async def _in_thread_team(
+    row: dict[str, Any], events: AsyncGenerator[dict[str, Any]]
+) -> AsyncGenerator[dict[str, Any]]:
+    """`events`, produced in a task that acts as the thread's team, so the run's checkpoints are in that team whether
+    a person of the team, the dev caller (every team of the tenant) or a resume started it. A scope held across this
+    generator's yields would be reset in whatever context closes it; the task keeps it to the run (as
+    tenant_tasks.py does for the sweeper)."""
+    queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1)
+    scope = as_thread_team(row)
+
+    async def produce() -> None:
+        with scope:
+            try:
+                async with aclosing(events):
+                    async for e in events:
+                        await queue.put(e)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as error:  # carried to the consumer, which raises it where the stream is read
+                await queue.put(_Failed(error))
+                return
+        await queue.put(_DONE)
+
+    task = asyncio.create_task(produce())
+    try:
+        while (item := await queue.get()) is not _DONE:
+            if isinstance(item, _Failed):
+                raise item.error
+            yield item
+    finally:
+        if not task.done():
+            task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
 async def execute(
     rt: Runtime, row: dict[str, Any], graph: Any, *, graph_input: Any, run_id: str, kind: str
 ) -> AsyncGenerator[dict[str, Any]]:
@@ -126,7 +179,8 @@ async def execute(
 
     finished = False
     try:
-        async for e in _execute(rt, row, graph, graph_input=graph_input, run_id=run_id, kind=kind):
+        run = _execute(rt, row, graph, graph_input=graph_input, run_id=run_id, kind=kind)
+        async for e in _in_thread_team(row, run):
             if deferred is None:
                 await write(e)
             else:
@@ -145,7 +199,7 @@ async def execute(
 
 async def _execute(
     rt: Runtime, row: dict[str, Any], graph: Any, *, graph_input: Any, run_id: str, kind: str
-) -> AsyncIterator[dict[str, Any]]:
+) -> AsyncGenerator[dict[str, Any]]:
     """Runs the graph on the thread while holding its lease (already taken by the caller), and releases it at the end.
     If another owner takes the lease over mid-run, the run stops and the lease is left to its new owner."""
     store, leases = graph_store(rt), rt.leases

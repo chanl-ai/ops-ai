@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import mssql, postgresql, sqlite
@@ -108,12 +108,20 @@ def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, key
     if dialect_of(bind) != "mssql":
         return upsert(bind, table, values, keys=keys, update=[])
     cols = list(values)
-    row = sa.select(*[sa.literal(values[c], table.c[c].type).label(c) for c in cols])
+
+    def value(c: str) -> sa.ColumnElement[Any]:
+        # A value may be a SQL expression (the database's clock); anything else is bound as a literal.
+        v = values[c]
+        if isinstance(v, sa.ColumnElement):
+            return cast(sa.ColumnElement[Any], v)
+        return sa.literal(v, table.c[c].type)
+
+    row = sa.select(*[value(c).label(c) for c in cols])
     # UPDLOCK and HOLDLOCK keep the key range locked from the check to the insert, so a concurrent insert waits.
     taken = (
         sa.select(sa.literal(1))
         .select_from(table)
-        .where(*[table.c[k] == sa.literal(values[k], table.c[k].type) for k in keys])
+        .where(*[table.c[k] == value(k) for k in keys])
         .with_hint(table, "WITH (UPDLOCK, HOLDLOCK)", "mssql")
     )
     return table.insert().from_select(cols, row.where(~sa.exists(taken)))

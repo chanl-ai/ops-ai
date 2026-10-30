@@ -19,7 +19,11 @@ from .schemas import Out
 
 EMAIL_TRIGGER = "trigger:email:"
 # How each kind of start by hand reads, from the trigger types that declare one: {"email": "test email", ...}.
-START_VIA = {t.start.kind: t.start.via for t in default_registry().all() if t.start is not None}
+START_VIA = {t.start.kind: t.start.via for t in default_registry().all() if t.start is not None} | {
+    # Starts that are no trigger's own (c-535): a members-only hosted form and a row of a batch.
+    "hosted_form": "hosted form",
+    "batch": "batch",
+}
 CHILD_RUN = "run:"
 
 

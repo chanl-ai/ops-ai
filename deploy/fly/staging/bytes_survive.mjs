@@ -1,6 +1,6 @@
 // Proves uploaded bytes outlive a files-service redeploy: `put` uploads random bytes through the origin and prints
 // the file id and their sha256; `get <id> <sha256>` reads the file back and checks the digest. Run put, redeploy
-// <your-app>-files, then get.
+// the staging files service (<app-prefix>-files), then get.
 //   OPS_SMOKE_EMAIL=... OPS_SMOKE_PASSWORD=... node deploy/fly/staging/bytes_survive.mjs <origin> put
 //   OPS_SMOKE_EMAIL=... OPS_SMOKE_PASSWORD=... node deploy/fly/staging/bytes_survive.mjs <origin> get <id> <sha256>
 import { createHash, randomBytes } from 'node:crypto';

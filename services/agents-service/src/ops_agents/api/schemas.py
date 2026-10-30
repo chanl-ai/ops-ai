@@ -310,6 +310,8 @@ class Tool(Out):
 
     id: str
     name: str
+    # What people see in place of the name: a plugin tool's manifest title; None for every other tool.
+    title: str | None = None
     server: str
     module_id: str | None
     description: str

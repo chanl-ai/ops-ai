@@ -444,7 +444,8 @@ async def test_no_tool_call_cap_lets_a_long_turn_run() -> None:
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         made = sum(1 for m in messages if isinstance(m, ModelRequest) for p in m.parts if p.part_kind == "tool-return")
         if made < 9:
-            return ModelResponse(parts=[ToolCallPart("lookup", {}, tool_call_id=f"c{made}")])
+            # A new lookup each time: the kernel answers a repeated identical call from its first result instead.
+            return ModelResponse(parts=[ToolCallPart("lookup", {"n": made}, tool_call_id=f"c{made}")])
         return ModelResponse(parts=[TextPart("Done after nine lookups.")])
 
     async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -452,7 +453,9 @@ async def test_no_tool_call_cap_lets_a_long_turn_run() -> None:
         if isinstance(part, TextPart):
             yield part.content
         elif isinstance(part, ToolCallPart):
-            yield {0: DeltaToolCall(name=part.tool_name, json_args="{}", tool_call_id=part.tool_call_id)}
+            yield {
+                0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args), tool_call_id=part.tool_call_id)
+            }
 
     for cap, expected in ((None, "final"), (6, "max_tool_calls")):
         calls["n"] = 0

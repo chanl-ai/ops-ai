@@ -136,10 +136,11 @@ async def reimport(
     return module
 
 
-async def ensure_secret(api: httpx.AsyncClient, name: str, value: str) -> str:
-    """The secret the bank module's X-Api-Key header reads ({{BANK_API_KEY}}); created when the tenant lacks it,
-    left alone when it exists (its value never comes back, so it is not compared). Returns what was done."""
-    r = await api.post("/v1/secrets", json={"name": name, "value": value})
+async def ensure_secret(api: httpx.AsyncClient, name: str, value: str, team: str | None = None) -> str:
+    """The secret the bank module's X-Api-Key header reads ({{BANK_API_KEY}}); created when `team` lacks it, left
+    alone when it exists (its value never comes back, so it is not compared). Returns what was done. A module reads
+    only its own team's secrets, so `team` is the builder's, whose module this is, never the Security admin's own."""
+    r = await api.post("/v1/secrets", json={"name": name, "value": value, **({"teamId": team} if team else {})})
     if r.status_code == 201:
         return "created"
     if r.status_code == 409:
@@ -224,8 +225,9 @@ async def main() -> None:
         httpx.AsyncClient(base_url=args.agents, headers=security or {}, timeout=60) as approver,
         httpx.AsyncClient(base_url=args.tools, headers=keeper, timeout=60) as secrets,
     ):
-        print(f"BANK_API_KEY: {await ensure_secret(secrets, 'BANK_API_KEY', args.bank_key)}")
-        print(f"LEVY_WEBHOOK_SECRET: {await ensure_secret(secrets, 'LEVY_WEBHOOK_SECRET', args.webhook_secret)}")
+        team = builder.get("X-Team-Id")
+        print(f"BANK_API_KEY: {await ensure_secret(secrets, 'BANK_API_KEY', args.bank_key, team)}")
+        print(f"LEVY_WEBHOOK_SECRET: {await ensure_secret(secrets, 'LEVY_WEBHOOK_SECRET', args.webhook_secret, team)}")
         if args.module:
             module_id = args.module
         else:

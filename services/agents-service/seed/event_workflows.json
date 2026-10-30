@@ -257,7 +257,10 @@
           "documentType": {
             "id": "$.input.documentTypeId",
             "version": "$.input.version"
-          }
+          },
+          "read": "$.input.read",
+          "hint": "$.input.hint",
+          "maxPages": "$.input.maxPages"
         }
       },
       {

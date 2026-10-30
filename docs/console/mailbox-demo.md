@@ -1,6 +1,6 @@
 # Mailbox demo
 
-Status: current. The local runbook below is walked by `make demo-walk` on the sample team (c-542). The walk from your
+Status: current. The local runbook below is walked by `make demo-walk` on the sample team. The walk from your
 own inbox further down has not been walked yet: it needs a real mailbox connected on the shared stack.
 
 An emailed levy notice (a court or authority ordering the bank to hold a customer's funds) becomes a case per debtor, a
@@ -72,7 +72,7 @@ If a step fails, the Activity page filtered to the mailbox shows the email and w
 
 ## On Fly staging
 
-Status: current, 2026-10-20 (c-406). Staging is the one-machine app <https://<your-app>-one.fly.dev>
+Status: current. Your staging instance is the one-machine app <https://<your-app>.fly.dev>
 (`docs/deploy/fly-staging.md`); it sleeps when idle and the first request takes about 35 s. Every step after the
 inbound email is walked on it with the real model: the notice read, a case per debtor, the hold approved and placed at
 the bank stand-in, the unmatched debtor's own case, the acknowledgement and the reply sent from the connected test
@@ -82,11 +82,11 @@ reading its reply need its password, which is held only in Secrets.
 
 | What | State |
 |---|---|
-| Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed c-421), so the test account stays in Security |
+| Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed an earlier change), so the test account stays in Security |
 | Workflows | Security: `mail_intake` (Mailed documents) v2 live on the test mailbox, starting `mail_document` per attachment, which starts `levy_case` per debtor |
 | Demo team | Harbor & Pine Operations (`team_a0877a1d8907`): the garnishment notice type and the court order workflows `levy_document_a0877a1d` (`Levy notice: read the document`) and `levy_debtor_a0877a1d` (`Levy notice: one debtor`), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
 | Model | The read uses alias `extract`, or `default` when there is none. Staging has no `extract`, so `default` serves it: gpt-4.1-mini on OpenAI, key `OPENAI_API_KEY` in Secrets, through models-service key `purpose:documents` (cap 5 USD). One real model call per notice |
-| Bank stand-in | `<your-app>-bank`, its public URL; holds wait for a person. Its holds live in memory, so they last until the machine restarts: Marcus Bell's chequing account holds 2,140.55, so after one hold on it a second one fails. Restart it before a demo with `fly machine restart 185d5e7bd3d548 -a <your-app>-bank` (restarted after the last walk on 2026-10-20). The walk flags an account with nothing free |
+| Bank stand-in | `<app-prefix>-bank`, its public URL; holds wait for a person. Its holds live in memory, so they last until the machine restarts: Marcus Bell's chequing account holds 2,140.55, so after one hold on it a second one fails. Restart it before a demo with `fly machine restart 185d5e7bd3d548 -a <app-prefix>-bank` (restarted after the last walk on 2026-10-20). The walk flags an account with nothing free |
 | Files | The PDFs uploaded before the move to one machine were copied from the stopped files app's volume on 2026-10-20, so the notice opens on the task page |
 | Egress | Gmail, Microsoft 365 (IMAP, SMTP, Graph and its sign-in), Ethereal and the bank stand-in are allowed |
 
@@ -98,7 +98,7 @@ second person (who joins the team as an approver). With `--mailbox`, a mailbox a
 makes the email intake on that mailbox. Re-runnable: what exists is reported FOUND.
 
 ```
-uv run python deploy/fly/staging/mailbox_demo.py levy --origin https://<your-app>-one.fly.dev \
+uv run python deploy/fly/staging/mailbox_demo.py levy --origin https://<your-app>.fly.dev \
   --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
   --team team_a0877a1d8907 [--mailbox <address connected in the team>]
 ```
@@ -119,7 +119,7 @@ and exiting with the number of failures. It is re-runnable, and `--team` with `-
 `--upload` starts the document run from the uploaded notice instead of an email:
 
 ```
-uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>-one.fly.dev \
+uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>.fly.dev \
   --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
   --mailbox <account>@ethereal.email --imap imap.ethereal.email:993 --smtp smtp.ethereal.email:587 \
   --bank-env ~/.config/ops-ai/staging-bank.env --upload
@@ -130,7 +130,7 @@ read from the environment, never from the command line or a file in the repo:
 
 ```
 export DEMO_MAILBOX_PASSWORD=...   # the Ethereal account's password
-uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>-one.fly.dev \
+uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app>.fly.dev \
   --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \
   --mailbox <account>@ethereal.email --imap imap.ethereal.email:993 --smtp smtp.ethereal.email:587 \
   --bank-env ~/.config/ops-ai/staging-bank.env \
@@ -148,7 +148,7 @@ no bank customer); the reply sent from the test mailbox.
 ### Connect your own mailbox
 
 Your mailbox goes straight into the demo team, Harbor & Pine Operations (`team_a0877a1d8907`); a mailbox stays in the
-team that connects it (c-421). Sign in to <https://<your-app>-one.fly.dev> as the admin
+team that connects it. Sign in to <https://<your-app>.fly.dev> as the admin
 (`~/.config/ops-ai/staging-admin.env`) and pick Harbor & Pine Operations in the team switcher, except where a step says
 Security. Keep `services/agents-service/tests/fixtures/mailbox/levy_notice.pdf` to hand. Before a demo, restart the
 bank stand-in (Bank stand-in above) so each matched debtor can be held.
@@ -178,6 +178,6 @@ tenant (**unverified**):
 | 6 | As for Gmail, steps 4 to 6 | Make the email intake on the mailbox, email the notice, decide the Human Tasks |
 
 If nothing arrives: the Activity page filtered to the mailbox lists each email and why one was skipped (an email
-with no attachment is skipped by Mailed documents), and `fly logs -a <your-app>-one` lines starting `[worker]` name
+with no attachment is skipped by Mailed documents), and `fly logs -a <your-app>` lines starting `[worker]` name
 a mailbox the worker could not read. One Email received workflow per mailbox: a mailbox bound to both Mailed
 documents and `levy_mail` starts both on every email.

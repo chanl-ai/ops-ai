@@ -1,7 +1,7 @@
 # A Human Task opens as its own page
 
 Status: current. Id: `uc-234`. Service: `console` on agents-service, files-service and documents-service. Layers: ui.
-Card: c-289.
+Card: an earlier change.
 
 A person deciding a Human Task needs the question, the evidence for it and the decision on one screen, with nothing
 covering what they read. The task opens as a page with a header (the question), a body that is the only scroll area,

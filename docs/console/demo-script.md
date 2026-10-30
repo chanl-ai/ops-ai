@@ -1,6 +1,6 @@
 # Demo script
 
-Status: current for the local stack (c-542). Every scenario below is a line of `make demo-walk`, on the fake model.
+Status: current for the local stack. Every scenario below is a line of `make demo-walk`, on the fake model.
 
 ## Before the demo
 

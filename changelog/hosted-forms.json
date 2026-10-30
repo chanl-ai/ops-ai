@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "title": "Start workflows from a form or a spreadsheet",
+  "description": "A workflow can be shared as a form people fill in by a link that expires, or only for the team. It can also run once for each row of a spreadsheet, with a results table, a CSV download and failed rows retried.",
+  "tag": "new",
+  "cards": ["c-535"],
+  "switch": "NEXT_PUBLIC_OPS_HOSTED_FORMS"
+}

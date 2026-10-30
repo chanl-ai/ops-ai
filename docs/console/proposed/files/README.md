@@ -1,6 +1,6 @@
 # File page and Extract, proposed
 
-Status: proposed, waiting for approval. Built by c-262 from `docs/services/documents-service/design.md` screens 1
+Status: proposed, waiting for approval. Built by an earlier change from `docs/services/documents-service/design.md` screens 1
 to 3, on the stack's real fixtures (TEST012.pdf, a synthetic restraining notice) and the demo's fake model. uc-227
 takes these screenshots; once approved they move to `docs/console/approved/files`.
 
@@ -19,6 +19,6 @@ Differences from the design, and why:
 
 | Difference | Why |
 |---|---|
-| Detect is listed but disabled | Classify arrives with c-250's backend |
+| Detect is listed but disabled | Classify arrives with an earlier change's backend |
 | Document type is a select, not the entity picker | Document types have no `/options` route; a team has a handful |
-| No Suggest template action | Templates arrive with c-247 |
+| No Suggest template action | Templates arrive with an earlier change |

@@ -6,7 +6,7 @@ attempt count raised. PostgreSQL only, as the timers' poller."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +16,10 @@ from ops_store import Guarantee
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_work
 from .tx import CLAIM_WORK, Transactions
+
+# A row whose claim lapsed more often than this is not claimed again: its run kills the worker that takes it, and the
+# run reconciler marks it Stuck with that reason (c-561).
+MAX_LAPSES = 5
 
 
 @dataclass(frozen=True)
@@ -46,7 +50,7 @@ class WorkQueue:
             )
             q = (
                 sa.select(w.c.id)
-                .where(due, w.c.build == self.build)
+                .where(due, w.c.build == self.build, w.c.lapses <= MAX_LAPSES)
                 .order_by(w.c.id)
                 .limit(1)
                 .with_for_update(skip_locked=True)
@@ -63,6 +67,8 @@ class WorkQueue:
                         claimed_by=self.owner,
                         lease_expires_at=now + self.ttl,
                         attempts=w.c.attempts + 1,
+                        # Still claimed when taken again: its worker died with the claim, not gave it back (c-561).
+                        lapses=w.c.lapses + sa.case((w.c.status == "claimed", 1), else_=0),
                     )
                     .returning(w.c.id, w.c.tenant_id, w.c.run_id, w.c.kind, w.c.payload, w.c.attempts, w.c.claimed_by)
                 )
@@ -80,6 +86,26 @@ class WorkQueue:
                 .where(w.c.status == "queued", w.c.available_at <= now, w.c.build == self.build)
             )
             return int((await c.execute(q)).scalar_one() or 0)
+
+    async def leaving(self, run_id: str, interrupt_id: str, node: str, iteration: int) -> bool:
+        """Whether the run's pause is already being left: a decision or callback queued for it, or its time limit due.
+        Rows are claimed oldest first, so a reminder queued before the decision is claimed before it."""
+        w = engine_work
+        async with self.tx.tenant_tx() as c:
+            now = db_now(c)
+            q = sa.select(w.c.kind, w.c.payload).where(
+                w.c.run_id == run_id,
+                w.c.status.in_(("queued", "claimed")),
+                sa.or_(w.c.kind == "resume", sa.and_(w.c.kind == "timeout", w.c.available_at <= now)),
+            )
+            rows = (await c.execute(q)).all()
+        for r in rows:
+            p = cast(dict[str, Any], r.payload or {})
+            if r.kind == "resume" and p.get("interruptId") in (None, interrupt_id):
+                return True
+            if r.kind == "timeout" and (p.get("node"), p.get("iteration")) == (node, iteration):
+                return True
+        return False
 
     async def renew(self, work: Work) -> bool:
         """Extends this worker's claim; False when it has lapsed and another worker took the row."""

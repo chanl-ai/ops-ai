@@ -1,6 +1,6 @@
 # Start a workflow from its trigger's start form
 
-Status: current. Id: `uc-466`. Service: `console` on agents-service and files-service. Layers: ui. Card: c-466.
+Status: current. Id: `uc-466`. Service: `console` on agents-service and files-service. Layers: ui. Card: an earlier change.
 
 A person starts any workflow from one dialog drawn from the start form its trigger declares, and never types a file id.
 An Email received trigger declares "Send a test email" (From, Subject, Body, Attachments): the email goes through the

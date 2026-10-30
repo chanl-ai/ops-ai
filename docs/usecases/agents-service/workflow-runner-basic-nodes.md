@@ -1,6 +1,6 @@
 # Basic workflow nodes run through the queue and survive a worker crash
 
-Status: current. Id: `uc-081`. Service: `agents-service`. Layers: api. Card: c-061 slice 1.
+Status: current. Id: `uc-081`. Service: `agents-service`. Layers: api. Card: an earlier change slice 1.
 
 ## Preconditions
 
@@ -36,7 +36,7 @@ OPS_ENGINE_FAULT_IGNORE_RECORDED=1 the last check fails (2 attempts, 2 calls).
 
 The Workflows list holds both kinds (GET /v1/workflows joins v2 rows on the server, Kind column). New workflow
 offers a runner workflow first: it publishes a request trigger wired to an end and opens it in the editor. Searching
-the list finds it as "Runner · v2" and a draft, its row opens the editor, and Delete on the list removes the draft
+the list finds it as a draft, with no engine named, its row opens the editor, and Delete on the list removes the draft
 (204, then 404); the workflow that has run answers 409 to a delete.
 
 ## Acceptance layers

@@ -4,7 +4,6 @@ import * as React from 'react';
 import { Copy, LogOut, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { AccountTabs } from '@/components/account/account-tabs';
 import { MfaDevicesTable, SessionsTable } from '@/components/account/account-tables';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -69,7 +68,7 @@ export default function AccountSecurityPage() {
   const failed = (profile.isError && !p) || (devices.isError && !devices.data) || (sessions.isError && !sessions.data);
 
   return (
-    <PageLayout icon={ShieldCheck} title="Account" description="Your profile and how you sign in" tabs={<AccountTabs />}>
+    <PageLayout icon={ShieldCheck} title="My security" description="How you sign in, two-step verification and where you are signed in">
       {loading ? (
         <div className="flex flex-col gap-4" aria-busy="true">
           <Skeleton className="h-48 w-full" />

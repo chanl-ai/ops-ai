@@ -1,4 +1,4 @@
-# Human Task page (c-289)
+# Human Task page
 
 Status: proposed, reworked after review, waiting for the design checker. Design: the
 [Human Task page design](../../../design/human-tasks/task-page.md). Proof: `make usecase-test UC=uc-234 LAYER=ui` and
@@ -32,7 +32,7 @@ pressed without a reason: the footer gains the reason row and the body gets shor
 
 | Design | Built | Why |
 |---|---|---|
-| Wireframe C's specialised regions (the agent's reason first, tools with their effect, Grant and Refuse) | The generic held-action view: the question, each option with its consequence and values | Specialised types are task types (c-288); `components/tasks/task-regions.ts` is the one place that changes when they land |
+| Wireframe C's specialised regions (the agent's reason first, tools with their effect, Grant and Refuse) | The generic held-action view: the question, each option with its consequence and values | Specialised types are task types; `components/tasks/task-regions.ts` is the one place that changes when they land |
 | Kinds move to `components/kinds/` | `viewer` and `field_check` added in `components/chat/widgets/kind-view.tsx` | The move touches every chat import; a separate change |
 | A held action's document shows boxes on the values in question | The document shows, without boxes | Boxes come from a read; a held action knows its file but not which read of it holds its values |
 | D shows the received email above the reply, and each case with its amount | The reply, and each case by its subject | The reply step's summary carries the reply and the cases it started, not the received email; the case subject names the debtor |

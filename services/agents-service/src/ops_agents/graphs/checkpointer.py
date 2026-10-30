@@ -9,14 +9,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from ops_checkpointer import open_saver
 
-from ..store.tenancy import LOCAL_TENANT, current_tenant
+from ..store.tenancy import LOCAL_TENANT
 
-# The checkpoint key's team part. Team access is decided by the API before a thread is touched; what isolates rows at
-# rest is the tenant, which RLS on the checkpoint tables checks (0004).
-LOCAL_TEAM = "local"
-__all__ = ["LOCAL_TEAM", "LOCAL_TENANT", "open_checkpointer"]
+__all__ = ["LOCAL_TENANT", "open_checkpointer"]
 
 
 def open_checkpointer(database_url: str) -> AbstractAsyncContextManager[BaseCheckpointSaver[Any]]:
-    # The tenant is read per transaction from the request's or loop's scope, so one compiled graph serves every tenant.
-    return open_saver(database_url, tenant_id=current_tenant, team_id=LOCAL_TEAM)
+    # The tenant and team are read per transaction from the request's or loop's isolation context, so one compiled
+    # graph serves every tenant and team; a run acts as its thread's team (api/runs.py), and a write with none is
+    # refused.
+    return open_saver(database_url)

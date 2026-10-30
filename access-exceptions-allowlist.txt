@@ -1,4 +1,4 @@
-# 49 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 50 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
@@ -29,6 +29,8 @@ services/files-service/src/ops_files/tenant_files.py refusal role_required 3 E13
 services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16
 services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16
 services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44
+services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45
+packages/ops_access/src/ops_access/policies.py policy-default plugins={} 1 E46
 services/platform-service/src/ops_platform/store/teams.py role-name admin 1 E17
 services/platform-service/src/ops_platform/store/workspace.py role-name admin 1 E17
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18
@@ -89,6 +91,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict digest_mismatch 0 state
 * conflict domain_taken 0 state
 * conflict file_not_ready 0 state
+* conflict form_needs_inputs 0 state
 * conflict guardrail_pinned 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
@@ -103,6 +106,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict not_an_account_admin 0 state
 * conflict not_archived 0 state
 * conflict not_closed 0 state
+* conflict not_email_triggered 0 state
 * conflict not_indexed 0 state
 * conflict not_live 0 state
 * conflict not_newest_draft 0 state
@@ -119,6 +123,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict review_required 0 state
 * conflict run_active 0 state
 * conflict run_finished 0 state
+* conflict run_not_stuck 0 state
 * conflict run_not_waiting 0 state
 * conflict run_waiting 0 state
 * conflict runs_in_progress 0 state
@@ -128,6 +133,9 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict skill_pinned 0 state
 * conflict slug_taken 0 state
 * conflict source_paused 0 state
+* conflict sync_running 0 state
+* conflict needs_reconnect 0 state
+* conflict tools_unavailable 0 state
 * conflict stale_base 0 state
 * conflict stale_pause 0 state
 * conflict stale_version 0 state
@@ -140,3 +148,4 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict workflow_archived 0 state
 * conflict workflow_owned 0 state
 * conflict workflow_paused 0 state
+services/agents-service/src/ops_agents/api/routers/forms.py refusal form_members_only 1 E47

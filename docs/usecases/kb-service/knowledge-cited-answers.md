@@ -1,6 +1,6 @@
 # A banker asks an agent and gets an answer cited by page and section from uploaded PDFs
 
-Status: passing. Id: `uc-080`. Service: `kb-service`. Layers: api. Card: c-056.
+Status: passing. Id: `uc-080`. Service: `kb-service`. Layers: api. Card: an earlier change.
 
 The card's tasks name uc-074 for this layer; uc-074 was already the console's chat-thread use case, so this one takes
 the next free id.
@@ -34,6 +34,8 @@ step 7 checks that kb-service's passage reaches the reply with its page and sect
 | Layer | Script | State |
 |---|---|---|
 | api | `kb-service/scripts/test-uc-080-api.py` | passing |
+
+In the console: uc-075's ui script turns a department's PDFs into an answer cited by page and section.
 
 ## Non-vacuous check
 

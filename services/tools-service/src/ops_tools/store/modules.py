@@ -51,6 +51,9 @@ tool_modules = sa.Table(
     sa.Column("data_classification", sa.String(16), nullable=False),
     sa.Column("catalog_id", sa.String(64)),
     sa.Column("connection_id", sa.String(64)),
+    # Whose account the module's calls may sign in with (c-558): team, person or either; a connection whose sign-in
+    # does not fit is refused when it is chosen.
+    sa.Column("sign_in", sa.String(16), nullable=False, server_default="either"),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
     # `system` nothing, `managed` anything (c-180). Null on a record no template made.
     sa.Column("template_id", sa.String(120), index=True),
@@ -146,6 +149,12 @@ module_operations = _child(
     sa.Column("approver_team", sa.String(64)),
     # Approving asks the approver to re-authenticate even with one approver (c-057): a hold on a customer's funds.
     sa.Column("step_up", sa.Boolean, nullable=False, server_default=sa.false()),
+    # Only a person's own sign-in may sign this operation's calls (c-558): a call with nobody behind it is refused
+    # even where the connection's team backup is on.
+    sa.Column("needs_person", sa.Boolean, nullable=False, server_default=sa.false()),
+    # The scopes a person's own sign-in must hold to call it (c-558); one lacking any is asked to sign in again with
+    # them. Not reviewed: asking for a scope grants nothing, the system decides what a token may do.
+    sa.Column("scopes", sa.JSON, nullable=False, server_default="[]"),
     # The result shape the operation declares (`x-ops-shape`: rows, series, record or metric), for the chat's shaper.
     sa.Column("output_shape", sa.String(16)),
     # The JSON Schema of the first success response, as an imported OpenAPI document gives it (c-353): a workflow
@@ -250,6 +259,7 @@ REVIEWED = (
     "enabled",
     "binding",
     "amount_max",
+    "needs_person",
     *APPROVAL_POLICY,
 )
 OPERATION_DEFAULTS: dict[str, Any] = {
@@ -258,6 +268,8 @@ OPERATION_DEFAULTS: dict[str, Any] = {
     "approvers": 1,
     "approver_team": None,
     "step_up": False,
+    "needs_person": False,
+    "scopes": [],
     "output_shape": None,
     "response_schema": None,
     "code": None,

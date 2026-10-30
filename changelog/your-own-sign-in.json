@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-29",
+  "title": "Sign in to a connected system with your own account",
+  "description": "Test connection checks a connection with your own sign-in, or with the team's account if you manage the connection, and keeps the result on the connection. A module can now require each person's own sign-in, so an action that must act as a person never runs on the team's account in their place.",
+  "tag": "new",
+  "switch": "NEXT_PUBLIC_OPS_PERSONAL_SIGNIN",
+  "cards": [
+    "c-558"
+  ]
+}

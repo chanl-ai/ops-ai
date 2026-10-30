@@ -117,6 +117,8 @@ await withUiStack(
       // Start a run from the editor with no worker (a test run: the definition is a draft): it waits in the queue and
       // the run page says so.
       await page.getByTestId('definition-start-run').click();
+      // A trigger with an input schema opens on its form; the JSON input is the second tab.
+      await page.getByRole('tab', { name: 'JSON' }).click({ timeout: 5000 }).catch(() => undefined);
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ customerId: 'CUS-1001', amount: 250 }));
       await page.getByTestId('definition-start-run-submit').click();
       await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
@@ -155,7 +157,8 @@ await withUiStack(
       const dialog = page.getByRole('dialog', { name: 'New workflow' });
       await dialog.getByLabel('Name').fill(NEW);
       await dialog.getByLabel('Starts when').fill('A customer asks to raise a card limit');
-      const runnerFirst = await dialog.getByRole('radio', { name: /Runner workflow/ }).isChecked();
+      // One kind of workflow (c-562): the dialog asks no shape.
+      const noShapes = (await dialog.getByRole('radio').count()) === 0;
       const published = page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 });
       await dialog.getByRole('button', { name: 'Create and open' }).click();
       const pub = await published;
@@ -163,15 +166,16 @@ await withUiStack(
       const openedNew = await page.waitForURL(`**/workflows/definitions/${newId}`, { timeout: 60_000 }).then(() => true, () => false);
       await page.getByTestId('definition-node').first().waitFor({ timeout: 60_000 }).catch(() => {});
       const newNodes = await page.getByTestId('definition-node').count();
-      check('New workflow creates a runner draft that passes the checks and opens it in the editor', runnerFirst && pub.status() === 201 && openedNew && newNodes === 2, { runnerFirst, status: pub.status(), newId, url: page.url(), newNodes });
+      check('New workflow creates a runner draft that passes the checks and opens it in the editor', noShapes && pub.status() === 201 && openedNew && newNodes === 2, { noShapes, status: pub.status(), newId, url: page.url(), newNodes });
 
       await page.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByPlaceholder('Search workflows…').fill('card limit check 081');
       const row = page.getByRole('row').filter({ hasText: NEW });
       await row.first().waitFor({ timeout: 60_000 }).catch(() => {});
-      const listed = await page.getByRole('row').filter({ has: page.getByTestId('workflow-kind') }).allInnerTexts();
-      const kind = await row.first().getByTestId('workflow-kind').innerText().catch(() => '');
-      check('search finds it in the Workflows list, marked as a v2 runner workflow and a draft', listed.length === 1 && kind === 'Runner · v2' && /Draft/.test(listed[0] ?? '') && /raise a card limit/.test(listed[0] ?? ''), { listed, kind });
+      const listed = await page.locator('main tbody tr').allInnerTexts();
+      // The list names no engine (c-562): every workflow on it is the current runner's.
+      const engineNamed = listed.some((t) => /Runner · v2|Graph · v1/.test(t));
+      check('search finds it in the Workflows list as a draft, with no engine named', listed.length === 1 && !engineNamed && /Draft/.test(listed[0] ?? '') && /raise a card limit/.test(listed[0] ?? ''), { listed, engineNamed });
       await row.first().getByText(NEW, { exact: true }).click();
       const openedFromRow = await page.waitForURL(`**/workflows/definitions/${newId}`, { timeout: 60_000 }).then(() => true, () => false);
       check('its row opens the v2 editor', openedFromRow, page.url());

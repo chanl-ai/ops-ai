@@ -1,6 +1,6 @@
 # A court order notice's cases are decided from the console
 
-Status: retired 2026-10-18 (c-212): it read the v1 court order run in Cases; the v1 flow is gone. uc-210 decides v2 court order cases through the API, and the console view of them belongs to the Cases card. Id: `uc-077`. Service: `console`. Layers: ui. Card: c-057 (T009).
+Status: retired 2026-10-18: it read the v1 court order run in Cases; the v1 flow is gone. uc-210 decides v2 court order cases through the API, and the console view of them belongs to the Cases card. Id: `uc-077`. Service: `console`. Layers: ui. Card: an earlier change (T009).
 
 As Maya (reviewer, team_ops), the intake run of a court order notice shows the persons it names, the candidates a person
 reads and the cases it opened; each case is decided in Reviews with Hold (an amount) or Flag; the hold id lands on the

@@ -7,6 +7,7 @@ data:
   OPS_ENVIRONMENT: production
   OPS_AUTH_MODE: platform
   OPS_BIND_HOST: 0.0.0.0
+  OPS_FORMS_TRUSTED_PROXIES: '["10.0.0.0/8", "172.16.0.0/12", "127.0.0.1/32"]'
   OPS_PLATFORM_URL: http://platform:8710
   OPS_PLATFORM_INTERNAL_URL: http://platform:8711
   OPS_AGENTS_URL: http://agents:8700

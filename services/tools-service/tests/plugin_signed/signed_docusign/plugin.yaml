@@ -1,0 +1,22 @@
+schema: ops-ai/plugin@2
+id: test.docusign
+title: DocuSign agreements
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [oauth2_jwt_bearer]
+  token_url: "{login_url}/docusign/token"
+  scopes: [{ id: records.read, label: Read records, required: true }]
+  sign_in: [team]
+  health_check: { path: "/api/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.certs.test" }
+  login_url: { type: string, title: Sign-in address, default: "https://login.certs.test" }
+egress: ["{base_url}"]
+endpoint: "{base_url}/api"
+tools:
+  - name: get_record
+    title: Read an agreement
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }

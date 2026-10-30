@@ -108,6 +108,11 @@ class ReadRequestIn(Model):
     document_type_id: str | None = Field(default=None, min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
     type_name: str | None = Field(default=None, max_length=200)
+    # Fields the model proposes instead of a type's (c-535), with what the person said the file is; the first pages
+    # only when `max_pages` is given. The full text is read on the file page from its layout, not through a request.
+    read: Literal["fields", "propose"] | None = None
+    hint: str | None = Field(default=None, max_length=200)
+    max_pages: int | None = Field(default=None, ge=1)
 
 
 class ReadRequest(Model):

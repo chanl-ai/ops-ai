@@ -40,6 +40,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.output import NativeOutput, StructuredDict
 from pydantic_ai.run import AgentRunResultEvent
+from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
 from ops_service_kit.ids import action_id, input_hash
@@ -116,6 +117,8 @@ class _TurnState:
     shown: int = 0
     # Set once present is refused for the cap: a further call ends the turn.
     present_closed: bool = False
+    # Set when the model repeats a call it already made this reply: it is offered no system tool after that.
+    tools_closed: bool = False
 
     def record(self, tool_call_id: str, tool: str, arguments: dict[str, Any]) -> ToolCallRecord:
         """The record for a call, created on first sight. The tool function can run before its call event is
@@ -273,13 +276,27 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]
     token = resume.approval_token if resume and resume.decision == "approved" else None
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+        tool_call_id = ctx.tool_call_id or f"call_{len(state.order)}"
+        asked = input_hash(arguments)
+        same = next(
+            (r for r in state.records.values() if r.tool == grant.name and r.input_hash == asked and r.status in DONE),
+            None,
+        )
+        if same is not None:
+            # The same call again in one reply is not sent to the system twice, and from here the model is offered no
+            # system tool, so it answers from what it has: a summary turn repeated one read until the tool cap ended
+            # it with no answer.
+            state.tools_closed = True
+            rec = state.record(tool_call_id, grant.name, arguments)
+            rec.status, rec.output = same.status, same.output
+            return {"note": REPEATED_CALL, "result": same.output}
         # The agent's tool-call budget counts the calls that reach a system; the built-in present tool reaches none
         # and is bounded by the step limit instead, so an agent with no tool calls can still answer with a widget.
         cap = state.req.settings.max_tool_calls
         if cap is not None and state.granted_calls >= cap:
             raise ToolLimitExceeded(f"The agent may make {cap} tool calls a reply.")
         state.granted_calls += 1
-        rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", grant.name, arguments)
+        rec = state.record(tool_call_id, grant.name, arguments)
         started = time.monotonic()
         # A call a person approved carries the token: a gated write's, or one the gateway sent for review (c-300).
         approved = grant.gated or ctx.tool_call_approved
@@ -302,6 +319,11 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]
     )
     # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
     tool.requires_approval = grant.gated
+
+    async def offered(_ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        return None if state.tools_closed else tool_def
+
+    tool.prepare = offered
     return tool
 
 
@@ -310,6 +332,17 @@ async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
     if not req.kb_ids or not query:
         return []
     return await ports.knowledge.search(query, req.kb_ids, k=KNOWLEDGE_K)
+
+
+def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
+    """Every call the turn left running, closed as not run: a card shows each call's end, never "Running" after the
+    reply is over."""
+    closed: list[ToolOutput] = []
+    for rec in state.records.values():
+        if rec.status == "running":
+            rec.status, rec.output = "error", {"error": why}
+            closed.append(ToolOutput(rec))
+    return closed
 
 
 def _reason(requests: DeferredToolRequests, call_id: str) -> str | None:
@@ -347,6 +380,17 @@ GUARDRAIL_UNAVAILABLE = (
     "I could not check this question against this agent's guardrails just now, so I have not answered it. Try again "
     "shortly."
 )
+# What a call that finished this reply ended as; a repeat of one is answered from it.
+DONE = ("ok", "error")
+REPEATED_CALL = (
+    "You already made this call with these arguments in this reply, and this is its result. Answer from what you have."
+)
+# Each tool call still open when a limit or the deadline ends the turn is closed as not run, with why.
+NOT_RUN = {
+    "max_tool_calls": "Not run: the reply reached the most tool calls this agent may make.",
+    "max_steps": "Not run: the reply reached its step limit.",
+    "deadline": "Not run: the reply took too long and was stopped.",
+}
 TOOL_LIMIT_REACHED = (
     "I reached the most tool calls this agent may make in one reply before I could answer. Ask again, or narrow the "
     "question."
@@ -633,6 +677,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     except TimeoutError:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
+        for closed in _close_open(state, NOT_RUN["deadline"]):
+            yield closed
         yield finish(
             "failed",
             "deadline",
@@ -660,7 +706,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         )
         state.text += notice
         yield TextDelta(notice)
-        yield finish("completed", "max_tool_calls" if tools else "max_steps", error=None)
+        stop = "max_tool_calls" if tools else "max_steps"
+        for closed in _close_open(state, NOT_RUN[stop]):
+            yield closed
+        yield finish("completed", stop, error=None)
         return
     except UnexpectedModelBehavior as e:
         if (cleared := _withhold(state, guarded)) is not None:

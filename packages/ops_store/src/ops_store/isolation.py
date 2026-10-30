@@ -162,14 +162,22 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
     with SQL Server's session context cleared when it ends however it ends."""
     ctx = current()
     async with engine.connect() as conn:
+        tx = await conn.begin()
         try:
-            async with conn.begin():
-                await enter_transaction(conn, ctx, role=role)
-                yield conn
-        finally:
+            await enter_transaction(conn, ctx, role=role)
+            yield conn
+            # Cleared before the commit, so a transaction commits once: a second commit after it cost a round trip on
+            # every SQL Server save (slow-tests RCA A3).
+            await leave_transaction(conn)
+            await tx.commit()
+        except BaseException:
+            if tx.is_active:
+                await tx.rollback()
+            # A rollback leaves SQL Server's session context set, and the pooled connection must not carry it on.
             await leave_transaction(conn)
             if conn.in_transaction():
                 await conn.commit()
+            raise
 
 
 @asynccontextmanager
@@ -192,19 +200,18 @@ async def enter_transaction(conn: AsyncConnection, ctx: Isolation, *, role: str 
             settings = [*([("role", role)] if role else []), *((SETTINGS[k], v) for k, v in values.items())]
             await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
         case "mssql":
-            for key, value in values.items():
-                await conn.execute(_MS_SET, {"k": key, "v": value})
+            await conn.execute(_MS_SET, values)
         case _:
             return
 
 
 async def leave_transaction(conn: AsyncConnection) -> None:
     if dialect.dialect_of(conn) == "mssql":
-        for key in SETTINGS:
-            await conn.execute(_MS_SET, {"k": key, "v": None})
+        await conn.execute(_MS_SET, dict.fromkeys(SETTINGS))
 
 
-_MS_SET = sa.text("EXEC sp_set_session_context @key = :k, @value = :v")
+# The three keys in one batch, one round trip to set them and one to clear them (slow-tests RCA A3).
+_MS_SET = sa.text(" ".join(f"EXEC sp_set_session_context @key = N'{k}', @value = :{k};" for k in SETTINGS))
 
 
 def _need(reason: str, what: str) -> None:

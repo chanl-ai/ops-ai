@@ -11,6 +11,8 @@ export interface ChangelogEntry {
   title: string;
   description: string;
   tag: 'new' | 'improved' | 'fix';
+  /** The release switch the feature waits behind; the entry shows only while it is on. */
+  switch?: string;
 }
 
 export interface RoadmapItem {
@@ -20,8 +22,13 @@ export interface RoadmapItem {
 
 const TAGS = new Set(['new', 'improved', 'fix']);
 
-/** The entries newest first (by date, then title); anything malformed is left out rather than breaking the popover. */
-export function parseChangelog(source: string): ChangelogEntry[] {
+
+/**
+ * The entries newest first (by date, then title); anything malformed is left out rather than breaking the popover, and
+ * so is an entry whose release switch is off. `switches` are the console's (lib/api releaseSwitches); a switch not in
+ * them counts as off, so a misspelt one never announces an unreleased feature.
+ */
+export function parseChangelog(source: string, switches: Readonly<Record<string, boolean>> = {}): ChangelogEntry[] {
   let raw: unknown;
   try {
     raw = JSON.parse(source);
@@ -31,6 +38,7 @@ export function parseChangelog(source: string): ChangelogEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((e): e is ChangelogEntry => !!e && typeof e.id === 'string' && typeof e.title === 'string' && typeof e.date === 'string' && TAGS.has(e.tag))
+    .filter((e) => e.switch === undefined || switches[e.switch] === true)
     .map(({ id, date, title, description, tag }) => ({ id, date, title, description: description ?? '', tag }))
     .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 }

@@ -31,4 +31,4 @@ parent is open.
 
 ## Non-vacuous check
 
-Step 1 fails on a sidebar that renders only top-level items (`app-sidebar.tsx` before c-047): no sub-rows are listed.
+Step 1 fails on a sidebar that renders only top-level items (`app-sidebar.tsx` before an earlier change): no sub-rows are listed.

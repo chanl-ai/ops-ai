@@ -10,7 +10,7 @@ import { PageLayout } from '@/components/page-layout';
 import { idColumn } from '@/components/shared/id-column';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToolGrants } from '@/hooks/tool-module-queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -70,7 +70,7 @@ export default function ToolAccessPage() {
         <div className="flex flex-col gap-4">
           <SavedViewTabs
             ariaLabel="Tool access views"
-            presets={VIEWS.map((v) => ({ id: v.id, label: `${v.label} · ${counts[v.id] ?? 0}` }))}
+            presets={VIEWS.map((v) => ({ id: v.id, label: countLabel(v.label, counts[v.id]) }))}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}

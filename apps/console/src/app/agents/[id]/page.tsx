@@ -57,7 +57,6 @@ import {
   useAgentPaused,
   useAgentRuns,
   useAgentVersions,
-  useCreateWorkflow,
   useDeleteAgent,
   useLookups,
   useModelAliases,
@@ -126,7 +125,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   // The newest version's state decides the header: a draft offers Request publish, one in review links to it.
   const newest = versions.data?.find((v) => v.version === agent.version);
   const remove = useDeleteAgent();
-  const createWorkflow = useCreateWorkflow();
   const skills = useAgentSkills(agent.id);
   const attachSkill = useAttachSkill(agent.id);
   const detachSkill = useDetachSkill(agent.id);
@@ -208,17 +206,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       onError: (e) => toast.error(agent.paused ? 'Couldn’t resume the agent' : 'Couldn’t pause the agent', { description: e.message }),
     });
 
-  const createChat = () =>
-    createWorkflow.mutate(
-      { name: `${agent.name} chat`, trigger: 'Chat message', template: 'chat', agentSlug: agent.slug },
-      {
-        onSuccess: (wf) => {
-          toast.success(`Created ${wf.name}`, { description: 'Publish it, then add a deployment.' });
-          router.push(`/workflows/${wf.id}`);
-        },
-        onError: (e) => toast.error('Couldn’t create the workflow', { description: e.message }),
-      },
-    );
 
   return (
     <PageLayout
@@ -436,7 +423,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
             savedVersions={versions.data ?? []}
             usedIn={
               <>
-                <UsedInCard agent={agent} onCreateChat={createChat} creating={createWorkflow.isPending} />
+                <UsedInCard agent={agent} />
                 <RecentRunsCard runs={runs.data} loading={runs.isPending} />
               </>
             }

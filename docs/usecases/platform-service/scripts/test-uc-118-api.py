@@ -36,17 +36,21 @@ with platform() as (api, _internal):
     r = api.get("/v1/roles", headers=priya)
     listed = [x["id"] for x in data(r)] if r.status_code == 200 else []
     check(
-        "six built-in roles are listed",
-        listed == ["admin", "builder", "reviewer", "viewer", "security_admin", "chat_user"],
+        # Owner, the workspace's own role (platform migration 0026), joins the six team roles.
+        "seven built-in roles are listed",
+        listed == ["admin", "builder", "reviewer", "viewer", "security_admin", "chat_user", "owner"],
         listed,
     )
     r = api.get("/v1/roles/chat_user", headers=priya)
     grid = {row["area"]: row["actions"] for row in data(r)["grid"]} if r.status_code == 200 else {}
     check(
-        "Chat user's grid holds chat only, its own threads",
+        # Correcting one's own memories is memory.edit, own (platform migration 0015).
+        "Chat user's grid holds chat, its own threads, and its own memories only",
         grid.get("chat", {}).get("view") == "own"
         and grid.get("chat", {}).get("run") == "all"
-        and all(v is None for area, acts in grid.items() if area != "chat" for v in acts.values()),
+        and grid.get("memory", {}).get("edit") == "own"
+        and all(v is None for area, acts in grid.items() if area not in ("chat", "memory") for v in acts.values())
+        and all(v is None for action, v in grid.get("memory", {}).items() if action != "edit"),
         r.text[:200],
     )
 
@@ -56,13 +60,19 @@ with platform() as (api, _internal):
         names(mine.get("access.manage")) == ["Admin"],
         mine.get("access.manage"),
     )
-    check("Priya does not change egress", "secrets_egress.manage" not in mine, sorted(mine)[:5])
+    # A team admin holds every cell (platform migration 0016); egress is a Security-team-only cell, so Priya's
+    # holds only in the Security team, where she is not.
+    check(
+        "Priya changes egress only in the Security team, where she is not",
+        (mine.get("secrets_egress.manage") or {}).get("securityTeamOnly") is True,
+        mine.get("secrets_egress.manage"),
+    )
 
     sam = sign_in(api, "s.adeyemi@harborpine.example")
     sec = held(data(api.get("/v1/me/permissions", headers=sam)), "team_security")
     check(
         "Sam changes egress as Security admin, in the Security team",
-        names(sec.get("secrets_egress.manage")) == ["Security admin"]
+        "Security admin" in names(sec.get("secrets_egress.manage"))
         and sec.get("secrets_egress.manage", {}).get("securityTeamOnly") is True,
         sec.get("secrets_egress.manage"),
     )
@@ -70,9 +80,10 @@ with platform() as (api, _internal):
     r = api.get("/v1/people/usr_builder/permissions", headers=priya)
     james = held(data(r), "team_ops") if r.status_code == 200 else {}
     check(
-        "James, a builder, creates agents, changes only his own knowledge and decides nothing",
+        # A builder changes any of the team's knowledge (platform migration 0009), not only their own.
+        "James, a builder, creates agents, changes the team's knowledge and decides nothing",
         "agents.create" in james
-        and james.get("knowledge.edit", {}).get("scope") == "own"
+        and james.get("knowledge.edit", {}).get("scope") == "all"
         and "agents.decide" not in james,
         r.text[:200],
     )

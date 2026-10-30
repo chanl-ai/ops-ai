@@ -18,9 +18,11 @@ import pytest
 import sqlalchemy as sa
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import importlib.util
 import itertools
 
 import mssql
+import mssql_live
 from models import chain_metadata, chains
 from schema import Checkout
 
@@ -183,11 +185,54 @@ def test_no_postgresql_type_or_function_reaches_the_ddl(compiled: mssql.Compiled
         sql = "\n".join(line for line in text.splitlines() if not line.startswith("--"))
         # A PostgreSQL cast, not SQL Server's securable class (USER::name, SCHEMA::name).
         casts = r"(?<!\bUSER)(?<!\bSCHEMA)(?<!\bOBJECT)(?<!\bDATABASE)::\w"
-        found = re.findall(rf"TSVECTOR|to_tsvector|JSONB|\bnow\(\)|{casts}|\bTEXT\b|\bIMAGE\b|\bSERIAL\b", sql)
+        # RESTRICT is PostgreSQL's; SQL Server stops a bundle on it ("Incorrect syntax near the keyword 'RESTRICT'").
+        found = re.findall(
+            rf"TSVECTOR|to_tsvector|JSONB|\bnow\(\)|{casts}|\bTEXT\b|\bIMAGE\b|\bSERIAL\b|\bRESTRICT\b", sql
+        )
         assert found == [], f"{name}: {found}"
     agents = compiled.files["01-agents.sql"]
     assert "created_at DATETIMEOFFSET NOT NULL" in agents and "BIT NOT NULL" in agents
     assert re.search(r"\bposition BIGINT NOT NULL IDENTITY", agents)
+
+
+def test_every_foreign_key_names_its_target_key_in_that_key_s_order() -> None:
+    # SQL Server refuses a foreign key whose columns are not a key's, in that key's order (Msg 1776); PostgreSQL takes
+    # another order.
+    wrong: list[str] = []
+    for chain in chains():
+        for t in mssql.chain_tables(chain, chain_metadata(chain)).tables:
+            for fk in t.foreign_key_constraints:
+                target = fk.referred_table
+                named = [e.column.name for e in fk.elements]
+                keys = [[c.name for c in target.primary_key.columns]]
+                keys += [[c.name for c in u.columns] for u in target.constraints if isinstance(u, sa.UniqueConstraint)]
+                # A filtered unique index cannot be referenced on SQL Server.
+                keys += [
+                    [c.name for c in ix.columns]
+                    for ix in target.indexes
+                    if ix.unique and ix.dialect_options["mssql"]["where"] is None
+                ]
+                if named not in keys:
+                    wrong.append(f"{t.name}.{fk.name} -> {target.name} {named}")
+    assert wrong == []
+
+
+def test_the_drift_check_expects_what_the_bundle_creates() -> None:
+    # The bundle leaves PostgreSQL-only columns out (kb_chunks.tsv, a tsvector); a drift check that expected them
+    # would report every SQL Server install as missing them.
+    columns, _ = mssql_live.expected()
+    assert "tsv" not in columns["kb_chunks"] and "text" in columns["kb_chunks"]
+
+
+def test_a_fresh_install_gets_the_memory_full_text_index_an_upgrade_gets(compiled: mssql.Compiled) -> None:
+    # The same statement 0085 runs on an upgraded install, so both installs search memories alike.
+    spec = importlib.util.spec_from_file_location(
+        "memory_full_text", HERE.root / "services/agents-service/migrations/versions/0085_memory_full_text.py"
+    )
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    assert f"{migration.MSSQL_FULL_TEXT}\nGO\n" in compiled.files["01-agents.sql"]
 
 
 # --- US5: upgrades ------------------------------------------------------------------------------------------------
@@ -222,6 +267,19 @@ def test_an_upgrade_after_the_baseline_renders_guarded_sql_server_steps(
     assert "IF NOT EXISTS (SELECT 1 FROM dbo.alembic_version_files WHERE version_num = N'files_0008')" in up
     assert "ALTER TABLE file_read_requests ALTER COLUMN document_type_id VARCHAR(64) NULL;" in up
     assert "SET XACT_ABORT ON;" in up
+
+
+def test_a_statement_sql_server_runs_outside_a_transaction_stays_outside_one(tmp_path: Path) -> None:
+    # 0085 creates a full-text catalog and index in an autocommit block; SQL Server refuses both inside a transaction.
+    mssql.write_upgrade(_At("agents", "0084_memory_audit_team_required"), HERE, tmp_path)
+    up = (tmp_path / "upgrade.sql").read_text()
+    step = up[up.index("-> 0085_memory_full_text") : up.index("-- step agents 0085_memory_full_text")]
+    open_transactions, at_full_text = 0, []
+    for line in step.splitlines():
+        open_transactions += line.startswith("BEGIN TRANSACTION;") - line.startswith("COMMIT;")
+        if "CREATE FULLTEXT CATALOG" in line:
+            at_full_text.append(open_transactions)
+    assert at_full_text == [0], step
 
 
 def test_an_upgrade_holding_postgresql_sql_is_refused_by_name(monkeypatch: pytest.MonkeyPatch) -> None:

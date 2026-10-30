@@ -3,7 +3,7 @@
 Status: current for PostgreSQL, proven on a throwaway server. For SQL Server and Azure SQL the scripts are generated
 and reviewed, and not yet applied to a server ([SQL Server](#sql-server-and-azure-sql)).
 
-<!-- PostgreSQL: c-336, proof deploy/database/proof.sh. SQL Server: c-344 (DIALECT=mssql), first apply is c-345. -->
+<!-- PostgreSQL: an earlier change, proof deploy/database/proof.sh. SQL Server: an earlier change (DIALECT=mssql), first apply is an earlier change. -->
 
 A bank's DBA applies every schema change in their own change window and never runs Ops AI's code against
 production. Each service's migration chain stays the source, and every script below is generated from those chains
@@ -43,7 +43,7 @@ made: never production. `REF` is exported with `git archive`, so uncommitted fil
 | `roles.sql` | Every role above, each guarded so it can run again; set each login's password afterwards (`ALTER ROLE ... PASSWORD`) |
 | `01-agents.sql` ... `07-documents.sql` | The objects each service's chain creates, for review. Apply the bundle, not these |
 | `bundle.sql` | The whole schema in the server's dependency order: tables, constraints, indexes, row-level security and policies, grants to the no-login roles, and the rows a fresh migration writes (each chain's version row) |
-| `grants.sql` | Each runtime role's rights, its membership of the no-login roles its tables grant to (granted only where it is missing, so a role a later migration added reaches a login roles.sql made before it, c-444), and CREATE on the public schema revoked from everyone but its owner (some server templates grant it to all; Fly's PostgreSQL 18 did); every statement can run again |
+| `grants.sql` | Each runtime role's rights, its membership of the no-login roles its tables grant to (granted only where it is missing, so a role a later migration added reaches a login roles.sql made before it), and CREATE on the public schema revoked from everyone but its owner (some server templates grant it to all; Fly's PostgreSQL 18 did); every statement can run again |
 | `manifest.json` | The commit, dialect, each chain's head revision, version table, runtime role and tables, and every file's sha256 |
 | `SHA256SUMS` | `shasum -a 256 -c SHA256SUMS` checks the files arrived unchanged |
 
@@ -83,7 +83,7 @@ every later revision renderable.
 
 `CREATE INDEX` holds writes on its table until it is built, and `upgrade.sql` runs each step in a transaction, where
 `CREATE INDEX CONCURRENTLY` cannot run. The index steps that may meet a large table create the index only when it is
-missing (agents 0071, c-280: the work queue, live workflow versions, thread lists and event polls, runs by workflow
+missing (agents 0071, an earlier change: the work queue, live workflow versions, thread lists and event polls, runs by workflow
 and checkpoints by run). On a table over about a million rows, build the index by hand first, outside a transaction,
 with the name and columns the revision gives, for example
 `CREATE INDEX CONCURRENTLY ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at)`;
@@ -171,7 +171,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql
 
 | Difference from PostgreSQL | SQL Server form |
 |---|---|
-| Forced row-level security on each tenant-scoped table, one generated policy each (`{t}_tenant`, or `{t}_isolation` for a team-owned table) | A security policy per table (`ops_security.<table>_tenant` or `_isolation`) binding a FILTER predicate and BLOCK predicates AFTER INSERT and AFTER UPDATE, generated with the PostgreSQL policy from the table's markings by `ops_store.schema.security_ddl` (c-410). The predicates read `SESSION_CONTEXT(N'tenant_id')`, and for a team-owned table `team_id` and `scope`, which `ops_store.isolation.isolated_tx` sets and clears per transaction (c-409): a team transaction reads its team's rows and the null-team rows and writes only its team's; a tenant-wide one (a named `tenant_wide` reason) reads and writes every team of its tenant. agents-service and platform-service go through it (platform's pre-tenant lookup functions are still PostgreSQL-only, listed below); the checkpointer still sets the tenant with PostgreSQL-only statements of its own, so on SQL Server it sees no rows until its conversion card. The agents predicates also pass every tenant for `USER_NAME() = N'ops_runtime_system'`, a user without a login that `ops_store.isolation.system_tx` (with a named reason) enters with `EXECUTE AS USER` and reverts; only `ops_agents_runtime` holds IMPERSONATE on it, and no session value a login sets for itself opens another tenant's rows. A row predicate cannot limit columns, so what that user reads and updates is held by its grants, as PostgreSQL's BYPASSRLS role `ops_runtime_system` is: SELECT on graph_threads, graph_runs, thread_events, review_decisions, review_approvals and engine_definitions, SELECT and UPDATE on engine_work, SELECT on `agent_memories (tenant_id)` only, nothing on mailboxes (`SYSTEM_READS` in `mssql.py`, held equal to the migrated PostgreSQL grants by `test_model_parity.py`) |
+| Forced row-level security on each tenant-scoped table, one generated policy each (`{t}_tenant`, or `{t}_isolation` for a team-owned table) | A security policy per table (`ops_security.<table>_tenant` or `_isolation`) binding a FILTER predicate and BLOCK predicates AFTER INSERT and AFTER UPDATE, generated with the PostgreSQL policy from the table's markings by `ops_store.schema.security_ddl`. The predicates read `SESSION_CONTEXT(N'tenant_id')`, and for a team-owned table `team_id` and `scope`, which `ops_store.isolation.isolated_tx` sets and clears per transaction: a team transaction reads its team's rows and the null-team rows and writes only its team's; a tenant-wide one (a named `tenant_wide` reason) reads and writes every team of its tenant. agents-service and platform-service go through it (platform's pre-tenant lookup functions are still PostgreSQL-only, listed below); the checkpointer still sets the tenant with PostgreSQL-only statements of its own, so on SQL Server it sees no rows until its conversion card. The agents predicates also pass every tenant for `USER_NAME() = N'ops_runtime_system'`, a user without a login that `ops_store.isolation.system_tx` (with a named reason) enters with `EXECUTE AS USER` and reverts; only `ops_agents_runtime` holds IMPERSONATE on it, and no session value a login sets for itself opens another tenant's rows. A row predicate cannot limit columns, so what that user reads and updates is held by its grants, as PostgreSQL's BYPASSRLS role `ops_runtime_system` is: SELECT on graph_threads, graph_runs, thread_events, review_decisions, review_approvals and engine_definitions, SELECT and UPDATE on engine_work, SELECT on `agent_memories (tenant_id)` only, nothing on mailboxes (`SYSTEM_READS` in `mssql.py`, held equal to the migrated PostgreSQL grants by `test_model_parity.py`) |
 | A unique key over a nullable column admits any number of NULL rows | A filtered unique index `WHERE <column> IS NOT NULL`, which admits the same rows |
 | A partial index | A filtered index from its `mssql_where` twin; a partial index without one is refused by name |
 | `text`, JSON, `timestamptz`, `boolean`, serial keys | `VARCHAR(max)` (UTF-8 under the collation), `NVARCHAR(max)`, `DATETIMEOFFSET`, `BIT`, `IDENTITY` |
@@ -179,17 +179,20 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql
 
 Upgrades: `make db-upgrade-sql DIALECT=mssql FROM=<running release> TO=<new release>` writes `upgrade.sql` and
 `downgrade.sql` from Alembic's offline SQL for SQL Server, one guarded step per revision (`THROW` when the version row
-is elsewhere, `SET XACT_ABORT ON`), then run the new `grants.sql`. Each chain's SQL Server baseline is its head on
-2026-10-19 (`BASELINE` in `mssql.py`); a range that starts before it is refused by name, as is a step whose offline SQL
-holds PostgreSQL-only SQL. `make db-drift DIALECT=mssql` answers that it needs a server (c-345).
+is elsewhere, `SET XACT_ABORT ON`), then run the new `grants.sql`. A step's statements that SQL Server refuses inside a
+transaction (the full-text catalog and index) run after its `COMMIT`, in their own batch. A range that starts before a
+chain's pin (`BASELINE` in `mssql.py`) is refused by name, as is a step whose offline SQL holds PostgreSQL-only SQL.
+SQL Server upgrades start from the first release whose bundle installs, the release cut after an earlier change: no SQL Server
+install of an earlier release exists, so the pins move to that release's heads when it is cut. Until a migration lands
+after it there is nothing to upgrade. `deploy/database/mssql_live.py drift` compares an installed database with the
+models; `make uc-sql-server` installs the bundle on the SQL Server test machine and runs it (uc-565).
 
 | Not on SQL Server yet | Owner |
 |---|---|
 | kb's full-text column `kb_chunks.tsv` and its GIN index (left out, listed in the kb file and the manifest) | kb's full-text card |
-| The checkpointer's three tables (no SQLAlchemy metadata) | its rewrite onto SQLAlchemy Core |
 | Platform's four pre-tenant lookup functions | the platform port |
-| A live run of `isolated_tables` on `sys.security_policies` (written, never run on a server) and of the isolation suite; a live check that `EXECUTE AS USER` and the column grant hold on a server | c-419 on the c-345 machine |
-| Applying the scripts to a SQL Server and comparing the result with the models | c-345 |
+| A live run of `isolated_tables` on `sys.security_policies` (written, never run on a server) and of the isolation suite; a live check that `EXECUTE AS USER` and the column grant hold on a server | an earlier change on the an earlier change machine |
+| An upgrade applied to a SQL Server install (uc-565 S2) | the first migration after the first installable release |
 
 `deploy/database/tests/test_mssql_ddl.py` compiles the models and compares every file with the reviewed golden files
 in `deploy/database/golden/mssql/`; a model change fails it naming the chain's file. Review the new DDL, then

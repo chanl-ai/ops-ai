@@ -1,8 +1,9 @@
-"""uc-008 a paused workflow is decided from the console, api layer: docs/usecases/agents-service/decide-paused-workflow.md."""
+"""uc-008 a paused workflow is decided from the console, api layer:
+docs/usecases/agents-service/decide-paused-workflow.md."""
 
 from __future__ import annotations
 
-from usecase_harness import EMAILS, agents, check, data, finish, new_thread, run
+from usecase_harness import EMAILS, TEAM, agents, check, data, finish, new_thread, run
 
 with agents() as api:
     tid = new_thread(api, "complex_workflow")
@@ -26,10 +27,10 @@ with agents() as api:
         review["status"] == "pending" and not review["stepUp"],
         review,
     )
-    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
+    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
     check("approved without a step-up (write, not money) (200)", decided.status_code == 200, decided.text)
     # Non-vacuous: a repeated decision must not resume again; a facade that resumed twice would send twice.
-    again = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
+    again = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
     check("repeated decision accepted without a second resume (200)", again.status_code == 200, again.text)
     journal = data(api.get(f"/v1/threads/{tid}/runs"))
     check("send_reply ran exactly once", sum(r["nodes"].count("send_reply") for r in journal) == 1, journal)

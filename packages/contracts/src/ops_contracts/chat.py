@@ -397,12 +397,19 @@ class ThreadSettings(WireModel):
 
 
 class RememberedItem(WireModel):
-    """One memory a reply saved about the person (c-206); an episode has no key."""
+    """One memory a reply saved, confirmed or asked about (c-206, c-557); an episode has no key. The thread keeps only
+    the id, kind, status and decision, so a reload reads key and value from the memory, and a forgotten one has
+    neither."""
 
     id: str
-    kind: Literal["fact", "preference", "episode"]
+    kind: Literal["preference", "procedure", "fact", "person", "case", "episode"]
     key: str | None = None
-    value: str
+    value: str | None = None
+    # The memory's status now: active, suggested (waits for a yes), conflict (waits for a choice), superseded or
+    # forgotten.
+    status: Literal["active", "suggested", "conflict", "superseded", "forgotten"] | None = None
+    # What learning did: new, same (confirmed one already kept), replaces or conflicts.
+    decision: Literal["new", "same", "replaces", "conflicts"] | None = None
 
 
 class ChatMessage(WireModel):

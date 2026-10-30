@@ -90,8 +90,9 @@ from ..chat_threads import (
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..memory import extract_memories, extractor_for, save_memories
+from ..memory import finish_learning, person_of, start_learning
 from ..ops_tools import ensure_ops_assistant, fill_cards
+from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
 from .agents import changeable
 
@@ -270,7 +271,7 @@ async def list_threads(
         chosen, more = ordered[start : start + page_size], start + page_size < total
     next_cursor = _cursor(order, *chosen[-1][:2]) if more and chosen else None
     page_rows = [x[2] for x in chosen]
-    msgs = await messages_of(rt, [r["id"] for r in page_rows])
+    msgs = await messages_of(rt, [r["id"] for r in page_rows], reader=person_of(me))
     result = ThreadList(
         data=[thread_row_view(rt, r, msgs[r["id"]]) for r in page_rows],
         pagination=PaginationMeta(
@@ -406,7 +407,7 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     row = await _thread_row(rt, me, thread_id)
     # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
     audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
-    messages = (await messages_of(rt, [thread_id], audit=audit))[thread_id]
+    messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
     # An open approval says whether the reader may decide it, so the card offers Approve and Reject only then.
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):
@@ -586,7 +587,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         raise Unprocessable("This conversation's agent is no longer live.")
     # A conversation from before per-conversation caps takes them now (c-103).
     await ensure_budget(rt, thread_id, agent)
-    current = (await messages_of(rt, [thread_id]))[thread_id]
+    current = (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]
 
     question = body.content.strip()
     user_message: ChatMessage | None = None
@@ -704,17 +705,14 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         agent_id=agent.id,
         agent_name=agent.name,
     )
-    builder = AssistantBuilder(rt.catalog, assistant)
+    builder = AssistantBuilder(rt.catalog, assistant, titles=await tool_titles(rt))
 
-    # What the person said about themselves is read while the reply is written: the extraction needs only their
-    # message, and run after the reply it held the reply's end back by a whole model call (c-124).
+    # What the person said about themselves is read while the reply is written: the extraction needs only the
+    # messages so far, and run after the reply it held the reply's end back by a whole model call (c-124).
     extraction = (
         asyncio.ensure_future(
-            extract_memories(
-                extractor_for(rt),
-                agent,
-                thread_id=thread_id,
-                message=question,
+            start_learning(
+                rt, me, agent, team_id=str(row["team_id"]), thread_id=thread_id, message=question, history=transcript
             )
         )
         # A test remembers nothing about the builder (c-284).
@@ -739,6 +737,11 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             ) as run:
                 async for e in run:
                     for out in builder.apply_run_event(e):
+                        # The live card says whether this reader may decide it, as the thread read does (c-565): the
+                        # person who asked for a write never sees Approve on it.
+                        w = getattr(out, "widget", None)
+                        if isinstance(w, ApprovalWidget) and w.state in ("pending", "awaiting_second"):
+                            w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
                         yield _frame(out)
         if cut:
             # Told in the reply, and kept in the log so a reload says the same.
@@ -752,8 +755,8 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         await store_summary(rt, thread_id)
         if extraction is not None and not assistant.error:
             # What the person said about themselves is kept for their next chat with this agent (c-124).
-            saved = await save_memories(
-                rt, me, agent, await extraction, team_id=str(row["team_id"]), thread_id=thread_id, run_id=run_id
+            saved = await finish_learning(
+                rt, me, agent, extraction, team_id=str(row["team_id"]), thread_id=thread_id, run_id=run_id
             )
             builder.apply("memory", {"saved": saved})
         if assistant.error:
@@ -768,7 +771,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")
 async def feedback(rt: Rt, me: Me, thread_id: str, message_id: str, body: FeedbackInput) -> JSONResponse:
     row = await _thread_row(rt, me, thread_id)
-    if not any(m.id == message_id for m in (await messages_of(rt, [thread_id]))[thread_id]):
+    if not any(m.id == message_id for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]):
         raise NotFound("Message")
     fb = body.feedback.model_dump(mode="json", exclude_none=True) if body.feedback else None
     await EventLog(graph_store(rt).engine).append(
@@ -789,7 +792,9 @@ async def widget_action(
     step-up for money, the approval token, then the resume, whose reply is a new assistant message. An approver who is
     not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds."""
     await _thread_row(rt, None, thread_id)
-    message = next((m for m in (await messages_of(rt, [thread_id]))[thread_id] if m.id == message_id), None)
+    message = next(
+        (m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id), None
+    )
     widget = next((w for w in (message.widgets or []) if w.id == widget_id), None) if message else None
     if widget is None:
         raise NotFound("Widget")
@@ -813,5 +818,7 @@ async def widget_action(
         step_up_token=action.step_up_token if isinstance(action, ApproveAction) else None,
     )
     await update_meta(rt, thread_id, lastMessageAt=now_iso())
-    decided = next(m for m in (await messages_of(rt, [thread_id]))[thread_id] if m.id == message_id)
+    decided = next(
+        m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id
+    )
     return ok(next(w for w in decided.widgets or [] if w.id == widget_id).wire())

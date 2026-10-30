@@ -3356,6 +3356,18 @@
             "title": "Collection",
             "type": "string"
           },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config"
+          },
           "fileIds": {
             "default": [],
             "items": {

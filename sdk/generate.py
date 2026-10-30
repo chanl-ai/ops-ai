@@ -217,7 +217,8 @@ def generate(out: Path, ref: str | None = None) -> None:
             models = pkg / "models.py"
             subprocess.run(
                 [
-                    "datamodel-codegen",
+                    # Beside the interpreter, so the commit gate (which runs .venv's python off PATH) finds it.
+                    shutil.which("datamodel-codegen") or str(Path(sys.executable).parent / "datamodel-codegen"),
                     "--input", str(spec),
                     "--input-file-type", "openapi",
                     "--output", str(models),

@@ -1,6 +1,6 @@
 # Runner service
 
-Status: first slice built (c-531). runner-service runs on :8770 with no database. tools-service is its only caller.
+Status: first slice built. runner-service runs on :8770 with no database. tools-service is its only caller.
 Design: `the planning repo/docs/plans/ops-ai/data-gateway-spec.md` section c; this page records what is built.
 
 | Item | Detail |

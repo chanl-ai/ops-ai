@@ -73,10 +73,11 @@ await withUiStack(
       const tx = widget('rows').first();
       const titled = (await tx.getAttribute('aria-label')) === 'transactions';
       const paged = (await tx.locator('tbody tr').count()) === 10 && (await tx.getByText('Page 1 of 2').count()) === 1;
-      const stat = (await widget('metric').getByText('3 cases').count()) === 1;
+      // The unit is its own muted span beside the value, spaced by margin, so the text reads 3cases.
+      const stat = /^3\s*cases$/.test((await widget('metric').locator('[data-slot="card-title"]').innerText().catch(() => '')).trim());
       check('the transactions table is titled from its key and paged; the metric shows its value and unit', titled && paged && stat, { titled, paged, stat });
 
-      const profileCard = page.getByTestId('chat-tool-call').filter({ hasText: 'account_profile' });
+      const profileCard = page.getByTestId('chat-tool-call').filter({ hasText: 'Account profile' });
       const cards = await page.getByTestId('chat-tool-call').count();
       check('an answer that fits no shape stays a tool card with no widget', (await profileCard.count()) === 1 && cards === ASK.length && (await page.getByTestId('widget').count()) === 6, { profile: await profileCard.count(), cards, widgets: await page.getByTestId('widget').count() });
 

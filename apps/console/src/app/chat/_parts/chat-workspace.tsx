@@ -7,14 +7,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Archive, ArchiveRestore, Bot, Brain, Link2, MessageSquareDashed, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { ChatLayout, ChatRailButton } from '@/components/chat/chat-layout';
+import { ChatLayout } from '@/components/chat/chat-layout';
 import { ChatHome } from './chat-home';
 import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
 import { ThreadSettingsButton } from '@/components/chat/thread-settings';
 import { MemorySheet } from '@/components/memory/memory-sheet';
 import { ThreadMessages, visibleMessages } from '@/components/chat/thread-messages';
 import { useThreadActions } from '@/components/chat/use-thread-actions';
-import { ThreadRail } from '@/components/chat/thread-rail';
 import { DocumentPanel } from '@/components/knowledge/document-panel';
 import { RetrievalTraceView } from '@/components/knowledge/retrieval-trace';
 import { DetailSheet } from '@/components/shared/detail-sheet';
@@ -48,22 +47,11 @@ import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatc
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
 const ALL = { page: 1, pageSize: 100 };
-const RAIL_PAGE = 30;
 
 export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const me = useCurrentPerson().name || undefined;
-  const [railOpen, setRailOpen] = React.useState(false);
-  const [search, setSearch] = React.useState('');
-  const [debounced, setDebounced] = React.useState('');
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(search), 250);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const rail = useChatThreadPages({ pageSize: RAIL_PAGE, search: debounced || undefined, filters: { state: ['active', 'pinned'] } });
-  const railThreads = React.useMemo(() => rail.data?.pages.flatMap((p) => p.data), [rail.data]);
   const thread = useChatThread(threadId);
   const agents = useChatAgents();
   const kbList = useKnowledgeBases(ALL);
@@ -74,7 +62,6 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
     const own = agents.data?.find((a) => a.id === agentId)?.kbs;
     return own ? own.map((k) => ({ id: k.id, name: k.name, color: kbs.find((x) => x.id === k.id)?.color ?? 'teal' })) : kbs;
   }, [agents.data, kbs]);
-  const streamingIds = useStreamingThreadIds();
   const live = useLiveTurn(threadId);
   const chat = useSendMessage();
   // Replies keep streaming while the person moves between conversations, and stop when they leave chat altogether.
@@ -109,36 +96,11 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const archive = (t: Pick<ChatThreadRow, 'id' | 'title' | 'archived'>) =>
     patchThread(t.id, { archived: !t.archived, ...(t.archived ? {} : { pinned: false }) }, t.archived ? `Restored ${t.title}` : `Archived ${t.title}`, { archived: t.archived });
 
-  const railNode = (
-    <ThreadRail
-      threads={railThreads}
-      loading={rail.isPending}
-      hasMore={rail.hasNextPage}
-      loadingMore={rail.isFetchingNextPage}
-      onLoadMore={() => rail.fetchNextPage()}
-      error={rail.isError ? rail.error.message : undefined}
-      onRetry={() => rail.refetch()}
-      activeId={threadId}
-      streamingIds={streamingIds}
-      search={search}
-      onSearch={setSearch}
-      onNew={() => {
-        setRailOpen(false);
-        router.push('/chat');
-      }}
-      onNavigate={() => setRailOpen(false)}
-      onRename={(t, title) => patchThread(t.id, { title })}
-      onTogglePin={(t) => patchThread(t.id, { pinned: !t.pinned }, t.pinned ? 'Unpinned' : 'Pinned')}
-      onArchive={archive}
-      onDelete={setDeleting}
-    />
-  );
-
   const actions = useThreadActions(threadId, thread);
   const copy = actions.copy;
 
   return (
-    <ChatLayout rail={railNode} railOpen={railOpen} onRailOpenChange={setRailOpen}>
+    <ChatLayout>
       {actions.stepUpDialog}
       {threadId ? (
         <ThreadView
@@ -170,12 +132,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           agents={agents}
           me={me}
           initialAgentId={searchParams.get('agent') ?? undefined}
-          header={
-            <>
-              <ChatRailButton />
-              <span className="px-1 text-sm font-semibold">New chat</span>
-            </>
-          }
+          header={<span className="px-1 text-sm font-semibold">New chat</span>}
           creating={create.isPending}
           onStart={async (agentId, kbIds, text, attachments) => {
             try {
@@ -285,7 +242,6 @@ function ThreadView({
     return (
       <>
         <header className="flex min-h-12 items-center gap-2 border-b px-3 py-2">
-          <ChatRailButton />
           <span className="px-1 text-sm font-semibold">Chat not found</span>
         </header>
         <div className="flex flex-1 items-center justify-center p-6">
@@ -303,7 +259,6 @@ function ThreadView({
   return (
     <>
       <header className="flex min-h-12 flex-wrap items-center gap-2 border-b px-3 py-2">
-        <ChatRailButton />
         <div className="min-w-0 flex-1">
           {t && editingTitle ? (
             <Input
@@ -436,6 +391,7 @@ function ThreadView({
             </Alert>
           )}
           <Composer
+            draftKey={t.id}
             placeholder={`Message ${t.agentName}… Type @ to hand the chat to another agent.`}
             mentions={agents.filter((a) => a.id !== t.agentId).map((a) => ({ id: a.id, name: a.name, role: a.role }))}
             onMention={(a) => handTo(a)}

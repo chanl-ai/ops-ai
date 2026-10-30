@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-30",
+  "title": "A tool fills its query placeholders",
+  "description": "A tool operation whose address held a placeholder in the query, such as ?email={email}, sent the placeholder itself instead of the value. It now sends the value, and leaves the parameter out when no value is given.",
+  "tag": "fix",
+  "cards": ["c-586"]
+}

@@ -2,7 +2,6 @@
   "rawTable": [
     "src/app/document-types/[id]/page.tsx",
     "src/app/model-risk/[id]/page.tsx",
-    "src/app/page.tsx",
     "src/app/settings/team/notifications/page.tsx",
     "src/app/settings/workspace/storage/page.tsx",
     "src/app/skills/[id]/_parts/activity-tab.tsx",
@@ -40,8 +39,7 @@
     "src/components/tools/input-schema-editor.tsx",
     "src/components/tools/operations-table.tsx",
     "src/components/tools/versions-panel.tsx",
-    "src/components/workflows/run-journal/step-sheet.tsx",
-    "src/components/workflows/test-cases.tsx"
+    "src/components/workflows/run-journal/step-sheet.tsx"
   ],
   "statusBadge": [
     "src/components/agents/template-meta.tsx",
@@ -50,8 +48,7 @@
     "src/components/knowledge/knowledge-meta.tsx",
     "src/components/skills/skill-meta.tsx",
     "src/components/tools/module-meta.tsx",
-    "src/components/widgets/widget-status-badge.tsx",
-    "src/components/workflows/run-trace.tsx"
+    "src/components/widgets/widget-status-badge.tsx"
   ],
   "chatRenderer": [
     "src/app/dev/chat-default-agent/page.tsx",

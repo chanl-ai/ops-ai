@@ -136,7 +136,7 @@ export function DataTableToolbar<TData>({
             placeholder={searchPlaceholder}
             value={(table.getColumn(searchColumn)?.getFilterValue() as string) ?? ''}
             onChange={(event) => table.getColumn(searchColumn)?.setFilterValue(event.target.value)}
-            className="h-8 w-full sm:w-[140px] lg:w-[190px] sm:focus:w-[240px] lg:focus:w-[300px] transition-all bg-card"
+            className="h-8 w-full sm:w-48 lg:w-72 sm:focus:w-60 lg:focus:w-80 transition-all bg-card"
             data-testid="data-table-search"
           />
         )}

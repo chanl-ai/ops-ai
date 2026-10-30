@@ -46,3 +46,62 @@ def test_an_isolated_reset_of_the_shared_database_is_refused_before_anything_run
     out = dry_run("reset-db", "ISOLATED=1", "CONFIRM=yes", f"OPS_DATABASE_URL={SHARED}", env={})
     assert out.returncode != 0 and "reset-db refused" in out.stderr, out.stdout + out.stderr
     assert "stop-for-reset" not in out.stdout, out.stdout
+
+
+def project(root: Path) -> str:
+    """The compose project `make ports ISOLATED=1` names when run from `root`."""
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE"))}
+    out = subprocess.run(
+        ["make", "-s", "-f", str(root / "make/env.mk"), "-f", str(root / "make/dev.mk"), "ports", "ISOLATED=1"],
+        cwd=root,
+        env=clean,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.stdout.split("compose project ", 1)[1].split()[0]
+
+
+def test_two_checkouts_never_share_one_isolated_compose_project(tmp_path: Path) -> None:
+    # One shared name let `make db-down ISOLATED=1` in one checkout remove the stack a run in another was using.
+    other = tmp_path / "ops-ai-other"
+    (other / "make").mkdir(parents=True)
+    for name in ("make/env.mk", "make/dev.mk"):
+        (other / name).write_text((ROOT / name).read_text())
+    ours, theirs = project(ROOT), project(other)
+    assert ours.startswith("ops-runtime-isolated-") and theirs.startswith("ops-runtime-isolated-"), (ours, theirs)
+    assert ours != theirs and project(ROOT) == ours, (ours, theirs)
+
+
+def copy_checkout(dest: Path) -> Path:
+    """Another checkout of this repository: the Makefile and make/ are all `make -n` reads."""
+    (dest / "make").mkdir(parents=True)
+    (dest / "Makefile").write_text((ROOT / "Makefile").read_text())
+    for mk in (ROOT / "make").glob("*.mk"):
+        (dest / "make" / mk.name).write_text(mk.read_text())
+    return dest
+
+
+def test_a_second_checkout_cannot_act_on_the_shared_stack(tmp_path: Path) -> None:
+    # A worktree's `make up` whose ISOLATED=1 was lost (a zsh word list that did not split) migrated the shared
+    # database to the worktree's branch and stopped the shared tools-service.
+    record = tmp_path / "shared-root"
+    record.write_text(f"{ROOT}\n")
+    other = copy_checkout(tmp_path / "ops-ai-worktree")
+    env = {"OPS_SHARED_ROOT_FILE": str(record)}
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE"))}
+
+    def run(where: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["make", "-n", *args], cwd=where, env={**clean, **env}, capture_output=True, text=True, check=False
+        )
+
+    # Starting the shared Postgres and OPA is safe from anywhere (a fixed compose project, --no-recreate, nothing
+    # migrated): a test target from an export runs it first.
+    assert "the shared stack runs from" not in run(other, "db-up").stderr
+    assert "the shared stack runs from" in run(other, "migrate").stderr
+    refused = run(other, "up")
+    assert refused.returncode != 0 and "the shared stack runs from" in refused.stderr, refused.stderr
+    assert "docker compose" not in refused.stdout and "migrate" not in refused.stdout, refused.stdout
+    assert "the shared stack runs from" not in run(other, "up", "ISOLATED=1").stderr
+    assert "the shared stack runs from" not in run(ROOT, "ports").stderr

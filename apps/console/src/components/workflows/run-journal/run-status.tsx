@@ -7,6 +7,7 @@ const TONE: Record<string, string> = {
   failed: 'border-destructive/40 bg-destructive/10 text-destructive',
   error: 'border-destructive/40 bg-destructive/10 text-destructive',
   waiting: 'border-warning/40 bg-warning/10 text-warning-text',
+  stuck: 'border-warning/40 bg-warning/10 text-warning-text',
   cancelled: 'border-border bg-muted text-muted-foreground',
 };
 

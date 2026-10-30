@@ -1,6 +1,6 @@
 # Follow an email from arrival to every case it opened
 
-Status: current. Id: `uc-477`. Service: `console` on agents-service, files-service and documents-service. Layers: ui. Card: c-477.
+Status: current. Id: `uc-477`. Service: `console` on agents-service, files-service and documents-service. Layers: ui. Card: an earlier change.
 
 A person opens an email-started run and reads what happened without JSON. The run page tells the run from its steps'
 output shapes (`story` on `GET /v1/runs/{id}`): the email it began with, each document a read step read beside the
@@ -33,5 +33,5 @@ when the shared `ops_usecase` database holds rows an older checkout wrote.
 ## Non-vacuous check
 
 Run before the change (at fda74a2f), steps 2 to 5 failed: no Email section, no rows named by debtor, no read on the
-document run's page, Jordan Whitfield ending with no task (card c-477's red run). With the change all
+document run's page, Jordan Whitfield ending with no task (card an earlier change's red run). With the change all
 six pass (its green run).

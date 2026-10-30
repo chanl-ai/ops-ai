@@ -1,12 +1,12 @@
 # A viewer sees the team's records read-only
 
-Status: current. Id: `uc-099`. Service: `console`. Layers: api, ui. Cards: c-109 (console), c-115 (services).
+Status: current. Id: `uc-099`. Service: `console`. Layers: api, ui. Cards: an earlier change (console), an earlier change (services).
 
 A viewer reads the team's agents, workflows, skills, guardrails, widgets, tools and knowledge bases but cannot change them. The
-console reads what `can()` grants each person on the team from platform-service (`GET /v1/me/permissions`, c-186) and
+console reads what `can()` grants each person on the team from platform-service (`GET /v1/me/permissions`) and
 shows create, edit, publish, pause and delete only to someone it lets edit the team's records; a viewer sees the same pages with record forms disabled and a "View only"
 notice. agents-service and kb-service refuse the same writes from a viewer or reviewer with 403 `role_required`
-(c-115), so an API caller meets the rule the console shows. Design: [roles and permissions](../platform-service/roles-and-permissions.md).
+(an earlier change), so an API caller meets the rule the console shows. Design: [roles and permissions](../platform-service/roles-and-permissions.md).
 
 ## Preconditions
 
@@ -41,5 +41,5 @@ Each script starts its own stack with platform sign-in; no model key is needed.
 
 Step 3 is the control in the same run: the buttons step 1 counts absent are present for a builder. Making
 `useCanBuild` (`apps/console/src/hooks/me-queries.ts`) return true for every role fails step 1. Step 7 is the api
-layer's control: the same bodies pass for a builder. Before c-115 the services took every write in step 6 from a viewer
-(quality-loop tick 7, A1), and with the role rule removed the c-115 suites fail on every route.
+layer's control: the same bodies pass for a builder. Before an earlier change the services took every write in step 6 from a viewer
+(quality-loop tick 7, A1), and with the role rule removed the an earlier change suites fail on every route.

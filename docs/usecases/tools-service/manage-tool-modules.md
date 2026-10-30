@@ -19,10 +19,10 @@ Status: current. Id: `uc-010`. Service: `tools-service`. Layers: api, ui.
 | 4 | List the host under `/v1/egress/hosts`, then add the operation again | 200, the module lists the operation |
 | 5 | `POST .../reviews` | the draft moves to `in_review` |
 | 6 | Change a rate limit on Core banking and publish | the next minor version is published |
-| 7 | Request a workflow approval, then try to decide it on the module | 201 naming its run (`tool_access.requested:<id>`), then 409 `decided_in_reviews`; the decision is uc-053's (c-257) |
+| 7 | Request a workflow approval, then try to decide it on the module | 201 naming its run (`tool_access.requested:<id>`), then 409 `decided_in_reviews`; the decision is uc-053's |
 | 8 | Restart tools-service and read both modules again | the draft, its operation and the open request are still there |
 
-Editing a published operation's call (c-027), against the https fake bank through `/v1/calls`:
+Editing a published operation's call, against the https fake bank through `/v1/calls`:
 
 | # | Step | Expected |
 |---|---|---|

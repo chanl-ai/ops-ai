@@ -296,7 +296,7 @@ class PolicyOut(TypedDict, closed=True):
     default: bool | int | float | dict[str, Any] | None
     effect: str
     key: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins"]
     title: str
     value: bool | int | float | dict[str, Any] | None
 

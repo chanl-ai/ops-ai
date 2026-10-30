@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
@@ -18,8 +17,10 @@ from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor
 from ops_agents.graphs.checkpointer import open_checkpointer
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.registry import build_graphs
+from ops_agents.store.tenancy import LOCAL_TENANT
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from tests.conftest import SEED, FakeGraphModels, scripted_model
 from tests.knowledge_fixture import KeywordPassageStore
 
@@ -34,10 +35,15 @@ def deps() -> GraphDeps:
     return GraphDeps(catalog, ports, FakeGraphModels(), LocalReplySender(), "test-model")
 
 
-@pytest.mark.usefixtures("local_tenant")
 async def test_interrupt_survives_restart() -> None:
     url = Settings().database_url
     config: RunnableConfig = {"configurable": {"thread_id": new_id("restart")}}
+    # As a run acts: as its thread's team, which every checkpoint write needs.
+    with isolation.scope(LOCAL_TENANT, "team_ops"):
+        await _pause_then_resume(url, config)
+
+
+async def _pause_then_resume(url: str, config: RunnableConfig) -> None:
     async with open_checkpointer(url) as saver:
         graph = build_graphs(deps(), saver)["complex_workflow"]
         await graph.ainvoke({"email": EMAIL}, config)

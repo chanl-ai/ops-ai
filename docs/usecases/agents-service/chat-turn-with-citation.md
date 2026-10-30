@@ -25,6 +25,8 @@ The script starts its own services on the scripted model; no model key is needed
 |---|---|---|
 | api | `agents-service/scripts/test-uc-001-api.py` | passing |
 
+In the console: uc-074's ui script: the cited answer streams into the chat with its marker drawn as a citation, which opens the source passage at its section.
+
 ## Non-vacuous check
 
 `citation [1] points at doc_wire_limits`: only a retrieval hit on the seed knowledge base produces that document id. Seen failing by pointing the thread at a knowledge base without that document.

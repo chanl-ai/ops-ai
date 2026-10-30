@@ -4,6 +4,7 @@ does for that same person."""
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 from httpx import AsyncClient
@@ -137,3 +138,21 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
     assert await flag(c, f"/reviews/{req['id']}", "canDecide", strict) is False
     decided = await c.post(f"/v1/publish-requests/{req['id']}/decision", json={"decision": "approved"}, headers=strict)
     assert decided.status_code == 403, decided.text
+
+
+async def test_the_streamed_approval_says_whether_the_asker_may_decide(stack: tuple[AsyncClient, AsyncEngine]) -> None:  # noqa: F811
+    """The live card showed Approve to the person who asked for the write, until a reload (c-565): the streamed widget
+    carries canDecide as the route decides it, as the thread read does."""
+    c, _ = stack
+    tid = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=BUILDER)).json()["data"][
+        "id"
+    ]
+    streamed = await c.post(
+        f"/chat/threads/{tid}/messages", json={"content": WRITE}, headers={**BUILDER, "Accept": "text/event-stream"}
+    )
+    events = [json.loads(line[5:]) for line in streamed.text.splitlines() if line.startswith("data:")]
+    cards = [e["widget"] for e in events if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    assert cards and cards[-1].get("canDecide") is not None, cards
+    res = await c.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=BUILDER)
+    allowed = cards[-1]["canDecide"]
+    assert (allowed and res.status_code == 200) or (not allowed and res.status_code == 403), (allowed, res.text)

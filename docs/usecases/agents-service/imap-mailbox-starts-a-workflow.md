@@ -1,6 +1,6 @@
 # An email in an IMAP mailbox starts a workflow
 
-Status: current. Id: `uc-192`. Service: `agents-service`. Layers: api. Card: c-192.
+Status: current. Id: `uc-192`. Service: `agents-service`. Layers: api. Card: an earlier change.
 
 A team mailbox read over IMAP, its password a Secrets-page secret that only tools-service reads. The worker asks
 tools-service's `/v1/mailboxes` for new mail (IDLE, with the poll as fallback) and starts one run per matching message,
@@ -18,7 +18,7 @@ attachments in Files first. GreenMail in compose plays the mailbox; a real Gmail
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Sam adds the secret for team_ops, the host `mail.harborpine.test` and this machine's address as a range | 201, or 200/409 when already there |
+| 1 | James adds the secret on Operations' Secrets page; Sam adds the host `mail.harborpine.test` and this machine's address as a range | 201, or 200/409 when already there |
 | 2 | James opens the mailbox picker | `intake@harborpine.test` shows as `team_ops · IMAP` |
 | 3 | James saves and publishes a workflow bound to it | 201 |
 | 4 | Mail sent before the first pass | No run |
@@ -35,6 +35,8 @@ first pass and IDLE are `services/agents-service/tests/engine/test_email_trigger
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-192-api.py` | passing |
+
+In the console: uc-245's ui script: the mailbox is connected and tested on Channels › Email, and an email to it starts one run.
 
 ## Non-vacuous check
 

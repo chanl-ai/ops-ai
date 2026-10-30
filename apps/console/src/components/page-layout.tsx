@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createElement, isValidElement } from 'react';
+import { createElement, isValidElement, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
 import { TitleSwitcher } from '@/components/shared/title-switcher';
+import { SampleOnPage } from '@/components/shared/sample-data';
 import { WholeTokens } from '@/components/shared/whole-tokens';
 import { usePreview } from '@/hooks/use-preview';
 import {
@@ -46,6 +47,8 @@ interface PageLayoutProps {
   // Metadata
   badge?: ReactNode;
   tabs?: ReactNode;
+  /** Overrides the page's own preview check, for a page that reads a real service where its area does not. */
+  preview?: boolean;
   /** List pages of a sidebar section: the title becomes a menu of the section's pages (TitleSwitcher). */
   switcher?: boolean;
 
@@ -75,6 +78,7 @@ export function PageLayout({
   breadcrumbs,
   badge,
   tabs,
+  preview: previewProp,
   switcher,
   backHref,
   onTitleClick,
@@ -82,7 +86,11 @@ export function PageLayout({
   className,
 }: PageLayoutProps) {
   const { bulkState, ctxValue } = useBulkSelectionProvider();
-  const preview = usePreview();
+  const previewOfArea = usePreview();
+  // A sample section anywhere on the page counts too: its area may be live while that section is not.
+  const [samples, setSamples] = useState(0);
+  const reportSample = useCallback((change: 1 | -1) => setSamples((n) => n + change), []);
+  const preview = previewProp ?? (previewOfArea || samples > 0);
 
   const renderIcon = () => {
     if (!icon) return null;
@@ -159,10 +167,11 @@ export function PageLayout({
       );
     }
 
-    return actions ? <div className="flex items-center gap-2">{actions}</div> : null;
+    return actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null;
   };
 
   return (
+    <SampleOnPage.Provider value={reportSample}>
     <BulkSelectionContext.Provider value={ctxValue}>
       <div className={cn('flex flex-col h-full space-y-4 px-6 lg:px-8 py-6', className)}>
         {/* Breadcrumbs */}
@@ -202,10 +211,10 @@ export function PageLayout({
                   className="group relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg shadow-sm border text-muted-foreground bg-card transition-colors hover:border-primary/30 hover:text-primary"
                   data-testid="page-back-icon"
                 >
-                  <span className="transition-opacity duration-150 group-hover:opacity-0">
+                  <span className="transition-opacity duration-150 group-hover:opacity-0 pointer-coarse:opacity-0">
                     {renderIcon()}
                   </span>
-                  <ArrowLeft className="absolute h-6 w-6 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+                  <ArrowLeft className="absolute h-6 w-6 opacity-0 transition-opacity duration-150 group-hover:opacity-100 pointer-coarse:opacity-100" />
                 </Link>
               ) : (
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg shadow-sm border text-muted-foreground bg-card">
@@ -247,7 +256,7 @@ export function PageLayout({
               )}
               {description && (
                 <div
-                  className="text-sm text-muted-foreground line-clamp-1 wrap-break-word mt-0.5 [contain:inline-size]"
+                  className="text-sm text-muted-foreground sm:line-clamp-2 wrap-break-word mt-0.5 [contain:inline-size]"
                   title={typeof description === 'string' ? description : undefined}
                   data-testid="page-description"
                 >
@@ -259,7 +268,15 @@ export function PageLayout({
                   className="flex flex-wrap items-center gap-2 gap-y-1 mt-2 [contain:inline-size]"
                   data-testid="page-badges"
                 >
-                  {preview && <PreviewBadge />}
+                  {preview && (
+                    // The reason in words, not only on hover: a touch screen never shows the badge's title.
+                    <>
+                      <PreviewBadge />
+                      <span className="text-xs text-muted-foreground" data-testid="preview-reason">
+                        Parts of this page show sample data that isn’t stored yet, so they are read only.
+                      </span>
+                    </>
+                  )}
                   {badge}
                 </div>
               )}
@@ -271,7 +288,7 @@ export function PageLayout({
         </div>
 
         {/* Tabs (if provided) */}
-        {tabs && <div className="pt-2">{tabs}</div>}
+        {tabs && <div className="max-w-full overflow-x-auto pt-2 [scrollbar-width:thin] [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
 
         {/* Content */}
         {/* px-1 / -mx-1 gives cards breathing room so borders & focus rings
@@ -280,5 +297,6 @@ export function PageLayout({
         <div className={cn('flex-1 px-1 -mx-1', contentClassName)}>{children}</div>
       </div>
     </BulkSelectionContext.Provider>
+    </SampleOnPage.Provider>
   );
 }

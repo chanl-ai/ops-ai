@@ -28,6 +28,8 @@ from fastapi import Header, Request
 from ops_policy import Ed25519Signer, Ed25519Verifier, TokenError, header_of, mint, verify
 from ops_service_kit.errors import Forbidden, Unauthorized, ValidationFailed
 
+from .acting_for import ActingForPerson, person_of
+from .acting_for import refused as acting_for_refused
 from .jwks import JwksCache, JwksFetch
 from .principal import Principal
 
@@ -112,6 +114,25 @@ class Identity:
         if self.services is not None and self.services.signs(token):
             raise _refused()
         return await self._from_token(token, team)
+
+    async def acting_for(self, token: str, caller: Principal) -> ActingForPerson:
+        """The person `caller` (a service) says its call acts for, from the acting-for token platform-service signed
+        (c-558): its own `kind`, minted for this service, in the call's tenant and team. In dev a token the calling
+        service signed itself is accepted instead, since no platform-service runs; a platform stack never takes one."""
+        if caller.kind != "service":
+            raise acting_for_refused("only a service call names whom it acts for")
+        try:
+            kid = str(header_of(token).get("kid", ""))
+            verifier = await self.keys.verifier(kid)
+            if verifier is None and self.dev_user is not None and self.services is not None:
+                trusted = self.services.verifiers.get(kid)
+                verifier = trusted[0] if trusted is not None else None
+            if verifier is None:
+                raise acting_for_refused("it is not signed by platform-service")
+            claims = verify(token, verifier)
+        except TokenError as e:
+            raise acting_for_refused("it does not verify") from e
+        return person_of(claims, service=caller.sub, tenant_id=caller.tenant_id, team_id=caller.team_id)
 
     def _from_service(self, token: str, team: str | None) -> Principal:
         """A service on a public route acts in the one team its signed token names; a header never widens it."""

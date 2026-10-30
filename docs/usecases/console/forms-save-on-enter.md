@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-097`. Service: `console`. Layers: ui.
 
-Card c-106: `DialogShell` and `SettingsSection` take `onSubmit` and render a `<form>`, so Enter in a field saves the
+Card an earlier change: `DialogShell` and `SettingsSection` take `onSubmit` and render a `<form>`, so Enter in a field saves the
 way the save button does, and every other button in them is `type="button"` so it never submits.
 
 ## Preconditions
@@ -23,7 +23,7 @@ way the save button does, and every other button in them is `type="button"` so i
 | 5 | On Account, which is sample data (uc-125), he presses Enter in the name field | the field is off and nothing is saved or claimed saved |
 
 Settings that save a new version on each save (Storage, Notifications) do not save on Enter; their Save button is the
-only way to create a version, and [uc-106](lists-preview-and-versioned-saves.md) covers it (c-114).
+only way to create a version, and [uc-106](lists-preview-and-versioned-saves.md) covers it.
 
 ## Acceptance layers
 

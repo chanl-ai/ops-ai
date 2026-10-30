@@ -178,6 +178,14 @@ class Runs(Resource):
     def cancel(self, run_id: str) -> Any:
         return self._raw.agents.workflows_cancel_engine_run(run_id)
 
+    def retry(self, run_id: str) -> Any:
+        """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
+        return self._raw.agents.workflows_retry_engine_run(run_id)
+
+    def run_set_aside_email(self, event_id: str) -> Any:
+        """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
+        return self._raw.agents.workflows_run_set_aside_email(event_id)
+
 
 class AsyncRuns(AsyncResource):
     async def start(self, workflow_id: str, *, input: dict[str, Any] | None = None, **fields: Any) -> Any:
@@ -199,6 +207,14 @@ class AsyncRuns(AsyncResource):
 
     async def cancel(self, run_id: str) -> Any:
         return await self._raw.agents.workflows_cancel_engine_run(run_id)
+
+    async def retry(self, run_id: str) -> Any:
+        """Queues a Stuck run again from its last recorded step; nothing it sent is sent again."""
+        return await self._raw.agents.workflows_retry_engine_run(run_id)
+
+    async def run_set_aside_email(self, event_id: str) -> Any:
+        """Starts the run of an email the mailbox listener set aside, under the email's own run key."""
+        return await self._raw.agents.workflows_run_set_aside_email(event_id)
 
 
 class Tasks(Resource):

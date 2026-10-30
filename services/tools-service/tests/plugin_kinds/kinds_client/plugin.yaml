@@ -1,0 +1,23 @@
+
+schema: ops-ai/plugin@2
+id: test.client
+title: Client desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [oauth2_client_credentials]
+  token_url: "{login_url}/token"
+  scopes: [{ id: api, label: Read records, required: true }]
+  sign_in: [team]
+  health_check: { path: "/cc/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+  login_url: { type: string, title: Sign-in address, default: "https://login.multi.test/salesforce" }
+egress: ["{base_url}"]
+endpoint: "{base_url}/cc"
+tools:
+  - name: get_record
+    title: Read a record
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }

@@ -1,6 +1,6 @@
 # Starting a run, and reading a run and a case
 
-Status: current. Id: `uc-228`. Service: `console` on agents-service. Layers: ui. Card: c-266.
+Status: current. Id: `uc-228`. Service: `console` on agents-service. Layers: ui. Card: an earlier change.
 
 A run starts from the workflow list or from the editor, and a run and a case each open on their own page. The walk
 opens each surface and keeps a screenshot of it, so a refactor of the dialogs or the detail layout can be compared side

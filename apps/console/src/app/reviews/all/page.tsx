@@ -12,7 +12,6 @@ import { isOpen, type ReviewRow, reviewColumns } from '@/components/reviews/revi
 import { StepUpCancelled } from '@/components/auth/reauth-dialog';
 import { DecidedBy, ReviewDetailBody } from '@/components/reviews/review-detail';
 import { type ReadEdits, useReadConfirmations } from '@/components/reviews/document-read';
-import { RunStateDetail } from '@/components/cases/run-state';
 import { BulkDecisionDialog } from '@/components/reviews/bulk-decision-dialog';
 import { ReviewsPageLayout } from '@/components/reviews/reviews-page-layout';
 import { TaskDecision } from '@/components/reviews/task-decision';
@@ -21,7 +20,7 @@ import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { KIND_LABEL, ReviewStatusBadge, RiskBadge } from '@/components/status-badges';
 import { KindView } from '@/components/chat/widgets/kind-view';
@@ -29,7 +28,6 @@ import { TaskDecide } from '@/components/tasks/task-page';
 import { taskView } from '@/components/tasks/task-regions';
 import { Button } from '@/components/ui/button';
 import { useAssignReviews, useBulkDecideReviews, useLookups, useReview, useReviewByRunKey, useReviews } from '@/hooks/queries';
-import { useRunState } from '@/hooks/case-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
@@ -98,10 +96,6 @@ export default function AllTasksPage() {
     toast.error('That task wasn’t found or is closed', { description: 'It may have been decided already, or it belongs to another team.' });
     setActiveId(null);
   }, [missing, setActiveId]);
-  // A workflow's paused step is a thread: its state holds what the run read and wrote (the record a step is about),
-  // drawn beside the review the way the Cases sheet draws it. What the step offers comes from the row itself.
-  // A graph-thread review's id is its thread; a runner review (`wfrun_…:<step>:<n>`) has no thread state to read.
-  const runState = useRunState(active && active.origin?.kind === 'workflow' && active.kind === 'approval' && !active.id.startsWith('wfrun_') ? active.id : null);
   const options = active?.options ?? undefined;
   // The same regions and words as the task's own page (c-289); a type with none keeps today's body.
   const task = React.useMemo(() => (active ? taskView(active) : null), [active]);
@@ -178,10 +172,10 @@ export default function AllTasksPage() {
           <SavedViewTabs
             ariaLabel="Review views"
             presets={[
-              { id: 'mine', label: `Assigned to me · ${counts?.mine ?? 0}` },
-              { id: 'open', label: `All open · ${counts?.open ?? 0}`, icon: Inbox },
-              { id: 'overdue', label: `Past SLA · ${counts?.overdue ?? 0}`, icon: Clock },
-              { id: 'resolved', label: `Resolved · ${counts?.resolved ?? 0}` },
+              { id: 'mine', label: countLabel('Assigned to me', counts?.mine) },
+              { id: 'open', label: countLabel('All open', counts?.open), icon: Inbox },
+              { id: 'overdue', label: countLabel('Past SLA', counts?.overdue), icon: Clock },
+              { id: 'resolved', label: countLabel('Resolved', counts?.resolved) },
             ]}
             savedViews={[]}
             activePresetId={view}
@@ -404,7 +398,6 @@ export default function AllTasksPage() {
                 checks={isOpen(active) && active.canDecide !== false ? checks : undefined}
               />
             )}
-            {runState.data && <RunStateDetail runId={active.id} state={runState.data} isPending={false} isError={false} onRetry={() => runState.refetch()} />}
             <TaskDecision review={active} view={task} checks={checks} decider={decider} me={me} owners={lookups?.owners ?? []} platformTeam={team?.scope === 'all'} layout="sheet">
               {({ choice, decide }) => (
                 <>

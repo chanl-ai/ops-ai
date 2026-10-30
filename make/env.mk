@@ -14,15 +14,38 @@ export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)
 
 # ISOLATED=1 runs a second stack beside the first: every port +1000, its own compose project and data volume, its own
-# logs and pids, so two checkouts or two sessions do not fight over :8700 or one database.
+# logs and pids, so two checkouts or two sessions do not fight over :8700 or one database. The project name carries a
+# checksum of this checkout's path: with one name for every checkout, `make db-down ISOLATED=1` in one removed the
+# stack a run in another was using. Two checkouts' isolated stacks still use the same ports, so a second one's `up`
+# fails on a taken port rather than joining the first.
 ifeq ($(ISOLATED),1)
   OPS_PORT_OFFSET := 1000
   OPS_STACK := isolated
-  OPS_COMPOSE_PROJECT := ops-runtime-isolated
+  OPS_COMPOSE_PROJECT := ops-runtime-isolated-$(shell printf '%s' '$(ROOT)' | cksum | cut -d' ' -f1)
 else
   OPS_PORT_OFFSET := 0
   OPS_STACK := shared
   OPS_COMPOSE_PROJECT := ops-runtime
+endif
+
+# One checkout runs the shared stack; its path is recorded in OPS_SHARED_ROOT_FILE by its first `make up`. A target
+# that starts the services, stops, migrates or seeds the stack refuses to run from any other checkout unless ISOLATED=1
+# (db-up is allowed: it only starts the shared Postgres and OPA under the fixed project, --no-recreate): a worktree
+# whose ISOLATED=1 was lost (a zsh word list that did not split) migrated the shared database to its branch and stopped
+# the shared tools-service. To move the shared stack to another checkout, delete the file and run `make up` there.
+OPS_SHARED_ROOT_FILE ?= $(HOME)/.config/ops-ai/shared-root
+STACK_GOALS := up down restart migrate reset-db db-down db-reset sample-team demo demo-walk demo-model
+ifeq ($(OPS_STACK),shared)
+  ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
+    SHARED_ROOT := $(shell cat '$(OPS_SHARED_ROOT_FILE)' 2>/dev/null)
+    ifeq ($(SHARED_ROOT),)
+      ifneq ($(filter up,$(MAKECMDGOALS)),)
+        $(shell mkdir -p '$(dir $(OPS_SHARED_ROOT_FILE))' && printf '%s\n' '$(ROOT)' > '$(OPS_SHARED_ROOT_FILE)')
+      endif
+    else ifneq ($(SHARED_ROOT),$(ROOT))
+      $(error refused: the shared stack runs from $(SHARED_ROOT), and this checkout is $(ROOT). Add ISOLATED=1 for a stack of its own; to move the shared stack here, delete $(OPS_SHARED_ROOT_FILE) and run make up)
+    endif
+  endif
 endif
 
 # Every port is overridable from the environment or the make command line (`make up OPS_AGENTS_PORT=8750`); the

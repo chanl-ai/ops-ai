@@ -90,3 +90,15 @@ export function sweepFinished(root: string, env: NodeJS.ProcessEnv): Promise<boo
     child.on('close', (code) => done(code === 0));
   });
 }
+
+/** Rebuilds a database the caller named when any migration chain it records is not this checkout's head
+ * (docs/usecases/lib/usecase_db.py): migrating a use-case database in place stops every script at start on a row the
+ * newer chain refuses. A database the run names itself is new and is never passed here. A failure only warns. */
+export function rebuildIfStale(root: string, env: NodeJS.ProcessEnv, name: string): Promise<boolean> {
+  return new Promise((done) => {
+    const argv = ['run', '--quiet', '--project', root, 'python', join(root, 'docs/usecases/lib/usecase_db.py'), pgUrl(name, 'postgresql+asyncpg', env)];
+    const child = spawn('uv', argv, { env, stdio: ['ignore', 'inherit', 'inherit'] });
+    child.on('error', () => done(false));
+    child.on('close', (code) => done(code === 0));
+  });
+}

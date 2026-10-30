@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-090`. Service: `console`. Layers: ui.
 
-c-073 in one run, signed in as the seeded people: a builder changes what an agent may send to an operation, its
+an earlier change in one run, signed in as the seeded people: a builder changes what an agent may send to an operation, its
 access and its step-up, sees which secrets it reads, and every change is staged as major or minor by what it changes
 for the agent. The design is [tool lifecycle](../../architecture/tool-lifecycle.md).
 

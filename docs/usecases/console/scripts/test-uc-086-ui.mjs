@@ -4,6 +4,7 @@
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -78,17 +79,6 @@ async function holdsOn(moduleId, contextId) {
 }
 
 
-// Grants each operation through the agent page's tools picker (EntityPicker, c-135): open, search, pick.
-async function grantTools(page, ops) {
-  const picker = page.getByTestId('agent-tools-picker');
-  for (const op of ops) {
-    await picker.getByRole('button', { name: 'Grant tools' }).click({ timeout: 120_000 });
-    await page.getByPlaceholder('Search tools by name or system…').fill(op);
-    await page.getByRole('option', { name: new RegExp(`^${op}\\b`) }).first().click({ timeout: 60_000 });
-    await page.keyboard.press('Escape');
-  }
-}
-
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
@@ -108,24 +98,25 @@ await withUiStack(
     const james = await signIn(browser, consoleUrl, JAMES, errors);
 
     // 2. The bank's two keys go in as secrets; no response, list or page shows a value again (T002).
-    await step('2 Sam adds the bank keys as secrets in Settings', async () => {
-      const sam = await signIn(browser, consoleUrl, SAM, errors);
+    // A secret belongs to the team that uses it, and that team's builders add it: James, for Operations.
+    await step('2 James adds the bank keys as Operations secrets in Settings', async () => {
+      const builder = await signIn(browser, consoleUrl, JAMES, errors);
       const made = [];
       for (const name of ['BANK_API_KEY', 'STATEMENTS_API_KEY']) {
-        await sam.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await builder.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The page header and the empty list both offer Add secret; either opens the same dialog.
-        await sam.getByRole('button', { name: 'Add secret' }).first().click({ timeout: 120_000 });
-        const dialog = sam.getByRole('dialog', { name: 'Add a secret' });
+        await builder.getByRole('button', { name: 'Add secret' }).first().click({ timeout: 120_000 });
+        const dialog = builder.getByRole('dialog', { name: 'Add a secret' });
         await dialog.locator('#secret-name').fill(name);
         await dialog.locator('#secret-value').fill(BANK_KEY);
-        const saved = armed(sam.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/secrets'), { timeout: 60_000 }));
+        const saved = armed(builder.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/v1/secrets'), { timeout: 60_000 }));
         await dialog.getByTestId('secret-submit').click();
         const res = await saved;
         made.push({ name, status: res?.status(), leaked: (await res?.text())?.includes(BANK_KEY) });
       }
-      await sam.getByText('STATEMENTS_API_KEY').first().waitFor({ timeout: 30_000 });
-      const page = await sam.locator('main').innerText();
-      check('2 Sam adds the bank keys as secrets in Settings', made.every((m) => m.status === 201 && !m.leaked) && !page.includes(BANK_KEY), made);
+      await builder.getByText('STATEMENTS_API_KEY').first().waitFor({ timeout: 30_000 });
+      const page = await builder.locator('main').innerText();
+      check('2 James adds the bank keys as Operations secrets in Settings', made.every((m) => m.status === 201 && !m.leaked) && !page.includes(BANK_KEY), made);
     });
 
     // 3. Import (T001): reads preselected, the write opt-in, the statement left for a later version; each operation
@@ -163,9 +154,9 @@ await withUiStack(
       await james.getByRole('dialog', { name: 'Request a security review' }).getByRole('button', { name: 'Request review' }).click();
       const requested = await asked;
       const nadia = await signIn(browser, consoleUrl, NADIA, errors);
-      await nadia.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await nadia.getByRole('tab', { name: /^Approval/ }).click({ timeout: 120_000 });
-      await nadia.getByRole('link', { name: 'Open in Human Tasks' }).click({ timeout: 60_000 });
+      // Nadia reviews from her own team, where James's module page reads as not found; the task opens from Human Tasks.
+      const waiting = (await get(`/v1/tool-modules/${moduleId}`)).versions.find((v) => v.status === 'in_review');
+      await nadia.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(waiting?.reviewId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // c-204: before deciding, the review shows what it approves: its operations, the host they reach, and a link
       // to the module itself.
       const panel = nadia.getByTestId('tool-module-review');
@@ -215,9 +206,9 @@ await withUiStack(
       const pub = await published;
       const version = pub ? (await pub.json()).data : undefined;
       const nadia = await signIn(browser, consoleUrl, NADIA, errors);
-      await nadia.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await nadia.getByRole('tab', { name: /^Approval/ }).click({ timeout: 120_000 });
-      await nadia.getByRole('link', { name: 'Open in Human Tasks' }).click({ timeout: 60_000 });
+      // Nadia reviews from her own team, where James's module page reads as not found; the task opens from Human Tasks.
+      const waiting = (await get(`/v1/tool-modules/${moduleId}`)).versions.find((v) => v.status === 'in_review');
+      await nadia.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(waiting?.reviewId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const decided = armed(nadia.waitForResponse((r) => r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url()), { timeout: 60_000 }));
       await nadia.getByRole('button', { name: 'Approve and publish' }).click({ timeout: 120_000 });
       const approved = await decided;
@@ -253,10 +244,9 @@ await withUiStack(
     // 7. Grant the three operations to Branch Concierge, save the draft and publish it.
     await step('7 James grants the operations to Branch Concierge and publishes it', async () => {
       await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await grantTools(james, ['get_account', 'get_statement', 'place_hold']);
-      await james.getByTestId('unsaved-bar').getByRole('button', { name: /^Save as v/ }).click();
-      const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}`, { timeout: 60_000 }));
-      await james.getByRole('dialog', { name: /^Save as v/ }).getByRole('button', { name: /^Save v/ }).click();
+      // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
+      const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'get_statement', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
+      await grantTools(james, ['get_account', 'get_statement', 'place_hold'], JAMES);
       const patchRes = await patched;
       const saved = patchRes ? (await patchRes.json()).data : undefined;
       await james.getByTestId('request-agent-publish').click({ timeout: 60_000 });
@@ -295,12 +285,7 @@ await withUiStack(
     // 10. An approver on the module's team decides it in Reviews; the write reaches the bank once (T006).
     await step('10 Maya approves the held write in Reviews and the bank holds it once', async () => {
       const maya = await signIn(browser, consoleUrl, MAYA, errors);
-      await maya.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const row = maya.getByRole('row').filter({ hasText: 'place_hold' }).first();
-      if (!(await row.waitFor({ timeout: 60_000 }).then(() => true, () => false))) throw new Error('the held chat write is not listed in Reviews');
-      await row.click();
-      const form = maya.getByTestId('review-decision-form');
-      await form.waitFor({ timeout: 30_000 });
+      const form = await openHeldChatWrite(maya, consoleUrl, thread);
       const decided = armed(maya.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 }));
       await form.getByRole('button', { name: 'Approve', exact: true }).click();
       const res = await decided;
@@ -336,7 +321,7 @@ await withUiStack(
         '11 the Activity tab shows actor, decision and outcome for each call',
         // The person who asked is not on the row yet: the caller is the verified agents service until the runner signs
         // a run context naming the user (the data gateway's run context, planned).
-        !!write && /m\.okafor@harborpinebank\.com/.test(text) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
+        !!write && text.includes(MAYA) && /via ag_branch/.test(text) && /Succeeded/.test(text) && runLink === `/chat/${thread}`,
         { row: text.replace(/\s+/g, ' ').slice(0, 300), runLink, thread, approval: write?.approval, subject: write?.subject, actor: write?.actor },
       );
     });

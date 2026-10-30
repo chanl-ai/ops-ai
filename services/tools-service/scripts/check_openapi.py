@@ -32,6 +32,10 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.routes import executions_router, modules_router
 from ops_tools.modules.service import ModuleService
 from ops_tools.opa import OpaClient
+from ops_tools.plugins.host import PluginHost
+from ops_tools.plugins.routes import plugins_router
+from ops_tools.plugins.switches import InstallSwitches
+from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
@@ -40,8 +44,11 @@ from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
+from ops_tools.store.plugin_app_keys import PluginAppKeys
+from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 from ops_tools.store.send_policies import SendPolicies
+from ops_tools.systems import Systems, systems_router
 from ops_tools.tools import LocalToolRunner
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +66,15 @@ def document() -> dict[str, Any]:
     service = ModuleService(ModuleStore(engine), directory, CallLog(engine))
     connections = ConnectionStore(engine)
     cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
+    connection_service = ConnectionService(
+        connections,
+        SecretStore(engine),
+        cipher,
+        Tokens(connections, cipher, None, None),
+        directory,
+        egress=None,
+        console_url=None,
+    )
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url)),
         registry=ToolRegistry(catalog),
@@ -74,18 +90,15 @@ def document() -> dict[str, Any]:
             secrets_router(SecretStore(engine), cipher),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
-            connections_router(
-                ConnectionService(
-                    connections,
-                    SecretStore(engine),
-                    cipher,
-                    Tokens(connections, cipher, None, None),
-                    directory,
-                    egress=None,
-                    console_url=None,
-                ),
+            connections_router(connection_service, directory),
+            plugins_router(
+                PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None)),
+                connection_service,
                 directory,
+                PluginAppKeys(engine, cipher),
             ),
+            plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None))),
+            systems_router(Systems(connection_service, ModuleStore(engine)), directory),
         ),
     )
     return app.openapi()

@@ -1,9 +1,9 @@
 """Prepares a deployed Ops AI for the mailbox demo through its public origin, as its people would through the console,
 and walks the demo against a test mailbox (docs/console/mailbox-demo.md, "On Fly staging").
 
-    python deploy/fly/staging/mailbox_demo.py seed --origin https://<your-app>-one.fly.dev \\
+    python deploy/fly/staging/mailbox_demo.py seed --origin https://<your-app>.fly.dev \\
         --admin-env ~/.config/ops-ai/staging-admin.env --people ~/.config/ops-ai/staging-demo-people.env \\
-        --bank https://<your-app>-bank.fly.dev --bank-env ~/.config/ops-ai/staging-bank.env
+        --bank https://<app-prefix>-bank.fly.dev --bank-env ~/.config/ops-ai/staging-bank.env
     python deploy/fly/staging/mailbox_demo.py walk --origin <origin> --admin-env ... --people ... \\
         --team <team id> --intake-workflow <the team's Email received workflow> \\
         --mailbox intake@demo.test --imap mail.demo.test:3993 --smtp smtp.demo.test:1025 --send-smtp 127.0.0.1:13025 \\
@@ -64,6 +64,7 @@ from reimport_bank_module import ensure_module, ensure_secret, reimport  # noqa:
 from sample_team import Refused, Session, decide, join_team, service_urls  # noqa: E402
 from sample_team import sign_in as person  # noqa: E402
 from seed_document_types import seed as seed_document_types  # noqa: E402
+from stg_env import bank_origin  # noqa: E402
 
 SECURITY = "team_security"
 WORKFLOWS = ("levy_case", "mail_document", "mail_intake", "levy_read_one", "levy_mail")
@@ -948,7 +949,9 @@ def main() -> None:
     seed.add_argument("--egress-range", action="append", default=[], help="a private range to allow (local proof)")
     levy = sub.choices["levy"]
     levy.add_argument("--team", required=True, help="the team the levy story is set up in")
-    levy.add_argument("--bank", default="https://<your-app>-bank.fly.dev", help="the bank stand-in's origin")
+    levy.add_argument(
+        "--bank", default=None, help="the bank stand-in's origin (default: STG_APP_PREFIX's bank app, from staging.env)"
+    )
     sub.choices["replies"].add_argument("--long", action="store_true", help="email the six-page notice")
     sub.choices["replies"].add_argument(
         "--decide-in-console", action="store_true", help="wait for a person to decide each Human Task in the console"
@@ -956,6 +959,8 @@ def main() -> None:
     for w in (sub.choices["walk"], sub.choices["replies"]):
         walk_arguments(w)
     a = ap.parse_args()
+    if hasattr(a, "bank") and a.bank is None:
+        a.bank = bank_origin()
     run_command(ap, a)
 
 
@@ -974,7 +979,9 @@ def walk_arguments(w: argparse.ArgumentParser) -> None:
     )
     w.add_argument("--secret", default="DEMO_MAILBOX_PASSWORD", help="the Secrets-page secret holding the password")
     w.add_argument("--upload", action="store_true", help="upload the notice and start its document run, no email")
-    w.add_argument("--bank", default="https://<your-app>-bank.fly.dev", help="the bank stand-in's origin")
+    w.add_argument(
+        "--bank", default=None, help="the bank stand-in's origin (default: STG_APP_PREFIX's bank app, from staging.env)"
+    )
     w.add_argument("--bank-env", type=Path, help="FAKE_BANK_KEY, to find each hold at the bank stand-in")
     found = w.add_mutually_exclusive_group()
     found.add_argument("--read-mailpit", help="the reply sender's Mailpit API, where the reply is found")

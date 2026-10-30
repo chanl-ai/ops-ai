@@ -1,8 +1,16 @@
 # Wrong passwords lock sign-in and step-up, and reset mail is capped
 
-Status: current. Id: `uc-214`. Service: `platform-service`. Layers: api.
+Status: current. Id: `uc-214`. Service: `platform-service`. Layers: api, ui (ui layer an earlier change).
 
 ## Preconditions
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | Lena types a wrong password five times; the fifth locks sign-in and the page says so | ui | 1 | 1 |
+| S2 | Her right password is refused while the lock holds | ui | 2 | 2 |
+| S3 | She resets her password from the mailed link and signs in: the reset ended the lock | ui | 5 | 5 |
 
 | Needs | How |
 |---|---|
@@ -28,6 +36,7 @@ fifteen minutes lock for fifteen, and three reset links an hour. No model is cal
 | Layer | Script | State |
 |---|---|---|
 | api | `platform-service/scripts/test-uc-214-api.py` | passing |
+| ui | `platform-service/scripts/test-uc-214-ui.mjs` | passing: the sign-in page, Forgot password and the reset page |
 
 ## Non-vacuous check
 

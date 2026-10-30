@@ -53,10 +53,10 @@ def main() -> None:
         cited = next((kb_id for kb_id, agents_of in named.items() if agents_of), None)
         as_kb = api.get("/v1/knowledge-usage", headers=svc("agents", "kb", ["agents:view"]))
         check(
-            "1 a person reads which of their team's agents cite each base; another team sees them counted, not named",
+            # Usage stays in one team (c-507): another team neither names nor counts a team's agents.
+            "1 a person reads which of their team's agents cite each base; another team sees none of them",
             cited is not None
-            and counted.get(cited, ([], 0))[0] == []
-            and counted.get(cited, ([], 0))[1] >= 1
+            and all(not agents_of and n == 0 for agents_of, n in counted.values())
             and as_kb.status_code == 200,
             {"named": named, "counted": counted, "service": as_kb.status_code},
         )

@@ -1,6 +1,6 @@
 # An agent refuses a blocked topic before answering, through a guardrail it pins by version
 
-Status: passing. Id: `uc-085`. Service: `agents-service`. Layers: api, ui. Card: c-063 (T006, T007, T008, T012, T013).
+Status: passing. Id: `uc-085`. Service: `agents-service`. Layers: api, ui. Card: an earlier change (T006, T007, T008, T012, T013).
 
 ## Preconditions
 

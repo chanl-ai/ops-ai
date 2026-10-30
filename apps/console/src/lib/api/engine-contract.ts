@@ -28,4 +28,8 @@ export interface EngineApi {
   run(runId: string): Promise<EngineRunDetail>;
   /** Cancels a run that has not ended; 409 once it succeeded or failed. */
   cancelRun(runId: string): Promise<EngineRun>;
+  /** Queues a Stuck run again from its last recorded step; 409 `run_not_stuck` once it moved on. */
+  retryRun(runId: string): Promise<EngineRun>;
+  /** Starts the run of an email the mailbox listener set aside, under the email's own run key; 404 once it ran. */
+  runSetAsideEmail(eventId: string): Promise<EngineRunStarted>;
 }

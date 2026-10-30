@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
 
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store.database import open_database
@@ -14,10 +14,12 @@ from ops_store.database import open_database
 from .leases import check_fence
 from .tenancy import current_tenant, system_tx, tenant_tx
 
-__all__ = ["AsyncEngine", "DatabaseError", "EngineTransactions", "connect"]
+__all__ = ["AsyncEngine", "DatabaseError", "DatabaseUnreachable", "EngineTransactions", "connect"]
 
 # What a statement on the runner's tables raises on a database not yet migrated to them (or any driver error).
 DatabaseError = DBAPIError
+# The database out of reach (down, restarting, the connection dropped), as against a statement it refused.
+DatabaseUnreachable = (OperationalError, InterfaceError)
 
 
 def connect(database_url: str) -> AsyncEngine:

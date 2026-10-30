@@ -1,8 +1,16 @@
 # Another team's file is missing on every files-service route
 
-Status: passing. Id: `uc-094`. Service: `files-service`. Layers: api. Card: c-087.
+Status: passing. Id: `uc-094`. Service: `files-service`. Layers: api, ui (ui layer an earlier change). Card: an earlier change.
 
 ## Preconditions
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | Sam, in Security, opens Priya's file's address and is told it is not found, with no team or file named | ui | 3 | 3 |
+| S2 | Security's Files list does not hold it | ui | 5 | 5 |
+| S3 | Priya, in Operations, opens it and sees it | ui | 8 | 8 |
 
 | Needs | How |
 |---|---|
@@ -30,6 +38,7 @@ The answer is 404, never 403, so a caller cannot learn that a file id exists out
 | Layer | Script | State |
 |---|---|---|
 | api | `files-service/scripts/test-uc-094-api.py` | passing |
+| ui | `files-service/scripts/test-uc-094-ui.mjs` | passing: the file's page as Priya and as Sam, and Security's Files list |
 
 ## Non-vacuous check
 

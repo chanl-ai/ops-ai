@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { EntityPicker } from '@/components/shared/entity-picker';
@@ -10,166 +9,21 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FileRef } from '@/components/shared/file-refs-field';
 import { RunInputForm, withFile } from '@/components/workflows/run-input-form';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useStartableWorkflows, useStartRun } from '@/hooks/case-queries';
+import { type CheckedFile, StartFromFile } from '@/components/workflows/start-from-file';
+import { useStartBatch } from '@/hooks/batch-queries';
 import { useDefinition, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
 import { fileWorkflowOptions, type OptionSource, startableWorkflowOptions } from '@/hooks/options-queries';
-import type { StartableWorkflow, StartRunInput } from '@/lib/types/cases';
+import { useHostedForms } from '@/hooks/use-switches';
 import type { StartForm } from '@/lib/types/engine';
+import { plural } from '@/lib/format';
 
 export type RunMode = 'live' | 'test';
-
-type Field = StartableWorkflow['input'][number];
-
-// An email input is the `{ sender, subject, body }` object the workflow reads.
-const EMAIL_PARTS = [
-  { key: 'sender', label: 'From', placeholder: 'e.g. customer@example.com' },
-  { key: 'subject', label: 'Subject', placeholder: 'e.g. Charge I did not make' },
-  { key: 'body', label: 'Body', placeholder: 'e.g. There is a charge on my card I do not recognise.' },
-] as const;
-
-const keyOf = (f: Field, part?: string) => (part ? `${f.name}.${part}` : f.name);
-
-/** One screen: pick a workflow the runtime can run, fill the input its first node reads, then the run opens in Cases. */
-export function StartRunDialog({
-  open,
-  onOpenChange,
-  workflows,
-  loading,
-  loadError,
-  onSubmit,
-  isPending,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** Workflows whose input this dialog can collect; agent-input workflows start from Chat instead. */
-  workflows: StartableWorkflow[];
-  loading: boolean;
-  loadError?: string;
-  onSubmit: (input: StartRunInput) => Promise<unknown>;
-  isPending: boolean;
-}) {
-  const [name, setName] = React.useState('');
-  const [values, setValues] = React.useState<Record<string, string>>({});
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const wf = workflows.find((w) => w.name === name) ?? workflows[0];
-
-  React.useEffect(() => {
-    if (open) {
-      setName('');
-      setValues({});
-      setErrors({});
-      setSubmitError(null);
-    }
-  }, [open]);
-
-  const set = (k: string, v: string) => (setValues((x) => ({ ...x, [k]: v })), setErrors((x) => ({ ...x, [k]: '' })));
-
-  const submit = async () => {
-    if (!wf) return;
-    const errs: Record<string, string> = {};
-    const input: Record<string, unknown> = {};
-    for (const f of wf.input) {
-      if (f.type === 'email') {
-        const email = Object.fromEntries(EMAIL_PARTS.map((p) => [p.key, (values[keyOf(f, p.key)] ?? '').trim()]));
-        for (const p of EMAIL_PARTS) if (f.required && !email[p.key]) errs[keyOf(f, p.key)] = `${p.label} is required.`;
-        input[f.name] = email;
-      } else {
-        const v = (values[keyOf(f)] ?? '').trim();
-        if (f.required && !v) errs[keyOf(f)] = `${f.label} is required.`;
-        input[f.name] = v;
-      }
-    }
-    setErrors(errs);
-    if (Object.values(errs).some(Boolean)) return;
-    const first = wf.input[0];
-    const raw = first?.type === 'email' ? (values[keyOf(first, 'subject')] ?? '') : (values[first ? keyOf(first) : ''] ?? '');
-    const subject = raw.trim() || wf.title;
-    setSubmitError(null);
-    try {
-      await onSubmit({ workflowId: wf.name, subject: subject.length > 80 ? `${subject.slice(0, 79)}…` : subject, input });
-      onOpenChange(false);
-    } catch (err) {
-      // The input stays in the fields so the person can retry.
-      setSubmitError((err as Error).message);
-    }
-  };
-
-  return (
-    <StartRunShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Start a run"
-      description="Runs a published workflow once on your input. The run opens in Cases when it stops."
-      pending={isPending}
-      canStart={!!wf}
-      loadingText="Running…"
-      submitTestId="start-run-submit"
-      onStart={submit}
-    >
-      {loading ? (
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </div>
-      ) : loadError ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{loadError}</p>
-      ) : !wf ? (
-        <p className="text-sm text-muted-foreground">No workflow can be started here yet. Publish one, then start it from this dialog.</p>
-      ) : (
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-        >
-          {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
-          <FormField id="run-workflow" label="Workflow">
-            <Select value={wf.name} onValueChange={(v) => v && (setName(v), setErrors({}))}>
-              <SelectTrigger id="run-workflow" className="w-full" aria-label="Workflow">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {workflows.map((w) => (
-                  <SelectItem key={w.name} value={w.name}>
-                    {w.title}
-                    {w.latestVersion != null && <span className="text-muted-foreground tabular-nums"> · v{w.latestVersion}</span>}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-          {wf.input.map((f) =>
-            f.type === 'email' ? (
-              EMAIL_PARTS.map((p) => (
-                <FormField key={keyOf(f, p.key)} id={`run-${f.name}-${p.key}`} label={p.label} error={errors[keyOf(f, p.key)] || undefined}>
-                  {p.key === 'body' ? (
-                    <Textarea id={`run-${f.name}-${p.key}`} rows={4} value={values[keyOf(f, p.key)] ?? ''} onChange={(e) => set(keyOf(f, p.key), e.target.value)} placeholder={p.placeholder} aria-invalid={!!errors[keyOf(f, p.key)]} />
-                  ) : (
-                    <Input id={`run-${f.name}-${p.key}`} value={values[keyOf(f, p.key)] ?? ''} onChange={(e) => set(keyOf(f, p.key), e.target.value)} placeholder={p.placeholder} aria-invalid={!!errors[keyOf(f, p.key)]} />
-                  )}
-                </FormField>
-              ))
-            ) : (
-              <FormField key={f.name} id={`run-${f.name}`} label={f.label} optional={!f.required} error={errors[keyOf(f)] || undefined}>
-                <Textarea id={`run-${f.name}`} rows={3} value={values[keyOf(f)] ?? ''} onChange={(e) => set(keyOf(f), e.target.value)} placeholder="e.g. What is the daily wire limit for a personal account?" aria-invalid={!!errors[keyOf(f)]} />
-              </FormField>
-            ),
-          )}
-        </form>
-      )}
-    </StartRunShell>
-  );
-}
 
 /**
  * The frame both ways of starting a run share: the title and description, Cancel and Start run in the footer, and the
@@ -226,16 +80,19 @@ function StartRunShell({
   );
 }
 
+
 /**
  * The one start dialog (c-466). It draws the start form the workflow's trigger declares (`startForm`: a test email, a
  * Request trigger's input, any later kind) with the shared field widgets, and runs it live on the version that is
  * live or as a test run of the latest saved version, which is how a draft runs before review. A trigger that declares
  * no start form takes a JSON input. `file` arrives attached in the form's first file field (Files' "Start a workflow
- * with this file"). A failed start keeps the dialog and what was typed.
+ * with this file"). A failed start keeps the dialog and what was typed. With hosted forms on, a form trigger also
+ * offers Start from a file: one run per row of a CSV or Excel file, followed on the batch's page (c-535).
  */
 export function StartDefinitionRunDialog({
   open,
   onOpenChange,
+  workflowId,
   workflowName,
   latestVersion,
   liveVersion,
@@ -248,6 +105,8 @@ export function StartDefinitionRunDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The workflow a file's rows start; without it the dialog offers no Start from a file. */
+  workflowId?: string;
   workflowName: string;
   latestVersion: number;
   /** Null before a version is approved; live runs are then refused. */
@@ -274,6 +133,15 @@ export function StartDefinitionRunDialog({
   const [error, setError] = React.useState<string | undefined>();
   const [pending, setPending] = React.useState(false);
   const schema = startForm && onStartForm ? startForm.schema : undefined;
+  const router = useRouter();
+  const hostedForms = useHostedForms();
+  const inputs = (schema?.properties ?? {}) as Record<string, { title?: string }>;
+  // A file's columns can only name a form trigger's inputs.
+  const fromFile = hostedForms && !!workflowId && startForm?.kind === 'form' && Object.keys(inputs).length > 0;
+  const [tab, setTab] = React.useState<'form' | 'file'>('form');
+  const [checked, setChecked] = React.useState<CheckedFile | null>(null);
+  const [batchError, setBatchError] = React.useState<string | undefined>();
+  const { mutateAsync: startBatch } = useStartBatch(workflowId ?? '');
   // Each opening starts from a clean form, with the file it was opened for already attached. Read through a ref so a
   // form object rebuilt on every render of the parent does not clear what is being typed.
   const opening = React.useRef({ file, schema });
@@ -283,6 +151,9 @@ export function StartDefinitionRunDialog({
     const { file: f, schema: s } = opening.current;
     setValues(f && s ? withFile(s, {}, f) : {});
     setError(undefined);
+    setTab('form');
+    setChecked(null);
+    setBatchError(undefined);
   }, [open]);
 
   const run = async (go: () => Promise<void>) => {
@@ -292,6 +163,21 @@ export function StartDefinitionRunDialog({
       await go();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The run did not start');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const startFile = async () => {
+    if (!checked) return;
+    setBatchError(undefined);
+    setPending(true);
+    try {
+      const batch = await startBatch({ fileId: checked.fileId, mode });
+      onOpenChange(false);
+      router.push(`/workflows/batches/${encodeURIComponent(batch.id)}`);
+    } catch (e) {
+      setBatchError(e instanceof Error ? e.message : 'The runs did not start');
     } finally {
       setPending(false);
     }
@@ -325,9 +211,9 @@ export function StartDefinitionRunDialog({
       description={schema ? 'It runs as its trigger would start it. Unsaved changes on the canvas are not included.' : 'Unsaved changes on the canvas are not included.'}
       pending={pending}
       loadingText="Starting…"
-      submitTestId="definition-start-run-submit"
-      startLabel={schema ? startForm!.action : 'Start run'}
-      onStart={submit}
+      {...(fromFile && tab === 'file'
+        ? { submitTestId: 'batch-start', startLabel: checked ? `Start ${plural(checked.dry.rows, 'run')}` : 'Start runs', canStart: !!checked, onStart: startFile }
+        : { submitTestId: 'definition-start-run-submit', startLabel: schema ? startForm!.action : 'Start run', onStart: submit })}
     >
       <RadioGroup value={mode} onValueChange={(v) => setMode(v as RunMode)} className="mb-4 gap-2" aria-label="Run mode">
         <Label htmlFor="definition-run-live" className="flex items-start gap-2 font-normal">
@@ -347,7 +233,22 @@ export function StartDefinitionRunDialog({
           </span>
         </Label>
       </RadioGroup>
-      {schema ? (
+      {schema && fromFile ? (
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'form' | 'file')} className="min-w-0 gap-4">
+          <TabsList aria-label="How to start">
+            <TabsTrigger value="form">Fill the form</TabsTrigger>
+            <TabsTrigger value="file" data-testid="start-from-file">
+              Start from a file
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="form" className="min-w-0">
+            <RunInputForm schema={schema} value={values} onChange={setValues} error={error} fileSource={fileSource} />
+          </TabsContent>
+          <TabsContent value="file" className="min-w-0">
+            <StartFromFile workflowId={workflowId!} mode={mode} inputs={inputs} onChecked={setChecked} startError={batchError} />
+          </TabsContent>
+        </Tabs>
+      ) : schema ? (
         <RunInputForm schema={schema} value={values} onChange={setValues} error={error} fileSource={fileSource} />
       ) : (
         <FormField id="definition-run-input" label="Input" hint="JSON object passed to the trigger." error={error}>
@@ -377,8 +278,7 @@ function missingFields(schema: Record<string, unknown>, values: Record<string, u
 /**
  * Start one of the team's workflows: pick one from the list, searched and paged on the server (agents start from Chat,
  * and workflows only other workflows start are not offered), and that workflow's own start opens as soon as it has
- * loaded: the test email composer for an email trigger, the form its editor opens otherwise; a graph workflow of the
- * earlier engine opens the input form it has always had. With `file` (Files' "Start a workflow with this file") only
+ * loaded: the test email composer for an email trigger, the form its editor opens otherwise. With `file` (Files' "Start a workflow with this file") only
  * workflows a file can start are offered, and the file arrives attached.
  */
 export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileSource }: { open: boolean; onOpenChange: (open: boolean) => void; file?: FileRef; source?: OptionSource; fileSource?: OptionSource }) {
@@ -388,17 +288,15 @@ export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileS
   React.useEffect(() => {
     if (open) setPicked([]);
   }, [open]);
-  // A runner definition exists for a v2 workflow; a 404 means a graph workflow of the earlier engine.
   const definition = useDefinition(chosen ?? '');
-  const graph = !!chosen && (definition.error as { status?: number } | null)?.status === 404;
-  const startable = useStartableWorkflows(graph);
   const { mutateAsync: startDefinition } = useStartEngineRun();
   const { mutateAsync: startByForm } = useStartWorkflow();
-  const startGraph = useStartRun();
   const close = () => setChosen(null);
   const view = definition.data;
-  const ready = !!chosen && (!!view || graph);
-  const failed = !!chosen && definition.isError && !graph ? (definition.error?.message ?? 'The workflow did not load.') : null;
+  const ready = !!chosen && !!view;
+  // A workflow the runner does not hold was built on the earlier engine, which the console no longer starts.
+  const gone = (definition.error as { status?: number } | null)?.status === 404;
+  const failed = !!chosen && definition.isError ? (gone ? 'That workflow is no longer available.' : (definition.error?.message ?? 'The workflow did not load.')) : null;
   // The picker hands over to the form once the workflow has loaded; until then it says it is opening.
   React.useEffect(() => {
     if (ready) onOpenChange(false);
@@ -444,6 +342,7 @@ export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileS
         <StartDefinitionRunDialog
           open={!!chosen && !!view && !open}
           onOpenChange={(o) => !o && close()}
+          workflowId={view.workflowId}
           workflowName={view.name || view.definition.name || view.workflowId}
           latestVersion={view.version}
           liveVersion={view.liveVersion}
@@ -463,20 +362,6 @@ export function StartWorkflowRunDialog({ open, onOpenChange, file, source, fileS
           }}
         />
       )}
-      <StartRunDialog
-        open={graph && !open}
-        onOpenChange={(o) => !o && close()}
-        workflows={(startable.data ?? []).filter((w) => w.name === chosen)}
-        loading={startable.isPending}
-        loadError={startable.isError ? startable.error.message : undefined}
-        isPending={startGraph.isPending}
-        onSubmit={async (input) => {
-          const { run } = await startGraph.mutateAsync(input);
-          close();
-          if (run) router.push(`/workflows/runs?run=${encodeURIComponent(run.id)}`);
-          else toast.success('Run finished');
-        }}
-      />
     </>
   );
 }

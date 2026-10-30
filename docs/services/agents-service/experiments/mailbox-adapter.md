@@ -1,6 +1,6 @@
 # Mailbox adapter: Graph delta mail into threads and runs
 
-Status: historical. The v1 mailbox adapter, its tests and `experiments/mailbox_postgres_cost.py` were removed on 2026-10-18 (c-212); mail now starts workflows through the Email received trigger (c-187). Measured: E6 2026-10-10; race closed and Postgres measured 2026-10-11; dev fake source 2026-10-15 (c-057).
+Status: historical. The v1 mailbox adapter, its tests and `experiments/mailbox_postgres_cost.py` were removed on 2026-10-18; mail now starts workflows through the Email received trigger. Measured: E6 2026-10-10; race closed and Postgres measured 2026-10-11; dev fake source 2026-10-15.
 Tests `tests/api/test_mailbox*.py` (no model calls), measurement `experiments/mailbox_postgres_cost.py`, fixtures
 `scripts/make_mailbox_fixture.py`. SQL counts SQLAlchemy statements; a checkpointer call adds two to four asyncpg ones.
 

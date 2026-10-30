@@ -1,8 +1,9 @@
-"""uc-004 complex workflow: fan-out, grade loop, review pause and send, api layer: docs/usecases/agents-service/complex-workflow.md."""
+"""uc-004 complex workflow: fan-out, grade loop, review pause and send, api layer:
+docs/usecases/agents-service/complex-workflow.md."""
 
 from __future__ import annotations
 
-from usecase_harness import EMAILS, agents, check, data, finish, new_thread, nodes, run, state
+from usecase_harness import EMAILS, TEAM, agents, check, data, finish, new_thread, nodes, run, state
 
 with agents() as api:
     tid = new_thread(api, "complex_workflow")
@@ -24,10 +25,10 @@ with agents() as api:
     # A review is decided in Reviews only; resuming it on the run stream would skip the decision's checks.
     code, _ = run(api, tid, {"resume": {"decision": "approved"}})
     check("resume on the run stream refused (409)", code == 409, code)
-    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
+    decided = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
     check("decided in Reviews (200)", decided.status_code == 200, decided.text[:200])
     # Non-vacuous: the same decision again must not resume again; if it did, the reply would go twice.
-    again = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
+    again = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
     check("repeated decision accepted without a second resume (200)", again.status_code == 200, again.text[:200])
     sends = sum(r["nodes"].count("send_reply") for r in data(api.get(f"/v1/threads/{tid}/runs")))
     check("send_reply ran exactly once", sends == 1, sends)

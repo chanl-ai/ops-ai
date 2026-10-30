@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0082_engine_waits
+-- agents-service, stamped at 0094_template_copies_digest
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -86,6 +86,7 @@ CREATE TABLE engine_work (
 	claimed_by VARCHAR(120) NULL, 
 	lease_expires_at FLOAT NULL, 
 	attempts INTEGER NOT NULL DEFAULT '0', 
+	lapses INTEGER NOT NULL DEFAULT '0', 
 	error VARCHAR(max) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT engine_work_pkey PRIMARY KEY (id), 
@@ -262,6 +263,49 @@ CREATE INDEX ix_thread_events_tenant_id ON thread_events (tenant_id);
 GO
 CREATE INDEX ix_thread_events_tenant_team_position ON thread_events (tenant_id, team_id, position);
 GO
+CREATE TABLE trigger_events (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(200) NOT NULL, 
+	source VARCHAR(320) NOT NULL, 
+	event_key VARCHAR(200) NOT NULL, 
+	sender VARCHAR(320) NOT NULL, 
+	subject VARCHAR(500) NOT NULL, 
+	received_at VARCHAR(40) NOT NULL, 
+	outcome VARCHAR(16) NOT NULL, 
+	run_id VARCHAR(64) NULL, 
+	detail VARCHAR(max) NOT NULL, 
+	recorded_at VARCHAR(32) NOT NULL, 
+	item VARCHAR(max) NULL, 
+	CONSTRAINT trigger_events_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_trigger_events_workflow ON trigger_events (tenant_id, workflow_id, recorded_at);
+GO
+CREATE TABLE form_links (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(200) NOT NULL, 
+	slug VARCHAR(80) NOT NULL, 
+	mode VARCHAR(16) NOT NULL, 
+	title VARCHAR(200) NOT NULL, 
+	description VARCHAR(1000) NOT NULL DEFAULT '', 
+	after_text VARCHAR(1000) NOT NULL DEFAULT '', 
+	token_hash VARCHAR(64) NOT NULL, 
+	expires_at VARCHAR(40) NOT NULL, 
+	daily_cap INTEGER NOT NULL, 
+	paused BIT NOT NULL DEFAULT 0, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	rotated_at VARCHAR(32) NULL, 
+	CONSTRAINT form_links_pkey PRIMARY KEY (id), 
+	CONSTRAINT uq_form_links_slug UNIQUE (tenant_id, slug)
+);
+GO
+CREATE INDEX ix_form_links_workflow ON form_links (tenant_id, workflow_id);
+GO
 CREATE TABLE graph_threads (
 	id VARCHAR(64) NOT NULL, 
 	graph VARCHAR(64) NOT NULL, 
@@ -381,25 +425,6 @@ CREATE TABLE service_events (
 	CONSTRAINT uq_service_events_key UNIQUE (tenant_id, name, event_key)
 );
 GO
-CREATE TABLE trigger_events (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	workflow_id VARCHAR(200) NOT NULL, 
-	source VARCHAR(320) NOT NULL, 
-	event_key VARCHAR(200) NOT NULL, 
-	sender VARCHAR(320) NOT NULL, 
-	subject VARCHAR(500) NOT NULL, 
-	received_at VARCHAR(40) NOT NULL, 
-	outcome VARCHAR(16) NOT NULL, 
-	run_id VARCHAR(64) NULL, 
-	detail VARCHAR(max) NOT NULL, 
-	recorded_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT trigger_events_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_trigger_events_workflow ON trigger_events (tenant_id, workflow_id, recorded_at);
-GO
 CREATE TABLE widget_deployments (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
@@ -417,6 +442,39 @@ CREATE TABLE widget_deployments (
 );
 GO
 CREATE INDEX ix_widget_deployments_tenant_id ON widget_deployments (tenant_id);
+GO
+CREATE TABLE run_batches (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(200) NOT NULL, 
+	version INTEGER NOT NULL, 
+	mode VARCHAR(8) NOT NULL, 
+	file_id VARCHAR(64) NOT NULL, 
+	file_name VARCHAR(300) NOT NULL, 
+	total INTEGER NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	stopped_reason VARCHAR(500) NULL, 
+	stopped_at VARCHAR(32) NULL, 
+	CONSTRAINT run_batches_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_run_batches_workflow ON run_batches (tenant_id, workflow_id, created_at);
+GO
+CREATE TABLE run_batch_rows (
+	tenant_id VARCHAR(64) NOT NULL, 
+	batch_id VARCHAR(64) NOT NULL, 
+	row INTEGER NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	attempt INTEGER NOT NULL DEFAULT '1', 
+	input NVARCHAR(max) NOT NULL, 
+	status VARCHAR(16) NOT NULL DEFAULT 'pending', 
+	run_id VARCHAR(64) NULL, 
+	CONSTRAINT run_batch_rows_pkey PRIMARY KEY (tenant_id, batch_id, row)
+);
+GO
+CREATE INDEX ix_run_batch_rows_pending ON run_batch_rows (status, tenant_id, batch_id, row);
 GO
 CREATE TABLE case_types (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -572,6 +630,15 @@ CREATE TABLE agent_memories (
 	source_thread_id VARCHAR(64) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	superseded_at VARCHAR(32) NULL, 
+	status VARCHAR(16) NOT NULL DEFAULT 'active', 
+	quote VARCHAR(500) NULL, 
+	source_message_id VARCHAR(64) NULL, 
+	sensitivity VARCHAR(16) NOT NULL DEFAULT 'none', 
+	supersedes_id VARCHAR(64) NULL, 
+	confirmed_at VARCHAR(32) NULL, 
+	use_count INTEGER NOT NULL DEFAULT '0', 
+	last_used_at VARCHAR(32) NULL, 
+	erase_after VARCHAR(32) NULL, 
 	CONSTRAINT agent_memories_pkey PRIMARY KEY (id)
 );
 GO
@@ -579,10 +646,13 @@ CREATE INDEX ix_agent_memories_owner ON agent_memories (tenant_id, person, agent
 GO
 CREATE INDEX ix_agent_memories_tenant_id ON agent_memories (tenant_id);
 GO
+CREATE UNIQUE INDEX ux_agent_memories_in_use ON agent_memories (tenant_id, team_id, person, agent_id, [key]) WHERE status = 'active' AND "key" IS NOT NULL AND [key] IS NOT NULL;
+GO
 CREATE TABLE memory_audit (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
 	person VARCHAR(320) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	agent_id VARCHAR(64) NOT NULL, 
 	memory_id VARCHAR(64) NULL, 
 	action VARCHAR(16) NOT NULL, 
@@ -592,6 +662,17 @@ CREATE TABLE memory_audit (
 );
 GO
 CREATE INDEX ix_memory_audit_tenant_id ON memory_audit (tenant_id);
+GO
+CREATE TABLE message_memory_use (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	message_id VARCHAR(64) NOT NULL, 
+	memory_id VARCHAR(64) NOT NULL, 
+	reason VARCHAR(16) NOT NULL, 
+	at VARCHAR(32) NOT NULL, 
+	CONSTRAINT pk_message_memory_use PRIMARY KEY (tenant_id, message_id, memory_id)
+);
 GO
 CREATE TABLE model_call_records (
 	id VARCHAR(64) NOT NULL, 
@@ -692,6 +773,24 @@ CREATE TABLE team_default_agents (
 	updated_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT team_default_agents_pkey PRIMARY KEY (tenant_id, team_id)
 );
+GO
+CREATE TABLE template_copies (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	record_id VARCHAR(200) NOT NULL, 
+	source VARCHAR(200) NOT NULL, 
+	template_id VARCHAR(200) NOT NULL, 
+	version INTEGER NOT NULL, 
+	digest VARCHAR(64) NULL, 
+	installed_by VARCHAR(320) NOT NULL, 
+	installed_at VARCHAR(32) NOT NULL, 
+	removed_at VARCHAR(32) NULL, 
+	CONSTRAINT template_copies_pkey PRIMARY KEY (id)
+);
+GO
+CREATE UNIQUE INDEX uq_template_copies_live ON template_copies (tenant_id, team_id, source, template_id, version) WHERE removed_at IS NULL;
 GO
 CREATE TABLE thread_budgets (
 	thread_id VARCHAR(64) NOT NULL, 
@@ -795,6 +894,48 @@ CREATE TABLE timers (
 );
 GO
 CREATE INDEX ix_timers_due_open ON timers (due_at) WHERE fired_at IS NULL AND cancelled_at IS NULL AND failed_at IS NULL;
+GO
+CREATE TABLE ops_checkpoints (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	checkpoint_ns VARCHAR(255) NOT NULL DEFAULT '', 
+	checkpoint_id VARCHAR(64) NOT NULL, 
+	parent_checkpoint_id VARCHAR(max) NULL, 
+	type VARCHAR(max) NOT NULL, 
+	[checkpoint] VARBINARY(max) NOT NULL, 
+	metadata_type VARCHAR(max) NOT NULL, 
+	metadata_blob VARBINARY(max) NOT NULL, 
+	metadata NVARCHAR(max) NOT NULL DEFAULT '{}', 
+	run_id VARCHAR(64) NULL, 
+	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	CONSTRAINT ops_checkpoints_pkey PRIMARY KEY (tenant_id, team_id, thread_id, checkpoint_ns, checkpoint_id)
+);
+GO
+CREATE INDEX ix_ops_checkpoints_run ON ops_checkpoints (tenant_id, team_id, run_id);
+GO
+CREATE TABLE ops_checkpoint_writes (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	checkpoint_ns VARCHAR(255) NOT NULL DEFAULT '', 
+	checkpoint_id VARCHAR(64) NOT NULL, 
+	task_id VARCHAR(64) NOT NULL, 
+	idx INTEGER NOT NULL, 
+	channel VARCHAR(max) NOT NULL, 
+	type VARCHAR(max) NOT NULL, 
+	blob VARBINARY(max) NOT NULL, 
+	task_path VARCHAR(max) NOT NULL DEFAULT '', 
+	CONSTRAINT ops_checkpoint_writes_pkey PRIMARY KEY (tenant_id, team_id, thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);
+GO
+CREATE TABLE ops_checkpoint_fences (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	generation BIGINT NOT NULL, 
+	CONSTRAINT ops_checkpoint_fences_pkey PRIMARY KEY (tenant_id, team_id, thread_id)
+);
 GO
 CREATE TABLE registry_agent_versions (
 	agent_id VARCHAR(64) NOT NULL, 
@@ -969,6 +1110,18 @@ CREATE SECURITY POLICY ops_security.thread_events_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.thread_events AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.trigger_events_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.trigger_events,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.form_links_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.form_links,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.form_links AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.form_links AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.graph_threads_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
@@ -999,16 +1152,22 @@ CREATE SECURITY POLICY ops_security.service_events_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.service_events AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.trigger_events_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.trigger_events,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.trigger_events AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.widget_deployments_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.widget_deployments,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.run_batches_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.run_batches,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.run_batches AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.run_batches AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.run_batch_rows_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.run_batch_rows,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.run_batch_rows AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.run_batch_rows AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.case_types_isolation
@@ -1047,10 +1206,16 @@ CREATE SECURITY POLICY ops_security.agent_memories_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.memory_audit_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.memory_audit,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.memory_audit AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.memory_audit AFTER UPDATE
+CREATE SECURITY POLICY ops_security.memory_audit_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.memory_audit,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.memory_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.memory_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.message_memory_use_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.message_memory_use,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.review_assignments_tenant
@@ -1083,6 +1248,12 @@ CREATE SECURITY POLICY ops_security.team_default_agents_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.team_default_agents AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.template_copies_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.template_copies,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.widget_mint_keys_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_mint_keys,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_keys AFTER INSERT,
@@ -1095,16 +1266,36 @@ CREATE SECURITY POLICY ops_security.widget_mint_key_audit_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.ops_checkpoints_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.ops_checkpoints,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoints AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoints AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.ops_checkpoint_writes_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.ops_checkpoint_writes,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoint_writes AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoint_writes AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.ops_checkpoint_fences_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.ops_checkpoint_fences,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoint_fences AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoint_fences AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.graph_runs_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_runs,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_runs AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_runs AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = 'ops_memory') EXEC('CREATE FULLTEXT CATALOG ops_memory'); IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('agent_memories')) EXEC('CREATE FULLTEXT INDEX ON agent_memories ([key], value) KEY INDEX agent_memories_pkey ON ops_memory WITH CHANGE_TRACKING AUTO'); END
+GO
 CREATE TABLE alembic_version (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0082_engine_waits');
+INSERT INTO alembic_version (version_num) VALUES ('0094_template_copies_digest');
 GO

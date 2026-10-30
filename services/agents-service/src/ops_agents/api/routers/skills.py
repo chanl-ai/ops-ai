@@ -15,6 +15,7 @@ from ops_service_kit.http import Envelope, OptionsPage, options_page, options_wi
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
+from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, principal, require_builder
@@ -260,6 +261,7 @@ async def delete_skill(rt: Rt, me: Me, skill_id: str) -> Response:
     )
     require_unpinned(await pinned_by(rt, skill_id), row["slug"])
     await skills(rt).delete(skill_id)
+    await TemplateCopies(rt.db).removed_record("skill", skill_id)
     log.info("skill_deleted", skill=skill_id, slug=row["slug"], by=me.email)
     return Response(status_code=204)
 

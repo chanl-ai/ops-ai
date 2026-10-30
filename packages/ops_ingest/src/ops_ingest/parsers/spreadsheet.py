@@ -51,6 +51,35 @@ def _add_sheet(builder: DocumentBuilder, name: str, rows: list[list[str]], keep:
     builder.table(rows[0], rows[1:], sheet=name, keep_as_table=keep)
 
 
+def _csv_rows(data: bytes) -> list[list[str]]:
+    text = decode(data)
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    return [[c.strip() for c in row] for row in csv.reader(io.StringIO(text), dialect)]
+
+
+def spreadsheet_rows(data: bytes, *, filename: str) -> tuple[list[str], list[dict[str, str]]]:
+    """A CSV or the first sheet of an Excel workbook as its header row and one dict per row after it, keyed by the
+    header (c-535: a batch starts one run per row). Blank rows are left out; the dialect of a CSV is sniffed as
+    `parse_csv` does, so a quoted comma stays inside its value."""
+    if filename.lower().endswith((".xlsx", ".xlsm")):
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        try:
+            sheet = workbook.worksheets[0]
+            rows = [[_cell(v) for v in row] for row in sheet.iter_rows(values_only=True)]
+        finally:
+            workbook.close()
+    else:
+        rows = _csv_rows(data)
+    rows = [r for r in rows if any(c for c in r)]
+    if not rows:
+        return [], []
+    header = rows[0]
+    return header, [{h: (r[i] if i < len(r) else "") for i, h in enumerate(header)} for r in rows[1:]]
+
+
 def parse_xlsx(
     data: bytes,
     *,
@@ -89,12 +118,7 @@ def parse_csv(
     fields: dict[str, str] | None = None,
 ) -> ParsedDocument:
     parsing = parsing or ParsingSettings()
-    text = decode(data)
-    try:
-        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
-    except csv.Error:
-        dialect = csv.excel
-    rows = [[c.strip() for c in row] for row in csv.reader(io.StringIO(text), dialect)]
+    rows = _csv_rows(data)
     builder = DocumentBuilder()
     _add_sheet(builder, filename.rsplit(".", 1)[0], rows, parsing.tables)
     source = SourceMetadata(filename=filename, mime_type="text/csv", size_bytes=len(data), fields=fields or {})

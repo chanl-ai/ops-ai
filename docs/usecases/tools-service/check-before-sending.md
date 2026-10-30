@@ -1,6 +1,16 @@
 # A workflow's write is checked against the team's sending policy before it goes out
 
-Status: current. Id: `uc-266`. Service: `tools-service`. Layers: api. Card: c-300.
+Status: current. Id: `uc-266`. Service: `tools-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | With the check off, a run that promises a refund opens its case | ui | 2 | 2 |
+| S2 | Priya turns Check before sending on in Govern › Policies | ui | 3 | 3 |
+| S3 | The next refund promise ends at Held, and its step's sheet says why | ui | 4 | 4 |
+| S4 | A case the policy allows opens at once | ui | 5 | 5 |
+| S5 | The same through the API, with the policy saved as version 1 | api | 0-5 | 1 |
 
 With a team's check before sending on, the tool gateway judges each write that carries no approval against the team's
 newest sending policy before it runs. A write the policy forbids is refused as `needs_review` with the reason: a
@@ -31,3 +41,7 @@ team turns it on.
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-266-api.py` | `ISOLATED=1 make usecase-test UC=uc-266 LAYER=api` |
+| ui | `tools-service/scripts/test-uc-266-ui.mjs` | `make usecase-test UC=uc-266 LAYER=ui`: Policies and each run's page |
+
+The console has no page for writing the sending policy's text yet, so the ui script saves it through tools-service
+(`PUT /v1/send-policy`) before the walk.

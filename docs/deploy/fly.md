@@ -1,12 +1,10 @@
-# Ops AI staging on Fly
+# Ops AI on Fly, one app per image
 
-Status: current for production's per-service layout; staging moved to one machine (`deploy/fly-staging.md`, c-387) on
-2026-10-20 and these apps are stopped, not deleted. Created by c-203 in Fly org `<your-org>`, region `ewr`, from the per-service images of c-269, with one
-database login per service and the start check of c-336. Every app deployed from cea6a248 on 2026-10-20; a browser walk
-there clicked every console sidebar link and the first row of each list, 41 of 41 with no error or not-found page.
-Public origin while running: https://<your-app>-web.fly.dev; the smoke walk passes there (13 of 13). 
+Status: current. One way to run Ops AI on Fly: one Fly app per image in your Fly org and a region of your choice, with one
+database login per service and a start check. A single-machine layout is in `deploy/fly-staging.md`. Replace
+`<app-prefix>` with a prefix you choose; your public origin is `https://<app-prefix>-web.fly.dev`.
 
-One Fly app per image, each on one machine, talking over Fly's private network; only `<your-app>-web` (the proxy)
+One Fly app per image, each on one machine, talking over Fly's private network; only `<app-prefix>-web` (the proxy)
 is public. The app table, sizes and settings live in one place, `deploy/fly/staging/apps.py`, which writes the
 committed configs `deploy/fly/staging/<app>.toml`.
 
@@ -14,21 +12,21 @@ committed configs `deploy/fly/staging/<app>.toml`.
 
 | App | Image (`deploy/fly/Dockerfile` target) | Machine | Private address | Public path |
 |---|---|---|---|---|
-| <your-app>-web | proxy (Caddy) | shared-cpu-1x, 256 MB | | the origin |
-| <your-app>-console | console | 512 MB | `:3016` | `/` |
-| <your-app>-migrate | platform, command `migrate`; runs once per deploy and stops | 256 MB, stopped between deploys | none | none |
-| <your-app>-platform | platform | 256 MB | `:8710`, `:8711` | `/api/platform/` |
-| <your-app>-agents | agents | 512 MB | `:8700` | `/api/agents/` |
-| <your-app>-worker | agents, `python -m ops_agents.api.worker` | 512 MB | none | none |
-| <your-app>-tools | tools | 256 MB | `:8720` | `/api/tools/` |
-| <your-app>-models | models | 256 MB | `:8730` | none |
-| <your-app>-fake | models, `python -m fake_openai` | 256 MB | `:8746` | none |
-| <your-app>-bank | tools, `uvicorn fake_bank.app:app`: the bank stand-in, synthetic customers only | 256 MB | `:8080` | its own origin, https://<your-app>-bank.fly.dev |
-| <your-app>-kb | kb | 256 MB | `:8740` | `/api/kb/` |
-| <your-app>-files | files, volume `files_data` at `/data` | 256 MB, 1 GB volume | `:8750` | `/api/files/` |
-| <your-app>-documents | documents | 512 MB | `:8760` | `/api/documents/` |
-| <your-app>-opa | opa | 256 MB | `:8181` | none |
-| <your-app>-db | Fly Postgres, one node | shared-cpu-1x, 512 MB, 1 GB volume | `<your-app>-db.flycast:5432` | none |
+| <app-prefix>-web | proxy (Caddy) | shared-cpu-1x, 256 MB | | the origin |
+| <app-prefix>-console | console | 512 MB | `:3016` | `/` |
+| <app-prefix>-migrate | platform, command `migrate`; runs once per deploy and stops | 256 MB, stopped between deploys | none | none |
+| <app-prefix>-platform | platform | 256 MB | `:8710`, `:8711` | `/api/platform/` |
+| <app-prefix>-agents | agents | 512 MB | `:8700` | `/api/agents/` |
+| <app-prefix>-worker | agents, `python -m ops_agents.api.worker` | 512 MB | none | none |
+| <app-prefix>-tools | tools | 256 MB | `:8720` | `/api/tools/` |
+| <app-prefix>-models | models | 256 MB | `:8730` | none |
+| <app-prefix>-fake | models, `python -m fake_openai` | 256 MB | `:8746` | none |
+| <app-prefix>-bank | tools, `uvicorn fake_bank.app:app`: the bank stand-in, synthetic customers only | 256 MB | `:8080` | its own origin, https://<app-prefix>-bank.fly.dev |
+| <app-prefix>-kb | kb | 256 MB | `:8740` | `/api/kb/` |
+| <app-prefix>-files | files, volume `files_data` at `/data` | 256 MB, 1 GB volume | `:8750` | `/api/files/` |
+| <app-prefix>-documents | documents | 512 MB | `:8760` | `/api/documents/` |
+| <app-prefix>-opa | opa | 256 MB | `:8181` | none |
+| <app-prefix>-db | Fly Postgres, one node | shared-cpu-1x, 512 MB, 1 GB volume | `<app-prefix>-db.flycast:5432` | none |
 
 Private addresses are `<app>.internal`. Sizes come from the compose run after the walk: agents 224 MB, worker 202,
 console 253, every other service under 110.
@@ -37,7 +35,7 @@ console 253, every other service under 110.
 
 | Fact | Consequence |
 |---|---|
-| No Postgres cluster existed in any org | `<your-app>-db` was created; `fly postgres attach --database-name ops_ai --database-user ops_ai --superuser` made the one database. Only the migrate app holds that superuser; each service logs in as `ops_<service>_runtime` with DML on its own tables, no DDL, and row-level security applied (`docs/deploy/database.md`) |
+| No Postgres cluster existed in any org | `<app-prefix>-db` was created; `fly postgres attach --database-name ops_ai --database-user ops_ai --superuser` made the one database. Only the migrate app holds that superuser; each service logs in as `ops_<service>_runtime` with DML on its own tables, no DDL, and row-level security applied (`docs/deploy/database.md`) |
 | Fly's health checks reach a machine over IPv4; the private network is IPv6; asyncio opens `::` as IPv6 only | `OPS_BIND_HOST=*` listens on every address |
 | The only model connection is the fake | No provider key is set anywhere; an operator binds a real model later (below) |
 | Fly mounts a volume owned by the image's user (uid 10001 here) | files-service keeps uploaded bytes on volume `files_data` (1 GB, `/data`), so they survive a redeploy: proven by `deploy/fly/staging/bytes_survive.mjs` (upload, redeploy, the same sha256 read back). Knowledge-base bytes still sit on the kb machine's disk until a Security admin points storage at a bucket (Settings > Storage) |
@@ -45,23 +43,23 @@ console 253, every other service under 110.
 | Fly machines are amd64; `next build` under emulation on an arm64 laptop segfaults | The console's build stages run on the build machine's platform (`deploy/fly/Dockerfile`) |
 | A freshly started console machine takes some seconds to draw its first page | A walk right after a console deploy can time out on the login form; run it again once the check passes |
 | `OPS_ENVIRONMENT=production` | Nothing is seeded; the migrate app makes the first tenant, Security team and admin; a first publish waits for a second person |
-| Secrets are generated by `apps.py secrets` and staged per app; values are never printed | Each app holds its own signing key, the public keys, and only the keys it uses: the platform signing key on platform, the review key on agents, worker and tools, the secrets key on tools and files. A generated key an app does not use is unset on the next run. The set is kept in `~/.config/ops-ai/staging-keys.env` (mode 600) on the machine that made it, and the first admin's sign-in in `~/.config/ops-ai/staging-admin.env` |
+| Secrets are generated by `apps.py secrets` and staged per app; values are never printed | Each app holds its own signing key, the public keys, and only the keys it uses: the platform signing key on platform, the review key on agents, worker and tools, the secrets key on tools and files. A generated key an app does not use is unset on the next run. The set is kept in `<private-dir>/staging-keys.env` (mode 600) on the machine that made it, and the first admin's sign-in in `<private-dir>/staging-admin.env` |
 
 ## Create
 
-From the repo root, once. Each command acts only on the `<your-app>-*` apps.
+From the repo root, once. Each command acts only on the `<app-prefix>-*` apps.
 
 ```
-fly postgres create --name <your-app>-db --org <your-org> --region ewr --vm-size shared-cpu-1x --vm-memory 512 \
-  --volume-size 1 --initial-cluster-size 1 > ~/.config/ops-ai/staging-db-create.txt
+fly postgres create --name <app-prefix>-db --org <your-org> --region <region> --vm-size shared-cpu-1x --vm-memory 512 \
+  --volume-size 1 --initial-cluster-size 1 > <private-dir>/staging-db-create.txt
 for a in $(uv run python deploy/fly/staging/apps.py order); do fly apps create $a --org <your-org>; done
-fly postgres attach <your-app>-db -a <your-app>-platform --database-name ops_ai --database-user ops_ai \
-  --superuser --yes > ~/.config/ops-ai/staging-attach.txt     # holds the URL; keep it private
-grep -oE 'postgres://[^ ]+' ~/.config/ops-ai/staging-attach.txt > ~/.config/ops-ai/staging-db-url.txt
-# ~/.config/ops-ai/staging-admin.env: the five OPS_BOOTSTRAP_* lines (tenant name, team, admin email, name, password)
-# ~/.config/ops-ai/staging-logins.env: one ops_<service>_runtime=<password> line per service (generated, mode 600)
-uv run python deploy/fly/staging/apps.py secrets --db ~/.config/ops-ai/staging-db-url.txt \
-  --admin ~/.config/ops-ai/staging-admin.env --logins ~/.config/ops-ai/staging-logins.env
+fly postgres attach <app-prefix>-db -a <app-prefix>-platform --database-name ops_ai --database-user ops_ai \
+  --superuser --yes > <private-dir>/staging-attach.txt     # holds the URL; keep it private
+grep -oE 'postgres://[^ ]+' <private-dir>/staging-attach.txt > <private-dir>/staging-db-url.txt
+# <private-dir>/staging-admin.env: the five OPS_BOOTSTRAP_* lines (tenant name, team, admin email, name, password)
+# <private-dir>/staging-logins.env: one ops_<service>_runtime=<password> line per service (generated, mode 600)
+uv run python deploy/fly/staging/apps.py secrets --db <private-dir>/staging-db-url.txt \
+  --admin <private-dir>/staging-admin.env --logins <private-dir>/staging-logins.env
 ```
 
 Then deploy the migrate app, apply the logins, deploy every other app in the order below, connect the model, and
@@ -69,7 +67,7 @@ deploy the model's users again.
 
 ### Apply the logins
 
-After the migrate app has run, as the attach's superuser through `fly proxy 15433:5432 -a <your-app>-db`: the
+After the migrate app has run, as the attach's superuser through `fly proxy 15433:5432 -a <app-prefix>-db`: the
 `roles.sql` and `grants.sql` of `make db-ddl` for the deployed commit (`docs/deploy/database.md`), then
 `ALTER ROLE ops_<service>_runtime PASSWORD '<its line in staging-logins.env>'` for each. Run `grants.sql` again after
 any deploy whose migrations add tables. Staging's server (PostgreSQL 18 from Fly's image) granted CREATE on the
@@ -79,7 +77,7 @@ public schema to everyone; `grants.sql` revokes it, and a runtime login's CREATE
 
 From an export of the commit being deployed, `fly deploy <dir> -c <dir>/deploy/fly/staging/<app>.toml --local-only
 --ha=false`, in the order `apps.py order` prints:
-migrate (every chain, then the first admin; its machine runs once and stops, and `fly logs -a <your-app>-migrate`
+migrate (every chain, then the first admin; its machine runs once and stops, and `fly logs -a <app-prefix>-migrate`
 shows each chain), platform, opa, tools, models, fake, bank, kb, files, documents, agents, worker, console, web. Each service
 refuses to start on a database whose version is behind its chain. A change to `apps.py` is followed by
 `uv run python deploy/fly/staging/apps.py write`, and the configs are committed with it.
@@ -87,8 +85,8 @@ refuses to start on a database whose version is behind its chain. A change to `a
 ### Connect the model
 
 ```
-fly ssh console -a <your-app>-agents -C "python /app/deploy/fly/connect_model.py \
-  --models-url http://<your-app>-models.internal:8730 --base-url http://<your-app>-fake.internal:8746/v1 \
+fly ssh console -a <app-prefix>-agents -C "python /app/deploy/fly/connect_model.py \
+  --models-url http://<app-prefix>-models.internal:8730 --base-url http://<app-prefix>-fake.internal:8746/v1 \
   --alias default --model fake-chat --input-price 1 --output-price 1 --budget 5 --key-id purpose:agents"
 ```
 
@@ -101,39 +99,39 @@ and an operator runs the same script with `--base-url <provider>/v1 --key-ref <k
 
 | Task | Command |
 |---|---|
-| Walk the install | `OPS_SMOKE_EMAIL=<admin> OPS_SMOKE_PASSWORD=<password> node deploy/fly/smoke.mjs https://<your-app>-web.fly.dev` |
-| State | `fly status -a <your-app>-<app>`; `fly checks list -a <your-app>-<app>` |
-| Logs | `fly logs -a <your-app>-<app>` (follows); `--no-tail` prints recent lines |
-| Roll back one app | `fly releases -a <your-app>-<app> --image`, then `fly deploy -c deploy/fly/staging/<app>.toml --image <previous image>`. Migrations do not roll back: roll platform back only to an image whose chains the database already has |
+| Walk the install | `OPS_SMOKE_EMAIL=<admin> OPS_SMOKE_PASSWORD=<password> node deploy/fly/smoke.mjs https://<app-prefix>-web.fly.dev` |
+| State | `fly status -a <app-prefix>-<app>`; `fly checks list -a <app-prefix>-<app>` |
+| Logs | `fly logs -a <app-prefix>-<app>` (follows); `--no-tail` prints recent lines |
+| Roll back one app | `fly releases -a <app-prefix>-<app> --image`, then `fly deploy -c deploy/fly/staging/<app>.toml --image <previous image>`. Migrations do not roll back: roll platform back only to an image whose chains the database already has |
 | Database backup | Fly takes daily snapshots of the cluster's volume (`fly volumes snapshots list <volume id>`); restore into a new cluster and attach it |
-| Stop it all | `fly scale count 0 -a <your-app>-<app>` per app; the database keeps its data |
+| Stop it all | `fly scale count 0 -a <app-prefix>-<app>` per app; the database keeps its data |
 
 ## SQL Server test machine
 
-`<your-app>-mssql` runs SQL Server 2025 Developer edition for the second database (ADR-0017), from
+`<app-prefix>-mssql` runs SQL Server 2025 Developer edition for the second database (ADR-0017), from
 `deploy/fly/mssql/fly.toml`: one shared-cpu-1x 2 GB machine and a 3 GB volume, no service and no IP. The SA password
-is the app's `MSSQL_SA_PASSWORD` secret, kept in `~/.config/ops-ai/staging-mssql-sa.txt` (mode 600).
+is the app's `MSSQL_SA_PASSWORD` secret, kept in `<private-dir>/staging-mssql-sa.txt` (mode 600).
 
 | Task | Command |
 |---|---|
-| Start, stop | `fly machine start` / `fly machine stop` on its one machine (`fly machine list -a <your-app>-mssql`); stopped, only the volume is billed |
-| Reach it | `fly proxy 14330:1433 -a <your-app>-mssql` |
+| Start, stop | `fly machine start` / `fly machine stop` on its one machine (`fly machine list -a <app-prefix>-mssql`); stopped, only the volume is billed |
+| Reach it | `fly proxy 14330:1433 -a <app-prefix>-mssql` |
 | Tooling image | `docker build --target test-mssql -t ops-ai/test-mssql:dev -f deploy/fly/Dockerfile <export>` (ODBC Driver 18, sqlcmd) |
 | Install the bundle | `make db-ddl DIALECT=mssql`, then `python deploy/database/mssql_live.py install --dir <out> --database <name>` in that image with `OPS_MSSQL_SERVER=host.docker.internal,14330` and `MSSQL_SA_PASSWORD` |
 | Compare with the models | `python deploy/database/mssql_live.py drift --database <name>`: tables, columns and the tenant security predicates |
 | Clean up | `python deploy/database/mssql_live.py drop --database <name>` drops the database and its logins |
+| Run the SQL Server use cases | `make uc-sql-server`: builds the bundle and the test image at HEAD, starts the machine, runs uc-565 on a runner machine beside it, then destroys the runner and stops the machine; prints when the machine is up and down |
 
-**State (2026-10-19): the bundle does not install yet.** `bundle.sql` declares `ON DELETE RESTRICT` (SQL Server has
-no RESTRICT; `module_egress_hosts`) and does not set `QUOTED_IDENTIFIER` for its filtered indexes. Both come from the
-SQL Server compiler (c-344). `roles.sql` installs. The test matrix (`OPS_TEST_DATABASE_URL` on SQL Server) waits on
-the bundle. Cost: about 11 USD a month running, about 0.45 USD stopped (the volume). The machine is stopped.
+**State (2026-10-30): the bundle installs** on an empty database and matches the models (uc-565 S1); install
+runs sqlcmd with `-I`, since its filtered indexes need `QUOTED_IDENTIFIER`. Agents does not run on it yet (an earlier change T004
+to T006), and the test matrix (`OPS_TEST_DATABASE_URL` on SQL Server) has not been run. Cost: about 11 USD a month running, about 0.45 USD stopped (the volume). The machine is stopped.
 
 ## Cost
 
 About 34 USD a month at Fly's list prices, measured from the machine sizes, not from an invoice: eight 256 MB
 machines at about 2 USD, four 512 MB machines and the database at about 3.30 USD, two 1 GB volumes (the database's and files') at 0.15 USD each. The
 migrate app's machine is stopped between deploys and costs cents.
-Bandwidth for a staging walk is negligible. **Unverified** against a bill; `fly-cost-watch` tracks the org.
+Bandwidth for a staging walk is negligible. **Unverified** against a bill; Check it against your invoice.
 
 ## Not covered
 

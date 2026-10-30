@@ -19,6 +19,7 @@ A rule that is not checked by the script is still a rule; the script covers the 
 
 - Every value a screen shows comes from a hook backed by `OpsApi` (`src/lib/api/contract.ts`). Adding data means: type → contract → `http.ts` → mock → hook.
 - Counts, totals and stats are computed by the API, never aggregated in a component.
+- A screen that moves to a real service calls it through the generated SDK (`@chanl-ai/ops-ai`, a workspace package built on `pnpm install`): a hook runs `sdk((ops) => ops.raw.<service>.<operation>(...))` from `src/lib/api/ops-sdk.ts`, which sends through `fetchWithIdentity` (token, team, one renew) and turns refusals into `ApiError`. Types come from the SDK (`OpsAI['raw'][service]`), not hand-written copies. Example: `src/hooks/systems-queries.ts`. The area clients (`*-http.ts`) stay until their screens move.
 - `NEXT_PUBLIC_OPS_API_URL` set → every area uses the real HTTP client; unset → mock. `NEXT_PUBLIC_OPS_CHAT_API_URL` set → `api.chat` uses HTTP to that service (the Runtime) and every other area stays as above (`pnpm dev:runtime`). `NEXT_PUBLIC_OPS_CASES_API_URL` set → `api.cases.runs`/`run` and `api.reviews` use the agents service the same way. `NEXT_PUBLIC_AUTH_PROVIDER` picks the sign-in adapter. Only `src/lib/api/index.ts` reads env.
 
 ## Components (reuse before writing)

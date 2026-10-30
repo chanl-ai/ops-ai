@@ -38,8 +38,8 @@ They meet in two places: an agent can be a step in a workflow, and a published w
 
 | You want to | Do this |
 |---|---|
-| Build one | Workflows, New workflow, then add steps from the palette and connect their ports (typed steps planned, c-061) |
-| Test one | Test run with sample input; pin a step's output to skip it on the next try (planned, c-061 slice 3) |
+| Build one | Workflows, New workflow, then add steps from the palette and connect their ports (typed steps planned) |
+| Test one | Test run with sample input; pin a step's output to skip it on the next try (planned, an earlier change slice 3) |
 | Run one | It starts from its trigger, or from Start run; each run shows every step with its input and output |
 | Follow a run | Cases lists runs waiting on a person; Reviews holds their decisions; Activity lists every tool call behind them |
 | Let an agent use it | Publish it, then grant it to the agent as a tool. An agent can also find it by searching tools; removing the grant hides it |

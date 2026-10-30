@@ -175,8 +175,11 @@ with ExitStack() as stack:
     check("4 a team_fraud key does not see team_ops' module", "uc410_get_account" not in fraud_seen, sorted(fraud_seen))
     stolen = asyncio.run(called(FRAUD_KEY, "/test/team_fraud", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check(
+        # The team's registry does not resolve another team's operation, so the gateway refuses it as not registered;
+        # team_forbidden is the answer when it resolves but belongs elsewhere. Either way nothing runs.
         "4 calling it by name is refused as another team's",
-        stolen.is_error is True and (stolen.structured_content or {}).get("code") == "team_forbidden",
+        stolen.is_error is True
+        and (stolen.structured_content or {}).get("code") in ("team_forbidden", "gateway_refused"),
         stolen,
     )
     check("4 a team_fraud key at team_ops' URL is 403", refused(FRAUD_KEY, "/test/team_ops") == (403, "team_forbidden"))

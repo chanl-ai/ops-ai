@@ -1,0 +1,25 @@
+
+schema: ops-ai/plugin@2
+id: test.bearer
+title: Token desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [bearer]
+  sign_in: [team]
+  health_check: { path: "/bearer/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+
+egress: ["{base_url}"]
+endpoint: "{base_url}/bearer"
+tools:
+  - name: get_record
+    title: Read a record
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }
+  - name: echo
+    title: Echo what was sent
+    access: read
+    function: kinds_bearer.tools:echo

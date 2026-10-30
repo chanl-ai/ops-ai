@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-107`. Service: `console`. Layers: ui.
 
-c-093: secrets management and connectivity with tools; c-509: a secret belongs to one team. Settings > Secrets shows
+an earlier change: secrets management and connectivity with tools; an earlier change: a secret belongs to one team. Settings > Secrets shows
 the current team's secrets with the operations that read each, rotates one for all of them at once, refuses a delete
 while one reads it, and lists the storage credentials files-service keeps beside them. Another team that calls the same
 system keeps its own secret under the same name.

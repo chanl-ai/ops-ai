@@ -14,10 +14,11 @@ is scrubbed from the answer the function receives."""
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_policy import HmacSigner, TokenError, mint, verify
 from ops_service_kit.errors import Unauthorized, Unprocessable
 
@@ -72,6 +73,8 @@ class CodeExecutor:
             "secrets": list(code.get("secrets") or []),
             "key": key,
             "environment": env,
+            # The person the run's caller acts for, so a call the function makes acts for them too (c-558).
+            "acting_for": asdict(caller.acting_for) if caller.acting_for else None,
         }
         return mint(claims, self.signer, ttl_s=int(float(limits.get("timeS", 10)) + TOKEN_GRACE_S))
 
@@ -131,6 +134,12 @@ def run_claims(token: str | None, signer: HmacSigner) -> dict[str, Any]:
     if claims.get("purpose") != PURPOSE:
         raise Unauthorized("This is not a code run's call token.", code="code_run_token")
     return claims
+
+
+def run_acting_for(claims: dict[str, Any]) -> ActingForPerson | None:
+    """The person a code run's calls act for, from its signed call token; None when the run acted for nobody."""
+    named = cast(dict[str, str] | None, claims.get("acting_for"))
+    return ActingForPerson(**named) if named else None
 
 
 def run_caller(claims: dict[str, Any]) -> Principal:

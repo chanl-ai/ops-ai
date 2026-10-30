@@ -8,7 +8,7 @@ import type { AnswerShape, FilterGroup, QueryMode, RetrievalTrace, RewriteMode, 
 
 export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 
-export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce';
+export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
 
 export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
 export type RunStatus = 'success' | 'partial' | 'failed' | 'running' | 'backing_off';

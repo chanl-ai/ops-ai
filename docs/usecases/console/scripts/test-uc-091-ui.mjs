@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_all' };
+const TEAM = { 'X-Team-Id': 'team_ops' };
 const armed = (p) => (p.catch(() => undefined), p);
 const NAME = `Overrides Desk ${Math.random().toString(36).slice(2, 6)}`;
 const PDF = fileURLToPath(new URL('../../../../services/kb-service/seed/pdfs/fee-schedule-v2.pdf', import.meta.url));
@@ -31,6 +31,8 @@ await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
+    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -44,7 +46,7 @@ await withUiStack(async (consoleUrl) => {
       await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
       await page.getByRole('button', { name: 'Regenerate' }).last().waitFor({ timeout: 60_000 }).catch(() => undefined);
     };
-    const lookups = () => page.getByTestId('chat-tool-call').filter({ hasText: 'lookup_account' }).count();
+    const lookups = () => page.getByTestId('chat-tool-call').filter({ hasText: 'Lookup account' }).count();
 
     // Control: with nothing narrowed, the agent calls its lookup tool.
     await send('Look up CHQ-2219');

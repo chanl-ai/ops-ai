@@ -40,6 +40,8 @@ DEFAULTS: dict[str, Any] = {
     "pageImages": {},
     # Per team and on unless a team turns it off (c-321): {} names no team, so every team masks.
     "aiStepsMaskPersonalData": {},
+    # No plugin is on until the platform admin turns it on for the install (c-564).
+    "plugins": {},
 }
 # The AI uses: the one documented exception to open defaults, off until a team turns them on.
 OFF_UNTIL_ON = ("aiSteps", "taskAssist", "checkBeforeSend", "pageImages")

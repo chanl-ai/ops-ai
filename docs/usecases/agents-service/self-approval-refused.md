@@ -10,7 +10,7 @@ Status: current. Id: `uc-009`. Service: `agents-service`. Layers: api.
 | Free use-case ports | agents :8790 (ISOLATED=1 adds 1000) |
 
 The script starts the agents service on the scripted model with `OPS_DEV_POLICIES='{"requesterMayDecide": false}'`,
-the dev stand-in for a workspace whose admin switched the policy off (c-186). The policy is open by default, so a
+the dev stand-in for a workspace whose admin switched the policy off. The policy is open by default, so a
 workspace that never sets it lets the asker decide; a two-approver review still needs two different people.
 
 ## Steps and expected results
@@ -26,6 +26,8 @@ workspace that never sets it lets the asker decide; a two-approver review still 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-009-api.py` | passing |
+
+In the console: uc-086's ui script, steps 9 and 10: the person whose chat drafted the write sees who decides and no Approve of their own, and a reviewer of the team approves it in Human Tasks.
 
 ## Non-vacuous check
 

@@ -1,12 +1,14 @@
 """Writes the developer skills for Claude Code and GitHub Copilot from their one copy in docs/guide/skills/ (c-554).
 
-    python3 scripts/agent_skills.py           write .claude/skills/ops-*/SKILL.md, .github/prompts/ops-*.prompt.md and
-                                              .github/copilot-instructions.md
+    python3 scripts/agent_skills.py           write .claude/skills/ops-*/SKILL.md (and .claude/skills/usecase/SKILL.md),
+                                              .github/prompts/<skill>.prompt.md and .github/copilot-instructions.md
     python3 scripts/agent_skills.py --check   exit 1 when a written file differs from its page, a page is malformed,
                                               or a generated file has no page (make verify runs this)
 
 A page has a title, a Status line, `skill:`, `description:` and `targets:` lines, its sections, and one fenced
-`bash proof` block that `make skills-proof` runs. The standard library only.
+`bash proof` block that `make skills-proof` runs. A skill is named `ops-<name>`, or one of UNPREFIXED, whose name
+people already type (`/usecase`). A written file is known by its "Generated from" note, so an unprefixed skill is told
+apart from a codeloop process skill. The standard library only.
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ CLAUDE_SKILLS = ROOT / ".claude" / "skills"
 PROMPTS = ROOT / ".github" / "prompts"
 INSTRUCTIONS = ROOT / ".github" / "copilot-instructions.md"
 PREFIX = "ops-"
+UNPREFIXED = {"usecase", "wf-builder"}
+MARK = "by `scripts/agent_skills.py`; change the page, not this file."
 # Copilot reads the instructions file on every request and asks for about two pages at most.
 MAX_INSTRUCTION_WORDS = 1000
 ALLOWED_TOOLS = "Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob"
@@ -62,11 +66,15 @@ def skills() -> list[Skill]:
     return [parse(p) for p in sorted(PAGES.glob("*.md"))]
 
 
+def generated(path: Path) -> bool:
+    return path.is_file() and MARK in path.read_text()
+
+
 def process_skills() -> set[str]:
     """The codeloop process skills already beside the generated ones, which a developer skill may not shadow."""
     if not CLAUDE_SKILLS.exists():
         return set()
-    return {p.name for p in CLAUDE_SKILLS.iterdir() if p.is_dir() and not p.name.startswith(PREFIX)}
+    return {p.name for p in CLAUDE_SKILLS.iterdir() if p.is_dir() and not generated(p / "SKILL.md")}
 
 
 def claude_skill(s: Skill) -> str:
@@ -119,7 +127,7 @@ def problems(files: dict[Path, str]) -> list[str]:
     out: list[str] = []
     taken = process_skills()
     for s in skills():
-        if not s.name.startswith(PREFIX):
+        if not s.name.startswith(PREFIX) and s.name not in UNPREFIXED:
             out.append(f"{s.page.relative_to(ROOT)}: skill {s.name} does not start with {PREFIX}")
         if s.name in taken:
             out.append(f"{s.page.relative_to(ROOT)}: {s.name} is a process skill's name")
@@ -133,7 +141,15 @@ def problems(files: dict[Path, str]) -> list[str]:
 
 def stale(files: dict[Path, str]) -> list[str]:
     """Written files that differ from what the pages give, are missing, or have no page any more."""
-    on_disk = set(CLAUDE_SKILLS.glob(f"{PREFIX}*/SKILL.md")) | set(PROMPTS.glob(f"{PREFIX}*.prompt.md"))
+
+    # Ours by name (ops-*, UNPREFIXED) or by the generator's note; a leftover prompt or skill under one of our names
+    # is drift even when its note is gone.
+    def ours(p: Path, name: str) -> bool:
+        return name.startswith(PREFIX) or name in UNPREFIXED or generated(p)
+
+    skill_files = [p for p in CLAUDE_SKILLS.glob("*/SKILL.md") if ours(p, p.parent.name)]
+    prompt_files = [p for p in PROMPTS.glob("*.prompt.md") if ours(p, p.name.removesuffix(".prompt.md"))]
+    on_disk = set(skill_files) | set(prompt_files)
     out = [str(p.relative_to(ROOT)) for p, text in files.items() if not p.exists() or p.read_text() != text]
     return sorted(out + [str(p.relative_to(ROOT)) for p in on_disk - set(files)])
 

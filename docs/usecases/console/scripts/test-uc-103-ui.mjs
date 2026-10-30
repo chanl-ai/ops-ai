@@ -4,7 +4,7 @@
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_all', 'Content-Type': 'application/json' };
+const TEAM = { 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
 const TAG = Math.random().toString(36).slice(2, 6);
 const armed = (p) => (p.catch(() => undefined), p);
 
@@ -28,6 +28,8 @@ await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
+    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${consoleUrl}/widgets/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

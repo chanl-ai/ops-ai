@@ -132,12 +132,19 @@ export default function ToolCallsPage() {
         <QueryError what="tool calls" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4">
+          {/* tools-service's /executions serves no totals yet; without them the cards would wait forever. */}
+          {!stats ? (
+            <p className="text-sm text-muted-foreground" data-testid="tool-calls-no-totals">
+              Totals are not served yet. The list below holds every call.
+            </p>
+          ) : (
           <StatCardGrid columns={4}>
-            <StatCard label="Failed" value={stats ? count(stats.failed) : undefined} icon={AlertCircle} footer={{ text: `${pct(stats?.errorRate ?? 0)} of calls · p95 ${ms(stats?.p95Ms ?? 0)}`, subtext: 'Errors returned by the system' }} />
-            <StatCard label="Denied" value={stats ? count(stats.denied) : undefined} icon={Ban} footer={{ text: 'Refused at the gateway', subtext: 'No grant, or an expired one' }} />
-            <StatCard label="Writes approved by a person" value={stats ? count(stats.writesApprovedByPerson) : undefined} icon={UserCheck} footer={{ text: 'Approval token checked at the gateway', subtext: 'Policy approvals counted separately' }} />
-            <StatCard label="Awaiting approval" value={stats ? count(stats.awaitingApproval) : undefined} icon={Clock} footer={{ text: 'Paused until someone decides', subtext: 'Open in Reviews' }} />
+            <StatCard label="Failed" value={count(stats.failed)} icon={AlertCircle} footer={{ text: `${pct(stats.errorRate ?? 0)} of calls · p95 ${ms(stats.p95Ms ?? 0)}`, subtext: 'Errors returned by the system' }} />
+            <StatCard label="Denied" value={count(stats.denied)} icon={Ban} footer={{ text: 'Refused at the gateway', subtext: 'No grant, or an expired one' }} />
+            <StatCard label="Writes approved by a person" value={count(stats.writesApprovedByPerson)} icon={UserCheck} footer={{ text: 'Approval token checked at the gateway', subtext: 'Policy approvals counted separately' }} />
+            <StatCard label="Awaiting approval" value={count(stats.awaitingApproval)} icon={Clock} footer={{ text: 'Paused until someone decides', subtext: 'Open in Reviews' }} />
           </StatCardGrid>
+          )}
 
           <DataTableWithViews
             columns={columns}
@@ -145,7 +152,7 @@ export default function ToolCallsPage() {
             getRowId={(r) => r.id}
             searchColumn="target"
             initialColumnFilters={[...(q ? [{ id: 'target', value: q }] : []), ...(run ? [{ id: 'runId', value: [run] }] : [])]}
-            searchPlaceholder="Search tool, model, workflow, run, case or record…"
+            searchPlaceholder="Search tools, models, runs or cases…"
             initialColumnVisibility={{ record: false, cost: false, run: false }}
             filters={[
               { column: 'gateway', title: 'Gateway', options: withCounts('gateway', options(GATEWAY_LABEL)) },

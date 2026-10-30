@@ -1,6 +1,6 @@
 # Every fixture of four document types is read end to end
 
-Status: current. Id: `uc-250`. Service: `documents-service`. Layers: api. Cards: c-255, c-295, c-297.
+Status: current. Id: `uc-250`. Service: `documents-service`. Layers: api. Cards: an earlier change, an earlier change, an earlier change.
 
 Every text fixture of the four seeded document types (restraining notices, tax orders, supplier invoices, bank
 statements) is uploaded to files-service and read by documents-service with its type. One fixture of each type is read

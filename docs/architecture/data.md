@@ -10,7 +10,7 @@ another service's tables ([service-map.md](service-map.md)).
 
 | Rule | What it means | In code |
 |---|---|---|
-| Every record has one team | A team-owned table carries `team_id NOT NULL` and the generated team policy, which reads only the acting team's rows (no null branch since c-507); account records (people, memberships, role assignments, API keys, sign-in audit, outboxes) and the background processes are named in the lock with their reason | `scripts/tests/test_team_boundary.py`, `ops_store.schema.isolation_ddl`, `docs/architecture/identity-and-tenancy.md` "The team is the workspace" |
+| Every record has one team | A team-owned table carries `team_id NOT NULL` and the generated team policy, which reads only the acting team's rows (no null branch since an earlier change); account records (people, memberships, role assignments, API keys, sign-in audit, outboxes) and the background processes are named in the lock with their reason | `scripts/tests/test_team_boundary.py`, `ops_store.schema.isolation_ddl`, `docs/architecture/identity-and-tenancy.md` "The team is the workspace" |
 | One door per service | A service reaches its database only through repository classes in its `store/` package; routers and runtime code call them and never import SQLAlchemy | In code: agents-service repositories are in `ops_agents/store/`, tools-service's in `ops_tools/store/`. The `drivers-only-in-stores` contract in `.importlinter` (`uv run lint-imports`, in the commit gate and `make python-verify`) fails a database driver imported elsewhere; it lists no file outside a store |
 | Guarantees declared | Each repository class names what its correctness rests on, `requires: frozenset[Guarantee]`: `CAS`, `TRANSACTION`, `LOCK`, `CLOCK`, `RLS`. A backend lists what it provides; a repository is refused on one that lacks a guarantee (`ops_store.unmet`) | `packages/ops_store` |
 | Conformance per port | Each port whose correctness rests on a guarantee has a suite, run by the owning service on every registered backend: leases (a lapsed owner's write is refused, one of many contenders wins), timer claims (exactly one poller), audit (a change and its entry land together or neither) | `ops_store.conformance`; each suite fails on a test implementation that drops its guarantee |
@@ -28,6 +28,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.actor_names` | `ActorNames` | none | none |
 | agents-service | `ops_agents.store.agent_registry` | `AgentRegistry` | CAS, TRANSACTION | `registry_agent_versions`, `registry_agents`, `registry_publish_requests` |
 | agents-service | `ops_agents.store.background` | `BackgroundJobs` | RLS, TRANSACTION | `background_heartbeats`, `background_jobs` |
+| agents-service | `ops_agents.store.batches` | `Batches` | none | `run_batch_rows`, `run_batches` |
 | agents-service | `ops_agents.store.case_links` | `CaseLinks` | none | none |
 | agents-service | `ops_agents.store.case_types` | `CaseTypeStore` | CAS, TRANSACTION | `case_type_versions`, `case_types` |
 | agents-service | `ops_agents.store.cases` | `CaseStore` | TRANSACTION | `case_events`, `cases` |
@@ -36,12 +37,13 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.chat_attachments` | none: no repository class | | `chat_attachments` |
 | agents-service | `ops_agents.store.chat_search` | none: no repository class | | `chat_search` |
 | agents-service | `ops_agents.store.events` | `EventLog` | CAS | `thread_events` |
+| agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
 | agents-service | `ops_agents.store.guardrails` | `GuardrailRegistry` | CAS, TRANSACTION | `registry_guardrail_versions`, `registry_guardrails` |
 | agents-service | `ops_agents.store.journal` | `GraphJournal` | none | none |
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
-| agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit` |
+| agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
 | agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records` |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
@@ -51,6 +53,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.task_assists` | `TaskAssistStore` | CAS | `task_assists` |
 | agents-service | `ops_agents.store.task_types` | `TaskTypeStore` | CAS, TRANSACTION | `task_type_versions`, `task_types` |
 | agents-service | `ops_agents.store.team_defaults` | `TeamDefaults` | none | `team_default_agents` |
+| agents-service | `ops_agents.store.template_copies` | `TemplateCopies` | none | `template_copies` |
 | agents-service | `ops_agents.store.timers` | `TimerStore` | CAS, CLOCK, LOCK, TRANSACTION | `timers` |
 | agents-service | `ops_agents.store.trigger_events` | `TriggerEvents` | none | `trigger_events` |
 | agents-service | `ops_agents.store.typed_records` | `VersionedRecords` | CAS, TRANSACTION | none |
@@ -86,10 +89,12 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
-| tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `connection_audit`, `connection_environments`, `connection_tokens`, `connections`, `oauth_states` |
+| tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `connect_links`, `connection_audit`, `connection_environments`, `connection_tokens`, `connections`, `oauth_states` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |
 | tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | `operation_mocks` |
 | tools-service | `ops_tools.store.modules` | `ModuleStore` | CAS, TRANSACTION | `module_approvals`, `module_egress_hosts`, `module_operations`, `module_versions`, `service_outbox`, `tool_modules` |
+| tools-service | `ops_tools.store.plugin_app_keys` | `PluginAppKeys` | CAS | `plugin_app_keys` |
+| tools-service | `ops_tools.store.plugin_bindings` | `PluginBindings` | CAS | `plugin_bindings` |
 | tools-service | `ops_tools.store.rate_windows` | `RateWindows` | CAS | `operation_rate_windows` |
 | tools-service | `ops_tools.store.secrets` | `SecretStore` | TRANSACTION | `secret_audit`, `tool_secrets` |
 | tools-service | `ops_tools.store.send_policies` | `SendPolicies` | CAS | `send_checks`, `send_policies` |
@@ -125,7 +130,7 @@ The columns those chains added that change a guarantee:
 | `graph_threads` | agents-service | Thread: graph, metadata, `team_id`, status, `version`, `digest`, `external_key` (unique), `deployment_id`, `parent_thread_id` | 0002, 0003, 0010 |
 | `graph_runs` | agents-service | Run journal: kind, status, events (JSON), input, timestamps | 0002, 0005 |
 | `graph_versions` | agents-service | Published definitions: name, version, digest, definition JSON | 0003 |
-| `ops_checkpoints`, `ops_checkpoint_writes` | agents-service, schema shipped by `ops_checkpointer` | LangGraph checkpoints and task writes, keyed by `(tenant_id, team_id, thread_id, checkpoint_ns, checkpoint_id)`; RLS forced. `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (0071, c-280); like the tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite (c-337), so the golden DDL, the ERD and drift do not show it | 0004, 0071 |
+| `ops_checkpoints`, `ops_checkpoint_writes` | agents-service, schema shipped by `ops_checkpointer` | LangGraph checkpoints and task writes, keyed by `(tenant_id, team_id, thread_id, checkpoint_ns, checkpoint_id)`; RLS forced. `ix_ops_checkpoints_run` (tenant_id, team_id, (metadata->>'run_id')) serves the delete by run (0071); like the tables it is raw SQL with no metadata until the checkpointer's SQL Server rewrite, so the golden DDL, the ERD and drift do not show it | 0004, 0071 |
 | `ops_checkpoint_fences` | agents-service, `ops_checkpointer` | Highest lease generation seen per thread; RLS forced | 0008 |
 | `thread_leases` | agents-service | Lease per thread with generation; released rows kept so the count never restarts | 0005, 0008 |
 | `timers` | agents-service | SLA timers with fenced claims, attempts and failure | 0007, 0009 |
@@ -139,13 +144,13 @@ The columns those chains added that change a guarantee:
 | `usage_records` | agents-service; models-service by design | One row per model call: thread, run, node, kind, model alias, calls, input and output tokens, `cost_micros`. Written as each call returns, outside the checkpoint and unfenced | 0013 |
 | `thread_budgets` | agents-service | Caps per thread: `max_calls`, `max_tokens`, `max_cost_micros`; an unset cap does not limit | 0013 |
 | `model_calls` | agents-service | One completed model response per `(thread_id, request_hash)`, replayed when a node re-runs ([durability-failure-and-audit.md](durability-failure-and-audit.md#re-execution)) | 0014 |
-| `task_assists` | agents-service | What task assist wrote for a typed task when its review step paused: one row per `(tenant_id, step_id)`, the step id `run:node:iteration`; a second write for the step is refused, so the first assist stays (c-302) | 0064, 0068 |
-| `gateway_calls` | tools-service | Call log: tool, access, input hash, thread, step, `sub`, `act`, decision, reasons, approvers, outcome, effect, output; the environment (test or production) and connection a call used (c-330); `channel`, the route that took the call (`api`, POST /v1/calls, or `mcp`), and `client_name`, the name an MCP client gives itself, a claim shown as one (c-356); both null on older rows | 0006; tools 0028, 0030 |
-| `module_operations` | tools-service | A tool module's operations: access (read or write), executor, method, path, headers, body and response templates, input and masked output, rate limit, amount cap, the write approval policy (approvers, their team, step-up), the declared output shape, and `response_schema`, the JSON Schema of the first success response an OpenAPI import gives, so a workflow step shows its output fields before it runs (c-353) | tools 0002, 0011, 0012, 0014, 0031 |
-| `connections`, `connection_environments` | tools-service | How the platform signs in to one system: auth kind, owning team, available-to teams, status, revision; per environment the plain settings (the system address its credentials are bound to, token and sign-in addresses, client id) and the `tool_secrets` names of its secret parts (c-330) | tools 0028 |
-| `connection_tokens`, `oauth_states` | tools-service | Encrypted access and refresh tokens per connection, environment and person, stored against the rotation they replaced; sign-ins in progress by state hash with the encrypted PKCE verifier, used once (c-330) | tools 0028 |
-| `connection_audit` | tools-service | Each connection change, secret set, sign-in, sign-out and failed refresh: names only (c-330) | tools 0028 |
-| `operation_mocks` | tools-service | An operation's mock answers per environment, in order, one default (c-332) | tools 0029 |
+| `task_assists` | agents-service | What task assist wrote for a typed task when its review step paused: one row per `(tenant_id, step_id)`, the step id `run:node:iteration`; a second write for the step is refused, so the first assist stays | 0064, 0068 |
+| `gateway_calls` | tools-service | Call log: tool, access, input hash, thread, step, `sub`, `act`, decision, reasons, approvers, outcome, effect, output; the environment (test or production) and connection a call used; `channel`, the route that took the call (`api`, POST /v1/calls, or `mcp`), and `client_name`, the name an MCP client gives itself, a claim shown as one; both null on older rows | 0006; tools 0028, 0030 |
+| `module_operations` | tools-service | A tool module's operations: access (read or write), executor, method, path, headers, body and response templates, input and masked output, rate limit, amount cap, the write approval policy (approvers, their team, step-up), the declared output shape, and `response_schema`, the JSON Schema of the first success response an OpenAPI import gives, so a workflow step shows its output fields before it runs; `needs_person`, only a person's own sign-in signs its calls, beside `tool_modules.sign_in`, the sign-in its module supports, and `scopes`, the ones a person's own sign-in must hold to call it | tools 0002, 0011, 0012, 0014, 0031, 0039, 0040 |
+| `connections`, `connection_environments` | tools-service | How the platform signs in to one system: auth kind, owning team, available-to teams, status, revision; per environment the plain settings (the system address its credentials are bound to, token and sign-in addresses, client id) and the `tool_secrets` names of its secret parts; whose account a call signs in with, the team backup, and the last Test connection's result | tools 0028, 0037, 0038 |
+| `connection_tokens`, `oauth_states` | tools-service | Encrypted access and refresh tokens per connection, environment and person, stored against the rotation they replaced; sign-ins in progress by state hash with the encrypted PKCE verifier, used once, and the scopes each asked for, which a token answer that names none granted | tools 0028, 0040 |
+| `connection_audit` | tools-service | Each connection change, secret set, sign-in, sign-out and failed refresh: names only | tools 0028 |
+| `operation_mocks` | tools-service | An operation's mock answers per environment, in order, one default | tools 0029 |
 | `gateway_fences` | tools-service | Highest lease generation seen per thread | 0008 |
 
 The tools-service tables sit in agents-service's Alembic history and tools-service's tests run inside agents-service.
@@ -157,9 +162,9 @@ psycopg saver still hold LangGraph's `checkpoints`, `checkpoint_writes`, `checkp
 
 | Part | Detail |
 |---|---|
-| Class | `AsyncpgSaver(BaseCheckpointSaver)`: `aget_tuple`, `alist`, `aput`, `aput_writes`, `adelete_thread`, `adelete_for_runs`, `acopy_thread`, `aprune`, fences, and sync shims |
-| Dependencies | `langgraph-checkpoint` and `asyncpg` only |
-| Storage | One `JsonPlusSerializer` blob per checkpoint with every channel value; metadata stored twice, as the serde blob for exact round trips and as `jsonb` for filters |
+| Class | `CheckpointSaver(BaseCheckpointSaver)`: `aget_tuple`, `alist`, `aput`, `aput_writes`, `adelete_thread`, `adelete_for_runs`, `acopy_thread`, `aprune`, fences, and sync shims |
+| Dependencies | `langgraph-checkpoint`, SQLAlchemy and `ops_store`: the same Core statements on PostgreSQL and SQL Server, upserts and row locks from `ops_store.dialect`, the tenant and team through `ops_store.isolation` |
+| Storage | One `JsonPlusSerializer` blob per checkpoint with every channel value; metadata stored twice, as the serde blob for exact round trips and as JSON, with `run_id` in its own indexed column for deleting a run's checkpoints; other filter keys are compared after reading |
 | Writes | Regular writes insert-or-ignore, so a replayed task keeps its first copy; errors, interrupts and resumes are upserted, so a resume reads the latest |
 | Conformance | Passes LangGraph's suite: 81 cases, base and extended capabilities. Re-run it on every `langgraph-checkpoint` upgrade |
 | Tables | Shipped as a migration the using service applies; the data belongs to that service |

@@ -2,6 +2,13 @@
 
 Status: current. Id: `uc-027`. Service: `agents-service`. Layers: api.
 
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | A reviewer approves while another run holds the thread; the approval is kept and resumes later | api | 1-2 | 2 |
+| S2 | When the thread is free after the approval's token expired, the run renews the token from the recorded approval and sends the reply once | api | 1-3 | 3 |
+
 ## Preconditions
 
 | Needs | How |

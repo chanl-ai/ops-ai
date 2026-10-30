@@ -1,6 +1,6 @@
 # A crafted PDF runs no script in the viewer
 
-Status: current. Id: `uc-398`. Service: `console`. Layers: ui. Card: c-350.
+Status: current. Id: `uc-398`. Service: `console`. Layers: ui. Card: an earlier change.
 
 PDF.js before 6.2.108 runs a document's JavaScript in the page's own origin when scripting is on and no CSP blocks it
 (GHSA-hq66-cqwq-w95j, CVE-2026-16633). The console's viewer opens uploaded bank documents, so a document's scripts must

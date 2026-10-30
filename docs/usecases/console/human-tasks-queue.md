@@ -1,6 +1,6 @@
 # A reviewer decides a Human Task beside a fixed decision panel
 
-Status: current. Id: `uc-460`. Service: `console` with `agents-service`. Layers: ui. Card: c-460.
+Status: current. Id: `uc-460`. Service: `console` with `agents-service`. Layers: ui. Card: an earlier change.
 
 Human Tasks is one page: the queue grouped by case on the left, the open task's evidence beside a decision panel whose
 header and Decide stay in view. The service orders and names the cases (`GET /v1/reviews?group=case`) and says which

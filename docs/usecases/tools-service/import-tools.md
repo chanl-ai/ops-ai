@@ -15,7 +15,7 @@ Status: current. Id: `uc-012`. Service: `tools-service`. Layers: api.
 |---|---|---|
 | 1 | Discover the document before its host is on the egress allow-list | 400 |
 | 2 | List the host, discover again (it resolves to an unlisted private address) | 400, and the bank received nothing |
-| 3 | List the bank's range, discover again | the document is read; each GET is a read (c-048 T006) |
+| 3 | List the bank's range, discover again | the document is read; each GET is a read (an earlier change T006) |
 | 4 | Create a module from the document, sending a forged `DELETE /admin` for `get_account` | the module holds `GET /accounts/{accountId}` |
 | 5 | Request a security review; someone else approves it | the module is published |
 | 6 | Call `get_account` through `/v1/calls` | the bank's answer |

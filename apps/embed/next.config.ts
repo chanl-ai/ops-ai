@@ -14,6 +14,19 @@ const nextConfig: NextConfig = {
     root: resolve(__dirname, '../..'),
     resolveAlias: { '@/lib/api': './src/widget-api/index.ts' },
   },
+  // A hosted form's address carries its token (c-535): no Referer may take it to another site, and no page may frame
+  // the form. proxy.ts sets frame-ancestors only for /embed/ pages, from each deployment's origins.
+  async headers() {
+    return [
+      {
+        source: '/f/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
   // One host for the loader, the page, the config and the widget API, as a bank's ingress routes them.
   async rewrites() {
     return [

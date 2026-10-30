@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Ops AI Python workspace: reusable libraries in packages/, deployable services in services/"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-checkpointer", "ops-metering", "ops-policy", "ops-identity", "ops-access", "ops-agents-service", "ops-platform-service", "ops-tools-service", "ops-models-service", "ops-storage", "ops-ingest[ocr]", "ops-files-service", "ops-files-client", "ops-documents-service", "ops-documents-client", "ops-kb-service", "ops-runner-service", "ops-store", "ops-engine", "ops-email", "ops-signin[fake]"]
+dependencies = ["ops-contracts", "ops-service-kit", "ops-agent-kernel", "ops-checkpointer", "ops-metering", "ops-policy", "ops-identity", "ops-access", "ops-agents-service", "ops-platform-service", "ops-tools-service", "ops-models-service", "ops-storage", "ops-ingest[ocr]", "ops-files-service", "ops-files-client", "ops-documents-service", "ops-documents-client", "ops-kb-service", "ops-runner-service", "ops-store", "ops-engine", "ops-email", "ops-signin[fake]", "ops-plugin-sdk"]
 
 [dependency-groups]
 dev = [
@@ -44,10 +44,11 @@ exclude-newer = "2026-09-27T00:00:00Z"
 exclude-newer-package = { certifi = "2026-10-21T00:00:00Z", pillow = "2026-10-17T00:00:00Z", asyncpg = "2026-10-07T00:00:00Z" }
 
 [tool.uv.workspace]
-members = ["packages/contracts", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service", "services/runner-service"]
+members = ["packages/contracts", "packages/ops_plugin_sdk", "packages/ops_service_kit", "packages/ops_agent_kernel", "packages/ops_pii", "packages/ops_checkpointer", "packages/ops_metering", "packages/ops_policy", "packages/ops_identity", "packages/ops_access", "packages/ops_storage", "packages/ops_ingest", "packages/ops_extract", "packages/ops_store", "packages/ops_engine", "packages/ops_files_client", "packages/ops_documents_client", "packages/ops_signin", "packages/ops_email", "services/agents-service", "services/platform-service", "services/tools-service", "services/models-service", "services/files-service", "services/documents-service", "services/kb-service", "services/runner-service"]
 
 [tool.uv.sources]
 ops-contracts = { workspace = true }
+ops-plugin-sdk = { workspace = true }
 ops-service-kit = { workspace = true }
 ops-agent-kernel = { workspace = true }
 ops-pii = { workspace = true }

@@ -1,0 +1,7 @@
+# The image the SQL Server use cases run in (deploy/fly/Dockerfile, target test-mssql: ODBC Driver 18 and sqlcmd),
+# built by run-usecases.sh into the SQL Server test app's registry and run there as a one-off machine. Never deployed.
+app = "<app-prefix>-mssql"
+
+[build]
+  dockerfile = "../Dockerfile"
+  build-target = "test-mssql"

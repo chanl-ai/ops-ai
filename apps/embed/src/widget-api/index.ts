@@ -94,6 +94,8 @@ export { ApiError, type OpsApi } from '@/lib/api/contract';
 export const filesOnService = false;
 /** Widget calls carry the widget session, not a team, so the console's team queries run without waiting for one. */
 export const queriesNeedTeam = false;
+// The embedded chat has no sign-in pages, so a tool that needs a person's own account shows as a failed call (c-558).
+export const personalSignIn = false;
 /** The bank page brands the widget itself; the console's demo brand never applies here. */
 export const brand: { name?: string; logo?: string } = {};
 

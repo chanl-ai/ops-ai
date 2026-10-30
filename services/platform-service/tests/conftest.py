@@ -179,7 +179,7 @@ async def platform(engine: AsyncEngine, database_url: str) -> AsyncIterator[Plat
     store = IdentityStore.open(database_url)
     signer = dev_signer()
     public = create_public_app(store, signer, demo_password=DEMO_PASSWORD, audiences=["platform", "agents"])
-    internal = create_internal_app(store, services=SERVICES)
+    internal = create_internal_app(store, services=SERVICES, signer=signer)
     async with (
         httpx.AsyncClient(
             transport=httpx.ASGITransport(app=public),

@@ -60,6 +60,9 @@ class SourceIn(In):
     file_ids: list[str] = []
     kb_ids: list[str] = []
     sync: bool = False
+    # A "tool" source's plugin and source names (c-564): {"plugin": "opsai.salesforce", "source": "articles"}. Any
+    # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
+    config: dict[str, Any] | None = None
 
 
 class KbSourceLink(Out):

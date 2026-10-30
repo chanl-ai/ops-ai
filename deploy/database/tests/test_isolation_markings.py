@@ -45,6 +45,8 @@ WAITING: dict[str, set[str]] = {
         "registry_workflows",
     },
     "c-414": {
+        # connect_links (c-558) is team-owned and read through team_visible; its database policy comes with these.
+        "connect_links",
         "connection_audit",
         "connection_environments",
         "connection_tokens",
@@ -61,6 +63,9 @@ WAITING: dict[str, set[str]] = {
         "oauth_states",
         "operation_mocks",
         "operation_rate_windows",
+        "plugin_bindings",
+        # Account-scoped by design, with no team: the platform's own OAuth app secret per plugin (c-565).
+        "plugin_app_keys",
         "secret_audit",
         "send_checks",
         "send_policies",

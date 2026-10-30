@@ -657,6 +657,40 @@ export interface Overview {
   urgentReviews: Review[];
   /** open: open or waiting on us; breaching: past the resolution deadline and not paused; awaitingApproval: with a review open. */
   cases: { open: number; breaching: number; awaitingApproval: number };
+  /** What the sidebar's Overview row, the Overview widgets and Chat's hints count (c-552): one response, already joined. */
+  counts: { waitingForMe: number; runsInFlight: number; casesDue: number };
+  /** Open Human Tasks assigned to the viewer, the one waiting longest first; at most five. */
+  waitingForMe: OverviewTask[];
+  /** Runs running or waiting on a person, newest first; at most five. */
+  runsInFlight: OverviewRun[];
+  /** Cases due by the end of today or already past, not resolved and not waiting on the customer, soonest first. */
+  casesDue: OverviewCase[];
+}
+
+export interface OverviewTask {
+  id: string;
+  title: string;
+  workflowName?: string | null;
+  caseId?: string | null;
+  createdAt: string;
+  dueAt?: string | null;
+}
+
+export interface OverviewRun {
+  id: string;
+  workflowId: string;
+  /** The workflow's display name. */
+  subject: string;
+  state: 'running' | 'waiting';
+  startedAt: string;
+}
+
+export interface OverviewCase {
+  id: string;
+  subject: string;
+  customerName?: string | null;
+  status: string;
+  resolutionDueAt?: string | null;
 }
 
 export interface Stat<T extends string = string> {

@@ -25,6 +25,7 @@
   },
   "homepage": "https://opsai.chanl.ai/docs/sdk/typescript",
   "scripts": {
+    "prepare": "tsc -p tsconfig.json",
     "build": "tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
   },

@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-28",
+  "title": "Chat first: one sidebar, hints from your work, and Overview",
+  "description": "Your chats now sit in the one sidebar under New chat, Overview, Cases and Human Tasks, and Chat suggests the task, late case or running workflow that is waiting for you. If your session ends while you type, you sign in again over the page and your message is still there.",
+  "tag": "improved",
+  "cards": [
+    "c-552"
+  ]
+}

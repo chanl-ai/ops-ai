@@ -29,7 +29,8 @@ from ops_engine.store import (
     WorkflowOwnedError,
 )
 from ops_engine.store.definitions import HUMAN_REVIEW
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unprocessable
+from ops_files_client import FilesClient, FilesRefused
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, Unprocessable
 from ops_service_kit.http import Envelope, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -38,7 +39,9 @@ from ...store.actor_names import UNNAMED_WORKFLOW
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
+from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
+from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
@@ -53,7 +56,7 @@ from ..auth import (
     started_by,
 )
 from ..deps import Runtime, runtime
-from ..email_trigger import binding_of
+from ..email_trigger import binding_of, run_again
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
 from ..file_names import named
@@ -498,6 +501,8 @@ async def delete_definition(rt: Rt, me: Me, workflow_id: str) -> Response:
         raise Conflict(
             f"{workflow_id} has runs pinned to its versions, so it cannot be deleted.", code="definition_has_runs"
         )
+    # A workflow installed from a template stops counting as the team's copy, so the template can be installed again.
+    await TemplateCopies(rt.db).removed_record("workflow", workflow_id)
     return Response(status_code=204)
 
 
@@ -712,6 +717,8 @@ class RunRow(Out):
     workflow_name: str | None = None
     # Whether the caller may cancel it now: runs/cancel on an unfinished run (c-123).
     can_cancel: bool | None = None
+    # Whether the caller may retry it now: a Stuck run, by whoever may cancel it (c-561).
+    can_retry: bool | None = None
     workflow_id: str
     version: int
     digest: str
@@ -932,6 +939,11 @@ async def visible_run(rt: Runtime, run_id: str, me: Principal | None = None) -> 
     return run
 
 
+def can_retry(me: Principal, run: dict[str, Any]) -> bool:
+    """Retry for the caller: a Stuck run (c-561), by whoever may cancel it."""
+    return run["status"] == "stuck" and can_cancel(me, run)
+
+
 def can_cancel(me: Principal, run: dict[str, Any]) -> bool:
     """runs/cancel for the caller on an unfinished run, by the rule the cancel route applies."""
     if run["status"] in ("succeeded", "failed", "cancelled"):
@@ -1084,6 +1096,7 @@ async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> 
         await for_people(rt, r, run_view(r))
         | {
             "canCancel": can_cancel(me, r),
+            "canRetry": can_retry(me, r),
             "workflowName": r.get("workflow_name") or UNNAMED_WORKFLOW,
             "startedBy": who.get(started_by_of(r)),
         }
@@ -1110,6 +1123,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         "decisions": [d | {"by": names.get(d["by"]) if d["by"] else None} for d in decided],
         "result": await run_result(rt, run, steps, decided=decided, names=names),
         "canCancel": can_cancel(me, run),
+        "canRetry": can_retry(me, run),
         "startedBy": (await actors(rt, [started_by_of(run)])).get(started_by_of(run)),
         "story": told,
     }
@@ -1223,6 +1237,51 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
     )
     return ok(await for_people(rt, cancelled, run_view(cancelled)))
+
+
+@runs_router.post("/{run_id}/retry", response_model=Envelope[RunRow])
+async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
+    """Queues a Stuck run again from its last recorded step (c-561): recorded steps are not run again and a write
+    with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
+    refused (409 run_not_stuck)."""
+    run = await visible_run(rt, run_id, me)
+    require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
+    retried, changed = await runs(rt).retry(run_id)
+    if not changed or retried is None:
+        raise Conflict("This run is no longer stuck, so there is nothing to retry.", code="run_not_stuck")
+    await EventLog(rt.db).append(
+        thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="retried", node=None, data={"by": me.email}
+    )
+    return ok(
+        await for_people(rt, retried, run_view(retried) | {"canCancel": can_cancel(me, retried), "canRetry": False})
+    )
+
+
+@runs_router.post(
+    "/set-aside-emails/{event_id}/run",
+    response_model=Envelope[RunStarted],
+    status_code=202,
+    responses={200: {"model": Envelope[RunStarted], "description": "The email's run had started already"}},
+)
+async def run_set_aside_email(rt: Rt, me: Me, event_id: str) -> JSONResponse:
+    """Run again on an email the mailbox listener set aside (c-561): its run starts on the workflow's live version under
+    the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
+    run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
+    (the email stays set aside)."""
+    event = await TriggerEvents(rt.db).set_aside(event_id)
+    if event is None:
+        raise NotFound(f"Set-aside email {event_id}")
+    await startable(rt, me, str(event["workflow_id"]), None, "live")
+    files = cast(FilesClient | None, rt.start_files)
+    if files is None:
+        raise ServiceUnavailable("An email's attachments are stored in Files, and this service has no Files URL.")
+    try:
+        started = await run_again(rt.db, files, event_id, by=started_by(me))
+    except FilesRefused as e:
+        raise ServiceUnavailable(f"Files did not store an attachment, so the email stays set aside: {e.message}") from e
+    if started.run is None:
+        raise Conflict("The workflow has started as many runs today as its trigger allows.", code="daily_cap")
+    return ok(started_view(started.run, started.created), status=202 if started.created else 200)
 
 
 async def event_frames(

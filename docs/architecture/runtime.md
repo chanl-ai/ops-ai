@@ -17,7 +17,7 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Workflows as tools | `api/child_runs.py`, `graphs/common.py` (`WorkflowRunner`, `WorkflowTools`) | An agent granted `workflow:<id>` calls a published workflow as a tool; a child thread on it is linked by `parent_thread_id`, and its result or review handle comes back as the tool result ([workflows-as-tools.md](workflows-as-tools.md)) |
 | Graphs | `ops_agents/graphs/` | Three code graphs and the definition compiler; `common.py` bridges a kernel turn into a node |
 | Definition compiler | `graphs/definition.py` | Validates a definition, builds a LangGraph `StateGraph`, caches compiled graphs by digest |
-| Checkpointer | `packages/ops_checkpointer` | `AsyncpgSaver`: LangGraph checkpoints on asyncpg with tenant row-level security and a per-thread fence |
+| Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL and SQL Server, under the tables' tenant and team policies, with a per-thread fence |
 | Leases and sweeper | `api/leases.py`, `api/sweeper.py` | Per-thread lease with generation; takeover of expired leases; recovery from the last checkpoint |
 | Timers | `api/timers.py`, `api/timer_port.py`, `graphs/sla.py` | SLA timers, the poller, `fire()` |
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
@@ -107,7 +107,7 @@ a time).
 
 Temporal was removed on 2026-10-16. The engine is `packages/ops_engine`: a step journal, a Postgres work queue,
 worker processes, leases with generation fencing and reconcile-by-key, with LangGraph as the runner on PostgreSQL
-([workflow-runner.md](workflow-runner.md)). Slice 1 (c-061) is in code and runs inside agents-service; the agent and
+([workflow-runner.md](workflow-runner.md)). Slice 1 is in code and runs inside agents-service; the agent and
 chat routes still call LangGraph directly. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the
 LangGraph adapter (`services/agents-service/tests/conformance/`,
 [conformance-suite](../services/agents-service/experiments/conformance-suite.md)). Plans must keep every side-effecting node idempotent by key
@@ -121,7 +121,7 @@ network facts that shape the architecture:
 
 | Fact | Consequence |
 |---|---|
-| The checkpointer is our own on asyncpg (Apache-2.0), not LangGraph's psycopg (LGPL-3.0) saver | The lock has no LGPL or GPL package |
+| The checkpointer is our own on SQLAlchemy Core (asyncpg on PostgreSQL, Apache-2.0), not LangGraph's psycopg (LGPL-3.0) saver | The lock has no LGPL or GPL package |
 | certifi and orjson are MPL-2.0, which is copyleft per file | Using them unmodified carries no obligation on our code; a modified file must be published |
 | tiktoken downloads its BPE encoding on first use | Vendor the encoding file into the image and set `TIKTOKEN_CACHE_DIR` to it |
 | langsmith and genai-prices can call out | A deployment sets no `LANGSMITH_TRACING` or key; the runtime never calls the price update; `make run` sets `PYDANTIC_AI_NO_BANNER=1` |

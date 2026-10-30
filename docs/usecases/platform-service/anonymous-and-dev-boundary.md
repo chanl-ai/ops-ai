@@ -17,7 +17,7 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Call every operation in the served `/openapi.json` except health, the key set, sign-in, refresh and the invite routes, with no credentials | 401 on each |
+| 1 | Call every operation in the served `/openapi.json` with no credentials, except those a person uses before holding a session (health and background health, the key set, sign-in, refresh, sign-in options, SSO start and complete, the OIDC callback, SAML metadata and ACS, password forgot and reset, the invite routes) and the dev-only one-click sign-in | 401 on each |
 | 2 | Call `/v1/me` with only `X-Dev-User` | 401 |
 | 3 | Present a token signed with platform's own key but issued for `tools` | 401, where James's real token is 200 |
 | 4 | Present a service token on the public mount | 401 |
@@ -27,6 +27,8 @@ password `northfield-demo`), the public app and the internal one. No model is ca
 | Layer | Script | State |
 |---|---|---|
 | api | `platform-service/scripts/test-uc-026-api.py` | passing |
+
+In the console: none of its own; the boundary is the platform's routes, so the use case stays at the api layer.
 
 ## Non-vacuous check
 

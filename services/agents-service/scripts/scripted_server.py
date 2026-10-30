@@ -8,7 +8,9 @@
 Use cases (docs/usecases/) start this instead of `make run-agents`, so a use case drives the real HTTP surface and
 never makes a model call. The scripted chat model and the fake workflow models are the test suite's
 (tests/conftest.py); a use case and a unit test therefore see the same replies for the same input. The database is
-created and migrated on start, so each use case run owns its tables and leaves the dev database alone.
+created and migrated on start, so each use case run owns its tables and leaves the dev database alone. With
+OPS_USECASE_INSTALLED set, OPS_DATABASE_URL names a database a DBA's scripts already installed (the SQL Server
+bundle), used as it is.
 """
 
 from __future__ import annotations
@@ -59,11 +61,14 @@ def main() -> None:
     p.add_argument("--migrate-only", action="store_true", help="create and migrate the database, then exit")
     args = p.parse_args()
 
-    url = pg_url(args.db)
-    # Settings is the one place env is read, so the URL reaches both Alembic and the app through it.
-    os.environ["OPS_DATABASE_URL"] = url
-    asyncio.run(ensure_database(args.db))
-    command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
+    if os.environ.get("OPS_USECASE_INSTALLED"):
+        url = Settings().database_url
+    else:
+        url = pg_url(args.db)
+        # Settings is the one place env is read, so the URL reaches both Alembic and the app through it.
+        os.environ["OPS_DATABASE_URL"] = url
+        asyncio.run(ensure_database(args.db))
+        command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
     if args.migrate_only:
         return
 

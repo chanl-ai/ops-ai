@@ -8,7 +8,7 @@ import { api, filesOnService } from '@/lib/api';
 import type { EvidenceExportInput, FileFilters, FilePurpose, FileView, ScanStatus, StorageCredentialInput, StorageSettingsInput, StorageTarget } from '@/lib/types/files';
 import type { AuditFilters, AuditView } from '@/lib/types/governance';
 import type { ListParams } from '@/lib/types/query';
-import { useTeamQuery } from './team-query';
+import { teamKey, useTeamQuery } from './team-query';
 
 /** True when Files runs on files-service, which does not set retention or export evidence yet. */
 export const useFilesOnService = () => filesOnService;
@@ -43,7 +43,8 @@ export function useRemoveFiles() {
     mutationFn: (ids: string[]) => api.files.bulkRemove(ids),
     // A deleted file's own query is left out of the refresh: refetching it answers 404 while its sheet closes.
     onSuccess: (res) => {
-      const gone = new Set(res.updated.map((id) => JSON.stringify(fk.one(id))));
+      // Cached under the team key (useTeamQuery), so the plain key would match nothing and the file would refetch.
+      const gone = new Set(res.updated.map((id) => JSON.stringify(teamKey(fk.one(id)))));
       return Promise.all([
         qc.invalidateQueries({ queryKey: ['files'], predicate: (q) => !gone.has(JSON.stringify(q.queryKey)) }),
         qc.invalidateQueries({ queryKey: ['logs'] }),

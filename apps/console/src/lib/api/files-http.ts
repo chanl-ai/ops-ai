@@ -52,6 +52,14 @@ export function createExtractionsRoutes(get: Get, send: Send): FilesApi['extract
   };
 }
 
+/** documents-service's layout routes: a file's pages, blocks and words, read once per content and cached. */
+export function createLayoutsRoutes(get: Get, send: Send): FilesApi['layouts'] {
+  return {
+    get: (fileId, { ocr }) => get(`/documents/layout/${encodeURIComponent(fileId)}${ocr ? '?ocr=true' : ''}`),
+    read: (fileId, { ocr }) => send('POST', '/documents/layout', { fileId, ocr }),
+  };
+}
+
 /** REST routes for files; `get`, `send` and `qs` come from the main HTTP client so auth and envelopes match. */
 export function createFilesHttp(get: Get, send: Send, qs: (p: ListParams & { view?: string }) => string): FilesApi {
   const base = '/files';
@@ -89,5 +97,6 @@ export function createFilesHttp(get: Get, send: Send, qs: (p: ListParams & { vie
     },
     documentTypes: createDocumentTypesHttp(get, send),
     extractions: createExtractionsRoutes(get, send),
+    layouts: createLayoutsRoutes(get, send),
   };
 }

@@ -17,8 +17,8 @@ Status: current. Id: `uc-078`. Service: `console`. Layers: api, ui.
 | 2 | He asks to compare Savings Plus and Money Market | the answer cites the Retail Product Sheet with page 4 |
 | 3 | Read the comparison | a table widget compares the two accounts |
 
-The comparison table comes through the model's present() tool (c-055 T021). get_customer's record carries accountIds
-and each account row carries holds; the shaper joins lists into a cell and counts objects (c-055 T024).
+The comparison table comes through the model's present() tool (an earlier change T021). get_customer's record carries accountIds
+and each account row carries holds; the shaper joins lists into a cell and counts objects (an earlier change T024).
 
 ## Acceptance layers
 

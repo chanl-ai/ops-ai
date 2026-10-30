@@ -1744,6 +1744,10 @@ export interface components {
              * @default
              */
             collection: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Fileids
              * @default []

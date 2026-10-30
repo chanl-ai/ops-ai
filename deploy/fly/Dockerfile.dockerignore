@@ -12,6 +12,8 @@
 !packages
 !services
 !deploy
+!sdk/typescript
+sdk/typescript/dist
 **/node_modules
 **/.next
 **/.next-*

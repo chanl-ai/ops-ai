@@ -19,7 +19,7 @@ Status: current. Id: `uc-058`. Service: `console`. Layers: ui.
 | 3 | James opens the same thread | he reads it and the message box is there |
 
 Chat reads are for the chat's own person only, since 2026-10-17, replacing the read-only view for teammates
-this use case first proved (c-048 T021). A review decided from a chat keeps the team rule (c-122).
+this use case first proved (an earlier change T021). A review decided from a chat keeps the team rule.
 
 ## Acceptance layers
 

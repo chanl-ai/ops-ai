@@ -61,7 +61,7 @@ export function HttpOperationBuilder({ value, onChange, errors, callOnly }: { va
           </FormField>
         </>
       )}
-      <FormField id="http-url" label="Request" error={errors?.url} hint="Use {name} for path parameters. Values the case binds are filled by the gateway.">
+      <FormField id="http-url" label="Request" error={errors?.url} hint="Use {name} for a value in the path or the query. Values the case binds are filled by the gateway.">
         <div className="flex">
           <Select value={value.method} onValueChange={(v) => set('method', v as HttpMethod)}>
             <SelectTrigger className="w-28 shrink-0 rounded-r-none border-r-0 font-mono font-semibold" aria-label="Method">

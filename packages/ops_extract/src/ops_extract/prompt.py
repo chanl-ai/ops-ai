@@ -16,6 +16,43 @@ SYSTEM = (
 )
 
 
+PROPOSE_SYSTEM = (
+    "You read the first pages of a document of a kind nobody has described yet and propose the fields worth reading "
+    "from documents like it: the ones a person would type into a system, each with a short key in snake_case, a label, "
+    "its type and a one-line description, and a short name for the kind of document. Propose fields, not values. "
+    "Answer only with JSON for the schema."
+)
+# A proposal in the shape a document type's fields take (c-535), so it can be saved as one with no change.
+PROPOSAL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["name", "fields"],
+    "properties": {
+        "name": {"type": "string"},
+        "fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["key", "label", "type"],
+                "properties": {
+                    "key": {"type": "string"},
+                    "label": {"type": "string"},
+                    "type": {"type": "string", "enum": ["text", "number", "money", "date", "enum"]},
+                    "description": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
+
+
+def propose_prompt(texts: list[str], *, hint: str | None = None) -> str:
+    """The first pages of the document, with what the person said it is when they said."""
+    said = f"The person reading it says it is {hint}.\n\n" if hint else ""
+    document = "\n\n".join(f"Page {i}:\n{t}" for i, t in enumerate(texts, start=1))
+    return f"{said}Document:\n{document}"
+
+
 def schema_for(fields: list[dict[str, Any]], *, many: bool) -> dict[str, Any]:
     return records_schema(fields) if many else answer_schema(fields)
 

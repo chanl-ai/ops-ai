@@ -9,8 +9,10 @@ export type Layer = (typeof LAYERS)[number];
 /** Paths whose presence makes a layer available. api and ui need only the running stack and the console. */
 export const LAYER_PROVIDERS: Record<Layer, string[]> = {
   api: [],
-  sdk: ['packages/sdk-py', 'packages/sdk-ts'],
-  cli: ['packages/ops-cli'],
+  sdk: ['sdk/python', 'sdk/typescript'],
+  // The sample team installer is the command a developer runs against the platform today; c-564's `ops` command in
+  // packages/ops_plugins joins it once it is built.
+  cli: ['scripts/sample_team.py', 'packages/ops_plugins'],
   ui: ['apps/console'],
 };
 

@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-106`. Service: `console`. Layers: ui.
 
-Card c-114: a table row that opens on click holds one named control (a link, or a button when it opens a sheet) in
+Card an earlier change: a table row that opens on click holds one named control (a link, or a button when it opens a sheet) in
 its name cell and no `tabindex` of its own. Pages that still show mock data while real services answer beside them
 carry a Preview badge in the page header and the sidebar. Settings that save a new version on each save do not save
 on Enter.
@@ -22,8 +22,8 @@ on Enter.
 | 1 | James creates 25 guardrails with one name prefix; Maya opens Guardrails, searches the prefix and shows 30 rows a page | 25 rows, none with a `tabindex`, each holding one link to its record |
 | 2 | Maya puts the focus on the first row's link and presses Tab until the focus reaches the pagination | 73 stops inside the table (three per row: select, copy id, record link; counted from the first row's link) and at most 3 between the last row and the pagination; counting from the table means a filter added to the toolbar does not move the bar |
 | 2b | Maya opens Tools, Widgets and Connections | the first row of each holds a link to its record and no `tabindex` |
-| 2c | Maya, at 400px wide, searches Guardrails for a name nothing matches | the empty message and its Clear filters button sit inside the viewport (c-125) |
-| 2d | James opens a skill's Instructions tab | the add-tool button is named "Add a tool operation", the text on it (c-125) |
+| 2c | Maya, at 400px wide, searches Guardrails for a name nothing matches | the empty message and its Clear filters button sit inside the viewport |
+| 2d | James opens a skill's Instructions tab | the add-tool button is named "Add a tool operation", the text on it |
 | 3 | Sam, a Security admin, opens Storage, changes the signed link lifetime and presses Enter | no version is saved |
 | 4 | He clicks the Save button | "Saved as version" |
 | 5 | Sam opens Settings (Members), where nothing is served by a service | a Preview badge in the header, and on the Settings row of the app sidebar when read from a page outside Settings (Settings has its own sidebar); Files and Access carry none, since files-service and platform-service serve them |

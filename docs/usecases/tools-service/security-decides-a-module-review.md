@@ -8,7 +8,7 @@ Status: current. Id: `uc-040`. Service: `tools-service`. Layers: api, ui.
 |---|---|
 | PostgreSQL :5477 and OPA | `make db-up` |
 | platform-service's dev seed | James Richardson (builder, Operations), Maya Okafor (approver, Operations), Nadia Petrov (approver, Security), Sam Adeyemi (admin, Security); password `northfield-demo` |
-| tools-service and agents-service verifying platform tokens | The scripts start both with `OPS_AUTH_MODE=platform`; the review is a publish request in agents-service's Reviews (c-163) |
+| tools-service and agents-service verifying platform tokens | The scripts start both with `OPS_AUTH_MODE=platform`; the review is a publish request in agents-service's Reviews |
 
 ## Steps and expected results
 

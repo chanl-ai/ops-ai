@@ -1,6 +1,6 @@
 """Per-thread leases: one run at a time per thread, across processes, and a way to tell a dead owner from a slow one.
 
-A run takes the lease with one conditional upsert: insert, or take over a row whose expiry has passed. The owner
+A run takes the lease under the thread's lock: insert, or take over a row whose expiry has passed. The owner
 renews it every third of the TTL while the run lasts and deletes it at the end. A lease past expiry means its owner
 stopped renewing, which is a crashed process; the sweeper takes such leases over and continues the thread.
 
@@ -9,8 +9,8 @@ released instead of deleting it) so the counter never restarts. The generation i
 gateway writes carry it, and a write whose generation is below the thread's current one is refused, so a stalled
 owner that wakes after a takeover cannot overwrite the new owner's work.
 
-Times are epoch seconds from the database's clock (`now()`), never a process clock, so processes on hosts with skewed
-clocks agree on when a lease expires (ADR-0016).
+Times are epoch seconds from the database's clock (`ops_store.dialect.db_epoch`), never a process clock, so processes
+on hosts with skewed clocks agree on when a lease expires (ADR-0016).
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_checkpointer import LeaseSupersededError
 from ops_store import Guarantee
+from ops_store.dialect import db_epoch, insert_ignore, lock_key, locked
 
 from .base import metadata
 
@@ -65,23 +65,21 @@ class LeaseHeldError(Exception):
         self.held = held
 
 
-def db_now(engine: AsyncEngine) -> Any:
+def db_now(_engine: AsyncEngine) -> Any:
     """The database's current time in epoch seconds, as a SQL expression."""
-    if engine.dialect.name == "postgresql":
-        return sa.func.extract("epoch", sa.func.now())
-    return (sa.func.julianday("now") - 2440587.5) * 86400.0  # SQLite, for the unit tests
+    return db_epoch()
 
 
 async def check_fence(conn: AsyncConnection, thread_id: str, generation: int | None) -> None:
     """Refuses a run's write when the thread's lease has moved past the run's generation. Runs inside the write's own
-    transaction and locks the lease row FOR SHARE, so a takeover cannot commit between this check and the write
-    (ADR-0016). A write with no generation is not a leased run's write and is not checked."""
+    transaction and locks the lease row, so a takeover cannot commit between this check and the write (ADR-0016). The
+    lock is exclusive on both databases (SQL Server has no shared row lock held to the end of a transaction); a
+    thread's writes are already one at a time under its lease, so nothing waits that did not before. A write with no
+    generation is not a leased run's write and is not checked."""
     if generation is None:
         return
     q = sa.select(thread_leases.c.generation).where(thread_leases.c.thread_id == thread_id)
-    if conn.dialect.name == "postgresql":
-        q = q.with_for_update(read=True)
-    current = (await conn.execute(q)).scalar_one_or_none()
+    current = (await conn.execute(locked(q, thread_leases))).scalar_one_or_none()
     if current is not None and int(current) != generation:
         raise LeaseSupersededError(f"lease superseded: write generation {generation}, current {current}")
 
@@ -92,15 +90,13 @@ TakeoverHook = Callable[[str, int], Awaitable[None]]
 async def thread_lock(conn: AsyncConnection, thread_id: str) -> None:
     """Serialises, until the transaction ends, everything that decides what a thread is doing: taking its lease and
     delivering a message to it. Without it a lease could be taken between a delivery's look at the thread and its
-    write, and the message would land as delivered on a run that never reads it. PostgreSQL only; SQLite has one
-    writer at a time anyway."""
-    if conn.dialect.name == "postgresql":
-        await conn.execute(sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:t, 0))"), {"t": thread_id})
+    write, and the message would land as delivered on a run that never reads it."""
+    await lock_key(conn, thread_id)
 
 
 class Leases:
-    # The takeover is a conditional upsert on the expiry (CAS), expiry is read from the database's clock (CLOCK), and
-    # taking a lease serialises with deliveries on the thread's advisory lock (LOCK).
+    # The takeover is conditional on the expiry under the thread's lock (CAS), expiry is read from the database's clock
+    # (CLOCK), and taking a lease serialises with deliveries on that lock (LOCK).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.CLOCK, Guarantee.LOCK})
 
     def __init__(self, engine: AsyncEngine, owner: str, ttl: float, *, on_takeover: TakeoverHook | None = None) -> None:
@@ -110,9 +106,6 @@ class Leases:
         # Called after an acquire that took over a lease its owner never released (a crash or a stall, not a finished
         # run), with the new generation, before the caller resumes the thread (E2c). It must not raise.
         self.on_takeover = on_takeover
-
-    def _insert(self) -> Any:
-        return (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(thread_leases)
 
     def _held(self, thread_id: str) -> Any:
         age = (db_now(self.engine) - thread_leases.c.acquired_at).label("age")
@@ -130,35 +123,30 @@ class Leases:
             "expires_at": now + self.ttl,
             "released_at": None,
         }
-        stmt = (
-            self._insert()
-            .values(thread_id=thread_id, generation=1, **values)
-            .on_conflict_do_update(
-                index_elements=["thread_id"],
-                set_={**values, "generation": thread_leases.c.generation + 1},
-                where=thread_leases.c.expires_at < now,
-            )
-            .returning(thread_leases.c.run_id, thread_leases.c.generation)
-        )
-        held: Any = None
+        this = thread_leases.c.thread_id == thread_id
+        generation, took_over = 0, False
         async with self.engine.begin() as c:
             await thread_lock(c, thread_id)
-            # Read under the row lock in the same transaction: an unreleased row the upsert then replaces was taken
-            # over from a live-looking owner, which is the case the tools-service fence must hear about first.
-            before = (
-                await c.execute(
-                    sa.select(thread_leases.c.released_at)
-                    .where(thread_leases.c.thread_id == thread_id)
-                    .with_for_update()
+            # Each write below is conditional in one statement, so it settles a race by itself where the thread lock
+            # takes none (SQLite): the insert does nothing when another made the row, the takeover changes nothing
+            # when the lease is live. The row lock keeps what was read until the transaction ends.
+            mine = locked(sa.select(thread_leases.c.released_at).where(this), thread_leases)
+            before = (await c.execute(mine)).first()
+            row = {"thread_id": thread_id, "generation": 1, **values}
+            if before is None and (await c.execute(insert_ignore(c, thread_leases, row, keys=["thread_id"]))).rowcount:
+                generation = 1
+            elif before is not None:
+                took = await c.execute(
+                    thread_leases.update()
+                    .where(this, thread_leases.c.expires_at < now)
+                    .values(**values, generation=thread_leases.c.generation + 1)
                 )
-            ).first()
-            won = (await c.execute(stmt)).first()
-            took_over = won is not None and before is not None and before.released_at is None
-            if won is not None and won.run_id == run_id:
-                generation = int(won.generation)
-            else:
-                generation = 0
-                held = (await c.execute(self._held(thread_id))).mappings().first()
+                if took.rowcount:
+                    generation = int((await c.execute(sa.select(thread_leases.c.generation).where(this))).scalar_one())
+                    # An unreleased row taken over was a live-looking owner's, the case the tools-service fence must
+                    # hear about first.
+                    took_over = before.released_at is None
+            held = None if generation else (await c.execute(self._held(thread_id))).mappings().first()
         if generation:
             if took_over and self.on_takeover is not None:
                 await self.on_takeover(thread_id, generation)

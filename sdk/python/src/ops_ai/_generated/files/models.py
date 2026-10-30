@@ -252,6 +252,9 @@ class ReadRequest(TypedDict, closed=True):
 
 class ReadRequestIn(TypedDict, closed=True):
     documentTypeId: NotRequired[str | None]
+    hint: NotRequired[str | None]
+    maxPages: NotRequired[int | None]
+    read: NotRequired[Literal["fields", "propose"] | None]
     typeName: NotRequired[str | None]
     version: NotRequired[int | None]
 

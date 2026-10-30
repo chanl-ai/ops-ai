@@ -24,7 +24,7 @@ import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Button } from '@/components/ui/button';
@@ -199,11 +199,11 @@ export default function FilesPage() {
           <SavedViewTabs
             ariaLabel="File views"
             presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Files },
-              { id: 'quarantined', label: `Quarantined · ${counts?.quarantined ?? 0}`, icon: ShieldX },
-              { id: 'legal_hold', label: `Under legal hold · ${counts?.legal_hold ?? 0}`, icon: Scale },
-              { id: 'unreferenced', label: `Unreferenced · ${counts?.unreferenced ?? 0}`, icon: Unlink },
-              { id: 'expiring', label: `Expiring in 30 days · ${counts?.expiring ?? 0}`, icon: CalendarClock },
+              { id: 'all', label: countLabel('All', counts?.all), icon: Files },
+              { id: 'quarantined', label: countLabel('Quarantined', counts?.quarantined), icon: ShieldX },
+              { id: 'legal_hold', label: countLabel('Under legal hold', counts?.legal_hold), icon: Scale },
+              { id: 'unreferenced', label: countLabel('Unreferenced', counts?.unreferenced), icon: Unlink },
+              { id: 'expiring', label: countLabel('Expiring in 30 days', counts?.expiring), icon: CalendarClock },
             ]}
             savedViews={[]}
             activePresetId={view}

@@ -1,7 +1,7 @@
 # A reply leaves from the team mailbox the customer wrote to
 
 Status: current. Id: `uc-200`. Service: `agents-service` (mailbox records) and `tools-service` (send_reply). Layers:
-api. Card: c-200.
+api. Card: an earlier change.
 
 A mailbox on Channels > Email carries the sender its replies go out through: SMTP or Resend, a from address and a
 Secrets-page secret. A `send_reply` that names the mailbox sends through it, for the calling team only.
@@ -24,3 +24,5 @@ Secrets-page secret. A `send_reply` that names the mailbox sends through it, for
 | 4 | The same reply as a team_fraud call | Not sent; the reason says it is not team_fraud's mailbox |
 
 Rules are `services/tools-service/tests/test_mailbox_senders.py`.
+
+In the console: uc-245's ui script: the acknowledgement is approved in Human Tasks and the reply leaves from the mailbox's own address. Another team's call has no console surface.

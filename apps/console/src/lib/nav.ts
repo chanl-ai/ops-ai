@@ -1,4 +1,5 @@
 import type { Icon } from '@tabler/icons-react';
+import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree';
 import { IconChecklist, IconCpu, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
 
 /** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
@@ -20,6 +21,8 @@ export interface NavItem {
   tabTitle?: string;
   /** The icon of the parent's own sub-row, when the parent shows one beside a lone child. */
   tabIcon?: Icon;
+  /** Drawn as a row at the top of the sidebar rather than in its group (c-552); still matched for crumbs and search. */
+  top?: boolean;
 }
 
 export interface NavGroup {
@@ -31,13 +34,13 @@ export const NAV: NavGroup[] = [
   {
     label: 'Work',
     items: [
-      { title: 'Overview', url: '/', icon: IconHome },
+      { title: 'Overview', url: '/', icon: IconHome, top: true },
       // The team's customer issues, with their deadlines and timelines (c-220); workflow runs are under Workflows.
       { title: 'Cases', url: '/cases', icon: IconMail },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
       // Every conversation the person has had, searchable, beside the chat itself.
-      { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
+      { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, top: true, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
     ],
   },
   {
@@ -107,13 +110,29 @@ export function navMatch(pathname: string): NavHit | null {
   return best && { group: best.group, item: best.item, child: best.child };
 }
 
-/** Breadcrumb trail for the header: section label, the sidebar item, then the tab when a child route matched. */
-export function crumbsFor(pathname: string): string[] {
+export interface Crumb {
+  label: string;
+  /** Set when the crumb has its own page and is not the page shown, so a record page links back to its list. */
+  href?: string;
+}
+
+/**
+ * Breadcrumb trail for the header. Settings pages follow the settings sidebar (Settings, its group and section, the
+ * page); other pages follow the app sidebar (section label, the item, then the tab when a child route matched).
+ */
+export function crumbsFor(pathname: string): Crumb[] {
+  const link = (label: string, url: string): Crumb => (url === pathname ? { label } : { label, href: url });
+  const personal = PERSONAL_SETTINGS.find((p) => p.href === pathname);
+  if (personal) return [link('Settings', '/settings'), { label: personal.label }];
+  const setting = [...SETTINGS_NAV].sort((a, b) => b.href.length - a.href.length).find((e) => pathname === e.href || pathname.startsWith(`${e.href}/`));
+  if (setting) return [link('Settings', '/settings'), { label: setting.group }, ...(setting.section ? [{ label: setting.section }] : []), link(setting.title, setting.href)];
   const best = navMatch(pathname);
   if (!best) return [];
-  const crumbs = best.child ? [best.group.label, best.item.title, best.child.title] : [best.group.label, best.item.title];
-  // A group and its item can share a name (Agents › Agents); the trail names it once.
-  return crumbs.filter((c, i) => c !== crumbs[i - 1]);
+  // The first group's pages sit at the top of the sidebar under no heading (c-552), so their trail names no group.
+  const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: best.group.label }];
+  const crumbs: Crumb[] = [...group, link(best.item.title, best.item.url), ...(best.child ? [link(best.child.title, best.child.url)] : [])];
+  // A group and its item can share a name (Agents › Agents); the trail names it once, keeping the item's link.
+  return crumbs.filter((c, i) => c.label !== crumbs[i + 1]?.label);
 }
 
 /** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */

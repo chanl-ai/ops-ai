@@ -1,6 +1,6 @@
 # A person corrects a document read in Human Tasks and sees the reply and cases
 
-Status: passing. Id: `uc-224`. Service: `agents-service`. Layers: ui. Card: c-169.
+Status: passing. Id: `uc-224`. Service: `agents-service`. Layers: ui. Card: an earlier change.
 
 A mailed document is read into fields; a field below the floor stops the read at Check the read in Human Tasks. The
 reviewer sees the file, each field's confidence and the page and quote it came from, corrects a misread value and
@@ -25,9 +25,9 @@ it will leave and the case run it follows.
 | 3b | The panel after her decision | It stays on the task she decided and says who decided it; it never moves to another task |
 | 3c | James opens the run | Decisions lists Check the read: Approve by Maya Okafor, when, linked to the task |
 | 4 | She opens the acknowledgement | To is the sender, From is the team mailbox, and the court order case run is listed |
-| 4b | She opens the acknowledgement as its own page (c-289) | The title asks whether to send the reply to the sender, and the reply shows beside the decision |
+| 4b | She opens the acknowledgement as its own page | The title asks whether to send the reply to the sender, and the reply shows beside the decision |
 | 4c | The same notice for a debtor the bank has (Marcus Bell) waits at Hold or flag; she opens that task | The title asks one plain question naming both choices and the customer, the notice shows beside it, the footer is one row, and hovering an option says what it does; no tool name, raw key or raw float on the page |
-| 4d | She opens the mailed document's run | It lists the court order case it started for the debtor, with its status and a link, and the canvas says the step runs for each debtor read (c-306) |
+| 4d | She opens the mailed document's run | It lists the court order case it started for the debtor, with its status and a link, and the canvas says the step runs for each debtor read |
 | 5 | — | No page errors |
 | 6 | A read naming three debtors waits for a check | The page shows one tab per debtor and one record at a time; at 1280 each record's table fits its pane with the source quote wrapped |
 

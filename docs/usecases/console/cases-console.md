@@ -3,7 +3,7 @@
 Status: current. Id: `uc-139`. Service: `console` and `agents-service`. Layers: ui.
 
 The Cases page listed workflow runs, with no customer, owner or deadline. It now lists the team's cases from
-`/v1/cases` (c-128) with both deadlines, filters on the server, opens each case on its timeline, and the run list moved
+`/v1/cases` with both deadlines, filters on the server, opens each case on its timeline, and the run list moved
 to Workflows › Runs.
 
 ## Preconditions
@@ -24,7 +24,7 @@ the customer.
 | 2 | He opens the Overdue view | The request asks the server for overdue cases; only the late one shows |
 | 3 | He opens the late case, sets its priority to High and adds a note | Both land on the timeline, on the page and the server |
 | 4 | He opens an old `/cases?run=` link | It lands on Workflows › Runs with the same run |
-| 5 | Start a canvas workflow's run through the API, then open Workflows › Runs | The Runner · v2 tab lists it with the server's status beside a Graph · v1 tab, and the row opens the run |
+| 5 | Start a workflow's run through the API, then open Workflows › Runs | One list, with no engine tabs, shows it with the server's status, and the row opens the run |
 | 6 | He opens the Overview | Needs a person and Waiting on review equal what GET /v1/overview counts |
 | 7 | He searches Cases for “Disputed wire” | The console asks the server, and only that case is listed |
 

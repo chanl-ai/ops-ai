@@ -1,6 +1,6 @@
 # A workflow starts a child workflow for each item of a list
 
-Status: current. Id: `uc-209`. Service: `agents-service` (the worker runs ops_engine). Layers: api, ui. Card: c-209.
+Status: current. Id: `uc-209`. Service: `agents-service` (the worker runs ops_engine). Layers: api, ui. Card: an earlier change.
 
 A Start workflow step starts another workflow of the team once, or once for each item of a list (`forEach`). Each
 child runs in the parent's team and mode and is keyed by the parent run, step, iteration and item, so a retry never

@@ -32,6 +32,7 @@ members = [
     "ops-models-service",
     "ops-pii",
     "ops-platform-service",
+    "ops-plugin-sdk",
     "ops-policy",
     "ops-runner-service",
     "ops-service-kit",
@@ -1573,6 +1574,7 @@ dependencies = [
     { name = "ops-metering" },
     { name = "ops-models-service" },
     { name = "ops-platform-service" },
+    { name = "ops-plugin-sdk" },
     { name = "ops-policy" },
     { name = "ops-runner-service" },
     { name = "ops-service-kit" },
@@ -1621,6 +1623,7 @@ requires-dist = [
     { name = "ops-metering", editable = "packages/ops_metering" },
     { name = "ops-models-service", editable = "services/models-service" },
     { name = "ops-platform-service", editable = "services/platform-service" },
+    { name = "ops-plugin-sdk", editable = "packages/ops_plugin_sdk" },
     { name = "ops-policy", editable = "packages/ops_policy" },
     { name = "ops-runner-service", editable = "services/runner-service" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
@@ -1655,14 +1658,16 @@ name = "ops-checkpointer"
 version = "0.1.0"
 source = { editable = "packages/ops_checkpointer" }
 dependencies = [
-    { name = "asyncpg" },
     { name = "langgraph-checkpoint" },
+    { name = "ops-store" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncpg", specifier = ">=0.30" },
     { name = "langgraph-checkpoint", specifier = ">=4.0" },
+    { name = "ops-store", editable = "packages/ops_store" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
 ]
 
 [[package]]
@@ -2076,6 +2081,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "ops-plugin-sdk"
+version = "0.1.0"
+source = { editable = "packages/ops_plugin_sdk" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "pyyaml", specifier = ">=6" },
+]
+
+[[package]]
 name = "ops-policy"
 version = "0.1.0"
 source = { editable = "packages/ops_policy" }
@@ -2246,6 +2270,7 @@ dependencies = [
     { name = "ops-agents-service" },
     { name = "ops-email" },
     { name = "ops-identity" },
+    { name = "ops-plugin-sdk" },
     { name = "ops-policy" },
     { name = "ops-service-kit" },
     { name = "ops-store" },
@@ -2266,6 +2291,7 @@ requires-dist = [
     { name = "ops-agents-service", editable = "services/agents-service" },
     { name = "ops-email", editable = "packages/ops_email" },
     { name = "ops-identity", editable = "packages/ops_identity" },
+    { name = "ops-plugin-sdk", editable = "packages/ops_plugin_sdk" },
     { name = "ops-policy", editable = "packages/ops_policy" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "ops-store", editable = "packages/ops_store" },

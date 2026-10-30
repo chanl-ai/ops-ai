@@ -1,6 +1,15 @@
 # Extract on a file saves what was read, and deleting the file purges it
 
-Status: current. Id: `uc-244`. Service: `agents-service`. Layers: api. Card: c-250.
+Status: current. Id: `uc-244`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | James asks in Files for a notice to be read as a Levy notice, and its run reads and saves it | ui | 1 | 1 |
+| S2 | The file's page says it was read as a Levy notice | ui | 2 | 2 |
+| S3 | Deleting the file in Files starts the purge, which ends purged | ui | 3 | 3 |
+| S4 | The same through the API, with a repeated request, a correction saved again and what the purge removed | api | 1-4 | 4 |
 
 A person asks for a file to be read with a document type (`POST /v1/files/{id}/read-requests`): files-service
 reports file.read_requested, and agents-service's system extract workflow runs as that person, reads the file through
@@ -26,3 +35,10 @@ make this happen; the workflows compose them.
 | 2b | Correct the first record's first waiting field (or its first field) | documents-service reports `extraction.corrected`; `extraction_corrected_save` saves the read on the file again: a newer `readAt`, the same extraction and type name, and `fieldsToCheck` equal to what still waits |
 | 3 | Delete the file | 204; a `file_deleted_purge` run starts from the event and ends `purged` |
 | 4 | Read the purge run's output | At least one extraction removed |
+
+## Acceptance layers
+
+| Layer | Script | State |
+|---|---|---|
+| api | `agents-service/scripts/test-uc-244-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-244-ui.mjs` | passing: Extract on the file's page, its Read as, and Delete in Files |

@@ -1,6 +1,15 @@
 # A write runs only after as many people as its policy names approve it
 
-Status: passing. Id: `uc-049`. Service: `agents-service`. Layers: api. Card: c-048 (T005).
+Status: passing. Id: `uc-049`. Service: `agents-service`. Layers: api, ui. Card: an earlier change (T005); ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | James's chat drafts a write whose policy needs two approvers, and it waits | ui | 2 | 2 |
+| S2 | Maya approves in Human Tasks; the write waits for a second person and nothing runs | ui | 3 | 3 |
+| S3 | Maya cannot approve it a second time | ui | 4 | 4 |
+| S4 | Priya approves as the second person, and the write runs once | ui | 5 | 5 |
 
 ## Preconditions
 
@@ -26,6 +35,7 @@ Status: passing. Id: `uc-049`. Service: `agents-service`. Layers: api. Card: c-0
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-049-api.py` | passing |
+| ui | `agents-service/scripts/test-uc-049-ui.mjs` | passing: the chat, Human Tasks as Maya then Priya, and the executions log |
 
 ## Non-vacuous check
 

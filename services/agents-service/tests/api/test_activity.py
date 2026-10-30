@@ -4,6 +4,7 @@ like one that started a run."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from httpx import AsyncClient
@@ -50,7 +51,9 @@ async def activity(c: AsyncClient, who: dict[str, str], **params: Any) -> dict[s
     return r.json()["data"]
 
 
-async def email(s: Stack, outcome: str, *, run_id: str | None = None, subject: str = "Notice") -> None:
+async def email(
+    s: Stack, outcome: str, *, run_id: str | None = None, subject: str = "Notice", detail: dict[str, Any] | None = None
+) -> None:
     _, rt = s
     with tenant_scope(TENANT):
         await TriggerEvents(rt.db).add(
@@ -64,6 +67,7 @@ async def email(s: Stack, outcome: str, *, run_id: str | None = None, subject: s
                 received_at="",
                 outcome=outcome,  # pyright: ignore[reportArgumentType]
                 run_id=run_id,
+                detail=detail,
             )
         )
 
@@ -135,6 +139,20 @@ async def test_a_decision_on_a_workflows_human_task_is_listed_with_who_decided(s
         "ops_check",
     )
     assert row["ref"] == {"kind": "review", "id": run}
+
+
+async def test_an_email_set_aside_is_one_row_that_says_why(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    reason = "FilesRefused: Files answered 503"
+    for n in (1, 2):
+        await email(stack, "start_failed", subject="Unreadable", detail={"reason": reason, "attempt": n})
+        await asyncio.sleep(0.01)
+    await email(stack, "set_aside", subject="Unreadable", detail={"reason": reason, "message": "Set aside."})
+    await email(stack, "started", subject="Readable")
+    rows = (await activity(c, BUILDER, kind="email"))["data"]
+    assert sorted(r["title"] for r in rows) == ["Readable", "Unreadable"], rows
+    [aside] = [r for r in rows if r["title"] == "Unreadable"]
+    assert (aside["outcome"], aside["detail"]) == ("set_aside", f"Failed to start 3 times: {reason}"), aside
 
 
 async def test_an_email_and_a_widget_chat_name_their_channel_records(stack: Stack) -> None:  # noqa: F811

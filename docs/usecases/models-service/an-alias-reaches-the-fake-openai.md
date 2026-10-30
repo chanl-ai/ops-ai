@@ -33,6 +33,8 @@ is called and no model key is read.
 |---|---|---|
 | api | `models-service/scripts/test-uc-060-api.py` | passing |
 
+In the console: none yet; the AI gateway's console is planned, so the use case stays at the api layer.
+
 ## Non-vacuous check
 
 `rebinding openai-local to a closed port fails default with 502 provider_error; rebinding back restores it`: it proves

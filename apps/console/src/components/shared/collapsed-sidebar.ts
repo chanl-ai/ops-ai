@@ -14,6 +14,11 @@ export const FOLD_BELOW = 1440;
 const holders = new Set<symbol>();
 let before: boolean | null = null;
 
+/** True while a page holds the sidebar folded, so a change then is the page's, not the person's choice (c-552). */
+export function sidebarFoldHeld(): boolean {
+  return holders.size > 0;
+}
+
 function useFold(active: boolean) {
   const { open, setOpen } = useSidebar();
   const openNow = React.useRef(open);

@@ -501,6 +501,19 @@
             ],
             "title": "Reviewbelow"
           },
+          "sampleFileId": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samplefileid"
+          },
           "templates": {
             "items": {
               "additionalProperties": true,
@@ -1298,10 +1311,28 @@
                 "type": "integer"
               },
               {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],
             "title": "Pages"
+          },
+          "partial": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial"
           },
           "path": {
             "anyOf": [
@@ -1317,6 +1348,29 @@
               }
             ],
             "title": "Path"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal"
+          },
+          "readPages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readpages"
           },
           "records": {
             "anyOf": [
@@ -1393,6 +1447,17 @@
                 "type": "null"
               }
             ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
           }
         },
         "required": [
@@ -1491,15 +1556,74 @@
             "title": "Fileid",
             "type": "string"
           },
+          "hint": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
           "many": {
             "default": false,
             "title": "Many",
             "type": "boolean"
           },
+          "maxPages": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxpages"
+          },
+          "maxTokens": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxtokens"
+          },
           "ocr": {
             "default": false,
             "title": "Ocr",
             "type": "boolean"
+          },
+          "proposePages": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposepages"
+          },
+          "read": {
+            "default": "fields",
+            "enum": [
+              "fields",
+              "text",
+              "propose"
+            ],
+            "title": "Read",
+            "type": "string"
           },
           "reviewBelow": {
             "anyOf": [

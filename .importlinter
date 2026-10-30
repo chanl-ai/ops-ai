@@ -74,7 +74,8 @@ ignore_imports =
     ops_models.store.** -> sqlalchemy
     ops_platform.store.** -> sqlalchemy
     ops_tools.store.** -> sqlalchemy
-    ops_checkpointer.saver -> asyncpg
+    ops_checkpointer.saver -> sqlalchemy
+    ops_checkpointer.tables -> sqlalchemy
 
 [importlinter:contract:agents-store-is-bottom]
 name = ops_agents.store imports nothing else in ops_agents

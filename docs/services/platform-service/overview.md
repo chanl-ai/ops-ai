@@ -1,6 +1,6 @@
 # platform-service
 
-Status: first slice and sign-in providers (c-188) built, checked 2026-10-17. `services/platform-service` (`ops_platform`), public app on :8710 and
+Status: first slice and sign-in providers built, checked 2026-10-17. `services/platform-service` (`ops_platform`), public app on :8710 and
 internal app on :8711 (localhost only), with its own migration chain (`alembic_version_platform`). `make up` starts it
 and lists it in `make health`. Tests: `services/platform-service/tests`; use cases uc-021, uc-023, uc-025, uc-026.
 Design: this page, service map row `platform-service`.
@@ -16,7 +16,7 @@ API keys through introspection on the internal app, service tokens on internal r
 |---|---|---|
 | Platform token | EdDSA JWT, 15 minutes, `aud` listing every user-facing service, claims per spec section 4 | Each service, against `GET /.well-known/jwks.json` |
 | Refresh token | `<session id>.<secret>`, rotated on every refresh; a reused one ends the session | platform-service |
-| API key | `ok_<id>.<secret>`, secret shown once, SHA-256 at rest, optional expiry, optional target (one agent or workflow, c-246) | platform-service, via `POST /v1/auth/introspect` |
+| API key | `ok_<id>.<secret>`, secret shown once, SHA-256 at rest, optional expiry, optional target (one agent or workflow) | platform-service, via `POST /v1/auth/introspect` |
 | Service token | EdDSA JWT, 60 seconds, signed with the calling service's own key, `sub` bound to that key | The callee's `ServiceAuth` |
 | Step-up token | EdDSA JWT, 5 minutes, same key and `aud` as the platform token, `kind` and `typ` `step_up`, `sub` and `email` the person who re-entered their password (`POST /v1/auth/step-up`) or signed in again at their SSO provider (`POST /v1/auth/step-up/sso/*`), audited as `auth.step_up` with the method | agents-service `require_step_up`, against the cached key set; refused as a session by every service |
 
@@ -41,7 +41,7 @@ openapi-check` fails on drift.
 | `OPS_PLATFORM_TOKEN_TTL_SECONDS` | 900 | Use cases shorten it to watch a token expire |
 | `OPS_PLATFORM_DEMO_PASSWORD` | `northfield-demo` | Dev only, for a person with no stored password; unset outside dev |
 | `OPS_PLATFORM_PUBLIC_URL`, `OPS_CONSOLE_URL` | unset | platform-service's public origin (the OIDC redirect URI `/v1/auth/oidc/callback`, the SAML consumer URL `/v1/auth/saml/acs`, the SAML entity id `/v1/auth/saml`) and the console's origin (`/sso/callback`, `/reset-password/<token>`); unset, SSO and reset answer 503 |
-| `OPS_SAML_SP_KEY`, `OPS_SAML_SP_CERTIFICATE` | unset | The SAML service provider's key pair, PEM (c-197): signs requests for a provider with `signRequests`, decrypts assertions encrypted to the certificate, and the certificate is published at `/v1/auth/saml/metadata`; unset, a provider cannot ask for either (400 `sp_key_missing`) |
+| `OPS_SAML_SP_KEY`, `OPS_SAML_SP_CERTIFICATE` | unset | The SAML service provider's key pair, PEM: signs requests for a provider with `signRequests`, decrypts assertions encrypted to the certificate, and the certificate is published at `/v1/auth/saml/metadata`; unset, a provider cannot ask for either (400 `sp_key_missing`) |
 | `OPS_SIGNIN_SECRETS` | `{}` | JSON name to secret; an OIDC provider's `clientSecretRef` names one |
 | `OPS_PASSWORD_HASH_ITERATIONS`, `OPS_PASSWORD_MIN_LENGTH` | 600000, 12 | PBKDF2-SHA256 work factor (a lower stored count is rehashed at the next sign-in) and the shortest password a reset or invite accepts |
 | `OPS_SIGNIN_FLOW_SECONDS`, `OPS_PASSWORD_RESET_SECONDS` | 600, 3600 | How long an SSO round trip and a reset link live |
@@ -49,7 +49,7 @@ openapi-check` fails on drift.
 | `OPS_PLATFORM_SEED_FILE` | `services/platform-service/tests/fixtures/people.json` | Dev seed: `team_ops` with an admin, a builder and an approver |
 | `OPS_SERVICE_SIGNING_KEY`, `OPS_SERVICE_SIGNING_KID` | unset, `svc-dev` | A calling service's own key; required outside dev |
 | `OPS_SERVICE_PUBLIC_KEYS` | `{}` | `{kid: {"service", "x"}}`: the services the internal app trusts |
-| `OPS_WORKSPACE_RESTORE_DAYS`, `OPS_TEAM_DELETE_AFTER_DAYS` | 30, 30 | How long a closed workspace can be restored before the purge, and how long a team stays archived before it can be deleted (c-529); uc-529 sets the second to 0 |
+| `OPS_WORKSPACE_RESTORE_DAYS`, `OPS_TEAM_DELETE_AFTER_DAYS` | 30, 30 | How long a closed workspace can be restored before the purge, and how long a team stays archived before it can be deleted; uc-529 sets the second to 0 |
 | `OPS_AGENTS_URL` | `http://127.0.0.1:$(OPS_PORT)` | Where platform-service reads what still runs in a team before a delete or close |
 
 ## Policies
@@ -84,11 +84,11 @@ A workspace's methods are rows in `signin_providers`, set by Security team admin
 `password`, `oidc` (authorization code with PKCE) and `saml` (SP-initiated). A workspace with no enabled row signs in
 by password, so turning off its only SSO provider never locks everyone out. A `signin_domains` row is a workspace's claim on an
 email domain for one provider, with a token: it routes sign-in and makes people only once `POST
-/v1/settings/sign-in/domains/{domain}/verify` has seen `ops-ai-verify=<token>` in the domain's TXT records (c-195,
+/v1/settings/sign-in/domains/{domain}/verify` has seen `ops-ai-verify=<token>` in the domain's TXT records (
 migration 0017; resolvers from `OPS_SIGNIN_DNS_SERVERS`). One workspace can hold a domain verified, and another's
 pending claim blocks nobody. Settings → Sign-in in the console sets providers and verifies domains. The
 console asks `POST /v1/auth/options` for the typed email and shows those methods. Wrong passwords at sign-in and
-step-up count together per person in `signin_lockouts` (migration 0019, c-196): five in fifteen minutes lock both for
+step-up count together per person in `signin_lockouts` (migration 0019): five in fifteen minutes lock both for
 fifteen (429 `signin_locked` with `Retry-After`), a right password clears the count and a used reset link ends the
 lock; one person is sent at most three reset links an hour. The limits are `OPS_SIGNIN_MAX_FAILURES`,
 `OPS_SIGNIN_FAILURE_WINDOW_SECONDS`, `OPS_SIGNIN_LOCKOUT_SECONDS`, `OPS_PASSWORD_RESET_MAX_PER_WINDOW` and
@@ -106,7 +106,7 @@ Local identity providers for tests and the dev stack: `uv run python -m ops_sign
 ## Teams
 
 Workspace admins, people with the Admin role in every team (`*`; the dev seed's Wanjiru Kamau), create a team with its
-first admin, rename it and archive or restore it at `/v1/settings/teams` (c-198). A name is unique in the workspace in any
+first admin, rename it and archive or restore it at `/v1/settings/teams`. A name is unique in the workspace in any
 case (`teams.name_key`). An archived team keeps what it owns, leaves its members' next tokens and `GET /v1/teams`, gives
 its members no rights there and takes no new invitations; the Security team cannot be archived. Team admins manage
 members and roles on `/v1/settings/members/*` as before.
@@ -114,7 +114,7 @@ members and roles on `/v1/settings/members/*` as before.
 ## Workspace and team lifecycle
 
 The workspace's owner is the one person with the built-in role Owner in every team (`*`), the only role holding
-`workspace.manage` (c-529); a partial unique index keeps it to one. The first account admin becomes the maintainers when the
+`workspace.manage`; a partial unique index keeps it to one. The first account admin becomes the maintainers when the
 workspace is seeded or bootstrapped, and migration 0026 chose the earliest one for workspaces made before it.
 
 | Action | Who | What happens |
@@ -133,7 +133,7 @@ records of a deleted team or purged workspace stay unreachable until each servic
 
 ## Access checks
 
-An admin checks one action for one person at `POST /v1/access/check` (c-150): the answer comes from the same `can()` the
+An admin checks one action for one person at `POST /v1/access/check`: the answer comes from the same `can()` the
 services run, with the workspace's policies, and names the person checked when it refuses ("Maya asked for this", not
 "You asked for this"). Each check is written to the audit log as kind `checked`, read as "Checked <person>'s access to
 <action> on <area>". `GET /v1/me/why` answers the signed-in person's own locked button: the roles that grant the action
@@ -168,6 +168,6 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 |---|---|
 | agents-service and tools-service resolving callers through `ops_identity`, with RLS on their tables (uc-022, uc-024) | The adoption card |
 | MFA; a limit per client address on sign-in | Later slices of [sign-in library](../../packages/ops_signin/overview.md) |
-| SAML single logout and identity-provider-initiated sign-in | c-217 (proposed) |
+| SAML single logout and identity-provider-initiated sign-in | an earlier change (proposed) |
 | Sending invitations by mail | The notifications slice; today the admin shares the link from the invite response |
 | A pushed revocation list | Only if 15 minutes of reach after sign-out proves too long |

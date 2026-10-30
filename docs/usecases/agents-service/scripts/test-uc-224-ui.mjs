@@ -66,6 +66,7 @@ await withUiStack(
       });
       check('1 setup: the workflows are published and the faxed notice stops at Check the read', published.every((p) => p.endsWith('/approved') || p.split('/').includes('409')) && waiting?.waiting?.node === 'check', { published, file: file?.id, status: waiting?.status, outcome: waiting?.outcome, at: waiting?.waiting?.node, error: waiting?.error, steps: (waiting?.steps ?? []).map((x) => [x.node, x.port, JSON.stringify(x.output ?? {}).slice(0, 300)]) });
 
+      // Human Tasks opens a task beside its queue (no side sheet), so the task's text is read from the page's main area.
       // Step 2: Maya opens it in Human Tasks and sees the file, the fields and which one needs a check.
       const page = await consoleSignIn(browser, consoleUrl, MAYA, PASSWORD, errors);
       await page.goto(`${consoleUrl}/reviews?review=${started.runId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -76,7 +77,7 @@ await withUiStack(
       const flagged = await nameRow.getAttribute('data-needs-review');
       const nameRowText = await nameRow.innerText();
       const others = await page.locator('[data-testid^="read-field-0-"][data-needs-review="true"]').count();
-      const raw = (await page.getByTestId('review-sheet').innerText()).includes('"records"');
+      const raw = (await page.locator('main').innerText()).includes('"records"');
       const subtitle = await page.getByTestId('review-run-link').innerText();
       const runHref = await page.getByTestId('review-run-link').getAttribute('href');
       const returnable = await page.getByTestId('review-decision-form').getByRole('button', { name: /^Return/ }).count();
@@ -95,17 +96,19 @@ await withUiStack(
       // The card's evidence: the check at desktop and phone width.
       const shots = evidenceDir('169');
       mkdirSync(shots, { recursive: true });
-      await page.getByTestId('review-sheet').screenshot({ path: join(shots, 'read-check-1280.png') });
+      await page.locator('main').screenshot({ path: join(shots, 'read-check-1280.png') });
       await page.setViewportSize({ width: 400, height: 900 });
-      await page.getByTestId('review-sheet').screenshot({ path: join(shots, 'read-check-400.png') });
+      await page.locator('main').screenshot({ path: join(shots, 'read-check-400.png') });
       await page.setViewportSize({ width: 1440, height: 1000 });
 
       // Step 3: she corrects the name and approves; the case starts on her value.
       await page.getByTestId('read-input-0-name').fill('Ana Example');
       const marked = await page.getByTestId('read-corrected-0-name').innerText();
       const decided = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/reviews/') && r.url().endsWith('/decision'), { timeout: 60_000 });
-      // The read check is a typed document_check task: it decides by its type's own Approve.
-      await page.getByTestId('decide-approve').click();
+      // The read check is a typed document_check task: it decides by its type's own Approve, picked and then sent with
+      // Decide in the task's panel.
+      await page.getByTestId('option-approve').click();
+      await page.getByTestId('decide').click();
       const response = await decided;
       const sent = response.request().postDataJSON();
       const levy = await until(async () => (await runs(james, 'levy_case')).find((r) => r.input?.record?.name) ?? null);
@@ -115,10 +118,10 @@ await withUiStack(
         { status: response.status(), marked, sent: sent?.inputs, levy: levy?.input?.record },
       );
 
-      // Step 3b: the panel stays on the task she decided, now saying who decided it, never moving to another task.
-      const decidedBy = await page.getByTestId('review-decided-by').first().waitFor({ timeout: 30_000 }).then(async () => (await page.getByTestId('review-decided-by').first().innerText()).trim(), () => '');
-      const stillHere = new URL(page.url()).searchParams.get('review');
-      check('3b after deciding, the panel stays on the same task and says who decided it', !!decidedBy && /Maya Okafor|m\.okafor/.test(decidedBy) && stillHere === started.runId, { decidedBy, stillHere });
+      // Step 3b: the decided task leaves her queue and the queue opens the next one (c-460); 3c shows who decided it.
+      const left = await page.waitForFunction((id) => !document.querySelector(`[data-testid^="queue-item-${id}"]`), started.runId, { timeout: 30_000 }).then(() => true, () => false);
+      const now = new URL(page.url()).searchParams.get('review');
+      check('3b after deciding, the task leaves her queue and the next task opens', left && now !== started.runId, { left, now });
 
       // Step 3c: the run keeps the decision: who, when and why, linked to the task it was made on.
       await page.goto(`${consoleUrl}/workflows/runs/${started.runId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -139,8 +142,9 @@ await withUiStack(
         return r.waiting?.node === 'ack' ? r : null;
       });
       await page.goto(`${consoleUrl}/reviews?review=${started.runId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // The quick view draws the task as its page does: the question, the email and reply, who and from where, the cases.
-      const sheet = page.getByTestId('review-sheet');
+      // Human Tasks opens the task beside its queue as its page draws it: the question, the email and reply, who and from
+      // where, the cases.
+      const sheet = page.locator('main');
       await sheet.getByTestId('task-decide').waitFor({ timeout: 120_000 });
       const sheetText = (await sheet.innerText()).replace(/\s+/g, ' ');
       const listed = await sheet.getByTestId('task-decide').getByRole('link', { name: 'Open case' }).count();
@@ -150,15 +154,16 @@ await withUiStack(
         { at: ack?.waiting?.node, sheet: sheetText.slice(0, 500), listed },
       );
 
-      // The same acknowledgement as its own page (c-289, wireframe D): the question, the reply as it will leave, the cases.
+      // The acknowledgement opened from its own address (c-289), which Human Tasks now opens beside its queue (c-460):
+      // the question, the reply as it will leave, the cases. The question, body and footer are the decision panel's.
       const taskShots = join(ROOT, 'docs/console/proposed/tasks');
       mkdirSync(taskShots, { recursive: true });
       await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const ackQuestion = await page.getByTestId('page-title').innerText();
-      await page.getByTestId('task-evidence').waitFor({ timeout: 60_000 });
-      const ackEvidence = await page.getByTestId('task-evidence').innerText();
+      const ackQuestion = await page.getByTestId('decision-question').innerText();
+      await page.getByTestId('decision-body').waitFor({ timeout: 60_000 });
+      const ackEvidence = await page.getByTestId('decision-body').innerText();
       // Whoever the step lets decide sees its type's buttons; the page is the same for everyone else, with who decides.
-      const ackFooter = (await page.getByTestId('task-footer').innerText()).replace(/\s+/g, ' ');
+      const ackFooter = (await page.getByTestId('decision-footer').innerText()).replace(/\s+/g, ' ');
       let who = null;
       for (const [email, team] of [['m.okafor@harborpine.example', 'team_ops'], ['p.shah@harborpine.example', 'team_ops'], ['n.petrov@harborpine.example', 'team_security'], ['o.haddad@harborpine.example', 'team_fraud'], ['w.kamau@harborpine.example', 'team_platform']]) {
         const signed = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data?.token;
@@ -170,9 +175,10 @@ await withUiStack(
       }
       const decider = await consoleSignIn(browser, consoleUrl, who ?? 'p.shah@harborpine.example', PASSWORD, errors);
       await decider.goto(`${consoleUrl}/reviews/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await decider.getByTestId('task-footer').waitFor({ timeout: 60_000 });
+      await decider.getByTestId('decision-footer').waitFor({ timeout: 60_000 });
       await decider.getByTestId('option-decision-form').waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const ackButtons = await decider.getByTestId('option-decision-form').locator('button').allInnerTexts();
+      // The panel lists each option as a labelled choice (option-<name>); Decide sends the one picked.
+      const ackButtons = await decider.getByTestId('option-decision-form').locator('[data-testid^="option-"]:not([data-testid="option-reason"])').allInnerTexts();
       await decider.close();
       const caseLinks = await page.getByTestId('task-decide').getByRole('link').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -204,21 +210,22 @@ await withUiStack(
       const heldId = `${matched.runId}:${held.waiting.node}:${held.waiting.iteration}`;
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(heldId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const heldTitle = await page.getByTestId('page-title').innerText();
-      const viewer = await page.getByTestId('task-evidence').getByTestId('document-viewer').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      const options = await page.getByTestId('option-decision-form').locator('button').allInnerTexts();
-      const footerHeight = (await page.getByTestId('task-footer').boundingBox())?.height ?? 0;
-      await page.getByTestId('option-decision-form').locator('button').nth(1).hover();
-      const secondSays = await page.getByTestId('review-consequence').innerText();
-      const shown = [heldTitle, await page.getByTestId('task-decide').innerText(), await page.getByTestId('task-footer').innerText()].join('\n');
+      const heldTitle = await page.getByTestId('decision-question').innerText();
+      // The notice sits beside the panel, in the task's own column.
+      const viewer = await page.locator('main').getByTestId('document-viewer').first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      // Each choice is a labelled option whose second line says what it does; the footer holds Decide and Reassign.
+      const options = await page.getByTestId('option-decision-form').locator('[data-testid^="option-"]:not([data-testid="option-reason"])').allInnerTexts();
+      const footerHeight = (await page.getByTestId('decision-footer').boundingBox())?.height ?? 0;
+      const secondSays = (options[1] ?? '').split('\n').slice(1).join(' ').trim();
+      const shown = [heldTitle, await page.getByTestId('task-decide').innerText(), await page.getByTestId('decision-footer').innerText()].join('\n');
       const rawText = shown.match(/\b[a-z]+_[a-z_]+\b|\d\.0\b|\{'/);
       await page.screenshot({ path: join(taskShots, 'task-held-action-1280.png') });
       await page.setViewportSize({ width: 400, height: 800 });
       await page.screenshot({ path: join(taskShots, 'task-held-action-400.png') });
       await page.setViewportSize({ width: 1440, height: 1000 });
       check(
-        '4c the levy case asks one plain question with the notice beside it, and a one-row footer says what each choice does',
-        /\?$/.test(heldTitle) && viewer && options.length >= 2 && footerHeight > 0 && footerHeight < 90 && secondSays.length > options[1].length + 2 && !rawText,
+        '4c the levy case asks one plain question with the notice beside it, and each choice says what it does',
+        /\?$/.test(heldTitle) && viewer && options.length >= 2 && footerHeight > 0 && secondSays.length > 2 && !rawText,
         { heldTitle, viewer, options, footerHeight, secondSays, raw: rawText?.[0] },
       );
 
@@ -231,7 +238,8 @@ await withUiStack(
       const childStatus = childrenShown ? await page.getByTestId('run-child-0').innerText() : '';
       // The canvas draws after the run's lists, so wait for its line before reading it.
       await page.getByTestId('node-repeats').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const repeats = await page.getByTestId('node-repeats').allInnerTexts();
+      // A long line drops what it repeats over on the canvas and keeps it in its title, which this reads.
+      const repeats = await page.getByTestId('node-repeats').evaluateAll((els) => els.map((e) => e.getAttribute('title') || e.textContent || ''));
       const eachShots = evidenceDir('306');
       mkdirSync(eachShots, { recursive: true });
       if (childrenShown) await page.getByTestId('run-children').screenshot({ path: join(eachShots, 'run-children-1280.png') });
@@ -244,7 +252,7 @@ await withUiStack(
 
       // Step 6: a notice naming three debtors reads as three records, one tab each, each with its own fields.
       // A read with Name always for review, so a clean notice naming three debtors still waits for a person.
-      const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: { ...james, 'Content-Type': 'application/json' }, body: JSON.stringify({ yaml: JSON.stringify({"schemaVersion": 2, "id": "uc224_three", "name": "Three debtors", "nodes": [{"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "name": "Document"}, {"id": "read", "type": "ops.ai.extract", "typeVersion": 1, "name": "Read the debtors", "parameters": {"file": "$.input.fileId", "many": true, "fields": [{"key": "name", "label": "Name", "type": "text", "required": true, "alwaysReview": true}, {"key": "address", "label": "Address", "type": "text"}, {"key": "ssn_last4", "label": "SSN last four", "type": "text"}, {"key": "amount", "label": "Amount", "type": "money"}, {"key": "currency", "label": "Currency", "type": "text"}, {"key": "court", "label": "Court", "type": "text"}, {"key": "case_no", "label": "Case number", "type": "text"}]}}, {"id": "check", "type": "ops.flow.humanReview", "typeVersion": 1, "name": "Check the read", "parameters": {"title": "Check the debtors read from the document", "summary": {"document": "$.input.name", "read": "$.nodes.read.out"}, "editable": "$.nodes.read.out.records"}}, {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "name": "Done", "parameters": {"outcome": "done"}}, {"id": "manual", "type": "ops.flow.end", "typeVersion": 1, "name": "Manual", "parameters": {"outcome": "manual"}}], "connections": [{"from": {"node": "start", "port": "payload"}, "to": {"node": "read", "port": "in"}}, {"from": {"node": "read", "port": "ok"}, "to": {"node": "check", "port": "in"}}, {"from": {"node": "read", "port": "review"}, "to": {"node": "check", "port": "in"}}, {"from": {"node": "read", "port": "unreadable"}, "to": {"node": "manual", "port": "in"}}, {"from": {"node": "read", "port": "error"}, "to": {"node": "manual", "port": "in"}}, {"from": {"node": "check", "port": "approve"}, "to": {"node": "done", "port": "in"}}, {"from": {"node": "check", "port": "reject"}, "to": {"node": "manual", "port": "in"}}]}) }) });
+      const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: { ...james, 'Content-Type': 'application/json' }, body: JSON.stringify({ yaml: JSON.stringify({"schemaVersion": 2, "id": "uc224_three", "name": "Three debtors", "nodes": [{"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "name": "Document", "parameters": {"inputSchema": {"type": "object", "properties": {"fileId": {"type": "string", "format": "file"}, "name": {"type": "string"}}}}}, {"id": "read", "type": "ops.ai.extract", "typeVersion": 1, "name": "Read the debtors", "parameters": {"file": "$.input.fileId", "many": true, "fields": [{"key": "name", "label": "Name", "type": "text", "required": true, "alwaysReview": true}, {"key": "address", "label": "Address", "type": "text"}, {"key": "ssn_last4", "label": "SSN last four", "type": "text"}, {"key": "amount", "label": "Amount", "type": "money"}, {"key": "currency", "label": "Currency", "type": "text"}, {"key": "court", "label": "Court", "type": "text"}, {"key": "case_no", "label": "Case number", "type": "text"}]}}, {"id": "check", "type": "ops.flow.humanReview", "typeVersion": 1, "name": "Check the read", "parameters": {"title": "Check the debtors read from the document", "summary": {"document": "$.input.name", "read": "$.nodes.read.out"}, "editable": "$.nodes.read.out.records"}}, {"id": "done", "type": "ops.flow.end", "typeVersion": 1, "name": "Done", "parameters": {"outcome": "done"}}, {"id": "manual", "type": "ops.flow.end", "typeVersion": 1, "name": "Manual", "parameters": {"outcome": "manual"}}], "connections": [{"from": {"node": "start", "port": "payload"}, "to": {"node": "read", "port": "in"}}, {"from": {"node": "read", "port": "ok"}, "to": {"node": "check", "port": "in"}}, {"from": {"node": "read", "port": "review"}, "to": {"node": "check", "port": "in"}}, {"from": {"node": "read", "port": "unreadable"}, "to": {"node": "manual", "port": "in"}}, {"from": {"node": "read", "port": "error"}, "to": {"node": "manual", "port": "in"}}, {"from": {"node": "check", "port": "approve"}, "to": {"node": "done", "port": "in"}}, {"from": {"node": "check", "port": "reject"}, "to": {"node": "manual", "port": "in"}}]}) }) });
       if (saved.status >= 300 && saved.status !== 409) throw new Error(`step 6: saving the read workflow answered ${saved.status}: ${(await saved.text()).slice(0, 300)}`);
       const scan = await upload(james, 'levy_notice.pdf', readFileSync(join(ROOT, 'services/agents-service/tests/fixtures/mailbox/levy_notice.pdf')));
       const three = await json(await fetch(`${agents}/v1/runs`, { method: 'POST', headers: james, body: JSON.stringify({ workflowId: 'uc224_three', mode: 'test', input: { fileId: scan.file?.id, name: 'levy_notice.pdf' } }) }));
@@ -266,7 +274,7 @@ await withUiStack(
       await page.screenshot({ path: join(ROOT, 'docs/console/proposed/tasks/task-read-check-records-1280.png') });
       await page.setViewportSize({ width: 1440, height: 1000 });
       check('6b at 1280 each record table fits its pane, Source included', overflow.length > 0 && overflow.every((d) => d <= 1), { overflow });
-      check('6 a notice naming three debtors reads as one tab per record, showing one record at a time', names.length === 3 && second && firstHidden, { names, second, firstHidden, records: await page.locator('[data-testid^="read-record-"]').count(), title: await page.getByTestId('page-title').innerText().catch(() => ''), body: (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300) });
+      check('6 a notice naming three debtors reads as one tab per record, showing one record at a time', names.length === 3 && second && firstHidden, { names, second, firstHidden, records: await page.locator('[data-testid^="read-record-"]').count(), title: await page.getByTestId('decision-question').innerText().catch(() => ''), body: (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300) });
 
       check('5 no page errors', errors.length === 0, errors);
     } finally {

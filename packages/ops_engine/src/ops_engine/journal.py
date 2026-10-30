@@ -5,6 +5,7 @@ store/steps.py, and `MemoryJournal` serves the engine's own tests."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
 # running: an attempt under way, or one whose process died (dangling). waiting: a review paused for a person.
@@ -64,7 +65,9 @@ class MemoryJournal:
         )
 
     async def begin(self, row: StepRow) -> None:
-        self.rows[(row.run_id, row.node_id, row.iteration, row.attempt)] = row
+        # Stamped as the store stamps it, so a deadline counted from the attempt's start reads the same here.
+        stamped = row if row.started_at else replace(row, started_at=datetime.now(UTC).isoformat())
+        self.rows[(row.run_id, row.node_id, row.iteration, row.attempt)] = stamped
 
     async def finish(
         self, row: StepRow, *, status: StepStatus, port: str | None, output: Any, error: str | None

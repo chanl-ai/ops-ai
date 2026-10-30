@@ -27,6 +27,7 @@ from ops_agents.activities.gateway import (
     current_run_context,
     gateway_error,
 )
+from ops_checkpointer import LeaseSupersededError
 from ops_engine.ports import Access, LeaseBusyError, ToolResult
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
@@ -112,11 +113,25 @@ class GatewayTools:
         # The run's mode, from the graph's config, picks the connection environment its calls use (c-330).
         run = current_run_context()
         ctx = RUN_CONTEXT.set(
-            RunContext(thread=thread_of(key), act="graph", generation=generation, environment=run.environment)
+            RunContext(
+                thread=thread_of(key),
+                act="graph",
+                generation=generation,
+                environment=run.environment,
+                run_id=run.run_id,
+            )
         )
         try:
             data = await self._gw().call(operation, input, key=key, approval_token=token)
         except GatewayRefused as e:
+            # The gateway's own codes for a write under a key it already holds, read for what they say (c-561):
+            # still running is pending, an abandoned key never ran, and a newer lease owns the run now.
+            if e.code == "write_in_progress":
+                return ToolResult(False, pending=True, reason=str(e))
+            if e.code == "call_abandoned":
+                return ToolResult(False, not_sent=True, reason=str(e))
+            if e.code == "lease_superseded":
+                raise LeaseSupersededError(str(e)) from e
             return ToolResult(False, refused=True, reason=str(e))
         except ServiceCallError as e:
             if e.status >= 500:
@@ -130,6 +145,11 @@ class GatewayTools:
     async def access(self, operation: str) -> Access:
         found = await self._gw().tool_access(operation)
         return found if found in ("read", "write") else "unknown"
+
+    async def deadline(self, operation: str) -> float | None:
+        """How long the gateway may take over one call of `operation` (c-561); the step waits at least that long."""
+        found = (await self._gw().tool_policy(operation)).get("deadlineSeconds")
+        return float(found) if isinstance(found, (int, float)) else None
 
     async def find(self, key: str, operation: str) -> ToolResult | None:
         """The gateway's record of the write sent under `key`, decided on its claim (the effect row) alone; with no
@@ -146,7 +166,8 @@ class GatewayTools:
             if outcome in ("ok", "replayed"):
                 return ToolResult(True, {"reconciled": True, "callId": call["id"], "status": outcome})
             reason = "the gateway lost the call; it may have run" if outcome == "lost" else "the call failed"
-            return ToolResult(False, {"callId": call["id"], "error": call.get("error")}, reason=reason)
+            output = {"callId": call["id"], "error": call.get("error")}
+            return ToolResult(False, output, reason=reason, lost=outcome == "lost")
         if outcome == "refused":
             return ToolResult(False, refused=True, reason="the gateway refused the call")
         return None  # no claim: the write never ran

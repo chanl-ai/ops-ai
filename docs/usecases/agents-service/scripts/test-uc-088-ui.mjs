@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
-const TEAM = { 'X-Team-Id': 'team_all' };
+const TEAM = { 'X-Team-Id': 'team_ops' };
 const armed = (p) => (p.catch(() => undefined), p);
 const NAME = `Limits Checker ${Math.random().toString(36).slice(2, 6)}`;
 const api = async (path, init = {}) => (await fetch(`${agents}${path}`, { ...init, headers: { ...TEAM, 'Content-Type': 'application/json', ...(init.headers ?? {}) } })).json();
@@ -15,6 +15,8 @@ await withUiStack(async (consoleUrl) => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    // The dev console works in team_platform until a team is picked; this script's rows are in team_ops.
+    await page.addInitScript(() => sessionStorage.setItem('ops-team', 'team_ops'));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
 

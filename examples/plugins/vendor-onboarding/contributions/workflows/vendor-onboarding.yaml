@@ -1,0 +1,94 @@
+# The workflow: wiring only. It looks the company up (REST tool), scores it (the Python function), asks the agent for
+# notes (AI step) and stops for a person (human review). This is the YAML agents-service's
+# POST /v1/workflows/definitions accepts as {"yaml": ...}; `@kind/id` references are replaced with the team's ids by
+# the installer.
+
+schemaVersion: 2
+id: vendor_onboarding
+name: Onboard a new vendor
+description: >-
+  A new supplier: its registration number checked against the company registry, a risk score worked out by code with a
+  sanctions screen, notes from the Vendor Reviewer agent, then a person approves or rejects onboarding.
+nodes:
+  - id: start
+    type: ops.trigger.request
+    typeVersion: 1
+    name: New vendor
+    parameters:
+      inputSchema:
+        type: object
+        required: [vendor]
+        properties:
+          vendor:
+            type: object
+            required: [legalName, country, registrationNumber]
+            properties:
+              legalName: { type: string }
+              country: { type: string }
+              registrationNumber: { type: string }
+              annualSpend: { type: number }
+
+  - id: lookup
+    type: ops.action.tool
+    typeVersion: 1
+    name: Look up the company
+    parameters:
+      operation: "@tool-module/vendor-registry#lookup_company"
+      input:
+        registration_number: $.input.vendor.registrationNumber
+
+  - id: score
+    type: ops.action.tool
+    typeVersion: 1
+    name: Score the vendor
+    parameters:
+      operation: "@code-module/vendor-scoring#score_vendor"
+      input:
+        vendor: $.input.vendor
+        company: $.nodes.lookup.out
+
+  - id: notes
+    type: ops.ai.agent
+    typeVersion: 1
+    name: Notes for the approver
+    parameters:
+      agent: "@agent/vendor-reviewer"
+      prompt: Write notes for the person deciding whether to onboard this supplier.
+      input:
+        vendor: $.input.vendor
+        company: $.nodes.lookup.out
+        risk: $.nodes.score.out
+
+  - id: review
+    type: ops.flow.humanReview
+    typeVersion: 1
+    name: Onboard this vendor?
+    parameters:
+      title: "Onboard {$.input.vendor.legalName}?"
+      summary:
+        vendor: $.input.vendor
+        registry: $.nodes.lookup.out
+        risk: $.nodes.score.out
+        notes: $.nodes.notes.out
+
+  - { id: onboarded, type: ops.flow.end, typeVersion: 1, name: Onboarded, parameters: { outcome: onboarded } }
+  - { id: declined, type: ops.flow.end, typeVersion: 1, name: Declined, parameters: { outcome: declined } }
+  - id: failed
+    type: ops.flow.end
+    typeVersion: 1
+    name: Could not check
+    parameters: { outcome: could_not_check, result: failed }
+
+connections:
+  - { from: { node: start, port: payload }, to: { node: lookup, port: in } }
+  - { from: { node: lookup, port: ok }, to: { node: score, port: in } }
+  - { from: { node: lookup, port: refused }, to: { node: failed, port: in } }
+  - { from: { node: lookup, port: error }, to: { node: failed, port: in } }
+  - { from: { node: score, port: ok }, to: { node: notes, port: in } }
+  - { from: { node: score, port: refused }, to: { node: failed, port: in } }
+  - { from: { node: score, port: error }, to: { node: failed, port: in } }
+  # Notes help the person; without them the person still decides.
+  - { from: { node: notes, port: ok }, to: { node: review, port: in } }
+  - { from: { node: notes, port: error }, to: { node: review, port: in } }
+  - { from: { node: review, port: approve }, to: { node: onboarded, port: in } }
+  - { from: { node: review, port: reject }, to: { node: declined, port: in } }

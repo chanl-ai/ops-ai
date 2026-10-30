@@ -1,6 +1,6 @@
 # A workflow waits for long-running work and carries on when it finishes
 
-Status: current. Id: `uc-525`. Service: `console` on agents-service, documents-service and files-service. Layers: ui. Card: c-525.
+Status: current. Id: `uc-525`. Service: `console` on agents-service, documents-service and files-service. Layers: ui. Card: an earlier change.
 
 A workflow that reads a long file used to wait for the read inside the worker, under a time limit shorter than the
 read, so a long document left Extract from file by its error port and the step after it had nothing to decide on.
@@ -28,5 +28,5 @@ service event or a signed callback, whichever comes first, or by its own Timeout
 
 ## Non-vacuous check
 
-Before c-525 every step fails: Extract from file has no Timeout port and `ops.flow.waitFor` does not exist, so neither
+Before an earlier change every step fails: Extract from file has no Timeout port and `ops.flow.waitFor` does not exist, so neither
 workflow saves (`uc-red.txt` under `evidenceDir('525')`).

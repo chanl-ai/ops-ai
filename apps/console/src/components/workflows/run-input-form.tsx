@@ -57,28 +57,23 @@ const label = (name: string, s: Schema) =>
     .replace(/\bid\b/g, 'ID')
     .replace(/^\w/, (c) => c.toUpperCase());
 
+/** The control a file field draws: the console picks or uploads through Files; a hosted form uploads through its link. */
+export type FileControl = (p: { id: string; many: boolean; value: FileRef[]; onChange: (next: FileRef[]) => void; testId: string }) => React.ReactNode;
+
 /**
- * The run's input as a form generated from the trigger's input schema: text, number, money, date, choice and yes or no
- * with the settings form's own controls, and file inputs that upload or pick files (stored in Files first; the run gets
- * their ids). A JSON tab edits the same value for anything the form cannot say.
+ * The fields a trigger's input schema generates, in the schema's order: text, number, money, date, choice and yes or
+ * no with the settings form's own controls, and file inputs drawn by `fileControl` (Files' picker by default). The run
+ * gets each file's id. `errors` puts a message under a field by its name.
  */
-export function RunInputForm({ schema: raw, value, onChange, error, fileSource }: { schema: Record<string, unknown>; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; error?: string; fileSource?: OptionSource }) {
+export function RunInputFields({ schema: raw, value, onChange, errors, fileSource, fileControl, idPrefix = 'run' }: { schema: Record<string, unknown>; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; errors?: Record<string, string>; fileSource?: OptionSource; fileControl?: FileControl; idPrefix?: string }) {
   const schema = raw as Schema;
   const props = Object.entries(schema.properties ?? {});
   const required = new Set(schema.required ?? []);
-  const [tab, setTab] = React.useState<'form' | 'json'>('form');
-  const [text, setText] = React.useState(() => JSON.stringify(value, null, 2));
-  const [jsonError, setJsonError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (tab === 'form') setText(JSON.stringify(value, null, 2));
-  }, [value, tab]);
-
   const simple = props.filter(([, field]) => !fileShape(field) && widgetFor(field));
   const form: NodeForm = {
     order: simple.map(([n]) => n),
     fields: Object.fromEntries(simple.map(([n, field]) => [n, { label: label(n, field), widget: widgetFor(field)!, help: field.description, placeholder: typeof field.examples?.[0] === 'string' ? `e.g. ${field.examples[0]}` : undefined }])),
   };
-  const rest = props.filter(([, field]) => !fileShape(field) && !widgetFor(field));
   // Fields draw in the schema's order: each file field on its own, the plain fields between them as one settings form.
   const groups: ({ file: string } | { plain: string[] })[] = [];
   for (const [name, field] of props) {
@@ -89,6 +84,7 @@ export function RunInputForm({ schema: raw, value, onChange, error, fileSource }
       else groups.push({ plain: [name] });
     }
   }
+  const control: FileControl = fileControl ?? ((p) => <FileRefsField id={p.id} many={p.many} value={p.value} onChange={p.onChange} testId={p.testId} source={fileSource} />);
   const fileField = (name: string, field: Schema) => {
     const shape = fileShape(field);
     const many = shape === 'many';
@@ -96,12 +92,47 @@ export function RunInputForm({ schema: raw, value, onChange, error, fileSource }
     const current: FileRef[] = many ? ((held as FileRef[] | undefined) ?? []) : typeof held === 'string' && held ? [{ fileId: held }] : held && typeof held === 'object' ? [held as FileRef] : [];
     // A string field gets the id alone, which is what a workflow reading `$.input.<name>` as an id expects.
     const set = (next: FileRef[]) => onChange({ ...value, [name]: many ? next : shape === 'id' ? next[0]?.fileId : next[0] });
+    const id = `${idPrefix}-${name}`;
     return (
-      <FormField key={name} id={`run-${name}`} label={label(name, field)} optional={!required.has(name)} hint={field.description ?? (many ? 'Upload files or pick ones already in Files.' : 'Upload a file or pick one already in Files.')}>
-        <FileRefsField id={`run-${name}`} many={many} value={current} onChange={set} testId={`run-files-${name}`} source={fileSource} />
+      <FormField key={name} id={id} label={label(name, field)} optional={!required.has(name)} error={errors?.[name]} hint={field.description ?? (fileControl ? (many ? 'Attach one or more files.' : 'Attach a file.') : many ? 'Upload files or pick ones already in Files.' : 'Upload a file or pick one already in Files.')}>
+        {control({ id, many, value: current, onChange: set, testId: `run-files-${name}` })}
       </FormField>
     );
   };
+  return (
+    <>
+      {groups.map((g) =>
+        'file' in g ? (
+          fileField(g.file, schema.properties![g.file])
+        ) : (
+          <NodeSettingsForm key={g.plain.join(',')} form={{ ...form, order: g.plain }} schema={schema as Record<string, unknown>} value={value} steps={NO_STEPS} idPrefix={idPrefix} errors={errors} onChange={(v) => onChange(v as Record<string, unknown>)} />
+        ),
+      )}
+    </>
+  );
+}
+
+/** What a submission is missing: each required field left empty, by name. */
+export function missingRequired(schema: Record<string, unknown>, value: Record<string, unknown>): Record<string, string> {
+  const s = schema as Schema;
+  const empty = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+  return Object.fromEntries((s.required ?? []).filter((n) => s.properties?.[n] && empty(value[n])).map((n) => [n, `Fill in ${label(n, s.properties![n]).toLowerCase()}.`]));
+}
+
+/**
+ * The run's input as a form generated from the trigger's input schema (`RunInputFields`). A JSON tab edits the same
+ * value for anything the form cannot say.
+ */
+export function RunInputForm({ schema: raw, value, onChange, error, fileSource }: { schema: Record<string, unknown>; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; error?: string; fileSource?: OptionSource }) {
+  const schema = raw as Schema;
+  const props = Object.entries(schema.properties ?? {});
+  const [tab, setTab] = React.useState<'form' | 'json'>('form');
+  const [text, setText] = React.useState(() => JSON.stringify(value, null, 2));
+  const [jsonError, setJsonError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (tab === 'form') setText(JSON.stringify(value, null, 2));
+  }, [value, tab]);
+  const rest = props.filter(([, field]) => !fileShape(field) && !widgetFor(field));
 
   return (
     <Tabs value={tab} onValueChange={(t) => setTab(t as 'form' | 'json')} className="gap-3">
@@ -114,13 +145,7 @@ export function RunInputForm({ schema: raw, value, onChange, error, fileSource }
         </TabsTrigger>
       </TabsList>
       <TabsContent value="form" className="flex flex-col gap-4" data-testid="run-input-form">
-        {groups.map((g) =>
-          'file' in g ? (
-            fileField(g.file, schema.properties![g.file])
-          ) : (
-            <NodeSettingsForm key={g.plain.join(',')} form={{ ...form, order: g.plain }} schema={schema as Record<string, unknown>} value={value} steps={NO_STEPS} idPrefix="run" onChange={(v) => onChange(v as Record<string, unknown>)} />
-          ),
-        )}
+        <RunInputFields schema={raw} value={value} onChange={onChange} fileSource={fileSource} />
         {rest.length > 0 && <p className="text-xs text-muted-foreground">{rest.map(([n, field]) => label(n, field)).join(', ')} {rest.length === 1 ? 'takes' : 'take'} JSON: use the JSON tab.</p>}
         {props.length === 0 && <p className="text-sm text-muted-foreground">This trigger declares no inputs; the JSON tab sends any object.</p>}
       </TabsContent>

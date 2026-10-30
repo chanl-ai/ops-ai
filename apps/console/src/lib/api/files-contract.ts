@@ -34,7 +34,7 @@ import type {
   DocumentTypeVersion,
   DocumentTypeVersionInput,
 } from '@/lib/types/document-types';
-import type { Extraction, ExtractionInput } from '@/lib/types/extractions';
+import type { DocumentLayout, Extraction, ExtractionInput } from '@/lib/types/extractions';
 import type { AuditFilters, AuditView } from '@/lib/types/governance';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
 
@@ -119,5 +119,12 @@ export interface FilesApi {
     byFile(fileId: string): Promise<ListResult<Extraction>>;
     /** A person's value for one field; the value as read stays beside it. `record` for a read of several records. */
     correct(id: string, key: string, value: unknown, record?: number): Promise<Extraction>;
+  };
+  /** documents-service `/v1/documents/layout` (c-247): a file's pages, blocks and words, read once and cached. No model call. */
+  layouts: {
+    /** The layout already read; 404 until `read` has read it. A layout read with OCR is cached apart from one without. */
+    get(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
+    /** Reads the layout (OCR on a page with no text layer when `ocr`), or returns the cached one. */
+    read(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
   };
 }

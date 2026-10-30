@@ -27,6 +27,7 @@ from ops_service_kit.errors import ApiError, Conflict, ServiceUnavailable, Unpro
 from ops_service_kit.http import Envelope, ListResult
 from ops_service_kit.ids import new_id
 
+from ...store.template_copies import TemplateCopies
 from ..agent_registry import (
     GUARDRAILS,
     agent_review_body,
@@ -465,6 +466,7 @@ async def delete_agent(rt: Rt, me: Cl, agent_id: str) -> Response:
     await changeable(rt, me, agent_id, "delete")
     await registry(rt).delete(agent_id)
     take_down(rt, agent_id)
+    await TemplateCopies(rt.db).removed_record("agent", agent_id)
     return Response(status_code=204)
 
 

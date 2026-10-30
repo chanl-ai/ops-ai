@@ -1,6 +1,14 @@
 # A Calculate step works out a court order's amount and deadline
 
-Status: passing. Id: `uc-231`. Service: `agents-service`. Layers: api.
+Status: passing. Id: `uc-231`. Service: `agents-service`. Layers: api, ui (ui layer an earlier change).
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | James's levy run ends at Done and its page shows the amount held, the shortfall and the deadline | ui | 3 | 3 |
+| S2 | A notice with no amount ends at Failed, and the step's sheet names the formula that failed | ui | 4 | 4 |
+| S3 | The same through the API, with a formula holding a path refused on save and the sandbox closed to a service without the scope | api | 1-5 | 5 |
 
 The court order demo needs values no system hands over: the amount to hold is the smaller of the ordered amount and
 the balance, and
@@ -34,3 +42,4 @@ value from the run can never become part of one (`packages/ops_engine/tests/test
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-231-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-231 LAYER=api` (2026-10-18) |
+| ui | `agents-service/scripts/test-uc-231-ui.mjs` | passing: the run page's result and the Calculate step's sheet |

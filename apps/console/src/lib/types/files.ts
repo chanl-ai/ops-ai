@@ -134,6 +134,12 @@ export interface ReadRequestInput {
   documentTypeId?: string;
   version?: number;
   typeName?: string;
+  /** `propose`: the model proposes the fields from the first pages, then the file is read with them. Fields when absent. */
+  read?: 'fields' | 'propose';
+  /** What the document is, to steer a proposal (e.g. "a tax levy notice"). */
+  hint?: string;
+  /** Read only the first pages. */
+  maxPages?: number;
 }
 
 /** First page or rows the console can show without downloading the file. Built by the server after scanning. */

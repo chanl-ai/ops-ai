@@ -20,12 +20,14 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field, replace
+from functools import cache
 from typing import Any, Literal, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.logging import get_logger
+from ops_service_kit.settings import Settings
 
 from . import isolation
 from .schema import system
@@ -44,6 +46,14 @@ class Process:
     does: str
     every_s: float | None
     across_teams: str
+    # Listed only while this answers true: a process behind a switch is neither started nor reported late while off.
+    only_if: Callable[[], bool] | None = None
+
+
+@cache
+def plugins_on() -> bool:
+    """OPS_PLUGINS, read once per process (c-565)."""
+    return Settings().plugins
 
 
 PROCESSES: tuple[Process, ...] = (
@@ -62,6 +72,22 @@ PROCESSES: tuple[Process, ...] = (
         "Picks up runs whose worker stopped, and finishes or retries them.",
         3.0,
         "A stopped worker's runs can belong to any team; each is recovered in its own team.",
+    ),
+    Process(
+        "run_reconciler",
+        "agents",
+        "Run reconciler",
+        "Marks workflow runs that nothing is working on as Stuck, so a person can retry or cancel them.",
+        60.0,
+        "A run with nothing behind it can belong to any team; each is marked in its own team.",
+    ),
+    Process(
+        "batch_starter",
+        "agents",
+        "Batch starter",
+        "Starts the runs of each batch's rows, up to 50 a pass, and stops a batch whose rows met the model budget.",
+        2.0,
+        "Pending rows can belong to any team; each row's run starts in its own team.",
     ),
     Process(
         "timer_poller",
@@ -127,6 +153,15 @@ PROCESSES: tuple[Process, ...] = (
         "Reads queued files and runs document type tests.",
         None,
         "Reads queued before a restart are resumed for every team, each in its own team.",
+    ),
+    Process(
+        "knowledge_schedule",
+        "kb",
+        "Knowledge schedule",
+        "Syncs each knowledge source read through a plugin's tools when its schedule is due (c-565).",
+        60.0,
+        "Every team's tool sources are checked for being due; each syncs in its own team.",
+        only_if=plugins_on,
     ),
     Process(
         "workspace_lifecycle",
@@ -404,7 +439,7 @@ def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = F
     """One entry per listed process of `service`, with its instances' heartbeats and a state. Without `detail` an
     error is its type only, so an unauthenticated health check carries no record's data."""
     out: list[dict[str, Any]] = []
-    for p in (p for p in PROCESSES if p.service == service):
+    for p in (p for p in PROCESSES if p.service == service and (p.only_if is None or p.only_if())):
         gap = STOPPED_AFTER * max(p.every_s or 0.0, WRITE_EVERY_S)
         # An instance that stopped beating (a restarted process under a new pid) no longer counts as one running.
         mine = [b for b in beats if b.process == p.key]

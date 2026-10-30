@@ -11,7 +11,7 @@ import { createOidcProvider } from '@/lib/auth/providers/oidc';
 import { createPlatformProvider } from '@/lib/auth/providers/platform';
 import { createPlatformAccessHttp } from './platform-access-http';
 import { createPlatformPoliciesHttp, createPlatformSignInProvidersHttp, createPlatformTeamsHttp, createPlatformWorkspaceTeamsHttp } from './platform-http';
-import { createDocumentsHttp, createExtractionsHttp } from './documents-http';
+import { createDocumentsHttp, createExtractionsHttp, createLayoutsHttp } from './documents-http';
 import { createFilesServiceHttp } from './files-service-http';
 import { createModelsHttp } from './models-http';
 import { createStorageHttp } from './storage-http';
@@ -56,6 +56,8 @@ function createApi(): OpsApi {
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl) } };
   // The chat loader and the iframe it opens are served by the embed app (c-224).
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
+  // A link form's page is the embed app's too (c-535).
+  if (embedUrl) api = { ...api, forms: { ...api.forms, pageUrl: (form) => `${embedUrl.replace(/\/$/, '')}${form.url}` } };
   if (toolsUrl) {
     // Activity (the tool-call log) is the gateway's own executions log; the audit log stays where it was.
     const { toolCalls, ...tools } = createToolsOnlyHttp(toolsUrl);
@@ -64,7 +66,7 @@ function createApi(): OpsApi {
   if (knowledgeUrl) api = { ...api, ...createKnowledgeOnlyHttp(knowledgeUrl) };
   if (filesUrl) api = { ...api, files: { ...api.files, ...createFilesServiceHttp(filesUrl), storage: createStorageHttp(filesUrl) } };
   if (modelsUrl) api = { ...api, providerKeys: createModelsHttp(modelsUrl) };
-  if (documentsUrl) api = { ...api, files: { ...api.files, documentTypes: createDocumentsHttp(documentsUrl), extractions: createExtractionsHttp(documentsUrl) } };
+  if (documentsUrl) api = { ...api, files: { ...api.files, documentTypes: createDocumentsHttp(documentsUrl), extractions: createExtractionsHttp(documentsUrl), layouts: createLayoutsHttp(documentsUrl) } };
   // No service owns notifications yet: once any area is on a real service, the mock feed is not shown beside it.
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };
   // Signed in through platform-service, the team switcher lists the person's own teams from it.
@@ -95,6 +97,8 @@ export const api: OpsApi = createApi();
 const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/agents', served: Boolean(registryUrl) },
   { prefix: '/workflows', served: Boolean(registryUrl) },
+  // A members-only hosted form reads agents-service's /v1/forms/{slug}/members (c-535).
+  { prefix: '/forms', served: Boolean(registryUrl) },
   // The run list (moved from Cases by c-220) reads the runs service.
   { prefix: '/workflows/runs', served: Boolean(casesUrl) },
   // Cases are agents-service's /v1/cases (c-220).
@@ -131,6 +135,9 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/access/tool-access', served: Boolean(toolsUrl) },
   { prefix: '/logs/audit', served: onPlatform },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
+  // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's (c-558).
+  { prefix: '/settings/account/connections', served: Boolean(toolsUrl) },
+  { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
   { prefix: '/settings/security/sign-in', served: onPlatform },
@@ -160,6 +167,8 @@ export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
 // The commit this console was built from and its release tag, if it has one (next.config.ts; lib/version.ts words them).
 export const buildTag = process.env.NEXT_PUBLIC_OPS_VERSION;
 export const buildCommit = process.env.NEXT_PUBLIC_OPS_COMMIT;
+/** NEXT_PUBLIC_OPS_CACHE=off: the console saves nothing to the browser (c-560, lib/query-cache.ts). */
+export const cacheSetting = process.env.NEXT_PUBLIC_OPS_CACHE;
 /** Every console call is answered for a team, so its queries wait for one (hooks/team-query.ts); the embed has none. */
 export const queriesNeedTeam = true;
 /** Invitations on platform-service go to the team in the request header and take no team of their own. */
@@ -167,6 +176,9 @@ export const invitesToCurrentTeam = onPlatform;
 
 export function isPreviewPath(pathname: string): boolean {
   if (baseUrl || !onRealService) return false;
+  // With real connections on, the Connections grid reads tools-service (c-580); a connection's own pages under it stay
+  // sample data until they move.
+  if (realConnections && pathname === '/integrations') return false;
   const under = (prefix: string) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`));
   const area = AREAS.filter((a) => under(a.prefix)).sort((x, y) => y.prefix.length - x.prefix.length)[0];
   return !!area && !area.served;
@@ -219,3 +231,49 @@ export const brand = {
 
 /** The Feedback button in development (c-504): `1` when `make up` found the ui-feedback collector running. */
 export const uiFeedback = process.env.NEXT_PUBLIC_UI_FEEDBACK;
+/**
+ * Each person's own sign-in to a connected system (c-558): the chat's Connect card, the sign-in pages, Your connections
+ * and a connection's sign-in setting. Off unless NEXT_PUBLIC_OPS_PERSONAL_SIGNIN is `1` or `true`, so a release can
+ * carry the screens before they are offered; off, a refused call shows as any failed tool call.
+ */
+export const personalSignIn = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_PERSONAL_SIGNIN ?? '');
+/**
+ * Connecting systems for real (c-580): Connections as a grid of the team's systems, one connect dialog with keys or the
+ * team's own app for test and production, health per environment, the sending policy and an operation's mock answers.
+ * Off unless NEXT_PUBLIC_OPS_REAL_CONNECTIONS is `1` or `true`, so a release carries the screens before they are offered;
+ * off, Connections, Policies and the operation page stay as they ship.
+ */
+export const realConnections = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_REAL_CONNECTIONS ?? '');
+/** Each service's address as the console is told it, for the generated SDK client (lib/api/ops-sdk.ts, c-580). */
+export const serviceUrls = {
+  platform: platformUrl,
+  agents: registryUrl,
+  tools: toolsUrl,
+  kb: knowledgeUrl,
+  files: filesUrl,
+  documents: documentsUrl,
+} as const;
+
+/**
+ * The release switches a changelog entry may name (lib/changelog.ts): an entry for a feature behind one shows in What's
+ * new only while it is on. Each is read by its full name, as Next inlines only a literal `process.env.NEXT_PUBLIC_*`
+ * reference; scripts/changelog-check.mjs keeps the same names.
+ */
+export const releaseSwitches: Readonly<Record<string, boolean>> = {
+  NEXT_PUBLIC_OPS_PLUGINS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_PLUGINS ?? ''),
+  NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: personalSignIn,
+  NEXT_PUBLIC_OPS_REAL_CONNECTIONS: realConnections,
+  NEXT_PUBLIC_OPS_DOCUMENT_READS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_DOCUMENT_READS ?? ''),
+  NEXT_PUBLIC_OPS_HOSTED_FORMS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_HOSTED_FORMS ?? ''),
+  NEXT_PUBLIC_OPS_WORKFLOW_BUILDER: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_WORKFLOW_BUILDER ?? ''),
+};
+/**
+ * Reading a document without a document type (c-535): Full text and "Let the model propose the fields" in the Read
+ * dialog, the file's Text tab, saving a proposed read as a document type, and those choices in the Extract from file
+ * step. Off unless NEXT_PUBLIC_OPS_DOCUMENT_READS is `1` or `true`; the API serves them either way.
+ */
+export const documentReads = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_DOCUMENT_READS ?? '');
+/** Sharing a workflow as a hosted form and starting runs from a file (c-535). Off unless NEXT_PUBLIC_OPS_HOSTED_FORMS is `1` or `true`. */
+export const hostedForms = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_HOSTED_FORMS ?? '');
+/** Describing a workflow to get it drawn from the existing steps (c-535). Off unless NEXT_PUBLIC_OPS_WORKFLOW_BUILDER is `1` or `true`. */
+export const workflowBuilder = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_WORKFLOW_BUILDER ?? '');

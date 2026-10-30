@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN
+from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
@@ -40,6 +41,7 @@ from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
 from ..access_check import AccessCheck
+from ..acting_for import ActingFor
 from ..api_keys import ApiKeys
 from ..audit_log import AuditReader
 from ..auth import Auth, Issued, Keys, principal_from_claims
@@ -69,6 +71,8 @@ from .schemas import (
     AcceptIn,
     AccessCheckIn,
     AccessCheckOut,
+    ActingForIn,
+    ActingForOut,
     ApiKeyCreated,
     ApiKeyIn,
     ApiKeyOut,
@@ -997,9 +1001,9 @@ def create_public_app(
     return app
 
 
-def create_internal_app(store: IdentityStore, *, services: ServiceAuth) -> FastAPI:
+def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: Ed25519Signer | None = None) -> FastAPI:
     """`services` trusts the calling services' keys; it is built without a tenant scope, because introspection is
-    how a caller learns the tenant (I13)."""
+    how a caller learns the tenant (I13). With `signer` (the people-token key) it also mints acting-for tokens."""
     keys = Keys(store)
     app = FastAPI(title="Ops AI platform service (internal)", version="0.1.0", generate_unique_id_function=operation_id)
     install_error_handlers(app)
@@ -1014,5 +1018,26 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth) -> FastA
     )
     async def introspect(body: Introspect) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await keys.introspect(body.api_key))
+
+    if signer is not None:
+        acting = ActingFor(store, signer)
+
+        @app.post(
+            "/v1/acting-for-tokens",
+            tags=["auth"],
+            response_model=Envelope[ActingForOut],
+            responses=ERRORS,
+        )
+        async def acting_for_token(  # pyright: ignore[reportUnusedFunction]
+            body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
+        ) -> Any:
+            """A 60-second token naming the person a tool call acts for (c-558); the service token names the tenant and
+            the team, never the body (I1)."""
+            if not caller.tenant_id or not caller.team_id:
+                raise Forbidden("The service token names no tenant or team.", code="tenant_required")
+            issued = await acting.mint(
+                service=caller.sub, tenant_id=caller.tenant_id, email=body.email, team_id=caller.team_id
+            )
+            return ok({"token": issued.token, "expiresAt": issued.expires_at})
 
     return app

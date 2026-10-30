@@ -146,13 +146,13 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
 | `plan/banker-demo.md` | Banker demo stage scripts: the court order notice from the fake mailbox to a held account, and the two agents answering from seeded knowledge bases; before-the-room checks, model switch, failure tables |
-| `deploy/fly.md` | Ops AI staging on Fly: one app per image in your Fly org, the shared Postgres, creating, deploying, connecting the model, logs, rolling back and the monthly cost |
+| `deploy/fly.md` | Ops AI on Fly: one app per image in your Fly org, the shared Postgres, creating, deploying, connecting the model, logs, rolling back and the monthly cost |
 | `deploy/database.md` | The database for a DBA: roles and who runs what, the baseline for a fresh install, guarded upgrades between releases, drift, the start check, roll back and the proof |
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
 | `deploy/compose.md` | Ops AI on Docker Compose against the bank's PostgreSQL: the images, what runs, the facts that shape it, running from a clean clone, connecting a model, secrets as files, upgrade, back up and logs |
 | `deploy/devhost.md` | One container per developer on a shared machine: the repo's devcontainer, side databases and mail, Coder on Ubuntu, what is kept apart and what is not |
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
-| `deploy/demo-mailbox.md` | The staging demo mailbox notices@ops.mails.run: the Stalwart mail server on Fly, its DNS records, secrets, sending a test, rotating the password and the cost |
+| `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
@@ -175,20 +175,25 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/skills/ops-sample-team.md` | Developer skill for Claude Code and GitHub Copilot (ops-sample-team): install the sample team and walk the demo; generated into `.claude/skills/ops-sample-team/SKILL.md` and `.github/prompts/ops-sample-team.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-tool-module.md` | Developer skill for Claude Code and GitHub Copilot (ops-tool-module): add a tool module, its secret and its host; generated into `.claude/skills/ops-tool-module/SKILL.md` and `.github/prompts/ops-tool-module.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-workflow-step.md` | Developer skill for Claude Code and GitHub Copilot (ops-workflow-step): add a workflow step type; generated into `.claude/skills/ops-workflow-step/SKILL.md` and `.github/prompts/ops-workflow-step.prompt.md` by `scripts/agent_skills.py` |
-| `guide/skills/ops-usecase.md` | Developer skill for Claude Code and GitHub Copilot (ops-usecase): write and run a use case; generated into `.claude/skills/ops-usecase/SKILL.md` and `.github/prompts/ops-usecase.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/usecase.md` | Developer skill for Claude Code and GitHub Copilot (`/usecase`): list, show, write, run and report use cases as plain user stories; generated into `.claude/skills/usecase/SKILL.md` and `.github/prompts/usecase.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/wf-builder.md` | Developer skill for Claude Code and GitHub Copilot (`/wf-builder`): describe a workflow, get one that runs on a named profile; generated into each tool's skill file by `scripts/agent_skills.py` |
+| `guide/skills/wf-builder/rules.md` | The rules every workflow `/wf-builder` draws follows, beside the engine's own checks |
+| `guide/skills/wf-builder/examples.md` | The seeded workflows `/wf-builder` adapts, generated from the seeds by `scripts/wf_builder_examples.py` |
 | `guide/skills/ops-debug.md` | Developer skill for Claude Code and GitHub Copilot (ops-debug): find why a service fails; generated into `.claude/skills/ops-debug/SKILL.md` and `.github/prompts/ops-debug.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
+| `guide/vendor-onboarding-plugin.md` | Building a plugin from the vendor-onboarding example in `examples/plugins/`: what is YAML and what is Python, the function's tests, installing it through the public APIs today, and the gaps found |
+| `guide/plugins.md` | Building a plugin: the manifest, Python tools, knowledge sources, `ops plugin validate` and `test`, installing it, the `OPS_PLUGINS` switch, the platform and team OAuth apps, and per-person sign-in |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
 | `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
 | `console/approved/channels/README.md` | The Channels screens the maintainers approved, at 1280 and 400 px, which the real pages are built to |
 | `console/approved/human-tasks/README.md` | The Human Tasks queue and task screens (layout A) the maintainers approved, at 1280 and 400 px, which /reviews is built to |
-| `console/proposed/files/README.md` | The file page and Extract screens built by c-262, at 1280 and 400 px, waiting for the maintainers' approval |
-| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after c-266, side by side |
-| `console/proposed/tasks/README.md` | The Human Task page built by c-289 beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the maintainers' approval |
+| `console/proposed/files/README.md` | The file page and Extract screens built by an earlier change, at 1280 and 400 px, waiting for the maintainers' approval |
+| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after an earlier change, side by side |
+| `console/proposed/tasks/README.md` | The Human Task page built by an earlier change beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the maintainers' approval |
 | `console/proposed/table-columns/README.md` | The shared data table's columns sized by kind, before beside after for Workflows, Runs, Files and Members at 1280 and 400 px |
 | `console/proposed/run-status/README.md` | Run status from where a run ended and from the runs it started: failed and waiting runs before beside after, and the End step's Counts as, at 1280 and 400 px |
 | `console/settings-tree.md` | The settings tree design mock at /preview/settings: the pages, the patterns, the dialogs with their mother pages, and the field kit |
@@ -228,7 +233,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
 | `usecases/tools-service/a-builder-adds-a-python-function-tool.md` | uc-531: a Python function tool runs sandboxed, reads bound tools through ops.call, hands a secret by name, and is stopped at an unbound tool, a socket, its time limit and its memory cap |
-| `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of c-048 on the shared stack |
+| `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of an earlier change on the shared stack |
 | `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
 | `usecases/console/import-to-governed-call.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
@@ -238,7 +243,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/chat-act-in-thread.md` | uc-072: Maya gets a cited answer, approves a drafted wire hold in the thread after a step-up and rejects another with a reason |
 | `usecases/console/knowledge-from-uploaded-pdfs.md` | uc-075: James creates a knowledge base with its owner, uploads a PDF into a file source, watches it index, asks an agent granted only that base and opens the citation and document; a second version shows on Changes |
 | `usecases/console/advisor-helper-answers.md` | uc-078: the Advisor's Helper draws a customer's record and accounts, cites the product sheet by page and shows the comparison as a table |
-| `usecases/console/branch-policy-answers.md` | uc-079: the Branch Policy agent cites the manual and fee schedule by page, says when the answer is not in the knowledge base, and cites version 2 after a replacement (blocked on c-055 T024) |
+| `usecases/console/branch-policy-answers.md` | uc-079: the Branch Policy agent cites the manual and fee schedule by page, says when the answer is not in the knowledge base, and cites version 2 after a replacement (blocked on an earlier change T024) |
 | `usecases/console/chat-thread-blocks.md` | uc-074: the chat thread draws a cited answer (citation button, no raw marker) and a tool card with AI Elements blocks |
 | `usecases/console/widgets-through-chat.md` | uc-061: a granted agent's tool results stream in as widgets by shape (declared shape wins, unshaped stays a tool card) and survive a reload |
 | `usecases/console/agent-presents-widgets.md` | uc-089: an agent with no tools shows a table and a stat through the built-in present tool; a shape present does not allow draws nothing |
@@ -285,6 +290,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/pages-wait-for-the-team.md` | uc-505: a sign-in straight to a case loads for the person's own team, and a record in another team says not found, or in another team, with a switch |
 | `usecases/console/whats-new.md` | uc-510: What's new in the sidebar lists what changed in plain words, with Coming next, and its dot clears once opened |
 | `usecases/console/chat-home.md` | uc-469: an approver lands on Chat's home, asks what needs them, approves a task from its card, and sees the run move on |
+| `usecases/console/chat-first.md` | uc-552: a person lands on Chat with hints from their work, finds Overview, their chats and every page in one folding sidebar, and keeps their draft when the session ends |
+| `usecases/console/phone-and-desktop.md` | uc-562: one page per class of the console UI sweep at phone and desktop widths, and the sweep's counts before and after |
 | `usecases/console/human-tasks-queue.md` | uc-460: Human Tasks as queue and task, grouped by case, a decision panel that keeps Decide in view, All tasks for the table |
 | `usecases/console/every-page-has-the-header.md` | uc-264: every sidebar route and one record of each kind render the shared page header; the runtime half of check-standards rule 12 |
 | `usecases/console/services-unreachable.md` | uc-404: a link to a missing task says so; a session ended elsewhere goes back to sign-in keeping the page; with the run's platform-service stopped, one shell screen says the services are out of reach, with Try again |
@@ -302,7 +309,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/write-approval-policy.md` | uc-059: a builder sets a write's approvers, approving team and self-approval in the operation sheet, and the operation shows them |
 | `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the maintainers keeps the message box |
 | `usecases/console/chat-holds-in-reviews.md` | uc-057: a write held in a chat appears in Reviews marked From chat and is approved there |
-| `usecases/console/levy-cases-decided.md` | uc-077, retired (c-212): the v1 court order run's cases decided from the console |
+| `usecases/console/levy-cases-decided.md` | uc-077, retired: the v1 court order run's cases decided from the console |
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
@@ -324,6 +331,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
 | `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
 | `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop (preview part for the maintainers' walk) |
+| `usecases/console/screen-speed.md` | uc-560: with OPS_REQUEST_TIMING on, each request's JSON line and Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
+| `usecases/console/connect-every-system.md` | uc-580: a team admin connects every system for real; the team's systems as a grid with search and a category filter, behind the real-connections switch |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |
@@ -336,7 +345,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/agent-runs-on-its-model.md` | uc-028: an agent runs on the model its publisher chose |
 | `usecases/agents-service/agent-calls-registry-operations.md` | uc-048: an agent is granted a published tools-service operation and calls it through the gateway |
 | `usecases/agents-service/write-approval-policy.md` | uc-049: a write runs only after as many distinct people as its operation's policy names approve it |
-| `usecases/agents-service/levy-from-mailbox.md` | uc-076, retired (c-212): the v1 court order flow from the mailbox deployment; uc-210 replaces it |
+| `usecases/agents-service/levy-from-mailbox.md` | uc-076, retired: the v1 court order flow from the mailbox deployment; uc-210 replaces it |
 | `usecases/agents-service/workflow-runner-basic-nodes.md` | uc-081: basic workflow nodes run through the queue and survive a worker crash |
 | `usecases/agents-service/agent-runs-a-workflow-by-search.md` | uc-084: an agent finds a workflow with search_tools and runs it; its agent step answers by schema |
 | `usecases/agents-service/agent-guardrails-blocked-topics.md` | uc-085: an agent refuses a blocked topic before answering, through a guardrail it pins by version |
@@ -392,6 +401,15 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
+| `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
+| `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
+| `usecases/tools-service/a-team-turns-on-the-salesforce.md` | uc-564: a team turns on the Salesforce plugin; its agents work cases and cite its articles |
+| `usecases/agents-service/memory-follows-a-person-across-a.md` | uc-561: Memory follows a person across a team's agents and they take it back |
+| `usecases/agents-service/run-outcomes.md` | uc-567: every workflow run ends with a clear outcome: Stuck with Retry, uncertain writes, outages, set-aside emails |
+| `usecases/platform-service/a-developer-installs-the-sample-team.md` | uc-563: A developer installs the sample team with one command, and a second run makes nothing |
+| `usecases/agents-service/a-sql-server-install-migrates-agents.md` | uc-565: A SQL Server install migrates agents to the head |
+| `usecases/agents-service/agents-starts-and-a-chat-turn-saves-its.md` | uc-566: Agents starts and a chat turn saves its checkpoint |
+| `usecases/agents-service/document-workflows.md` | uc-568: document workflows: full-text and proposed reads, hosted forms, CSV batches, describe-to-build |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
@@ -403,6 +421,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/agents-service/experiments/own-checkpointer.md` | E0: own LangGraph checkpointer on asyncpg with tenant row-level security |
 | `services/agents-service/experiments/pause-survives-graph-change.md` | E1: a paused thread survives a graph change by version pinning |
 | `services/agents-service/experiments/leases-and-sweeper.md` | E2: thread leases and a sweeper continue a crashed run |
+| `services/agents-service/experiments/memory-decisions.md` | an earlier change: does the extraction prompt choose new, same, replaces or conflicts well (real run not done) |
 | `services/agents-service/experiments/fencing.md` | E2b: fencing every write a stale lease owner can make |
 | `services/agents-service/experiments/fence-on-takeover.md` | E2c: raising the tools-service fence when agents-service takes a thread over |
 | `services/agents-service/experiments/conformance-suite.md` | E9: the execution-engine conformance suite on the LangGraph adapter, with its two open gaps |
@@ -444,3 +463,5 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 
 File names are topics. Specs keep their number (01–17; 05 and 06 unused) and decision records their ADR id in the
 title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
+| `usecases/tools-service/plugin-sign-in-methods.md` | uc-588: a developer's plugin signs in every way a system asks (none, API key, password, token, OAuth client, each person, client certificate) |
+| `usecases/tools-service/plugin-sign-in-with-a-certificate.md` | uc-583: a team connects a system that allows only certificate sign-in (an Entra app's signed assertion, a Google or DocuSign signed JWT grant) |

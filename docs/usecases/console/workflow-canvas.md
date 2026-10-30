@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-121`. Service: `console`. Layers: ui.
 
-c-164 (split from c-096), owner feedback (mid-1): the workflow editor's canvas fills the page under the header at a
+an earlier change (split from an earlier change), owner feedback (mid-1): the workflow editor's canvas fills the page under the header at a
 readable zoom, with its controls, checks and minimap floating over it, instead of sitting between two side columns.
 
 ## Preconditions

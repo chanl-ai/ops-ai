@@ -31,6 +31,8 @@ identity provider and no model is called.
 |---|---|---|
 | api | `platform-service/scripts/test-uc-162-api.py` | passing |
 
+In the console: signing in by SSO is walked by uc-161's ui script (OIDC); the SAML exchange and the provider's step-up stay at the api layer.
+
 ## Non-vacuous check
 
 `a provider that reuses its earlier login does not pass a step-up`: with the login-time check removed, the step-up

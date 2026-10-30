@@ -2216,7 +2216,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "plugins";
             /** Title */
             title: string;
             /** Value */

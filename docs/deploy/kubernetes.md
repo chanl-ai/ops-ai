@@ -2,7 +2,7 @@
 
 Status: current. Proven on a local kind cluster; not yet run on a bank's cluster.
 
-<!-- Built by c-268; the proof is deploy/k8s/proof.sh. -->
+<!-- Built by an earlier change; the proof is deploy/k8s/proof.sh. -->
 
 Ops AI on Kubernetes uses Kustomize and no other tool: a base with one folder per service, and an overlay per
 environment that picks the images, the origin, the secrets and the database. The images are the ones Compose runs,
@@ -39,12 +39,13 @@ that does not, 8711 is open to every pod in the cluster, as it is to every conta
 
 | Fact | Consequence |
 |---|---|
-| Each service refuses a schema behind its chain (c-336) | Services started before the migrate Job restart until it has run; nothing races the migrations |
+| Each service refuses a schema behind its chain | Services started before the migrate Job restart until it has run; nothing races the migrations |
 | A Job's pod template cannot change | An upgrade deletes the finished Job, then applies again (below) |
 | Each Secret holds one service's login, its signing key, the public keys and only the keys it uses (`deploy/images/service_keys.py`) | No pod can sign as another service or read another's database tables |
 | Secrets come from env files beside the overlay, written by `deploy/k8s/write_secrets.py` and ignored by git | Nothing secret is committed; Kustomize's hash suffix rolls the pods whose Secret changed |
 | PostgreSQL is outside the cluster | The base's Service `postgres` has no selector; the overlay's EndpointSlice says where it is (or patch it to `type: ExternalName` for a host name) |
 | Pods drop every capability, and a binary carrying a file capability will not start then | The proxy image strips Caddy's (it listens on 8080, no low port) |
+| Hosted forms count submissions per client address, read from `X-Forwarded-For` past the proxies in `OPS_FORMS_TRUSTED_PROXIES`; the base trusts `10.0.0.0/8`, `172.16.0.0/12` and `127.0.0.1/32`, the usual pod networks | If the cluster runs workloads you do not trust, narrow `OPS_FORMS_TRUSTED_PROXIES` in the overlay to the embed pod's network, so another pod cannot claim any address it likes |
 | The base's manifests are written by `deploy/k8s/generate.py`, the shared settings read from compose's `x-settings` | Change the table there (or the setting in `deploy/compose/app.yaml`) and regenerate; the YAML is committed for review, and `make verify` runs `generate.py --check`, which fails on a base that is not what it writes |
 
 ## Install

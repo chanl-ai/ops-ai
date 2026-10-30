@@ -2,7 +2,7 @@
 
 Status: E13, holds, 2026-10-11. Script: `services/agents-service/experiments/e13_models_service_hop.py` (scripted
 provider, no tokens); `make experiment E=13 APPROVED_REAL_CALLS=13 ARGS="--only real --real-approved"` made the 10
-owner-approved real calls, about $0.01. Card: c-009.
+owner-approved real calls, about $0.01. Card: an earlier change.
 
 ## Verdict
 
@@ -49,5 +49,5 @@ spend per call; models-service logged 0 because the experiment's alias has no pr
 
 | Item | Feeds |
 |---|---|
-| The scripted hop number | c-009 latency baseline |
+| The scripted hop number | an earlier change latency baseline |
 | The concurrency-5 p95 | models-service pool size and a reservation per call (the cap is checked before the call) |

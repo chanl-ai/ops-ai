@@ -75,7 +75,11 @@ schemaVersion: 2
 id: {wid}
 name: Invoice intake ({wid})
 nodes:
-  - {{id: start, type: ops.trigger.request, typeVersion: 1, name: Request}}
+  - id: start
+    type: ops.trigger.request
+    typeVersion: 1
+    name: Request
+    parameters: {{inputSchema: {{type: object, properties: {{fileId: {{type: string, format: file}}}}}}}}
   - id: extract
     type: ops.ai.extract
     typeVersion: 1

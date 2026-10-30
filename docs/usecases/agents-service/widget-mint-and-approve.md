@@ -1,6 +1,6 @@
 # A bank's server mints a widget session, and the chat's approval is decided through Reviews
 
-Status: current. Id: `uc-117`. Service: `agents-service`. Layers: api. Card: c-131.
+Status: current. Id: `uc-117`. Service: `agents-service`. Layers: api. Card: an earlier change.
 
 The bank's server mints a 15-minute session for the signed-in person with the deployment's own mint key; a team API
 key, another deployment's key and a revoked key mint nothing. The embed app's server reads the deployment's public
@@ -33,3 +33,5 @@ The script starts agents-service on the scripted model with dev sign-in and the 
 ## Run
 
 `make usecase-test UC=uc-117 LAYER=api`
+
+In the console: uc-116's ui script issues and revokes the deployment's mint key; uc-119's walks the bank page's chat through the loader with its approvals waiting in Human Tasks.

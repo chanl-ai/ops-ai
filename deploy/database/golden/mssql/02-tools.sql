@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0035_secrets_per_team
+-- tools-service, stamped at tools_0043_conn_details_health
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -28,6 +28,8 @@ CREATE TABLE gateway_calls (
 	tenant_id VARCHAR(64) NULL, 
 	environment VARCHAR(16) NULL, 
 	connection_id VARCHAR(64) NULL, 
+	acting_for VARCHAR(320) NULL, 
+	credential VARCHAR(16) NULL, 
 	channel VARCHAR(16) NULL, 
 	client_name VARCHAR(120) NULL, 
 	CONSTRAINT gateway_calls_pkey PRIMARY KEY (id)
@@ -65,6 +67,7 @@ CREATE TABLE tool_modules (
 	data_classification VARCHAR(16) NOT NULL, 
 	catalog_id VARCHAR(64) NULL, 
 	connection_id VARCHAR(64) NULL, 
+	sign_in VARCHAR(16) NOT NULL DEFAULT 'either', 
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	reachable BIT NOT NULL, 
@@ -113,6 +116,12 @@ CREATE TABLE connections (
 	status_detail VARCHAR(max) NULL, 
 	expires_at DATETIMEOFFSET NULL, 
 	catalog_id VARCHAR(64) NULL, 
+	sign_in VARCHAR(16) NOT NULL DEFAULT 'team', 
+	team_backup BIT NOT NULL DEFAULT 0, 
+	health NVARCHAR(max) NULL, 
+	category VARCHAR(80) NULL, 
+	description VARCHAR(300) NULL, 
+	docs_url VARCHAR(500) NULL, 
 	revision INTEGER NOT NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
@@ -133,6 +142,8 @@ CREATE TABLE oauth_states (
 	redirect_uri VARCHAR(max) NOT NULL, 
 	expires_at DATETIMEOFFSET NOT NULL, 
 	used_at DATETIMEOFFSET NULL, 
+	token_for VARCHAR(200) NOT NULL DEFAULT '', 
+	scopes VARCHAR(max) NOT NULL DEFAULT '', 
 	CONSTRAINT oauth_states_pkey PRIMARY KEY (tenant_id, state_hash)
 );
 GO
@@ -254,6 +265,27 @@ CREATE TABLE secret_audit (
 GO
 CREATE INDEX ix_secret_audit_tenant_id ON secret_audit (tenant_id);
 GO
+CREATE TABLE plugin_app_keys (
+	tenant_id VARCHAR(64) NOT NULL, 
+	plugin_id VARCHAR(120) NOT NULL, 
+	ciphertext VARCHAR(max) NOT NULL, 
+	updated_by VARCHAR(320) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT plugin_app_keys_pkey PRIMARY KEY (tenant_id, plugin_id)
+);
+GO
+CREATE TABLE plugin_bindings (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	plugin_id VARCHAR(120) NOT NULL, 
+	enabled BIT NOT NULL, 
+	connection_id VARCHAR(64) NULL, 
+	settings NVARCHAR(max) NOT NULL, 
+	updated_by VARCHAR(320) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT plugin_bindings_pkey PRIMARY KEY (tenant_id, team_id, plugin_id)
+);
+GO
 CREATE TABLE send_policies (
 	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -301,6 +333,8 @@ CREATE TABLE module_operations (
 	approvers INTEGER NOT NULL DEFAULT '1', 
 	approver_team VARCHAR(64) NULL, 
 	step_up BIT NOT NULL DEFAULT 0, 
+	needs_person BIT NOT NULL DEFAULT 0, 
+	scopes NVARCHAR(max) NOT NULL DEFAULT '[]', 
 	output_shape VARCHAR(16) NULL, 
 	response_schema NVARCHAR(max) NULL, 
 	code NVARCHAR(max) NULL, 
@@ -376,7 +410,7 @@ CREATE TABLE module_egress_hosts (
 	position INTEGER NOT NULL, 
 	CONSTRAINT module_egress_hosts_pkey PRIMARY KEY (tenant_id, module_id, host), 
 	CONSTRAINT module_egress_hosts_tenant_id_module_id_fkey FOREIGN KEY(tenant_id, module_id) REFERENCES tool_modules (tenant_id, id) ON DELETE CASCADE, 
-	CONSTRAINT module_egress_hosts_tenant_id_host_fkey FOREIGN KEY(tenant_id, host) REFERENCES egress_hosts (tenant_id, host) ON DELETE RESTRICT
+	CONSTRAINT module_egress_hosts_tenant_id_host_fkey FOREIGN KEY(tenant_id, host) REFERENCES egress_hosts (tenant_id, host) ON DELETE NO ACTION
 );
 GO
 CREATE TABLE connection_environments (
@@ -385,6 +419,7 @@ CREATE TABLE connection_environments (
 	environment VARCHAR(16) NOT NULL, 
 	settings NVARCHAR(max) NOT NULL, 
 	secrets NVARCHAR(max) NOT NULL, 
+	health NVARCHAR(max) NULL, 
 	updated_by VARCHAR(200) NOT NULL, 
 	updated_at DATETIMEOFFSET NOT NULL, 
 	CONSTRAINT connection_environments_pkey PRIMARY KEY (tenant_id, connection_id, environment), 
@@ -407,10 +442,27 @@ CREATE TABLE connection_tokens (
 	CONSTRAINT connection_tokens_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
 GO
+CREATE TABLE connect_links (
+	tenant_id VARCHAR(64) NOT NULL, 
+	token_hash VARCHAR(64) NOT NULL, 
+	connection_id VARCHAR(64) NOT NULL, 
+	environment VARCHAR(16) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	person_id VARCHAR(200) NOT NULL, 
+	email VARCHAR(320) NOT NULL, 
+	scopes VARCHAR(max) NOT NULL, 
+	reason VARCHAR(32) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	expires_at DATETIMEOFFSET NOT NULL, 
+	used_at DATETIMEOFFSET NULL, 
+	CONSTRAINT connect_links_pkey PRIMARY KEY (tenant_id, token_hash), 
+	CONSTRAINT connect_links_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
+);
+GO
 CREATE TABLE alembic_version_tools (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0035_secrets_per_team');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0043_conn_details_health');
 GO

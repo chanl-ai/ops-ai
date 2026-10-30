@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-095`. Service: `console`. Layers: ui.
 
-Card c-082: a builder pins published widget templates on an agent and lets it compose from the catalogue; in chat the
+Card an earlier change: a builder pins published widget templates on an agent and lets it compose from the catalogue; in chat the
 agent fills a widget with data checked against its schema, composes a layout, and a widget button sends its reply
 back as the person's next message.
 

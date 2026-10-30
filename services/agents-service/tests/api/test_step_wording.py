@@ -20,7 +20,7 @@ from ops_agents.store.cases import CaseStore
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import tenant_scope, tenant_tx
-from ops_contracts.chat import ChatMessage, WidgetEvent
+from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
 from ops_engine.journal import StepRow
 from ops_engine.store import RunStore, SqlJournal
 from ops_engine.store.tables import engine_definitions
@@ -263,3 +263,27 @@ async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:
     with tenant_scope(TENANT):
         told = await describe_call(rt, call, currency=None, money_key=None)
     assert told["sentence"] == "Notify webhook: hook holds, event hold.placed", told
+
+
+async def test_a_record_change_shows_each_field_it_writes(stack: Stack) -> None:  # noqa: F811
+    """An approver of a record change saw nothing of what would change: the object of changed fields was dropped from
+    the card (c-565). Each field is a row, though never part of the sentence."""
+    _, rt = stack
+    call = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}}}
+    with tenant_scope(TENANT):
+        told = await describe_call(rt, call, currency=None, money_key=None)
+    rows = {f["label"]: f["value"] for f in told["fields"]}
+    assert rows.get("Fields · Status") == "Escalated" and rows.get("Fields · Priority") == "High", told
+    assert "Escalated" not in told["sentence"], told
+
+
+def test_a_chat_approval_shows_an_object_as_rows_never_raw() -> None:
+    """The chat card showed `{'Status': 'Escalated'}` for a record change (c-565): each field is now its own row."""
+    builder = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m1", role="assistant", content="", at="t"))
+    held = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated"}}, "review_id": "r1"}
+    events = builder.apply("waiting_review", {"id": "i1", "payload": held})
+    widget = next(e.widget for e in events if isinstance(e, WidgetEvent))
+    assert isinstance(widget, ApprovalWidget), widget
+    rows = {f.label: f.value for f in widget.fields}
+    assert rows.get("Fields · Status") == "Escalated" and rows.get("Object") == "Case", rows
+    assert not any("{" in v for v in rows.values()), rows

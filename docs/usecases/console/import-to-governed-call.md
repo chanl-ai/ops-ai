@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-086`. Service: `console`. Layers: ui.
 
-c-070's path in one run, as the seeded people, in the console: the bank's keys stored as secrets, its OpenAPI
+an earlier change's path in one run, as the seeded people, in the console: the bank's keys stored as secrets, its OpenAPI
 document imported, reviewed and published, a second version published, the reads tried and granted to an agent, a
 chat write held until a second person approves it, and the call log naming who asked, who approved and how each call
 ended. The design is [tool lifecycle](../../architecture/tool-lifecycle.md). It replaces uc-055 as the card's gate;
@@ -13,7 +13,7 @@ uc-055's last step belongs to the agent page.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
-| platform-service's dev seed | James Richardson (builder) and Maya Okafor (approver) on Operations, Nadia Petrov (approver) on Security, Priya Shah (admin), Sam Adeyemi (admin on Security, the only one who changes egress and secrets); password `northfield-demo` |
+| platform-service's dev seed | James Richardson (builder) and Maya Okafor (approver) on Operations, Nadia Petrov (approver) on Security, Priya Shah (admin), Sam Adeyemi (admin on Security, the only one who changes egress); password `northfield-demo` |
 | The core-banking fake on https | the ui harness's `tools: { bank: 'core' }` (`services/tools-service/scripts/fake_bank`): an `X-Api-Key` header on most routes, an `api_key` query key on `get_statement`, holds that later reads return; key `dev-bank-key` |
 | Agents granted from tools-service | the ui harness's `tools: { gateway: true }` |
 | No model calls | the scripted model; a chat message `call <tool> <json>` calls that tool |
@@ -23,7 +23,7 @@ uc-055's last step belongs to the agent page.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Sam (Security admin) allows the bank's host and range | 201 |
-| 2 | Sam adds `BANK_API_KEY` and `STATEMENTS_API_KEY` in Settings > Secrets | 201 each; no response or page shows the value |
+| 2 | James adds `BANK_API_KEY` and `STATEMENTS_API_KEY` in Settings > Secrets, as Operations' secrets: a secret belongs to the team that uses it | 201 each; no response or page shows the value |
 | 3 | James imports `https://api.bank.test/openapi.json`, ticks `place_hold`, unticks `get_statement`, saves the draft | 201; reads are Read, `place_hold` is Write |
 | 4 | James requests a security review; Nadia approves it on the module's Approval tab | the module is published |
 | 5 | James imports `get_statement` into the module and publishes a version | the version is listed on the Versions tab; `get_statement` has no `api_key` input |

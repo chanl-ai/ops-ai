@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-29",
+  "title": "Pages read well on a phone; Human Tasks waits for you",
+  "description": "On a phone, lists lead with each record's name, a fade shows when more sits past the edge, descriptions read in full and record pages show the way back. Human Tasks no longer picks a decision for you, and Workflows and Runs show one list each, with old workflow links opening the workflow or saying it is gone.",
+  "tag": "improved",
+  "cards": [
+    "c-562"
+  ]
+}

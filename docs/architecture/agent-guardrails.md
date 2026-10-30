@@ -1,6 +1,6 @@
 # Agent guardrails and skills
 
-Status: in code 2026-10-16 (c-063). How an agent enforces the guardrails it pins and loads the skills it holds, and
+Status: in code 2026-10-16. How an agent enforces the guardrails it pins and loads the skills it holds, and
 which agent settings are not enforced yet. Parent page: [runtime.md](runtime.md). Use case: uc-085
 (`docs/usecases/agents-service/agent-guardrails-blocked-topics.md`).
 

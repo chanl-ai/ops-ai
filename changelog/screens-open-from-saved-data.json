@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-29",
+  "title": "Screens open at once on a reload",
+  "description": "A reload shows what your screens last showed in this browser straight away, then refreshes it; Human Tasks and runs still going always load fresh. Signing out or switching team clears what was kept.",
+  "tag": "improved",
+  "cards": [
+    "c-560"
+  ]
+}

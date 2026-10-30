@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
-from ops_store.schema import MSSQL_SECURITY, security_ddl
+from ops_store.schema import MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "mssql"
 OFFLINE_URL = "mssql+aioodbc://offline:offline@localhost:1/offline"
@@ -58,11 +58,17 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "review_approvals": (("SELECT",), ()),
     "engine_definitions": (("SELECT",), ()),
     "engine_work": (("SELECT", "UPDATE"), ()),
+    # The run reconciler finds runs with nothing behind them across tenants and changes each in its own (c-561).
+    "engine_runs": (("SELECT",), ()),
+    "engine_steps": (("SELECT",), ()),
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
     # Every background process writes its heartbeat; the Background page reads every team's jobs (c-516).
     "background_heartbeats": (("SELECT", "INSERT", "UPDATE", "DELETE"), ()),
     "background_jobs": (("SELECT",), ()),
+    # The batch starter finds every tenant's pending rows, then starts each in its own tenant and team (c-535).
+    "run_batches": (("SELECT",), ()),
+    "run_batch_rows": (("SELECT",), ()),
 }
 Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as
@@ -80,8 +86,10 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         },
     ),
 }
-# Each chain's first SQL Server baseline (2026-10-19, each chain's head that day). Revisions up to and including it are
-# PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both run.
+# Where each chain's portable migrations begin (2026-10-19, each chain's head that day). Revisions up to and including
+# it are PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both
+# run. SQL Server upgrades start from the first release whose bundle installs, the release cut after c-549; the pins
+# move to its heads when it is cut, since no SQL Server install of an earlier release exists.
 BASELINE = {
     "agents": "0070_engine_definitions_archived",
     "tools": "tools_0030_call_channel",
@@ -142,6 +150,32 @@ def _identity(con: sa.Constraint) -> tuple[str, str, tuple[str, ...], str]:
     return (type(con).__name__, str(con.name or ""), columns, target + body)
 
 
+def _in_key_order(t: sa.Table, fk: sa.ForeignKeyConstraint) -> None:
+    """A foreign key's column pairs in the order of the key it references: SQL Server refuses another order (Msg 1776),
+    while PostgreSQL takes any."""
+    target = fk.referred_table
+    pairs = {e.column.name: e.parent for e in fk.elements}
+    keys = [list(target.primary_key.columns)]
+    keys += [list(u.columns) for u in target.constraints if isinstance(u, sa.UniqueConstraint)]
+    for key in keys:
+        names = [c.name for c in key]
+        if set(names) == set(pairs) and names != list(pairs):
+            ordered = sa.ForeignKeyConstraint(
+                [pairs[n] for n in names],
+                [target.c[n] for n in names],
+                name=fk.name,
+                ondelete=fk.ondelete,
+                onupdate=fk.onupdate,
+            )
+            ordered._creation_order = fk._creation_order  # pyright: ignore[reportPrivateUsage]
+            t.constraints.discard(fk)
+            for element in fk.elements:
+                element.parent.foreign_keys.discard(element)
+                t.foreign_keys.discard(element)
+            t.append_constraint(ordered)
+            return
+
+
 @dataclass
 class Chain:
     name: str
@@ -199,8 +233,13 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
                     sa.Index(name, *con.columns, unique=True, mssql_where=sa.and_(*_not_null(con.columns)))
                 elif con.name is None:
                     con.name = name
-            elif isinstance(con, sa.ForeignKeyConstraint) and con.name is None:
-                con.name = _key_name(t.name, columns, "fkey")
+            elif isinstance(con, sa.ForeignKeyConstraint):
+                con.name = con.name or _key_name(t.name, columns, "fkey")
+                # SQL Server has no RESTRICT; NO ACTION refuses the same deletes and updates, checked at once as well.
+                for action in ("ondelete", "onupdate"):
+                    if str(getattr(con, action) or "").upper() == "RESTRICT":
+                        setattr(con, action, "NO ACTION")
+                _in_key_order(t, con)
             elif isinstance(con, sa.CheckConstraint) and con.name is None:
                 refused.append(f"{chain} {t.name}: a CHECK constraint without a name")
     if refused:
@@ -296,6 +335,8 @@ def compile_all(
             statements += [_sql(CreateIndex(ix)) + ";" for ix in sorted(t.indexes, key=lambda x: str(x.name))]
         system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else None
         statements += [f"{s};" for s in security_ddl(chain, c.tables, column_type=_column_type, system_user=system)]
+        # The bundle runs outside a transaction, as full-text DDL needs.
+        statements += [s for t in c.tables for s in mssql_full_text_ddl(t)]
         statements += stamped
         omitted = "".join(f"-- not on SQL Server yet: {o}\n" for o in c.omitted)
         body = f"-- {chain}-service, stamped at {head}\n" + omitted + batches(statements)
@@ -423,8 +464,6 @@ def write_golden(checkout: Checkout, out: Path = GOLDEN) -> list[str]:
 
 # --- upgrade --------------------------------------------------------------------------------------------------------
 
-_TX = re.compile(r"^(BEGIN TRANSACTION;|COMMIT;)\s*$\n?", re.M)
-
 
 def before_baseline(checkout: Checkout, chain: str, revision: str | None) -> bool:
     pin = BASELINE[chain]
@@ -478,8 +517,10 @@ def steps(old: Checkout, new: Checkout) -> list[Step]:
                     chain,
                     rev.revision,
                     prev,
-                    _TX.sub("", up.stdout).strip(),
-                    _TX.sub("", down.stdout).strip() if down.returncode == 0 else None,
+                    # Alembic's own transaction lines are kept: an autocommit block (full-text DDL) runs between them,
+                    # outside a transaction, as SQL Server requires.
+                    up.stdout.strip(),
+                    down.stdout.strip() if down.returncode == 0 else None,
                     table.group(1),
                 )
             )
@@ -504,7 +545,8 @@ def write_upgrade(old: Checkout, new: Checkout, out: Path) -> list[Step]:
     head = (
         f"-- Ops AI schema upgrade for SQL Server, {old.ref} ({old.commit[:12]}) to {new.ref} ({new.commit[:12]}),\n"
         "-- generated by deploy/database/mssql.py; do not edit. Run as the migrator with sqlcmd -b. Each step checks\n"
-        f"-- its version row, then runs in its own transaction; then run grants.sql from {new.ref}'s baseline.\n"
+        "-- its version row, then runs in its own transaction, apart from statements SQL Server refuses inside one\n"
+        f"-- (full-text DDL), which run between its transactions; then run grants.sql from {new.ref}'s baseline.\n"
         "SET XACT_ABORT ON;\nGO\n\n"
     )
     up, down = [head], [head.replace("upgrade", "downgrade", 1)]
@@ -512,7 +554,7 @@ def write_upgrade(old: Checkout, new: Checkout, out: Path) -> list[Step]:
         up.append(
             f"-- step {s.chain} {s.previous} -> {s.revision}  sha256 {sha256(s.up)}\n"
             + guard(s.version_table, s.previous)
-            + f"BEGIN TRANSACTION;\nGO\n{s.up}\nCOMMIT;\nGO\n\n"
+            + f"{s.up}\n\n"
         )
     for s in reversed(found):
         if s.down is None:
@@ -521,7 +563,7 @@ def write_upgrade(old: Checkout, new: Checkout, out: Path) -> list[Step]:
         down.append(
             f"-- step {s.chain} {s.revision} -> {s.previous}  sha256 {sha256(s.down)}\n"
             + guard(s.version_table, s.revision)
-            + f"BEGIN TRANSACTION;\nGO\n{s.down}\nCOMMIT;\nGO\n\n"
+            + f"{s.down}\n\n"
         )
     (out / "upgrade-roles.sql").write_text(
         head.replace("Run as the migrator", "Run in master by a server administrator", 1)

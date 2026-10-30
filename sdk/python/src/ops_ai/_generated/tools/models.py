@@ -30,6 +30,10 @@ class ActivityDay(TypedDict, closed=True):
     p95Ms: int
 
 
+class AppSecretIn(TypedDict, closed=True):
+    clientSecret: str
+
+
 class ApprovalRequestIn(TypedDict, closed=True):
     environment: Literal["dev", "test", "production"]
     expiresInDays: int
@@ -138,6 +142,10 @@ class CodeSettingsIn(TypedDict, closed=True):
     source: str
 
 
+class ConnectLinkIn(TypedDict, closed=True):
+    link: str
+
+
 class Connection(TypedDict, closed=True):
     address: str
     graphClientId: NotRequired[str | None]
@@ -158,14 +166,31 @@ class ConnectionEvent(TypedDict, closed=True):
     environment: NotRequired[str | None]
 
 
+class ConnectionHealth(TypedDict, closed=True):
+    account: Literal["own", "team"]
+    at: str
+    by: str
+    code: NotRequired[str | None]
+    environment: Literal["test", "production"]
+    httpStatus: NotRequired[int | None]
+    latencyMs: NotRequired[int | None]
+    message: NotRequired[str | None]
+    status: Literal["ok", "failed"]
+
+
 class ConnectionIn(TypedDict, closed=True):
     connectionId: str | None
 
 
 class ConnectionPatchIn(TypedDict, closed=True):
     availableTo: NotRequired[list[str] | None]
+    category: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
     name: NotRequired[str | None]
     revision: int
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    teamBackup: NotRequired[bool | None]
 
 
 class ConnectionRef(TypedDict, closed=True):
@@ -174,6 +199,11 @@ class ConnectionRef(TypedDict, closed=True):
     kind: str
     name: str
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
+
+
+class ConnectionTestIn(TypedDict, closed=True):
+    account: NotRequired[Literal["self", "team"]]
+    environment: Literal["test", "production"]
 
 
 class DecisionIn(TypedDict, closed=True):
@@ -204,6 +234,12 @@ class EnvironmentIn(TypedDict, closed=True):
     settings: NotRequired[dict[str, Any]]
 
 
+class EnvironmentOption(TypedDict, closed=True):
+    id: str
+    label: str
+    production: bool
+
+
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
@@ -226,6 +262,11 @@ class EvaluateOut(TypedDict, closed=True):
     out: dict[str, Any]
 
 
+class FailedPlugin(TypedDict, closed=True):
+    error: str
+    name: str
+
+
 class FenceIn(TypedDict, closed=True):
     generation: int
     thread: str
@@ -242,6 +283,7 @@ class GrantableOperation(TypedDict, closed=True):
     outputShape: NotRequired[str | None]
     requiresApproval: bool
     stepUp: NotRequired[bool]
+    title: NotRequired[str | None]
 
 
 class HeaderIn(TypedDict, closed=True):
@@ -280,8 +322,23 @@ class KindField(TypedDict, closed=True):
     help: NotRequired[str | None]
     label: str
     name: str
+    optionalWhen: NotRequired[dict[str, str] | None]
     required: bool
+    requiredWhen: NotRequired[dict[str, str] | None]
     secret: bool
+
+
+class KnowledgeSourceView(TypedDict, closed=True):
+    connectionId: str | None
+    connectionStatus: str | None
+    deletedTool: str | None
+    getTool: str
+    listTool: str
+    plugin: str
+    schedule: dict[str, Any]
+    signIn: str | None
+    source: str
+    title: str
 
 
 class ListedHost(TypedDict, closed=True):
@@ -393,6 +450,7 @@ class ModuleDetailsPatchIn(TypedDict, closed=True):
     description: NotRequired[str | None]
     displayName: NotRequired[str | None]
     protection: NotRequired[Literal["system", "managed"] | None]
+    signIn: NotRequired[Literal["team", "person", "either"] | None]
     templateId: NotRequired[str | None]
 
 
@@ -433,10 +491,25 @@ class ModuleViewCounts(TypedDict, closed=True):
     security_review: int
 
 
+class MyConnection(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    connection: str
+    connectionId: str
+    connectionStatus: str
+    environment: Literal["test", "production"]
+    expiresAt: NotRequired[str | None]
+    scopes: list[str]
+    since: NotRequired[str | None]
+
+
 class NewConnectionIn(TypedDict, closed=True):
     authKind: str
     availableTo: NotRequired[list[str] | None]
+    category: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
     name: str
+    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
 
 
 class NoteIn(TypedDict, closed=True):
@@ -462,6 +535,9 @@ class OperationHeader(TypedDict, closed=True):
     value: str
 
 
+Scope: TypeAlias = str
+
+
 class PageOut(TypedDict):
     deltaLink: str | None
     items: list[dict[str, Any]]
@@ -481,6 +557,57 @@ class PendingReview(TypedDict, closed=True):
     id: str
     requestedAt: str
     requestedBy: str
+    version: str
+
+
+class PersonSignedIn(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    environment: Literal["test", "production"]
+    expiresAt: NotRequired[str | None]
+    personId: str
+    scopes: list[str]
+    since: NotRequired[str | None]
+
+
+class PlatformApp(TypedDict, closed=True):
+    clientId: str | None
+    secretSet: bool
+
+
+class PluginDisplay(TypedDict, closed=True):
+    category: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    logo: NotRequired[str | None]
+
+
+class PluginRef(TypedDict):
+    id: str
+    title: str
+    version: str
+
+
+class PluginSetting(TypedDict, closed=True):
+    default: NotRequired[str | None]
+    label: str
+    locked: NotRequired[bool]
+    name: str
+    perEnvironment: NotRequired[bool]
+    secret: NotRequired[bool]
+
+
+class PluginView(TypedDict, closed=True):
+    connectionId: str | None
+    display: NotRequired[PluginDisplay]
+    id: str
+    installOn: bool
+    knowledgeSources: list[str]
+    locked: list[str]
+    platformApp: PlatformApp
+    settings: dict[str, Any]
+    teamOn: bool
+    title: str
+    tools: list[str]
     version: str
 
 
@@ -601,11 +728,13 @@ class SignInCompleteIn(TypedDict, closed=True):
 
 
 class SignInIn(TypedDict, closed=True):
+    account: NotRequired[Literal["self", "team"]]
     environment: Literal["test", "production"]
 
 
 class SignInStart(TypedDict, closed=True):
     authorizeUrl: str
+    connectionId: NotRequired[str | None]
     expiresAt: NotRequired[str | None]
     redirectUri: str
 
@@ -615,6 +744,13 @@ class SignedIn(TypedDict, closed=True):
     expiresAt: NotRequired[str | None]
     scopes: list[str]
     since: NotRequired[str | None]
+
+
+class SigningCertificate(TypedDict, closed=True):
+    expiresSoon: bool
+    notAfter: str
+    subject: str
+    thumbprint: str
 
 
 class Skipped(TypedDict, closed=True):
@@ -648,6 +784,39 @@ class SubjectBindingIn(TypedDict, closed=True):
     required: bool
 
 
+class SystemEnvironment(TypedDict, closed=True):
+    health: NotRequired[ConnectionHealth | None]
+    label: str
+    set: bool
+
+
+class SystemPlugin(TypedDict, closed=True):
+    fixed: list[str]
+    installOn: bool
+    kinds: list[str]
+    platformApp: bool
+    scopes: list[str]
+    settings: list[PluginSetting]
+    signIn: list[str]
+    teamOn: bool
+
+
+class TeamPluginIn(TypedDict, closed=True):
+    clientId: NotRequired[str | None]
+    clientSecret: NotRequired[str | None]
+    credentials: NotRequired[dict[str, str]]
+    enabled: bool
+    environment: NotRequired[Literal["test", "production"]]
+    kind: NotRequired[str | None]
+    settings: NotRequired[dict[str, Any]]
+    signIn: NotRequired[str | None]
+
+
+class TemplateRequires(TypedDict):
+    bind: list[dict[str, str]]
+    tools: list[str]
+
+
 class TestDraftIn(TypedDict, closed=True):
     responseTransform: NotRequired[str | None]
     stub: NotRequired[Any]
@@ -676,6 +845,7 @@ class TestStep(TypedDict):
 
 
 class ToolCallRow(TypedDict, closed=True):
+    actingFor: NotRequired[str | None]
     actor: NotRequired[CallIdentity | None]
     agentName: str
     agentSlug: str
@@ -686,6 +856,7 @@ class ToolCallRow(TypedDict, closed=True):
     channel: NotRequired[Literal["api", "mcp"] | None]
     clientName: NotRequired[str | None]
     connectionId: NotRequired[str | None]
+    credential: NotRequired[Literal["person", "team"] | None]
     decision: NotRequired[Literal["allow", "deny"] | None]
     denyReason: NotRequired[str | None]
     deploymentId: NotRequired[str | None]
@@ -702,7 +873,7 @@ class ToolCallRow(TypedDict, closed=True):
     record: NotRequired[str | None]
     replayOf: NotRequired[str | None]
     runId: str
-    status: Literal["ok", "error", "denied", "awaiting_approval", "replayed"]
+    status: Literal["ok", "error", "denied", "awaiting_approval", "replayed", "running"]
     step: NotRequired[str | None]
     subject: NotRequired[CallIdentity | None]
     system: str
@@ -761,6 +932,7 @@ class ToolModule(TypedDict, closed=True):
     pendingReview: NotRequired[PendingReview | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     reachable: bool
+    signIn: NotRequired[Literal["team", "person", "either"]]
     status: Literal["draft", "in_review", "published", "revoked"]
     system: str
     templateId: NotRequired[str | None]
@@ -805,6 +977,7 @@ class AuthKind(TypedDict, closed=True):
     holdsToken: bool
     id: str
     label: str
+    perPerson: bool
     signsIn: bool
 
 
@@ -834,6 +1007,8 @@ class CodeOperationIn(TypedDict, closed=True):
 
 
 class ConnectionEnvironment(TypedDict, closed=True):
+    certificate: NotRequired[SigningCertificate | None]
+    health: NotRequired[ConnectionHealth | None]
     secrets: dict[str, SecretPart]
     set: bool
     settings: dict[str, str]
@@ -843,20 +1018,28 @@ class ConnectionEnvironment(TypedDict, closed=True):
 class ConnectionKinds(TypedDict, closed=True):
     certificate: list[KindField]
     common: list[KindField]
+    environments: list[EnvironmentOption]
     kinds: list[AuthKind]
+    redirectUri: NotRequired[str | None]
 
 
 class ConnectionRow(TypedDict, closed=True):
     authKind: str
     availableTo: list[str]
+    category: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
     environmentsSet: list[str]
+    health: NotRequired[ConnectionHealth | None]
     id: str
     kindLabel: str
     mayManage: bool
     name: str
     revision: int
+    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     statusDetail: NotRequired[str | None]
+    teamBackup: NotRequired[bool]
     teamId: str
     updatedAt: NotRequired[str | None]
     usedBy: list[ModuleUse]
@@ -943,6 +1126,11 @@ class EnvelopePageOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePluginView(TypedDict, closed=True):
+    data: PluginView
+    success: Literal[True]
+
+
 class EnvelopeSendPolicyView(TypedDict, closed=True):
     data: SendPolicyView
     success: Literal[True]
@@ -975,6 +1163,16 @@ class EnvelopeWaitOut(TypedDict, closed=True):
 
 class EnvelopeListGrantableOperation(TypedDict, closed=True):
     data: list[GrantableOperation]
+    success: Literal[True]
+
+
+class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
+    data: list[KnowledgeSourceView]
+    success: Literal[True]
+
+
+class EnvelopeListMyConnection(TypedDict, closed=True):
+    data: list[MyConnection]
     success: Literal[True]
 
 
@@ -1014,6 +1212,7 @@ class ModuleIn(TypedDict, closed=True):
     name: str
     operations: NotRequired[list[DiscoveredOperationIn] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
+    signIn: NotRequired[Literal["team", "person", "either"]]
     source: NotRequired[ModuleSourceIn | None]
     system: str
     templateId: NotRequired[str | None]
@@ -1050,11 +1249,13 @@ class ModuleOperation(TypedDict, closed=True):
     maskedOutput: list[str]
     method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
     name: str
+    needsPerson: NotRequired[bool]
     p95Ms: int
     path: NotRequired[str | None]
     rateLimitPerMin: int
     requiresApproval: bool
     responseTransform: NotRequired[str | None]
+    scopes: NotRequired[list[str]]
     secrets: NotRequired[list[SecretNeed]]
     stepUp: bool
     stub: NotRequired[Any]
@@ -1125,13 +1326,32 @@ class OperationPatchIn(TypedDict, closed=True):
     headers: NotRequired[list[HeaderIn] | None]
     input: NotRequired[list[SchemaFieldIn] | None]
     method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
+    needsPerson: NotRequired[bool | None]
     path: NotRequired[str | None]
     rateLimitPerMin: NotRequired[int | None]
     requiresApproval: NotRequired[bool | None]
     responseTransform: NotRequired[str | None]
+    scopes: NotRequired[list[Scope] | None]
     stepUp: NotRequired[bool | None]
     stub: NotRequired[Any]
     timeoutMs: NotRequired[int | None]
+
+
+class PluginList(TypedDict, closed=True):
+    failed: list[FailedPlugin]
+    plugins: list[PluginView]
+
+
+class PluginTemplate(TypedDict):
+    body: NotRequired[dict[str, Any]]
+    digest: str
+    id: str
+    kind: Literal["agent", "skill", "workflow", "document_type"]
+    plugin: PluginRef
+    requires: TemplateRequires
+    source: str
+    title: str
+    version: int
 
 
 class SecretMeta(TypedDict, closed=True):
@@ -1147,6 +1367,26 @@ class SecretMeta(TypedDict, closed=True):
     templateId: NotRequired[str | None]
     usedBy: NotRequired[list[SecretUser]]
     version: int
+
+
+class SystemCard(TypedDict, closed=True):
+    authKind: NotRequired[str | None]
+    category: NotRequired[str | None]
+    connectionId: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    environments: dict[str, SystemEnvironment]
+    id: str
+    kind: Literal["plugin", "connection", "module"]
+    kindLabel: NotRequired[str | None]
+    logo: NotRequired[str | None]
+    mayManage: bool
+    moduleIds: list[str]
+    name: str
+    plugin: NotRequired[SystemPlugin | None]
+    pluginId: NotRequired[str | None]
+    status: NotRequired[str | None]
+    toolsCount: int
 
 
 class TestOut(TypedDict):
@@ -1189,6 +1429,7 @@ class ToolModuleDetail(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     reachable: bool
     runContexts: list[RunContextOption]
+    signIn: NotRequired[Literal["team", "person", "either"]]
     status: Literal["draft", "in_review", "published", "revoked"]
     system: str
     templateId: NotRequired[str | None]
@@ -1205,16 +1446,23 @@ class ConnectionDetail(TypedDict, closed=True):
     activity: list[ConnectionEvent]
     authKind: str
     availableTo: list[str]
+    category: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
     environments: dict[str, ConnectionEnvironment]
     environmentsSet: list[str]
+    health: NotRequired[ConnectionHealth | None]
     id: str
     kindLabel: str
     mayManage: bool
     name: str
+    people: NotRequired[list[PersonSignedIn]]
     redirectUri: NotRequired[str | None]
     revision: int
+    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     statusDetail: NotRequired[str | None]
+    teamBackup: NotRequired[bool]
     teamId: str
     updatedAt: NotRequired[str | None]
     usedBy: list[ModuleUse]
@@ -1261,6 +1509,11 @@ class EnvelopeModuleTestResult(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePluginList(TypedDict, closed=True):
+    data: PluginList
+    success: Literal[True]
+
+
 class EnvelopeSecretMeta(TypedDict, closed=True):
     data: SecretMeta
     success: Literal[True]
@@ -1273,6 +1526,16 @@ class EnvelopeTestOut(TypedDict, closed=True):
 
 class EnvelopeToolModuleDetail(TypedDict, closed=True):
     data: ToolModuleDetail
+    success: Literal[True]
+
+
+class EnvelopeListPluginTemplate(TypedDict, closed=True):
+    data: list[PluginTemplate]
+    success: Literal[True]
+
+
+class EnvelopeListSystemCard(TypedDict, closed=True):
+    data: list[SystemCard]
     success: Literal[True]
 
 

@@ -1,6 +1,6 @@
 # The console has no preview mock pages
 
-Status: current. Id: `uc-517`. Service: `console` on agents-service and tools-service. Layers: ui. Card: c-517.
+Status: current. Id: `uc-517`. Service: `console` on agents-service and tools-service. Layers: ui. Card: an earlier change.
 
 The console served development-only copies of its pages under `/preview/` beside the real ones, so what the maintainers
 reviewed could drift from what shipped. The copies are deleted. The pieces they drew that the real pages lacked are
@@ -25,7 +25,7 @@ with the Egress page's own form. Only `/preview/human-tasks` stays, until the ma
 
 ## Non-vacuous check
 
-With the agent settings, the agent page and the tool request builder at their versions from before c-517, steps 1 to 3
+With the agent settings, the agent page and the tool request builder at their versions from before an earlier change, steps 1 to 3
 fail: no Agent ID field, no host notice, no Add allowed host. Step 4 failed during the build while the settings and
 workflow-layout mocks still answered 200. On the card's last commit all five pass (`uc-red.txt` and `uc-green.txt`
 under `evidenceDir('517')`).

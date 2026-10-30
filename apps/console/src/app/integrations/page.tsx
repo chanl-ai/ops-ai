@@ -14,12 +14,13 @@ import { ConnectDialog } from '@/components/integrations/connect-dialog';
 import { NewConnectionDialog } from '@/components/integrations/new-connection-dialog';
 import { AUTH, IntegrationStatusBadge, STATUS_LABEL, SystemMark, kindOf } from '@/components/integrations/integration-meta';
 import { RevokeDialog } from '@/components/integrations/revoke-dialog';
+import { RealConnectionsPage } from '@/components/connections/real-connections-page';
 import { PageLayout } from '@/components/page-layout';
 import { toastBulk } from '@/components/shared/bulk';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { ExpiryText } from '@/components/tools/module-meta';
@@ -30,6 +31,7 @@ import { useSetIntegrationSwitches, useBulkCheckIntegrations, useConnectFlow, us
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
 import { useTabParam } from '@/hooks/use-tab-param';
+import { realConnections } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { AuthMethod, CatalogSystem, Integration, IntegrationFilters, IntegrationKind, IntegrationStatus, IntegrationView } from '@/lib/types/integrations';
 
@@ -141,7 +143,12 @@ function columns(onRecheck: (i: Integration) => void, onRevoke: (i: Integration)
   ];
 }
 
+/** Connections: the grid of the team's real systems behind NEXT_PUBLIC_OPS_REAL_CONNECTIONS (c-580), else as it ships. */
 export default function IntegrationsPage() {
+  return realConnections ? <RealConnectionsPage /> : <ShippedIntegrationsPage />;
+}
+
+function ShippedIntegrationsPage() {
   const router = useRouter();
   const [tab, setTab] = useTabParam(TABS, 'connected');
   const [view, setView] = React.useState<IntegrationView>('all');
@@ -243,10 +250,10 @@ export default function IntegrationsPage() {
           <SavedViewTabs
             ariaLabel="Integration views"
             presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Cable },
-              { id: 'attention', label: `Needs attention · ${counts?.attention ?? 0}`, icon: AlertTriangle },
-              { id: 'expiring', label: `Expiring in 30 days · ${counts?.expiring ?? 0}`, icon: CalendarClock },
-              { id: 'revoked', label: `Revoked · ${counts?.revoked ?? 0}`, icon: ShieldOff },
+              { id: 'all', label: countLabel('All', counts?.all), icon: Cable },
+              { id: 'attention', label: countLabel('Needs attention', counts?.attention), icon: AlertTriangle },
+              { id: 'expiring', label: countLabel('Expiring in 30 days', counts?.expiring), icon: CalendarClock },
+              { id: 'revoked', label: countLabel('Revoked', counts?.revoked), icon: ShieldOff },
             ]}
             savedViews={[]}
             activePresetId={view}

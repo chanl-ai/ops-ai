@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { decideInConsole } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -17,7 +18,6 @@ const MAYA = 'm.okafor@harborpine.example';
 const PRIYA = 'p.shah@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // The reply goes out through send_reply on the Messaging Platform team's mail module, so that team approves the write.
-const WANJIRU = 'w.kamau@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const SECRET = 'INTAKE_MAIL_PASSWORD';
 const RUN = Math.random().toString(36).slice(2, 8);
@@ -104,7 +104,8 @@ await withUiStack(
     const S = as(await tokenFor(SAM), 'team_security');
     const J = as(await tokenFor(JAMES));
     const P = as(await tokenFor(PRIYA));
-    const W = as(await tokenFor(WANJIRU), 'team_platform');
+    // A held write is decided in its run's team (Operations), so Maya acknowledges, not the mail module's owners.
+    const M = as(await tokenFor(MAYA));
     const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=100`, J))?.data ?? [];
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const out = (run, node) => (run?.steps ?? []).find((s) => s.nodeId === node)?.output;
@@ -182,25 +183,18 @@ await withUiStack(
         sendNotice();
         // The intake's own steps end once it has started the document's run; it then waits on that run.
         const intake = await until(async () => (await runsOf(ID.mail_intake)).find((r) => r.outcome || SETTLED.includes(r.status)));
+        // The run's input is customer data, which the API masks ([email]), so the sender is not compared here.
         const attachments = intake?.input?.attachments ?? [];
         doc = await until(async () => (await runsOf(ID.mail_document)).find((r) => r.status === 'waiting'));
-        check('3 the email starts one intake run and its PDF is in Files', attachments.length === 1 && !!attachments[0].fileId && intake.input.from === SENDER, { intake: intake?.status, attachments });
+        check('3 the email starts one intake run and its PDF is in Files', attachments.length === 1 && !!attachments[0].fileId && attachments[0].name === 'notice.pdf', { intake: intake?.status, from: intake?.input?.from, attachments });
       });
 
       // 4. The read scores below the floor, so it waits on Check the read; Maya decides it on Human Tasks.
       await step('4 the low-confidence read waits on Check the read and Maya approves it on Human Tasks', async () => {
         const waiting = (doc?.waiting ?? {}).node;
         const maya = await signIn(browser, consoleUrl, MAYA, errors);
-        await maya.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const row = maya.getByRole('row').filter({ hasText: 'Check the debtors' }).first();
-        await row.waitFor({ timeout: 60_000 });
-        await row.click();
-        const form = maya.getByTestId('review-decision-form');
-        await form.waitFor({ timeout: 30_000 });
-        const decided = maya.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 });
-        await form.getByRole('button', { name: 'Approve', exact: true }).click();
-        const res = await decided;
-        check('4 the low-confidence read waits on Check the read and Maya approves it on Human Tasks', waiting === 'check' && res.status() === 200, { waiting, decision: res.status() });
+        const status = await decideInConsole(maya, consoleUrl, doc, 'approve');
+        check('4 the low-confidence read waits on Check the read and Maya approves it on Human Tasks', waiting === 'check' && status === 200, { waiting, decision: status });
       });
 
       // 5. The approved read opens a levy case for the debtor; the case is on Cases.
@@ -221,7 +215,7 @@ await withUiStack(
       // 6. The mail module's team acknowledges the document; the reply leaves from the mailbox's own address.
       await step('6 the acknowledgement sends one reply from the mailbox’s own address', async () => {
         await until(async () => ((await detail(doc.id))?.waiting ?? {}).node === 'ack');
-        const ack = await fetch(`${agents}/reviews/${doc.id}/decision`, { method: 'POST', headers: W, body: JSON.stringify({ decision: 'approved', reason: 'uc-245' }) });
+        const ack = await fetch(`${agents}/reviews/${doc.id}/decision`, { method: 'POST', headers: M, body: JSON.stringify({ decision: 'approved', reason: 'uc-245' }) });
         const sent = await until(async () => {
           const found = await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${SENDER}"`)}`)).json();
           return (found.messages ?? []).filter((m) => m.Subject.includes(RUN)).length ? found.messages.filter((m) => m.Subject.includes(RUN)) : undefined;

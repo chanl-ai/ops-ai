@@ -1,6 +1,6 @@
 # Documents emailed to a team mailbox become cases, and the sender gets a reply
 
-Status: current. Id: `uc-223`. Service: `agents-service` (the worker), `tools-service` (IMAP, the reply), `files-service`. Layers: api. Card: c-223.
+Status: current. Id: `uc-223`. Service: `agents-service` (the worker), `tools-service` (IMAP, the reply), `files-service`. Layers: api. Card: an earlier change.
 
 A notice PDF and a CSV of debtors emailed to a team's IMAP mailbox each become a child run (`mail_document`) that
 reads every debtor (Extract from file, Several records) and opens a court order case per debtor. Attachments files-service
@@ -29,3 +29,5 @@ acknowledgement from the mailbox's own sender.
 ## Non-vacuous check
 
 Step 2 fails when a refused attachment fails the pass (`tests/engine/test_email_trigger.py::test_an_attachment_files_service_refuses_is_skipped_and_the_mailbox_keeps_reading`, seen failing with refusals re-raised): the message is read again forever and later mail never starts a run. Step 5 fails when a field's quote is not checked against its page (`packages/ops_engine/tests/test_extract_step.py`).
+
+In the console: uc-245's and uc-246's ui scripts: a mailed PDF is read, a doubtful read waits for a person, a case opens per document, and the reply leaves from the mailbox. The skipped files and the debtors CSV stay at the api layer.

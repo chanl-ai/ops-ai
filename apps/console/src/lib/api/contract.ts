@@ -21,6 +21,7 @@ import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
 import type { EgressApi } from './egress-contract';
 import type { SecretsApi } from './secrets-contract';
+import type { ConnectionsApi } from './connections-contract';
 import type { IntegrationsApi } from './integrations-contract';
 import type { FilesApi } from './files-contract';
 import type { TemplatesApi } from './templates-contract';
@@ -29,6 +30,8 @@ import type { GuardrailsApi } from './guardrails-contract';
 import type { SkillsApi } from './skills-contract';
 import type { WidgetsApi } from './widgets-contract';
 import type { WidgetDeploymentsApi } from './widget-deployments-contract';
+import type { BatchesApi } from './batches-contract';
+import type { FormsApi } from './forms-contract';
 import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
@@ -202,6 +205,8 @@ export interface OpsApi {
   egress: EgressApi;
   /** Credentials tool calls send; values never come back (tools-service). */
   secrets: SecretsApi;
+  /** A connected system's sign-in: whose account, Test connection, and each person's own (tools-service, c-558). */
+  connections: ConnectionsApi;
   integrations: IntegrationsApi;
   files: FilesApi;
   templates: TemplatesApi;
@@ -209,6 +214,10 @@ export interface OpsApi {
   skills: SkillsApi;
   widgets: WidgetsApi;
   widgetDeployments: WidgetDeploymentsApi;
+  /** A workflow's start form shared as a page (agents-service /v1/workflows/{id}/forms, c-535). */
+  forms: FormsApi;
+  /** A workflow started once per row of a file, and the batch's page (agents-service /v1/workflows/{id}/batches, c-535). */
+  batches: BatchesApi;
   /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases, c-220). */
   caseRecords: CaseRecordsApi;
   activity: ActivityApi;

@@ -2932,7 +2932,8 @@
               "floor",
               "days",
               "hours",
-              "publish_modes"
+              "publish_modes",
+              "plugins"
             ],
             "title": "Kind",
             "type": "string"

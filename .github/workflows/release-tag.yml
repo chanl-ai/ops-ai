@@ -5,8 +5,13 @@
 # Override: run this workflow by hand with a ref to put that ref on staging; set the repository variable STAGING_HOLD
 # (any value, the reason) to stop merges from replacing it, and clear it to go back to main.
 #
-# Staging needs three repository secrets; without any of them the deploy is skipped with a notice and the tag still lands:
-#   FLY_API_TOKEN       deploy tokens for <your-app>-one and <your-app>-db, joined by a comma (docs/deploy/fly-staging.md)
+# Staging needs three repository secrets and two repository variables; without any of them the deploy is skipped with a
+# notice and the tag still lands. The Fly app names are not in the repo; they come from the variables, which this job
+# writes into staging.env for stg_deploy.sh (deploy/fly/staging.env.example):
+#   vars.STG_APP        the one-machine staging app
+#   vars.STG_DB_APP     its Postgres app
+#   vars.STG_APP_PREFIX optional; the prefix both names must start with (default <your-app>)
+#   FLY_API_TOKEN       deploy tokens for those two apps, joined by a comma (docs/deploy/fly-staging.md)
 #   STAGING_DB_URL      the staging attach's superuser URL (~/.config/ops-ai/staging-db-url.txt): grants are applied with it
 #   STAGING_ADMIN_ENV   the bootstrap admin's lines (~/.config/ops-ai/staging-admin.env): the click walk signs in with it
 name: release-tag
@@ -57,6 +62,9 @@ jobs:
       cancel-in-progress: false
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      STG_APP: ${{ vars.STG_APP }}
+      STG_DB_APP: ${{ vars.STG_DB_APP }}
+      STG_APP_PREFIX: ${{ vars.STG_APP_PREFIX }}
       STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
       STAGING_ADMIN_ENV: ${{ secrets.STAGING_ADMIN_ENV }}
     steps:
@@ -73,14 +81,16 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           missing=""
           [ -n "$FLY_API_TOKEN" ] || missing="$missing FLY_API_TOKEN"
+          [ -n "$STG_APP" ] || missing="$missing vars.STG_APP"
+          [ -n "$STG_DB_APP" ] || missing="$missing vars.STG_DB_APP"
           [ -n "$STAGING_DB_URL" ] || missing="$missing STAGING_DB_URL"
           [ -n "$STAGING_ADMIN_ENV" ] || missing="$missing STAGING_ADMIN_ENV"
           if [ -n "$missing" ]; then
-            echo "::notice title=Staging not deployed::Repository secrets missing:$missing. Staging keeps what it runs; $sha is not deployed. See the header of .github/workflows/release-tag.yml."
+            echo "::notice title=Staging not deployed::Repository secrets or variables missing:$missing. Staging keeps what it runs; $sha is not deployed. See the header of .github/workflows/release-tag.yml."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "Deploying $ASKED ($sha) to <your-app>-one"
+            echo "Deploying $ASKED ($sha) to the staging app"
           fi
       - if: steps.plan.outputs.ready == 'true'
         uses: superfly/flyctl-actions/setup-flyctl@master
@@ -110,6 +120,9 @@ jobs:
           mkdir -p "$OPS_STAGING_CONFIG"
           printf '%s\n' "$STAGING_DB_URL" > "$OPS_STAGING_CONFIG/staging-db-url.txt"
           printf '%s\n' "$STAGING_ADMIN_ENV" > "$OPS_STAGING_CONFIG/staging-admin.env"
+          # App names, not secrets: from the repository variables.
+          printf 'STG_APP=%s\nSTG_DB_APP=%s\n' "$STG_APP" "$STG_DB_APP" > "$OPS_STAGING_CONFIG/staging.env"
+          [ -z "$STG_APP_PREFIX" ] || printf 'STG_APP_PREFIX=%s\n' "$STG_APP_PREFIX" >> "$OPS_STAGING_CONFIG/staging.env"
       - name: Deploy to staging
         if: steps.plan.outputs.ready == 'true'
         env:

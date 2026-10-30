@@ -26,6 +26,9 @@ WIDENINGS: dict[str, set[str]] = {
         "services/platform-service/src/ops_platform/store/signin.py",
     },
     "SESSION_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
+    "WIDGET_LOOKUP": {"services/agents-service/src/ops_agents/api/routers/widget.py"},
+    # c-535: the workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
+    "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
     "KEY_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
     "SIGNIN_LOCKOUT": {"services/platform-service/src/ops_platform/store/signin.py"},
@@ -46,12 +49,17 @@ WIDENINGS: dict[str, set[str]] = {
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
+    # c-561: the run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
+    "RECONCILE_RUNS": {"packages/ops_engine/src/ops_engine/store/reconciler.py"},
+    "RUN_RECONCILER": {"services/agents-service/src/ops_agents/api/sweeper.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
     # c-507: kb's background processes, the dev demo seed and the start-up move between file stores.
     "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
     "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
     "MOVE_FILES": {"services/kb-service/src/ops_kb/__main__.py"},
+    # The knowledge schedule finds each tenant's due tool sources, then syncs each in its own team's scope (c-565).
+    "FIND_DUE": {"services/kb-service/src/ops_kb/schedule.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # c-516: heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
@@ -65,17 +73,28 @@ WIDENINGS: dict[str, set[str]] = {
 ENTRIES: dict[str, set[str]] = {
     "enter_caller": {"packages/ops_identity/src/ops_identity/fastapi.py"},
     "enter": {
+        # c-535: a hosted form's link enters the tenant and team its signed token names; a members-only form, each of
+        # the signed-in person's own teams in turn.
+        "services/agents-service/src/ops_agents/api/routers/forms.py",
         "services/agents-service/src/ops_agents/api/routers/run_resume.py",
         "services/agents-service/src/ops_agents/api/routers/widget.py",
         "services/agents-service/src/ops_agents/api/worker.py",
     },
     "scope": {
+        "services/agents-service/src/ops_agents/api/batches.py",
+        # c-549: a checkpointer built for one tenant and team (tests, tools) scopes each transaction to them, never to a
+        # config's; the Runtime's checkpointer acts in the caller's context.
+        "packages/ops_checkpointer/src/ops_checkpointer/saver.py",
         "packages/ops_store/src/ops_store/outbox.py",
         "services/documents-service/src/ops_documents/document_types.py",
         "services/documents-service/src/ops_documents/extraction.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
         "services/agents-service/src/ops_agents/api/tenant_tasks.py",
+        # c-549: a run, and a write to a thread's state outside one, act as the thread's team, so every checkpoint is
+        # in exactly one team whoever started the run.
+        "services/agents-service/src/ops_agents/api/runs.py",
         "services/platform-service/src/ops_platform/store/tenancy.py",
+        "services/kb-service/src/ops_kb/schedule.py",
     },
 }
 # Names a service once used to set its own context. `set_acting_team` is c-407's filter; kb-service still sets it for

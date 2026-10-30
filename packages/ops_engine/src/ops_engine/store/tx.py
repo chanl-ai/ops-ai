@@ -35,3 +35,4 @@ class Transactions(Protocol):
 # Why the engine reads past the tenant (`Transactions.system_tx`).
 CLAIM_WORK = "engine_claim_work"  # the worker claims the next due engine_work row of any tenant
 LIVE_WORKFLOWS = "engine_live_workflows"  # the mailbox listener lists every tenant's live workflows
+RECONCILE_RUNS = "engine_reconcile_runs"  # the reconciler finds runs with nothing behind them, then acts per tenant

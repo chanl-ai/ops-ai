@@ -8,14 +8,15 @@ from __future__ import annotations
 from typing import Any, cast
 
 # A replay ran nothing, so it is its own status, not a success; a write refused because the same one was running is a
-# denial. Both stay out of a module's call counts (CallLog.traffic) and the 409 counts as denied.
+# denial. Both stay out of a module's call counts (CallLog.traffic) and the 409 counts as denied. A write still running
+# is running, never ok: whether it happened is not known yet (c-561).
 STATUS = {
     "ok": "ok",
     "replayed": "replayed",
     "error": "error",
     "refused": "denied",
     "in_progress": "denied",
-    "running": "ok",
+    "running": "running",
     "lost": "error",
     "abandoned": "denied",
 }
@@ -89,6 +90,11 @@ def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | 
         row["channel"] = r["channel"]
     if r.get("client_name"):
         row["clientName"] = r["client_name"]
+    # Whom the call acted for and whose sign-in signed it (c-558).
+    if r.get("acting_for"):
+        row["actingFor"] = r["acting_for"]
+    if r.get("credential"):
+        row["credential"] = r["credential"]
     error = r.get("error")
     if r["outcome"] == "error" and isinstance(error, dict):
         # Which side the call broke on and why, as the executor named it; the message names the host, never an

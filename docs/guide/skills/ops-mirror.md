@@ -1,6 +1,6 @@
 # ops-mirror: work behind a company mirror
 
-Status: current. Proven by `make skills-proof` (c-554).
+Status: current. Proven by `make skills-proof`.
 
 skill: ops-mirror
 description: Install and build Ops AI through a company package mirror (Nexus, Artifactory): set the mirror, test it, find the locked versions it does not serve, and install through it. Use when installs fail behind a proxy or a bank's network has no public internet.

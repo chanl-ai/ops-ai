@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-30",
+  "title": "A knowledge source of any type opens its page",
+  "description": "A knowledge source read through a plugin, such as Salesforce articles, now opens its page, shows as a Plugin source and syncs from there. A source of a type the console does not know yet opens under its own name instead of a blank error page.",
+  "tag": "fix",
+  "switch": "NEXT_PUBLIC_OPS_PLUGINS",
+  "cards": [
+    "c-565"
+  ]
+}

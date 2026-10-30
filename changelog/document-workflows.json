@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "title": "Read any document without setting up a type",
+  "description": "A document can be read as full text, or with fields the model proposes from the first pages, then saved as a document type in one step.",
+  "tag": "new",
+  "cards": ["c-535"],
+  "switch": "NEXT_PUBLIC_OPS_DOCUMENT_READS"
+}

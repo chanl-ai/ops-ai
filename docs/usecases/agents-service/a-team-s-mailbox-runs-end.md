@@ -1,6 +1,6 @@
 # A team's mailbox runs end to end
 
-Status: passing (2026-10-19). Id: `uc-245`. Service: `agents-service`. Layers: ui. Card c-230, epic c-227.
+Status: passing (2026-10-19). Id: `uc-245`. Service: `agents-service`. Layers: ui. Card an earlier change, epic an earlier change.
 
 A team connects its mailbox in the console, binds the court order workflows to it through publish review, and from then on
 every email is run once, read, checked by a person when the read is doubtful, turned into a case, and answered from
@@ -30,7 +30,7 @@ fake OpenAI with the demo's rules, tools-service with the core fake bank, and `m
 | 3 | A court clerk emails a notice PDF to the mailbox (SMTP to GreenMail) | One mail_intake run, its PDF stored in Files, `from` the sender |
 | 4 | The read scores below the floor; Maya opens Human Tasks and approves Check the debtors | The document run waited at `check`; Maya's decision is 200 |
 | 5 | The approved read starts the debtor's court order run | A case opens naming the debtor as read |
-| 6 | The Messaging Platform team (owner of the mail module that sends replies) approves the acknowledgement | One reply in Mailpit, from the mailbox's own address, and the document run ends `replied` |
+| 6 | Maya, in Operations (the run's team, which decides its held writes), approves the acknowledgement | One reply in Mailpit, from the mailbox's own address, and the document run ends `replied` |
 | 7 | The same message bytes are delivered again | No second intake run |
 
 ## Acceptance layers
@@ -42,11 +42,11 @@ fake OpenAI with the demo's rules, tools-service with the core fake bank, and `m
 ## Non-vacuous check
 
 Step 7 is the dedupe check: it failed while the script rebuilt the PDF for the second send (a new message reusing the
-Message-ID runs, by design, c-231), and passes when the same bytes are redelivered. Step 2's self-approval 403 is the
+Message-ID runs, by design), and passes when the same bytes are redelivered. Step 2's self-approval 403 is the
 review gate's refusal paired with Priya's approval. Steps 3 to 7 failed while the harness started the worker without
 `OPS_FILES_URL` (the trigger left the mailbox unread), which `packages/usecase-runner/src/harness.ts` now passes.
 
 ## What this does not cover
 
 `make demo-walk` reads the notice on whatever model `make up DEMO_MODEL=` points document reads at; this use case
-runs on the fake. A Microsoft 365 mailbox is covered by tools and agents tests against a fake Graph (c-228).
+runs on the fake. A Microsoft 365 mailbox is covered by tools and agents tests against a fake Graph.

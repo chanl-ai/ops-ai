@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "title": "Send disagreeing sources to a person",
+  "description": "Combine facts can leave by a Disagree way when its sources give different values, so a Human review settles them instead of the workflow going on.",
+  "tag": "new",
+  "cards": ["c-535"],
+  "switch": "NEXT_PUBLIC_OPS_WORKFLOW_BUILDER"
+}

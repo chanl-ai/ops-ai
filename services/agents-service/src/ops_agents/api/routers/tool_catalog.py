@@ -40,6 +40,7 @@ async def known_tools(rt: Runtime) -> list[dict[str, Any]]:
             {
                 "id": op.name,
                 "name": op.name,
+                "title": getattr(op, "title", None),
                 "server": op.module_name,
                 "moduleId": op.module_id,
                 "description": op.description,
@@ -120,8 +121,11 @@ async def tool_options(
         offset = 0
     else:
         q = search.strip().lower()
-        hits = [t for t in tools if q in f"{t['name']} {t['server']} {t['description']}".lower()]
+        hits = [t for t in tools if q in f"{t.get('title') or ''} {t['name']} {t['server']} {t['description']}".lower()]
         offset, _ = options_window(cursor, limit)
     page = hits[offset : offset + limit + 1]
-    options = [{"id": t["id"], "label": t["name"], "hint": t["server"], "disabled": None} for t in page]
+    # A plugin tool reads by its title (c-581); every other tool by its name.
+    options = [
+        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
+    ]
     return ok(options_page(options, offset, limit))

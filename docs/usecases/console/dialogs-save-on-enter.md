@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-110`. Service: `console`. Layers: ui.
 
-Card c-113: the remaining create and edit dialogs (secrets, egress, tool modules and operations, knowledge pages,
+Card an earlier change: the remaining create and edit dialogs (secrets, egress, tool modules and operations, knowledge pages,
 sources, save as template, the thread settings sheet) save on Enter through `DialogShell onSubmit` or their own form.
 The integrations revoke dialog is a destructive confirm and keeps an explicit button, so Enter never submits it.
 

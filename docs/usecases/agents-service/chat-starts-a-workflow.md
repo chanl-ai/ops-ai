@@ -36,7 +36,7 @@ In the console (ui layer), with chat, Cases and Reviews pointed at the scripted 
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-020-api.py` | passing |
-| ui | `agents-service/scripts/test-uc-020-ui.mjs` | passing |
+| ui | none | retired 2026-10-29: the console no longer shows the earlier workflow engine's runs; the api layer still covers it; it returns when the backend-removal card moves this case onto a current workflow |
 
 ## Non-vacuous check
 

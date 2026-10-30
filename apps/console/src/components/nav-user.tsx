@@ -7,6 +7,7 @@ import {
   IconDotsVertical,
   IconLogout,
   IconNotification,
+  IconPlug,
   IconUserCircle,
 } from "@tabler/icons-react"
 
@@ -32,6 +33,9 @@ import {
 } from "@/components/ui/sidebar"
 import { useRouter } from "next/navigation"
 import { useSession, useSignOut } from "@/hooks/auth-queries"
+import { clearChatDrafts } from "@/components/chat/composer"
+import { noteChosenSignOut } from "@/components/shell/session-end"
+import { usePersonalSignIn } from "@/hooks/connections-queries"
 
 export function NavUser({
   user: fallback,
@@ -49,6 +53,7 @@ export function NavUser({
   const router = useRouter()
   // Signing out drops every cached query, then the guard would send this page to /login anyway; going there directly avoids a flash.
   const signOut = useSignOut()
+  const personalSignIn = usePersonalSignIn()
 
   return (
     <SidebarMenu>
@@ -57,6 +62,7 @@ export function NavUser({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
+              data-testid="nav-user"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg grayscale">
@@ -106,6 +112,14 @@ export function NavUser({
                   Security
                 </Link>
               </DropdownMenuItem>
+              {personalSignIn && (
+                <DropdownMenuItem asChild>
+                  <Link href="/settings/account/connections" data-testid="nav-connections">
+                    <IconPlug />
+                    Your connections
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href="/settings/team/notifications">
                   <IconNotification />
@@ -117,6 +131,8 @@ export function NavUser({
             <DropdownMenuItem
               data-testid="sign-out"
               onSelect={async () => {
+                noteChosenSignOut()
+                clearChatDrafts()
                 await signOut.mutateAsync()
                 router.replace("/login")
               }}

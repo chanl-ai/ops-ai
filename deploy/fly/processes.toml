@@ -78,7 +78,9 @@ command = ["/app/.venv/bin/python", "-m", "ops_agents.api.worker"]
 env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_AGENTS}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_AGENTS}", OPS_SERVICE_SIGNING_KID = "svc-agents-1", OPS_REVIEW_KEY = "${OPS_REVIEW_KEY}", OPS_MODELS_KEY = "${OPS_MODELS_KEY_AGENTS}" }
 
 [process.console]
-command = ["/app/apps/console/node_modules/.bin/next", "start", "-H", "127.0.0.1", "-p", "3016"]
+# The route cache belongs to the build that wrote it. A suspended machine keeps its filesystem across a deploy, so a
+# cached page from the previous build would reference chunks the new build no longer has (a blank /login).
+command = ["sh", "-c", "find .next/server/route-cache -mindepth 1 -delete 2>/dev/null; exec /app/apps/console/node_modules/.bin/next start -H 127.0.0.1 -p 3016"]
 cwd = "/app/apps/console"
 ready = "http://127.0.0.1:3016/"
 

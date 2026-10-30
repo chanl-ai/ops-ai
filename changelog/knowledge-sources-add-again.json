@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-30",
+  "title": "Adding a knowledge source works again",
+  "description": "Add source on a knowledge base was refused with a validation error for every kind of source, so no files could be added from the console. Adding a source to a knowledge base works again for every source type.",
+  "tag": "fix",
+  "cards": ["c-553"]
+}

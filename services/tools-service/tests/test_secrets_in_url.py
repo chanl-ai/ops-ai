@@ -66,6 +66,12 @@ async def _module(engine: AsyncEngine, tenant: str) -> None:
                 [_field("account_id", required=True), _field("limit", "integer"), _field("api_key")],
             ),
             op(2, f"segment_{tenant}", "/echo-url/{{BANK_KEY}}", []),
+            op(
+                3,
+                f"search_{tenant}",
+                "/echo-url/search?email={email}&cursor={cursor}&api_key={{BANK_KEY}}",
+                [_field("email", required=True), _field("cursor"), _field("limit", "integer")],
+            ),
         ],
     )
     await ModuleStore(engine).put(m, expected_revision=None)
@@ -120,6 +126,24 @@ def test_a_path_secret_stays_one_segment_whatever_it_holds() -> None:
     op: dict[str, Any] = {"method": "GET", "path": "/accounts/{{BANK_KEY}}/statement", "headers": []}
     req = build_request({"endpoint": ENDPOINT}, op, {}, {"BANK_KEY": "a/b?c#d"})
     assert req.url == f"{ENDPOINT}/accounts/a%2Fb%3Fc%23d/statement"
+
+
+async def test_a_query_placeholder_is_filled_from_its_argument_and_sent_once(keyed: Bank) -> None:
+    # `?email={email}` was sent as the literal `%7Bemail%7D` (the dogfood's Stripe customer search).
+    await keyed.api.client.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
+    email = "a+b@example.com&x=1"
+    res = await _call(keyed, f"search_{keyed.api.tenant}", {"email": email, "limit": 2}, "u4")
+    assert res.status_code == 200, res.text
+    query = parse_qs(keyed.received[-1]["query"])
+    assert query["email"] == [email], "the argument's value, encoded once, in place of {email}"
+    assert query["api_key"] == [VALUE] and query["limit"] == ["2"], "the secret and the other arguments still arrive"
+    assert "cursor" not in query, "a placeholder whose argument is not given is left out, not sent empty"
+
+
+async def test_a_query_argument_cannot_name_a_secret(keyed: Bank) -> None:
+    await keyed.api.client.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
+    await _call(keyed, f"search_{keyed.api.tenant}", {"email": "{{BANK_KEY}}"}, "u5")
+    assert parse_qs(keyed.received[-1]["query"])["email"] == ["{{BANK_KEY}}"], "an argument is sent as written"
 
 
 async def test_a_caller_cannot_replace_the_credential_or_name_a_secret(keyed: Bank) -> None:

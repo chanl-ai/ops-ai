@@ -10,7 +10,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { PROVENANCE_OPTIONS, ProvenanceChip, VerifiedText } from '@/components/wiki/wiki-meta';
 import { WikiPageSheet } from '@/components/wiki/wiki-page-sheet';
 import { Badge } from '@/components/ui/badge';
@@ -78,10 +78,10 @@ export default function WikiPage() {
           <SavedViewTabs
             ariaLabel="Wiki views"
             presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}` },
-              { id: 'needs_verification', label: `Needs verification · ${counts?.needs_verification ?? 0}`, icon: ShieldAlert },
-              { id: 'remembered', label: `Remembered · ${counts?.remembered ?? 0}`, icon: Bot },
-              { id: 'drifted', label: `Drifted · ${counts?.drifted ?? 0}`, icon: GitCompareArrows },
+              { id: 'all', label: countLabel('All', counts?.all) },
+              { id: 'needs_verification', label: countLabel('Needs verification', counts?.needs_verification), icon: ShieldAlert },
+              { id: 'remembered', label: countLabel('Remembered', counts?.remembered), icon: Bot },
+              { id: 'drifted', label: countLabel('Drifted', counts?.drifted), icon: GitCompareArrows },
             ]}
             savedViews={[]}
             activePresetId={view}

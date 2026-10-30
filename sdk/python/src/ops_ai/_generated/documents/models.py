@@ -66,6 +66,7 @@ class DocumentTypeIn(TypedDict, closed=True):
     offerAt: NotRequired[int | None]
     pageImages: NotRequired[bool]
     reviewBelow: NotRequired[float | None]
+    sampleFileId: NotRequired[str | None]
     templates: NotRequired[list[dict[str, Any]]]
 
 
@@ -148,8 +149,13 @@ class ExtractionRequest(TypedDict, closed=True):
     documentTypeId: NotRequired[str | None]
     fields: NotRequired[list[dict[str, Any]] | None]
     fileId: str
+    hint: NotRequired[str | None]
     many: NotRequired[bool]
+    maxPages: NotRequired[int | None]
+    maxTokens: NotRequired[int | None]
     ocr: NotRequired[bool]
+    proposePages: NotRequired[int | None]
+    read: NotRequired[Literal["fields", "text", "propose"]]
     reviewBelow: NotRequired[float | None]
     version: NotRequired[int | None]
 
@@ -340,14 +346,18 @@ class Extraction(TypedDict, closed=True):
     imageRefused: NotRequired[str | None]
     needsReview: NotRequired[list[Any] | None]
     outcome: NotRequired[Literal["ok", "review", "unreadable", "unknown"] | None]
-    pages: NotRequired[int | None]
+    pages: NotRequired[int | list[dict[str, Any]] | None]
+    partial: NotRequired[bool | None]
     path: NotRequired[Literal["template", "model"] | None]
+    proposal: NotRequired[dict[str, Any] | None]
+    readPages: NotRequired[int | None]
     records: NotRequired[list[dict[str, Any]] | None]
     rereadTokens: NotRequired[dict[str, int] | None]
     schema: NotRequired[list[dict[str, Any]] | None]
     status: Literal["queued", "running", "done", "failed", "unreadable"]
     templateId: NotRequired[str | None]
     templateMiss: NotRequired[TemplateMiss | None]
+    text: NotRequired[str | None]
 
 
 class LayoutBlock(TypedDict, closed=True):

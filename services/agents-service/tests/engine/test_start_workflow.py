@@ -18,7 +18,7 @@ from ops_agents.api.engine_runs import MAX_CHILD_DEPTH, WorkflowStarts, start_ru
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.ports import RunRefusedError
+from ops_engine.ports import RunRefusedError, ToolResult
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from tests.engine.test_worker import (  # noqa: F401
     CountingTools,  # pyright: ignore[reportUnusedImport]
@@ -284,3 +284,85 @@ async def test_an_end_marked_failed_fails_the_run_and_names_where_it_ended(
         ended = await t.runs.get(str(run["id"])) or {}
     assert (ended["status"], ended["outcome"]) == ("failed", "tool_failed")
     assert ended["error"] == "Ended at Lookup failed, an end marked as a failure" and ended["finished_at"] is not None
+
+
+class MissingCustomer(CountingTools):
+    """The bank answers that the customer does not exist: the operation's own error, the tool step's error port."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__()
+        self.reason = reason
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        return ToolResult(False, None, reason=self.reason)
+
+
+@pytest.mark.parametrize(
+    ("reason", "said"),
+    [
+        ("No customer CUS-404 at the bank", "No customer CUS-404 at the bank"),
+        # The engine's exception name and the service's status and code are for builders; a person reads the message.
+        ("CustomerNotFound: 404 not_found: No customer CUS-404 at the bank.", "No customer CUS-404 at the bank"),
+        # A bare error code reads as plain words.
+        ("not_found", "it was not found"),
+        ("budget_exhausted", "the team's model budget ran out"),
+    ],
+)
+async def test_a_failure_end_after_a_failed_step_says_which_step_failed_and_why(
+    engine: AsyncEngine,  # noqa: F811
+    tenants: Callable[[], Tenant],
+    reason: str,
+    said: str,
+) -> None:
+    """A run that reaches a failure End read "Ended at Not saved, an end marked as a failure", which says nothing a
+    person can act on (#14 staging test): the step that failed and its error, in plain words, do."""
+    t = tenants()
+    flow = parse(
+        {
+            "schemaVersion": 2,
+            "id": "save_note",
+            "name": "Save a note",
+            "nodes": [
+                {"id": "in", "type": "ops.trigger.request", "typeVersion": 1, "name": "Request"},
+                {
+                    "id": "lookup",
+                    "type": "ops.action.tool",
+                    "typeVersion": 1,
+                    "name": "Look up the customer",
+                    "parameters": {"operation": "get_customer", "input": {"customer_id": "CUS-404"}},
+                },
+                {
+                    "id": "ok",
+                    "type": "ops.flow.end",
+                    "typeVersion": 1,
+                    "name": "Saved",
+                    "parameters": {"outcome": "saved"},
+                },
+                {
+                    "id": "failed",
+                    "type": "ops.flow.end",
+                    "typeVersion": 1,
+                    "name": "Not saved",
+                    "parameters": {"outcome": "not_saved", "result": "failed"},
+                },
+            ],
+            "connections": [
+                {"from": {"node": "in", "port": "payload"}, "to": {"node": "lookup", "port": "in"}},
+                {"from": {"node": "lookup", "port": "ok"}, "to": {"node": "ok", "port": "in"}},
+                {"from": {"node": "lookup", "port": "error"}, "to": {"node": "failed", "port": "in"}},
+                {"from": {"node": "lookup", "port": "refused"}, "to": {"node": "failed", "port": "in"}},
+            ],
+        }
+    )
+    stored = await t.publish(flow)
+    with tenant_scope(t.id):
+        run, _ = await start_run(t.runs, stored, team_id=TEAM, mode="live", input={}, run_key=None, created_by="b@x")
+    await drain(worker(engine, MissingCustomer(reason), InMemorySaver()))
+    with tenant_scope(t.id):
+        ended = await t.runs.get(str(run["id"])) or {}
+    assert ended["status"] == "failed", ended
+    why = f"Look up the customer failed: {said}. The run ended at Not saved."
+    assert ended["error"] == why, ended["error"]

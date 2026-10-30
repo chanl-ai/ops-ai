@@ -90,6 +90,10 @@ def build(
     return compile_definition(BASIC, default_registry(), ports=ports, journal=journal, checkpointer=saver)
 
 
+async def _no_wait(seconds: float) -> None:
+    """Stands in for the wait between attempts."""
+
+
 def test_the_basic_definition_passes_its_checks() -> None:
     assert validate(BASIC, default_registry()) == []
 
@@ -135,12 +139,15 @@ async def test_a_crash_after_the_tool_step_returns_its_recorded_output(lookup: b
 
 
 @pytest.mark.parametrize(
-    ("recorded", "port"),
-    [(ToolResult(True, {"ref": "H-1"}), "ok"), (None, "error")],
+    ("recorded", "sent"),
+    [(ToolResult(True, {"ref": "H-1"}), []), (None, ["r4:lookup:1:2"])],
 )
-async def test_a_dangling_write_is_reconciled_by_its_key_and_never_sent_again(
-    recorded: ToolResult | None, port: str
+async def test_a_dangling_write_is_reconciled_by_its_key_and_never_sent_again_under_it(
+    recorded: ToolResult | None, sent: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Done at the gateway: its record is the result. No record: the gateway blocks the key, and the write is sent
+    under the next attempt's key, never the first (c-561)."""
+    monkeypatch.setattr("ops_engine.compiler.sleep", _no_wait)
     tools, journal, saver = FakeTools(access="write", recorded=recorded), MemoryJournal(), InMemorySaver()
     with pytest.raises(Killed):
         # Killed after the if step: the checkpoint holds fields and big, the tool step has not run.
@@ -149,20 +156,22 @@ async def test_a_dangling_write_is_reconciled_by_its_key_and_never_sent_again(
     await journal.begin(StepRow("r4", "lookup", 1, 1, "running", "write", "r4:lookup:1:1", input={}))
     g = build(tools, journal, saver)
     await g.ainvoke(None, config("r4"), durability="sync")
-    assert tools.calls == []
+    assert tools.calls == sent
     values = (await g.aget_state(config("r4"))).values
-    assert values[channel("lookup")]["port"] == port
+    assert values[channel("lookup")]["port"] == "ok"
 
 
-async def test_a_read_is_retried_and_a_write_is_not() -> None:
+async def test_a_read_is_retried_and_a_write_only_under_a_new_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ops_engine.compiler.sleep", _no_wait)
     reads, journal = FakeTools(fail=2), MemoryJournal()
     await build(reads, journal, InMemorySaver()).ainvoke({"input": PAYLOAD}, config("r5"), durability="sync")
     assert [r.status for r in await journal.steps("r5", "lookup", 1)] == ["error", "error", "ok"]
+    # The write's call raised and the gateway has no record: sent again only under attempt 2's key (c-561).
     writes, journal = FakeTools(access="write", fail=1), MemoryJournal()
     g = build(writes, journal, InMemorySaver())
     await g.ainvoke({"input": PAYLOAD}, config("r6"), durability="sync")
-    assert len(writes.calls) == 1
-    assert (await g.aget_state(config("r6"))).values[channel("failed")]["out"]["outcome"] == "tool_failed"
+    assert writes.calls == ["r6:lookup:1:1", "r6:lookup:1:2"]
+    assert (await g.aget_state(config("r6"))).values[channel("lookup")]["port"] == "ok"
 
 
 async def test_a_worker_killed_mid_write_finds_the_write_by_its_key_and_never_sends_it_again() -> None:
@@ -196,8 +205,18 @@ async def test_a_write_still_running_at_the_gateway_is_neither_done_nor_sent_aga
     assert [r.status for r in await journal.steps("r9", "lookup", 1)] == ["running"]
 
 
+class RefusingTools(FakeTools):
+    """The system refuses the write's input: an answer, so the error port, never a retry."""
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        return ToolResult(False, {"error": {"code": "INVALID_ARGUMENTS", "status": 400}})
+
+
 async def test_an_error_port_is_recorded_as_an_error_and_returned_on_a_rerun() -> None:
-    tools, journal, saver = FakeTools(access="write", fail=1), MemoryJournal(), InMemorySaver()
+    tools, journal, saver = RefusingTools(access="write"), MemoryJournal(), InMemorySaver()
     with pytest.raises(Killed):
         await build(tools, journal, saver, kill="lookup").ainvoke({"input": PAYLOAD}, config("r10"), durability="sync")
     (row,) = await journal.steps("r10", "lookup", 1)
@@ -325,16 +344,19 @@ async def test_an_agent_step_runs_a_turn_by_schema_and_a_mismatch_takes_the_erro
         assert env["out"] == {"customerId": "CUS-1", "summary": "A retail customer."}
 
 
-async def test_a_dangling_write_is_reconciled_even_if_its_operation_is_now_a_read() -> None:
-    """The row's own effects decide: an operation reclassified to read after a crash must not get its write resent."""
+async def test_a_dangling_write_is_reconciled_even_if_its_operation_is_now_a_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row's own effects decide: an operation reclassified to read after a crash is reconciled as the write it was,
+    so it is never sent again under its first key."""
+    monkeypatch.setattr("ops_engine.compiler.sleep", _no_wait)
     tools, journal, saver = FakeTools(access="read", recorded=None), MemoryJournal(), InMemorySaver()
     with pytest.raises(Killed):
         await build(tools, journal, saver, kill="big").ainvoke({"input": PAYLOAD}, config("r13"), durability="sync")
     await journal.begin(StepRow("r13", "lookup", 1, 1, "running", "write", "r13:lookup:1:1", input={}))
     g = build(tools, journal, saver)
     await g.ainvoke(None, config("r13"), durability="sync")
-    assert tools.calls == [], "a running write is never sent again"
-    assert (await g.aget_state(config("r13"))).values[channel("lookup")]["port"] == "error"
+    assert tools.calls == ["r13:lookup:1:2"], "never under its first key; once under the next, after no record"
 
 
 def test_a_parameter_error_names_its_field() -> None:

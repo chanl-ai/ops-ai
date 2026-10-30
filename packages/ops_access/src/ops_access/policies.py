@@ -32,7 +32,7 @@ class Policy:
     title: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins")
 
 
 # Which publishes wait for a second person's review (c-086, moved here by c-214), per team and area:
@@ -167,6 +167,16 @@ POLICIES: tuple[Policy, ...] = (
         title="Mask personal data in AI steps",
     ),
     Policy(
+        "plugins",
+        # No plugin is on until the platform admin turns it on for the install (c-564); teams then turn it on for
+        # themselves. A plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
+        {},
+        "Which installed plugins teams may turn on, and the settings fixed for every team.",
+        kind="plugins",
+        live=True,
+        title="Plugins",
+    ),
+    Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
@@ -175,6 +185,15 @@ POLICIES: tuple[Policy, ...] = (
 )
 
 BY_KEY: dict[str, Policy] = {p.key: p for p in POLICIES}
+
+
+def _app_client(value: object) -> bool:
+    """A plugin's platform OAuth app as the policy holds it: exactly {"id": a client id}."""
+    if not isinstance(value, dict):
+        return False
+    v = cast(dict[Any, Any], value)
+    cid = v.get("id")
+    return set(v) == {"id"} and isinstance(cid, str) and 0 < len(cid) <= 500
 
 
 def check_value(key: str, value: Any) -> Any:
@@ -198,12 +217,37 @@ def check_value(key: str, value: Any) -> Any:
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
             return {str(a): str(m) for a, m in modes.items()}
+    if policy.kind == "plugins" and isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for pid, entry in cast(dict[Any, Any], value).items():
+            if not isinstance(entry, dict) or not isinstance(cast(dict[str, Any], entry).get("enabled"), bool):
+                break
+            e = cast(dict[str, Any], entry)
+            locked: object = e.get("locked") or {}
+            if set(e) - {"enabled", "locked", "client"} or not isinstance(locked, dict):
+                break
+            fixed = cast(dict[Any, Any], locked)
+            if not all(isinstance(k, str) and isinstance(v, str | int | float | bool) for k, v in fixed.items()):
+                break
+            # The platform's own OAuth app for the plugin (c-565): its client id only; the secret is sealed in
+            # tools-service at the account and never travels in a policy.
+            client: object = e.get("client")
+            if client is not None and not _app_client(client):
+                break
+            out[str(pid)] = {"enabled": e["enabled"], "locked": {str(k): v for k, v in fixed.items()}}
+            if client is not None:
+                out[str(pid)]["client"] = {"id": str(cast(dict[str, Any], client)["id"])}
+        else:
+            return out
     takes = {
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
         "days": "a whole number of days, or null",
         "hours": "a whole number of hours from 1 to 8760",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
+        "plugins": (
+            'an object of plugin id to {"enabled": true or false, "locked": {setting: value}, "client": {"id": text}}'
+        ),
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 

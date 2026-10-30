@@ -8,13 +8,12 @@ with the filtered columns in its Index Cond, so a scan of another index under a 
 from __future__ import annotations
 
 import re
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 from uuid import uuid4
 
-import asyncpg  # pyright: ignore[reportMissingTypeStubs]
 import pytest
+from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -23,7 +22,8 @@ from ops_agents.store.events import EventLog, thread_events
 from ops_agents.store.graphs import GraphStore, graph_threads
 from ops_agents.store.service_events import listeners
 from ops_agents.store.tenancy import current_tenant, tenant_scope, tenant_tx
-from ops_checkpointer.saver import AsyncpgSaver, asyncpg_dsn
+from ops_checkpointer import CheckpointSaver
+from ops_checkpointer.tables import ops_checkpoints
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from ops_engine.store.tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_work
 from ops_store import isolation
@@ -218,66 +218,44 @@ async def test_the_runs_list_filtered_by_one_workflow_seeks_tenant_and_workflow(
         assert "ix_engine_runs_team" not in plan, plan
 
 
-async def connect(dsn: str) -> Any:
-    """An asyncpg connection, typed as Any: asyncpg ships no type information."""
-    return await asyncpg.connect(dsn)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-
-
-async def one_connection_pool(dsn: str) -> Any:
-    return await asyncpg.create_pool(dsn, min_size=1, max_size=1)  # pyright: ignore[reportUnknownMemberType]
-
-
-class Recording:
-    """A pool whose connections record what the saver executes, so the test explains the saver's own statement."""
-
-    def __init__(self, pool: Any) -> None:
-        self.pool, self.seen = pool, cast(list[tuple[str, tuple[Any, ...]]], [])
-
-    @asynccontextmanager
-    async def acquire(self) -> AsyncGenerator[Any]:
-        async with self.pool.acquire() as conn:
-            yield Recorded(conn, self.seen)
-
-    async def close(self) -> None:
-        await self.pool.close()
-
-
-class Recorded:
-    def __init__(self, conn: Any, seen: list[tuple[str, tuple[Any, ...]]]) -> None:
-        self.conn, self.seen = conn, seen
-
-    async def execute(self, query: str, *args: Any) -> str:
-        self.seen.append((query, args))
-        return await self.conn.execute(query, *args)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.conn, name)
-
-
-async def test_deleting_a_runs_checkpoints_seeks_the_run_id_in_their_metadata(engine: AsyncEngine) -> None:  # noqa: F811
-    """3000 checkpoints of 300 runs in one tenant and team: deleting two runs' checkpoints seeks the run id."""
+async def test_deleting_a_runs_checkpoints_seeks_their_run_id(engine: AsyncEngine) -> None:  # noqa: F811
+    """3000 checkpoints of 300 runs in one tenant and team: deleting two runs' checkpoints seeks the run id column, and
+    a checkpoint the saver puts carries its run's id there, so the delete finds it."""
     tenant, team = f"t_{uuid4().hex[:8]}", "team_ops"
-    dsn = asyncpg_dsn(engine.url.render_as_string(hide_password=False))
-    conn = await connect(dsn)
+    rows = [
+        {
+            "tenant_id": tenant,
+            "team_id": team,
+            "thread_id": f"th_{i % 300}",
+            "checkpoint_id": f"cp_{i}",
+            "type": "msgpack",
+            "checkpoint": b"",
+            "metadata_type": "json",
+            "metadata_blob": b"",
+            "metadata": {"run_id": f"run_{i % 300}"},
+            "run_id": f"run_{i % 300}",
+        }
+        for i in range(3000)
+    ]
+    async with engine.begin() as c:
+        await c.execute(ops_checkpoints.insert(), rows)
+    await analyse(engine, "ops_checkpoints")
+    seen: list[tuple[str, Any]] = []
+
+    def record(_conn: Any, _cursor: Any, statement: str, parameters: Any, _context: Any, _many: bool) -> None:
+        seen.append((statement, parameters))
+
+    saver = CheckpointSaver(engine, tenant_id=tenant, team_id=team)
+    put = {"configurable": {"thread_id": "th_put", "checkpoint_ns": ""}, "metadata": {"run_id": "run_1"}}
+    await saver.aput(cast(Any, put), empty_checkpoint(), {}, {})
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
     try:
-        async with conn.transaction():
-            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant)
-            await conn.executemany(
-                "INSERT INTO ops_checkpoints (tenant_id, team_id, thread_id, checkpoint_id, type, checkpoint, "
-                "metadata_type, metadata_blob, metadata) VALUES ($1, $2, $3, $4, 'msgpack', '', 'json', '', $5::jsonb)",
-                [(tenant, team, f"th_{i % 300}", f"cp_{i}", f'{{"run_id": "run_{i % 300}"}}') for i in range(3000)],
-            )
-        await conn.execute("ANALYZE ops_checkpoints")
-        pool = Recording(await one_connection_pool(dsn))
-        try:
-            await AsyncpgSaver(pool, tenant_id=tenant, team_id=team).adelete_for_runs(["run_1", "run_2"])
-        finally:
-            await pool.close()
-        [(statement, args)] = [s for s in pool.seen if "DELETE FROM ops_checkpoints" in s[0]]
-        async with conn.transaction():
-            await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant)
-            await conn.execute("SET LOCAL enable_seqscan = off")
-            plan = "\n".join(r[0] for r in await conn.fetch(f"EXPLAIN {statement}", *args))
+        await saver.adelete_for_runs(["run_1", "run_2"])
     finally:
-        await conn.close()
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+    assert await saver.aget_tuple(cast(Any, put)) is None
+    [(statement, args)] = [s for s in seen if s[0].lstrip().startswith("DELETE FROM ops_checkpoints ")]
+    async with engine.begin() as c:
+        await c.exec_driver_sql("SET LOCAL enable_seqscan = off")
+        plan = "\n".join(r[0] for r in await c.exec_driver_sql(f"EXPLAIN {statement}", args))
     assert seeks("ix_ops_checkpoints_run", "tenant_id", "team_id", "run_id")(plan), plan

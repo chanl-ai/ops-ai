@@ -64,14 +64,20 @@ await withUiStack(
 
       // Step 2: Maya sees the task's time left and nothing assigned to her yet.
       const page = await consoleSignIn(browser, consoleUrl, MAYA, PASSWORD, errors);
-      await page.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // Human Tasks opens on the queue; every task with its time left, selection and Quick view is under All tasks.
+      await page.goto(`${consoleUrl}/reviews/all`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const row = page.getByTestId(`review-row-${review.id}`);
       await row.waitFor({ timeout: 120_000 });
       const rowText = await row.innerText();
       const mineBefore = await page.getByRole('tab', { name: /^Assigned to me/ }).innerText();
       // The row names the task by its question, as its page does, never by its run id.
       const requestCell = (await row.locator('td').nth(2).innerText()).trim();
-      check('2b the row names the task by its question, not its id', requestCell.startsWith(review.question ?? review.title) && !requestCell.includes('wfrun_'), { requestCell, question: review.question });
+      // The task's page words the question from what it shows ("Check 1 field read from …"); the row uses the same words.
+      const pageView = await page.context().newPage();
+      await pageView.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(review.id)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const asked = (await pageView.getByTestId('decision-question').innerText({ timeout: 60_000 }).catch(() => '')).trim();
+      await pageView.close();
+      check('2b the row names the task by its question, as its page does, not by its id', !!asked && requestCell.startsWith(asked) && !requestCell.includes('wfrun_'), { requestCell, asked });
       check('2 the row shows the time left on the task, and nothing is assigned to her yet', /\d+h \d+m left/.test(rowText) && /· 0$/.test(mineBefore.trim()), { rowText: rowText.slice(0, 200), mineBefore });
 
       // Step 3: she takes it with Assign to me; it is hers under Assigned to me and on the sheet.

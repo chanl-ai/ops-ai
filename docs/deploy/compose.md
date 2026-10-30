@@ -3,7 +3,7 @@
 Status: current. Proven on one machine; not yet run on a bank's servers. A client team installs from a
 [release package](release-package.md) instead, with prebuilt images and no checkout.
 
-<!-- Built by c-269; the proof is deploy/compose/proof.sh. -->
+<!-- Built by an earlier change; the proof is deploy/compose/proof.sh. -->
 
 Compose runs every service, the workflow worker, the console, OPA and one proxy as containers against a PostgreSQL the
 bank runs. Nothing runs from the repository's development scripts. Compose is optional: every release still runs on
@@ -93,7 +93,7 @@ A provider key is saved on Settings > Model providers (an account admin: an admi
 ### Try it with a built-in database and the fake model
 
 `deploy/compose/try.yaml` adds a PostgreSQL (profile `postgres`) and a fake OpenAI-compatible model (profile
-`fake-model`) that answers from committed rules and calls no provider. Both were started by c-269: the PostgreSQL
+`fake-model`) that answers from committed rules and calls no provider. Both were started by an earlier change: the PostgreSQL
 profile through migrate, the first admin and a sign-in; the fake model through the full walk. Set `OPS_TRY_POSTGRES_PASSWORD` and
 `OPS_DATABASE_URL=postgresql+asyncpg://ops:<that password>@postgres:5432/ops`, add `-f deploy/compose/try.yaml
 --profile postgres --profile fake-model` to the commands above, and connect the model with

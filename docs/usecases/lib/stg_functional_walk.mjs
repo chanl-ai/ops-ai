@@ -1,5 +1,5 @@
-// Uses a deployed console the way a person checks a release: a chat turn that gets an answer, a workflow test run
-// that reaches an outcome, and every Settings page. The click walk (stg_click_walk.mjs) proves pages open; this proves
+// Uses a deployed console the way a person checks a release: a chat turn that gets an answer, a workflow run that
+// reaches its end, and every Settings page. The click walk (stg_click_walk.mjs) proves pages open; this proves
 // the three things people do most still work. Reports OK or FAIL per check with the 4xx/5xx and page errors seen.
 // STG_ORIGIN, STG_EMAIL and STG_PASSWORD come from the environment.
 import { chromium } from '@ops-ai/usecase-runner/harness';
@@ -50,30 +50,76 @@ if (hasBox) {
   report('chat turn answered', !failedMark && after > before + 40, failedMark ? 'send failed' : `answer ${after - before} chars`);
 } else report('chat composer shown', false, 'no composer');
 
-// Workflows: the first workflow opens, and a test run reaches an outcome.
+// Workflows: a workflow opens, and a run started from its form reaches an end. The first workflow listed may need a file
+// ("Extract a file"), so the walk starts the first whose form it can fill, and attaches a small sample file only when
+// none can start without one. The end is read from the run page, by name: a run that ends Not saved is not a pass.
+const SAMPLE = { name: 'staging-sample.txt', mimeType: 'text/plain', buffer: Buffer.from('A short sample for a staging test run.\n') };
+const SETTLED = ['succeeded', 'failed', 'cancelled', 'waiting'];
+let canvases = 0;
+
+/** Opens `href`, presses Start run and submits its form; the run page's id, or why it could not start. */
+async function startFrom(href, { withFile }) {
+  await page.goto(`${origin}${href}`, { waitUntil: 'domcontentloaded' });
+  if (await page.locator('[data-testid="definition-canvas"]').first().waitFor({ timeout: 30_000 }).then(() => true, () => false)) canvases++;
+  const run = page.getByRole('button', { name: /^(start run|test run)$/i }).first();
+  if (!(await run.count())) return { why: 'no Start run button' };
+  await run.click();
+  const dialog = page.getByRole('dialog').first();
+  if (!(await dialog.waitFor({ timeout: 15_000 }).then(() => true, () => false))) return { why: 'no start form' };
+  const files = dialog.locator('input[type="file"]');
+  const needsFile = (await files.count()) > 0;
+  if (needsFile && !withFile) {
+    await page.keyboard.press('Escape');
+    return { why: 'needs a file' };
+  }
+  for (let i = 0; i < (await files.count()); i++) await files.nth(i).setInputFiles(SAMPLE).catch(() => {});
+  // Empty text fields get a sample value, as a person trying the workflow would type one.
+  const fields = dialog.locator('input[type="text"]:visible, input:not([type]):visible, textarea:visible');
+  for (let i = 0; i < (await fields.count()); i++) {
+    const f = fields.nth(i);
+    if (!(await f.inputValue().catch(() => 'x'))) await f.fill('Sample').catch(() => {});
+  }
+  const go = dialog.locator('[data-testid$="start-run-submit"]').first();
+  await page.waitForTimeout(needsFile ? 3_000 : 500);
+  if (await go.isDisabled().catch(() => true)) {
+    await page.keyboard.press('Escape');
+    return { why: 'its form needs input the walk cannot fill' };
+  }
+  await go.click();
+  const at = await page.waitForURL(/\/workflows\/runs(\/[^/?]+$|\?run=)/, { timeout: 30_000 }).then(() => new URL(page.url()), () => null);
+  const runId = at && (at.searchParams.get('run') ?? decodeURIComponent(at.pathname.split('/').pop() ?? ''));
+  return runId ? { runId } : { why: 'no run page after Start' };
+}
+
 await page.goto(`${origin}/workflows`, { waitUntil: 'domcontentloaded' });
 await settle();
-const first = page.locator('main table tbody tr a[href^="/workflows/"], main [role="row"] a[href^="/workflows/"]').first();
-if (await first.waitFor({ timeout: 15_000 }).then(() => true, () => false)) {
-  const name = (await first.innerText()).trim().slice(0, 60);
-  await first.click();
-  await page.locator('[data-testid="definition-canvas"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
-  report(`workflow opens: ${name}`, (await page.locator('[data-testid="definition-canvas"]').count()) > 0);
-  const run = page.getByRole('button', { name: /^(start run|test run)$/i }).first();
-  if (await run.count()) {
-    await run.click();
-    await settle();
-    // A start form, if the workflow has inputs, is submitted as filled by its defaults.
-    const start = page.getByRole('button', { name: /^(start|run|start run|run test)$/i }).first();
-    if (await start.count()) await start.click().catch(() => {});
-    const outcome = await page
-      .locator('[aria-label="Done"], [aria-label="Failed"], [data-testid="ops-card-outcome"]')
-      .first()
-      .waitFor({ timeout: 120_000 })
-      .then(() => true, () => false);
-    const failedRun = await page.locator('[aria-label="Failed"]').count();
-    report('workflow test run reaches an outcome', outcome, failedRun ? `${failedRun} step(s) failed` : '');
-  } else report('workflow run button', false, 'no Start run button');
+const listed = await page
+  .locator('main table tbody tr a[href^="/workflows/"], main [role="row"] a[href^="/workflows/"]')
+  .evaluateAll((as) => [...new Map(as.map((a) => [a.getAttribute('href'), (a.innerText || '').split('\n')[0].trim().slice(0, 60)])).entries()].slice(0, 8));
+if (listed.length) {
+  let started = null;
+  const tried = [];
+  for (const withFile of [false, true]) {
+    for (const [href, name] of listed) {
+      if (started) break;
+      const got = await startFrom(href, { withFile });
+      if (got.runId) started = { ...got, name, withFile };
+      else if (!withFile) tried.push(`${name}: ${got.why}`);
+    }
+  }
+  report('workflow opens on its canvas', canvases > 0, started?.name ?? listed[0][1]);
+  if (started) {
+    await page.goto(`${origin}/workflows/runs/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded' });
+    let status = '';
+    for (const end = Date.now() + 120_000; Date.now() < end && !SETTLED.includes(status); await page.waitForTimeout(2_000)) {
+      status = (await page.getByTestId('run-status').innerText({ timeout: 5_000 }).catch(() => '')).trim().toLowerCase();
+    }
+    const result = page.getByTestId('run-result');
+    const outcome = (await result.count()) ? await result.getAttribute('data-outcome') : null;
+    const ended = outcome ?? 'no end';
+    const passed = status === 'succeeded' && !/not.?saved|fail|error|reject/i.test(ended);
+    report(`workflow run reaches its end: ${started.name}${started.withFile ? ' (sample file)' : ''}`, passed, `${status || 'no status'}, ended ${ended}`);
+  } else report('workflow run starts', false, tried.slice(0, 4).join('; '));
 } else report('workflow list has a workflow', false, 'empty list');
 
 // Settings: every page in the Settings tree opens without errors or not-found text.

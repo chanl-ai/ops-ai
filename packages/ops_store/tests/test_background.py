@@ -117,3 +117,16 @@ def test_state_is_late_after_two_gaps_and_stopped_after_five() -> None:
 def test_a_process_not_on_the_list_does_not_start() -> None:
     with pytest.raises(ValueError, match=r"not on ops_store\.background\.PROCESSES"):
         Beat("nightly_export", MemoryHeartbeats())
+
+
+def test_the_knowledge_schedule_is_listed_only_with_plugins_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    # With OPS_PLUGINS off kb-service never starts the schedule; listing it anyway would show it late on Background.
+    def keys() -> set[str]:
+        background.plugins_on.cache_clear()
+        return {str(p["key"]) for p in background.report([], "kb", 0.0)}
+
+    monkeypatch.delenv("OPS_PLUGINS", raising=False)
+    assert "knowledge_schedule" not in keys()
+    monkeypatch.setenv("OPS_PLUGINS", "true")
+    assert "knowledge_schedule" in keys()
+    background.plugins_on.cache_clear()

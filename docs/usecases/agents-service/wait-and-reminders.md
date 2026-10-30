@@ -1,6 +1,6 @@
 # A workflow waits for a time or date and reminds a person
 
-Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api, ui. Card: c-277.
+Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 A court order notice gives the bank a date to respond by. The workflow keeps that date itself: a Wait step pauses the run for
 a duration or until a date read from an earlier step, and goes on by `out` when the time has passed. A date already
@@ -42,5 +42,5 @@ reminder is taken as a resume.
 
 ## What this does not cover
 
-The Schedule trigger (c-370). What a reminder does next, an email or a reassignment, is a workflow a team adds for the
+The Schedule trigger. What a reminder does next, an email or a reassignment, is a workflow a team adds for the
 `task.reminder` event; none is shipped. Reminders on steps other than Human review.

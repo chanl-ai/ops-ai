@@ -4,7 +4,6 @@ import * as React from 'react';
 import Link from 'next/link';
 import { UserRoundPlus } from 'lucide-react';
 
-import { RunStateDetail } from '@/components/cases/run-state';
 import { EvidenceExportButton } from '@/components/files/file-actions';
 import type { ReadChecks, ReadEdits } from '@/components/reviews/document-read';
 import { isOpen } from '@/components/reviews/review-columns';
@@ -15,7 +14,6 @@ import { TaskDecide } from '@/components/tasks/task-page';
 import type { TaskView } from '@/components/tasks/task-regions';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useRunState } from '@/hooks/case-queries';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 
@@ -54,8 +52,6 @@ export function DecisionPanel({
 }) {
   const open = isOpen(review);
   const canDecide = open && review.canDecide !== false;
-  // A workflow's paused step is a thread whose state holds the record the step is about; a runner step has none.
-  const runState = useRunState(review.origin?.kind === 'workflow' && review.kind === 'approval' && !review.id.startsWith('wfrun_') ? review.id : null);
   return (
     <aside className={cn('flex min-h-0 min-w-0 flex-col rounded-lg border bg-card', className)} aria-label="Decision" data-testid="decision-panel">
       <header className="flex flex-col gap-2 border-b p-4">
@@ -102,7 +98,6 @@ export function DecisionPanel({
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="decision-body">
               <TaskDecide review={review} view={view} edits={edits} onEdit={canDecide && review.read?.editable ? onEdit : undefined} checks={canDecide ? checks : undefined} />
-              {runState.data && <RunStateDetail runId={review.id} state={runState.data} isPending={false} isError={false} onRetry={() => runState.refetch()} />}
               {choice}
             </div>
             {/* Sticky for the one-pane phone view, where the page scrolls; beside the evidence the panel is bounded and never moves. */}

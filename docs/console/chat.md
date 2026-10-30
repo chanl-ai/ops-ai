@@ -1,6 +1,6 @@
 # Chat in the console
 
-Status: current (c-055). How the chat thread is built, how tool results become widgets, and how a new use case adds
+Status: current. How the chat thread is built, how tool results become widgets, and how a new use case adds
 data rather than components.
 
 ## The thread is AI Elements, behind one wrapper
@@ -83,4 +83,4 @@ none of the existing renderers gives, and add it to the registry, not to a page.
 | Every shape with sample data | `/dev/widgets` (dev server only), parts in `apps/console/src/lib/widgets/sample-parts.json`; uc-073 |
 | Widgets through a real chat | uc-061 (fake bank's insights spec, scripted model) |
 | The thread blocks, citations, remote images | uc-074 |
-| Ask, cite, approve and reject in a thread | uc-072 (approval waits on platform step-up, c-055 T022) |
+| Ask, cite, approve and reject in a thread | uc-072 (approval waits on platform step-up, an earlier change T022) |

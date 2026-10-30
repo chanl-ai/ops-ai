@@ -1,6 +1,6 @@
 # A builder connects a team mailbox and binds a workflow to it
 
-Status: current. Id: `uc-199`. Service: `agents-service`. Layers: api, ui. Card: c-199.
+Status: current. Id: `uc-199`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
 
 A team mailbox is a record on Channels > Email (agents-service `/v1/channels/mailboxes`), not a settings line: a
 builder connects it with a Secrets-page secret as its password, tests it, and picks it in a workflow's Email received

@@ -26,7 +26,7 @@ from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
 from .auth import Authenticator
-from .code_runs import CodeExecutor, resolve_handles, run_caller, run_claims
+from .code_runs import CodeExecutor, resolve_handles, run_acting_for, run_caller, run_claims
 from .egress import EgressPolicy, egress_client
 from .executor import Executor, HttpExecutor
 from .gateway_calls import API, WRITES, CallRequest, GatewayCalls, Outcome, Refused
@@ -35,6 +35,8 @@ from .mocks import MockAnswers
 from .modules.directory import Directory
 from .modules.policy import WriteApprovals
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
+from .plugins.executor import PluginExecutor
+from .plugins.host import PluginHost
 from .registry import Resolved, ToolRegistry
 from .secrets import SecretResolver
 from .send_check import SendCheck
@@ -105,6 +107,8 @@ class GrantableOperation(Out):
     """A tool an agent may be granted: a published operation, with what a model needs to choose and call it."""
 
     name: str
+    # What people see in place of the name (a plugin tool's manifest title); none for a tool without one.
+    title: str | None = None
     description: str
     access: str
     input_schema: dict[str, Any]
@@ -168,6 +172,8 @@ def create_gateway_app(
     authenticator: Authenticator | None = None,
     directory: Directory | None = None,
     code: CodeExecutor | None = None,
+    plugins: PluginHost | None = None,
+    cursor_key: bytes = b"",
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -187,11 +193,14 @@ def create_gateway_app(
     quiet_request_logs()
     rules = policy if policy is not None else POLICY_FILE.read_text()
     client = http_client or (egress_client(egress) if egress else httpx.AsyncClient())
+    http_executor = HttpExecutor(client, egress, secret_resolver, authenticator)
     executor = Executor(
         runner,
-        HttpExecutor(client, egress, secret_resolver, authenticator),
+        http_executor,
         mocks=MockAnswers(MockStore(log.engine)),
         code=code,
+        # A plugin's Python tools run here, with the http executor's sign-in and egress client (c-564).
+        plugins=PluginExecutor(plugins, http_executor, cursor_key) if plugins is not None else None,
     )
     expected = policy_hash(rules)
     counters = rates or RateWindows(log.engine)
@@ -290,7 +299,7 @@ def create_gateway_app(
     async def tool_access(name: str, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
         on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
-        access, policy, output = await registry.described(name, caller.tenant_id, caller.team_id)
+        access, policy, output, deadline = await registry.described(name, caller.tenant_id, caller.team_id)
         if access == "unknown":
             return as_response(Refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"]))
         approval = (
@@ -303,7 +312,14 @@ def create_gateway_app(
             else {"approvers": 1, "approverTeam": None, "stepUp": False}
         )
         # `output`: what the operation answers (c-353), a step's output fields before it runs; null when unknown.
-        data = {"name": name, "access": access, "approval": approval, "outputSchema": output}
+        # `deadlineSeconds`: how long the gateway may take over one call, which the engine's step waits out (c-561).
+        data = {
+            "name": name,
+            "access": access,
+            "approval": approval,
+            "outputSchema": output,
+            "deadlineSeconds": deadline,
+        }
         return JSONResponse({"success": True, "data": data})
 
     @app.post("/v1/fences", tags=["gateway"])
@@ -343,14 +359,20 @@ def create_gateway_app(
 
     @app.post("/v1/calls", tags=["gateway"], response_model=Envelope[CallResult], responses=error_responses())
     async def call(  # pyright: ignore[reportUnusedFunction]
-        body: CallIn, caller: CurrentService, x_lease_generation: Annotated[int | None, Header()] = None
+        body: CallIn,
+        caller: CurrentService,
+        x_lease_generation: Annotated[int | None, Header()] = None,
+        x_acting_for: Annotated[str | None, Header()] = None,
     ) -> JSONResponse:
+        # Whom the call acts for comes only from the token platform-service signed for the calling service (c-558).
+        acting = await resolved_auth.identity.acting_for(x_acting_for, caller) if x_acting_for else None
         request = CallRequest(
             tool=body.tool,
             input=body.input,
             key=body.key,
             run_context=body.run_context.model_dump(),
             approval_token=body.approval_token,
+            acting_for=acting,
         )
         found = await calls.call(caller, request, generation=x_lease_generation, channel=API, sees=team_view(caller))
         return as_response(found)
@@ -375,6 +397,7 @@ def create_gateway_app(
             # The same call with the same input in one run is the same call: a write is claimed once.
             key=f"{claims['key']}:{body.tool}:{input_hash(body.input)[:16]}",
             run_context={"act": f"code:{claims['operation']}", "environment": claims.get("environment")},
+            acting_for=run_acting_for(claims),
         )
 
         async def prepare(resolved: Resolved | None, args: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:

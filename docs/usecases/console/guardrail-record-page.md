@@ -1,6 +1,6 @@
 # A guardrail has its own page and an agent pins one of its versions
 
-Status: current. Id: `uc-104`. Service: `console`. Layers: ui. Card: c-110.
+Status: current. Id: `uc-104`. Service: `console`. Layers: ui. Card: an earlier change.
 
 A guardrail opens on its own page, like an agent: its rule is edited there and saved as a new draft version, published
 from the header, and every version is listed with its state and note. An agent pins any published version from its

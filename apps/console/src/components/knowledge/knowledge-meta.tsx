@@ -20,6 +20,7 @@ import {
   MinusCircle,
   PauseCircle,
   Presentation,
+  Puzzle,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -179,7 +180,14 @@ export const SOURCE_TYPES: SourceTypeMeta[] = [
   { type: 'salesforce', label: 'Salesforce Knowledge', short: 'Salesforce', description: 'Org, article types, data categories, language, published channel.', group: 'Connected apps', icon: Building2, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'LastModifiedDate since cursor', scopeLabel: 'Article types' },
 ];
 
-export const sourceTypeMeta = (type: SourceType) => SOURCE_TYPES.find((t) => t.type === type)!;
+/**
+ * A source read through an installed plugin's list and get tools (c-564). Not in SOURCE_TYPES: the add dialogs offer
+ * those, and a plugin source is made through kb-service's API until a Plugins page exists.
+ */
+const PLUGIN_SOURCE: SourceTypeMeta = { type: 'tool', label: 'Plugin source', short: 'Plugin', description: "Read through an installed plugin's list and get tools.", group: 'Connected apps', icon: Puzzle, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Each item\'s last-changed time since the last sync', scopeLabel: 'Source' };
+
+/** A type this console does not know reads as a plugin source with its own name, so its pages still open. */
+export const sourceTypeMeta = (type: SourceType): SourceTypeMeta => SOURCE_TYPES.find((t) => t.type === type) ?? (type === 'tool' ? PLUGIN_SOURCE : { ...PLUGIN_SOURCE, type, label: type, short: type });
 
 export function SourceTypeIcon({ type, className }: { type: SourceType; className?: string }) {
   const Icon = sourceTypeMeta(type).icon;
@@ -248,10 +256,11 @@ export const PARSING_OPTIONS = [
   { k: 'vision' as const, label: 'Vision for figures', tip: 'Describes images and charts into text.' },
 ];
 
+// kb-service searches by keyword and does not rerank yet (service.py's defaults), so no preset claims either.
 export const RETRIEVAL_PRESETS = {
-  balanced: { searchMode: 'hybrid', rerank: true, chunkLimit: 8, threshold: 0.5, answerShape: 'answer_with_citations', temperature: 0.1 },
-  precise: { searchMode: 'hybrid', rerank: true, chunkLimit: 5, threshold: 0.65, answerShape: 'answer_with_citations', temperature: 0 },
-  raw: { searchMode: 'hybrid', rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: 'chunks' },
+  balanced: { searchMode: 'keyword', rerank: false, chunkLimit: 8, threshold: 0.5, answerShape: 'answer_with_citations', temperature: 0.1 },
+  precise: { searchMode: 'keyword', rerank: false, chunkLimit: 5, threshold: 0.65, answerShape: 'answer_with_citations', temperature: 0 },
+  raw: { searchMode: 'keyword', rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: 'chunks' },
 } as const;
 
 /** Why an item is not searched as-is: the rule, the missing metadata, the copy it duplicates or the version that replaced it. */

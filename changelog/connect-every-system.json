@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-30",
+  "title": "Connect every system for real, from one dialog",
+  "description": "A team admin connects each system its tools use from one dialog, with keys or the team's own app for test and production, each tested before it counts as working. Each environment keeps its own health, so a failing sandbox no longer marks a working production connection as broken.",
+  "tag": "new",
+  "cards": [
+    "c-580"
+  ],
+  "switch": "NEXT_PUBLIC_OPS_REAL_CONNECTIONS"
+}

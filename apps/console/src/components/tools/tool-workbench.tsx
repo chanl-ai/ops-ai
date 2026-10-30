@@ -11,12 +11,14 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { HttpOperationBuilder } from '@/components/tools/http-operation-builder';
+import { MockAnswers } from '@/components/tools/mock-answers';
 import { fieldDrafts, InputSchemaEditor, schemaOf, type FieldDraft } from '@/components/tools/input-schema-editor';
 import { unusedInputs } from '@/components/tools/operation-sheet';
 import { TestConsole } from '@/components/tools/test-console';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { useRealConnections } from '@/hooks/systems-queries';
 import { cn } from '@/lib/utils';
 import type { HttpOperationInput, ModuleOperation, ModuleTestInput, ModuleTestResult, OperationPatch, RunContextOption } from '@/lib/types/tool-modules';
 import { SplitView } from '@/components/shared/setting/split-view';
@@ -110,6 +112,8 @@ export interface ToolWorkbenchProps {
  */
 export function ToolWorkbench(p: ToolWorkbenchProps) {
   const { op, draft: d } = p;
+  // With real connections on, an operation keeps an ordered list of mock answers in place of its one mock (c-580).
+  const mockAnswers = useRealConnections();
   const set = (patch: Partial<WorkbenchDraft>) => p.onDraftChange({ ...d, ...patch });
   const [secretValues, setSecretValues] = React.useState<Record<string, string>>({});
   // A value typed for one run leaves the page when the run ends, whether it answered or failed: React writes a controlled
@@ -207,11 +211,15 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
               </Rows>
             )}
           </Section>
-          <Section title="Mock response" description="Answers a run against the mock, and every write in a test. Staged and reviewed like any edit.">
-            <FormField id="wb-stub" label="Response JSON" error={stub.error}>
-              <Textarea id="wb-stub" rows={8} value={d.stub} onChange={(e) => set({ stub: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": 1520.33}'} aria-invalid={!!stub.error} />
-            </FormField>
-          </Section>
+          {mockAnswers ? (
+            <MockAnswers moduleId={p.moduleId} opId={op.id} />
+          ) : (
+            <Section title="Mock response" description="Answers a run against the mock, and every write in a test. Staged and reviewed like any edit.">
+              <FormField id="wb-stub" label="Response JSON" error={stub.error}>
+                <Textarea id="wb-stub" rows={8} value={d.stub} onChange={(e) => set({ stub: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": 1520.33}'} aria-invalid={!!stub.error} />
+              </FormField>
+            </Section>
+          )}
           <Section title="Transform" description="A Jinja2 template over the response as data. The run applies it as typed.">
             <FormField id="wb-transform" label="Template" optional error={p.result?.transformError}>
               <Textarea id="wb-transform" rows={5} value={d.transform} onChange={(e) => set({ transform: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": {{ data.balance }}}'} aria-invalid={!!p.result?.transformError} />

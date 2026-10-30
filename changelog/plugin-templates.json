@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-30",
+  "title": "Install the agents and workflows a plugin brings",
+  "description": "While a plugin is on for the team, its agents, skills, workflows and document types are listed, and each can be installed as the team's own copy to edit and publish like any other.",
+  "tag": "new",
+  "cards": ["c-590"],
+  "switch": "NEXT_PUBLIC_OPS_PLUGINS"
+}

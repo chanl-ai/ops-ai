@@ -18,6 +18,7 @@ from typing import Any, Literal
 import sqlalchemy as sa
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from sqlalchemy.dialects import mssql as mssql_dialect
 
 TENANT_KEY = "tenant_scoped"
 TENANT_SCOPED: dict[str, Any] = {TENANT_KEY: True}
@@ -413,3 +414,33 @@ def _describe(diff: Any) -> str:
         return f"{kind} {table}.{column}: database {rest[-2]!r}, metadata {rest[-1]!r}"
     side = "in metadata, not in the database" if kind.startswith("add_") else "in the database, not in metadata"
     return f"{kind} {where} {side}"
+
+
+# Full-text search on SQL Server ----------------------------------------------------------------------------------
+
+# A table SQL Server indexes for full-text search: info={FULL_TEXT: full_text("catalog", "column", ...)}. PostgreSQL
+# needs no index for it (its queries narrow to one person before matching).
+FULL_TEXT = "full_text"
+
+
+def full_text(catalog: str, *columns: str) -> dict[str, Any]:
+    return {FULL_TEXT: {"catalog": catalog, "columns": columns}}
+
+
+def mssql_full_text_ddl(table: sa.Table) -> list[str]:
+    """SQL Server, outside a transaction: the catalog and full-text index the table's FULL_TEXT marking asks for,
+    keyed by its primary key, each made only where Full-Text Search is installed and it is missing. Without Full-Text
+    Search a store counts matching words instead, so an install needs no extra component."""
+    spec = table.info.get(FULL_TEXT)
+    if not spec:
+        return []
+    quote = mssql_dialect.dialect().identifier_preparer.quote
+    catalog, columns = spec["catalog"], ", ".join(quote(c) for c in spec["columns"])
+    return [
+        "IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN "
+        f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = '{catalog}') "
+        f"EXEC('CREATE FULLTEXT CATALOG {catalog}'); "
+        f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('{table.name}')) "
+        f"EXEC('CREATE FULLTEXT INDEX ON {table.name} ({columns}) KEY INDEX {table.primary_key.name} "
+        f"ON {catalog} WITH CHANGE_TRACKING AUTO'); END"
+    ]

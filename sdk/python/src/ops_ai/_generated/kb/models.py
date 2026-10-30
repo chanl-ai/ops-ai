@@ -402,6 +402,7 @@ class SourceDetail(TypedDict, closed=True):
 
 class SourceIn(TypedDict):
     collection: NotRequired[str]
+    config: NotRequired[dict[str, Any] | None]
     fileIds: NotRequired[list[str]]
     kbIds: NotRequired[list[str]]
     name: str

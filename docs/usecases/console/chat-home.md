@@ -1,9 +1,9 @@
 # Staff start, follow and finish their work in chat
 
-Status: current. Id: `uc-469`. Service: `console` with `agents-service`. Layers: ui. Card: c-469.
+Status: current. Id: `uc-469`. Service: `console` with `agents-service`. Layers: ui. Card: an earlier change.
 
-A person signs in to Chat's home in the Focus layout: the composer, four suggested starts and what needs them, with the
-console sidebar folded to its icon rail. The team's default agent answers with cards drawn from the records themselves
+A person signs in to Chat's home beside the open sidebar: the composer and hints from their own work, or four
+general starts when nothing waits. The team's default agent answers with cards drawn from the records themselves
 (case, Human Task, run, workflow start), and the card's buttons act as the person through the record's own route.
 
 ## Preconditions
@@ -18,12 +18,12 @@ console sidebar folded to its icon rail. The team's default agent answers with c
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Maya signs in | She lands on /chat, the sidebar folded, four starts |
-| 2 | She presses "What needs me today" | The answer carries the dispute's Human Task as a card with Approve, values in words |
+| 1 | Maya signs in | She lands on /chat beside the open sidebar, with hints or starts |
+| 2 | She asks "What needs me today?" in the composer | The answer carries the dispute's Human Task as a card with Approve, values in words |
 | 3 | She approves from the card, signing in again if the task asks | The card says so and the run leaves the decision step |
 | 4 | She asks for the run | The run card no longer waits for a person |
 | 5 | She reloads | The task card reads "Approved by …" with no buttons |
-| 6 | She opens Cases | The sidebar is back |
+| 6 | She opens Cases | The sidebar is as it was |
 | 7 | Throughout | No page error |
 
 The non-vacuous check is step 5: the card is drawn from the record on every read, so a decided task never offers its
@@ -33,4 +33,4 @@ buttons again.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-469-ui.mjs` | passing |
+| ui | `console/scripts/test-uc-469-ui.mjs` | failing: setup, the sample team's card dispute (2026-10-28) no longer waits on its decision; the layout steps 1, 5b and 6 pass |

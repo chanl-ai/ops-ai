@@ -19,6 +19,7 @@ from pathlib import Path
 
 import httpx
 
+from ops_service_kit import harness_containers
 from ops_service_kit.settings import Settings
 
 # The directory compose mounts at /policy: gateway.rego and data.json (the registered identities).
@@ -34,11 +35,14 @@ def start() -> tuple[str, str]:
     if settings.infra == "external":
         return "", settings.opa_url
     # OPA 1.x listens on localhost inside the container by default, which a published port cannot reach.
-    run = [
-        *("docker", "run", "-d", "--rm", "-p", "127.0.0.1::8181", "-v", f"{POLICY_DIR}:/policy:ro", IMAGE),
-        *("run", "--server", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"),
-    ]
-    cid = subprocess.run(run, capture_output=True, text=True, check=True).stdout.strip()
+    started = harness_containers.run(
+        [
+            *("-p", "127.0.0.1::8181", "-v", f"{POLICY_DIR}:/policy:ro", IMAGE),
+            *("run", "--server", "--addr", "0.0.0.0:8181", "--log-level", "error", "/policy"),
+        ]
+    )
+    started.check_returncode()
+    cid = started.stdout.strip()
     try:
         bound = subprocess.run(["docker", "port", cid, "8181/tcp"], capture_output=True, text=True, check=True).stdout
         url = f"http://127.0.0.1:{bound.splitlines()[0].rsplit(':', 1)[1]}"

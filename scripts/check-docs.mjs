@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Enforces where documentation lives (CONTRIBUTING.md, "Where docs live"). Full docs live only under docs/, in a
 // folder that maps to a part of the repo. Code folders carry a short README that points into docs/.
-// Exit 1 lists every violation; run from the repo root.
+// Exit 1 lists every violation; run from the repo root. Files given as arguments are the only ones checked one by one
+// (scripts/verify-staged.sh passes a commit's staged files); the index's entries are checked either way.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
@@ -24,8 +25,8 @@ const DATED = /(^|\/)\d{4}-\d{2}-\d{2}[-_.]/;
 // Topic names only: a number or sequence prefix (01-, ADR-0001-, E2-) fails; ids live in the title.
 const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*\.(md|html|pdf|png|svg|gif|yaml)$/;
 
-const files = execFileSync('git', ['ls-files', '--cached'], { encoding: 'utf8' })
-  .split('\n')
+const named = process.argv.slice(2);
+const files = (named.length ? named : execFileSync('git', ['ls-files', '--cached'], { encoding: 'utf8' }).split('\n'))
   .filter((f) => f && !IGNORED.test(f) && !GENERATED.test(f) && existsSync(f));
 
 const problems = [];

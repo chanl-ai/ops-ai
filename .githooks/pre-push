@@ -1,0 +1,22 @@
+#!/bin/sh
+# ops-ai push check. Before a push, the checks the pushed commits can affect, run thoroughly: each touched service's verify and each touched
+# package's tests, plus the members that list a touched package themselves, side by side on their own test databases.
+# It runs scripts/verify-changed.sh through verify-head.sh on the pushed commit's export, never on the working tree.
+# The commit gate (pre-commit) runs only the quick checks the staged paths need. The full suite runs on each new HEAD (the
+# QA runner) and before a snapshot leaves (the planning repo scripts/ops-ai/repo.sh). A branch new to the remote has no base,
+# so it gets the full suite. codeloop's own pre-push hook (kept as pre-push.codeloop by scripts/install-hooks.sh) runs
+# first, on the same refs.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+refs=$(cat)
+d=$(git rev-parse --git-dir) || exit 1
+if [ -x "$d/hooks/pre-push.codeloop" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.codeloop" "$@" || exit $?; fi
+zero=0000000000000000000000000000000000000000
+printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ -n "$local_sha" ] || continue
+  [ "$local_sha" = "$zero" ] && continue  # a delete sends no commits
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    VERIFY_REF=$local_sha VERIFY_SINCE=$remote_sha VERIFY_CHANGED_DEPTH=direct QA_LOCAL=1 scripts/verify-head.sh </dev/null
+  else
+    VERIFY_REF=$local_sha QA_LOCAL=1 scripts/verify-head.sh </dev/null
+  fi || { echo "pre-push: the checks on $local_sha failed (above); fix the code, do not bypass with --no-verify"; exit 1; }
+done

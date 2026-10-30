@@ -28,7 +28,9 @@ host on the egress allow-list, and publishes one read module on each.
 |---|---|---|
 | api | `tools-service/scripts/test-uc-038-api.py` | passing |
 
+In the console: an operation's test panel runs a read against the bank's test environment (uc-086's ui script, step 6). The live egress run needs OPS_LIVE_EGRESS=1 and stays at the api layer.
+
 ## Non-vacuous check
 
-`the test console's Test environment read reached postman-echo.com, not the stub`: before c-038 the sandbox target
+`the test console's Test environment read reached postman-echo.com, not the stub`: before an earlier change the sandbox target
 answered from the stub with no host, and `stubbed` did not exist.

@@ -1,6 +1,6 @@
 # Steps read in sentences wherever a person reads them
 
-Status: current. Id: `uc-508`. Service: `console` on agents-service. Layers: ui. Card: c-508.
+Status: current. Id: `uc-508`. Service: `console` on agents-service. Layers: ui. Card: an earlier change.
 
 A workflow's steps are worded once, by the API, and every page a person reads draws those words: Activity's rows, a
 Human Task's "What it changes", the case list's first response and the run page. Before this, each page worded steps
@@ -32,7 +32,7 @@ Screenshots are saved under `evidenceDir('508', 'uc')`. Set `OPS_USECASE_DB` to 
 
 ## Non-vacuous check
 
-Run on a clone at `dd22f660`, the commit before c-508's first change, steps 2 to 5 fail: Activity titles
+Run on a clone at `dd22f660`, the commit before an earlier change's first change, steps 2 to 5 fail: Activity titles
 `list_accounts` and `search_customers`, the task carries no labels, First response reads due after James's note, and
 the Run panel reads "Outcome held" and "uc508_hold v1" (`uc-red.txt` under `evidenceDir('508')`). On this commit all
 six pass (`uc-green.txt` there).

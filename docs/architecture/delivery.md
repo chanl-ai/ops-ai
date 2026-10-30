@@ -48,7 +48,7 @@ Ordered by how much the answer could change the design.
 |---|---|---|---|
 | 1 | Mailbox on a real tenant | The first workflow's channel; large attachments and sender authentication are untested | Replay sample mail through `GraphMailSource` against a test tenant, with PostgreSQL numbers |
 | 2 | Delegation token with an `act` claim from the IdP | platform-service issues the tokens today; a run acting for a person on an external IdP's authority is untested (overview open question 6) | One token exchange against a test tenant |
-| 3 | The `ops_engine` runner | Slice 1 (c-061) exists; workflows still run on the agents-service graphs | Run the conformance suite through `ops_engine` ([workflow-runner.md](workflow-runner.md)) |
+| 3 | The `ops_engine` runner | Slice 1 exists; workflows still run on the agents-service graphs | Run the conformance suite through `ops_engine` ([workflow-runner.md](workflow-runner.md)) |
 | 4 | Decide as the only resume door, in `ops_hitl` | Decide-then-resume exists (uc-008), but a caller of `runs` can still resume a policy-owned pause | `runs` answers 409 for a policy-owned interrupt; move the facade routes into the `ops_hitl` package under `/v1/reviews` |
 | 5 | Console chat on the thread calls | Chat runs on its own routes with a dev approval token, so the gateway refuses chat writes when on | Run chat as `agent_wrapper` threads; uc-001 and uc-002 unchanged |
 | 6 | Key budgets and chat metering | Thread budgets exist; key budgets admit every key and chat routes are not metered | A per-key ledger in models-service on `ops_metering`; meter chat or move it onto the graph path |

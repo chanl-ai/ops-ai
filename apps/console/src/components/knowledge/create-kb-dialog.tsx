@@ -13,9 +13,9 @@ import type { KnowledgeBaseInput, RetrievalPreset } from '@/lib/types/knowledge'
 import { cn } from '@/lib/utils';
 
 const PRESETS: { value: RetrievalPreset; label: string; description: string }[] = [
-  { value: 'balanced', label: 'Balanced', description: 'Hybrid search, rerank on, 8 chunks, threshold 0.50, answer synthesis on. A good default for policy and product content.' },
-  { value: 'precise', label: 'Precise', description: 'Hybrid, rerank on, 5 chunks, threshold 0.65, temperature 0. Fewer answers, fewer wrong ones. For fees, limits and regulated wording.' },
-  { value: 'raw', label: 'Raw retrieval', description: 'Hybrid, rerank off, 10 chunks, threshold 0.40, no synthesis. Returns chunks only, for an agent to answer from.' },
+  { value: 'balanced', label: 'Balanced', description: 'Keyword search, 8 chunks, threshold 0.50, answer synthesis on. A good default for policy and product content.' },
+  { value: 'precise', label: 'Precise', description: 'Keyword search, 5 chunks, threshold 0.65, temperature 0. Fewer answers, fewer wrong ones. For fees, limits and regulated wording.' },
+  { value: 'raw', label: 'Raw retrieval', description: 'Keyword search, 10 chunks, threshold 0.40, no synthesis. Returns chunks only, for an agent to answer from.' },
 ];
 
 /**

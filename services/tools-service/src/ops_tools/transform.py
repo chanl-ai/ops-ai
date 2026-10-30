@@ -163,13 +163,15 @@ def _why(e: BaseException) -> str:
     return f"The response transform failed: {type(e).__name__}."
 
 
-def _child(conn: Connection, template: str, data: Any) -> None:
+def _child(conn: Connection, template: str, data: Any, settings: Any = None) -> None:
     """Runs in the render process: renders and sends ("ok", text) or ("error", why)."""
     if sys.platform.startswith("linux"):
         # Address space, not resident memory: generous, so the parent's resident check usually fires first.
         resource.setrlimit(resource.RLIMIT_AS, (4 * MEMORY_LIMIT, 4 * MEMORY_LIMIT))
     try:
-        conn.send(("ok", _ENV.from_string(template).render(data=data, range=_budgeted_range())))
+        conn.send(
+            ("ok", _ENV.from_string(template).render(data=data, settings=settings or {}, range=_budgeted_range()))
+        )
     except BaseException as e:  # MemoryError included: the child reports, the parent never sees a traceback.
         conn.send(("error", _why(e)))
     finally:
@@ -194,9 +196,9 @@ _CTX = multiprocessing.get_context("forkserver")
 _CTX.set_forkserver_preload(["ops_tools.transform", "ops_tools.expressions"])
 
 
-def _run(template: str, data: Any) -> tuple[str, str]:
+def _run(template: str, data: Any, settings: Any = None) -> tuple[str, str]:
     """Blocking: renders in a child and watches it. Returns ("ok", text) or ("error", why)."""
-    return watch(_child, (template, data), "The response transform")
+    return watch(_child, (template, data, settings), "The response transform")
 
 
 def watch(target: Callable[..., None], args: tuple[Any, ...], what: str) -> tuple[str, Any]:
@@ -225,10 +227,11 @@ def watch(target: Callable[..., None], args: tuple[Any, ...], what: str) -> tupl
         receive.close()
 
 
-async def apply(template: str, data: Any) -> tuple[Any, str | None]:
+async def apply(template: str, data: Any, settings: Any = None) -> tuple[Any, str | None]:
     """The transformed output and None, or `data` unchanged and why the render failed. Rendered text that parses as
-    JSON is returned as JSON, otherwise as the text. `data` must already be scrubbed of secrets."""
-    kind, text = await asyncio.to_thread(_run, template, data)
+    JSON is returned as JSON, otherwise as the text. `data` must already be scrubbed of secrets. `settings` is a
+    plugin's merged settings (c-564), read as `settings.<name>`; it holds no secret values."""
+    kind, text = await asyncio.to_thread(_run, template, data, settings)
     if kind != "ok":
         return data, text
     if len(text) > MAX_RENDERED:

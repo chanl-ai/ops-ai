@@ -1,5 +1,5 @@
 {
   "ops": {
-    "identities": ["service:agents"]
+    "identities": ["service:agents", "service:kb"]
   }
 }

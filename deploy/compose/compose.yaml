@@ -4,6 +4,10 @@ name: ops-runtime
 services:
   postgres:
     image: ${OPS_BASE_IMAGE_PREFIX:-}postgres:17-alpine
+    # One Postgres serves the shared stack, every isolated use-case stack, the QA run and the test suites, each pool up to
+    # 15 connections per service; the default of 100 ran out with four isolated stacks up ("too many clients already").
+    # Takes effect when the container is recreated.
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: ops
       POSTGRES_PASSWORD: ops

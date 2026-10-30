@@ -32,6 +32,8 @@ A team whose toolWritesNeedApproval policy is on still has the call wait for a p
 |---|---|---|
 | api | `tools-service/scripts/test-uc-230-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-230 LAYER=api` (2026-10-18) |
 
+In the console: uc-246's ui script reads a mixed court order email and sends one webhook per document through `notify_webhook`, which the bank stand-in's receiver lists once each. The missing secret and the replayed call stay at the api layer.
+
 ## Non-vacuous check
 
 Step 2 is the receiver refusing an unsigned call: with the operation's header removed, step 3 fails the same way.

@@ -49,7 +49,8 @@ async def test_an_account_admin_sees_every_listed_process_and_every_team_s_jobs(
     r = await c.get("/v1/background", headers=account_admin())
     assert r.status_code == 200, r.text
     page = r.json()["data"]
-    assert [p["key"] for p in page["processes"]] == [p.key for p in PROCESSES]
+    # A process switched off where it runs (knowledge_schedule without plugins) is not listed.
+    assert [p["key"] for p in page["processes"]] == [p.key for p in PROCESSES if p.only_if is None or p.only_if()]
     by_key = {p["key"]: p for p in page["processes"]}
     # Not configured in tests, so their processes read not reported rather than vanishing.
     assert {by_key[k]["state"] for k in ("files_relay", "documents_relay", "tools_relay", "document_reading")} == {

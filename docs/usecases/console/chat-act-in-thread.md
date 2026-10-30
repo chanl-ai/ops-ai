@@ -25,7 +25,7 @@ The place-wire-hold operation needs two approvers, so approving it needs a step-
 chat may approve it (allow_self_approval_in_chat). The Branch Concierge has no write that needs a step-up and its
 knowledge has no passage the scripted model cites, so the Wire Fraud Sentinel carries this flow.
 
-The step-up under platform sign-in re-checks Maya's password at platform-service (c-055 T022).
+The step-up under platform sign-in re-checks Maya's password at platform-service (an earlier change T022).
 
 ## Acceptance layers
 

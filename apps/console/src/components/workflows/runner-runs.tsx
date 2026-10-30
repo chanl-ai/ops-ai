@@ -68,7 +68,7 @@ const columns: ColumnDef<Row>[] = [
 ];
 
 /**
- * Runs of the workflows built on the canvas (Runner · v2), from agents-service `GET /v1/runs`: paged, filtered and
+ * Runs of the team's workflows, from agents-service `GET /v1/runs`: paged, filtered and
  * counted on the server. A row opens the run's own page with its graph and steps.
  */
 export function RunnerRuns() {
@@ -82,7 +82,7 @@ export function RunnerRuns() {
     [query.data, router],
   );
   const counts = query.data?.facets?.status ?? {};
-  const workflowOptions = (workflows?.data ?? []).filter((w) => w.engine === 'v2').map((w) => ({ label: w.name, value: w.id }));
+  const workflowOptions = (workflows?.data ?? []).map((w) => ({ label: w.name, value: w.id }));
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
   if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="runner-runs-error" />;

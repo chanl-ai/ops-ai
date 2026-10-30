@@ -1,0 +1,52 @@
+# A REST tool module: the company registry a team checks new suppliers against.
+#
+# Declaration only, no code. Each operation is the body tools-service's POST /v1/tool-modules (first operation, as
+# `http`) and POST /v1/tool-modules/{id}/operations (the rest) accept today. `{name}` in a URL and `{{name}}` in a body
+# are the operation's inputs; `{{VENDOR_REGISTRY_KEY}}` in a header is a team secret, resolved by tools-service at call
+# time and never seen by a workflow, an agent or a function.
+#
+# The registry here is fake: fake_api/vendor_registry.py serves it, and `mocks` below are its answers for test runs.
+# tests/test_fake_api.py fails when the two disagree.
+
+name: vendor-registry
+displayName: Vendor registry
+system: Company registry
+description: Looks up a company by registration number and screens a name against sanctions lists.
+type: http
+endpoint: https://registry.vendors.test
+
+operations:
+  - name: lookup_company
+    description: The registry's record for a company, by its registration number.
+    access: read
+    method: GET
+    url: https://registry.vendors.test/v1/companies/{registration_number}
+    headers:
+      - { key: X-Api-Key, value: "{{VENDOR_REGISTRY_KEY}}" }
+
+  - name: screen_vendor
+    description: Screens a company name and country against sanctions lists; answers the hits, if any.
+    # A POST that changes nothing: declared a read, so it runs at once with no approval.
+    access: read
+    method: POST
+    url: https://registry.vendors.test/v1/screenings
+    headers:
+      - { key: X-Api-Key, value: "{{VENDOR_REGISTRY_KEY}}" }
+    body: '{"name": "{{legal_name}}", "country": "{{country}}"}'
+
+# Answers for test runs (mode: test). A live run calls the registry itself.
+mocks:
+  lookup_company:
+    - name: Dissolved company
+      match: { registration_number: RC-0000017 }
+      body: { registrationNumber: RC-0000017, legalName: Old Quay Traders Ltd, country: GB, status: dissolved, yearsTrading: 12 }
+    - name: Active company
+      default: true
+      body: { registrationNumber: RC-1048213, legalName: Brightwater Logistics Ltd., country: CA, status: active, yearsTrading: 3 }
+  screen_vendor:
+    - name: Listed name
+      match: { legal_name: Sable Freight Partners }
+      body: { hits: [{ list: Consolidated sanctions list, name: Sable Freight Partners, score: 0.97 }] }
+    - name: No hits
+      default: true
+      body: { hits: [] }

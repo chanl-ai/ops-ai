@@ -11,11 +11,17 @@ import type { ListParams } from '@/lib/types/query';
  * The search column's text becomes `search`; every other column filter becomes a facet filter.
  * Any filter change returns to page 1 so the user never lands on an empty page.
  */
-export function useListParams<F extends Record<string, string[] | undefined>>(searchColumn?: string, pageSize: number = PAGINATION_DEFAULTS.PAGE_SIZE) {
+export function useListParams<F extends Record<string, string[] | undefined>>(
+  searchColumn?: string,
+  pageSize: number = PAGINATION_DEFAULTS.PAGE_SIZE,
+  initialFilters?: F,
+) {
   const [pagination, setPagination] = React.useState<PaginationState>({ page: 1, pageSize });
   const [search, setSearch] = React.useState('');
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
-  const [filters, setFilters] = React.useState<F>({} as F);
+  // A page linked with its filters in the URL (`/activity?kind=email`) asks for them on its first read; pass the same
+  // filters to the table as `initialColumnFilters` so its facets show them chosen.
+  const [filters, setFilters] = React.useState<F>(initialFilters ?? ({} as F));
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
@@ -49,6 +55,12 @@ export function useListParams<F extends Record<string, string[] | undefined>>(se
 
   return { params, pagination, setPagination, onColumnFiltersChange, reset, isFiltered: !!debouncedSearch || Object.keys(filters).length > 0 };
 }
+
+/** Filters as the table's column filter state, for `initialColumnFilters`. */
+export const columnFiltersOf = (filters: Record<string, string[] | undefined>): ColumnFiltersState =>
+  Object.entries(filters)
+    .filter(([, v]) => v?.length)
+    .map(([id, value]) => ({ id, value }));
 
 /** Column filterFn for faceted multi-select filters (the table re-applies server filters to the page it holds). */
 export const facetFilterFn = (row: { getValue: (id: string) => unknown }, id: string, value: string[]) =>

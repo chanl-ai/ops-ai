@@ -4,7 +4,7 @@ Status: current. Id: `uc-137`. Service: `console`, `tools-service` and `platform
 
 Which publishes need a second person is the team's publishReview setting (Settings, Policies, Publish reviews). A change
 used to reach a publish only after a token refresh or a restart; tools-service and agents-service now read it on every
-publish (c-214), so an admin's change applies to the very next one.
+publish, so an admin's change applies to the very next one.
 
 ## Preconditions
 

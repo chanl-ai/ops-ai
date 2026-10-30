@@ -561,6 +561,50 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "batches_batch_page": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/batches/{batch_id}",
+    "pathParams": [
+      "batch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "batches_batch_results": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/batches/{batch_id}/results.csv",
+    "pathParams": [
+      "batch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "batches_retry_batch": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/batches/{batch_id}/retry",
+    "pathParams": [
+      "batch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "batches_start_batch": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/workflows/{workflow_id}/batches",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "cases_add_event": {
     "body": "json",
     "headers": [],
@@ -875,6 +919,112 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "forms_create_form": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/workflows/{workflow_id}/forms",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "forms_member_form": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/forms/{slug}/members",
+    "pathParams": [
+      "slug"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "forms_public_form": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/forms/public/{slug}",
+    "pathParams": [
+      "slug"
+    ],
+    "query": [
+      "t"
+    ],
+    "stream": false
+  },
+  "forms_rotate_form": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/forms/{form_id}/rotate",
+    "pathParams": [
+      "form_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "forms_submit_member": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/forms/{slug}/members",
+    "pathParams": [
+      "slug"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "forms_submit_public": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/forms/public/{slug}/submit",
+    "pathParams": [
+      "slug"
+    ],
+    "query": [
+      "t"
+    ],
+    "stream": false
+  },
+  "forms_update_form": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/forms/{form_id}",
+    "pathParams": [
+      "form_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "forms_upload_public": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/forms/public/{slug}/files",
+    "pathParams": [
+      "slug"
+    ],
+    "query": [
+      "t",
+      "name"
+    ],
+    "stream": false
+  },
+  "forms_workflow_forms": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/{workflow_id}/forms",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "graphs_list_graphs": {
     "body": null,
     "headers": [],
@@ -926,6 +1076,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "memory_erase_memory": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/me/memories/{memory_id}/erase",
+    "pathParams": [
+      "memory_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "memory_export_memories": {
     "body": null,
     "headers": [],
@@ -966,6 +1127,17 @@ export const agentsOperations = {
     "query": [
       "agentId"
     ],
+    "stream": false
+  },
+  "memory_undo_memory": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/me/memories/{memory_id}/undo",
+    "pathParams": [
+      "memory_id"
+    ],
+    "query": [],
     "stream": false
   },
   "reviews_assign": {
@@ -1157,6 +1329,29 @@ export const agentsOperations = {
       "type_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "templates_install_template": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/templates/{source}/{template_id}/install",
+    "pathParams": [
+      "source",
+      "template_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "templates_list_templates": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/templates",
+    "pathParams": [],
+    "query": [
+      "kind"
+    ],
     "stream": false
   },
   "threads_approve": {
@@ -1527,7 +1722,8 @@ export const agentsOperations = {
       "sortBy",
       "sortOrder",
       "startable",
-      "takesFiles"
+      "takesFiles",
+      "engine"
     ],
     "stream": false
   },
@@ -1641,6 +1837,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_retry_engine_run": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/{run_id}/retry",
+    "pathParams": [
+      "run_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "workflows_route_fields": {
     "body": null,
     "headers": [],
@@ -1657,6 +1864,17 @@ export const agentsOperations = {
     "path": "/v1/ai-steps/{step}",
     "pathParams": [
       "step"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_run_set_aside_email": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/set-aside-emails/{event_id}/run",
+    "pathParams": [
+      "event_id"
     ],
     "query": [],
     "stream": false

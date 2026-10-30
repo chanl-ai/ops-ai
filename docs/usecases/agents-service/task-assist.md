@@ -1,6 +1,15 @@
 # A typed task opens with task assist when the team turns it on
 
-Status: current. Id: `uc-263`. Service: `agents-service`. Layers: api. Card: c-302.
+Status: current. Id: `uc-263`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+
+## Stories
+
+| # | Story | Layer | Steps | Proved by |
+|---|---|---|---|---|
+| S1 | Maya opens a task with task assist off and sees no AI help and no suggestion | ui | 1 | 1 |
+| S2 | Priya turns task assist on in Policies, and the next task shows its question, summary and the field worth checking, with Reject marked as suggested and nothing chosen | ui | 2-3 | 3 |
+| S3 | A suggestion of an action the task's type does not offer is dropped, and the rest of the help still shows | ui | 5 | 5 |
+| S4 | The same through the API: help only when the team has it on, after the question and before the evidence | api | 1-5 | 4 |
 
 When a typed task's step pauses in a team that turned task assist on, one model call over what the task shows writes
 the question in plain words, a summary, the doubtful fields and a suggested action with its reason. The task shows it
@@ -30,3 +39,4 @@ not offer is dropped. With task assist off (the default) no call is made.
 | Layer | Script | State |
 |---|---|---|
 | api | `agents-service/scripts/test-uc-263-api.py` | `ISOLATED=1 make usecase-test UC=uc-263 LAYER=api` |
+| ui | `agents-service/scripts/test-uc-263-ui.mjs` | `make usecase-test UC=uc-263 LAYER=ui`: Maya reads the tasks, since James asked for them |

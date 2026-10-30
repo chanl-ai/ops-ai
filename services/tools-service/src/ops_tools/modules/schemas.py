@@ -15,6 +15,8 @@ from ops_service_kit.http import ListResult, Out
 Access = Literal["read", "write"]
 ModuleType = Literal["mcp", "openapi", "http", "code"]
 Method = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+# Whose account a module's calls may sign in with (c-558); a connection whose sign-in does not fit is refused.
+ModuleSignIn = Literal["team", "person", "either"]
 Environment = Literal["dev", "test", "production"]
 BindingSource = Literal["case.account", "case.customerId", "case.id", "case.requesterEmail", "case.queue"]
 ChangeKind = Literal["added", "removed", "access_widened", "schema_changed", "binding_changed", "settings"]
@@ -104,6 +106,7 @@ class ToolModule(Out):
     drift: bool
     connection_id: str | None = None
     connection: ConnectionRef | None
+    sign_in: ModuleSignIn = "either"
     updated_at: str
     # The review waiting on Security, if any: what the Reviews page's Tool modules tab lists.
     pending_review: PendingReview | None = None
@@ -173,6 +176,10 @@ class ModuleOperation(Out):
     # Approving asks the approver for a step-up: set here, or implied by two approvers.
     step_up: bool
     idempotent: bool
+    # Only a person's own sign-in signs its calls: never the team backup (c-558).
+    needs_person: bool = False
+    # The scopes a person's own sign-in must hold to call it; one lacking any is asked to connect again (c-558).
+    scopes: list[str] = Field(default_factory=list)
     calls24h: int = Field(alias="calls24h")
     error_rate: float
     p95_ms: int = Field(alias="p95Ms")
@@ -459,6 +466,7 @@ class ModuleIn(In):
     endpoint: str
     # Optional: the endpoint plus the operations' secret headers are the connection; none means auth kind "none".
     connection_id: str | None = None
+    sign_in: ModuleSignIn = "either"
     operations: list[DiscoveredOperationIn] | None = None
     # Where `operations` were discovered. Given, the service re-reads it and takes each operation's method, path,
     # inputs and headers from there; the caller's copies only pick operations and confirm reads.
@@ -485,6 +493,7 @@ class BlankModuleIn(In):
 class ModuleDetailsPatchIn(In):
     display_name: str | None = None
     description: str | None = None
+    sign_in: ModuleSignIn | None = None
     # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
@@ -518,6 +527,9 @@ class OperationPatchIn(In):
     approvers: int | None = None
     approver_team: str | None = None
     step_up: bool | None = None
+    needs_person: bool | None = None
+    # Each scope as the system names it, no spaces; [] asks for none beyond the connection's.
+    scopes: Annotated[list[Annotated[str, Field(pattern=r"^\S{1,200}$")]], Field(max_length=50)] | None = None
     access: Access | None = None
     # The whole input schema as it should be; fields left out of the list are removed.
     input: list[SchemaFieldIn] | None = None
@@ -601,7 +613,7 @@ class ToolCallRow(Out):
     operation: Literal["read", "write", "completion"]
     record: str | None = None
     approval: CallApproval
-    status: Literal["ok", "error", "denied", "awaiting_approval", "replayed"]
+    status: Literal["ok", "error", "denied", "awaiting_approval", "replayed", "running"]
     latency_ms: int
     subject: CallIdentity | None = None
     actor: CallIdentity | None = None
@@ -626,6 +638,8 @@ class ToolCallRow(Out):
     # Where the call came in (c-356): POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
     channel: Literal["api", "mcp"] | None = None
     client_name: str | None = None
+    acting_for: str | None = None
+    credential: Literal["person", "team"] | None = None
 
 
 class ExecutionList(ListResult[ToolCallRow]):

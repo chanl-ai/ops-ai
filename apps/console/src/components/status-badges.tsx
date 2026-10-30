@@ -4,15 +4,18 @@ import type { AgentAvailability, AgentVersionState, GrantAccess, LifecycleStatus
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
 
-/** Adapted from the shared component library's live badge, extended with a paused state. */
-export function LiveBadge({ status, className }: { status: LifecycleStatus; className?: string }) {
+// The Workflows list also sends in_review (a first version waiting in Reviews) and archived; each reads as itself.
+const LIVE_LABEL: Record<LifecycleStatus | 'in_review' | 'archived', string> = { live: 'Live', draft: 'Draft', paused: 'Paused', in_review: 'In review', archived: 'Archived' };
+
+/** Adapted from the shared component library's live badge, extended with paused, in review and archived states. */
+export function LiveBadge({ status, className }: { status: keyof typeof LIVE_LABEL; className?: string }) {
   return (
     <span
       className={cn(
         pill,
         status === 'live' && 'border-success/40 bg-success/10 text-success-text',
-        status === 'draft' && 'border-border bg-muted text-muted-foreground',
-        status === 'paused' && 'border-warning/40 bg-warning/10 text-warning-text',
+        (status === 'draft' || status === 'archived') && 'border-border bg-muted text-muted-foreground',
+        (status === 'paused' || status === 'in_review') && 'border-warning/40 bg-warning/10 text-warning-text',
         className,
       )}
     >
@@ -22,9 +25,9 @@ export function LiveBadge({ status, className }: { status: LifecycleStatus; clas
           <span className="relative inline-flex size-1.5 rounded-full bg-success" />
         </span>
       ) : (
-        <span className={cn('inline-flex size-1.5 rounded-full', status === 'paused' ? 'bg-warning' : 'bg-muted-foreground/60')} />
+        <span className={cn('inline-flex size-1.5 rounded-full', status === 'paused' || status === 'in_review' ? 'bg-warning' : 'bg-muted-foreground/60')} />
       )}
-      {status === 'live' ? 'Live' : status === 'draft' ? 'Draft' : 'Paused'}
+      {LIVE_LABEL[status] ?? status}
     </span>
   );
 }

@@ -4,8 +4,12 @@ different input or a new key, a rejection the model never hears, and assembly er
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
+
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.events import CitationsReady, KernelEvent, TextDelta, ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
@@ -200,6 +204,54 @@ async def test_a_reply_cut_short_after_some_text_says_so() -> None:
     assert result.text.startswith("The daily ATM limit is 1,000.")
     assert result.text.endswith("(Reply cut short: the agent reached its step limit for one reply.)"), result.text
     assert isinstance(events[-2], TextDelta) or any(isinstance(e, TextDelta) and "cut short" in e.delta for e in events)
+
+
+def repeating_model(tool: str, args: dict[str, Any]) -> FunctionModel:
+    """A model that calls `tool` with the same `args` for as long as it is offered, then answers from what it has: the
+    staging summary turn that called "Get human task" five times and never wrote the summary."""
+
+    def offered(info: AgentInfo) -> bool:
+        return any(t.name == tool for t in info.function_tools)
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if offered(info):
+            return ModelResponse(parts=[ToolCallPart(tool, args)])
+        return ModelResponse(parts=[TextPart(ANSWERED)])
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        if offered(info):
+            yield {1: DeltaToolCall(name=tool, json_args=json.dumps(args))}
+        else:
+            yield ANSWERED
+
+    return FunctionModel(respond, stream_function=stream)
+
+
+ANSWERED = "Two tasks wait for you this week."
+TASK = ToolGrant("get_human_task", "Ops AI", "Get a human task", "read", {"type": "object", "properties": {}})
+
+
+async def test_an_identical_call_runs_once_and_the_reply_answers_from_it() -> None:
+    tools = RecordingTools()
+    settings = replace(SETTINGS, max_tool_calls=5)
+    req = TurnRequest("t1", "th1", settings, [TASK], user_turn="Give me a summary of what is waiting for me")
+    model = repeating_model("get_human_task", {"taskId": "REV-1"})
+    _, result = await run(req, KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([])))
+    assert len(tools.calls) == 1, tools.calls
+    assert result.stop_reason == "final" and result.text == ANSWERED, result
+    assert all(r.status != "running" for r in result.tool_calls), result.tool_calls
+
+
+async def test_every_open_tool_card_closes_when_the_tool_budget_ends_the_turn() -> None:
+    tools = RecordingTools()
+    settings = replace(SETTINGS, max_tool_calls=0)
+    req = TurnRequest("t1", "th1", settings, [TASK], user_turn="Give me a summary of what is waiting for me")
+    model = repeating_model("get_human_task", {"taskId": "REV-1"})
+    events, result = await run(req, KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([])))
+    assert result.stop_reason == "max_tool_calls", result
+    assert result.tool_calls and all(r.status == "error" for r in result.tool_calls), result.tool_calls
+    closed = {e.call.tool_call_id for e in events if isinstance(e, ToolOutput)}
+    assert closed == {r.tool_call_id for r in result.tool_calls}, closed
 
 
 class ReviewFirst(RecordingTools):

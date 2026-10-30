@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { decideOpenTask } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -16,7 +17,6 @@ const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
 // The reply goes out through send_reply on the Messaging Platform team's mail module, so that team approves the write.
-const WANJIRU = 'w.kamau@harborpine.example';
 const MAILBOX = 'levies@harborpine.test';
 const SENDER = 'service@process.example';
 const SETTLED = ['succeeded', 'failed', 'cancelled'];
@@ -69,7 +69,8 @@ await withUiStack(
   async (consoleUrl, stack) => {
     const S = as(await tokenFor(SAM), 'team_security');
     const J = as(await tokenFor(JAMES));
-    const W = as(await tokenFor(WANJIRU), 'team_platform');
+    // A held write is decided in its run's team (Operations), so Maya acknowledges, not the mail module's owners.
+    const M = as(await tokenFor(MAYA));
     const runsOf = async (workflow) => (await get(`${agents}/v1/runs?workflowId=${workflow}&pageSize=50`, J))?.data ?? [];
     const detail = (id) => get(`${agents}/v1/runs/${id}`, J);
     const stepOf = (run, node) => (run?.steps ?? []).find((s) => s.nodeId === node);
@@ -134,15 +135,12 @@ await withUiStack(
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
         const decisions = [];
         for (const name of DOUBTFUL) {
-          await page.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          // All tasks lists every open task as a row; a row opens the task.
+          await page.goto(`${consoleUrl}/reviews/all`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const row = page.getByRole('row').filter({ hasText: name }).first();
           await row.waitFor({ timeout: 60_000 });
           await row.click();
-          const form = page.getByTestId('review-decision-form');
-          await form.waitFor({ timeout: 30_000 });
-          const decided = page.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 });
-          await form.getByRole('button', { name: 'Approve', exact: true }).click();
-          decisions.push((await decided).status());
+          decisions.push(await decideOpenTask(page, 'approve'));
         }
         const outcomes = [];
         for (const name of DOUBTFUL) {
@@ -198,7 +196,7 @@ await withUiStack(
         return (found.messages ?? []).filter((m) => m.From.Address === MAILBOX).length;
       };
       const before = await replies(); // an earlier run on this Mailpit may have replied to the same sender
-      const ack = await fetch(`${agents}/reviews/${parent.id}/decision`, { method: 'POST', headers: W, body: JSON.stringify({ decision: 'approved', reason: 'uc-246' }) });
+      const ack = await fetch(`${agents}/reviews/${parent.id}/decision`, { method: 'POST', headers: M, body: JSON.stringify({ decision: 'approved', reason: 'uc-246' }) });
       const done = await until(async () => {
         const r = await detail(parent.id);
         return SETTLED.includes(r?.status) ? r : undefined;

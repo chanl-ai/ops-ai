@@ -1,6 +1,6 @@
 # ops-tool-module: add a tool module, its secret and its host
 
-Status: current. Proven by `make skills-proof` (c-554).
+Status: current. Proven by `make skills-proof`.
 
 skill: ops-tool-module
 description: Add a tool module (OpenAPI, MCP, HTTP or a Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use when someone wants an agent or workflow to call a new system.

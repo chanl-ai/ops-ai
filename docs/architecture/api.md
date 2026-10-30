@@ -25,7 +25,7 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 | Agents | `GET …/versions`, `POST …/versions/{n}/restore` | History; restore into a new draft | In code |
 | Agents | `POST /v1/agents/{id}/paused` | Stop or resume new threads | In code. The pointer moves only by publishing; a restore plus publish moves it back |
 | Agents | `GET /v1/tools` | The tools an agent can be granted: published tools-service operations with module, description, access class, input schema and whether a call waits for approval | In code on agents-service, read from tools-service's `GET /v1/grantable-operations` (service token, 30 s per tenant; 503 `tools_unavailable` when it cannot answer) |
-| Agents | `GET /v1/agents/{id}`, `PATCH /v1/agents/{id}` | `staleToolIds`: granted ids the tool directory no longer offers (unpublished, hidden, drifted, deleted); a save drops them, while a newly added id it does not offer is refused (400 `unknown_tool`). With tools-service unreachable, a read reports none stale | In code on agents-service (c-048 T010) |
+| Agents | `GET /v1/agents/{id}`, `PATCH /v1/agents/{id}` | `staleToolIds`: granted ids the tool directory no longer offers (unpublished, hidden, drifted, deleted); a save drops them, while a newly added id it does not offer is refused (400 `unknown_tool`). With tools-service unreachable, a read reports none stale | In code on agents-service (an earlier change T010) |
 | Agents | `GET /v1/model-aliases` | The chat aliases an agent may name: name, kind, clearance and prices; exactly the set a publish request accepts | In code on agents-service: models-service's chat aliases when it is configured, else the runtime's own alias by name |
 | Agents, Workflows | `GET /v1/publish-requests/{id}`, `POST /v1/publish-requests/{id}/decision` | Read or decide an agent or workflow publish request: approved, rejected or returned, with a reason for the last two | In code. The requester cannot decide, nor can the person who saved an agent version; approving publishes what the request recorded |
 | Workflows | `GET /v1/workflows`, `POST /v1/workflows`, `GET`/`PATCH`/`DELETE /v1/workflows/{id}` | List; create from a template; read with live graph and draft; settings; delete | In code (`api/workflow_registry.py`). The id is the graph name for `POST /v1/threads`. dispute_email and wire_hold_review are seeded live |
@@ -84,7 +84,7 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 | Idempotency | Every write takes a key kept in our own dedupe table. A repeated `runId` replays the stored events instead of running again; a repeated `externalKey` returns the existing thread; a repeated tool write returns the first result | Run id and external key: yes. A general `Idempotency-Key` header: proposed |
 | Paging | Cursor paging with the usual filters on every list | Proposed; lists return everything |
 | Team | From identity, never from a parameter | Not yet: the dev principal reads `X-Team-Id` ([identity-and-tenancy.md](identity-and-tenancy.md)) |
-| Auth on service calls | Bearer service token with `area:action` scopes on the public routes (c-168); workload identity in a deployment | Shared token in code |
+| Auth on service calls | Bearer service token with `area:action` scopes on the public routes; workload identity in a deployment | Shared token in code |
 
 ## Event schema
 

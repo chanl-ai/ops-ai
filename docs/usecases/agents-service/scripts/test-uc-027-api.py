@@ -9,10 +9,10 @@ import time
 # Tokens expire one second after a decision, so a resume that waits on a busy thread meets an expired token.
 os.environ["OPS_REVIEW_TOKEN_TTL_SECONDS"] = "1"
 
-from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine
+from usecase_harness import DB, EMAILS, TEAM, agents, check, data, finish, new_thread, run, tools
 
-from ops_agents.store.leases import Leases  # noqa: E402
-from usecase_harness import DB, EMAILS, agents, check, data, finish, new_thread, run, tools  # noqa: E402
+from ops_agents.store.leases import Leases
 
 PG = os.environ.get("OPS_PG_PORT", "5477")
 
@@ -32,18 +32,28 @@ def hold(tid: str, release: bool = False) -> None:
 with tools() as gateway, agents(gateway_url=str(gateway.base_url)) as api:
     tid = new_thread(api, "complex_workflow")
     code, events = run(api, tid, {"input": {"email": EMAILS[0]}})
-    check("dispute paused for review", code == 200 and events[-1]["data"]["status"] == "interrupted", events[-1:])
+    check("1 dispute paused for review", code == 200 and events[-1]["data"]["status"] == "interrupted", events[-1:])
     hold(tid)
-    busy = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
-    check("the decision is recorded while the thread is busy (409, resumes later)", busy.status_code == 409, busy.text[:200])
+    busy = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
+    check(
+        "2 the decision is recorded while the thread is busy (409, resumes later)",
+        busy.status_code == 409,
+        busy.text[:200],
+    )
     time.sleep(1.5)  # past the token's one-second TTL
     hold(tid, release=True)
-    retried = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
-    check("the retried decide is accepted (200)", retried.status_code == 200, retried.text[:200])
+    retried = api.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=TEAM)
+    check("3 the retried decide is accepted (200)", retried.status_code == 200, retried.text[:200])
     # Non-vacuous: without renewal the expired token is refused and the run fails; here the reply goes once.
     last = data(api.get(f"/v1/threads/{tid}/runs"))[-1]
-    check("the late resume finished instead of failing on the expired token", last["status"] == "done", last)
+    check("3 the late resume finished instead of failing on the expired token", last["status"] == "done", last)
     values = data(api.get(f"/v1/threads/{tid}/state"))["values"]
-    check("the reply was sent through the gateway", str(values.get("sent", "")).startswith("OUT-"), values.get("sent"))
+    # Through the gateway the id is the mail provider's. Its log holds the expired token's refusal and the one send.
+    rows = data(gateway.get("/v1/executions", params={"thread": tid, "tool": "send_reply", "pageSize": 10}))["data"]
+    check(
+        "3 the gateway refused the expired token once, and the renewed one sent the reply once",
+        bool(values.get("sent")) and sorted(r.get("status") for r in rows) == ["denied", "ok"],
+        {"sent": values.get("sent"), "rows": [(r.get("status"), r.get("runId")) for r in rows]},
+    )
 
 finish()

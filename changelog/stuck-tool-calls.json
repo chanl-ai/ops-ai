@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-29",
+  "title": "A failed tool call no longer stalls a workflow",
+  "description": "When a tool call fails before the connected system answers, the step now ends as failed instead of waiting forever. Saving an operation whose body puts a placeholder inside quotes is refused with the placeholder named, since that body could never be sent.",
+  "tag": "fix",
+  "cards": ["c-558"]
+}

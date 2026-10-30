@@ -18,7 +18,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from functools import cache
 from typing import Any, Protocol, cast
@@ -54,7 +54,25 @@ FALLBACK_ALIAS = "default"
 
 
 class ModelRefusedError(RuntimeError):
-    """models-service refused the call or could not be reached."""
+    """models-service refused the call or could not be reached; `code` is its error code when it answered one."""
+
+    def __init__(self, message: str, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+# models-service's refusals a person can act on, as the read's error: a spent budget waits for its reset, a busy model
+# for a minute. Anything else reads as the model being out of reach.
+SPENT = "The team's model budget is spent; reads that call a model wait until it resets."
+REFUSALS = {
+    "key_budget_exhausted": ("budget_exhausted", SPENT),
+    "tenant_budget_exhausted": ("budget_exhausted", SPENT),
+    "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
+}
+READS = ("fields", "text", "propose")
+PROPOSE_PAGES = 5
+# Page text per model token, the estimate a read's token ceiling counts in.
+CHARS_PER_TOKEN = 4
 
 
 @dataclass
@@ -154,7 +172,7 @@ class ModelsService:
             if r.status_code == 404 and "alias_not_found" in r.text and name != FALLBACK_ALIAS:
                 continue
             if r.status_code >= 400:
-                raise ModelRefusedError(f"models-service answered {r.status_code}: {r.text[:300]}")
+                raise ModelRefusedError(f"models-service answered {r.status_code}: {r.text[:300]}", _error_code(r))
             body = cast(dict[str, Any], r.json())
             if usage is not None:
                 counted = cast(dict[str, Any], body.get("usage") or {})
@@ -355,14 +373,26 @@ def _check_rules(field: dict[str, Any]) -> None:
         raise InvalidRequestError(f"field {field['key']}: clean lists rules from {', '.join(CLEAN_RULES)}")
 
 
+def _error_code(r: httpx.Response) -> str | None:
+    try:
+        error = cast(dict[str, Any], r.json()).get("error")
+    except ValueError:
+        return None
+    return str(cast(dict[str, Any], error).get("code")) if isinstance(error, dict) else None
+
+
 def _key_hash(who: Who, key: str) -> str:
     return _sha(f"{who.tenant_id}\n{who.team}\n{who.actor}\n{key}")
 
 
 def request_of(body: dict[str, Any]) -> dict[str, Any]:
-    """The extraction asked for, checked: fields with a key and a known type, and the options that change the answer."""
-    fields = body.get("fields")
-    if not isinstance(fields, list) or not fields:
+    """The extraction asked for, checked: fields with a key and a known type, and the options that change the answer.
+    A full-text or proposed read (c-535) names no fields."""
+    read = body.get("read") or "fields"
+    if read not in READS:
+        raise InvalidRequestError(f"read is one of {', '.join(READS)}")
+    fields: Any = body.get("fields") if read == "fields" else []
+    if not isinstance(fields, list) or (read == "fields" and not fields):
         raise InvalidRequestError("fields is a list of at least one field")
     keys: set[str] = set()
     for f in cast(list[Any], fields):
@@ -399,6 +429,11 @@ def request_of(body: dict[str, Any]) -> dict[str, Any]:
     if body.get("pageImages"):
         # The type version lets reads show the model page images (c-295), still under the team's policy and the alias.
         request["pageImages"] = True
+    if read != "fields":
+        request["read"] = read
+    for name in ("hint", "proposePages", "maxPages", "maxTokens"):
+        if body.get(name) is not None:
+            request[name] = body[name]
     return request
 
 
@@ -778,12 +813,19 @@ class Extractor:
             return done
         request = row.request
         fields = cast(list[dict[str, Any]], request["fields"])
+        read = str(request.get("read") or "fields")
+        pages, limited = _limited(pages, request)
         if not pages.texts:
             # No text layer and no OCR asked (or OCR found nothing): empty fields would pass as found.
             await self.store.finish(
                 eid, status="unreadable", outcome="unreadable", at=self.clock(),
                 result={"fileId": row.file_id, "pages": pages.count},
             )  # fmt: skip
+            return await self._row(tenant, eid)
+        if read == "text":
+            # The layout already holds every page's text, in reading order: no model is asked and nothing is charged.
+            out = {"fileId": row.file_id, **_full_text(pages), **limited}
+            await self.store.finish(eid, status="done", outcome="ok", result=out, at=self.clock(), tokens=(0, 0))
             return await self._row(tenant, eid)
         many = bool(request["many"])
         pictures = self._pictures(row, file)
@@ -796,9 +838,25 @@ class Extractor:
         if self.models is None:
             await self._fail(row, "not_configured", "documents-service has no models-service key")
             return await self._row(tenant, eid)
+        usage = Usage()
+        proposal: dict[str, Any] | None = None
+        if read == "propose":
+            try:
+                proposal = await self._propose(row, pages, usage)
+            except ModelRefusedError as e:
+                await self._refused(row, e)
+                return await self._row(tenant, eid)
+            fields = cast(list[dict[str, Any]], proposal["fields"])
+            if not fields:
+                out: dict[str, Any] = {
+                    "fileId": row.file_id, "proposal": proposal, "fields": {}, "needsReview": [], **limited,
+                }  # fmt: skip
+                _recorded(out, usage)
+                tokens = (usage.input_tokens, usage.output_tokens)
+                await self.store.finish(eid, status="done", outcome="ok", result=out, at=self.clock(), tokens=tokens)
+                return await self._row(tenant, eid)
         schema = prompt.schema_for(fields, many=many)
         user = prompt.user_prompt(fields, pages.texts, many=many, examples=await self._examples(row, fields))
-        usage = Usage()
         try:
             # A page read through OCR goes with its image when the read may show it (c-295); a text page never does.
             shown = await pictures.whole(sorted(pages.ocr)) if pictures is not None else []
@@ -823,7 +881,7 @@ class Extractor:
             await self._fail(row, "floor_unread", str(e))
             return await self._row(tenant, eid)
         except ModelRefusedError as e:
-            await self._fail(row, "model_unavailable", str(e))
+            await self._refused(row, e)
             return await self._row(tenant, eid)
         outcome, out = result.scored(
             fields,
@@ -842,6 +900,9 @@ class Extractor:
             out = boxes.with_boxes(out, pages.layout)
         out["path"] = PATH_MODEL
         _recorded(out, usage)
+        out |= limited
+        if proposal is not None:
+            out["proposal"] = proposal
         if miss is not None:
             out["templateMiss"] = miss
         tokens = (usage.input_tokens, usage.output_tokens)
@@ -1006,6 +1067,34 @@ class Extractor:
                 return cached
         return await layouts.of(who, await self.files.readable(who, row.file_id), ocr=ocr)
 
+    async def _propose(self, row: ExtractionRow, pages: Pages, usage: Usage) -> dict[str, Any]:
+        """Fields in the document type's shape and a suggested name, read from the first pages only, so an unknown
+        document's cost is bounded; the read that follows uses every page like any other. A proposed field the scorer
+        could not check (no key, an unknown type, a key twice) is left out."""
+        assert self.models is not None
+        first = sorted(pages.texts)[: int(row.request.get("proposePages") or PROPOSE_PAGES)]
+        user = prompt.propose_prompt([pages.texts[n] for n in first], hint=row.request.get("hint"))
+        answer = await self.models.structured(
+            prompt.PROPOSE_SYSTEM, user, prompt.PROPOSAL_SCHEMA, run=row.id, step="propose", tenant=row.tenant_id,
+            usage=usage,
+        )  # fmt: skip
+        raw = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+        kept: list[dict[str, Any]] = []
+        for f in cast(list[Any], raw.get("fields") or []):
+            if not isinstance(f, dict):
+                continue
+            one = cast(dict[str, Any], f)
+            key, kind = one.get("key"), one.get("type") or "text"
+            if not isinstance(key, str) or not key or kind not in FIELD_TYPES or any(k["key"] == key for k in kept):
+                continue
+            named = {k: one[k] for k in ("key", "label", "description", "options") if k in one}
+            kept.append(named | {"type": kind})
+        return {"name": str(raw.get("name") or ""), "fields": kept}
+
+    async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> None:
+        code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
+        await self._fail(row, code, message)
+
     async def _fail(self, row: ExtractionRow, code: str, message: str, extra: dict[str, Any] | None = None) -> None:
         await self.store.finish(row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra)
 
@@ -1013,6 +1102,50 @@ class Extractor:
         found = await self.store.get(extraction_id)
         assert found is not None
         return found
+
+
+def _limited(pages: Pages, request: dict[str, Any]) -> tuple[Pages, dict[str, Any]]:
+    """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens`. What it says about them:
+    `readPages` when a limit applied, and `partial` when the token ceiling left pages unread."""
+    keep = sorted(pages.texts)
+    said: dict[str, Any] = {}
+    if request.get("maxPages"):
+        keep = [n for n in keep if n <= int(request["maxPages"])]
+    if request.get("maxTokens"):
+        budget, used = int(request["maxTokens"]) * CHARS_PER_TOKEN, 0
+        fits: list[int] = []
+        for n in keep:
+            used += len(pages.texts[n])
+            if used > budget:
+                break
+            fits.append(n)
+        said["partial"] = len(fits) < len(keep)
+        keep = fits
+    if not said and len(keep) == len(pages.texts):
+        return pages, {}
+    said["readPages"] = len(keep)
+    texts = {n: pages.texts[n] for n in keep}
+    confidence = {n: c for n, c in pages.confidence.items() if n in texts}
+    return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), said
+
+
+def _full_text(pages: Pages) -> dict[str, Any]:
+    """Every page's text in reading order, with its tables' cells, from the layout the read was rendered from."""
+    blocks = cast(list[dict[str, Any]], (pages.layout or {}).get("blocks") or [])
+    out: list[dict[str, Any]] = []
+    for n in sorted(pages.texts):
+        on_page = [b for b in blocks if int(b.get("page") or 0) == n and b.get("kind") == "table"]
+        tables = [
+            {
+                "cells": [
+                    {k: c.get(k) for k in ("row", "col", "text")}
+                    for c in cast(list[dict[str, Any]], b.get("cells") or [])
+                ]
+            }
+            for b in on_page
+        ]
+        out.append({"number": n, "text": pages.texts[n], "tables": tables})
+    return {"text": "\n\n".join(p["text"] for p in out), "pages": out}
 
 
 def default_extractor(files: Files, engine: Any, settings: Settings, *, layouts: Layouts | None = None) -> Extractor:

@@ -29,5 +29,5 @@ not to an access class.
 
 ## Non-vacuous check
 
-Each step fails on the console before c-048 T004, which offered "Moves money" in the filter, the access select and
+Each step fails on the console before an earlier change T004, which offered "Moves money" in the filter, the access select and
 the module badges.
