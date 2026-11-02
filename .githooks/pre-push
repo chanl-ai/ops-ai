@@ -8,7 +8,7 @@
 # first, on the same refs.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 refs=$(cat)
-d=$(git rev-parse --git-dir) || exit 1
+d=$(git rev-parse --git-common-dir) || exit 1
 if [ -x "$d/hooks/pre-push.codeloop" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.codeloop" "$@" || exit $?; fi
 zero=0000000000000000000000000000000000000000
 printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sha; do
