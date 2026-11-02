@@ -1,5 +1,5 @@
 // uc-508 Steps read in sentences everywhere a person reads them, ui layer: docs/usecases/console/steps-in-sentences.md
-// (c-508). The demo stack (platform sign-in, the core fake bank, a worker). James starts a copy of the seeded hold
+//. The demo stack (platform sign-in, the core fake bank, a worker). James starts a copy of the seeded hold
 // workflow for Marcus Bell; Activity, Maya's Human Task, the case the run opens and the run page are each checked for
 // what a person reads: sentences, the operation's labels, a first response once a person works the case, the outcome in
 // words and the workflow by its name. Screenshots go to evidenceDir('508', 'uc').

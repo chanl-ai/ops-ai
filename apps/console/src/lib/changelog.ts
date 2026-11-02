@@ -22,9 +22,13 @@ export interface RoadmapItem {
 
 const TAGS = new Set(['new', 'improved', 'fix']);
 
+/** A new capability is a major change; an improvement or a fix is a smaller one. */
+export const isMajor = (e: Pick<ChangelogEntry, 'tag'>): boolean => e.tag === 'new';
+const RANK: Record<ChangelogEntry['tag'], number> = { new: 0, improved: 1, fix: 2 };
+
 
 /**
- * The entries newest first (by date, then title); anything malformed is left out rather than breaking the popover, and
+ * The entries with the major changes first, then the smaller ones, each newest first (by date, then title); anything malformed is left out rather than breaking the popover, and
  * so is an entry whose release switch is off. `switches` are the console's (lib/api releaseSwitches); a switch not in
  * them counts as off, so a misspelt one never announces an unreleased feature.
  */
@@ -40,7 +44,7 @@ export function parseChangelog(source: string, switches: Readonly<Record<string,
     .filter((e): e is ChangelogEntry => !!e && typeof e.id === 'string' && typeof e.title === 'string' && typeof e.date === 'string' && TAGS.has(e.tag))
     .filter((e) => e.switch === undefined || switches[e.switch] === true)
     .map(({ id, date, title, description, tag }) => ({ id, date, title, description: description ?? '', tag }))
-    .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+    .sort((a, b) => RANK[a.tag] - RANK[b.tag] || b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 }
 
 export function parseRoadmap(source: string): RoadmapItem[] {

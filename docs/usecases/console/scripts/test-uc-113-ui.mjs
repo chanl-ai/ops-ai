@@ -56,15 +56,14 @@ await withUiStack(
       const tool = page.getByRole('option', { name: /lookup_account/ });
       await tool.waitFor({ timeout: 30_000 }).catch(() => undefined);
       check('the tools picker searches agents-service', (await tool.count()) >= 1 && asked.some((u) => u.startsWith(agents) && u.includes('/tools/options')), { asked: asked.slice(-3) });
+      // The draft saves itself a second after a change: there is no Save button, so the save is awaited.
+      const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
       await tool.first().click();
       await page.keyboard.press('Escape');
 
-      // Step 4: save, and the version holds ids.
-      const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
-      await page.getByRole('button', { name: /^Save/ }).first().click();
-      const dialog = page.getByRole('dialog');
-      if (await dialog.isVisible().catch(() => false)) await dialog.getByRole('button', { name: /^Save/ }).last().click();
+      // Step 4: the draft autosaves, and the version holds ids.
       await saved;
+      await page.getByTestId('agent-save-status').filter({ hasText: /saved$/ }).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
       const stored = await data(await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J }));
       check('the version stores the base id and the tool id', stored.collections?.includes(target.id) && stored.toolIds?.includes('lookup_account'), { collections: stored.collections, toolIds: stored.toolIds });
 

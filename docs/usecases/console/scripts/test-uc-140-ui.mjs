@@ -12,7 +12,7 @@ const AGENTS = `http://127.0.0.1:${process.env.OPS_AGENTS_PORT ?? 8700}`;
 const PLATFORM = `http://127.0.0.1:${process.env.OPS_PLATFORM_PORT ?? 8710}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
-const OMAR = 'o.haddad@harborpine.example';
+const NADIA = 'n.petrov@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
 // A turn on a real model takes several model calls of a few seconds each.
 const TURN = 180_000;
@@ -114,7 +114,7 @@ try {
     }
     if (!reviewId) throw new Error('no new review in Human Tasks for the hold');
     const statuses = [];
-    for (const email of [MAYA, OMAR]) {
+    for (const email of [MAYA, NADIA]) {
       const person = await signIn(browser, email, errors);
       await person.goto(`${CONSOLE}/reviews?review=${encodeURIComponent(reviewId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const form = person.getByTestId('review-decision-form');

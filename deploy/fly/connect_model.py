@@ -6,9 +6,13 @@ models-service's admin token with that service's own key (OPS_SERVICE_SIGNING_KE
         --key-ref provider --alias default --model <provider model id> --input-price <per million> \\
         --output-price <per million> --budget 25 --key-id purpose:agents
 
-`--key-ref` names a secret in the deployment's Secrets; the provider key itself never passes through here. A second run
-rebinds the connection, adds an alias version and leaves an existing key alone. The key's secret is printed once: set
-it as the service's OPS_MODELS_KEY, which models-service refuses once the key's budget is spent.
+For an Azure OpenAI resource add `--type azure-openai --api-version <v1 or a date> --region <region>`, with the
+resource's endpoint as `--base-url` and the deployment as `--model`; all four default from OPENAI_API_TYPE,
+OPENAI_API_BASE, OPENAI_API_VERSION and OPENAI_API_REGION.
+
+`--key-ref` names a model provider key saved on Settings > Model providers; the key itself never passes through here.
+A second run rebinds the connection, adds an alias version and leaves an existing key alone. The key's secret is
+printed once: set it as the service's OPS_MODELS_KEY, which models-service refuses once the key's budget is spent.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import httpx
 
 from ops_identity import mint_service_token
 from ops_identity.service_keys import service_signer
+from ops_models.connection_settings import ModelConnectionSettings
 from ops_service_kit.settings import Settings
 
 KEY_ID = "purpose:agents"
@@ -37,7 +42,23 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--models-url", default=os.environ.get("OPS_MODELS_URL", "http://127.0.0.1:8730"))
     p.add_argument("--provider", default="provider", help="connection name")
-    p.add_argument("--base-url", required=True, help="an openai-compatible endpoint's base URL, ending in /v1")
+    # Defaults from the install's model settings (OPENAI_API_TYPE, OPENAI_API_BASE, OPENAI_API_VERSION,
+    # OPENAI_API_REGION; c-605), which ModelConnectionSettings has already checked.
+    settings, install = Settings(), ModelConnectionSettings()
+    azure = install.openai_api_type == "azure"
+    p.add_argument(
+        "--type",
+        default="azure-openai" if azure else "openai-compatible",
+        choices=("openai-compatible", "azure-openai"),
+        help="azure-openai for an Azure OpenAI resource; defaults from OPENAI_API_TYPE",
+    )
+    p.add_argument(
+        "--base-url",
+        default=install.openai_api_base,
+        help="an openai-compatible endpoint's base URL ending in /v1, or an Azure resource's endpoint; OPENAI_API_BASE",
+    )
+    p.add_argument("--api-version", default=install.openai_api_version, help="azure-openai: v1 or a dated version")
+    p.add_argument("--region", default=install.openai_api_region, help="azure-openai: the resource's region")
     p.add_argument("--key-ref", default=None, help="name in OPS_MODEL_PROVIDER_KEYS; omit for a keyless endpoint")
     p.add_argument("--alias", required=True, help="agents-service's OPS_MODEL_ALIAS, or another an agent names")
     p.add_argument(
@@ -56,21 +77,23 @@ def main() -> None:
     )
     a = p.parse_args()
     if not a.model:
-        sys.exit("name the provider's model with --model or the OPS_PROVIDER_MODEL_ID secret")
+        sys.exit("name the provider's model with --model or the OPS_PROVIDER_MODEL_ID secret; on Azure, the deployment")
+    if not a.base_url:
+        sys.exit("name the endpoint with --base-url or OPENAI_API_BASE")
+    where = {"baseUrl": a.base_url, "keyRef": a.key_ref}
+    if a.type == "azure-openai":
+        where |= {"apiVersion": a.api_version, "region": a.region}
 
-    signer = service_signer(Settings())
+    signer = service_signer(settings)
     token = mint_service_token(
         signer, service="agents", audience="models", tenant_id=os.environ.get("OPS_BOOTSTRAP_TENANT_ID"), ttl_s=300
     )
     with httpx.Client(base_url=a.models_url, headers={"Authorization": f"Bearer {token}"}, timeout=15) as c:
-        made = c.post(
-            "/v1/models/providers",
-            json={"name": a.provider, "type": "openai-compatible", "baseUrl": a.base_url, "keyRef": a.key_ref},
-        )
+        made = c.post("/v1/models/providers", json={"name": a.provider, "type": a.type, **where})
         if made.status_code == 409:
             found = _check(c.get("/v1/models/providers"), 200)["data"]
             pid = next(x["id"] for x in found if x["name"] == a.provider)
-            _check(c.put(f"/v1/models/providers/{pid}", json={"baseUrl": a.base_url, "keyRef": a.key_ref}), 200)
+            _check(c.put(f"/v1/models/providers/{pid}", json=where), 200)
             print(f"provider {a.provider}: rebound to {a.base_url}")
         else:
             pid = _check(made, 201)["data"]["id"]

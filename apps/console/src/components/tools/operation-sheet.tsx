@@ -33,7 +33,7 @@ export function unusedInputs(op: ModuleOperation, http: HttpOperationInput): str
   return op.input.map((f) => f.name).filter((n) => ![`{${n}}`, `{{${n}}}`, `{{ ${n} }}`].some((p) => text.includes(p)));
 }
 
-const draftOf = (o: ModuleOperation, endpoint: string): Draft => ({
+const draftOf = (o: ModuleOperation, appBase: string): Draft => ({
   description: o.description,
   bound: !!o.binding,
   binding: o.binding ?? { arg: o.input[0]?.name ?? '', bindTo: 'case.account', mode: 'equals', required: true },
@@ -44,7 +44,7 @@ const draftOf = (o: ModuleOperation, endpoint: string): Draft => ({
   stepUp: !!o.stepUp,
   access: o.access,
   input: fieldDrafts(o.input),
-  http: { name: o.name, description: o.description, access: o.access, method: o.method ?? 'GET', url: `${baseOf(endpoint)}${o.path ?? ''}`, headers: o.headers.map((h) => ({ ...h })), body: o.body ?? '' },
+  http: { name: o.name, description: o.description, access: o.access, method: o.method ?? 'GET', url: `${baseOf(appBase)}${o.path ?? ''}`, headers: o.headers.map((h) => ({ ...h })), body: o.body ?? '' },
   transform: o.responseTransform ?? '',
   timeout: o.timeoutMs ? String(o.timeoutMs / 1000) : '',
 });
@@ -52,7 +52,7 @@ const draftOf = (o: ModuleOperation, endpoint: string): Draft => ({
 /** One operation: its schema, the record it is bound to, and the limits the gateway enforces. Saving stages a change. */
 export function OperationSheet({
   op,
-  endpoint,
+  base: appBase,
   stagedCall,
   onOpenChange,
   navigation,
@@ -61,8 +61,8 @@ export function OperationSheet({
   policyOnly,
 }: {
   op: ModuleOperation | null;
-  /** The module endpoint every operation's path hangs off; the URL's origin cannot change here. */
-  endpoint: string;
+  /** The app's base address every operation's path hangs off; the URL's origin cannot change here. */
+  base: string;
   /** The operation's call (method, path or body) has a staged change; what the sheet shows is not yet what calls run. */
   stagedCall?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,13 +72,13 @@ export function OperationSheet({
   /** Opened from the workbench, which edits the call and the input itself: the sheet keeps the policy (c-088). */
   policyOnly?: boolean;
 }) {
-  const [d, setD] = React.useState<Draft | null>(op ? draftOf(op, endpoint) : null);
+  const [d, setD] = React.useState<Draft | null>(op ? draftOf(op, appBase) : null);
   // The service's refusal of the input schema, by field name, shown on that row.
   const [inputErrors, setInputErrors] = React.useState<Record<string, string>>({});
   React.useEffect(() => {
-    setD(op ? draftOf(op, endpoint) : null);
+    setD(op ? draftOf(op, appBase) : null);
     setInputErrors({});
-  }, [op, endpoint]);
+  }, [op, appBase]);
   if (!op || !d) return <DetailSheet open={false} onOpenChange={onOpenChange} title="">{null}</DetailSheet>;
 
   const write = d.access === 'write';
@@ -98,10 +98,10 @@ export function OperationSheet({
   if (JSON.stringify(input) !== JSON.stringify(schemaOf(fieldDrafts(op.input)))) patch.input = input;
   // The HTTP call: staged like every other edit, and calls keep the published call until the next publish.
   const http = op.executor === 'http';
-  const base = baseOf(endpoint);
-  const urlError = http && d.http.url !== base && !d.http.url.startsWith(`${base}/`) ? `Keep the module endpoint, ${base}. A second system is a second module.` : undefined;
+  const base = baseOf(appBase);
+  const urlError = http && d.http.url !== base && !d.http.url.startsWith(`${base}/`) ? `Keep the app’s address, ${base}. Another address is another app.` : undefined;
   const secs = d.timeout.trim();
-  const timeoutError = secs && !(Number(secs) >= 1 && Number(secs) <= 120) ? 'Enter 1 to 120 seconds, or leave it blank for the module timeout.' : undefined;
+  const timeoutError = secs && !(Number(secs) >= 1 && Number(secs) <= 120) ? 'Enter 1 to 120 seconds, or leave it blank for the default timeout.' : undefined;
   if (http) {
     if (d.http.method !== op.method) patch.method = d.http.method;
     const path = d.http.url.slice(base.length) || '/';
@@ -171,7 +171,7 @@ export function OperationSheet({
         </FormField>
 
         {http && policyOnly && (
-          <FormField id="op-timeout" label="Timeout" optional hint="Seconds, 1 to 120. Blank uses the module timeout." error={timeoutError}>
+          <FormField id="op-timeout" label="Timeout" optional hint="Seconds, 1 to 120. Blank uses the default timeout." error={timeoutError}>
             <Input id="op-timeout" inputMode="numeric" value={d.timeout} onChange={(e) => set({ timeout: e.target.value })} className="w-28" aria-invalid={!!timeoutError} />
           </FormField>
         )}
@@ -191,7 +191,7 @@ export function OperationSheet({
               <FormField id="op-transform" label="Response transform" optional hint="A Jinja2 template over the answer as data, e.g. {{ data.balance }}. If it fails on a real answer, the agent gets the answer and the error.">
                 <Textarea id="op-transform" rows={3} value={d.transform} onChange={(e) => set({ transform: e.target.value })} className="font-mono text-xs" placeholder={'e.g. {"balance": {{ data.balance }}}'} />
               </FormField>
-              <FormField id="op-timeout" label="Timeout" optional hint="Seconds, 1 to 120. Blank uses the module timeout." error={timeoutError}>
+              <FormField id="op-timeout" label="Timeout" optional hint="Seconds, 1 to 120. Blank uses the default timeout." error={timeoutError}>
                 <Input id="op-timeout" inputMode="numeric" value={d.timeout} onChange={(e) => set({ timeout: e.target.value })} className="w-28" aria-invalid={!!timeoutError} />
               </FormField>
             </div>
@@ -216,7 +216,7 @@ export function OperationSheet({
                       <CheckCircle2 className="size-3.5" /> Set
                     </span>
                   ) : (
-                    <Link href="/settings/security/secrets" className="inline-flex items-center gap-1 text-xs text-warning-text underline-offset-4 hover:underline">
+                    <Link href="/integrations/credentials?tab=secrets" className="inline-flex items-center gap-1 text-xs text-warning-text underline-offset-4 hover:underline">
                       <AlertTriangle className="size-3.5" /> {sec.name} not set
                     </Link>
                   )}
@@ -261,7 +261,7 @@ export function OperationSheet({
                   </SelectContent>
                 </Select>
               </FormField>
-              <FormField id="b-mode" label="Model may" hint={d.binding.mode === 'equals' ? 'The value is filled from the case; any other value is refused.' : 'The model may name a record that belongs to the bound one, checked by the system.'}>
+              <FormField id="b-mode" label="Model may" hint={d.binding.mode === 'equals' ? 'The value is filled from the case; any other value is refused.' : 'The model may name a record that belongs to the bound one, checked by the app.'}>
                 <Select value={d.binding.mode} onValueChange={(v) => setBinding({ mode: v as SubjectBinding['mode'] })}>
                   <SelectTrigger id="b-mode" className="w-full">
                     <SelectValue />
@@ -291,8 +291,9 @@ export function OperationSheet({
 
         <Section title="Limits and approval">
           <div className="grid gap-3 sm:grid-cols-2">
-            <FormField id="op-access" label="Access" hint="Whether a call changes data. Any change is a major version; a write waits for an approval.">
-              <Select value={d.access} onValueChange={(v) => set(v === 'write' ? { access: 'write', requiresApproval: true } : { access: 'read' })}>
+            <FormField id="op-access" label="Access" hint="Whether a call changes data. Any change is a major version.">
+              {/* Approvals are off by default (owner rule): a write waits only when its approval switch is turned on. */}
+              <Select value={d.access} onValueChange={(v) => set({ access: v as ToolAccess })}>
                 <SelectTrigger id="op-access" className="w-full">
                   <SelectValue />
                 </SelectTrigger>

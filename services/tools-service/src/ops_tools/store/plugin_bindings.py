@@ -31,6 +31,11 @@ plugin_bindings = sa.Table(
     sa.Column("settings", sa.JSON, nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    # The plugin version the team took (c-609): its number, the digest of its tool declarations and the declarations
+    # themselves, which each call is built from until the team takes a newer one. Null until the team takes one.
+    sa.Column("version", sa.String(40)),
+    sa.Column("digest", sa.String(64)),
+    sa.Column("declarations", sa.JSON),
     # One team's row, never read across teams: the gateway reads the calling team's only.
     info=TEAM_OWNED,
 )
@@ -68,6 +73,28 @@ class PluginBindings:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
+    async def of_plugin(self, tenant_id: str, plugin_id: str) -> list[dict[str, Any]]:
+        """Every team's binding of one plugin, for stamping the installed version on those that have none (c-609)."""
+        t = plugin_bindings
+        reason = "stamping a plugin's installed version on each team's binding that has none"
+        q = sa.select(t).where(t.c.tenant_id == tenant_id, any_team(t, reason), t.c.plugin_id == plugin_id)
+        async with self.engine.connect() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings().all()]
+
+    async def take(
+        self, tenant_id: str, team_id: str, plugin_id: str, *, version: str, digest: str, declarations: dict[str, Any]
+    ) -> bool:
+        """Records the plugin version a team runs on its existing binding; False when the team has no binding."""
+        t = plugin_bindings
+        with acting_as(team_id):
+            q = (
+                t.update()
+                .where(t.c.tenant_id == tenant_id, team_visible(t), t.c.plugin_id == plugin_id)
+                .values(version=version, digest=digest, declarations=declarations, updated_at=now_iso())
+            )
+        async with self.engine.begin() as c:
+            return (await c.execute(q)).rowcount > 0
+
     async def put(
         self,
         tenant_id: str,
@@ -79,6 +106,7 @@ class PluginBindings:
         settings: dict[str, Any],
         by: str,
     ) -> dict[str, Any]:
+        # The version columns are not named here, so an upsert leaves the version the team took as it is.
         values = {
             "tenant_id": tenant_id,
             "team_id": team_id,

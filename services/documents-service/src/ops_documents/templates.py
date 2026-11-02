@@ -1,0 +1,233 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 chanl-ai
+"""`/v1/templates` (c-590): the document types a team may install from its plugins, and the install that makes the
+team's own copy. agents-service serves the same routes for agents, skills and workflows.
+
+tools-service is the one service that loads plugins; it answers the templates of the plugins on for the acting team,
+with each body (`GET /v1/plugin-templates`). A copy is made through the document type create route's own model and
+`DocumentTypes.create`, so a copy can never be something a person's create would refuse, and it is ready to read at
+once (version 1, as create makes it). Where a copy came from is a `template_copies` row; the copy itself is an ordinary
+type the team edits like any other.
+
+The routes act in the caller's team (`who` refuses a call naming none), since a copy saved with no team would be every
+team's. `source` is `plugin:<plugin id>` now; a built-in pack is another source later, on the same routes."""
+
+# No `from __future__ import annotations`: the routes' `Depends(caller)` annotations name the factory's arguments, which
+# FastAPI can only read as objects, not as strings resolved in this module.
+
+from collections.abc import Callable
+from typing import Annotated, Any, Literal, cast
+
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import Field, ValidationError
+
+from ops_documents.document_types import DocumentTypes
+from ops_documents.files import Who
+from ops_documents.models import DocumentTypeIn, Model
+from ops_documents.store import NameTakenError, TemplateCopies
+from ops_documents.tools_client import PluginTemplates
+from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_service_kit.errors import ApiError, Conflict, ServiceUnavailable, ValidationFailed
+from ops_service_kit.http import Envelope, ok
+
+Kind = Literal["document_type"]
+KIND: Kind = "document_type"
+# Keys of a template body the copy never takes: the type id is the team's own (ids are unique per tenant, so a body's
+# id would collide with another team's copy), and a sample file is one team's file.
+NOT_COPIED = ("id", "sampleFileId", "sample_file_id")
+
+
+class TemplatePlugin(Model):
+    id: str
+    title: str
+    version: str
+
+
+class TemplateRequires(Model):
+    tools: list[str]
+    bind: list[dict[str, str]]
+
+
+class Installed(Model):
+    # Live copies the team holds of this template, the newest version among them, and whether the source ships a
+    # newer one. A copy never changes by itself; updating one is a later card.
+    copies: int
+    version: int | None
+    newer_available: bool
+    # The newest live copy was made from a body other than the template's current one (its digest differs).
+    changed: bool = False
+
+
+class TemplateView(Model):
+    source: str
+    plugin: TemplatePlugin
+    kind: Kind
+    id: str
+    version: int
+    title: str
+    requires: TemplateRequires
+    installed: Installed
+
+
+class InstallInput(Model):
+    # The version listed now when left out; another one is 404 template_version_not_found.
+    version: int | None = Field(default=None, ge=1)
+    # The copy's name; the template's when left out. Unique in the team, as on create (409 name_taken).
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class CopyRef(Model):
+    id: str
+    kind: Kind
+    record_id: str
+    source: str
+    template_id: str
+    version: int
+
+
+class Installation(Model):
+    copy_: CopyRef = Field(alias="copy")
+    created: bool
+    # Bindings the install left for the person; a document type template names none.
+    needs: list[dict[str, str]]
+
+
+class TemplateNotFound(ApiError):
+    status = 404
+    code = "template_not_found"
+
+
+def _copy_view(row: dict[str, Any]) -> dict[str, Any]:
+    keys = ("id", "kind", "record_id", "source", "template_id", "version")
+    return CopyRef.model_validate({k: row[k] for k in keys}).model_dump(by_alias=True)
+
+
+def templates_router(
+    *,
+    copies: TemplateCopies,
+    document_types: DocumentTypes,
+    caller: Callable[..., Any],
+    scope: Callable[[str], Any],
+    responses: dict[int | str, dict[str, Any]],
+) -> APIRouter:
+    """The routes, acting as `caller` resolves the request (documents' `who`) under `scope(action)`. tools-service is
+    reached through `app.state.plugin_templates`; with none, both routes answer 503."""
+    # No router-wide tag: the list is `templates`, the copy `resources` (c-616, Add to team in the screen's words, the
+    # same route agents-service answers for agents, skills and workflows), and the first tag names the SDK operation.
+    router = APIRouter(responses=responses)
+
+    async def listed(request: Request, who: Who) -> list[dict[str, Any]]:
+        """The document type templates of the plugins on for the caller's team, from tools-service."""
+        tools = cast(PluginTemplates | None, getattr(request.app.state, "plugin_templates", None))
+        if tools is None:
+            raise ServiceUnavailable("Templates come from tools-service, and this service has no address for it.")
+        try:
+            rows = await tools.document_types(who)
+        except (ServiceCallError, ServiceUnreachable) as e:
+            raise ServiceUnavailable(
+                "tools-service did not answer with the team's templates. Try again shortly."
+            ) from e
+        return [t for t in rows if t.get("kind") == KIND]
+
+    @router.get(
+        "/v1/templates", tags=["templates"], response_model=Envelope[list[TemplateView]], dependencies=[scope("view")]
+    )
+    async def list_templates(  # pyright: ignore[reportUnusedFunction]
+        request: Request,
+        who: Annotated[Who, Depends(caller)],
+        kind: Annotated[Kind | None, Query()] = None,
+    ) -> JSONResponse:
+        """The document types the team's plugins bring, each with the copies the team holds of it."""
+        held = await copies.of_team()
+        out: list[dict[str, Any]] = []
+        for t in await listed(request, who):
+            mine = [c for c in held if c["source"] == t["source"] and c["template_id"] == t["id"]]
+            newest = max((int(c["version"]) for c in mine), default=None)
+            latest = max(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), default=None)
+            installed = {
+                "copies": len(mine),
+                "version": newest,
+                "newerAvailable": newest is not None and newest < t["version"],
+                "changed": latest is not None and bool(t.get("digest")) and latest.get("digest") != t.get("digest"),
+            }
+            view = {k: t[k] for k in ("source", "plugin", "kind", "id", "version", "title", "requires")}
+            out.append(TemplateView.model_validate(view | {"installed": installed}).model_dump(by_alias=True))
+        return ok(out)
+
+    async def make_type(who: Who, t: dict[str, Any], body: InstallInput) -> str:
+        """The create route's body and path: `DocumentTypeIn`, then `DocumentTypes.create`, which checks the fields as
+        an extraction does and makes version 1."""
+        fields = {k: v for k, v in cast(dict[str, Any], t.get("body") or {}).items() if k not in NOT_COPIED}
+        fields["name"] = body.name or fields.get("name") or t["title"]
+        try:
+            parsed = DocumentTypeIn.model_validate(fields)
+        except ValidationError as e:
+            first = e.errors()[0]
+            where = ".".join(str(p) for p in first["loc"])
+            raise ValidationFailed(
+                f"The template is not a document type this service makes: {where}: {first['msg']}"
+            ) from None
+        asked = parsed.model_dump(mode="json", by_alias=True, exclude={"sample_file_id"})
+        try:
+            made = await document_types.create(who, asked)
+        except NameTakenError as e:
+            raise Conflict(f"A document type named {parsed.name} exists.", code="name_taken") from e
+        return str(made["id"])
+
+    @router.post(
+        "/v1/resources/{resource}/copies",
+        tags=["resources"],
+        response_model=Envelope[Installation],
+        status_code=201,
+        responses={
+            200: {"model": Envelope[Installation], "description": "The team already holds a copy of this version"}
+        },
+        dependencies=[scope("edit")],
+    )
+    async def copy_resource(  # pyright: ignore[reportUnusedFunction]
+        request: Request,
+        who: Annotated[Who, Depends(caller)],
+        resource: str,
+        body: InstallInput,
+    ) -> JSONResponse:
+        """Add to team: makes the team's own copy of the document type, 201 with it, or 200 with the copy the team
+        already holds of this version. `resource` is `<source>:<template id>`; the source has a colon of its own
+        (`plugin:<id>`), so the template id follows the last one. 404 `template_not_found` when the team's apps bring
+        no such resource, `template_version_not_found` for a version they do not ship."""
+        source, _, template_id = resource.rpartition(":")
+        t = next((x for x in await listed(request, who) if x["source"] == source and x["id"] == template_id), None)
+        if t is None:
+            raise TemplateNotFound(
+                f"No template {template_id} from {source} for this team; its plugin may be off for it."
+            )
+        version = int(t["version"])
+        if body.version is not None and body.version != version:
+            raise TemplateNotFound(
+                f"{source} ships {template_id} version {version}, not {body.version}.",
+                code="template_version_not_found",
+            )
+        held = await copies.live(source, template_id, version)
+        if held is not None and await document_types.get(who, str(held["record_id"])) is not None:
+            return ok({"copy": _copy_view(held), "created": False, "needs": []})
+        # The create path refuses a role that cannot change document types, before anything is written.
+        record_id = await make_type(who, t, body)
+        if held is not None:
+            # The old copy's type is gone; its row stops counting so the new copy can be recorded.
+            await copies.removed(str(held["id"]))
+        row, made = await copies.add(
+            team=who.team,
+            kind=KIND,
+            record_id=record_id,
+            source=source,
+            template_id=template_id,
+            version=version,
+            by=who.actor,
+            digest=cast(str | None, t.get("digest")),
+        )
+        # Another install of this version won the race: its copy stands, and the type made here stays as an unused type
+        # of the team's (this service has no delete for a type). A type's name is unique in its team, so this happens
+        # only when the two installs named their copies differently.
+        return ok({"copy": _copy_view(row), "created": made, "needs": []}, 201 if made else 200)
+
+    return router

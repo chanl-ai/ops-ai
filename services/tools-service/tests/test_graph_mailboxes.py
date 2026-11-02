@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_email import OutboundMessage
 from ops_identity import Auth, dev_service_signer, install_auth, mint_service_token
-from ops_policy import AesGcmCipher, context_of
+from ops_policy import context_of
 from ops_service_kit.http import install_error_handlers
 from ops_service_kit.settings import Settings
 from ops_tools.egress import EgressPolicy, OverrideResolver
@@ -30,6 +30,7 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.secrets import SecretStore
 
+from .conftest import credentials
 from .service_clients import fake_service
 from .test_mailbox_senders import Agents
 
@@ -122,7 +123,7 @@ def policy(engine: AsyncEngine) -> EgressPolicy:
 
 def app_for(engine: AsyncEngine, graph: FakeGraph) -> FastAPI:
     settings = Settings()
-    resolver = SecretResolver(SecretStore(engine), AesGcmCipher(settings.secrets_key.get_secret_value()))
+    resolver = SecretResolver(SecretStore(engine), credentials())
     app = FastAPI()
     install_error_handlers(app)
     install_auth(app, Auth.from_settings(settings, audience="tools"))
@@ -138,8 +139,8 @@ async def allow_and_store(engine: AsyncEngine, tenant: str, *, hosts: bool = Tru
         for host in ("login.microsoftonline.com", "graph.microsoft.com"):
             await store.add(tenant, "host", host, actor="test", note="", at=now)
         await store.add(tenant, "range", f"{FAKE_IP}/32", actor="test", note="", at=now)
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    blob = cipher.encrypt("s3cret", context=context_of(tenant, SECRET))
+    vault = credentials()
+    blob = await vault.put("s3cret", context=context_of(tenant, SECRET))
     await SecretStore(engine).create(tenant, TEAM, SECRET, blob, actor="sam", at=now)
 
 
@@ -207,7 +208,7 @@ async def test_a_reply_leaves_as_the_mailbox_through_the_teams_registration(stor
     senders = MailboxSenders(
         settings,
         fake_service(Agents(record), "agents", ["deployments:view"]),
-        resolver=SecretResolver(SecretStore(engine), AesGcmCipher(settings.secrets_key.get_secret_value())),
+        resolver=SecretResolver(SecretStore(engine), credentials()),
         egress=policy(engine),
         resend_http=httpx.AsyncClient(),
         graph=graph_clients(httpx.MockTransport(graph), settings.graph_url),

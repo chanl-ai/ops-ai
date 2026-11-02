@@ -152,9 +152,11 @@ export function ActorCell({ kind, name, detail }: { kind: 'person' | 'workflow';
  * Who made a call: the identity it runs as and, when someone acts for them, "via" that actor. Rows from a log that
  * does not carry identity yet show the workflow and its agent, which is the same pair in workflow steps.
  */
-export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'actor' | 'workflowName' | 'agentName'> }) {
+export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'actor' | 'workflowName' | 'agentName' | 'actingFor' | 'credential'> }) {
   const who = call.subject?.name ?? call.workflowName;
   const via = call.subject ? call.actor?.name : call.agentName;
+  // Whose account the system saw: a person's own sign-in or the team's (c-558); nothing for a call with no sign-in.
+  const signedIn = call.credential === 'person' ? `Signed in as ${call.actingFor ?? 'the person'}` : call.credential === 'team' ? 'Team account' : undefined;
   return (
     <div className="max-w-56 min-w-36" data-testid="caller-cell">
       <div className="truncate text-sm" title={who}>
@@ -163,6 +165,11 @@ export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'acto
       {via && (
         <div className="truncate text-xs text-muted-foreground" title={via}>
           via {via}
+        </div>
+      )}
+      {signedIn && (
+        <div className="truncate text-xs text-muted-foreground" title={signedIn} data-testid="caller-signed-in">
+          {signedIn}
         </div>
       )}
     </div>

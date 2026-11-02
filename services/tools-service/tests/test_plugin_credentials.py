@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
-from ops_policy import AesGcmCipher
 from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator
 from ops_tools.auth.tokens import Tokens
@@ -29,13 +28,14 @@ from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
 from ops_tools.plugins.switches import InstallSwitches
+from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
 from .test_personal_sign_in import SETTINGS, AnyUrl, module
 from .test_plugins import ID, Policy
@@ -57,17 +57,22 @@ async def rig(
         ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
     )
     app = build_app(engine, seed, tenant, auth=auth)
-    cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
-    keys = PluginAppKeys(engine, cipher)
+    vault = credentials()
+    keys = PluginAppKeys(engine, vault)
     store = ConnectionStore(engine)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     connections = ConnectionService(
-        store, SecretStore(engine), cipher, Tokens(store, cipher, None, None), directory, egress=None,
+        store, SecretResolver(SecretStore(engine), vault),
+        vault, Tokens(store, vault, None, None), directory, egress=None,
         console_url=CONSOLE_URL, app_secret=keys.value,
     )  # fmt: skip
     policy = {ID: {"enabled": True, "client": {"id": "platform-client-id"}}}
     host = PluginHost(
-        ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), [Loaded("desk", desk, None)]
+        ModuleStore(engine),
+        PluginBindings(engine),
+        InstallSwitches(Policy(policy)),
+        [Loaded("desk", desk, None)],
+        store,
     )
     app.include_router(plugins_router(host, connections, directory, keys))
     hooks = {"response": [response_checker(app)]}
@@ -103,7 +108,7 @@ async def test_a_team_with_no_app_of_its_own_signs_in_with_the_platforms(
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]
     env = await _env(connections, tenant, conn_id)
-    assert env["settings"]["clientId"] == "platform-client-id" and env["settings"]["platformApp"] == ID
+    assert env["settings"]["clientId"] == "platform-client-id" and env["platform_app"] == ID
     assert not env.get("secrets"), env  # no copy of the platform's secret in the team
     conn = await connections.store.get(tenant, conn_id)
     assert conn is not None
@@ -122,8 +127,34 @@ async def test_a_teams_own_app_wins_over_the_platforms(
     on = await client.put(f"/v1/plugins/{ID}/team", json=own, headers=team_admin(tenant))
     assert on.status_code == 200, on.text
     env = await _env(connections, tenant, on.json()["data"]["connectionId"])
-    assert env["settings"]["clientId"] == "team-client-id" and "platformApp" not in env["settings"]
+    assert env["settings"]["clientId"] == "team-client-id" and env["platform_app"] is None
     assert "clientSecret" in (env.get("secrets") or {})
+
+
+async def test_edit_keys_on_a_platform_app_connection_keeps_the_platforms_app(
+    rig: tuple[httpx.AsyncClient, ConnectionService, PluginAppKeys], tenant: str
+) -> None:
+    """The connection page's Edit keys sends back the kind's fields it shows, as the dialog does (c-580): the app the
+    environment signs in with is not one of them, so a save that rewrites the settings must not drop it."""
+    client, connections, _ = rig
+    await client.put(f"/v1/plugins/{ID}/app-secret", json={"clientSecret": SECRET}, headers=account_admin(tenant))
+    on = await client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=team_admin(tenant))
+    conn_id = on.json()["data"]["connectionId"]
+    kinds = (await client.get("/v1/connection-kinds", headers=team_admin(tenant))).json()["data"]
+    kind = next(k for k in kinds["kinds"] if k["id"] == "oauth2_auth_code")
+    shown = {f["name"] for f in [*kinds["common"], *kind["fields"], *kinds["certificate"]]}
+    detail = (await client.get(f"/v1/connections/{conn_id}", headers=team_admin(tenant))).json()["data"]
+    settings = {k: v for k, v in detail["environments"]["production"]["settings"].items() if k in shown}
+    body = {"revision": detail["revision"], "settings": {**settings, "testPath": "/api/v1/limits"}, "secretValues": {}}
+    saved = await client.put(
+        f"/v1/connections/{conn_id}/environments/production", json=body, headers=team_admin(tenant)
+    )
+    assert saved.status_code == 200, saved.text
+    conn = await connections.store.get(tenant, conn_id)
+    assert conn is not None
+    env = dict(conn["environments"]["production"])
+    proof = await connections._client_proof(_caller(tenant), conn, env, "sign-in Desk")  # pyright: ignore[reportPrivateUsage]
+    assert proof.secret == SECRET, "Edit keys dropped the platform's app: the sign-in has no client secret"
 
 
 async def test_only_an_account_admin_sets_the_platforms_secret_and_no_read_shows_it(
@@ -196,19 +227,21 @@ async def test_a_call_on_the_platforms_app_reads_its_secret_from_the_account_not
         return httpx.Response(200, json={"access_token": "at-new", "expires_in": 3600, "refresh_token": "rt-2"})
 
     store = ConnectionStore(engine)
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    keys = PluginAppKeys(engine, cipher)
+    vault = credentials()
+    keys = PluginAppKeys(engine, vault)
     now = datetime.now(UTC)
     row = {
         "tenant_id": tenant, "id": "con_desk", "team_id": TEAM, "name": "Desk", "auth_kind": "oauth2_auth_code",
-        "available_to": None, "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
+        "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "t", "created_at": now, "updated_by": "t", "updated_at": now,
     }  # fmt: skip
     assert await store.create(row, actor="t", at=now)
-    env = {**SETTINGS, "platformApp": ID}
-    await store.change(tenant, "con_desk", 1, {}, actor="t", at=now, environment=("test", env, {}))
+    env = dict(SETTINGS)
+    await store.change(
+        tenant, "con_desk", 1, {}, actor="t", at=now, environment=("test", env, {}, {"platform_app": ID})
+    )
     upstream = httpx.AsyncClient(transport=httpx.MockTransport(token_endpoint))
-    tokens = Tokens(store, cipher, upstream, AnyUrl())  # pyright: ignore[reportArgumentType]
+    tokens = Tokens(store, vault, upstream, AnyUrl())  # pyright: ignore[reportArgumentType]
     expired = {"access_token": "at-old", "expires_in": -60, "refresh_token": "rt-1"}
     await tokens.store_answer(tenant, "con_desk", "test", expired)
     await keys.save(tenant, ID, SECRET, by="sam")

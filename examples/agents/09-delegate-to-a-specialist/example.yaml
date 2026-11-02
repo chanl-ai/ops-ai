@@ -1,0 +1,27 @@
+id: delegate-to-a-specialist
+title: Delegate to a specialist
+track: agent
+status: built
+difficulty: advanced
+outcome: A triage agent delegates research to a specialist.
+capabilities:
+- id: agent.delegate
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+- resources/specialist.yaml
+fixtures:
+- fixtures/question.json
+expected:
+- expected/reply.json
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 50
+teaches:
+- grant agent:<id> the same way as workflow:<id>
+- the triage turn calls agent__<id> and the reply cites the specialist
+gaps: []

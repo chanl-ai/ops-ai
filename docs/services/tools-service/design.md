@@ -18,13 +18,11 @@ Status: current for an earlier change (connections and the one executor), an ear
 | 8 | An MCP server's sign-in found from its 401 and metadata, issuer checked, run as the authorization code strategy with the server as `resource`; the MCP path signs in through the same authenticator | `auth/discovery.py`, `executor.py` | built |
 | 9 | A call that says test answered from the operation's first matching mock answer, else its default, before step 5: error status, delay or timeout as a real answer would give them; production, and a call naming no environment, never | `executor.py`, `mocks.py` | built |
 
-## Screens (low fidelity)
+## Screens
 
-Content and components only; the console's builder composes them (purple tags are files under `apps/console/src/components`). The API below is built; the screens are not.
-
-![1 · Data Hub › Connections](images/design-data-hub-connections.png)
-
-![2 · A connection](images/design-a-connection.png)
+The console shows this service through the Apps menu: the catalog, each App's page with its Accounts, Credentials, My
+accounts and Tools. [Apps](../../guide/apps.md) describes each screen; the earlier wireframes of separate connection
+screens were retired with them.
 
 ## API
 

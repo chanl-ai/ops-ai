@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.activities.catalog import load_catalog
 from ops_email import MemorySender, OutboundMessage
-from ops_policy import AesGcmCipher, context_of
+from ops_policy import context_of
 from ops_service_kit.settings import Settings
 from ops_tools.egress import EgressPolicy, OverrideResolver
 from ops_tools.mailboxes import MailboxSenders, MailboxSendRefused
@@ -27,7 +27,7 @@ from ops_tools.store.egress import EgressStore
 from ops_tools.store.secrets import SecretStore
 from ops_tools.tools import LocalToolRunner, ToolCaller
 
-from .conftest import AGENTS_FIXTURES
+from .conftest import AGENTS_FIXTURES, credentials
 from .service_clients import claims, fake_service
 
 MAILPIT_SMTP = int(os.environ.get("OPS_MAILPIT_SMTP_PORT", "1025"))
@@ -73,7 +73,7 @@ class Env:
 
 def build(engine: AsyncEngine, agents: Agents, resend: httpx.MockTransport | None = None) -> MailboxSenders:
     settings = Settings()
-    resolver = SecretResolver(SecretStore(engine), AesGcmCipher(settings.secrets_key.get_secret_value()))
+    resolver = SecretResolver(SecretStore(engine), credentials())
     policy = EgressPolicy(EgressStore(engine), OverrideResolver({HOST: f"{private_address()}:{MAILPIT_SMTP}"}))
     return MailboxSenders(
         settings,
@@ -92,12 +92,12 @@ async def env(engine: AsyncEngine, tenant: str) -> AsyncIterator[Env]:
     store = EgressStore(engine)
     await store.add(tenant, "host", HOST, actor="test", note="", at=now)
     await store.add(tenant, "range", f"{private_address()}/32", actor="test", note="", at=now)
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
+    vault = credentials()
     await SecretStore(engine).create(
         tenant,
         TEAM,
         SECRET,
-        cipher.encrypt("smtp-password", context=context_of(tenant, SECRET)),
+        await vault.put("smtp-password", context=context_of(tenant, SECRET)),
         actor="t",
         at=now,
     )
@@ -149,7 +149,7 @@ async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
 
 async def test_the_secret_is_read_for_the_mailboxs_team(env: Env) -> None:
     store, now = SecretStore(env.engine), datetime.now(UTC)
-    blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt("x", context=context_of(env.tenant, SECRET))
+    blob = await credentials().put("x", context=context_of(env.tenant, SECRET))
     await store.create(env.tenant, "team_fraud", SECRET, blob, actor="t", at=now)
     assert await store.delete(env.tenant, TEAM, SECRET, actor="t", at=now)
     sender = await env.senders.sender(env.tenant, TEAM, env.agents.mailbox["address"])

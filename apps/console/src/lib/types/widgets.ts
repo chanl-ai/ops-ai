@@ -101,6 +101,8 @@ export type StepStateKind = 'pending' | 'active' | 'done' | 'failed';
 export interface KindAction {
   label: string;
   reply: string;
+  /** What the card reads once this action was taken ("Approved" for Approve); the label when unset. */
+  done?: string;
 }
 export interface KindStatus {
   text: string;
@@ -126,7 +128,7 @@ export type KindNode =
   | {
       type: 'form';
       title?: string;
-      fields: { name: string; label: string; type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'boolean'; options?: string[]; required?: boolean; placeholder?: string }[];
+      fields: { name: string; label: string; type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'boolean'; options?: string[]; required?: boolean; placeholder?: string; /** The value the field starts with. */ value?: Cell }[];
       submit: KindAction;
     }
   /** `actionsOff`: the page around it owns the decision (a Human Task's footer), so the card draws no buttons. */

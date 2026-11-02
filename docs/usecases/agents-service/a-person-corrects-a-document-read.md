@@ -27,6 +27,7 @@ it will leave and the case run it follows.
 | 4 | She opens the acknowledgement | To is the sender, From is the team mailbox, and the court order case run is listed |
 | 4b | She opens the acknowledgement as its own page | The title asks whether to send the reply to the sender, and the reply shows beside the decision |
 | 4c | The same notice for a debtor the bank has (Marcus Bell) waits at Hold or flag; she opens that task | The title asks one plain question naming both choices and the customer, the notice shows beside it, the footer is one row, and hovering an option says what it does; no tool name, raw key or raw float on the page |
+| 4e | She chooses Hold, changes the proposed 3,250.00 to 2,140.55 and decides | The task's Hold card and the case's Drafted actions row read 2,140.55, Approved; neither shows 3,250.00 |
 | 4d | She opens the mailed document's run | It lists the court order case it started for the debtor, with its status and a link, and the canvas says the step runs for each debtor read |
 | 5 | — | No page errors |
 | 6 | A read naming three debtors waits for a check | The page shows one tab per debtor and one record at a time; at 1280 each record's table fits its pane with the source quote wrapped |

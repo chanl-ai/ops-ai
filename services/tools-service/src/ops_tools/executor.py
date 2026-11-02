@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import parse_qsl, quote, quote_plus, urlsplit
+from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
 
 import httpx
 
@@ -178,6 +178,10 @@ class HttpRequest:
     params: dict[str, Any]
     json_body: Any
     headers: dict[str, str]
+    # A form-encoded body in place of the JSON one (a plugin's form tool, c-584, or a form operation, c-591).
+    form: dict[str, str] | None = None
+    # A raw body, sent as the text it is with the operation's own Content-Type (c-591).
+    content: str | None = None
 
 
 def _with_auth(req: HttpRequest, prepared: Prepared | None) -> tuple[dict[str, Any], dict[str, str]]:
@@ -245,7 +249,14 @@ def build_request(
     method = op.get("method") or "GET"
     body: Any = None
     params: dict[str, Any] = dict(fixed)
-    if op.get("body"):
+    form: dict[str, str] | None = None
+    content: str | None = None
+    encoding = op.get("body_encoding") or "json"
+    if op.get("body") and encoding == "form":
+        form = form_fields(cast(dict[str, str], json.loads(op["body"])), args)
+    elif op.get("body") and encoding == "raw":
+        content = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), op["body"])
+    elif op.get("body"):
         body = json.loads(BODY_VAR.sub(lambda m: json.dumps(args.get(m.group(1))), op["body"]))
     elif method in ("GET", "DELETE"):
         # The operation's own query wins over an argument of the same name: a caller cannot replace a credential.
@@ -254,7 +265,47 @@ def build_request(
         body = rest
     pairs: list[dict[str, str]] = op.get("headers") or []
     headers = {h["key"]: SECRET_REF.sub(lambda m: secret(m, False), h["value"]) for h in pairs}
-    return HttpRequest(method, url, params, body, headers)
+    return HttpRequest(method, url, params, body, headers, form, content)
+
+
+def _sent_headers(req: HttpRequest, prepared: Prepared | None) -> dict[str, str]:
+    """The headers as the request left: the operation's and the connection's, and the Content-Type its body encoding
+    set (httpx adds it on the wire), so what a person reads is what the system got (c-591)."""
+    headers = _with_auth(req, prepared)[1]
+    encoded = (
+        "application/x-www-form-urlencoded"
+        if req.form is not None
+        else "application/json"
+        if req.json_body is not None
+        else None
+    )
+    if encoded and not any(k.lower() == "content-type" for k in headers):
+        return {**headers, "Content-Type": encoded}
+    return headers
+
+
+def _as_text(value: Any) -> str:
+    """An argument inside a form field or a raw body: text as it is, anything else as JSON, nothing as empty."""
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def form_fields(templates: dict[str, str], args: dict[str, Any]) -> dict[str, str]:
+    """A form body: each field's `{{arg}}` the argument as text (an object or a list as JSON), a field whose whole
+    value is an argument not given left out. httpx encodes every value, so an argument cannot add a field."""
+
+    out: dict[str, str] = {}
+    for name, template in templates.items():
+        whole = BODY_VAR.fullmatch(template.strip())
+        if whole and args.get(whole.group(1)) is None:
+            continue
+        out[name] = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), template)
+    return out
+
+
+# A call to a module whose connection names no address for the run's environment (c-616): nothing is sent.
+NO_ADDRESS = "This tool's app names no address for this environment; set it on the app's connection."
 
 
 class _Secrets:
@@ -380,6 +431,8 @@ class HttpExecutor(_Secrets):
         to `trial.raw`. `secret_values` are a test's typed values (_Secrets._resolve). `environment` is the run's (test
         or production), which picks the connection's settings. `on_answer` sees the answer before the transform, as
         a plugin's paging reads the next page from it (plugins/executor.py)."""
+        if not module.get("endpoint"):
+            return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
         host = urlsplit(build_request(module, op, args).url).hostname
         if self.policy is None:
             return _failure("EGRESS_DENIED", "This gateway has no egress policy, so it calls no external system.")
@@ -403,8 +456,10 @@ class HttpExecutor(_Secrets):
                 {
                     "method": req.method,
                     "url": sent,
-                    "headers": [{"key": k, "value": v} for k, v in _with_auth(req, prepared)[1].items()],
+                    "headers": [{"key": k, "value": v} for k, v in _sent_headers(req, prepared).items()],
                     **({"body": json.dumps(req.json_body)} if req.json_body is not None else {}),
+                    **({"body": urlencode(req.form)} if req.form is not None else {}),
+                    **({"body": req.content} if req.content is not None else {}),
                 },
                 used,
             )
@@ -434,6 +489,16 @@ class HttpExecutor(_Secrets):
                 if trial is not None:
                     trial.used = used
                 res = await self._send(module, req, prepared, limit_ms)
+            if (
+                res.status_code == 401
+                and prepared is not None
+                and prepared.person is not None
+                and not prepared.renewable
+                and self.auth is not None
+                and acting_for is not None
+            ):
+                # A person's own key the system refused (c-595): theirs alone is marked, and the card asks for it again.
+                return auth_failure(await self.auth.refused(module, prepared, acting_for, f"{host} answered 401."))
         except EgressDenied as e:
             # The policy may name the URL it refused, which now carries resolved secrets.
             return _failure("EGRESS_DENIED", scrub(str(e), used), side=OURS)
@@ -474,7 +539,9 @@ class HttpExecutor(_Secrets):
             req.method,
             req.url,
             params=params or None,
-            json=req.json_body,
+            json=req.json_body if req.form is None and req.content is None else None,
+            data=req.form,
+            content=req.content,
             headers=headers,
             timeout=limit_ms / 1000,
             extensions=for_tenant(module["tenant_id"], prepared.certificate if prepared else None),
@@ -527,6 +594,8 @@ class McpExecutor(_Secrets):
         trial: Trial | None = None,
         environment: str | None = None,
     ) -> ToolOutcome:
+        if not module.get("endpoint"):
+            return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
         url: str = module["endpoint"]
         host = urlsplit(url).hostname
         if self.policy is None:
@@ -616,7 +685,7 @@ class Executor:
         or a real timeout gives, so a workflow's ports behave as they would against the system."""
         assert self.mocks is not None
         limit_ms: int = op.get("timeout_ms") or module["timeout_ms"]
-        host = urlsplit(str(module["endpoint"])).hostname
+        host = urlsplit(str(module.get("endpoint") or "")).hostname
         await self.mocks.wait(mock, limit_ms)
         if mock["timeout"]:
             failed = transport_failure(host, httpx.ReadTimeout("mock"), limit_ms)
@@ -639,9 +708,13 @@ class Executor:
         key: str,
         caller: ToolCaller,
         environment: str | None = None,
+        trial: Trial | None = None,
+        secret_values: dict[str, str] | None = None,
     ) -> ToolOutcome:
         """`caller` is the verified caller the gateway decided for: every executor path acts for it alone.
-        `environment` is the run's (test or production; test when None), which picks a connection's settings."""
+        `environment` is the run's (test or production; test when None), which picks a connection's settings. A tool
+        page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors, which fill
+        the request it shows."""
         op, module = resolved.operation, resolved.module
         if module is not None and module["tenant_id"] != caller.tenant_id:
             raise ValueError("A module is run only for its own tenant.")
@@ -660,16 +733,30 @@ class Executor:
             return await self.code.run(
                 op, args, key=key, caller=caller, environment=environment, module_team=module.get("team_id")
             )
+        if resolved.executor in ("http", "mcp") and self.http.auth is not None:
+            # A module's address is its connection's for the run's environment (c-616), the only home it has.
+            module = await self.http.auth.addressed(module, environment)
         if self.mocks is not None and (
-            mock := await self.mocks.for_call(caller.tenant_id, op["name"], args, environment)
+            mock := await self.mocks.for_call(caller.tenant_id, str(module["id"]), op["name"], args, environment)
         ):
             return await self._mocked(module, op, mock)
         if resolved.executor == "mcp":
-            return await self.mcp.run(module, op, args, actor=actor, environment=environment)
+            return await self.mcp.run(
+                module, op, args, actor=actor, environment=environment, trial=trial, secret_values=secret_values
+            )
         if resolved.executor == "plugin":
             if self.plugins is None:
                 return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
             return await self.plugins.run(
                 module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for
             )
-        return await self.http.run(module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for)
+        return await self.http.run(
+            module,
+            op,
+            args,
+            actor=actor,
+            environment=environment,
+            acting_for=caller.acting_for,
+            trial=trial,
+            secret_values=secret_values,
+        )

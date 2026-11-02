@@ -1,39 +1,33 @@
-/** Govern › Models (c-177): the model providers a workspace connects, as models-service serves them. */
+/** Govern › Settings › Model providers: the account's provider connections, as models-service serves them. */
 
-export type ProviderType = 'openai' | 'anthropic' | 'azure_openai' | 'openai_compatible';
+/** The connection types models-service knows; the console connects the two it serves to callers. */
+export type ProviderType = 'openai-compatible' | 'azure-openai' | 'anthropic' | 'scripted';
 
-/** The last connection test: a call to the provider's model list with its key. */
-export interface ProviderHealth {
-  status: 'ok' | 'failed' | 'untested';
-  /** When the test ran, ISO; null before the first. */
-  at: string | null;
-  latencyMs?: number | null;
-  /** The provider's own refusal, as it gave it ("401 invalid api key"); never the key. */
-  error?: string | null;
-  /** How many models the key may call, from the provider's list. */
-  models?: number | null;
-}
-
-export interface ModelProvider {
+/** Where an alias's calls go, and the name of the saved key they sign in with; a key itself never comes back. */
+export interface ProviderConnection {
   id: string;
   name: string;
   type: ProviderType;
-  baseUrl: string;
-  /** The workspace secret holding the key (Govern › Settings › Secrets); null for a provider that takes none. */
-  keySecret: string | null;
-  /** Whether that secret exists; a connection naming a missing secret cannot call the provider. */
-  keySet: boolean;
-  health: ProviderHealth;
-  /** The aliases (what agents and workflows pick) that route to this provider. */
-  aliases: string[];
+  /** The endpoint: a base URL ending in /v1, or an Azure resource's endpoint; null for scripted. */
+  baseUrl: string | null;
+  /** The model provider key's name (Keys on the same page); null for an endpoint that takes none. */
+  keyRef: string | null;
+  /** Azure OpenAI only: `v1` or a dated version. */
+  apiVersion: string | null;
+  /** Azure OpenAI only: the region the resource runs in. */
+  region: string | null;
+  /** Azure OpenAI only: the region Azure last answered from; null until the first call. */
+  observedRegion: string | null;
+  /** `answered from <region>, expected <region>` when Azure answered from another region; computed by models-service. */
+  regionMismatch: string | null;
 }
 
-/** Connecting a provider: the key is saved as a workspace secret named `keySecret`, or an existing one is named. */
-export interface ProviderInput {
+/** Connecting a provider: only the picked type's fields are sent. */
+export interface ProviderConnectionInput {
   name: string;
-  type: ProviderType;
+  type: 'openai-compatible' | 'azure-openai';
   baseUrl: string;
-  keySecret: string;
-  /** A new key to save under `keySecret`; absent when the secret already holds it. */
-  key?: string;
+  keyRef: string | null;
+  apiVersion?: string;
+  region?: string;
 }

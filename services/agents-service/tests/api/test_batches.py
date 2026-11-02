@@ -6,6 +6,9 @@ with its own database; Files is faked at its routes and the worker's batch tick 
 
 from __future__ import annotations
 
+import io
+import json
+from csv import DictReader
 from typing import Any
 
 import sqlalchemy as sa
@@ -164,7 +167,11 @@ async def test_the_results_download_lists_every_row_with_its_status(stack: Stack
     r = await c.get(f"/v1/batches/{bid}/results.csv", headers=BUILDER)
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv"), r.text
     lines = r.text.strip().splitlines()
-    assert lines[0].split(",")[:3] == ["row", "status", "outcome"] and len(lines) == 4, lines
+    assert lines[0].split(",")[:4] == ["row", "input", "status", "outcome"] and len(lines) == 4, lines
+    # The Input column the page shows comes with every line, as the row's mapped input.
+    shown = {x["row"]: x["input"] for x in (await c.get(f"/v1/batches/{bid}", headers=BUILDER)).json()["data"]["rows"]}
+    for line in DictReader(io.StringIO(r.text)):
+        assert json.loads(line["input"]) == shown[int(line["row"])] and shown[int(line["row"])], line
     async with rt.db.connect() as conn:
         n = await conn.scalar(
             sa.select(sa.func.count()).select_from(engine_runs).where(engine_runs.c.workflow_id == WID)

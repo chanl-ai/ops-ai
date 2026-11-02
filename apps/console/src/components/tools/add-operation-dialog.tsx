@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { SaveProblem } from '@/components/shared/save-problem';
 import { Button } from '@/components/ui/button';
 import type { HttpOperationInput } from '@/lib/types/tool-modules';
 
@@ -15,7 +16,7 @@ const EMPTY: HttpOperationInput = { name: '', description: '', access: 'read', m
 export function AddOperationDialog({ open, onOpenChange, onAdd, adding }: { open: boolean; onOpenChange: (o: boolean) => void; onAdd: (input: HttpOperationInput) => Promise<void>; adding: boolean }) {
   const [value, setValue] = React.useState<HttpOperationInput>(EMPTY);
   const [touched, setTouched] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   React.useEffect(() => {
     if (!open) return;
     setValue(EMPTY);
@@ -30,7 +31,7 @@ export function AddOperationDialog({ open, onOpenChange, onAdd, adding }: { open
     try {
       await onAdd(value);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
     }
   };
 
@@ -41,7 +42,7 @@ export function AddOperationDialog({ open, onOpenChange, onAdd, adding }: { open
       onOpenChange={onOpenChange}
       size="md"
       title="Add operation"
-      description="Added to the draft. A published module stages it for the next version."
+      description="Added to the draft. Published tools stage it for the next version."
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={adding}>
@@ -54,7 +55,7 @@ export function AddOperationDialog({ open, onOpenChange, onAdd, adding }: { open
       }
     >
       <div className="flex flex-col gap-3" data-testid="add-operation-dialog">
-        {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
+        <SaveProblem error={error} />
         <HttpOperationBuilder value={value} onChange={setValue} errors={errors} />
       </div>
     </DialogShell>

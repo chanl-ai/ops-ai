@@ -33,6 +33,8 @@ DEFAULTS: dict[str, Any] = {
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,
     "toolWritesNeedApproval": {},
+    # Approvals are off by default (owner, 2026-11-01): no team lists an app whose writes wait.
+    "appWritesNeedApproval": {},
     # No team set: off for every team until one turns it on (owner, 2026-10-18; c-298, c-302, c-300, c-295).
     "aiSteps": {},
     "taskAssist": {},
@@ -99,6 +101,8 @@ async def test_a_change_is_audited_with_before_and_after_and_moves_the_permissio
         ("memoryRetentionDays", 1.5),
         ("reviewSlaHours", 0),
         ("reviewSlaHours", None),
+        ("appWritesNeedApproval", "plugin:opsai.salesforce"),
+        ("appWritesNeedApproval", [""]),
         ("noSuchPolicy", True),
     ],
 )
@@ -256,3 +260,14 @@ async def test_every_policy_says_how_it_is_drawn_and_what_it_is_called(signin: S
     rows = (await signin.public.get("/v1/policies", headers=signin.admin)).json()["data"]
     assert {r["key"]: r["kind"] for r in rows} == {p.key: p.kind for p in POLICIES}
     assert all(r["kind"] in KINDS and r["title"] for r in rows), rows
+
+
+async def test_a_team_lists_the_apps_whose_writes_wait_through_the_route(signin: SignInRig) -> None:
+    """appWritesNeedApproval (c-616) takes a list, which a route typed for switches and numbers would refuse."""
+    put = await signin.public.put(
+        "/v1/policies/appWritesNeedApproval", json={"value": ["plugin:opsai.salesforce"]}, headers=signin.admin
+    )
+    assert put.status_code == 200, put.text
+    assert put.json()["data"]["kind"] == "names"
+    value = put.json()["data"]["value"]
+    assert list(value.values()) == [["plugin:opsai.salesforce"]], value

@@ -19,8 +19,8 @@ URLs, an OIDC client secret named `uc-oidc`, and the local fake identity provide
 |---|---|---|
 | 1 | Priya sets the workspace's teams | 403 |
 | 2 | Wanjiru creates Lobby, then makes team_ops the security team and Lobby the default team | 200; Priya now holds Security admin in team_ops, Sam no longer in team_security; `/v1/me` names team_ops |
-| 3 | Wanjiru sets an OIDC provider whose first sign-in names a role and no team, mapping group `fraud-analysts` to team_fraud as viewer | 200 |
-| 4 | A new person carrying `fraud-analysts` signs in; another without it | The first lands in Lobby as chat user and team_fraud as viewer; the second in Lobby only |
+| 3 | Wanjiru sets an OIDC provider whose first sign-in names a role and no team, mapping group `platform-analysts` to team_platform as viewer | 200 |
+| 4 | A new person carrying `platform-analysts` signs in; another without it | The first lands in Lobby as chat user and team_platform as viewer; the second in Lobby only |
 
 ## Acceptance layers
 

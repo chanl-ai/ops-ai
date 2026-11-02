@@ -4,14 +4,47 @@ resume the conversation."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
-from httpx import AsyncClient
+import pytest
+from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import StaticPool
 
-from tests.conftest import sse_events
+from ops_agents.api.app import create_app
+from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
+from ops_service_kit.settings import Settings
+from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 
 ASKER, APPROVER = {"X-Dev-User": "dana@harborpine.example"}, {"X-Dev-User": "lee@harborpine.example"}
 WRITE = 'call request_document {"customerId": "C-1042", "document": "proof of address", "reason": "Moved"}'
+
+
+@pytest.fixture
+async def client(graph_models: FakeGraphModels) -> AsyncIterator[AsyncClient]:
+    """The four-eyes rule on (requesterMayDecide off): the dev asker passes every role rule, so with the rule open
+    their own write is decided as theirs and never waits in Reviews (c-616)."""
+    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"requesterMayDecide": False})
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    async with engine.begin() as c:
+        await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
+    app = create_app(
+        settings,
+        model=scripted_model(),
+        engine=engine,
+        checkpointer=InMemorySaver(),
+        graph_models=graph_models,
+        knowledge=fixture_knowledge(),
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c,
+    ):
+        yield c
 
 
 async def _hold(client: AsyncClient) -> str:

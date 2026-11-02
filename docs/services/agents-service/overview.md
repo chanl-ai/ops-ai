@@ -49,6 +49,7 @@ State is saved after every node by the checkpointer, so a pause survives a resta
 | Tool gateway | `OPS_GATEWAY_URL` | none: tools then run in process from the fixture catalogue (unit tests only); the stack sets tools-service |
 | Seed directory | `OPS_SEED_DIR` | `services/agents-service/seed/` in dev; unset outside dev, so production starts empty. Tests name `tests/fixtures/seed/` |
 | Seeded agents | `OPS_AGENTS_SEED_FILE` | `chat_agents.json` in the seed directory |
+| Tool search (install flag `tool_search`) | `OPS_FLAGS` naming `tool_search`; `OPS_TOOL_SEARCH_ABOVE` | off. On, an agent with more granted tools than `OPS_TOOL_SEARCH_ABOVE` (default 20; 0 means always) is sent none of their schemas: each is `defer_loading` and pydantic-ai's tool search (`ops_agent_kernel/search.py` `strategy`, the same word scoring as `search_tools`) reveals the ones the model finds, which it then calls by their own name through the same approval, sign-in, budget and audit. A name outside the grants is recorded as a failed call with server `none` and nothing is sent (uc-610) |
 
 Values carry the `OPS_` prefix because a shared secret store may already define `DATABASE_URL` for another
 service. Without a model key the service starts, `/health` reports the missing key and sending a message returns 503.

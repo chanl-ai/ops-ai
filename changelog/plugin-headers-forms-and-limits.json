@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-31",
+  "title": "Plugins send the headers, forms and limits a system needs",
+  "description": "A plugin can now send the extra headers a system asks for, post form fields to systems like Slack and Stripe, ask for extra sign-in options and look up which site a team signed in to. A money-moving tool can carry a limit, so a transfer over it or with no amount is refused before it leaves.",
+  "tag": "improved",
+  "cards": [
+    "c-584"
+  ]
+}

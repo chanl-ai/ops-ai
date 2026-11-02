@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -19,10 +19,11 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ops_policy import Cipher, CipherError, context_of
+from ops_policy import CipherError, CredentialStore
 
 from ..egress import EgressDenied, EgressPolicy, for_tenant
-from ..store.connections import SHARED, ConnectionStore
+from ..store.connections import SHARED, ConnectionStore, Row, held_of
+from ..store.connections import token_context as _context
 from .assertion import SigningError, sign
 
 # A token this close to its expiry is refreshed before use, so a call never carries one that lapses on the way.
@@ -68,10 +69,6 @@ class ClientProof:
     signing_key: str | None = None
     signing_certificate: str | None = None
     signed: list[str] = field(default_factory=list[str])
-
-
-def _context(tenant_id: str, part: str, connection_id: str, environment: str, person: str) -> str:
-    return context_of(tenant_id, f"{part}/{connection_id}/{environment}/{person or 'shared'}")
 
 
 def _claims(raw: Any) -> dict[str, Any]:
@@ -163,13 +160,13 @@ class Tokens:
     def __init__(
         self,
         store: ConnectionStore,
-        cipher: Cipher,
+        credentials: CredentialStore,
         http: httpx.AsyncClient | None,
         policy: EgressPolicy | None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.store = store
-        self.cipher = cipher
+        self.credentials = credentials
         self.http = http
         self.policy = policy
         self.clock = clock
@@ -217,7 +214,7 @@ class Tokens:
             )
         return cast(dict[str, Any], answer)
 
-    def _row(
+    async def _row(
         self,
         tenant_id: str,
         key: tuple[str, str, str],
@@ -232,11 +229,11 @@ class Tokens:
         expires = answer.get("expires_in")
         refresh = answer.get("refresh_token")
         return {
-            "access_ct": self.cipher.encrypt(
+            "access_ct": await self.credentials.put(
                 str(answer["access_token"]), context=_context(tenant_id, "access", connection_id, environment, person)
             ),
             # A system that does not rotate keeps the refresh token it gave before.
-            "refresh_ct": self.cipher.encrypt(
+            "refresh_ct": await self.credentials.put(
                 str(refresh), context=_context(tenant_id, "refresh", connection_id, environment, person)
             )
             if isinstance(refresh, str) and refresh
@@ -248,10 +245,10 @@ class Tokens:
             "refreshed_at": now,
         }
 
-    def _token(self, tenant_id: str, row: dict[str, Any], key: tuple[str, str, str]) -> Token:
+    async def _token(self, tenant_id: str, row: dict[str, Any], key: tuple[str, str, str]) -> Token:
         connection_id, environment, person = key
         try:
-            access = self.cipher.decrypt(
+            access = await self.credentials.get(
                 str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, environment, person)
             )
         except CipherError as e:
@@ -288,20 +285,41 @@ class Tokens:
             row = await self.store.token(tenant_id, connection_id, environment, person)
             if self._fresh(row, stale_rotation):
                 assert row is not None
-                return self._token(tenant_id, row, key)
+                return await self._token(tenant_id, row, key)
             read = int(row["rotations"]) if row else None
             try:
                 fresh = await self._fetch(tenant_id, key, row, settings, proof=proof, grant=grant)
             except AuthFailed:
                 again = await self.store.token(tenant_id, connection_id, environment, person)
                 if again is not None and int(again["rotations"]) != read and self._fresh(again, None):
-                    return self._token(tenant_id, again, key)
+                    return await self._token(tenant_id, again, key)
                 raise
             if not await self.store.put_token(
                 tenant_id, connection_id, environment, fresh, expected_rotations=read, person=person
             ):
+                await self._forget(tenant_id, key, fresh, keep=row)
                 fresh = await self.store.token(tenant_id, connection_id, environment, person) or fresh
-            return self._token(tenant_id, fresh, key)
+            elif row is not None:
+                await self._forget(tenant_id, key, row, keep=fresh)
+            return await self._token(tenant_id, fresh, key)
+
+    async def drop(self, tenant_id: str, rows: Sequence[Row]) -> None:
+        """Drops from the credential store what deleted token and sign-in state rows held (ConnectionStore's
+        forget_token, forget_person, delete and add_state): a row deleted alone leaves its value in a vault."""
+        for ref, context in held_of(tenant_id, rows):
+            await self.credentials.delete(ref, context=context)
+
+    async def _forget(
+        self, tenant_id: str, key: tuple[str, str, str], row: dict[str, Any], *, keep: dict[str, Any] | None
+    ) -> None:
+        """Lets the credential store drop the references a row no longer names: the token a refresh replaced, or the
+        one a lost race wrote and nobody stored. A refresh token the system did not rotate is kept."""
+        connection_id, environment, person = key
+        for part in ("access", "refresh"):
+            ref = row.get(f"{part}_ct")
+            if ref and (keep is None or keep.get(f"{part}_ct") != ref):
+                context = _context(tenant_id, part, connection_id, environment, person)
+                await self.credentials.delete(str(ref), context=context)
 
     async def _fetch(
         self,
@@ -318,7 +336,7 @@ class Tokens:
         refresh_ct = row.get("refresh_ct") if row else None
         if refresh_ct:
             try:
-                refresh = self.cipher.decrypt(
+                refresh = await self.credentials.get(
                     str(refresh_ct), context=_context(tenant_id, "refresh", connection_id, environment, person)
                 )
             except CipherError as e:
@@ -330,7 +348,7 @@ class Tokens:
             answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
             # A refresh grants what the sign-in did unless it says otherwise (RFC 6749 6).
             held = scope_list((row or {}).get("scopes"))
-            return self._row(tenant_id, key, answer, rotations, keep_refresh=str(refresh_ct), requested=held)
+            return await self._row(tenant_id, key, answer, rotations, keep_refresh=str(refresh_ct), requested=held)
         if grant == "jwt_bearer":
             return await self._jwt_grant(tenant_id, key, settings, proof, rotations)
         if grant != "client_credentials":
@@ -341,7 +359,7 @@ class Tokens:
                 form["scope" if name == "scopes" else name] = str(settings[name])
         answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
         asked = str(settings.get("scopes") or "").split()
-        return self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=asked)
+        return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=asked)
 
     async def _jwt_grant(
         self,
@@ -363,7 +381,7 @@ class Tokens:
         if scopes and not claim:
             form["scope"] = scopes
         answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, client=False)
-        return self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=scopes.split())
+        return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=scopes.split())
 
     async def revoke(
         self,
@@ -384,7 +402,7 @@ class Tokens:
         person = str(row["person_id"])
         part, hint = ("refresh", "refresh_token") if row.get("refresh_ct") else ("access", "access_token")
         try:
-            token = self.cipher.decrypt(
+            token = await self.credentials.get(
                 str(row[f"{part}_ct"]), context=_context(tenant_id, part, connection_id, environment, person)
             )
         except CipherError:
@@ -398,6 +416,50 @@ class Tokens:
         except (EgressDenied, httpx.HTTPError):
             return False
         return res.status_code < 400
+
+    async def store_own(
+        self, tenant_id: str, connection_id: str, environment: str, person: str, values: dict[str, str]
+    ) -> None:
+        """A person's own key, password or token for a connection each person signs in to (c-595): their row in
+        connection_tokens, the fields sealed together under the person's own context, with no expiry and nothing to
+        refresh. The account shown is the username, when the kind has one."""
+        if person == SHARED:
+            raise ValueError("a person's own credentials are never the team's row")
+        held = await self.store.token(tenant_id, connection_id, environment, person)
+        sealed = await self.credentials.put(
+            json.dumps(values), context=_context(tenant_id, "access", connection_id, environment, person)
+        )
+        row: dict[str, Any] = {
+            "access_ct": sealed,
+            "refresh_ct": None,
+            "expires_at": None,
+            "scopes": [],
+            "account": values.get("username"),
+            "rotations": int(held["rotations"]) + 1 if held else 1,
+            "refreshed_at": self.clock(),
+        }
+        await self.store.replace_token(tenant_id, connection_id, environment, row, person)
+        if held is not None:
+            await self._forget(tenant_id, (connection_id, environment, person), held, keep=row)
+
+    async def own(
+        self, tenant_id: str, connection_id: str, environment: str, person: str, *, row: dict[str, Any] | None = None
+    ) -> dict[str, str] | None:
+        """The person's own credential fields, or None when they gave none or the row no longer opens. `row`: the
+        row already read for this call."""
+        row = row if row is not None else await self.store.token(tenant_id, connection_id, environment, person)
+        if row is None:
+            return None
+        try:
+            opened = await self.credentials.get(
+                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, environment, person)
+            )
+            found = json.loads(opened)
+        except (CipherError, ValueError):
+            return None
+        if not isinstance(found, dict):
+            return None
+        return {str(k): str(v) for k, v in cast(dict[Any, Any], found).items()}
 
     async def store_answer(
         self,
@@ -414,6 +476,8 @@ class Tokens:
         key = (connection_id, environment, person)
         held = await self.store.token(tenant_id, connection_id, environment, person)
         rotations = int(held["rotations"]) + 1 if held else 1
-        values = self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=requested or [])
+        values = await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=requested or [])
         await self.store.replace_token(tenant_id, connection_id, environment, values, person)
-        return self._token(tenant_id, values, key)
+        if held is not None:
+            await self._forget(tenant_id, key, held, keep=values)
+        return await self._token(tenant_id, values, key)

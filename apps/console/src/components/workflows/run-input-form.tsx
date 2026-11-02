@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import type { OptionSource } from '@/hooks/options-queries';
 import type { NodeForm, NodeFormField } from '@/lib/types/engine';
+import { fieldGuide, isEmptyInput, sampleFromSchema } from './run-input-schema';
 
 type Schema = { type?: string | string[]; format?: string; 'x-widget'?: string; examples?: unknown[]; enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; title?: string; description?: string; properties?: Record<string, Schema>; required?: string[]; items?: Schema; default?: unknown };
 
@@ -126,16 +127,25 @@ export function missingRequired(schema: Record<string, unknown>, value: Record<s
 export function RunInputForm({ schema: raw, value, onChange, error, fileSource }: { schema: Record<string, unknown>; value: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void; error?: string; fileSource?: OptionSource }) {
   const schema = raw as Schema;
   const props = Object.entries(schema.properties ?? {});
+  const guide = fieldGuide(raw);
   const [tab, setTab] = React.useState<'form' | 'json'>('form');
-  const [text, setText] = React.useState(() => JSON.stringify(value, null, 2));
+  const [text, setText] = React.useState(() => JSON.stringify(isEmptyInput(value) ? sampleFromSchema(raw) : value, null, 2));
   const [jsonError, setJsonError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (tab === 'form') setText(JSON.stringify(value, null, 2));
-  }, [value, tab]);
+    if (tab === 'form') setText(JSON.stringify(isEmptyInput(value) ? sampleFromSchema(raw) : value, null, 2));
+  }, [value, tab, raw]);
+  const openJson = (next: string) => {
+    setTab(next as 'form' | 'json');
+    if (next === 'json' && isEmptyInput(value)) {
+      const sample = sampleFromSchema(raw);
+      setText(JSON.stringify(sample, null, 2));
+      onChange(sample);
+    }
+  };
   const rest = props.filter(([, field]) => !fileShape(field) && !widgetFor(field));
 
   return (
-    <Tabs value={tab} onValueChange={(t) => setTab(t as 'form' | 'json')} className="gap-3">
+    <Tabs value={tab} onValueChange={openJson} className="gap-3">
       <TabsList>
         <TabsTrigger value="form" data-testid="run-input-form-tab">
           Form
@@ -150,7 +160,21 @@ export function RunInputForm({ schema: raw, value, onChange, error, fileSource }
         {props.length === 0 && <p className="text-sm text-muted-foreground">This trigger declares no inputs; the JSON tab sends any object.</p>}
       </TabsContent>
       <TabsContent value="json">
-        <FormField id="run-input-json" label="Input" hint="The same input as the form, as JSON." error={jsonError ?? error}>
+        {guide.length > 0 && (
+          <div className="mb-3 rounded-md border bg-muted/40 px-3 py-2" data-testid="run-input-json-guide">
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">From the form trigger</p>
+            <ul className="space-y-1 font-mono text-xs">
+              {guide.map((row) => (
+                <li key={row.key}>
+                  <span className="text-foreground">{row.key}</span>
+                  <span className="text-muted-foreground"> · {row.type} · </span>
+                  <span className="text-muted-foreground">{row.example === '—' ? 'no example' : `e.g. ${row.example}`}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <FormField id="run-input-json" label="Input" hint="The same input as the form, as JSON. Empty fields start from the trigger's examples." error={jsonError ?? error}>
           <Textarea
             id="run-input-json"
             value={text}

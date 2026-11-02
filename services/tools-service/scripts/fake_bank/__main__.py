@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -17,7 +18,7 @@ from pathlib import Path
 import uvicorn
 
 HOST = "api.bank.test"
-PORT = 8745
+PORT = int(os.environ.get("FAKE_BANK_PORT", "8745"))
 
 
 def private_address() -> str:
@@ -30,6 +31,15 @@ def private_address() -> str:
     if not ipaddress.ip_address(address).is_private or address.startswith("127."):
         sys.exit(f"no private network address to serve on (found {address})")
     return address
+
+
+def listen_address() -> str:
+    """0.0.0.0 in a compose sidecar so the workspace reaches it as api.bank.test; otherwise this machine's private
+    address, which egress will list (loopback is never listable)."""
+    bind = os.environ.get("FAKE_BANK_BIND") or ""
+    if bind in {"0.0.0.0", "::"}:
+        return bind
+    return private_address()
 
 
 def main() -> None:
@@ -63,7 +73,7 @@ def main() -> None:
             check=True,
             capture_output=True,
         )
-    address = private_address()
+    address = listen_address()
     print(f"OPS_EGRESS_CA_FILE={cert}")
     print(f"OPS_EGRESS_RESOLVE={json.dumps({HOST: f'{address}:{PORT}'})}")
     print(f"egress: host {HOST}, range {address}/32", flush=True)

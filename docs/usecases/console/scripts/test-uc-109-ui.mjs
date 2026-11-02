@@ -65,7 +65,7 @@ await withUiStack(
       await phone.getByRole('button', { name: /^Sign in/ }).first().click();
       await phone.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       await phone.goto(`${consoleUrl}/agents/${made.data.id}?tab=channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // The Channels tab (c-130): the embeds section's empty line and its Embed on a page button.
+      // The Channels tab: the embeds section's empty line and its Embed on a page button.
       const emptyBox = await phone.getByText('No embeds yet.').boundingBox({ timeout: 120_000 }).catch(() => null);
       const create = await phone.getByTestId('widget-embed-open').boundingBox().catch(() => null);
       check('at 400 px the Channels tab\'s empty embeds line and its button sit inside the viewport', !!emptyBox && !!create && emptyBox.x >= 0 && emptyBox.x + emptyBox.width <= 400 && create.x >= 0 && create.x + create.width <= 400, { emptyBox, create });
@@ -125,7 +125,7 @@ await withUiStack(
       check('Snippet says what it opens, and Pause and Resume name the pages and wait for a confirm', toggle.expanded === 'true' && toggle.opens === 1 && said && untouched && pausedStatus === 200 && badge && resumeAsk && resumedStatus === 200, { toggle, said, untouched, pausedStatus, badge, resumeAsk, resumedStatus });
 
       // Maya on the intranet, a second origin, chats with her SSO: the page loads /embed/v1.js and its getSession trades
-      // the intranet's token for a session bound to that page (c-224 retired the first script, /widget/v1.js).
+      // the intranet's token for a session bound to that page (an earlier change retired the first script, /widget/v1.js).
       const M = await tokenFor('m.okafor@harborpine.example');
       const tenant = JSON.parse(Buffer.from(M.split('.')[1], 'base64url').toString()).tenant_id;
       const embedTag = `<script src="${stack.embedUrl}/embed/v1.js" async></script>

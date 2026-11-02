@@ -89,6 +89,7 @@ REQUEST_PREFIXES = {
     "deployment": "DPR",
     "tool_module": "TMP",
     "tool_access": "TAR",
+    "egress_host": "EGH",
 }
 
 SPEC_FIELDS = (
@@ -427,13 +428,31 @@ class AgentRegistry:
             )
 
     async def open_request(
-        self, kind: str, subject_id: str, version: int, *, note: str, by: str, body: dict[str, Any], approved: bool
+        self,
+        kind: str,
+        subject_id: str,
+        version: int,
+        *,
+        note: str,
+        by: str,
+        body: dict[str, Any],
+        approved: bool,
+        replaces_older: bool = False,
     ) -> dict[str, Any]:
-        """Records a publish request; 409 when one is already pending for the subject."""
+        """Records a publish request; 409 when one is already pending for the subject. With `replaces_older`, a pending
+        request for an older version is returned to its author instead (c-616 S7): only the newest draft may publish, so
+        the older one could only ever put a version live that lacks what was saved since."""
         for attempt in range(3):
             try:
                 return await self._open_request(
-                    kind, subject_id, version, note=note, by=by, body=body, approved=approved
+                    kind,
+                    subject_id,
+                    version,
+                    note=note,
+                    by=by,
+                    body=body,
+                    approved=approved,
+                    replaces_older=replaces_older,
                 )
             except IntegrityError:
                 # Two opens in the tenant took the same number; the next attempt reads the one that landed.
@@ -442,14 +461,23 @@ class AgentRegistry:
         raise AssertionError("unreachable")
 
     async def _open_request(
-        self, kind: str, subject_id: str, version: int, *, note: str, by: str, body: dict[str, Any], approved: bool
+        self,
+        kind: str,
+        subject_id: str,
+        version: int,
+        *,
+        note: str,
+        by: str,
+        body: dict[str, Any],
+        approved: bool,
+        replaces_older: bool,
     ) -> dict[str, Any]:
         at = now_iso()
         prefix = REQUEST_PREFIXES.get(kind, "WFP")
         async with tenant_tx(self.engine) as c:
             pending = (
                 await c.execute(
-                    sa.select(publish_requests.c.id).where(
+                    sa.select(publish_requests.c.id, publish_requests.c.version).where(
                         _mine(),
                         publish_requests.c.kind == kind,
                         publish_requests.c.subject_id == subject_id,
@@ -457,8 +485,20 @@ class AgentRegistry:
                     )
                 )
             ).first()
-            if pending is not None:
+            if pending is not None and not (replaces_older and int(pending[1]) < version):
                 raise Conflict(f"Publish request {pending[0]} is already open.", code="review_open")
+            if pending is not None:
+                # Returned, the state a reviewer's send-back leaves, so a late approval of it answers already_decided.
+                await c.execute(
+                    publish_requests.update()
+                    .where(_mine(), publish_requests.c.id == pending[0], publish_requests.c.status == "pending")
+                    .values(
+                        status="returned",
+                        decided_at=at,
+                        decided_by=by,
+                        decision_reason=f"Replaced by the request for version {version}.",
+                    )
+                )
             # The next number after the tenant's highest for this prefix. A row count repeats a number once a request
             # is deleted (an agent's are deleted with it).
             taken = (

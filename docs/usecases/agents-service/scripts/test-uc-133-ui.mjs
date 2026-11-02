@@ -1,5 +1,5 @@
 // uc-133 agent test replies show what the agent did, ui layer: docs/usecases/agents-service/agent-test-shows-steps.md.
-// The scripted agents service with platform sign-in; James builds in team_ops and tests in the page's panel (c-285).
+// The scripted agents service with platform sign-in; James builds in team_ops and tests in the page's panel.
 import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 await withUiStack(
@@ -16,7 +16,7 @@ await withUiStack(
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       await page.goto(`${consoleUrl}/agents/ag_fraud`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('test-agent-button').click({ timeout: 120_000 });
-      // The test is a real chat in the page's right panel (c-285); Why explains the newest reply.
+      // The test is a real chat in the page's right panel; Why explains the newest reply.
       const panel = page.getByTestId('agent-test-panel');
       // Each case on a thread of its own: a test is a real chat, and one paused on an approval takes no new message.
       const ask = async (text) => {

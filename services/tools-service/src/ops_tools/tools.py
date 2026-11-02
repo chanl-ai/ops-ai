@@ -14,7 +14,10 @@ from ops_email import MailNotConfiguredError, MailSender, OutboundMessage
 from ops_identity import ActingForPerson, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 
+from .file_tools import FileTools
+from .knowledge_tools import KnowledgeSearch
 from .modules.review_events import APPLY_ACCESS
+from .modules.seed import FILE_TOOL_NAMES, KNOWLEDGE_TOOL_NAMES
 
 # The local executor refuses a write without a token. By the time a call reaches it the gateway has decided, so
 # this marker only says so; the token itself was checked by OPA.
@@ -79,18 +82,24 @@ class LocalToolRunner:
         mailbox_sender: Callable[[str, str, str], Awaitable[MailSender]] | None = None,
         cases: ServiceClient | None = None,
         decisions: AccessDecisions | None = None,
+        file_tools: FileTools | None = None,
+        knowledge: KnowledgeSearch | None = None,
     ) -> None:
         """`mail_for` builds the sender for a caller, from the provider settings picked (ops_email.EmailProviders),
         reading that caller's tenant's secrets; `mail` is one fixed sender (tests). With neither, or none configured,
         every send_reply fails with that reason. `mailbox_sender(tenant, team, address)` is the sender of a named
         mailbox of the caller's team (mailboxes.MailboxSenders), used when send_reply names `mailbox`. `cases` is
-        agents-service, where open_case opens a case in the caller's team (c-219)."""
+        agents-service, where open_case opens a case in the caller's team (c-219). `file_tools` reads the caller's
+        team's files and documents (c-613) through documents-service; `knowledge` searches its knowledge bases
+        (c-616) through kb-service."""
         self.tools = LocalToolExecutor(catalog)
         self.mail = mail
         self.mail_for = mail_for
         self.mailbox_sender = mailbox_sender
         self.cases = cases
         self.decisions = decisions
+        self.file_tools = file_tools
+        self.knowledge = knowledge
 
     async def run(self, tool: str, arguments: dict[str, Any], *, key: str, caller: ToolCaller) -> ToolOutcome:
         # send_acknowledgement sends the same way; it is declared a write that runs at once (seed.SENDS).
@@ -105,6 +114,14 @@ class LocalToolRunner:
             return ToolOutcome(True, {"status": "sent", "reference": reference})
         if tool == "open_case":
             return await self._open_case(arguments, key, caller)
+        if tool in FILE_TOOL_NAMES:
+            if self.file_tools is None:
+                return ToolOutcome(False, {"error": "This tools-service reads no files: documents-service is not set."})
+            return await self.file_tools.run(tool, arguments, tenant=caller.tenant_id, team=caller.team_id)
+        if tool in KNOWLEDGE_TOOL_NAMES:
+            if self.knowledge is None:
+                return ToolOutcome(False, {"error": "This tools-service searches no knowledge: kb-service is not set."})
+            return await self.knowledge.run(arguments, tenant=caller.tenant_id, team=caller.team_id)
         if tool == APPLY_ACCESS:
             return await self._apply_access(arguments, caller)
         return await self.tools.execute(tool, arguments, key=key, approval_token=DECIDED)

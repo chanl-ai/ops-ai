@@ -46,6 +46,7 @@ class RunStore:
         A live run is refused (NotLiveError) unless the version it pins is live, read under the same lock a pause
         takes, so a pause and a start cannot both pass. Returns (run, created)."""
         at = now_iso()
+        delay = float(run.pop("after_seconds", 0) or 0)
         values = {**run, "tenant_id": self.tx.tenant(), "status": "queued", "created_at": at, "updated_at": at}
         d = engine_definitions
         try:
@@ -79,7 +80,7 @@ class RunStore:
                         dedupe_key=f"start:{run['id']}",
                         status="queued",
                         build=ENGINE_BUILD,
-                        available_at=db_now(c),
+                        available_at=db_now(c) + delay,
                         attempts=0,
                         created_at=at,
                     )

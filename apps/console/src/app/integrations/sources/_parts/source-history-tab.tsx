@@ -17,6 +17,7 @@ import { useSourceRuns, useSyncRun, useSyncSource } from '@/hooks/knowledge-quer
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, dateTime, duration, relativeTime } from '@/lib/format';
 import type { RunFilters, RunStatus, SourceDetail, SyncRun } from '@/lib/types/knowledge';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = SyncRun & { onRowClick: (r: SyncRun) => void };
 
@@ -95,15 +96,7 @@ export function SourceHistoryTab({ source, onSync }: { source: SourceDetail; onS
           { column: 'trigger', title: 'Trigger', options: (Object.keys(TRIGGER_LABEL) as SyncRun['trigger'][]).map((t) => ({ label: TRIGGER_LABEL[t], value: t, count: facets.trigger?.[t] ?? 0 })) },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={History}

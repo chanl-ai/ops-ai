@@ -8,7 +8,6 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { realConnections } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 
@@ -27,20 +26,19 @@ export type MockAnswer = Data<'tool_modules_list_mocks'>['data'][number];
 
 const SYSTEMS = ['systems'] as const;
 const CONNECTIONS = ['connections'] as const;
-
-/** Whether the console offers the real-connections screens (the NEXT_PUBLIC_OPS_REAL_CONNECTIONS switch). */
-export const useRealConnections = (): boolean => realConnections;
+const APPS = ['apps'] as const;
 
 export const useSystems = () =>
-  useTeamQuery({ queryKey: SYSTEMS, queryFn: () => sdk((ops) => ops.raw.tools.connections_list_systems()), enabled: realConnections });
+  useTeamQuery({ queryKey: SYSTEMS, queryFn: () => sdk((ops) => ops.raw.tools.connections_list_systems()) });
 export const usePlugins = () =>
-  useTeamQuery({ queryKey: ['plugins'], queryFn: () => sdk((ops) => ops.raw.tools.plugins_list_plugins()), enabled: realConnections });
+  useTeamQuery({ queryKey: ['plugins'], queryFn: () => sdk((ops) => ops.raw.tools.plugins_list_plugins()) });
 
 function useSystemsMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: SYSTEMS }), qc.invalidateQueries({ queryKey: CONNECTIONS })]),
+    onSuccess: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: SYSTEMS }), qc.invalidateQueries({ queryKey: CONNECTIONS }), qc.invalidateQueries({ queryKey: APPS })]),
   });
 }
 
@@ -49,6 +47,16 @@ export type ConnectionKinds = Data<'connections_kinds'>;
 type ApiEnvironment = NonNullable<Args<'connections_test_connection'>['body']>['environment'];
 const env = (id: string) => id as ApiEnvironment;
 
+export type AppPage = Data<'connections_get_app'>;
+/** One app's page, joined by tools-service (c-607): card, account, your own sign-in, tools, skills and latest runs. */
+export const useApp = (appId: string) =>
+  useTeamQuery({ queryKey: [...APPS, appId], queryFn: () => sdk((ops) => ops.raw.tools.connections_get_app({ path: { app_id: appId } })) });
+/** Disconnect: ends the caller's own sign-in on a connection's environment (DELETE /v1/me/connections/{id}); the team's stays. */
+export const useSignOutMine = () =>
+  useSystemsMutation((a: { connectionId: string; environment: string }) =>
+    sdk((ops) => ops.raw.tools.connections_disconnect({ path: { connection_id: a.connectionId }, query: { environment: env(a.environment) } })),
+  );
+
 export const useConnectionKinds = () =>
   useTeamQuery({ queryKey: ['connection-kinds'], queryFn: () => sdk((ops) => ops.raw.tools.connections_kinds()), staleTime: 5 * 60_000 });
 export const useConnectionDetail = (connectionId: string | null | undefined) =>
@@ -56,6 +64,14 @@ export const useConnectionDetail = (connectionId: string | null | undefined) =>
     queryKey: [...CONNECTIONS, connectionId],
     queryFn: () => sdk((ops) => ops.raw.tools.connections_get_connection({ path: { connection_id: connectionId ?? '' } })),
     enabled: Boolean(connectionId),
+  });
+
+/** The team's connections a module may sign in through, for the connection picker (c-591). */
+export const useConnectionOptions = (enabled = true) =>
+  useTeamQuery({
+    queryKey: [...CONNECTIONS, 'options'],
+    queryFn: () => sdk((ops) => ops.raw.tools.connections_list_connections({ query: { pageSize: 100 } })),
+    enabled,
   });
 
 export const useCreateConnection = () =>
@@ -89,10 +105,30 @@ export const useBindModule = () =>
   useSystemsMutation((a: { moduleId: string; connectionId: string | null }) =>
     sdk((ops) => ops.raw.tools.tool_modules_set_connection({ path: { module_id: a.moduleId }, body: { connectionId: a.connectionId } })),
   );
+/**
+ * The agents and workflows using an app's tools in the team (GET /v1/plugins/{id}/team/users), read when Turn off asks;
+ * admins only. A 503 tool_users_unavailable means the service could not tell, which is an error, never "nothing".
+ */
+export const useAppUsers = (pluginId: string | null) =>
+  useTeamQuery({ queryKey: [...SYSTEMS, 'users', pluginId], queryFn: () => sdk((ops) => ops.raw.tools.plugins_app_users({ path: { plugin_id: pluginId ?? '' } })), enabled: !!pluginId, retry: false });
+/**
+ * One OAuth client an app signs in with (GET /v1/app-credentials, team admins only): Ops AI's own app or the team's,
+ * its permissions, how many accounts signed in through it, and its state from the last Test with my account.
+ */
+export type AppCredential = Data<'connections_list_app_credentials'>[number];
+export const useAppCredentials = () =>
+  useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials'], queryFn: () => sdk((ops) => ops.raw.tools.connections_list_app_credentials()) });
+/** Replaces the client secret of the team's own app for a plugin (PUT /v1/plugins/{id}/app-secret); sealed on save. */
+export const useSetAppSecret = () => useSystemsMutation((a: Args<'plugins_set_app_secret'>) => sdk((ops) => ops.raw.tools.plugins_set_app_secret(a)));
 export const useSetTeamPlugin = () => useSystemsMutation((a: Args<'plugins_set_team_plugin'>) => sdk((ops) => ops.raw.tools.plugins_set_team_plugin(a)));
+/** Another named account of an app the team has connected (c-608, several_accounts); answers the new account. */
+export const useAddAccount = () => useSystemsMutation((a: Args<'plugins_add_account'>) => sdk((ops) => ops.raw.tools.plugins_add_account(a)));
+/** Makes one of the app's accounts the caller's default: their calls that name no account use it (c-608). */
+export const usePinDefault = () =>
+  useSystemsMutation((connectionId: string) => sdk((ops) => ops.raw.tools.connections_pin_default({ path: { connection_id: connectionId } })));
 
 export const useSendPolicy = () =>
-  useTeamQuery({ queryKey: ['send-policy'], queryFn: () => sdk((ops) => ops.raw.tools.send_policy_get_send_policy()), enabled: realConnections });
+  useTeamQuery({ queryKey: ['send-policy'], queryFn: () => sdk((ops) => ops.raw.tools.send_policy_get_send_policy()) });
 export function useSaveSendPolicy() {
   const qc = useQueryClient();
   return useMutation({
@@ -106,7 +142,7 @@ export const useMockAnswers = (moduleId: string, opId: string) =>
   useTeamQuery({
     queryKey: mocksKey(moduleId, opId),
     queryFn: () => sdk((ops) => ops.raw.tools.tool_modules_list_mocks({ path: { module_id: moduleId, op_id: opId } })),
-    enabled: realConnections && Boolean(moduleId && opId),
+    enabled: Boolean(moduleId && opId),
   });
 function useMockMutation<I, O>(moduleId: string, opId: string, fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();

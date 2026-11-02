@@ -24,6 +24,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { dateOnly, pct, plural } from '@/lib/format';
 import type { Risk } from '@/lib/types/domain';
 import type { ModelEntry, ModelRiskFilters, ModelRiskView } from '@/lib/types/model-risk';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = ModelEntry & { onRowClick: (e: ModelEntry) => void; href: string; rowTestId: string };
 
@@ -205,15 +206,7 @@ export default function ModelRiskPage() {
               { label: 'Request validation', icon: ClipboardCheck, variant: 'outline', onClick: (r) => setBulk({ kind: 'validate', rows: r }) },
               { label: 'Set next review', icon: CalendarDays, variant: 'outline', onClick: (r) => setBulk({ kind: 'review', rows: r }) },
             ]}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
                 icon={Scale}

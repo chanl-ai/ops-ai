@@ -12,6 +12,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 
 from ops_store.dialect import db_now
+from ops_store.schema import TENANT_SCOPED, system
 
 metadata = sa.MetaData()
 
@@ -22,10 +23,15 @@ provider_connections = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(120), nullable=False, unique=True),
-    sa.Column("type", sa.String(32), nullable=False),  # openai-compatible | anthropic | scripted
+    sa.Column("type", sa.String(32), nullable=False),  # openai-compatible | azure-openai | anthropic | scripted
     sa.Column("base_url", sa.String(400)),
     sa.Column("key_ref", sa.String(120)),  # the provider_keys name of its credential
+    # azure-openai only: `v1` or a dated version, the resource's region, and the region it last answered from.
+    sa.Column("api_version", sa.String(32)),
+    sa.Column("region", sa.String(64)),
+    sa.Column("observed_region", sa.String(64)),
     sa.Column("created_at", sa.String(32), nullable=False),
+    info=system("an install's model connection: no tenant and no value; the provider key it names is held by tenant"),
 )
 
 # An account's model provider keys (owner, 2026-10-27): account admins set them, only this service reads them, and no
@@ -41,6 +47,8 @@ provider_keys = sa.Table(
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
     sa.Column("rotated_at", sa.DateTime(timezone=True)),
+    # Held to its tenant by the database (c-616 C3): read only by a transaction run as ROLE in that tenant.
+    info=TENANT_SCOPED,
 )
 
 model_aliases = sa.Table(
@@ -89,6 +97,7 @@ model_keys = sa.Table(
     # Set for a key one service uses for many tenants (files-service's extractions, c-251): each tenant then spends
     # from its own row in model_key_tenants, starting at this budget, so one tenant cannot use up the others' share.
     sa.Column("tenant_budget", MONEY),
+    info=system("one identity's model key, spent for many tenants; each tenant's share is held by tenant"),
 )
 
 model_key_tenants = sa.Table(
@@ -98,6 +107,8 @@ model_key_tenants = sa.Table(
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("budget", MONEY, nullable=False),
     sa.Column("spent", MONEY, nullable=False),
+    # Held to its tenant by the database (c-616 C4): read and spent only as ROLE in that tenant.
+    info=TENANT_SCOPED,
 )
 
 model_call_log = sa.Table(

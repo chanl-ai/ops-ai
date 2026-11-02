@@ -66,18 +66,26 @@ const copy = async (text: string, what: string) => {
  * A file's full text, every page in order in its own block ("Page N of M"), each word read with low confidence marked
  * with its confidence. Copy page and Copy all copy the text as read; Go to page scrolls to a page.
  */
-export function FileTextPages({ layout }: { layout: DocumentLayout }) {
-  const pages = React.useMemo(() => pagesOf(layout), [layout]);
+export function FileTextPages({ layout, limit }: { layout: DocumentLayout; /** Show only the first pages. */ limit?: number }) {
+  const all = React.useMemo(() => pagesOf(layout), [layout]);
+  const [every, setEvery] = React.useState(false);
+  const cut = !every && limit !== undefined && limit < all.length;
+  const pages = cut ? all.slice(0, limit) : all;
   const lowCount = layout.words.filter((w) => w.conf < LOW).length;
-  const total = pages.length;
+  const total = all.length;
   const refs = React.useRef(new Map<number, HTMLElement>());
   if (total === 0) return <p className="rounded-lg border p-6 text-sm text-muted-foreground">No text was found in this file.</p>;
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="file-text">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          {plural(total, 'page')}
+        <p className="text-xs text-muted-foreground" data-testid="file-text-count">
+          {cut ? `Pages 1 to ${pages.length} of ${total}` : plural(total, 'page')}
           {lowCount ? ` · ${plural(lowCount, 'word')} read with low confidence marked` : ''}
+          {cut && (
+            <Button variant="link" size="sm" className="h-auto px-1 py-0 text-xs" onClick={() => setEvery(true)} data-testid="file-text-show-all">
+              Show every page
+            </Button>
+          )}
         </p>
         <div className="flex items-center gap-2">
           {total > 1 && (

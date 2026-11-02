@@ -7,6 +7,7 @@ does not list; and a caller forges a next-page address that the team's token is 
 from __future__ import annotations
 
 from pathlib import Path
+from shutil import copytree, ignore_patterns
 from typing import Any
 
 import httpx
@@ -16,17 +17,18 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 import ops_tools.registry as reg
 from ops_identity import ActingForPerson
 from ops_plugin_sdk import Plugin
-from ops_plugin_sdk.loader import Loaded
+from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.executor import HttpExecutor
+from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.switches import InstallSwitches
-from ops_tools.registry import ToolRegistry
-from ops_tools.store.connections import SHARED
+from ops_tools.registry import Resolved, ToolRegistry
+from ops_tools.store.connections import SHARED, ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
@@ -143,7 +145,9 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     extra = await h.on_token(tenant, "con_a", {"access_token": "x", "instance_url": "https://alpha.my.desk.test/"})
     assert extra == {"baseUrl": "https://alpha.my.desk.test", "testPath": "/api/v1/limits"}
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
-    assert b is not None and b["settings"]["instance_url"] == "https://alpha.my.desk.test"
+    # The instance is the connection environment's own (c-580, test_plugin_environments.py); no copy on the binding.
+    assert b is not None
+    assert "instance_url" not in b["settings"], b["settings"]
 
 
 class AllowAll:
@@ -212,13 +216,25 @@ def test_the_test_plugin_is_a_plugin() -> None:
     _ = ActingForPerson
 
 
-def test_nothing_is_read_unless_plugins_are_switched_on(engine: AsyncEngine, store: ModuleStore) -> None:
-    # OPS_PLUGINS is off until the plugins release: an installed or a developer's plugin must stay unread.
-    folder = str(Path(__file__).parent / "plugin_desk")
+def test_plugins_load_from_the_install_folder_with_no_switch(
+    engine: AsyncEngine, store: ModuleStore, tmp_path: Path
+) -> None:
+    # One plugins folder per install (owner, 2026-11-01): an empty folder reads nothing, a plugin dropped in loads with
+    # no OPS_PLUGINS, and a broken one beside it is reported by name while the good one still loads.
     parts = (store, PluginBindings(engine), InstallSwitches(None))
-    assert PluginHost.when_on(Settings(plugins=False, plugin_paths=[folder]), *parts) is None
-    on = PluginHost.when_on(Settings(plugins=True, plugin_paths=[folder]), *parts)
+    folder = tmp_path / "plugins"
+    folder.mkdir()
+    assert PluginHost.when_on(Settings(plugins_dir=folder), *parts) is None
+    copytree(Path(__file__).parent / "plugin_desk", folder / "plugin_desk", ignore=ignore_patterns("__pycache__"))
+    (folder / "broken_desk").mkdir()
+    (folder / "broken_desk" / "plugin.yaml").write_text("id: [")
+    on = PluginHost.when_on(Settings(plugins_dir=folder), *parts)
     assert on is not None and "test.desk" in on.plugins
+    assert [(x.name, x.ok) for x in on.loaded] == [("broken_desk", False), ("plugin_desk", True)]
+
+
+def test_settings_name_the_plugin_kits_entry_point_group() -> None:
+    assert PLUGIN_ENTRY_POINTS == GROUP
 
 
 async def test_a_python_tool_signs_in_as_the_person_it_acts_for(
@@ -278,3 +294,20 @@ async def test_another_teams_connection_never_serves_a_teams_call(
     lee = ActingForPerson(sub="usr_lee", email="lee@bank.example", name="Lee", team_id="team_b")
     out = await ex.run(m, {"name": "desk_list_things"}, {}, actor="t", environment="test", acting_for=lee)
     assert not out.ok and heard == [], (out, heard)
+
+
+async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
+    engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    # Everyone signs in with their own account, and this environment has no instance yet (c-616 live walk): the plugin
+    # is on. The call asks this person to sign in. It does not say the plugin is off or that a team admin goes first.
+    connections = ConnectionStore(engine)
+    conn = await connection(connections, tenant, "person")
+    await bind(engine, tenant, TEAM, "", conn)
+    h = host(engine, store)
+    h.connections = connections
+    seen = await h.for_call(tenant, TEAM, module_for(tenant), "test", person=JAMES.sub)
+    assert seen.get("plugin_off") is None and seen.get("instance_missing") is None, seen
+    assert "own account" in str(seen.get("sign_in_needed"))
+    refused = _before_policy(Resolved("read", "plugin", seen, {"name": "desk_get_case", "enabled": True}), {})
+    assert refused is not None and refused[1] == "CONNECTION_NOT_LINKED", refused

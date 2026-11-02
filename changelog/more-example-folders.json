@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "More runnable example folders for agents and workflows",
+  "description": "Three new agent folders (run in three modes, delegate to a specialist, a morning check of held wires) and seven new workflow folders (transform a record, filter a list, retrieve from knowledge, send a message, repeat until done, ask a person, and more). Each one runs from its own folder against the public SDK, and agents can now be scored on a set of cases.",
+  "tag": "new",
+  "cards": [
+    "c-623"
+  ]
+}

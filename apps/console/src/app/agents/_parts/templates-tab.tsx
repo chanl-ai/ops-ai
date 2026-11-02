@@ -17,6 +17,7 @@ import { useTemplate, useTemplates } from '@/hooks/template-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { AgentTemplate, TemplateFilters } from '@/lib/types/templates';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = AgentTemplate & { onRowClick: (t: AgentTemplate) => void };
 
@@ -94,15 +95,7 @@ export function TemplatesTab({ onUse }: { onUse: (templateId: string) => void })
           { column: 'status', title: 'Status', options: STATUS.map((o) => ({ ...o, count: facets.status?.[o.value] ?? 0 })) },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={<ListEmpty icon={LayoutTemplate} noun="templates" filtered={list.isFiltered} description="Templates are published by the platform team. Save one of your agents as a template to propose one." />}
       />
       <DetailSheet

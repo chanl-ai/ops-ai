@@ -1,13 +1,14 @@
 # Building a plugin: the vendor-onboarding example
 
-Status: current, 2026-10-29. The example installs and runs on a local stack today through the public APIs. The plugin
-system it is written for is proposed and not built (`the planning repo/docs/plans/ops-ai/plugins.html`). The example lives
-in `examples/plugins/vendor-onboarding/`; every path below is relative to that folder unless it says otherwise.
+Status: current. The example installs and runs on a local stack today through the public APIs. The plugin system it
+is written for is proposed and not built. Every path below is relative to the example folder unless it says otherwise.
 
 A team that buys from suppliers checks each new one before it is paid: is the company real and active, is it on a
 sanctions list, how much risk does it carry. This plugin brings that check as one thing a team installs: a REST tool
 module for a company registry, a Python function that scores the supplier, an agent that writes notes for the
 approver, and a workflow that wires them together and stops for a person to approve or reject.
+
+The example folder is `examples/plugins/vendor-onboarding/`.
 
 ## What a plugin is
 

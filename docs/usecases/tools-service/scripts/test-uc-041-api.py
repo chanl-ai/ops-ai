@@ -72,7 +72,7 @@ with tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as gw
         orphan_id = data(orphan).get("id") if orphan.status_code == 201 else ""
         time.sleep(31)  # past the workflow list's 30 s cache, so tools-service sees the new workflow
         unknown = gw.post(f"{MODULE}/approvals", json=request(orphan_id))
-        # The grant is for the workflow's own team id even when the directory does not hold that team (c-423); it is
+        # The grant is for the workflow's own team id even when the directory does not hold that team; it is
         # never handed to every team. A workflow no team owns is still refused.
         owner = {w["id"]: w for w in data(api.get("/v1/workflow-refs", headers=as_tools)) or []}.get(orphan_id, {})
         check(

@@ -69,6 +69,11 @@ class WidgetTemplate:
     schema: dict[str, Any]
 
 
+# Above this many granted tools an agent finds its tools by searching (c-610): no schema is sent until a search
+# reveals it. OPS_TOOL_SEARCH_ABOVE changes it per deployment, with the install flag tool_search on.
+TOOL_SEARCH_ABOVE = 20
+
+
 @dataclass(frozen=True)
 class AgentSettings:
     agent_id: str
@@ -80,6 +85,9 @@ class AgentSettings:
     # Model requests in one turn (the loop's steps). Always a number: an uncapped loop would spend real calls until
     # the deadline, so an agent with no cap set runs on the platform default.
     max_steps: int = 8
+    # More granted tools than this and they are searched for, not all offered (c-610); 0 means always search. None is
+    # off, every tool offered: the install flag tool_search is off by default.
+    tool_search_above: int | None = None
     # A caller's temperature within the agent's limits (c-071); None leaves the model's default.
     temperature: float | None = None
     # Checked before and after the answer by a classification call; none means today's path, no extra call.

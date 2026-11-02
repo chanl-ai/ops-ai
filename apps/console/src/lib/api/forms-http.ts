@@ -13,7 +13,7 @@ export function createFormsHttp(get: Get, send: Send): FormsApi {
     update: (formId, patch) => send('PATCH', `/forms/${at(formId)}`, patch),
     memberForm: (slug) => get(`/forms/${at(slug)}/members`),
     submitMember: (slug, values) => send('POST', `/forms/${at(slug)}/members`, { values }),
-    // Without the embed app's address the path is all there is; index.ts prefixes it when NEXT_PUBLIC_OPS_EMBED_URL is set.
+    // A relative /f/ path is not a page the console serves; index.ts prefixes it only when NEXT_PUBLIC_OPS_EMBED_URL is set.
     pageUrl: (form) => form.url,
   };
 }

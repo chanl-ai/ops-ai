@@ -18,7 +18,7 @@ from ops_contracts.chat import WireModel
 from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Envelope
 
-from .. import publish_reviews, tool_module_reviews
+from .. import egress_host_reviews, publish_reviews, tool_module_reviews
 from ..auth import Principal, caller, principal
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -101,6 +101,32 @@ async def open_publish_request(
         await tool_module_reviews.tools_service(request, x_service_authorization, me.tenant_id)
         req = await tool_module_reviews.open_review(rt, me, body.model_dump(by_alias=True))
     return ok(await publish_reviews.view(rt, req), status=201)
+
+
+class EgressHostReviewInput(WireModel):
+    host: str = Field(min_length=1, max_length=253)
+    app: str = Field(min_length=1, max_length=200)
+
+
+@open_router.post(
+    "/egress-hosts",
+    response_model=Envelope[PublishReview],
+    status_code=201,
+    responses={200: {"model": Envelope[PublishReview], "description": "The request already open, or refused, for it"}},
+)
+async def open_egress_host_request(
+    rt: Rt,
+    me: Caller,
+    request: Request,
+    body: EgressHostReviewInput,
+    x_service_authorization: Annotated[str | None, Header()] = None,
+) -> JSONResponse:
+    """A host held for Security (c-616 S13), opened by tools-service for the person setting an app's address: their
+    credentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the
+    host. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal."""
+    await tool_module_reviews.tools_service(request, x_service_authorization, me.tenant_id)
+    req, made = await egress_host_reviews.open_review(rt, me, body.host, body.app)
+    return ok(await publish_reviews.view(rt, req), status=201 if made else 200)
 
 
 @router.get("/{request_id}", response_model=Envelope[PublishReview])

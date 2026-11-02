@@ -1,0 +1,29 @@
+id: transform-a-record
+title: Transform a record
+track: workflow
+status: built
+difficulty: intro
+outcome: Map one input field onto an output field with a single path.
+capabilities:
+- id: ops.data.transform
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/valid.json
+- fixtures/missing.json
+expected:
+- expected/ok.json
+- expected/missing.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 30
+teaches:
+- one path expression writes one output field
+- a missing path takes the error port

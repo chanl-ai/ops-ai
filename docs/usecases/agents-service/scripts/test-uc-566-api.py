@@ -52,7 +52,7 @@ OTHER_TEAM = "team_other"
 @contextmanager
 def no_knowledge_bases() -> Generator[str]:
     """A knowledge service that knows no knowledge base. agents refuses a chat when none answers, and kb-service does
-    not run on SQL Server yet (c-550), nor on the runner, which has no PostgreSQL."""
+    not run on SQL Server yet, nor on the runner, which has no PostgreSQL."""
 
     class Empty(BaseHTTPRequestHandler):
         def do_GET(self) -> None:

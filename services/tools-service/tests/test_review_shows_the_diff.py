@@ -70,7 +70,7 @@ async def test_a_review_names_the_operations_host_and_secret_it_approves(
         "access": "read",
         "method": "GET",
         "url": f"https://{HOST}/v1/statements",
-        "headers": [{"key": "X-Api-Key", "value": "{{STATEMENTS_KEY}}"}],
+        "headers": [{"key": "X-Partner-Token", "value": "{{STATEMENTS_KEY}}"}],
     }
     assert (await c.post(f"/v1/tool-modules/{mid}/operations", json=op, headers=james)).status_code == 200
     asked = await c.post(f"/v1/tool-modules/{mid}/reviews", json={"note": "c-204"}, headers=james)

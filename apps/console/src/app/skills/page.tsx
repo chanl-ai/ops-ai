@@ -34,6 +34,7 @@ import { useCanBuild } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { pct, plural, relativeTime } from '@/lib/format';
 import type { Skill, SkillFilters, SkillOrigin, SkillStatus, SkillView } from '@/lib/types/skills';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Skill & { onRowClick: (s: Skill) => void; href: string; rowTestId: string };
 
@@ -312,15 +313,7 @@ export default function SkillsPage() {
                   ]
                 : []),
             ]}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
                 icon={Sparkles}

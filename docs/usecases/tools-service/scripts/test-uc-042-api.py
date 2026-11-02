@@ -26,7 +26,12 @@ OK, FAILS, WRITES = f"get_account_{RUN}", f"get_missing_{RUN}", f"close_account_
 def published_module(gw: Any, name: str, ops: list[dict[str, Any]]) -> str:
     made = data(gw.post("/v1/tool-modules/blank", json={"displayName": name, "name": name, "type": "http"}))
     for op in ops:
-        gw.post(f"/v1/tool-modules/{made['id']}/operations", json=op)
+        added = data(gw.post(f"/v1/tool-modules/{made['id']}/operations", json=op))
+        if op["access"] == "write":
+            # Approvals are off by default (2026-11-01): a write here proves the approval path, so its own
+            # switch goes on, as a builder turns it on from the tool page.
+            op_id = next(o["id"] for o in added["operations"] if o["name"] == op["name"])
+            gw.patch(f"/v1/tool-modules/{made['id']}/operations/{op_id}", json={"requiresApproval": True})
     data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-042"}))
     approve_tool_review(gw, made["id"], SECURITY)
     return str(made["id"])

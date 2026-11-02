@@ -1,5 +1,5 @@
 // uc-121 a builder designs a workflow on a canvas that fills the page, ui layer: docs/usecases/console/workflow-canvas.md
-// (c-164). withUiStack's demo stack, signed in through platform-service as James. A ten-step wire review is saved as a
+//. withUiStack's demo stack, signed in through platform-service as James. A ten-step wire review is saved as a
 // draft through the API, then opened in the editor at 1440px and 400px. Each step is checked on its own.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

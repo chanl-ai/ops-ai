@@ -132,3 +132,23 @@ async def test_a_test_chat_calls_in_test_and_a_live_chat_in_production() -> None
         with acting_as("agent:ag_x", turn_environment(state)):
             await client.call("get_account", {}, key="k", approval_token=None)
     assert [s["runContext"]["environment"] for s in seen] == ["test", "production"]
+
+
+async def test_a_failed_call_gives_the_gateways_own_words_as_its_reason() -> None:
+    """The run's failure reads the step's reason (worker._why_failed): "the operation returned an error" named neither
+    the app nor the fix (c-616 S12)."""
+    said = "Client desk needs reconnecting: login.multi.test refused the sign-in (invalid_client)."
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        error = {"code": "AUTH_FAILED", "message": said, "side": "upstream"}
+        return httpx.Response(200, json={"success": True, "data": {"ok": False, "output": {"error": error}}})
+
+    result = await tools(handler).call("client_get_record", {"id": "rec-1"}, KEY, 1, None)
+    assert (result.ok, result.reason) == (False, said)
+
+    def invalid(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422, json={"success": False, "error": {"code": "invalid_input", "message": "id is required"}}
+        )
+
+    assert (await tools(invalid).call("client_get_record", {}, KEY, 1, None)).reason == "id is required"

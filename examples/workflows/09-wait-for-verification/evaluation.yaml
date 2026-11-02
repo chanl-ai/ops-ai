@@ -1,0 +1,13 @@
+cases:
+  - name: clear
+    input: fixtures/clear.json
+    expected: expected/clear.json
+  - name: review
+    input: fixtures/review.json
+    expected: expected/review.json
+  - name: missing
+    input: fixtures/missing.json
+    expected: expected/missing.json
+  - name: timeout
+    input: fixtures/timeout.json
+    expected: expected/timeout.json

@@ -22,48 +22,80 @@ const SAMPLE = 5;
 const cell = (v: unknown) => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 const quoted = (names: string[]) => names.map((n) => `“${n}”`).join(', ');
 
+/** A file picked in the Start run dialog: uploaded to Files, not yet checked. */
+export interface PickedFile {
+  fileId: string;
+  name: string;
+}
+
+/** Where a picked file is checked and its runs started: its own page, since a dialog stays small (owner, 10-30). */
+export const batchCheckHref = (workflowId: string, file: PickedFile, mode: BatchMode) =>
+  `/workflows/batches/check?${new URLSearchParams({ workflow: workflowId, file: file.fileId, name: file.name, mode })}`;
+
 /**
- * The Start run dialog's Start from a file tab (c-535): a CSV or Excel file is uploaded to Files, then checked
- * against the workflow's inputs without starting anything (the dry run): the row count, which column feeds which
- * input, the columns left out and the first rows as the runs will get them. A refusal (too many rows, no column
- * naming an input) shows here and nothing starts. The dialog's footer starts the runs once `onChecked` has a file.
+ * The Start run dialog's Start from a file tab (c-535): only the file. A CSV or Excel file is uploaded to Files and
+ * handed back; the dialog then opens the check page (`BatchCheck`).
  */
-export function StartFromFile({
+export function BatchFilePicker({ inputs, onPicked }: { inputs: Record<string, { title?: string }>; onPicked: (file: PickedFile | null) => void }) {
+  const titles = Object.entries(inputs).map(([k, s]) => s.title || k);
+  return (
+    <FileUpload
+      id="batch-file"
+      purpose="case_attachment"
+      types={['csv', 'xlsx']}
+      testId="batch-file"
+      title="Drop a CSV or Excel file here or choose one"
+      hint={`Its first row names the inputs: ${titles.join(', ')}. Up to 500 rows, one run each.`}
+      onChange={(items: UploadItem[]) => {
+        const ready = items.find((i) => i.phase === 'ready' && i.fileId);
+        onPicked(ready ? { fileId: ready.fileId!, name: ready.name } : null);
+      }}
+    />
+  );
+}
+
+/**
+ * The check page's body (c-535): the picked file checked against the workflow's inputs without starting anything (the
+ * dry run): the row count, which column feeds which input, the columns left out and the first rows as the runs will
+ * get them. A refusal (too many rows, no column naming an input) shows here and nothing starts. The page starts the
+ * runs once `onChecked` has the answer.
+ */
+export function BatchCheck({
   workflowId,
   mode,
+  file,
   inputs,
   onChecked,
   startError,
 }: {
   workflowId: string;
   mode: BatchMode;
+  file: PickedFile;
   /** The trigger's inputs by key, for their titles. */
   inputs: Record<string, { title?: string }>;
   onChecked: (file: CheckedFile | null) => void;
   /** Why starting the runs failed, shown with the dry run. */
   startError?: string;
 }) {
-  const [file, setFile] = React.useState<{ fileId: string; name: string } | null>(null);
   const dry = useBatchDryRun(workflowId);
   const { mutateAsync: check, reset } = dry;
   const onCheckedRef = React.useRef(onChecked);
   onCheckedRef.current = onChecked;
   // Each new file or mode is checked again; an answer for a file no longer chosen is dropped.
   const asked = React.useRef(0);
+  const { fileId, name } = file;
   React.useEffect(() => {
     const n = ++asked.current;
     onCheckedRef.current(null);
     reset();
-    if (!file) return;
-    check({ fileId: file.fileId, mode }).then(
+    check({ fileId, mode }).then(
       (answer) => {
-        if (n === asked.current) onCheckedRef.current({ ...file, dry: answer });
+        if (n === asked.current) onCheckedRef.current({ fileId, name, dry: answer });
       },
       () => undefined,
     );
-  }, [file, mode, check, reset]);
+  }, [fileId, name, mode, check, reset]);
 
-  const titles = Object.entries(inputs).map(([k, s]) => s.title || k);
   const title = (key: string) => inputs[key]?.title || key;
   const answer = dry.data;
   const columns = answer ? Object.entries(answer.mapping) : [];
@@ -71,31 +103,18 @@ export function StartFromFile({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <FileUpload
-        id="batch-file"
-        purpose="case_attachment"
-        types={['csv', 'xlsx']}
-        testId="batch-file"
-        title="Drop a CSV or Excel file here or choose one"
-        hint={`Its first row names the inputs: ${titles.join(', ')}. Up to 500 rows, one run each.`}
-        onChange={(items: UploadItem[]) => {
-          const ready = items.find((i) => i.phase === 'ready' && i.fileId);
-          const next = ready ? { fileId: ready.fileId!, name: ready.name } : null;
-          setFile((prev) => (prev?.fileId === next?.fileId ? prev : next));
-        }}
-      />
-      {dry.isPending && file && (
+      {dry.isPending && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="batch-checking">
           <Loader2 className="size-4 animate-spin" /> Checking {file.name}: counting rows and matching columns to inputs
         </p>
       )}
-      {dry.isError && file && (
+      {dry.isError && (
         <Alert variant="destructive" data-testid="batch-refused">
           <AlertTitle>{file.name} cannot start runs</AlertTitle>
           <AlertDescription>{dry.error.message} Nothing was started.</AlertDescription>
         </Alert>
       )}
-      {answer && file && (
+      {answer && (
         <div className="flex min-w-0 flex-col gap-4" data-testid="batch-dry-run">
           <p className="text-sm">
             <span className="font-medium">{file.name}</span> has <span className="font-medium tabular-nums">{plural(answer.rows, 'row')}</span>, one run each.

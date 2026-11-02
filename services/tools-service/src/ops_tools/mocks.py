@@ -13,7 +13,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from .auth.kinds import TEST
+from .environments import TEST
 from .store.mocks import MockStore
 
 # The longest a mock waits, whatever its delay or the operation's limit says.
@@ -36,11 +36,11 @@ class MockAnswers:
         self.sleep = sleep
 
     async def for_call(
-        self, tenant_id: str, operation: str, args: dict[str, Any], environment: str | None
+        self, tenant_id: str, module_id: str, operation: str, args: dict[str, Any], environment: str | None
     ) -> dict[str, Any] | None:
         if environment != TEST:
             return None
-        return chosen(await self.store.listed(tenant_id, operation, TEST), args)
+        return chosen(await self.store.listed(tenant_id, module_id, operation, TEST), args)
 
     async def wait(self, mock: dict[str, Any], limit_ms: int) -> None:
         """A timeout waits the operation's limit; a delay its own time, never past the limit; both capped."""

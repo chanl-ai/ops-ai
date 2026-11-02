@@ -13,7 +13,8 @@ import { EgressAddDialog } from './egress-add-dialog';
 
 /**
  * A request whose host is not on the egress allowlist is refused before anything is sent (tools-service matches the
- * host exactly). Said beside the URL, with the allowlist's own form opened in place for a person who may add hosts.
+ * host exactly). Said beside the URL, with the allowlist's own form opened in place for a person who may add hosts;
+ * anyone else's save asks the Security team in Human Tasks (c-616 S13).
  * Nothing shows while the list is loading or the person may not read it.
  */
 export function EgressHostNotice({ url }: { url: string }) {
@@ -34,7 +35,7 @@ export function EgressHostNotice({ url }: { url: string }) {
               Add allowed host
             </Button>
           ) : (
-            <span className="text-xs">A Security admin can add it under Settings, Security, Egress.</span>
+            <span className="text-xs">Saving asks a Security admin to allow it in Human Tasks.</span>
           )}
         </span>
       </AlertDescription>

@@ -85,7 +85,11 @@ with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     bank = stack.enter_context(core_bank())
     gw_url = f"http://127.0.0.1:{TOOLS_PORT}"
-    stack.enter_context(tools({**bank["settings"], **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    # The MCP address is behind the install flag mcp_gateway.
+    flags = {"OPS_FLAGS": "mcp_gateway"}
+    stack.enter_context(
+        tools({**bank["settings"], **AUTH, **flags, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"})
+    )
     stack.enter_context(agents(gateway_url=gw_url, env=AUTH))
 
     priya = signed_in(api, "p.shah@harborpine.example")
@@ -117,10 +121,10 @@ with ExitStack() as stack:
     ops_key = data(
         api.post("/v1/api-keys", headers=bearer(priya, "team_ops"), json={"name": "uc410", "scopes": ["read"]})
     )
-    fraud_key = data(
-        api.post("/v1/api-keys", headers=bearer(wanjiru, "team_fraud"), json={"name": "uc410", "scopes": ["read"]})
+    other_key = data(
+        api.post("/v1/api-keys", headers=bearer(wanjiru, "team_platform"), json={"name": "uc410", "scopes": ["read"]})
     )
-    OPS_KEY, FRAUD_KEY = ops_key["secret"], fraud_key["secret"]
+    OPS_KEY, OTHER_KEY = ops_key["secret"], other_key["secret"]
 
     # 1. A team_ops key lists the team's reads, with schemas and readOnlyHint, and no writes.
     tools_seen = asyncio.run(listed(OPS_KEY, "/test/team_ops"))
@@ -171,9 +175,11 @@ with ExitStack() as stack:
     check("3 the bank holds nothing on the account", (again.structured_content or {}).get("holds") == [], again)
 
     # 4. Another team: its own URL lists none of team_ops' module and cannot run it; team_ops' URL refuses its key.
-    fraud_seen = asyncio.run(listed(FRAUD_KEY, "/test/team_fraud"))
-    check("4 a team_fraud key does not see team_ops' module", "uc410_get_account" not in fraud_seen, sorted(fraud_seen))
-    stolen = asyncio.run(called(FRAUD_KEY, "/test/team_fraud", "uc410_get_account", {"account_id": "CHQ-2219"}))
+    other_seen = asyncio.run(listed(OTHER_KEY, "/test/team_platform"))
+    check(
+        "4 a team_platform key does not see team_ops' module", "uc410_get_account" not in other_seen, sorted(other_seen)
+    )
+    stolen = asyncio.run(called(OTHER_KEY, "/test/team_platform", "uc410_get_account", {"account_id": "CHQ-2219"}))
     check(
         # The team's registry does not resolve another team's operation, so the gateway refuses it as not registered;
         # team_forbidden is the answer when it resolves but belongs elsewhere. Either way nothing runs.
@@ -182,7 +188,10 @@ with ExitStack() as stack:
         and (stolen.structured_content or {}).get("code") in ("team_forbidden", "gateway_refused"),
         stolen,
     )
-    check("4 a team_fraud key at team_ops' URL is 403", refused(FRAUD_KEY, "/test/team_ops") == (403, "team_forbidden"))
+    check(
+        "4 a team_platform key at team_ops' URL is 403",
+        refused(OTHER_KEY, "/test/team_ops") == (403, "team_forbidden"),
+    )
 
     # 5. Production is refused until a team allows it; no key is 401; a viewer, who cannot run tools, is 403.
     check("5 the production URL is 403", refused(OPS_KEY, "/production/team_ops") == (403, "production_off"))

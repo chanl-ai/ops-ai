@@ -467,7 +467,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         label="Service event",
         description=(
             "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's "
-            "input is the event's payload. Only a system workflow, which the platform maintains, is started by one."
+            "input is the event's payload. Only a system workflow, which the platform maintains, is started by one. "
+            "An input schema, when set, is also the form Start run shows."
         ),
         executor="trigger.payload",
         effects="none",
@@ -480,10 +481,56 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "pattern": EVENT_NAME,
                     "description": "The event's name, such as file.deleted",
                 },
+                "inputSchema": {
+                    "type": "object",
+                    "description": "JSON Schema Start run shows; empty means only the event starts the workflow",
+                },
             },
             "required": ["event"],
         },
-        ui=_form(("event", _f("Event", "text", "The event's name, such as file.deleted", placeholder="file.deleted"))),
+        ui=_form(
+            ("event", _f("Event", "text", "The event's name, such as file.deleted", placeholder="file.deleted")),
+            (
+                "inputSchema",
+                _f("Input schema", "json", "JSON Schema Start run shows; empty means only the event starts it"),
+            ),
+        ),
+        start=StartSpec(
+            kind="form",
+            title="Start a run",
+            action="Start run",
+            via="form",
+            form_parameter="inputSchema",
+            when_schema=True,
+        ),
+    ),
+    NodeType(
+        id="ops.trigger.schedule",
+        version=1,
+        group="trigger",
+        label="Schedule",
+        description="Starts a run when the platform clock reaches the due time. The same key fires once.",
+        executor="trigger.payload",
+        effects="none",
+        outputs=(Port("payload"),),
+        parameters={
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Idempotency key; a second tick with it starts no run"},
+                "inputSchema": {"type": "object", "description": "JSON Schema the payload must match"},
+            },
+        },
+        ui=_form(
+            ("key", _f("Key", "text", "A second fire with this key starts no run")),
+            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+        ),
+        start=StartSpec(
+            kind="schedule",
+            title="Fire now",
+            action="Start scheduled run",
+            via="schedule",
+            form_parameter="inputSchema",
+        ),
     ),
     NodeType(
         id="ops.data.combine",
@@ -681,6 +728,66 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ),
     ),
     NodeType(
+        id="ops.data.transform",
+        version=1,
+        group="data",
+        label="Transform",
+        description="Reads one path from the run and writes it under a name. A missing path takes the error port.",
+        executor="data.transform",
+        effects="none",
+        inputs=MAIN_IN,
+        outputs=(Port("out"), Port("error")),
+        parameters={
+            "type": "object",
+            "required": ["expression"],
+            "properties": {
+                "expression": {"type": "string", "description": _MAPPING},
+                "as": {"type": "string", "default": "value", "description": "The output field the value is written as"},
+            },
+        },
+        ui=_form(
+            ("expression", _f("Expression", "mapping", "A path such as $.input.a")),
+            ("as", _f("As", "text", "The output field name")),
+        ),
+    ),
+    NodeType(
+        id="ops.data.filter",
+        version=1,
+        group="data",
+        label="Filter",
+        description="Keeps or drops items of a list by field predicates. Not a second If.",
+        executor="data.filter",
+        effects="none",
+        inputs=MAIN_IN,
+        outputs=(Port("kept"), Port("dropped"), Port("error")),
+        parameters={
+            "type": "object",
+            "required": ["items", "conditions"],
+            "properties": {
+                "items": {"description": "The list to filter: " + _MAPPING},
+                "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
+                "combine": {"enum": ["all", "any"], "default": "all"},
+            },
+        },
+        ui=_form(
+            ("items", _f("List", "mapping", "A list from the input or an earlier step")),
+            (
+                "conditions",
+                _f(
+                    "Keep when",
+                    "list",
+                    "Compared against each item's fields",
+                    item=_form(
+                        ("left", _f("Field", "text")),
+                        ("op", _f("Is", "select")),
+                        ("right", _f("Compared with", "mapping")),
+                    ),
+                ),
+            ),
+            ("combine", _f("Combine", "select")),
+        ),
+    ),
+    NodeType(
         id="ops.flow.if",
         version=1,
         group="flow",
@@ -713,6 +820,67 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 ),
             ),
             ("combine", _f("Combine", "select")),
+        ),
+    ),
+    NodeType(
+        id="ops.flow.repeat",
+        version=1,
+        group="flow",
+        label="Repeat",
+        description="Leaves by again until a predicate holds or the cap is hit, so a loop cannot spin.",
+        executor="flow.repeat",
+        effects="none",
+        inputs=MAIN_IN,
+        outputs=(Port("again"), Port("done"), Port("exhausted")),
+        parameters={
+            "type": "object",
+            "required": ["conditions"],
+            "properties": {
+                "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
+                "combine": {"enum": ["all", "any"], "default": "all"},
+                "max": {"type": "integer", "minimum": 1, "default": 8, "description": "Most times again may fire"},
+            },
+        },
+        ui=_form(
+            (
+                "conditions",
+                _f(
+                    "Done when",
+                    "list",
+                    "Compared in order; Done when all (or any) hold",
+                    item=_form(
+                        ("left", _f("Value", "mapping")),
+                        ("op", _f("Is", "select")),
+                        ("right", _f("Compared with", "mapping")),
+                    ),
+                ),
+            ),
+            ("combine", _f("Combine", "select")),
+            ("max", _f("Cap", "number", "Most times the loop may run again")),
+        ),
+    ),
+    NodeType(
+        id="ops.flow.ask",
+        version=1,
+        group="flow",
+        label="Ask",
+        description="Pauses for a reply on a conversation key, then resumes. A zero deadline times out.",
+        executor="flow.ask",
+        effects="human",
+        inputs=MAIN_IN,
+        outputs=(Port("replied"), Port("timedOut")),
+        parameters={
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "What the person is asked"},
+                "key": {"type": "string", "description": "Conversation key the reply is posted on"},
+                "timeoutSeconds": {"type": "number", "minimum": 0, "description": "0 times out without pausing"},
+            },
+        },
+        ui=_form(
+            ("prompt", _f("Prompt", "textarea", "What the person is asked")),
+            ("key", _f("Key", "text", "The conversation key the reply is posted on")),
+            ("timeoutSeconds", _f("Timeout seconds", "number", "0 times out without pausing")),
         ),
     ),
     NodeType(
@@ -829,6 +997,30 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ),
     ),
     NodeType(
+        id="ops.action.send",
+        version=1,
+        group="action",
+        label="Send a message",
+        description="Replies on the channel that started the run, through the existing send_reply path. One attempt.",
+        executor="action.send",
+        effects="write",
+        inputs=MAIN_IN,
+        outputs=(Port("sent"), Port("error")),
+        parameters={
+            "type": "object",
+            "properties": {
+                "to": {"description": "Recipient; empty uses the inbound from/sender: " + _MAPPING},
+                "subject": {"description": "Subject; empty uses Re: the inbound subject: " + _MAPPING},
+                "body": {"description": "The message body: " + _MAPPING},
+            },
+        },
+        ui=_form(
+            ("to", _f("To", "mapping", "Empty uses the inbound sender")),
+            ("subject", _f("Subject", "mapping", "Empty uses Re: the inbound subject")),
+            ("body", _f("Body", "textarea", "The message body")),
+        ),
+    ),
+    NodeType(
         id="ops.ai.agent",
         version=1,
         group="ai",
@@ -872,6 +1064,31 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("model", _f("Model", "text", "A model the agent allows, for this step only; empty uses the agent's")),
             ("maxToolCalls", _f("Tool calls", "number", "At most this many in the step, within the agent's own limit")),
             _TIMEOUT,
+        ),
+    ),
+    NodeType(
+        id="ops.ai.knowledge",
+        version=1,
+        group="ai",
+        label="Retrieve from knowledge",
+        description="Searches the team's knowledge bases the same way a citing agent does. Citations leave by found.",
+        executor="ai.knowledge",
+        effects="read",
+        inputs=MAIN_IN,
+        outputs=(Port("found"), Port("notFound")),
+        parameters={
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"description": "The question: " + _MAPPING},
+                "kbIds": {"type": "array", "items": {"type": "string"}, "description": "Knowledge bases to search"},
+                "limit": {"type": "integer", "minimum": 1, "default": 3},
+            },
+        },
+        ui=_form(
+            ("query", _f("Question", "mapping", "The question to retrieve for")),
+            ("kbIds", _f("Knowledge bases", "source", "Empty searches none", source="knowledge")),
+            ("limit", _f("Limit", "number", "Most passages to return")),
         ),
     ),
     NodeType(
@@ -1567,11 +1784,17 @@ def default_registry() -> TypeRegistry:
 
 def start_form(definition: Mapping[str, Any] | None, registry: TypeRegistry) -> dict[str, Any] | None:
     """The start form of the definition's trigger, resolved for its parameters: `StartSpec.view`, or None when the
-    trigger declares no start by hand."""
+    trigger declares no start by hand. A Service event trigger declares one only when its input schema has fields."""
     node = trigger_node(definition)
     if node is None:
         return None
     t = registry.find(str(node.get("type")), int(node.get("typeVersion") or 1))
     if t is None or t.start is None:
         return None
-    return t.start.view(cast(Mapping[str, Any], node.get("parameters") or {}))
+    parameters = cast(Mapping[str, Any], node.get("parameters") or {})
+    if t.start.when_schema:
+        raw: object = parameters.get(t.start.form_parameter or "")
+        props: object = cast(Mapping[str, Any], raw).get("properties") if isinstance(raw, Mapping) else None
+        if not isinstance(props, Mapping) or not props:
+            return None
+    return t.start.view(parameters)

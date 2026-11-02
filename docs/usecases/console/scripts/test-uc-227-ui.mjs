@@ -1,4 +1,4 @@
-// uc-227 A file is read on its own page, ui layer: docs/usecases/console/file-extraction.md (c-262). Platform sign-in;
+// uc-227 A file is read on its own page, ui layer: docs/usecases/console/file-extraction.md. Platform sign-in;
 // James works in Operations, where the stack's seed put the restraining-notice samples. Demo mode, so extractions run
 // on models-service against the fake model, whose rule for TEST012 leaves the garnishee off the page.
 import { mkdirSync } from 'node:fs';
@@ -16,7 +16,7 @@ const json = async (r) => {
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
-// Screenshots for the owner to approve; approved screens then move to docs/console/approved/files.
+// Screenshots for the maintainers to approve; approved screens then move to docs/console/approved/files.
 const SHOTS = process.env.UC227_SHOTS ?? join(ROOT, 'docs/console/proposed/files');
 
 const runOf = {};

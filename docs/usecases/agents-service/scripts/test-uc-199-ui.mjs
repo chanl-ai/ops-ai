@@ -1,5 +1,5 @@
 // uc-199 a builder connects a team mailbox in the console and binds a workflow to it, ui layer:
-// docs/usecases/agents-service/connect-a-mailbox.md (c-199). withUiStack with platform sign-in and tools-service, run
+// docs/usecases/agents-service/connect-a-mailbox.md. withUiStack with platform sign-in and tools-service, run
 // isolated (ISOLATED=1). Sam puts the mailbox password on the Secrets page through the API; James connects an IMAP
 // mailbox on Channels > Email, tests it, opens its page, then connects a second mailbox from a workflow's Email
 // received trigger and saves the version, which names the new mailbox.
@@ -71,7 +71,7 @@ await withUiStack(
 
       await step('1 Channels lists the team mailboxes from the records', async () => {
         await page.goto(`${consoleUrl}/channels/email`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        // The Email mailbox page lists the team's mailboxes from the channel records (c-242).
+        // The Email mailbox page lists the team's mailboxes from the channel records.
         const list = page.getByRole('table');
         await list.locator('[data-testid^="channel-row-"]').first().waitFor({ timeout: 60_000 });
         const text = await list.innerText();

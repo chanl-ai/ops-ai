@@ -1,0 +1,37 @@
+id: purge-after-file-deleted
+title: Purge derived data after a file deletion
+track: workflow
+status: built
+difficulty: guided
+outcome: When files-service reports file.deleted, remove derived extractions.
+capabilities:
+- id: ops.trigger.event
+  status: built
+- id: ops.documents.purge
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/deleted.json
+- fixtures/again.json
+- fixtures/wrong.json
+expected:
+- expected/deleted.json
+- expected/again.json
+- expected/wrong.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 20
+teaches:
+- system workflow, event-started
+- file.deleted is fired by deleting a file, not by hand
+- a duplicate purge is idempotent
+- a file that still exists fails

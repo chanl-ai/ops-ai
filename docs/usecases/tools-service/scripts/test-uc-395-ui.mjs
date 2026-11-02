@@ -1,8 +1,7 @@
 // uc-395 a tool presents a client certificate from its connection, ui layer:
 // docs/usecases/tools-service/connections-certificate.md. Priya, an Operations admin, presses Test the team account on a
 // connection holding a client certificate for the bank stand-in's certificate-only listener, and it works. The ui
-// harness's bank hands back no certificate-only host or client certificate (c-580), so this walk fails at step 5 until
-// it does.
+// harness's core bank hands back its certificate-only host and the CA and client certificate's files.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { readFileSync } from 'node:fs';
 import { CONNECTION_STACK, allowBank, connection, testTeamAccount } from '../../lib/connection_ui.mjs';
@@ -13,7 +12,7 @@ const RUN = Math.random().toString(36).slice(2, 6);
 await withUiStack(
   async (consoleUrl, stack) => {
     const { mtlsHost, mtls } = stack.bank;
-    check('5 the stack serves the certificate-only listener and hands back its client certificate (c-580)', Boolean(mtlsHost && mtls), { keys: Object.keys(stack.bank) });
+    check('5 the stack serves the certificate-only listener and hands back its client certificate', Boolean(mtlsHost && mtls), { keys: Object.keys(stack.bank) });
     if (!mtlsHost || !mtls) return;
     await allowBank(stack.bank);
     const pem = Object.fromEntries(Object.entries(mtls).map(([k, v]) => [k, readFileSync(v, 'utf8')]));

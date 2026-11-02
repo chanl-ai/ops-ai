@@ -139,7 +139,7 @@ await withUiStack(
     });
 
     // 4. Run workflow once started customer_hold for the sender: matched by their address and waiting for approval.
-    // The run page masks the address people read (c-321); the matched customer's name is not masked, and step 5's mail
+    // The run page masks the address people read; the matched customer's name is not masked, and step 5's mail
     // to the real address proves the workflow kept it.
     await step('4 the hold it started found the customer by their address and waits for approval', async () => {
       const hold = await until(async () => (await runsOf('customer_hold')).find((k) => k.startedBy?.runId === run?.id && (k.status === 'waiting' || SETTLED.includes(k.status))));

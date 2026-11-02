@@ -1,0 +1,6 @@
+name: Dispute desk
+role: analyst
+instructions: Start customer hold when asked, using the workflow tool.
+model: fake
+tools:
+- workflow:calculate_account_hold

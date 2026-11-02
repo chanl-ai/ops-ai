@@ -38,11 +38,11 @@ const counts = {};
 const SELF_WORDED = /(?<![=\w$])\{\s*[\w.?]+\.(?:nodeId|operation|tool)\s*\}|<OperationBadge\b/g;
 const SELF_WORDED_OK = new Set([
   'components/workflows/run-journal/step-sheet.tsx',
-  'app/logs/tool-calls/page.tsx',
+  'app/tools/calls/page.tsx',
   'components/logs/tool-call-sheet.tsx',
   'components/tools/executions-table.tsx',
   'components/tools/versions-panel.tsx',
-  'app/settings/security/secrets/page.tsx',
+  'components/secrets/secrets-panel.tsx',
 ]);
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const report = (f, index, rule) => violations.push(`${f.rel}:${lineOf(f.text, index)}  ${rule}`);
@@ -184,6 +184,16 @@ const reachesLayout = (f, depth = 0) =>
       const source = importedSource(f, name);
       return !!source && source.abs !== f.abs && reachesLayout(source, depth + 1);
     }));
+// 19. The outside-assistant MCP address is behind the install flag mcp_gateway (c-611): a file that links to the MCP
+//     channel or names the MCP URL on screen (app/ and components/) reads the flag (hooks/flag-queries), so a new entry point cannot show it on an install
+//     that has it off. Exempt: the mock's data, the retired /connect redirect (it lands on the channel page, which checks
+//     the flag), and the MCP channel's own panels (app/deployments/_parts/mcp-tab.tsx, components/deployments/mcp/),
+//     which render only inside that page.
+const mcpExempt = (rel) => rel.startsWith('src/lib/api/mock/') || rel.startsWith('src/components/deployments/mcp/') || ['src/app/connect/page.tsx', 'src/app/deployments/_parts/mcp-tab.tsx'].includes(rel);
+for (const f of files.filter((x) => /^src\/(app|components)\//.test(x.rel) && !mcpExempt(x.rel))) {
+  const hit = /['"`]\/channels\/mcp['"`]|MCP URL/.exec(f.text);
+  if (hit && !f.text.includes("'mcp_gateway'")) report(f, hit.index, 'links to the MCP address without reading the mcp_gateway flag (c-611)');
+}
 for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel))) {
   if (!reachesLayout(f)) report(f, 0, 'page that never reaches PageLayout or RecordLayout (in the page or up to three components down)');
 }

@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-31",
+  "title": "A REST tool's page reads like an API client",
+  "description": "A REST tool's page now runs in order: pick the connection, write the call, Run it in Mock or Real, read the answer and the exact request sent, then Save. A refused save lists every problem at once.",
+  "tag": "improved",
+  "cards": [
+    "c-591"
+  ]
+}

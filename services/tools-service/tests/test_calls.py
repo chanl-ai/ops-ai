@@ -17,8 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import input_hash, new_id
-from ops_tools.modules.seed import blank, load
+from ops_store import isolation
+from ops_tools.environments import CONNECTION_ENVIRONMENTS
+from ops_tools.modules.seed import blank, load, open_connection
 from ops_tools.store import CallLog
+from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.tokens import Binding, mint
@@ -70,7 +73,6 @@ def bank_module(tenant: str, suffix: str) -> dict[str, Any]:
     hold = [account, {"name": "hours", "type": "integer", "required": True}]
     m.update(
         status="published",
-        endpoint=ENDPOINT,
         egress_hosts=[HOST],
         version="1.0.0",
         operations=[
@@ -90,6 +92,26 @@ def bank_module(tenant: str, suffix: str) -> dict[str, Any]:
         ],
     )
     return m
+
+
+async def on_its_connection(engine: AsyncEngine, module: dict[str, Any], base: str) -> dict[str, Any]:
+    """The module on a connection of its own that signs nothing in and holds `base` in every environment: where a
+    module's address lives (c-616)."""
+    now = datetime.now(UTC)
+    row, envs = open_connection(
+        tenant_id=module["tenant_id"], team_id=module["team_id"], connection_id=f"con_{module['id']}",
+        name=module["display_name"], base=base, me="test", at=now,
+    )  # fmt: skip
+    with isolation.scope(module["tenant_id"], module["team_id"]):
+        await ConnectionStore(engine).create(row, actor="test", at=now, environments=envs)
+    return {**module, "connection_id": row["id"]}
+
+
+async def move_address(engine: AsyncEngine, tenant: str, module_id: str, team: str, base: str) -> None:
+    with isolation.scope(tenant, team):
+        await ConnectionStore(engine).set_base(
+            tenant, f"con_{module_id}", base, CONNECTION_ENVIRONMENTS, actor="test", at=datetime.now(UTC)
+        )
 
 
 @dataclass
@@ -124,7 +146,7 @@ async def gateway(
 ) -> AsyncIterator[Gateway]:
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     suffix = new_id("x")[2:8].lower()
-    module = bank_module(tenant, suffix)
+    module = await on_its_connection(engine, bank_module(tenant, suffix), ENDPOINT)
     await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
     await ModuleStore(engine).put(module, expected_revision=None)
     bank, received = fake_bank()
@@ -214,10 +236,8 @@ async def test_upstream_failures_are_logged_as_errors(gateway: Gateway) -> None:
 
 async def test_egress_goes_only_to_the_modules_hosts(gateway: Gateway, engine: AsyncEngine, tenant: str) -> None:
     store = ModuleStore(engine)
-    m = await store.get(tenant, MODULE)
-    assert m is not None
-    m["endpoint"] = "https://exfil.example.com/v1"
-    await store.put(m, expected_revision=m["revision"])
+    assert await store.get(tenant, MODULE) is not None
+    await move_address(engine, tenant, MODULE, "team_platform", "https://exfil.example.com/v1")
     r = await gateway.call("elsewhere", {"accountId": "CHQ-2219"}, step="s1")
     assert r.json()["data"]["output"]["error"]["code"] == "EGRESS_DENIED"
     assert not gateway.received
@@ -357,6 +377,8 @@ async def test_a_write_received_but_not_finished_reads_as_running_by_its_key(
     row: dict[str, Any] = {
         "id": new_id("call"),
         "tenant_id": gateway.tenant,
+        # The module's team, which a call from a service acting for the whole tenant is logged under (c-616).
+        "team_id": "team_platform",
         "tool": gateway.tool("place_hold"),
         "access": "write",
         "input_hash": "h",
@@ -410,6 +432,8 @@ async def test_a_write_running_past_its_expiry_reads_as_lost(gateway: Gateway, e
     row: dict[str, Any] = {
         "id": new_id("call"),
         "tenant_id": gateway.tenant,
+        # The module's team, which a call from a service acting for the whole tenant is logged under (c-616).
+        "team_id": "team_platform",
         "tool": gateway.tool("place_hold"),
         "access": "write",
         "input_hash": "h2",

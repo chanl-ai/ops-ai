@@ -13,9 +13,6 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
-ENVIRONMENTS = ("test", "production")
-TEST, PRODUCTION = ENVIRONMENTS
-
 
 @dataclass(frozen=True)
 class Field:
@@ -31,6 +28,8 @@ class Field:
     # Required once every setting named holds its value, or no longer required then; pairs, so the field stays hashable.
     required_when: tuple[tuple[str, str], ...] = ()
     optional_when: tuple[tuple[str, str], ...] = ()
+    # PEM text, many lines long: the dialog gives it a multi-line box and a file to read it from (c-580).
+    pem: bool = False
 
     def required_for(self, settings: dict[str, Any]) -> bool:
         if self.required_when and all(settings.get(k) == v for k, v in self.required_when):
@@ -57,6 +56,8 @@ class Field:
             out["requiredWhen"] = dict(self.required_when)
         if self.optional_when:
             out["optionalWhen"] = dict(self.optional_when)
+        if self.pem:
+            out["pem"] = True
         return out
 
 
@@ -71,13 +72,18 @@ class Kind:
     holds_token: bool = False
     # Each person may sign in with their own account, so a call acts as the person it is for (c-558).
     per_person: bool = False
+    # The fields each person gives for themselves when the connection signs in as each person (c-595): their own key,
+    # password or token; the team gives the rest. Empty for a kind whose person signs in at the system instead.
+    person_fields: tuple[str, ...] = ()
 
     def field(self, name: str) -> Field | None:
         return next((f for f in (*self.fields, *COMMON, *CERTIFICATE) if f.name == name), None)
 
-    def requires(self, settings: dict[str, Any]) -> list[Field]:
-        """The fields this kind needs with these plain settings (defaults applied), secret or not."""
-        return [f for f in (*self.fields, *COMMON) if f.required_for(settings)]
+    def requires(self, settings: dict[str, Any], *, each_person: bool = False) -> list[Field]:
+        """The fields this kind needs with these plain settings (defaults applied), secret or not. `each_person`: the
+        fields asked of the team where each person gives their own (`person_fields`) are left out (c-595)."""
+        own: set[str] = set(self.person_fields) if each_person else set()
+        return [f for f in (*self.fields, *COMMON) if f.required_for(settings) and f.name not in own]
 
     def view(self) -> dict[str, Any]:
         return {
@@ -87,17 +93,23 @@ class Kind:
             "signsIn": self.signs_in,
             "holdsToken": self.holds_token,
             "perPerson": self.per_person,
+            "personFields": list(self.person_fields),
         }
 
 
-_SCOPES = Field("scopes", "Permissions to ask for", help="Separated by spaces, as the system names them.")
+_SCOPES = Field("scopes", "Permissions to ask for", help="Separated by spaces, as the app names them.")
 SIGNED = (("clientAuth", "private_key_jwt"),)
 # Signing has its own pair, apart from the mTLS clientCertificate and clientKey, so the signing key is never offered in
 # a TLS handshake or written out for one.
 _SIGNING_CERTIFICATE = Field(
-    "signingCertificate", "Signing certificate", help="PEM of the certificate registered with the system's app."
+    "signingCertificate",
+    "Signing certificate",
+    help="PEM of the certificate registered with the app's OAuth client.",
+    pem=True,
 )
-_SIGNING_KEY = Field("signingKey", "Signing key", secret=True, help="PEM private key of the signing certificate.")
+_SIGNING_KEY = Field(
+    "signingKey", "Signing key", secret=True, help="PEM private key of the signing certificate.", pem=True
+)
 _CLIENT_AUTH = Field(
     "clientAuth",
     "How the client is sent",
@@ -107,8 +119,14 @@ _CLIENT_AUTH = Field(
     help="In the request body, as a username and password, or as an assertion signed with the app's certificate.",
 )
 _SIGNED_PAIR = (
-    Field(_SIGNING_CERTIFICATE.name, _SIGNING_CERTIFICATE.label, help=_SIGNING_CERTIFICATE.help, required_when=SIGNED),
-    Field(_SIGNING_KEY.name, _SIGNING_KEY.label, secret=True, help=_SIGNING_KEY.help, required_when=SIGNED),
+    Field(
+        _SIGNING_CERTIFICATE.name,
+        _SIGNING_CERTIFICATE.label,
+        help=_SIGNING_CERTIFICATE.help,
+        required_when=SIGNED,
+        pem=True,
+    ),
+    Field(_SIGNING_KEY.name, _SIGNING_KEY.label, secret=True, help=_SIGNING_KEY.help, required_when=SIGNED, pem=True),
 )
 
 KINDS: tuple[Kind, ...] = (
@@ -121,11 +139,15 @@ KINDS: tuple[Kind, ...] = (
             Field("name", "Header or query name", required=True, default="X-Api-Key"),
             Field("key", "Key", secret=True, required=True),
         ),
+        per_person=True,
+        person_fields=("key",),
     ),
     Kind(
         "basic",
         "Username and password",
         (Field("username", "Username", required=True), Field("password", "Password", secret=True, required=True)),
+        per_person=True,
+        person_fields=("username", "password"),
     ),
     Kind(
         "bearer",
@@ -134,6 +156,8 @@ KINDS: tuple[Kind, ...] = (
             Field("token", "Token", secret=True, required=True),
             Field("prefix", "Prefix", default="Bearer", advanced=True),
         ),
+        per_person=True,
+        person_fields=("token",),
     ),
     Kind(
         "oauth2_client_credentials",
@@ -158,14 +182,21 @@ KINDS: tuple[Kind, ...] = (
             Field("clientId", "Client ID", required=True),
             Field("clientSecret", "Client secret", secret=True, help="Leave empty for a public client."),
             _SCOPES,
-            Field("resource", "Resource", advanced=True, help="The address the token is for, when the system asks."),
+            Field("resource", "Resource", advanced=True, help="The address the token is for, when the app asks."),
             _CLIENT_AUTH,
             *_SIGNED_PAIR,
+            Field(
+                "authorizeParams",
+                "Extra sign-in parameters",
+                advanced=True,
+                help="Added to the sign-in address as name=value pairs joined by &, such as prompt=consent; the "
+                "platform's own parameters always win.",
+            ),
             Field(
                 "revokeUrl",
                 "Revocation address",
                 advanced=True,
-                help="Where a sign-in is ended when a person disconnects (RFC 7009), when the system has one.",
+                help="Where a sign-in is ended when a person disconnects (RFC 7009), when the app has one.",
             ),
         ),
         signs_in=True,
@@ -178,8 +209,8 @@ KINDS: tuple[Kind, ...] = (
         "Signed service account",
         (
             Field("tokenUrl", "Token address", required=True),
-            Field("clientId", "Client ID", required=True, help="The issuer: an integration key or a service account."),
-            Field("subject", "Acting as", help="The user the token acts for, when the system asks for one."),
+            Field("clientId", "Client ID", required=True, help="The issuer: an app's key or a service account."),
+            Field("subject", "Acting as", help="The user the token acts for, when the app asks for one."),
             Field("audience", "Audience", advanced=True, help="The token address when empty."),
             _SCOPES,
             Field(
@@ -190,8 +221,8 @@ KINDS: tuple[Kind, ...] = (
                 advanced=True,
                 help="In the token request, or as a claim in the signed grant (Google).",
             ),
-            Field(_SIGNING_CERTIFICATE.name, _SIGNING_CERTIFICATE.label, help=_SIGNING_CERTIFICATE.help),
-            Field(_SIGNING_KEY.name, _SIGNING_KEY.label, secret=True, required=True, help=_SIGNING_KEY.help),
+            Field(_SIGNING_CERTIFICATE.name, _SIGNING_CERTIFICATE.label, help=_SIGNING_CERTIFICATE.help, pem=True),
+            Field(_SIGNING_KEY.name, _SIGNING_KEY.label, secret=True, required=True, help=_SIGNING_KEY.help, pem=True),
         ),
         holds_token=True,
     ),
@@ -200,7 +231,7 @@ KINDS: tuple[Kind, ...] = (
 # Every environment names the system it signs in to: its credentials go to that address (scheme, host and port) only,
 # whichever module uses the connection and whatever else is on the allow-list.
 ADDRESS = Field(
-    "baseUrl", "System address", required=True, help="https address of the system; its credentials go nowhere else."
+    "baseUrl", "App address", required=True, help="https address of the app; its credentials go nowhere else."
 )
 # What Test connection reads (c-558): a path on the system address that answers any signed-in account, such as the
 # identity provider's userinfo.
@@ -208,14 +239,14 @@ TEST_PATH = Field(
     "testPath",
     "Test address",
     advanced=True,
-    help="A read on the system address that answers when the sign-in works, such as /services/oauth2/userinfo.",
+    help="A read on the app address that answers when the sign-in works, such as /services/oauth2/userinfo.",
 )
 COMMON: tuple[Field, ...] = (ADDRESS, TEST_PATH)
 
 CERTIFICATE: tuple[Field, ...] = (
-    Field("clientCertificate", "Client certificate", help="PEM, for systems that ask for one."),
-    Field("clientKey", "Private key", secret=True),
-    Field("trustedCa", "Trusted server certificate", help="PEM of the CA that signed the system's certificate."),
+    Field("clientCertificate", "Client certificate", help="PEM, for apps that ask for one.", pem=True),
+    Field("clientKey", "Private key", secret=True, pem=True),
+    Field("trustedCa", "Trusted server certificate", help="PEM of the CA that signed the app's certificate.", pem=True),
 )
 
 BY_ID = {k.id: k for k in KINDS}

@@ -34,6 +34,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
 import { bytes, plural, relativeTime } from '@/lib/format';
 import type { FileFilters, FilePurpose, FileRecord, FileSensitivity, FileView, ScanStatus } from '@/lib/types/files';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = FileRecord & { onRowClick: (f: FileRecord) => void };
 
@@ -254,15 +255,7 @@ export default function FilesPage() {
                 : []),
               { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => setDeleting(rs) },
             ]}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={<ListEmpty icon={Files} noun={view === 'all' ? 'files' : 'files in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} />}
           />
         </div>

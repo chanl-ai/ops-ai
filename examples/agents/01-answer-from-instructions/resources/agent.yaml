@@ -1,0 +1,6 @@
+name: Example answer from instructions
+role: answer
+instructions: Answer from these instructions only. Business accounts need two identity
+  documents.
+memory:
+  enabled: false

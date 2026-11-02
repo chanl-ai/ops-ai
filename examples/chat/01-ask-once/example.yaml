@@ -1,0 +1,22 @@
+id: ask-once
+title: Ask once
+track: chat
+status: built
+difficulty: intro
+outcome: Send one message and read the reply.
+capabilities:
+- id: chat.send
+  status: built
+entrypoint: fixtures/message.json
+fixtures:
+- fixtures/message.json
+expected:
+- expected/reply.json
+surfaces:
+  ui: built
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 10
+teaches:
+- chat

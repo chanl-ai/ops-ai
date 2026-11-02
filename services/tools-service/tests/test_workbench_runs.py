@@ -22,8 +22,8 @@ from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import build_app, opa_client
-from .fake_upstream import HOST, SlowAware, fake_bank
-from .test_calls import MODULE, Gateway, bank_module
+from .fake_upstream import ENDPOINT, HOST, SlowAware, fake_bank
+from .test_calls import MODULE, Gateway, bank_module, on_its_connection
 
 BASE = f"/v1/tool-modules/{MODULE}"
 # A value no other row in the test database holds, so finding it anywhere means this run stored it.
@@ -35,7 +35,7 @@ async def _gateway(
 ) -> AsyncIterator[Gateway]:
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     suffix = new_id("x")[2:8].lower()
-    module = bank_module(tenant, suffix)
+    module = await on_its_connection(engine, bank_module(tenant, suffix), ENDPOINT)
     read = module["operations"][0]
     read["path"] = path
     read["headers"] = [{"key": "X-Api-Key", "value": "{{WB_BANK_KEY}}"}]
@@ -77,7 +77,8 @@ async def reversing(
 
 async def _run(g: Gateway, base: str, target: str, args: dict[str, Any], **extra: Any) -> dict[str, Any]:
     body = {"operation": g.tool(base), "contextId": "owner", "target": target, "input": args, **extra}
-    r = await g.client.post(f"{BASE}/test", json=body)
+    # In the module's team, as the console sends it: a Real run is a gateway call made in the acting team (c-616).
+    r = await g.client.post(f"{BASE}/test", json=body, headers={"X-Team-Id": "team_platform"})
     assert r.status_code == 200, r.text
     return r.json()["data"]
 

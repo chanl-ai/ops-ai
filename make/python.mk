@@ -74,7 +74,7 @@ pool-store:
 pool-engine:
 	@$(call pool_job,$@,uv run python scripts/test_db.py $(call db_for,engine) && cd packages/ops_engine && OPS_DATABASE_URL=$(call db_for,engine) uv run pytest)
 pool-packages:
-	@$(call pool_job,$@,set -e; for p in ops_ingest ops_policy ops_identity ops_access ops_email ops_signin; do (cd packages/$$p && uv run pytest); done; cd packages/ops_store && uv run pytest tests/test_schema_version.py)
+	@$(call pool_job,$@,set -e; for p in ops_ingest ops_policy ops_identity ops_access ops_email ops_signin ops_service_kit; do (cd packages/$$p && uv run pytest); done; cd packages/ops_store && uv run pytest tests/test_schema_version.py)
 pool-deploy:
 	@$(call pool_job,$@,uv run pytest deploy/database/tests && uv run pytest -q deploy/k8s/tests)
 

@@ -1,4 +1,4 @@
-"""A fake system for every sign-in method a plugin can use (c-588): one endpoint per method, each accepting only its own
+"""A fake system for every sign-in method a plugin can use: one endpoint per method, each accepting only its own
 credential in the format real APIs use, and a listener that demands a client certificate.
 
 `api.multi.test` serves the API and `login.multi.test` fronts navikt's mock-oauth2-server (the OAuth server the fake
@@ -62,8 +62,20 @@ SECRETS = {
     "password": "pw-3f8a61c2e4",
     "token": "static-token-9d27e0b4c1",
 }
-# OAuth clients the login host knows: one for client credentials, one for each person's sign-in.
-CLIENTS = {"multi-cc": "cc-secret-71b3e5a8d2", "multi-app": "app-secret-c49f0a2e6b"}
+# Each person's own API key on the person-key endpoint, and whose it is; any other key is refused.
+PERSON_KEYS = {"james": "desk-key-james-4c1a", "maya": "desk-key-maya-8e2d"}
+# OAuth clients the login host knows: one for client credentials, one for each person's sign-in, and one that may send
+# its client only as basic auth, as Zoom's token endpoint requires.
+CLIENTS = {
+    "multi-cc": "cc-secret-71b3e5a8d2",
+    "multi-app": "app-secret-c49f0a2e6b",
+    "multi-zoom": "zoom-secret-6d0e2a91f4",
+}
+BASIC_ONLY = {"multi-zoom"}
+# Headers the fake shows back from what it was sent: never a credential.
+SHOWN_HEADERS = ("x-api-version", "consistencylevel", "content-type")
+# The site the sites lookup names until a use case switches it.
+SITE = "site-7f3a"
 RECORD = {"id": "rec-1042", "title": "Harbor ticket 1042", "status": "open"}
 
 
@@ -116,6 +128,10 @@ class MultiAuth:
         self.token_requests: list[dict[str, Any]] = []
         self._issued: set[str] = set()
         self._expired: set[str] = set()
+        # The sign-in address's query as each authorize request arrived, and the site the lookup names.
+        self.authorize_requests: list[dict[str, str]] = []
+        self.site = SITE
+        self.transfers: list[dict[str, Any]] = []
         self._jwks = jwt.PyJWKClient(f"{upstream}/{ISSUER_ID}/jwks")
 
     def expire(self) -> None:
@@ -149,6 +165,8 @@ class MultiAuth:
         if path.startswith("/_control/"):
             if request.method == "POST" and path == "/_control/expire":
                 self.expire()
+            if request.method == "POST" and path == "/_control/site":
+                self.site = str(json.loads(body or b"{}").get("id") or SITE)
             return JSONResponse(self.state())
         if host == LOGIN_HOST:
             return await self._login(request, body)
@@ -156,11 +174,14 @@ class MultiAuth:
         check = {
             "open": self._open,
             "header-key": self._header_key,
+            "person-key": self._person_key,
             "query-key": self._query_key,
             "basic": self._basic,
             "bearer": self._bearer,
             "cc": self._oauth,
             "person": self._oauth,
+            "fields": self._bearer,
+            "sites": self._oauth,
         }.get(method)
         if check is None:
             return JSONResponse({"error": "not_found", "message": path}, 404)
@@ -168,7 +189,7 @@ class MultiAuth:
         self.calls.append({"method": method, "accepted": accepted, "credential": digest(given) if given else None})
         if not accepted:
             # The way most APIs refuse a missing or wrong credential: 401 with a WWW-Authenticate challenge.
-            tokens = method in ("bearer", "cc", "person")
+            tokens = method in ("bearer", "cc", "person", "fields", "sites")
             challenge = 'Bearer error="invalid_token"' if tokens else 'Basic realm="multi"'
             return JSONResponse(
                 {"error": "unauthorized", "message": "The credential was refused."},
@@ -176,10 +197,48 @@ class MultiAuth:
                 headers={"WWW-Authenticate": challenge},
             )
         self.calls[-1]["as"] = who
+        self.calls[-1]["headers"] = {k: v for k, v in request.headers.items() if k.lower() in SHOWN_HEADERS}
+        if method == "fields":
+            return self._fields(request, path, body)
+        if method == "sites":
+            return self._sites(path)
         if path.endswith("/echo"):
             # Some systems repeat the request they were sent; a plugin tool that returns this must not leak the sign-in.
             return JSONResponse({"method": method, "sent": dict(request.headers)})
         return JSONResponse({"method": method, "as": who, "record": RECORD})
+
+    def _fields(self, request: Any, path: str, body: bytes) -> Any:
+        """A desk API in the formats real ones use: a chat method that takes only a form body, as Slack's do, a
+        transfer that counts what reached it, and a search that shows the headers it was sent."""
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        shown = self.calls[-1]["headers"]
+        # The path each call reached, so a use case can tell which version of a tool sent it.
+        self.calls[-1]["path"] = path
+        if path.endswith(("/chat.postMessage", "/chat.post")):
+            if not request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+                return JSONResponse({"ok": False, "error": "invalid_form_data"}, 415)
+            return JSONResponse({"ok": True, "fields": {k: v[0] for k, v in parse_qs(body.decode()).items()}})
+        if path.endswith("/transfers"):
+            sent = json.loads(body or b"{}")
+            self.transfers.append({"amount": sent.get("amount"), "to": sent.get("to")})
+            return JSONResponse({"id": f"tr-{len(self.transfers)}", "amount": sent.get("amount")})
+        if path.endswith("/close") and "/cases/" in path:
+            return JSONResponse({"closed": path.split("/cases/", 1)[1].removesuffix("/close")})
+        if path.endswith("/echo"):
+            return JSONResponse({"method": "fields", "sent": dict(request.headers)})
+        return JSONResponse({"method": "fields", "headers": shown, "record": RECORD})
+
+    def _sites(self, path: str) -> Any:
+        """The sites an account can reach, as Atlassian's accessible-resources answers, and records on the one named."""
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        if path == "/sites/accessible":
+            return JSONResponse([{"id": self.site, "name": "Harbor desk", "scopes": ["read"]}])
+        site = path.split("/")[2] if path.count("/") >= 2 else ""
+        if site != self.site:
+            return JSONResponse({"error": "not_found", "message": f"no site {site}"}, 404)
+        return JSONResponse({"method": "sites", "site": site, "record": RECORD})
 
     @staticmethod
     def _open(_request: Any) -> tuple[bool, str, str]:
@@ -189,6 +248,12 @@ class MultiAuth:
     def _header_key(request: Any) -> tuple[bool, str, str]:
         given = request.headers.get(KEY_HEADER, "")
         return given == SECRETS["key"], given, "team"
+
+    @staticmethod
+    def _person_key(request: Any) -> tuple[bool, str, str]:
+        given = request.headers.get(KEY_HEADER, "")
+        who = next((name for name, key in PERSON_KEYS.items() if key == given), "")
+        return bool(who), given, who
 
     @staticmethod
     def _query_key(request: Any) -> tuple[bool, str, str]:
@@ -227,12 +292,17 @@ class MultiAuth:
         from starlette.responses import JSONResponse, Response  # noqa: PLC0415
 
         path = request.url.path
+        if path.endswith("/authorize") and request.method == "GET":
+            self.authorize_requests.append({k: v[0] for k, v in parse_qs(request.url.query).items()})
         if path.endswith("/token"):
             form = parse_qs(body.decode())
-            cid, secret = _client_of(form, request.headers.get("authorization", ""))
+            authorization = request.headers.get("authorization", "")
+            cid, secret = _client_of(form, authorization)
             grant = form.get("grant_type", [""])[0]
-            ok = cid in CLIENTS and secret == CLIENTS[cid]
-            self.token_requests.append({"grant": grant, "client": cid, "accepted": ok})
+            sent_as = "basic" if authorization.lower().startswith("basic ") else "form"
+            # A basic-only client sent in the form is refused, as Zoom refuses it.
+            ok = cid in CLIENTS and secret == CLIENTS[cid] and not (cid in BASIC_ONLY and sent_as != "basic")
+            self.token_requests.append({"grant": grant, "client": cid, "accepted": ok, "sent_as": sent_as})
             if not ok:
                 return JSONResponse(
                     {"error": "invalid_client", "error_description": "Client authentication failed."}, 401
@@ -259,7 +329,13 @@ class MultiAuth:
         return Response(r.content, status_code=r.status_code, headers=out)
 
     def state(self) -> dict[str, Any]:
-        return {"calls": list(self.calls), "token_requests": list(self.token_requests)}
+        return {
+            "calls": list(self.calls),
+            "token_requests": list(self.token_requests),
+            "authorize_requests": list(self.authorize_requests),
+            "transfers": list(self.transfers),
+            "site": self.site,
+        }
 
 
 @contextmanager
@@ -336,6 +412,7 @@ def multi_auth(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
                 "control": f"https://{address}:{port}/_control",
                 "secrets": dict(SECRETS),
                 "clients": dict(CLIENTS),
+                "person_keys": dict(PERSON_KEYS),
                 "mtls_ca": bank["ca"].read_text(),
                 "client_cert": bank["client_cert"].read_text(),
                 "client_key": bank["client_key"].read_text(),

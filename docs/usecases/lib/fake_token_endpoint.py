@@ -1,4 +1,4 @@
-"""A fake sign-in for apps that prove themselves with a certificate (c-583): a Microsoft Entra style token endpoint
+"""A fake sign-in for apps that prove themselves with a certificate: a Microsoft Entra style token endpoint
 that takes a signed client assertion (RFC 7523 2.2) and no client secret, and Google and DocuSign style endpoints
 whose grant is the signed JWT itself (RFC 7523 2.1), with an API that answers only their tokens.
 
@@ -303,3 +303,28 @@ def token_endpoint() -> Generator[dict[str, Any]]:
             }
         finally:
             server.should_exit = True
+
+
+if __name__ == "__main__":
+    # Run as a script for a Node ui use case (uc-580): serves until stdin closes and prints one JSON line with the
+    # settings tools-service needs, the hosts and range to list, and the Entra app's id and its registered pair.
+    import signal
+    import sys
+
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    with token_endpoint() as m:
+        entra = m["systems"]["entra"]
+        pair = entra["pair"]
+        shown = {
+            "settings": m["settings"],
+            "hosts": m["hosts"],
+            "range": m["range"],
+            "entra": {
+                "clientId": entra["client_id"],
+                "cert": pair.cert,
+                "key": pair.key,
+                "thumbprint": pair.thumbprint,
+            },
+        }
+        print(json.dumps(shown), flush=True)
+        sys.stdin.read()

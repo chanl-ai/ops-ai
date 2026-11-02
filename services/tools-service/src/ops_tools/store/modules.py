@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql.schema import SchemaItem
 
+from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
@@ -41,11 +42,9 @@ tool_modules = sa.Table(
     sa.Column("display_name", sa.String(200), nullable=False),
     sa.Column("system", sa.String(200), nullable=False),
     sa.Column("description", sa.Text, nullable=False),
-    sa.Column("type", sa.String(16), nullable=False),
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("owner_team", sa.String(120), nullable=False),
     sa.Column("owner_contacts", sa.JSON, nullable=False),
-    sa.Column("endpoint", sa.Text, nullable=False),
     sa.Column("auth", sa.JSON, nullable=False),
     sa.Column("timeout_ms", sa.Integer, nullable=False),
     sa.Column("data_classification", sa.String(16), nullable=False),
@@ -53,7 +52,7 @@ tool_modules = sa.Table(
     sa.Column("connection_id", sa.String(64)),
     # Whose account the module's calls may sign in with (c-558): team, person or either; a connection whose sign-in
     # does not fit is refused when it is chosen.
-    sa.Column("sign_in", sa.String(16), nullable=False, server_default="either"),
+    sa.Column("sign_in", sa.String(16), nullable=False, server_default="person_or_team"),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
     # `system` nothing, `managed` anything (c-180). Null on a record no template made.
     sa.Column("template_id", sa.String(120), index=True),
@@ -133,6 +132,9 @@ module_operations = _child(
     sa.Column("headers", sa.JSON, nullable=False, server_default="[]"),
     # A JSON body template with {{arg}} placeholders; without one the arguments the URL did not use are the body.
     sa.Column("body", sa.Text),
+    # How `body` is sent (c-591): json (null, as before), form (a JSON object of field to template, form-encoded) or raw
+    # (the template as text, with the Content-Type header the operation sets).
+    sa.Column("body_encoding", sa.String(8)),
     # A Jinja2 template over the parsed response (ops_tools.transform); null returns the response as it came.
     sa.Column("response_transform", sa.Text),
     # This operation's limit; null uses the module's timeout_ms.
@@ -165,11 +167,51 @@ module_operations = _child(
     sa.Column("code", sa.JSON),
     # Read or write only (migration tools_0012): a database holding any other class is rebuilt, never read.
     sa.CheckConstraint("access IN ('read', 'write')", name="ck_module_operations_access"),
-    sa.Column("stub", sa.JSON, nullable=False),
     # The gateway resolves a call by tool name in the run's team, so the same name may exist in
     # another team's module (c-509). Unique per module: two operations of one module cannot share it.
     sa.UniqueConstraint("tenant_id", "module_id", "name", name="ux_module_operations_name"),
 )
+
+operation_mocks = sa.Table(
+    "operation_mocks",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("module_id", sa.String(64), nullable=False),
+    sa.Column("operation", sa.String(120), nullable=False),
+    # test: answers test-environment calls; example: the operation's example answer (EXAMPLE). Production never reads
+    # a mock.
+    sa.Column("environment", sa.String(16), nullable=False),
+    # Order within the operation's mocks: the first whose match holds answers.
+    sa.Column("position", sa.Integer, nullable=False),
+    sa.Column("name", sa.String(200), nullable=False),
+    # Input field to the value it must equal; empty matches every call.
+    sa.Column("match", sa.JSON, nullable=False),
+    sa.Column("status", sa.Integer, nullable=False),
+    sa.Column("body", sa.JSON),
+    sa.Column("headers", sa.JSON, nullable=False),
+    sa.Column("delay_ms", sa.Integer, nullable=False),
+    # Answers nothing within the operation's time limit: the call fails UPSTREAM_TIMEOUT as a real one would.
+    sa.Column("timeout", sa.Boolean, nullable=False),
+    # The one a call gets when no other matches; at most one per operation and environment, kept by the service.
+    sa.Column("is_default", sa.Boolean, nullable=False),
+    # The logged call it was saved from, when it was.
+    sa.Column("from_call_id", sa.String(64)),
+    sa.Column("created_by", sa.String(200), nullable=False),
+    sa.Column("created_at", _TS, nullable=False),
+    sa.Column("updated_at", _TS, nullable=False),
+    sa.Index("ix_operation_mocks_operation", "tenant_id", "operation", "environment", "position"),
+)
+
+# The mock "environment" holding an operation's example answer (c-616): what Mock answers when no test mock matches,
+# what a system with no upstream answers in every environment, and what an output schema is inferred from. Apart from
+# "test" on purpose: a test mock intercepts test-environment calls, and an example must not keep a Real run in test from
+# reaching the system.
+EXAMPLE = "example"
+# An operation with no example answers this: what an import writes when the document gives none (registry._output).
+NO_EXAMPLE: dict[str, Any] = {"ok": True}
+# Who an example written through an operation is recorded as made by; migration tools_0052 uses the same name.
+EXAMPLE_AUTHOR = "operation example"
 
 module_versions = _child(
     "module_versions",
@@ -242,7 +284,7 @@ module_egress_hosts = sa.Table(
 )
 
 # The fields of an operation that say how it is called; a staged change to any of them waits for publish.
-CALL_SHAPE = ("method", "path", "headers", "body", "response_transform", "timeout_ms")
+CALL_SHAPE = ("method", "path", "headers", "body", "body_encoding", "response_transform", "timeout_ms")
 # The write approval policy, which a staged edit must not loosen before Security reviews it either.
 APPROVAL_POLICY = ("approvers", "approver_team", "step_up")
 # Every field of an operation whose edit can be major, so Security reviews it: where and how it is called, what it may
@@ -253,6 +295,7 @@ REVIEWED = (
     "method",
     "path",
     "body",
+    "body_encoding",
     "input",
     "access",
     "requires_approval",
@@ -263,6 +306,7 @@ REVIEWED = (
     *APPROVAL_POLICY,
 )
 OPERATION_DEFAULTS: dict[str, Any] = {
+    "body_encoding": None,
     "response_transform": None,
     "timeout_ms": None,
     "approvers": 1,
@@ -346,6 +390,9 @@ class StaleModuleError(RuntimeError):
 
 # Why a read crosses teams: another service asks on a run's behalf, and the run's grants and approval token decide.
 RUN_PATHS = "a run's call or grant list is authorized by its grants and approval token (c-433 scopes it)"
+# Why the start-up move of sign-in header keys reads every team's headers: it finds the modules to move, then acts on
+# each in its own team (c-616 D3b-2b); it reads header names and references, never a secret.
+HEADER_KEYS = "the start-up move of sign-in header keys finds each module whose tools still carry one"
 
 
 @contextmanager
@@ -392,6 +439,10 @@ class ModuleStore:
                         "access class; rebuild the database with `make up`"
                     )
                 out[r["module_id"]][key].append(dict(r))
+        examples = await self._examples(c, tenant_id, ids)
+        for i in ids:
+            for o in out[i]["operations"]:
+                o["stub"] = examples.get((i, str(o["name"])), NO_EXAMPLE)
         hosts: dict[str, list[str]] = {i: [] for i in ids}
         q = (
             sa.select(module_egress_hosts.c.module_id, module_egress_hosts.c.host)
@@ -401,6 +452,40 @@ class ModuleStore:
         for module_id, host in await c.execute(q):
             hosts[module_id].append(host)
         return {i: {**out[i], "egress_hosts": hosts[i]} for i in ids}
+
+    @staticmethod
+    async def _examples(c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[tuple[str, str], Any]:
+        """Each operation's example answer, by (module, operation name): the body of its example mock."""
+        m = operation_mocks.c
+        q = sa.select(m.module_id, m.operation, m.body).where(
+            m.tenant_id == tenant_id, m.module_id.in_(ids), m.environment == EXAMPLE, m.is_default.is_(True)
+        )
+        return {(str(r.module_id), str(r.operation)): r.body for r in await c.execute(q)}
+
+    @staticmethod
+    async def _write_examples(c: AsyncConnection, agg: Aggregate, at: Any) -> None:
+        """An operation's `stub` written as its example mock: the body of the one there, or a new one. An operation with
+        no example leaves it as it is."""
+        tenant, module = str(agg["tenant_id"]), str(agg["id"])
+        held = await ModuleStore._examples(c, tenant, [module])
+        m = operation_mocks.c
+        for o in cast(list[dict[str, Any]], agg["operations"]):
+            body, name = o.get("stub"), str(o["name"])
+            if body is None or body == NO_EXAMPLE or held.get((module, name), NO_EXAMPLE) == body:
+                continue
+            where = (m.tenant_id == tenant, m.module_id == module, m.operation == name, m.environment == EXAMPLE)
+            if (module, name) in held:
+                await c.execute(operation_mocks.update().where(*where, m.is_default.is_(True)).values(body=body))
+                continue
+            last = (await c.execute(sa.select(sa.func.max(m.position)).where(*where))).scalar()
+            await c.execute(
+                operation_mocks.insert().values(
+                    tenant_id=tenant, id=new_id("mck"), module_id=module, operation=name,
+                    environment=EXAMPLE, position=int(last or 0) + 1, name="Example answer", match={}, status=200,
+                    body=body, headers={}, delay_ms=0, timeout=False, is_default=True, from_call_id=None,
+                    created_by=EXAMPLE_AUTHOR, created_at=at, updated_at=at,
+                )
+            )  # fmt: skip
 
     async def all(self, tenant_id: str) -> list[Aggregate]:
         """The modules the acting team reads (c-423): its own, workspace-level ones (no team) and those approved for one
@@ -428,6 +513,21 @@ class ModuleStore:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
         return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def header_holders(self, tenant_id: str | None = None) -> list[Aggregate]:
+        """Every team module's operation that carries a header, every tenant's or `tenant_id`'s: its tenant, team,
+        module and headers."""
+        ops = module_operations.c
+        on = sa.and_(ops.tenant_id == tool_modules.c.tenant_id, ops.module_id == tool_modules.c.id)
+        q = (
+            sa.select(tool_modules.c.tenant_id, tool_modules.c.team_id, ops.module_id, ops.headers)
+            .select_from(tool_modules.join(module_operations, on))
+            .where(tool_modules.c.team_id.is_not(None), any_team(tool_modules, HEADER_KEYS))
+        )
+        if tenant_id is not None:
+            q = q.where(tool_modules.c.tenant_id == tenant_id)
+        async with self.engine.connect() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
 
     async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
         """Module names of the acting team (or `team_id`), plus workspace-level names: a name is unique per team
@@ -561,7 +661,8 @@ class ModuleStore:
         `seeded` writes revision 0, the dev seed's mark for a module nobody has edited. HostNotAllowedError when the
         module names a host the tenant's egress allow-list does not hold; nothing is written then. `events` are
         service events (`outbox.add` keywords) written with the change, so neither commits without the other."""
-        row = {k: v for k, v in agg.items() if k not in CHILDREN and k != "egress_hosts"}
+        # Only the table's columns: a module as a call reaches it carries its connection's address, never stored.
+        row = {k: v for k, v in agg.items() if k in tool_modules.c}
         hosts: list[str] = list(dict.fromkeys(agg.get("egress_hosts") or []))
         async with self.engine.begin() as c:
             if hosts:
@@ -613,6 +714,7 @@ class ModuleStore:
                 ]
                 if rows:
                     await c.execute(table.insert(), rows)
+            await self._write_examples(c, agg, row.get("updated_at") or row.get("created_at"))
             if hosts:
                 links = [
                     {"tenant_id": row["tenant_id"], "module_id": row["id"], "host": h, "position": i}

@@ -1,5 +1,5 @@
 // uc-143 Access › Tool access lists every workflow's tool access, ui layer: docs/usecases/console/tool-access.md
-// (c-144). James asks for a workflow's access to his published module through the API; the console then lists it.
+//. James asks for a workflow's access to his published module through the API; the console then lists it.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -24,7 +24,7 @@ await withUiStack(
     // James's published module with one read, and his request for a workflow's access to it.
     const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
-    // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
+    // Only a Security admin changes the egress allow-list, so Sam lists the host.
     const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-143' }) });
     const id = (await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc143-${TAG}`, type: 'http' }) })).json()).data.id;

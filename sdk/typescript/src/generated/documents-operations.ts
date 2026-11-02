@@ -261,5 +261,27 @@ export const documentsOperations = {
     "pathParams": [],
     "query": [],
     "stream": false
+  },
+  "resources_copy_resource": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies",
+    "pathParams": [
+      "resource"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "templates_list_templates": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/templates",
+    "pathParams": [],
+    "query": [
+      "kind"
+    ],
+    "stream": false
   }
 } as const;

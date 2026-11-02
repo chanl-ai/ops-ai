@@ -1,0 +1,31 @@
+id: vendor-onboarding
+title: Vendor onboarding plugin
+track: plugin
+status: partial
+difficulty: advanced
+outcome: Look up a supplier, score its risk, ask an agent for notes, and stop for a person to approve.
+capabilities:
+  - id: plugin.manifest
+    status: partial
+  - id: ops.action.tool
+    status: built
+  - id: ops.ai.agent
+    status: built
+  - id: ops.flow.humanReview
+    status: built
+entrypoint: plugin.yaml
+resources:
+  - plugin.yaml
+  - contributions/workflows/vendor-onboarding.yaml
+fixtures: []
+expected: []
+surfaces:
+  ui: planned
+  cli: partial
+  python: built
+  typescript: planned
+setupSeconds: 120
+teaches:
+  - plugin
+gaps:
+  - The plugin system is proposed; install.py calls public APIs itself

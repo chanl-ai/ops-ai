@@ -98,13 +98,48 @@ def test_each_trigger_kind_declares_its_start_form() -> None:
     )
     assert email is not None and email["kind"] == "email" and email["via"] == "test email"
     assert email["schema"] == dict(TEST_EMAIL_FORM) and email["takesFiles"] is True
-    event = {"nodes": [{"id": "t", "type": "ops.trigger.event", "typeVersion": 1, "parameters": {"event": "x.y"}}]}
+    event: dict[str, Any] = {
+        "nodes": [{"id": "t", "type": "ops.trigger.event", "typeVersion": 1, "parameters": {"event": "x.y"}}]
+    }
     assert start_form(event, reg) is None
+    event["nodes"][0]["parameters"]["inputSchema"] = {
+        "type": "object",
+        "properties": {"fileId": {"type": "string", "format": "file", "title": "File"}},
+    }
+    by_file = start_form(event, reg)
+    assert by_file is not None and by_file["kind"] == "form" and by_file["takesFiles"] is True
 
 
 def test_a_form_without_a_file_field_takes_no_file() -> None:
     form = start_form(notice({"type": "string", "title": "Notice"}), default_registry())
     assert form is not None and form["takesFiles"] is False
+
+
+def test_an_event_with_no_schema_is_not_held_to_the_file_field() -> None:
+    d = notice({"type": "string", "title": "File"})
+    d["nodes"][0] = {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "parameters": {"event": "file.deleted"},
+    }
+    assert "file_input_unmarked" not in codes(d)
+
+
+def test_an_event_start_form_that_reads_a_file_must_mark_it() -> None:
+    d = notice({"type": "string", "title": "File"})
+    d["nodes"][0] = {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "parameters": {
+            "event": "file.read_requested",
+            "inputSchema": {"type": "object", "properties": {"notice": {"type": "string", "title": "File"}}},
+        },
+    }
+    assert "file_input_unmarked" in codes(d)
+    d["nodes"][0]["parameters"]["inputSchema"]["properties"]["notice"]["format"] = "file"
+    assert "file_input_unmarked" not in codes(d)
 
 
 def test_an_email_trigger_with_no_mailbox_saves() -> None:

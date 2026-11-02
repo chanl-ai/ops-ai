@@ -888,7 +888,7 @@
         "parameters": {
           "file": "$.input.attachments.0.fileId",
           "documentType": {
-            "id": "levy_notice",
+            "id": "legal_notice",
             "version": 1
           }
         },
@@ -1123,8 +1123,7 @@
             "type": "object",
             "required": [
               "fileId",
-              "from",
-              "mailbox"
+              "from"
             ],
             "properties": {
               "fileId": {
@@ -1139,6 +1138,11 @@
               "mailbox": {
                 "type": "string",
                 "title": "Mailbox it arrived in"
+              },
+              "subject": {
+                "type": "string",
+                "title": "Subject of the reply",
+                "default": "We received your document"
               }
             }
           },
@@ -1158,7 +1162,7 @@
           "file": "$.input.fileId",
           "ocr": true,
           "documentType": {
-            "id": "levy_notice",
+            "id": "legal_notice",
             "version": 1
           }
         },
@@ -1218,6 +1222,10 @@
             },
             {
               "left": "$.input.from",
+              "op": "empty"
+            },
+            {
+              "left": "$.input.subject",
               "op": "empty"
             }
           ],
@@ -1400,7 +1408,7 @@
           "outcome": "cases_opened",
           "output": {
             "cases": "$.nodes.open.out",
-            "message": "The acknowledgement was skipped: this notice did not arrive by email, so there is no mailbox or sender to reply to."
+            "message": "The acknowledgement was skipped: this notice did not arrive by email, so there is no mailbox, sender or subject to reply with."
           }
         },
         "position": {
@@ -1841,12 +1849,12 @@
               ]
             },
             {
-              "name": "levy_notice",
+              "name": "legal_notice",
               "conditions": [
                 {
                   "left": "$.nodes.facts.out.kind",
                   "op": "eq",
-                  "right": "levy_notice"
+                  "right": "legal_notice"
                 }
               ]
             }
@@ -2070,9 +2078,9 @@
         "id": "notices_done",
         "type": "ops.flow.end",
         "typeVersion": 1,
-        "name": "Levy notice handled",
+        "name": "Legal notice handled",
         "parameters": {
-          "outcome": "levy_notice"
+          "outcome": "legal_notice"
         },
         "position": {
           "x": 1536,
@@ -2241,7 +2249,7 @@
       {
         "from": {
           "node": "kind",
-          "port": "levy_notice"
+          "port": "legal_notice"
         },
         "to": {
           "node": "notices",
@@ -2586,6 +2594,10 @@
             {
               "left": "$.input.from",
               "op": "empty"
+            },
+            {
+              "left": "$.input.subject",
+              "op": "empty"
             }
           ],
           "combine": "any"
@@ -2719,7 +2731,7 @@
         "parameters": {
           "outcome": "no_reply",
           "output": {
-            "message": "The acknowledgement was skipped: this run has no mailbox or sender to reply to."
+            "message": "The acknowledgement was skipped: this run has no mailbox, sender or subject to reply with."
           }
         },
         "position": {
@@ -4264,6 +4276,10 @@
             {
               "left": "$.input.from",
               "op": "empty"
+            },
+            {
+              "left": "$.input.subject",
+              "op": "empty"
             }
           ],
           "combine": "any"
@@ -4397,7 +4413,7 @@
         "parameters": {
           "outcome": "no_reply",
           "output": {
-            "message": "The reply was skipped: this run has no mailbox or sender to reply to."
+            "message": "The reply was skipped: this run has no mailbox, sender or subject to reply with."
           }
         },
         "position": {

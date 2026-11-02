@@ -26,7 +26,7 @@ calls a real model provider.
 | 2 | James imports the open spec, selects `place_hold`, saves the draft | 201; `get_account` read, `place_hold` write; `place_hold`'s stub is the spec's example |
 | 3 | James requests a security review from the module page | the module is in review |
 | 4 | Nadia opens Reviews > Tool modules and approves | the module is published |
-| 5 | James runs `get_account` and `place_hold` from the module's test panel, as its owner with no workflow approval | the read reaches the bank; the write answers from the stub (pending an earlier change T008 until it is on the stack) |
+| 5 | James runs `get_account` and `place_hold` from the module's test panel, as its owner with no workflow approval | the read and the write both reach the bank; the write is logged under James |
 | 6 | James grants both operations to Branch Concierge, saves and publishes the agent | the agent holds `get_account` and `place_hold` |
 | 7 | James asks Branch Concierge `call get_account {"accountId": "CHQ-2219"}` | the read runs; the reply is "Here is what I found." |
 | 8 | James asks it `call place_hold {"accountId": "CHQ-2219"}` | an approval card shows; nothing reaches the bank |

@@ -4,7 +4,7 @@
 // provider) takes its tools from tools-service. Each step is checked on its own, so one failing step still lets the
 // later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
+import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -15,7 +15,7 @@ const BANK_KEY = 'dev-bank-key';
 const JAMES = 'j.richardson@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-// Egress and secrets are changed only by an admin of the Security team (c-079).
+// Egress and secrets are changed only by an admin of the Security team.
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
@@ -57,13 +57,13 @@ async function chat(page, consoleUrl, text) {
   return res;
 }
 
-/** Runs one operation from its workbench's test panel (c-088) against the test environment; the response and what was
+/** Runs one operation from its workbench's test panel against the test environment; the response and what was
  * sent. */
 async function tryOperation(page, consoleUrl, moduleId, op, fields) {
   await page.goto(`${consoleUrl}/tools/${moduleId}/operations/${op}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   const panel = page.getByTestId('module-test-panel');
   await panel.waitFor({ timeout: 120_000 });
-  await panel.getByRole('radio', { name: 'Test environment' }).or(panel.getByRole('button', { name: 'Test environment' })).first().click();
+  await panel.getByRole('radio', { name: 'Real' }).or(panel.getByRole('button', { name: 'Real' })).first().click();
   for (const [k, v] of Object.entries(fields)) await panel.locator(`#t-${k}`).fill(v);
   const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
   await panel.getByRole('button', { name: 'Run' }).click();
@@ -71,7 +71,7 @@ async function tryOperation(page, consoleUrl, moduleId, op, fields) {
   return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: res ? ((await res.json().catch(() => ({}))).data ?? {}) : {} };
 }
 
-/** The bank's own record of the account, read through the gateway as the owner's test call does. */
+/** The bank's own record of the account, read through the gateway as the maintainers' test call does. */
 async function holdsOn(moduleId, contextId) {
   const res = await fetch(`${tools}/v1/tool-modules/${moduleId}/test`, { method: 'POST', headers: await headers(JAMES), body: JSON.stringify({ operation: 'get_account', contextId, target: 'sandbox', input: { account_id: ACCOUNT } }) });
   const out = (await res.json()).data?.output;
@@ -146,7 +146,7 @@ await withUiStack(
     });
 
     // 4. Security review (T004): James requests it on the module page; Nadia follows its link to Human Tasks, where
-    // every review is decided (c-163), and approves it there; it publishes.
+    // every review is decided, and approves it there; it publishes.
     await step('4 Nadia approves the review in Human Tasks and it publishes', async () => {
       await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('header-request-review').click({ timeout: 120_000 });
@@ -157,7 +157,7 @@ await withUiStack(
       // Nadia reviews from her own team, where James's module page reads as not found; the task opens from Human Tasks.
       const waiting = (await get(`/v1/tool-modules/${moduleId}`)).versions.find((v) => v.status === 'in_review');
       await nadia.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(waiting?.reviewId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // c-204: before deciding, the review shows what it approves: its operations, the host they reach, and a link
+      // an earlier change: before deciding, the review shows what it approves: its operations, the host they reach, and a link
       // to the module itself.
       const panel = nadia.getByTestId('tool-module-review');
       await panel.waitFor({ timeout: 120_000 });
@@ -165,7 +165,7 @@ await withUiStack(
       const hosts = await panel.getByTestId('review-hosts').innerText().catch(() => '');
       const link = await panel.getByTestId('review-module-link').getAttribute('href').catch(() => null);
       check(
-        '4a (c-204) the review lists its operations and new host and links to the module',
+        '4a the review lists its operations and new host and links to the module',
         /Added/.test(operations) && hosts.includes(stack.bank.host) && link === `/tools/${moduleId}`,
         { operations: operations.slice(0, 300), hosts, link },
       );
@@ -177,7 +177,7 @@ await withUiStack(
     });
 
     // 5. A new operation, imported into the published module, is a major version: James publishes it, Nadia approves
-    // it in Human Tasks, and only then is it served (T004, c-163).
+    // it in Human Tasks, and only then is it served (T004).
     await step('5 James imports get_statement, publishes a version and Nadia approves it', async () => {
       await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('ops-import').click({ timeout: 120_000 });
@@ -186,9 +186,9 @@ await withUiStack(
       await dialog.locator('#spec-url').fill(`https://${stack.bank.host}/openapi.json`);
       await dialog.getByRole('button', { name: 'Next' }).click();
       await dialog.getByLabel('Access for get_statement').waitFor({ timeout: 60_000 });
-      // Operations the module already has are listed as in it, never selected or counted (c-073 T007); the new read
+      // Operations the module already has are listed as in it, never selected or counted (an earlier change T007); the new read
       // starts selected.
-      const inModule = await dialog.getByTestId('op-in-module-get_account').getByText('In this module').count();
+      const inModule = await dialog.getByTestId('op-in-module-get_account').getByText('Already here').count();
       const ownTicked = await dialog.locator('#op-get_account').getAttribute('data-state');
       const ticked = await dialog.locator('#op-get_statement').getAttribute('data-state');
       check('5a the module\'s own operations show as in it and are not selected', inModule === 1 && ownTicked !== 'checked' && ticked === 'checked', { inModule, ownTicked, ticked });
@@ -227,7 +227,7 @@ await withUiStack(
       );
     });
 
-    // 6. The owner tries the reads against the bank with no workflow approval: the header key and the query key are
+    // 6. The maintainers tries the reads against the bank with no workflow approval: the header key and the query key are
     // both resolved at call time (T003), and the key the statement route repeats back comes out scrubbed.
     await step('6 James runs get_account and get_statement against the bank from the test panel', async () => {
       const account = await tryOperation(james, consoleUrl, moduleId, 'get_account', { account_id: ACCOUNT });
@@ -243,6 +243,9 @@ await withUiStack(
 
     // 7. Grant the three operations to Branch Concierge, save the draft and publish it.
     await step('7 James grants the operations to Branch Concierge and publishes it', async () => {
+      // Approvals are off by default (2026-11-01): steps 9-11 prove a held chat write, so the team turns tool write
+      // approvals on before the agent is granted the write.
+      await writeApprovalsOn();
       await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
       const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'get_statement', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -274,7 +277,7 @@ await withUiStack(
       before = await holdsOn(moduleId, ownerContext);
       await chat(james, consoleUrl, `call place_hold {"account_id": "${ACCOUNT}", "amount": 25, "reason": "uc-086 suspected fraud"}`);
       thread = /\/chat\/([^/?#]+)/.exec(james.url())?.[1];
-      // The card waits on a reviewer; James asked for the write, so he is offered no Approve on it (c-123 canDecide).
+      // The card waits on a reviewer; James asked for the write, so he is offered no Approve on it (an earlier change canDecide).
       const card = await james.getByTestId('approval-waiting-on').last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const selfApprove = await james.getByRole('button', { name: /^Approve/ }).count();
       const sent = ((await get(`/v1/tool-modules/${moduleId}/activity`))?.recent ?? []).filter((c) => c.target === 'place_hold');

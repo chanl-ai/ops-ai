@@ -1,4 +1,4 @@
-"""The stack the AI step use cases (uc-258 to uc-262, c-298) share: platform-service for the team's aiSteps setting,
+"""The stack the AI step use cases (uc-258 to uc-262) share: platform-service for the team's aiSteps setting,
 models-service on the fake OpenAI with the ai-steps-fake-openai rules (agents-service tests/fixtures), the agents
 service reading platform policies, and a workflow worker. No real model is called."""
 

@@ -20,7 +20,7 @@ OPERATION = {
     "headers": [{"key": "Authorization", "value": "Bearer sk_live_9f2c"}],
 }
 APPROVAL = {
-    "workflowId": "dispute_email",  # an agents-service workflow (c-039): tools-service reads them from there
+    "workflowId": "dispute_email",  # an agents-service workflow: tools-service reads them from there
     "environment": "production",
     "operations": ["get_customer_profile"],
     "expiresInDays": 90,
@@ -42,15 +42,19 @@ with agents(), tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT
 
     literal = gw.post(f"/v1/tool-modules/{module_id}/operations", json=OPERATION)
     check("a literal credential in a header is refused (400)", literal.status_code == 400, literal.text[:200])
-    referenced = {**OPERATION, "headers": [{"key": "Authorization", "value": "{{STATEMENTS_TOKEN}}"}]}
-    unlisted = gw.post(f"/v1/tool-modules/{module_id}/operations", json=referenced)
-    check(
-        "an operation on a host off the egress allow-list is refused (422)",
-        unlisted.status_code == 422,
-        unlisted.text[:200],
-    )
-    gw.post("/v1/egress/hosts", json={"value": f"statements-{RUN}.harborpine.internal", "note": "statements"})
+    # A sign-in header is refused whatever it holds; another header may read a secret from the vault.
+    referenced = {**OPERATION, "headers": [{"key": "X-Partner-Token", "value": "{{STATEMENTS_TOKEN}}"}]}
+    # This stack signs every caller in as the dev user, who holds every role: a host off the allow-list is listed in
+    # their name as the operation is added (S13, owner's rule); a caller without the Security role waits for a task
+    # instead, which tests/test_held_hosts.py proves.
     added = gw.post(f"/v1/tool-modules/{module_id}/operations", json=referenced)
+    listed = data(gw.get("/v1/egress/hosts", params={"pageSize": 200})) or {}
+    hosts = {h["host"] for h in (listed.get("data") if isinstance(listed, dict) else listed) or []}
+    check(
+        "an operation on a host off the allow-list lists the host in the Security holder's name (200)",
+        added.status_code == 200 and f"statements-{RUN}.harborpine.internal" in hosts,
+        added.text[:200],
+    )
     ops = [o["name"] for o in data(added)["operations"]] if added.status_code == 200 else []
     check("the operation is added with a vault reference instead", ops == [OPERATION["name"]], added.text[:200])
 
@@ -77,7 +81,7 @@ with agents(), tools(settings={"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT
     requested = gw.post("/v1/tool-modules/mod_core_banking/approvals", json=APPROVAL)
     check("a workflow approval is requested (201)", requested.status_code == 201, requested.text[:200])
     approval_id = data(requested)["id"] if requested.status_code == 201 else ""
-    # Decided by its system workflow run (c-257): the request names the run's key, and the module page decides nothing.
+    # Decided by its system workflow run: the request names the run's key, and the module page decides nothing.
     # The decision itself, through Human Tasks, the worker and the gateway, is uc-053's.
     review_id = data(requested)["reviewId"] if requested.status_code == 201 else ""
     check("the request names its workflow run", review_id == f"tool_access.requested:{approval_id}", review_id)
@@ -96,13 +100,13 @@ with agents(), tools() as gw:
     check("the open request survives a restart", [a["status"] for a in approvals] == ["requested"], approvals)
 
 
-# c-027: an operation's HTTP call edited after it is added, called through the gateway against the fake bank.
+# an earlier change: an operation's HTTP call edited after it is added, called through the gateway against the fake bank.
 TOOL = f"bank_account_{RUN}"
 
 
 def publish(gw: Any, module_id: str) -> dict[str, Any]:
     """Publishes what is staged; a major version is approved by Security so it serves."""
-    out = data(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "c-027"}))
+    out = data(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "an earlier change"}))
     if any(v["status"] == "in_review" for v in out["versions"]):
         out = approve_tool_review(gw, module_id, SECURITY)
     return out
@@ -152,7 +156,7 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
         gw,
         bank_id,
         op_id,
-        {"path": "/v1/statements/latest", "headers": [{"key": "X-Api-Key", "value": "{{UC010_KEY}}"}]},
+        {"path": "/v1/statements/latest", "headers": [{"key": "X-Partner-Token", "value": "{{UC010_KEY}}"}]},
     )
     pending = call(gw, "b")
     check(

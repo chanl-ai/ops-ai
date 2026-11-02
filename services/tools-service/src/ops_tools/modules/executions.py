@@ -34,7 +34,11 @@ def _identity(value: str, kinds: dict[str, str], names: dict[str, str]) -> dict[
     return {"kind": kind, "id": ident, "name": name}
 
 
-def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | None) -> dict[str, Any]:
+def call_row(
+    r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | None, title: str | None = None
+) -> dict[str, Any]:
+    """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it, c-607); the row
+    falls back to the tool's own name, so no reader shows a blank."""
     subject = _identity(r["sub"], SUBJECT_KINDS, names)
     workflow_id = subject["id"] if subject["kind"] == "workflow" else ""
     approval: dict[str, Any] = {"kind": "person" if r["approvers"] else "none"}
@@ -54,6 +58,8 @@ def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | 
         "runId": r["thread_id"] or "",
         "target": r["tool"],
         "system": module["system"] if module else "",
+        "title": title or r["tool"],
+        "app": module["display_name"] if module else "",
         "operation": r["access"] if r["access"] in ("read", "write") else "read",
         "approval": approval,
         "status": STATUS.get(r["outcome"], "error"),
@@ -95,6 +101,10 @@ def call_row(r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | 
         row["actingFor"] = r["acting_for"]
     if r.get("credential"):
         row["credential"] = r["credential"]
+    # Whom Usage says the call ran as (c-616): whose sign-in signed it; one refused before any sign-in ran as the
+    # person it acted for, if any. Never the service that carried the call.
+    as_person = r.get("acting_for") and r.get("credential") in ("person", None)
+    row["runAs"] = {"kind": "person", "email": r["acting_for"]} if as_person else {"kind": "team"}
     error = r.get("error")
     if r["outcome"] == "error" and isinstance(error, dict):
         # Which side the call broke on and why, as the executor named it; the message names the host, never an

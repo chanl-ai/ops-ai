@@ -1,8 +1,13 @@
-"""uc-002 write tool pauses, approval resumes with step-up, api layer: docs/usecases/agents-service/write-tool-approval-step-up.md."""
+"""uc-002 write tool pauses, approval resumes with step-up, api layer:
+docs/usecases/agents-service/write-tool-approval-step-up.md."""
 
 from __future__ import annotations
 
-from usecase_harness import TEAM, agents, check, data, finish, sse
+from usecase_harness import agents, check, data, finish, sse
+
+# The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
+# bases, so the chat runs in Operations.
+TEAM = {"X-Team-Id": "team_ops"}
 
 with agents() as api:
     thread = data(api.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": ["kb_people"]}, headers=TEAM))

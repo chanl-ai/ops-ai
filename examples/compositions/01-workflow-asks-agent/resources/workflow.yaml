@@ -1,0 +1,56 @@
+schemaVersion: 2
+id: workflow_asks_agent
+name: Workflow asks agent
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Question
+  parameters:
+    inputSchema:
+      type: object
+      required:
+      - question
+      properties:
+        question:
+          type: string
+- id: ask
+  type: ops.ai.agent
+  typeVersion: 1
+  name: Ask the guide
+  parameters:
+    agent: account-opening-guide
+    prompt: $.input.question
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Answered
+  parameters:
+    outcome: answered
+    output: $.nodes.ask.out
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Failed
+  parameters:
+    outcome: agent_failed
+    result: failed
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: ask
+    port: in
+- from:
+    node: ask
+    port: ok
+  to:
+    node: done
+    port: in
+- from:
+    node: ask
+    port: error
+  to:
+    node: failed
+    port: in

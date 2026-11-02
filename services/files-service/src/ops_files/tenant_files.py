@@ -18,7 +18,7 @@ import uuid
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ops_files.models import (
     CompletedUpload,
@@ -265,12 +265,19 @@ class TenantFiles:
         return _read_request(found)
 
     async def set_data(self, who: Who, file_id: str, data: FileData) -> FileDetail:
-        """Records what was read from an available file of the caller's team, replacing what was recorded before."""
+        """Records what was read from an available file of the caller's team, replacing what was recorded before. For
+        the same extraction the fields to check never rise again: the read's own save (extraction.read, c-378) can
+        arrive after a workflow saved it checked or a correction lowered the count, and must not put fields back."""
         if not who.edits:
             raise EditNotAllowedError("your role in this team does not change files")
         row = await self._owned(who, file_id)
         if row["status"] != "available":
             raise UploadStateError(f"{file_id} is {row['status']}")
+        before = cast(dict[str, Any] | None, row["data"])
+        if before and before.get("extractionId") == data.extraction_id:
+            kept = int(before.get("fieldsToCheck") or 0)
+            if kept < data.fields_to_check:
+                data = data.model_copy(update={"fields_to_check": kept})
         stored = data.model_dump(mode="json", by_alias=True)
         await self._files.update(file_id, {"data": stored, "read_as": data.type_id, "read_path": data.path})
         found = await self._files.get(file_id)

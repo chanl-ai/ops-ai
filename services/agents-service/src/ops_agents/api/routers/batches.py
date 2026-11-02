@@ -213,14 +213,21 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}, "description": "One line per row"}},
 )
 async def batch_results(rt: Rt, me: Me, batch_id: str) -> Response:
-    """Every row as the page shows it, one line each: row, status, outcome, run, error and output."""
+    """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
+    output are JSON, so a value holding a comma or a quote reads back as it was."""
     await _batch(rt, me, batch_id)
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["row", "status", "outcome", "runId", "error", "output"])
+    writer.writerow(["row", "input", "status", "outcome", "runId", "error", "output"])
+
+    def as_json(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False) if value is not None else ""
+
     for r in sorted(await Batches(rt.db).rows(batch_id), key=lambda x: int(x["row"])):
-        output = json.dumps(r["output"], ensure_ascii=False) if r["output"] is not None else ""
-        writer.writerow([r["row"], _status(r), r["outcome"] or "", r["run_id"] or "", r["error"] or "", output])
+        writer.writerow(
+            [r["row"], as_json(r["input"]), _status(r), r["outcome"] or "", r["run_id"] or "", r["error"] or "",
+             as_json(r["output"])]
+        )  # fmt: skip
     name = f"results-{batch_id}.csv"
     return Response(
         out.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'}

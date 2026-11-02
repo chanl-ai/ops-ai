@@ -1,6 +1,6 @@
 'use client';
 
-import { notFound, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Play, Save, Workflow } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
@@ -16,12 +16,11 @@ const SCENES: Scene[] = ['empty', 'large', 'adding', 'step', 'trigger', 'error',
 
 /**
  * The c-096 mock: the workflow editor on a full-width canvas, drawn over a sample definition with the server's real
- * step types and checks. `?scene=` picks the state a screenshot shows. Served by the dev server only, and not in the nav.
+ * step types and checks. `?scene=` picks the state a screenshot shows. Reachable only where src/proxy.ts lets /dev through, and not in the nav.
  */
 export default function WorkflowLargeCanvasPage() {
   const params = useSearchParams();
   const types = useNodeTypes();
-  if (process.env.NODE_ENV !== 'development') notFound();
   const asked = params.get('scene') as Scene | null;
   const scene: Scene = asked && SCENES.includes(asked) ? asked : 'large';
   const definition = scene === 'empty' ? EMPTY_DEFINITION : scene === 'error' ? BROKEN_DEFINITION : SAMPLE_DEFINITION;

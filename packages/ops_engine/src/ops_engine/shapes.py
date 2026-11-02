@@ -84,6 +84,35 @@ async def _set(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     return {"out": closed(_keys(node.parameters.get("values")))}
 
 
+async def _transform(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    name = str(node.parameters.get("as") or "value")
+    return {"out": closed((name,)), "error": ERROR}
+
+
+async def _filter(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    listed = closed(("kept", "dropped", "keptCount", "droppedCount"))
+    return {"kept": listed, "dropped": listed, "error": ERROR}
+
+
+async def _knowledge(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    found = opened(("passages",), props={"passages": {"type": "array"}})
+    missing = closed(("passages", "error", "code"))
+    return {"found": found, "notFound": missing}
+
+
+async def _send(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    return {"sent": opened(("status",), props={"status": {}, "reference": {}}), "error": ERROR}
+
+
+async def _repeat(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    counted = closed(("count",))
+    return {"again": counted, "done": counted, "exhausted": counted}
+
+
+async def _ask(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    return {"replied": ANY, "timedOut": closed(("reason", "key"))}
+
+
 async def _compute(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     return {"out": closed(_keys(node.parameters.get("expressions"))), "error": ERROR}
 
@@ -213,6 +242,8 @@ Builder = Callable[[NodeInstance, NodeType, Lookups], Awaitable[Ports]]
 BUILDERS: dict[str, Builder] = {
     "trigger.payload": _trigger,
     "data.set": _set,
+    "data.transform": _transform,
+    "data.filter": _filter,
     "data.compute": _compute,
     "flow.if": _if,
     "flow.switch": _switch,
@@ -230,6 +261,10 @@ BUILDERS: dict[str, Builder] = {
     "case.add": _case_add,
     "flow.wait": _wait,
     "flow.wait_for": _wait_for,
+    "flow.repeat": _repeat,
+    "flow.ask": _ask,
+    "ai.knowledge": _knowledge,
+    "action.send": _send,
     "flow.end": _end,
 }
 

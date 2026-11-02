@@ -35,7 +35,7 @@ class Aliases:
         self.db = db
 
     async def current(self, name: str) -> dict[str, Any] | None:
-        """The version serving `name`, with its connection's type, base URL and credential name."""
+        """The version serving `name`, with its connection's type, base URL, key name, api-version and regions."""
         async with self.db.connect() as c:
             return await _current(c, name)
 
@@ -74,7 +74,7 @@ class Aliases:
 
 async def _current(c: AsyncConnection, name: str) -> dict[str, Any] | None:
     q = (
-        sa.select(t, p.c.type, p.c.base_url, p.c.key_ref)
+        sa.select(t, p.c.type, p.c.base_url, p.c.key_ref, p.c.api_version, p.c.region, p.c.observed_region)
         .join(p, p.c.id == t.c.provider_id)
         .where(t.c.name == name, t.c.status == "current")
         .order_by(t.c.version.desc())

@@ -662,7 +662,7 @@ function QuoteKind({ node, onOpenFile }: { node: Extract<KindNode, { type: 'quot
 // ── asking the person ──
 
 function FormKind({ node, actions }: { node: Extract<KindNode, { type: 'form' }>; actions: KindActions }) {
-  const [values, setValues] = React.useState<Record<string, Cell>>(() => Object.fromEntries(node.fields.map((f) => [f.name, f.type === 'boolean' ? false : ''])));
+  const [values, setValues] = React.useState<Record<string, Cell>>(() => Object.fromEntries(node.fields.map((f) => [f.name, f.value ?? (f.type === 'boolean' ? false : '')])));
   const [state, setState] = React.useState<'open' | 'sending' | 'sent'>('open');
   const send = actions.onSubmit ?? (actions.onReply && ((v: Record<string, Cell>) => (actions.onReply!(answerText(node, v)), Promise.resolve())));
   const missing = node.fields.some((f) => f.required && (values[f.name] === '' || values[f.name] === null));
@@ -777,7 +777,7 @@ function ConfirmKind({ node, actions }: { node: Extract<KindNode, { type: 'confi
         {answered && (
           <CardAction>
             <Badge variant="outline" className={answered === 'confirmed' ? 'text-success-text' : ''}>
-              {answered === 'confirmed' ? node.confirm.label : (node.cancel?.label ?? 'Cancelled')}
+              {answered === 'confirmed' ? (node.confirm.done ?? node.confirm.label) : (node.cancel?.done ?? node.cancel?.label ?? 'Cancelled')}
             </Badge>
           </CardAction>
         )}

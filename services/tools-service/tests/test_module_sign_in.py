@@ -112,3 +112,23 @@ async def test_the_kinds_say_which_take_each_persons_own_sign_in(client: httpx.A
     assert r.status_code == 200, r.text
     per_person = {k["id"]: k["perPerson"] for k in r.json()["data"]["kinds"]}
     assert per_person["oauth2_auth_code"] is True and per_person["oauth2_client_credentials"] is False, per_person
+
+
+async def test_a_module_reads_in_its_connections_names_whichever_it_was_saved_with(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    """c-591: `either` is still taken for one release and reads back as person_or_team, and the module's auth kind is
+    its connection's own name, not a second spelling of it."""
+    security = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
+    await client.post("/v1/egress/hosts", json={"value": "crm.test"}, headers=security)
+    conn = await made(client, tenant, "person_or_team")
+    builder = person(tenant, "James Richardson", {TEAM: "builder"})
+    r = await client.post("/v1/tool-modules", json=module_in(conn, "either"), headers=builder)
+    assert r.status_code == 201 and r.json()["data"]["signIn"] == "person_or_team", r.text
+    detail = await client.get(f"/v1/tool-modules/{r.json()['data']['id']}", headers=builder)
+    assert detail.json()["data"]["auth"] == {"kind": "oauth2_auth_code"}, detail.text
+
+
+async def test_a_module_stored_with_mtls_reads_as_a_certificate(api: Api) -> None:
+    auth = (await api.call("GET", "/mod_card_platform")).json()["data"]["auth"]
+    assert auth == {"kind": "none", "certificate": True}, auth

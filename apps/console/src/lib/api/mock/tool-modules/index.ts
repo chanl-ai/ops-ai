@@ -70,6 +70,7 @@ interface Op {
   path?: string;
   headers?: { key: string; value: string }[];
   body?: string;
+  bodyEncoding?: ModuleOperation['bodyEncoding'];
   responseTransform?: string;
   timeoutMs?: number;
   input: SchemaField[];
@@ -92,7 +93,7 @@ interface Mod {
   ownerTeam: string;
   ownerContacts: string[];
   endpoint: string;
-  auth: { kind: CredentialKind | 'none'; header?: string };
+  auth: { kind: CredentialKind | 'none'; header?: string; certificate?: boolean };
   timeoutMs: number;
   egressHosts: string[];
   dataClassification: ToolModuleDetail['dataClassification'];
@@ -270,7 +271,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       ownerTeam: s.ownerTeam,
       ownerContacts: s.ownerContacts,
       endpoint: s.endpoint,
-      auth: { kind: s.auth, header: s.authHeader },
+      auth: { kind: s.auth, header: s.authHeader, ...(s.authCertificate ? { certificate: true } : {}) },
       timeoutMs: s.timeoutMs,
       egressHosts: s.egressHosts,
       dataClassification: s.dataClassification,
@@ -297,7 +298,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     displayName: input.displayName.trim(),
     system: input.displayName.trim(),
     description: input.description?.trim() ?? '',
-    type: input.type,
+    // The kind follows the operations (group F); a blank module calls HTTP until one says otherwise.
+    type: 'http',
     status: 'draft',
     ownerTeam: owner,
     ownerContacts: [me],
@@ -318,7 +320,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     baseline: null,
   });
   // Seed: one draft that has a name and nothing else yet.
-  mods.push({ ...blankMod({ displayName: 'Document service', name: 'document-service', type: 'http', description: 'Fetches signed loan documents for the lending inbox.' }, 'Lending Ops', daysAgo(1)), id: 'mod_document_service' });
+  mods.push({ ...blankMod({ displayName: 'Document service', name: 'document-service', description: 'Fetches signed loan documents for the lending inbox.' }, 'Lending Ops', daysAgo(1)), id: 'mod_document_service' });
   // A tool not yet in any module (created before modules existed) gets nothing here; every seeded tool is covered.
 
   // ── Derived views ─────────────────────────────────────────────────────────
@@ -426,6 +428,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           path: o.path,
           headers: o.headers ?? [],
           body: o.body,
+          bodyEncoding: o.bodyEncoding,
           responseTransform: o.responseTransform,
           timeoutMs: o.timeoutMs,
           stub: o.stub,
@@ -481,7 +484,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   /** One hand-built HTTP operation as a discovered one; refuses literal credentials in headers. */
   function httpOperation(h: HttpOperationInput): { op: DiscoveredOperation; origin: string } {
     const keyLike = h.headers.find((x) => /^(authorization|x-api-key|cookie)$/i.test(x.key.trim()) && x.value.trim() && !/^\{\{[A-Z][A-Z0-9_]*\}\}$/.test(x.value.trim()));
-    if (keyLike) throw new ApiError(`The ${keyLike.key} header holds a literal value. Reference the vault instead, e.g. {{CORE_API_KEY}}.`, 400);
+    if (keyLike) throw new ApiError(`The ${keyLike.key} header holds a literal value. Put the key on the module’s connection, which signs every call in, or reference a secret as {{NAME}}.`, 400);
     if (!/^[a-z][a-z0-9_]{2,}$/.test(h.name)) throw new ApiError('Name the operation in lower case letters, digits and underscores.', 400);
     let url: URL;
     try {
@@ -562,10 +565,11 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
     }
     if (patch.headers !== undefined) {
       for (const h of patch.headers) {
-        if (CREDENTIAL_HEADER.test(h.key.trim()) && h.value.trim() && !SECRET_REF.test(h.value.trim())) throw new ApiError(`The ${h.key} header holds a literal value. Reference the vault instead, e.g. {{CORE_API_KEY}}.`, 400);
+        if (CREDENTIAL_HEADER.test(h.key.trim()) && h.value.trim() && !SECRET_REF.test(h.value.trim())) throw new ApiError(`The ${h.key} header holds a literal value. Put the key on the module’s connection, which signs every call in, or reference a secret as {{NAME}}.`, 400);
       }
       out.headers = patch.headers.filter((h) => h.key.trim()).map((h) => ({ key: h.key.trim(), value: h.value.trim() }));
     }
+    if (patch.bodyEncoding !== undefined) out.bodyEncoding = patch.bodyEncoding;
     if (patch.body !== undefined) {
       const body = patch.body?.trim() || undefined;
       if (body) {
@@ -657,8 +661,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         if (mods.some((m) => m.name === name)) throw new ApiError(`A module named ${name} already exists.`, 409);
         if (!input.displayName.trim()) throw new ApiError('Give the module a display name.', 400);
         let opsIn: DiscoveredOperation[] = input.operations ?? [];
-        let endpoint = input.endpoint;
-        if (input.type === 'code') throw new ApiError('Code modules need the sandbox, which is not available yet.', 422);
+        // As the service: the kind comes from the source (or http for one request), the address from what was read.
+        const kind: ModuleType = input.source?.kind === 'mcp' ? 'mcp' : input.source?.kind === 'openapi' ? 'openapi' : 'http';
+        let endpoint = '';
         if (input.http) {
           const built = httpOperation(input.http);
           endpoint = built.origin;
@@ -670,7 +675,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const version = '1.0.0';
         const owner = teamOwner() ?? 'Platform';
         const ops: Op[] = opsIn.map((o, i) => {
-          const t: Tool = { id: id('tl'), name: o.name, description: o.description, type: toolTypeOf(input.type), system: input.system, access: o.access, requiresReview: o.access !== 'read', enabled: true, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: sampleInput(o.input), moduleId: mid, module: input.displayName };
+          const t: Tool = { id: id('tl'), name: o.name, description: o.description, type: toolTypeOf(kind), system: input.system, access: o.access, requiresReview: o.access !== 'read', enabled: true, calls24h: 0, errorRate: 0, p95Ms: 0, grantedAgentIds: [], sampleInput: sampleInput(o.input), moduleId: mid, module: input.displayName };
           tools.unshift(t);
           return { id: `${mid}_op${i + 1}`, toolId: t.id, name: o.name, method: o.method, path: o.path, input: o.input, maskedOutput: [], binding: null, rateLimitPerMin: 60, requiresApproval: o.access !== 'read', amountMax: undefined, stub: { ok: true } };
         });
@@ -680,7 +685,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           displayName: input.displayName.trim(),
           system: input.system.trim() || input.displayName.trim(),
           description: `${input.system} operations behind the data gateway.`,
-          type: input.type,
+          type: kind,
           status: 'draft',
           ownerTeam: owner,
           ownerContacts: [me],
@@ -782,8 +787,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
           const conn = deps.connection(connId);
           if (!conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
           if (conn.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Connections or pick another one.`, 409);
-          const kind: CredentialKind = conn.authMethod === 'api_key' ? 'api_key' : conn.authMethod === 'mtls' ? 'mtls' : 'oauth_client_credentials';
-          Object.assign(m, { connectionId: conn.id, catalogId: conn.catalogId, auth: { kind } });
+          const auth: ToolModuleDetail['auth'] = conn.authMethod === 'api_key' ? { kind: 'api_key' } : conn.authMethod === 'mtls' ? { kind: 'none', certificate: true } : { kind: 'oauth2_client_credentials' };
+          Object.assign(m, { connectionId: conn.id, catalogId: conn.catalogId, auth });
         }
         touch(m);
         audit(m, 'edited', connId ? `Connected through ${deps.connection(connId)?.name}` : 'Detached its connection', [{ field: 'Connection', before, after: connId ? deps.connection(connId)?.name : undefined }]);
@@ -991,7 +996,8 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const testApprovalToken = wouldPause && input.simulateApproval ? `test-apt_${Math.random().toString(36).slice(2, 8)}` : undefined;
         // Mirrors tools-service: on the test environment a read reaches the system (the mock answers with the stub), a write answers from the stub and says so.
         const sandbox = input.target === 'sandbox';
-        const reached = sandbox && t.access === 'read' ? { stubbed: false, reachedHost: new URL(m.endpoint).hostname } : sandbox ? { stubbed: true } : {};
+        // Real calls the system, a write included (c-591); the mock stands in for its answer.
+        const reached = sandbox ? { stubbed: false, reachedHost: new URL(m.endpoint).hostname } : {};
         // The draft mock and transform run for this test only, as tools-service runs them (c-088).
         const draft = input.draft ?? {};
         const raw = 'stub' in draft && draft.stub !== undefined ? draft.stub : o.stub;

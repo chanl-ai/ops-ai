@@ -1,0 +1,6 @@
+{
+  "from": "ada@example.test",
+  "subject": "Unreadable claim",
+  "body": "Please read the attached claim.",
+  "file": "unreadable.txt"
+}

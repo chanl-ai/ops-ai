@@ -1,5 +1,5 @@
 // uc-500 A case shows the whole story of its matter and what is left, ui layer: docs/usecases/console/case-story.md
-// (c-500). The demo stack (platform sign-in, the fake model's committed answers and reads, the core fake bank, a
+//. The demo stack (platform sign-in, the fake model's committed answers and reads, the core fake bank, a
 // worker). Three kinds of case: a card dispute James starts from its form (Marcus Bell's Coastal Air fare, which waits
 // for a credit decision), a tax levy that arrives by test email (TAXLEVY01.pdf, read by the levy mail copies, whose
 // case type names its respond-by date and whose read gives the deadline), and a case James opens by hand. Each case page is checked for what is

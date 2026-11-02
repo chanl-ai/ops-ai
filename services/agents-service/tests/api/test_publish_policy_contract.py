@@ -54,6 +54,8 @@ SEED_ONLY = {
     # agents-service.
     ("tool_module_reviews.py", "open_review"),
     ("tool_module_reviews.py", "open_for"),
+    # tools-service holds a host nobody listed for Security (c-616 S13); the Security team decides it, no policy here.
+    ("egress_host_reviews.py", "open_review"),
 }
 # Routes that open a review another service decided on.
 OPENS_ONLY = {"/v1/publish-requests"}

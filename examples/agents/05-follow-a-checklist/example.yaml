@@ -1,0 +1,35 @@
+id: follow-a-checklist
+title: Follow a checklist
+track: agent
+status: built
+difficulty: guided
+outcome: Follow a reusable checklist and block investment advice.
+capabilities:
+- id: agent.skills
+  status: built
+- id: agent.guardrails
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+- resources/skill.yaml
+- resources/guardrail.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/blocked.json
+expected:
+- expected/checklist.json
+- expected/blocked.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+gaps:
+- ops chat send
+- agent.eval
+teaches:
+- skills
+- guardrails
+- version pins

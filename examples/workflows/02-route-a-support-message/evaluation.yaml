@@ -1,0 +1,7 @@
+cases:
+  - name: billing
+    input: fixtures/billing.json
+    expected: expected/billing.json
+  - name: unsure
+    input: fixtures/unsure.json
+    expected: expected/unsure.json

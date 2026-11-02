@@ -1,0 +1,26 @@
+id: morning-held-wires
+title: Morning held-wires review
+track: agent
+status: built
+difficulty: advanced
+outcome: A scheduled agent job returns a report.
+capabilities:
+- id: agent.jobs
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/job.json
+expected:
+- expected/report.json
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- the existing timer clock fires one job
+- a repeated key is one run
+gaps: []

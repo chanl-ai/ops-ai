@@ -1777,6 +1777,21 @@ export interface components {
              */
             success: false;
         };
+        /**
+         * FlagOut
+         * @description One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS.
+         */
+        FlagOut: {
+            /** Description */
+            description: string;
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "mcp_gateway" | "tool_search" | "plugin_updates" | "several_accounts";
+            /** On */
+            on: boolean;
+        };
         /** ForgotIn */
         ForgotIn: {
             /** Email */
@@ -2026,6 +2041,8 @@ export interface components {
         };
         /** Me */
         Me: {
+            /** Flags */
+            flags: components["schemas"]["FlagOut"][];
             /** Policies */
             policies: {
                 [key: string]: unknown;
@@ -2198,7 +2215,7 @@ export interface components {
             /** Value */
             value: boolean | number | {
                 [key: string]: unknown;
-            } | null;
+            } | string[] | null;
         };
         /** PolicyOut */
         PolicyOut: {
@@ -2216,7 +2233,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "plugins";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "plugins" | "names";
             /** Title */
             title: string;
             /** Value */

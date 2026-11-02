@@ -1,4 +1,4 @@
-// uc-568 document workflows, ui layer: docs/usecases/agents-service/document-workflows.md (c-535). The demo stack with
+// uc-568 document workflows, ui layer: docs/usecases/agents-service/document-workflows.md. The demo stack with
 // the embed app and the three console switches on, a workflow worker, and a fake model that also answers a propose read
 // (the api script's rules, merged ahead of the demo's in a temporary folder). James Richardson, a team_ops builder,
 // reads a 12-page scan as full text and as proposed fields, saves the proposal as a document type, picks what an
@@ -22,7 +22,9 @@
 //   hosted-form-send      its Send button
 //   hosted-form-thanks    the thank-you after a submission
 //   hosted-form-refused   why a submission or an opened link was refused (expired, rotated, the day's cap)
-//   start-from-file       the Start run dialog's Start from a file tab
+//   start-from-file       the Start run dialog's Start from a file tab, which only picks the file
+//   batch-check           the dialog's Check the file, opening the check page
+//   batch-check-page      the Start from a file page: dry run, columns, first rows and Start
 //   batch-dry-run         the dry run's result: the row count and the first 5 rows mapped to the inputs
 //   batch-start           Start the runs
 //   batch-headline        the batch page's "N of M finished, K failed"
@@ -203,6 +205,22 @@ try {
           check('32 the Text tab shows the 12 pages in order with words under 0.7 confidence shaded', texts.length === 12 && order.join() === Array.from({ length: 12 }, (_, i) => i + 1).join() && marks.length > 0 && marks.every((c) => c < 0.7), { pages: texts.length, order, marks });
         });
 
+        // 32b. Full text with Pages to read: the Text tab shows those pages, and Show every page shows the rest.
+        await step('32b Full text with Pages to read 3 shows pages 1 to 3, then every page on request', async () => {
+          await openRead();
+          await page.getByTestId('file-read-full-text').click();
+          await page.getByTestId('extract-max-pages').fill('3');
+          await page.getByTestId('extract-submit').click();
+          const pages = page.getByTestId('file-text-page');
+          await pages.first().waitFor({ timeout: 120_000 });
+          const first = await pages.count();
+          const said = await page.getByTestId('file-text-count').innerText();
+          await page.getByTestId('file-text-show-all').click();
+          await page.waitForTimeout(300);
+          const every = await pages.count();
+          check('32b Full text with Pages to read 3 shows pages 1 to 3, then every page on request', first === 3 && /Pages 1 to 3 of 12/.test(said) && every === 12, { first, said, every });
+        });
+
         // 33. Propose, rename a field, Save as document type.
         await step('33 a proposed read with a renamed field saves as the team\'s document type', async () => {
           await openRead();
@@ -213,6 +231,10 @@ try {
           const keys = await names.evaluateAll((els) => els.map((e) => e.value ?? e.textContent));
           await names.nth(keys.indexOf('taxpayer')).fill('debtor_name');
           await page.screenshot({ path: join(SHOTS, 'proposed-read-1280.png'), fullPage: true });
+          // The header names the proposed read, and the banner never says a person is needed without saying why.
+          const header = await page.getByTestId('read-as').first().innerText();
+          const banner = (await page.getByTestId('file-last-run').count()) ? await page.getByTestId('file-last-run').innerText() : '';
+          check('33a after a proposed read the header names it and the banner gives a reason for any wait', /Fields proposed/.test(header) && !/waiting for a person to check fields in Human Tasks\.?$/.test(banner.trim()) && (!/waiting for a person/.test(banner) || /: .+ (was|broke|matched)/.test(banner)), { header, banner });
           await page.getByTestId('save-document-type').click();
           const saved = await until(async () => {
             const items = (await body(await fetch(`${documents}/v1/document-types`, { headers: J }))).data?.items ?? [];
@@ -355,17 +377,23 @@ try {
           await page.getByTestId('definition-start-run').click({ timeout: 60_000 });
           await page.getByTestId('start-from-file').click();
           await page.locator('input[type="file"]').first().setInputFiles({ name: 'customers.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
+          // Once the file is chosen the drop zone gives way to the file's own row; removing the file brings it back.
+          const zone = page.getByRole('button', { name: /^Drop a CSV or Excel file here or choose one/ });
+          await page.getByTestId('batch-file-items').waitFor({ timeout: 60_000 });
+          const collapsed = !(await zone.isVisible()) && (await page.getByTestId('batch-file-items').innerText()).includes('customers.csv');
+          // The dialog only picks the file (dialogs stay small); the check and the table are on their own page.
+          const dryInDialog = await page.getByRole('dialog').getByTestId('batch-dry-run').count();
+          await page.getByTestId('batch-check').click();
+          await page.waitForURL(/\/workflows\/batches\/check\?/, { timeout: 60_000 });
+          const onPage = (await page.getByRole('dialog').count()) === 0 && (await seen(page.getByTestId('batch-check-page'), 30_000));
           const dry = page.getByTestId('batch-dry-run');
           await dry.waitFor({ timeout: 60_000 });
           const shown = await dry.innerText();
-          // Once the file is chosen the drop zone gives way to the file's own row; removing the file brings it back.
-          const zone = page.getByRole('button', { name: /^Drop a CSV or Excel file here or choose one/ });
-          const collapsed = !(await zone.isVisible()) && (await page.getByTestId('batch-file-items').innerText()).includes('customers.csv');
           await page.screenshot({ path: join(SHOTS, 'start-from-file-1280.png') });
           await page.getByTestId('batch-start').click();
-          await page.waitForURL(/\/workflows\/batches\/[^/?]+/, { timeout: 60_000 });
+          await page.waitForURL((u) => /\/workflows\/batches\/[^/?]+$/.test(u.pathname) && !u.pathname.endsWith('/check'), { timeout: 60_000 });
           batchUrl = page.url();
-          check('39 Start from a file shows the chosen file in place of the drop zone, the row count and the first 5 rows mapped, then starts one run per row', /\b12\b/.test(shown) && ['CUS-6001', 'CUS-6005'].every((c) => shown.includes(c)) && !shown.includes('CUS-6006') && /notes/.test(shown) && collapsed, { shown: shown.slice(0, 300), collapsed, batchUrl });
+          check('39 Start from a file shows the chosen file in place of the drop zone, the row count and the first 5 rows mapped, then starts one run per row', /\b12\b/.test(shown) && ['CUS-6001', 'CUS-6005'].every((c) => shown.includes(c)) && !shown.includes('CUS-6006') && /notes/.test(shown) && collapsed && dryInDialog === 0 && onPage, { dryInDialog, onPage, shown: shown.slice(0, 300), collapsed, batchUrl });
         });
 
         // 40. The batch page: counts, failed rows first, Retry failed rows, Download as CSV.
@@ -416,7 +444,6 @@ try {
       demo: true,
       embed: true,
       fakeModelRules: relative(ROOT, RULES_DIR),
-      consoleSwitches: { NEXT_PUBLIC_OPS_DOCUMENT_READS: '1', NEXT_PUBLIC_OPS_HOSTED_FORMS: '1', NEXT_PUBLIC_OPS_WORKFLOW_BUILDER: '1' },
     },
   );
 } finally {

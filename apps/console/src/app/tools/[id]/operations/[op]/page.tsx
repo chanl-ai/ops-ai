@@ -11,13 +11,17 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { OperationSheet } from '@/components/tools/operation-sheet';
-import { draftOf, patchOf, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
+import { RestTool } from '@/components/tools/rest-tool';
+import { baseOfApp, draftOf, patchOf, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Button } from '@/components/ui/button';
-import { useTestModule, useToolModule, useUpdateOperation } from '@/hooks/tool-module-queries';
+import { useConnectionOptions } from '@/hooks/systems-queries';
+import { useSetModuleConnection, useTestModule, useToolModule, useUpdateOperation } from '@/hooks/tool-module-queries';
 import { ApiError } from '@/lib/api/contract';
-import type { OperationPatch } from '@/lib/types/tool-modules';
+import type { IntegrationStatus } from '@/lib/types/integrations';
+import type { ModuleTestInput, OperationPatch } from '@/lib/types/tool-modules';
 
-/** One tool operation on its own page (c-088): edit its call, inputs, mock and transform, and try them before staging. */
+/** One tool operation on its own page (c-088): edit its call, inputs, mock and transform, and try them before staging. A
+ * REST operation is laid out as an API client lays out a request (c-591). */
 export default function OperationWorkbenchPage() {
   const params = useParams<{ id: string; op: string }>();
   const name = decodeURIComponent(params.op);
@@ -26,49 +30,101 @@ export default function OperationWorkbenchPage() {
   const update = useUpdateOperation();
   const [policyOpen, setPolicyOpen] = React.useState(false);
   const [inputErrors, setInputErrors] = React.useState<Record<string, string>>({});
+  const [saveProblems, setSaveProblems] = React.useState<string[]>([]);
+  const setConnection = useSetModuleConnection();
+  const connections = useConnectionOptions();
   const m = mod.data;
   const op = m?.operations.find((o) => o.name === name);
   const [draft, setDraft] = React.useState<WorkbenchDraft | null>(null);
   // A fresh definition after staging (or another tab's edit) replaces the draft; typing in between is kept.
-  const loaded = op && m ? JSON.stringify(draftOf(op, m.endpoint)) : '';
+  // The address comes from the app's connection, never the module (c-616): its base address per environment.
+  const base = baseOfApp(m?.connection);
+  const loaded = op && m ? JSON.stringify(draftOf(op, base)) : '';
   React.useEffect(() => {
-    if (op && m) setDraft(draftOf(op, m.endpoint));
+    if (op && m) setDraft(draftOf(op, base));
   }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (mod.isPending) return <RecordSkeleton />;
   if (mod.isError)
     return (
       <PageLayout icon={Wrench} title="Tool operation" backHref="/tools">
-        <QueryError what="this tool module" onRetry={() => mod.refetch()} retrying={mod.isFetching} error={mod.error} />
+        <QueryError what="these tools" onRetry={() => mod.refetch()} retrying={mod.isFetching} error={mod.error} />
       </PageLayout>
     );
   if (!m || !op || !draft)
     return (
       <PageLayout icon={Wrench} title={name} backHref={`/tools/${params.id}`}>
-        <EmptyState icon={SearchX} title="No such operation" description={`${m?.displayName ?? 'This module'} has no operation named ${name}.`} />
+        <EmptyState icon={SearchX} title="No such operation" description={`${m?.displayName ?? 'These tools'} has no operation named ${name}.`} />
       </PageLayout>
     );
 
-  const patch = patchOf(op, m.endpoint, draft);
+  const patch = patchOf(op, base, draft);
   const stagedCall = m.pendingChanges.some((c) => c.operation === op.name && c.kind === 'schema_changed');
   const stage = (p: OperationPatch, what: string) =>
     update.mutateAsync({ id: m.id, operationId: op.id, patch: p }).then(
-      () => (setInputErrors({}), toast.success(what, { description: 'Publish a version for agents to use it.' })),
+      () => (setInputErrors({}), setSaveProblems([]), toast.success(what, { description: 'Publish a version for agents to use it.' })),
       (e: Error) => {
-        // A refused input schema names its field (input.<name>); the reason shows on that row.
+        // A refused input schema names its field (input.<name>); the reason shows on that row. A refused call lists every
+        // problem at once (details.problems), shown together above the request.
         const field = e instanceof ApiError ? String(e.details?.field ?? '') : '';
+        const problems = e instanceof ApiError && Array.isArray(e.details?.problems) ? (e.details.problems as string[]) : [];
         if (field.startsWith('input.')) setInputErrors({ [field.slice(6)]: e.message });
+        else if (problems.length && op.executor === 'http') setSaveProblems(problems);
         else toast.error('Couldn’t stage the change', { description: e.message });
         throw e;
       },
     );
 
+  const policy = (
+    <BuilderOnly>
+      <Button variant="outline" onClick={() => setPolicyOpen(true)} data-testid="workbench-policy">
+        <ShieldCheck className="size-4" /> Access and approval
+      </Button>
+    </BuilderOnly>
+  );
+  const run = {
+    onRun: (input: ModuleTestInput) => test.mutate({ id: m.id, ...input }),
+    onReset: () => test.reset(),
+    running: test.isPending,
+    result: test.data,
+    runError: test.error?.message,
+  };
+
   return (
     <>
+      {op.executor === 'http' ? (
+        <RestTool
+          moduleId={m.id}
+          moduleName={m.displayName}
+          base={base}
+          op={op}
+          published={m.status === 'published'}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSave={() => void stage(patch, `Saved ${op.name}`).catch(() => undefined)}
+          saving={update.isPending}
+          dirty={Object.keys(patch).length > 0}
+          saveProblems={saveProblems}
+          connection={m.connection}
+          connections={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+          connectionsLoading={connections.isPending}
+          settingConnection={setConnection.isPending}
+          onConnectionChange={(connectionId) =>
+            setConnection.mutate(
+              { id: m.id, connectionId },
+              { onSuccess: (x) => toast.success(`Calls ${x.connection?.name} now`), onError: (e) => toast.error('Couldn’t change the app', { description: e.message }) },
+            )
+          }
+          stagedCall={stagedCall}
+          inputErrors={inputErrors}
+          extraActions={policy}
+          {...run}
+        />
+      ) : (
       <ToolWorkbench
         moduleId={m.id}
         moduleName={m.displayName}
-        endpoint={m.endpoint}
+        base={base}
         op={op}
         published={m.status === 'published'}
         draft={draft}
@@ -77,22 +133,13 @@ export default function OperationWorkbenchPage() {
         staging={update.isPending}
         dirty={Object.keys(patch).length > 0}
         contexts={m.runContexts}
-        onRun={(input) => test.mutate({ id: m.id, ...input })}
-        onReset={() => test.reset()}
-        running={test.isPending}
-        result={test.data}
-        runError={test.error?.message}
+        {...run}
         stagedCall={stagedCall}
         inputErrors={inputErrors}
-        extraActions={
-          <BuilderOnly>
-            <Button variant="outline" onClick={() => setPolicyOpen(true)} data-testid="workbench-policy">
-              <ShieldCheck className="size-4" /> Access and approval
-            </Button>
-          </BuilderOnly>
-        }
+        extraActions={policy}
       />
-      <OperationSheet policyOnly op={policyOpen ? op : null} endpoint={m.endpoint} stagedCall={stagedCall} onOpenChange={setPolicyOpen} saving={update.isPending} onSave={(p) => stage(p, `Staged changes to ${op.name}`)} />
+      )}
+      <OperationSheet policyOnly op={policyOpen ? op : null} base={base} stagedCall={stagedCall} onOpenChange={setPolicyOpen} saving={update.isPending} onSave={(p) => stage(p, `Staged changes to ${op.name}`)} />
     </>
   );
 }

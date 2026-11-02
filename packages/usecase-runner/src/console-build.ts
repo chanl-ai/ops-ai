@@ -100,17 +100,35 @@ export async function ensureConsoleBuild(root: string, publicEnv: Record<string,
   return { dist, placeholders };
 }
 
-/** Builds nobody used for three days go; each is some hundred MB. */
-function pruneOld(cacheDir: string, keep: string): void {
-  const cutoff = Date.now() - 3 * 86_400_000;
+/** Newest builds kept besides the current one: a build is some hundred MB and a new source hash makes another. */
+const KEEP_BUILDS = 3;
+/** A build older than this goes even when it is among the newest. */
+const BUILD_MAX_AGE_MS = 86_400_000;
+
+/**
+ * Old builds go, with the tsconfig each wrote beside it. A build is kept while it is the current one, or one of the
+ * `KEEP_BUILDS` newest and under a day old. A three-day age alone kept every source hash of three days: 300 builds,
+ * over a hundred GB.
+ */
+export function pruneOld(cacheDir: string, keep: string, now: number = Date.now()): string[] {
+  const builds: { name: string; mtimeMs: number }[] = [];
   for (const name of readdirSync(cacheDir)) {
     if (!name.startsWith('console-build-') || name.endsWith('.lock') || `node_modules/.cache/${name}` === keep) continue;
     try {
-      if (statSync(join(cacheDir, name)).mtimeMs < cutoff) rmSync(join(cacheDir, name), { recursive: true, force: true });
+      builds.push({ name, mtimeMs: statSync(join(cacheDir, name)).mtimeMs });
     } catch {
       // another run is removing it
     }
   }
+  builds.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const removed: string[] = [];
+  builds.forEach(({ name, mtimeMs }, i) => {
+    if (i < KEEP_BUILDS && now - mtimeMs < BUILD_MAX_AGE_MS) return;
+    rmSync(join(cacheDir, name), { recursive: true, force: true });
+    rmSync(join(cacheDir, `tsconfig-build-${name.slice('console-build-'.length)}.json`), { force: true });
+    removed.push(name);
+  });
+  return removed;
 }
 
 function* files(dir: string): Generator<string> {

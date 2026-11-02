@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { AccessBadge } from '@/components/status-badges';
 import type { ToolAccess } from '@/lib/types/domain';
-import type { ApprovalStatus, BindingSource, CredentialKind, Environment, ModuleApprovalState, ModuleType, SubjectBinding } from '@/lib/types/tool-modules';
+import type { ApprovalStatus, BindingSource, Environment, ModuleApprovalState, ModuleOperation, ModuleType, SubjectBinding } from '@/lib/types/tool-modules';
 import { cn } from '@/lib/utils';
 
 const pill = 'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
@@ -15,6 +15,33 @@ export const MODULE_TYPE: Record<ModuleType, { label: string; icon: LucideIcon; 
   code: { label: 'Code', icon: Code2, hint: 'Functions run in the sandbox' },
 };
 
+/** How each operation runs, by its executor: the kind a module page shows (the module's own type is not read). */
+const EXECUTOR: Record<ModuleOperation['executor'], { label: string; icon: LucideIcon }> = {
+  http: { label: 'HTTP', icon: Globe },
+  mcp: { label: 'MCP server', icon: Plug },
+  code: { label: 'Code', icon: Code2 },
+  plugin: { label: 'App', icon: Plug },
+  local: { label: 'Built in', icon: Braces },
+  stub: { label: 'Mock', icon: Braces },
+};
+
+/** The distinct kinds a module's operations run as, from each operation's executor; none before its first operation. */
+export function OperationKindBadge({ operations }: { operations: Pick<ModuleOperation, 'executor'>[] }) {
+  const kinds = [...new Set(operations.map((o) => o.executor))];
+  return (
+    <>
+      {kinds.map((k) => {
+        const t = EXECUTOR[k] ?? { label: k, icon: Braces };
+        return (
+          <span key={k} className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground" data-testid="module-kind">
+            <t.icon className="size-3.5" /> {t.label}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 export function ModuleTypeBadge({ type }: { type: ModuleType }) {
   const t = MODULE_TYPE[type];
   return (
@@ -25,6 +52,12 @@ export function ModuleTypeBadge({ type }: { type: ModuleType }) {
 }
 
 /** Square tile with the system's initials, the catalog card and record header identity mark. */
+/**
+ * Who owns a set of tools, in words: an installed app's tools are filed under the owner "Plugins" by the plugin host
+ * (tools-service plugins/host.py), which is no team, so they read as coming with the app.
+ */
+export const ownerText = (team: string) => (team === 'Plugins' ? 'Comes with the app' : `Owner ${team}`);
+
 export function ModuleMark({ name, className }: { name: string; className?: string }) {
   const letters = name
     .split(/\s+/)
@@ -109,14 +142,6 @@ export function BindingText({ binding }: { binding: SubjectBinding | null }) {
     </span>
   );
 }
-
-export const CREDENTIAL_KIND: Record<CredentialKind | 'none', string> = {
-  oauth_client_credentials: 'OAuth client credentials',
-  mtls: 'Mutual TLS',
-  api_key: 'API key',
-  basic: 'Basic auth',
-  none: 'No credential',
-};
 
 export const ENV_LABEL: Record<Environment, string> = { dev: 'Dev', test: 'Test', production: 'Production' };
 

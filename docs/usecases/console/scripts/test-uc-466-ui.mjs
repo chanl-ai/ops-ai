@@ -1,5 +1,5 @@
 // uc-466 A person starts a workflow from its trigger's start form, ui layer: docs/usecases/console/start-from-the-trigger.md
-// (c-466). The demo stack with platform sign-in and a worker. James saves copies of the court order notice workflows (the
+//. The demo stack with platform sign-in and a worker. James saves copies of the court order notice workflows (the
 // email intake, the document read and the debtor case, the last two marked as started only by other workflows), then:
 // 1 the Start run picker offers the intake and neither child; 2 choosing it opens Send a test email, he attaches the
 // court order notice PDF and sends it, and the run gets the email input a mailbox email gets and reaches a Human Task;

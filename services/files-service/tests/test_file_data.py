@@ -64,3 +64,16 @@ async def test_data_on_another_teams_file_is_not_found(client: Client) -> None:
         fid = await stored(c)
         theirs = await c.put(f"/v1/files/{fid}/data", json=READ, headers={"X-Team-Id": "team_cards"})
     assert theirs.status_code == 404, theirs.text
+
+
+async def test_a_later_save_of_the_same_read_never_puts_checked_fields_back(client: Client) -> None:
+    """A read's own save (extraction.read, c-378) can land after a workflow saved it checked: the count stays at what
+    the check left. A new extraction replaces the record as before."""
+    async with client() as c:
+        fid = await stored(c)
+        checked = await c.put(f"/v1/files/{fid}/data", json=READ | {"fieldsToCheck": 0}, headers=OPS)
+        late = await c.put(f"/v1/files/{fid}/data", json=READ | {"readAt": "2026-10-18T23:41:00Z"}, headers=OPS)
+        newer = await c.put(f"/v1/files/{fid}/data", json=READ | {"extractionId": "ext_fedcba9876543210"}, headers=OPS)
+    assert _data(checked)["data"]["fieldsToCheck"] == 0, checked.text
+    assert _data(late)["data"]["fieldsToCheck"] == 0 and _data(late)["data"]["readAt"].startswith("2026-10-18T23:41")
+    assert _data(newer)["data"]["fieldsToCheck"] == 3, newer.text

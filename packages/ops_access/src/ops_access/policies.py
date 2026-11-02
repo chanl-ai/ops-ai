@@ -20,6 +20,7 @@ class Policy:
     effect: str
     # "bool"; "floor": a number from 0 to 1, or None for no floor; "days": a whole number of days, or None for no limit;
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
+    # "names": a list of names (appWritesNeedApproval: app ids).
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
@@ -32,7 +33,7 @@ class Policy:
     title: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names")
 
 
 # Which publishes wait for a second person's review (c-086, moved here by c-214), per team and area:
@@ -104,14 +105,27 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "toolWritesNeedApproval",
-        # No team set: each write follows its operation's own flag in the gateway's registry, so every write waits
-        # except the few declared to run at once (open_case).
+        # Approvals are off by default (owner, 2026-11-01): no team set, a write waits only when its tool's own switch
+        # is on or its app is listed in appWritesNeedApproval; when one waits, a person holding reviews.decide is not
+        # asked.
         {},
         "Every tool write by the team waits for a person's approval, including the ones a tool lets run at once.",
         changed_by=("reviews", "manage"),
         per_team=True,
         live=True,
         title="Approve every tool write",
+    ),
+    Policy(
+        "appWritesNeedApproval",
+        # Off by default like every approval (owner, 2026-11-01): a team lists the apps whose writes wait, by the id
+        # the Apps page shows (plugin:<id>, a connection's id, or module:<id>).
+        {},
+        "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
+        kind="names",
+        changed_by=("reviews", "manage"),
+        per_team=True,
+        live=True,
+        title="Approve writes of these apps",
     ),
     Policy(
         "aiSteps",
@@ -213,6 +227,13 @@ def check_value(key: str, value: Any) -> Any:
         return value
     if policy.kind == "hours" and type(value) is int and 1 <= value <= 8760:
         return value
+    if (
+        policy.kind == "names"
+        and isinstance(value, list)
+        and len(cast(list[Any], value)) <= 500
+        and all(isinstance(n, str) and 0 < len(n) <= 200 for n in cast(list[Any], value))
+    ):
+        return list(dict.fromkeys(cast(list[str], value)))
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
@@ -244,6 +265,7 @@ def check_value(key: str, value: Any) -> Any:
         "floor": "a number from 0 to 1, or null",
         "days": "a whole number of days, or null",
         "hours": "a whole number of hours from 1 to 8760",
+        "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "plugins": (
             'an object of plugin id to {"enabled": true or false, "locked": {setting: value}, "client": {"id": text}}'
@@ -273,6 +295,15 @@ def team_off(values: Any, team: str | None) -> bool:
 def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
     """Whether `team` set toolWritesNeedApproval on."""
     return team_on(values, team)
+
+
+def team_names(values: Any, team: str | None) -> list[str]:
+    """The names `team` listed in a per-team list policy (appWritesNeedApproval), from the value GET /v1/policies/{key}
+    returns; none for a team that set nothing."""
+    if team is None or not isinstance(values, dict):
+        return []
+    listed: object = cast(dict[str, Any], values).get(team)
+    return [str(n) for n in cast(list[Any], listed)] if isinstance(listed, list) else []
 
 
 def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:

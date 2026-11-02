@@ -7,12 +7,18 @@ their provider names so the same secrets serve every service.
 
 from __future__ import annotations
 
+import json
 import os
+from functools import cache
+from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from .flags import Flags
+from .flags import check as check_flags
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 # Each service's dev seed lives in its own seed/ folder. A running service reads no tests/ path
@@ -24,6 +30,18 @@ _DEV_REVIEW_KEY = "dev-review-key-not-secret"
 _TOOLS_SEED = _REPO_ROOT / "services" / "tools-service" / "seed" / "tool_modules.json"
 # The development tenant, team and people platform-service seeds in dev.
 _PLATFORM_SEED = _REPO_ROOT / "services" / "platform-service" / "seed" / "people.json"
+
+
+# The entry point group installed plugin packages register under; equals ops_plugin_sdk.loader.GROUP (a tools-service
+# test holds the two together, since this package does not import the plugin kit).
+PLUGIN_ENTRY_POINTS = "ops_ai.plugins"
+
+
+@cache
+def _installed_plugins() -> bool:
+    """Whether any installed package registers a plugin; read once per process, as the installed set only changes
+    with a new image."""
+    return bool(entry_points(group=PLUGIN_ENTRY_POINTS))
 
 
 def _secrets_dir() -> Path | None:
@@ -56,8 +74,14 @@ class Settings(BaseSettings):
     port: int = 8700
     # The runtime's alias, which models-service serves; no vendor model is named here (a direct call sets one).
     model_alias: str = "default"
+    # With the flag tool_search on (c-610), an agent with more granted tools than this searches for its tools instead
+    # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
+    tool_search_above: int | None = Field(default=None, ge=0)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
     openai_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
+    # Read here only so the agents kernel's direct path can refuse an Azure key (c-605); models-service reads and checks
+    # the install's model connection itself (ops_models.connection_settings), so no other service fails on it.
+    openai_api_type: str | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_TYPE"))
     cors_origins: list[str] = ["http://localhost:3016", "http://localhost:3017"]
     # agents-service's catalogue and start-up seeds. Outside dev it is unset unless named, so production starts empty;
     # tests name tests/fixtures/seed.
@@ -118,12 +142,16 @@ class Settings(BaseSettings):
     # One JSON line per request on the ops.request logger and a Server-Timing header (c-560); off by default because
     # Server-Timing tells a caller how long internal work took.
     request_timing: bool = False
-    # Plugins (c-565): tools-service loads installed plugins and serves their routes only with this on (OPS_PLUGINS),
-    # and kb-service reads knowledge through them. Off until the plugins release.
-    plugins: bool = False
-    # Plugin package folders tools-service loads beside the installed plugins, for a developer trying a plugin on a
-    # local stack before it is packaged, and for the built-in plugins repository on a dev stack:
-    # OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
+    # Feature flags turned on for this install (c-611), from the install config: OPS_FLAGS=mcp_gateway,tool_search (a
+    # JSON list also reads). Every flag is off unless named; a name not in ops_service_kit.flags.FLAGS stops the service
+    # at start.
+    flags: Annotated[list[str], NoDecode] = Field(default_factory=list[str])
+    # The install's one plugins folder (owner, 2026-11-01): each plugin is a folder in it, put there by `ops plugin
+    # install`. The repo's plugins/ locally; a mounted volume in Docker and Kubernetes (OPS_PLUGINS_DIR). tools-service
+    # loads every plugin in it at start, and kb-service reads knowledge through them, whenever it holds any.
+    plugins_dir: Path = _REPO_ROOT / "plugins"
+    # Plugin package folders tools-service loads beside the plugins folder, for a developer trying a plugin on a
+    # local stack before it is packaged: OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
     plugin_paths: list[str] = Field(default_factory=list[str])
     # The most text one call to agents-service's AI step route reads (c-298, tick 31): the kernel caps a step at two
     # model calls, so this bounds what one outside call can spend.
@@ -153,6 +181,9 @@ class Settings(BaseSettings):
     # tools-service encrypts tool secrets with this AES-256 key, 64 hex characters, from your secrets manager. The
     # default is public and works in dev only.
     secrets_key: SecretStr = SecretStr(_DEV_SECRETS_KEY)
+    # Where secret values are kept (ops_service_kit.credentials): `sealed` seals each into its row under secrets_key;
+    # `memory` keeps them in the process, for running a suite on a vault-shaped adapter, refused outside dev and test.
+    credential_store: Literal["sealed", "memory"] = "sealed"
     # A CA bundle tools-service trusts for its outbound https, for systems whose certificates an internal CA issued.
     egress_ca_file: Path | None = None
     # tools-service: the team whose approvers and admins decide a module's security review (c-040). Matches the id in
@@ -245,10 +276,10 @@ class Settings(BaseSettings):
     # Dev only: the one password for every seeded person. Ignored outside dev, where password sign-in is closed.
     platform_demo_password: SecretStr = SecretStr("northfield-demo")
     platform_seed_file: Path = _PLATFORM_SEED
-    # Dev seed only: every seeded person also holds Admin in every team, so a person trying the console is never held
-    # back by a role. Off, the seed's own roles stand, as a role test needs (the use-case harness turns it off). Never
-    # read by migrations, the bootstrap or any product default.
-    seed_everyone_admin: bool = True
+    # Dev seed only: on, every seeded person also holds Admin in every team, so a person trying the console is never
+    # held back by a role. Off by default (c-615): the seed's own roles stand, so a viewer is a viewer and a role test
+    # means something. Never read by migrations, the bootstrap or any product default.
+    seed_everyone_admin: bool = False
     # Sign-in (c-188). platform-service's public origin, which identity providers send people back to (the OIDC
     # redirect URI and the SAML consumer URL are built on it), and the console's origin, where a finished SSO sign-in
     # and a reset link land. Unset, SSO and reset refuse with `sso_not_configured`.
@@ -331,6 +362,9 @@ class Settings(BaseSettings):
                 "documents:view",
                 "documents:run",
                 "documents:delete",
+                # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service
+                # (c-616 S13); claimed only on that call (GatewayClient.egress_host_decision).
+                "secrets_egress:manage",
             ],
             # deployments:view: it reads a mailbox's reply sender when a send_reply names the mailbox (c-200).
             # settings:view: a tool module publish reads the team's publishReview live (c-214).
@@ -338,7 +372,14 @@ class Settings(BaseSettings):
             # events:emit: it reports tool access and module review requests as service events (c-258).
             # tools:publish: its seed opens the reviews of module versions waiting for one, on the publisher's behalf
             # (c-222); agents-service takes that token only for a tool module of the team it is scoped to.
+            # files:view, documents:view, documents:run: the read_file and read_document tools read a file of the
+            # caller's team through documents-service (c-613).
+            # agents:view: an app's "who uses it" asks agents-service which of the team's agents and workflows use its
+            # tools, before a team admin turns it off (c-616). knowledge:view: search_knowledge searches the calling
+            # team's knowledge bases through kb-service (c-616).
             "tools": [
+                "agents:view",
+                "knowledge:view",
                 "workflows:view",
                 "deployments:view",
                 "settings:view",
@@ -346,16 +387,22 @@ class Settings(BaseSettings):
                 "cases:create",
                 "events:emit",
                 "tools:publish",
+                "files:view",
+                "documents:view",
+                "documents:run",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it (c-258).
             "files": ["events:emit"],
             # files:view, files:edit: documents-service reads the bytes it reads from as the caller's team and keeps a
             # sample's file with a reference; settings:view: the extractionFloor policy (c-256).
             # events:emit: it reports a person's correction as a service event, which saves it on the file (c-252).
-            "documents": ["files:view", "files:edit", "settings:view", "events:emit"],
+            # tools:view: it reads the document type templates of the plugins on for the caller's team (c-590).
+            "documents": ["files:view", "files:edit", "settings:view", "events:emit", "tools:view"],
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
-            # workspace closed (c-529).
-            "platform": ["workflows:view"],
+            # workspace closed (c-529). connections:delete: a member removed from a team has their own accounts on its
+            # apps deleted in tools-service (c-616 S14). tools:create, agents:create: a new team's defaults are written
+            # by each service when platform-service reports the team (c-616 PV2).
+            "platform": ["workflows:view", "connections:delete", "tools:create", "agents:create"],
         }
     )
     # The embed app's own origins (apps/embed, c-158), such as https://ops.bank.example. A widget request from one of
@@ -399,6 +446,8 @@ class Settings(BaseSettings):
         key = self.secrets_key.get_secret_value()
         if len(key) != 64 or any(c not in "0123456789abcdefABCDEF" for c in key):
             raise ValueError("secrets_key must be 64 hex characters (an AES-256 key)")
+        if self.environment not in ("dev", "test") and self.credential_store == "memory":
+            raise ValueError("credential_store 'memory' is for dev and test only; its values are lost on restart")
         if self.environment != "dev" and self.egress_resolve:
             raise ValueError("egress_resolve is for dev only; outside dev, names resolve through DNS")
         faults = self.engine_fault_kill_after_node is not None or self.engine_fault_ignore_recorded
@@ -412,10 +461,47 @@ class Settings(BaseSettings):
             raise ValueError(f"seed_dir {self.seed_dir} does not exist")
         return self
 
+    @field_validator("flags", mode="before")
+    @classmethod
+    def _flag_list(cls, value: object) -> object:
+        # An operator writes names separated by commas; the JSON list form the other list settings use reads too.
+        if isinstance(value, str):
+            text = value.strip()
+            return json.loads(text) if text.startswith("[") else [n.strip() for n in text.split(",") if n.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def _known_flags(self) -> Settings:
+        check_flags(self.flags)
+        return self
+
+    @property
+    def feature_flags(self) -> Flags:
+        """The install's flags; services read a flag only through this."""
+        return Flags(frozenset(self.flags))
+
+    @property
+    def plugin_folders(self) -> list[str]:
+        """Every plugin folder to load: each folder in plugins_dir (hidden ones and caches skipped), then
+        plugin_paths."""
+        d = self.plugins_dir
+        dropped = (
+            sorted(str(f) for f in d.iterdir() if f.is_dir() and not f.name.startswith((".", "_")))
+            if d.is_dir()
+            else []
+        )
+        return [*dropped, *self.plugin_paths]
+
+    @property
+    def plugins(self) -> bool:
+        """Whether this install has any plugin: one in the plugins folder, a developer's plugin path, or an installed
+        plugin package. With none, no plugin is read, no plugin route is mounted and kb-service calls no tool."""
+        return bool(self.plugin_folders) or _installed_plugins()
+
     @model_validator(mode="after")
     def _plugin_scopes(self) -> Settings:
         # kb-service reads a plugin's knowledge through tools-service (c-565). Its scope cap gains the two tools scopes
-        # only with plugins on, so with OPS_PLUGINS off a kb token can never act on a tool.
+        # only when the install has plugins, so a kb token on an install without any can never act on a tool.
         if self.plugins and "service_scopes" not in self.model_fields_set:
             kb = self.service_scopes.get("kb", [])
             extra = [s for s in ("tools:view", "tools:run") if s not in kb]

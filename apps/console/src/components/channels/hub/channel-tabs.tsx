@@ -1,6 +1,7 @@
 'use client';
 
 import { RouteTabs } from '@/components/shared/route-tabs';
+import { useFlagged } from '@/hooks/flag-queries';
 import type { ChannelKindSummary } from '@/lib/types/channels';
 import { cn } from '@/lib/utils';
 
@@ -8,9 +9,10 @@ import { HEALTH_DOT, HEALTH_WORD, KINDS } from './kinds';
 
 /** Overview, then a tab per kind with a dot for its health; kinds coming soon carry no dot. */
 export function ChannelTabs({ kinds }: { kinds: ChannelKindSummary[] | undefined }) {
+  const shown = useFlagged(KINDS);
   const tabs = [
     { href: '/channels', label: 'Overview' },
-    ...KINDS.map((k) => {
+    ...shown.map((k) => {
       const summary = kinds?.find((s) => s.type === k.type);
       const built = summary?.built ?? ['email', 'chat', 'api'].includes(k.type);
       const health = summary?.health ?? 'idle';

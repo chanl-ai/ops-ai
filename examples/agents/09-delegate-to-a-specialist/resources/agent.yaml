@@ -1,0 +1,7 @@
+name: Triage
+role: triage
+instructions: When asked to research the handbook, ask the specialist.
+tools:
+  - agent:specialist
+memory:
+  enabled: false

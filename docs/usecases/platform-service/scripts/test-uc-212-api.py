@@ -63,19 +63,19 @@ with signin_stack() as (api, idp, _):
         "domains": [zone],
         "oidc": {"issuer": f"{base}/oidc/northfield", "clientId": "ops-console", "clientSecretRef": SIGNIN_SECRET},
         "jit": {"role": "chat_user"},
-        "groups": {"map": [{"group": "fraud-analysts", "team": "team_fraud", "role": "viewer"}]},
+        "groups": {"map": [{"group": "platform-analysts", "team": "team_platform", "role": "viewer"}]},
     }
     r = set_provider(api, idp, "oidc-northfield", provider, bearer(signed_in(api, WANJIRU), "team_security"))
     check("Wanjiru sets an OIDC provider with a role and no team, and a group map", r.status_code == 200, r.text[:300])
-    first = sso_round_trip(api, idp, f"analyst@{zone}", groups=("fraud-analysts", "other"))
+    first = sso_round_trip(api, idp, f"analyst@{zone}", groups=("platform-analysts", "other"))
     roles = (
         data(first["completed"])["principal"]["roles"]
         if first["completed"] is not None and first["completed"].status_code == 200
         else {}
     )
     check(
-        "a new person lands in Lobby as a chat user and in team_fraud through the group",
-        roles == {lobby: "chat_user", "team_fraud": "viewer"},
+        "a new person lands in Lobby as a chat user and in team_platform through the group",
+        roles == {lobby: "chat_user", "team_platform": "viewer"},
         roles or first["location"],
     )
     plain = sso_round_trip(api, idp, f"teller@{zone}")

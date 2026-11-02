@@ -1,5 +1,6 @@
 // Starts a run of a workflow that waits on a person, waits for the task, decides it as the reviewer, and waits for
-// the run to finish, through the TypeScript SDK. `make sdk-check` runs it on the team the Python seed example made:
+// the run to finish, through the TypeScript SDK. Teaching folders live under examples/ at the repo root.
+// `make sdk-check` runs it on the team the Python seed example made:
 //   OPS_EXAMPLE_TEAM=... OPS_EXAMPLE_WORKFLOW=... OPS_EXAMPLE_EMAIL=... OPS_EXAMPLE_REVIEWER=... node examples/run-and-decide.mjs
 import { OpsAI } from '../dist/index.js';
 

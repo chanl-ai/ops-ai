@@ -265,9 +265,9 @@
   "documentTypes": [
     {
       "seed": "LEVY_NOTICE",
-      "id": "garnishment_notice",
-      "name": "Garnishment notice",
-      "description": "A court's notice of garnishment naming judgment debtors and the amount to hold for each."
+      "id": "legal_notice",
+      "name": "Legal notice",
+      "description": "A court or agency notice naming the people and the amount to hold for each."
     }
   ],
   "mailbox": {
@@ -300,7 +300,7 @@
         "levy_case": "levy_debtor"
       },
       "documentTypes": {
-        "levy_notice": "garnishment_notice"
+        "legal_notice": "legal_notice"
       }
     },
     {

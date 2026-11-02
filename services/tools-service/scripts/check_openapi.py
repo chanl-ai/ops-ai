@@ -15,10 +15,11 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_access.platform_events import platform_events_router
 from ops_agents.activities.catalog import load_catalog
 from ops_email import UnconfiguredSender
-from ops_policy import AesGcmCipher
 from ops_service_kit import openapi
+from ops_service_kit.credentials import credential_store
 from ops_service_kit.settings import Settings
 from ops_tools.app import create_gateway_app
 from ops_tools.auth import Tokens
@@ -32,11 +33,13 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.routes import executions_router, modules_router
 from ops_tools.modules.service import ModuleService
 from ops_tools.opa import OpaClient
+from ops_tools.platform_events import member_removed_handlers
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
 from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.registry import ToolRegistry
+from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
@@ -65,12 +68,13 @@ def document() -> dict[str, Any]:
     directory = Directory.from_seed(json.loads(settings.tools_seed_file.read_text()), datetime.now(UTC))
     service = ModuleService(ModuleStore(engine), directory, CallLog(engine))
     connections = ConnectionStore(engine)
-    cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
+    credentials = credential_store(settings)
+    secrets = SecretResolver(SecretStore(engine), credentials)
     connection_service = ConnectionService(
         connections,
-        SecretStore(engine),
-        cipher,
-        Tokens(connections, cipher, None, None),
+        secrets,
+        credentials,
+        Tokens(connections, credentials, None, None),
         directory,
         egress=None,
         console_url=None,
@@ -87,7 +91,7 @@ def document() -> dict[str, Any]:
             mailboxes_router(settings, None, None),
             egress_router(EgressStore(engine)),
             expressions_router(),
-            secrets_router(SecretStore(engine), cipher),
+            secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
             connections_router(connection_service, directory),
@@ -95,10 +99,11 @@ def document() -> dict[str, Any]:
                 PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None)),
                 connection_service,
                 directory,
-                PluginAppKeys(engine, cipher),
+                PluginAppKeys(engine, credentials),
             ),
             plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None))),
             systems_router(Systems(connection_service, ModuleStore(engine)), directory),
+            platform_events_router(member_removed_handlers(connection_service.store, credentials)),
         ),
     )
     return app.openapi()

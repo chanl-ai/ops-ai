@@ -1,4 +1,4 @@
-// uc-010 a builder manages a tool module, ui layer (c-027): docs/usecases/tools-service/manage-tool-modules.md.
+// uc-010 a builder manages a tool module, ui layer: docs/usecases/tools-service/manage-tool-modules.md.
 // Headless Chromium against a console whose Tools pages call tools-service: edit a published operation's URL in the
 // operation workbench, see the change pending and the unused-input warning, publish, see the major version.
 import { mkdirSync } from 'node:fs';
@@ -29,7 +29,7 @@ await withUiStack(
     const id = made.data?.id;
     await api('POST', `/v1/tool-modules/${id}/operations`, { name: OP, description: 'Monthly statement', access: 'read', method: 'GET', url: `https://${HOST}/v1/accounts/{accountId}/statements`, headers: [] });
     const reviewed = await api('POST', `/v1/tool-modules/${id}/reviews`, { note: 'uc-010 ui' });
-    // Approved in Reviews, as Human Tasks does (c-163); Reviews applies it in tools-service.
+    // Approved in Reviews, as Human Tasks does; Reviews applies it in tools-service.
     const published = reviewed.data ? { status: 200, data: await approveToolReview(id, SECURITY, JSONH) } : reviewed;
     // A draft's first approved review publishes 0.1.0; a major change after it makes 1.0.0.
     const start = published.data?.version;
@@ -43,7 +43,7 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // The row opens the operation's workbench (c-088), where its call is edited.
+      // The row opens the operation's workbench, where its call is edited.
       await page.getByRole('row', { name: new RegExp(OP) }).click({ timeout: 120_000 });
       const http = page.getByTestId('op-http');
       await http.waitFor({ timeout: 30_000 });

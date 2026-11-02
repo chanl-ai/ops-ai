@@ -80,7 +80,8 @@ async def test_import_takes_the_document_not_the_caller_and_runs_through_the_gat
     assert (ops["get_account"]["method"], ops["get_account"]["path"]) == ("GET", "/accounts/{accountId}")
     assert [f["name"] for f in ops["get_account"]["input"]] == ["accountId"]
     assert ops["get_account"]["access"] == "read", "the owner confirmed this one as a read"
-    assert ops["place_hold"]["requiresApproval"] is True
+    # Approvals are off by default (owner, 2026-11-01): an imported write runs until its switch or a policy is on.
+    assert ops["place_hold"]["requiresApproval"] is False
     unknown: dict[str, Any] = {**body, "operations": [{**forged, "name": "drop_tables"}]}
     r = await bank_api.call("POST", "/mod_document_service/operations/import", json=unknown)
     assert r.status_code == 400, "an operation the document does not describe is refused"
@@ -107,6 +108,9 @@ async def test_an_imported_operation_runs_only_once_its_secret_is_set(
 
 async def test_create_from_a_source_takes_the_document_not_the_caller(bank_api: Api, engine: Any) -> None:
     await _listed(bank_api)
+    # The module's own connection, made here: the dev seed makes connections only where its modules use them.
+    made = await bank_api.client.post("/v1/connections", json={"name": "Statements", "authKind": "api_key"})
+    assert made.status_code == 201, made.text
     forged: dict[str, Any] = {
         "name": "get_account",
         "description": "anything",
@@ -122,7 +126,7 @@ async def test_create_from_a_source_takes_the_document_not_the_caller(bank_api: 
         "system": "Statements",
         "type": "openapi",
         "endpoint": f"{ENDPOINT}/admin",
-        "connectionId": "int_core_banking",
+        "connectionId": made.json()["data"]["id"],
         "operations": [forged],
         "source": SOURCE,
     }
@@ -164,8 +168,8 @@ async def test_an_imported_write_answers_from_its_example_response(bank_api: Api
 async def test_a_module_is_created_from_its_source_without_a_connection_record(
     bank_api: Api, engine: AsyncEngine
 ) -> None:
-    """A module's endpoint and its secret headers are its connection (tool-lifecycle.md); the import dialog sends
-    none, and a named connection that does not exist is still refused (c-048 T006)."""
+    """The import dialog sends no connection: the module gets one that needs no sign-in, holding its address (c-616),
+    and a named connection that does not exist is still refused (c-048 T006)."""
     await _listed(bank_api)
     op: dict[str, Any] = {
         "name": "get_account",
@@ -190,6 +194,6 @@ async def test_a_module_is_created_from_its_source_without_a_connection_record(
     assert r.status_code == 201, r.text
     stored = await ModuleStore(engine).get(bank_api.tenant, r.json()["data"]["id"])
     assert stored is not None
-    assert (stored["connection_id"], stored["auth"]) == (None, {"kind": "none"})
+    assert stored["auth"] == {"kind": "none"} and stored["connection_id"], stored
     gone = await bank_api.call("POST", "", json={**body, "connectionId": "int_nobody"})
     assert gone.status_code == 400, gone.text

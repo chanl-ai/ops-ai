@@ -287,8 +287,9 @@ export function PageLayout({
           <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">{renderActions()}</div>
         </div>
 
-        {/* Tabs (if provided) */}
-        {tabs && <div className="max-w-full overflow-x-auto pt-2 [scrollbar-width:thin] [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
+        {/* Tabs (if provided). shrink-0: the layout is a full-height column, and a scroll container may shrink to its
+            padding in one, so on a page taller than the window the tab row collapsed to 8px and its tabs were clipped. */}
+        {tabs && <div className="max-w-full shrink-0 overflow-x-auto pt-2 [scrollbar-width:thin] [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
 
         {/* Content */}
         {/* px-1 / -mx-1 gives cards breathing room so borders & focus rings

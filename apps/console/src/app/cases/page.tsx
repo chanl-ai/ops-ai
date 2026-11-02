@@ -14,6 +14,7 @@ import { useCaseRecords } from '@/hooks/case-record-queries';
 import { useMe } from '@/hooks/me-queries';
 import { useListParams } from '@/hooks/use-list-params';
 import type { CaseRecordFilters, CaseStatus } from '@/lib/types/case-records';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type View = 'open' | 'mine' | 'overdue' | 'all';
 const OPEN: CaseStatus[] = ['open', 'waiting_on_us', 'waiting_on_customer'];
@@ -96,15 +97,7 @@ export default function CasesPage() {
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             hideViewSwitcher
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={<ListEmpty icon={Mail} noun={EMPTY[view].noun} filtered={!!(list.params.search || chosen?.length || filters.priority?.length)} onClear={list.reset} description={EMPTY[view].description} />}
           />
         </div>

@@ -1,0 +1,5 @@
+{
+  "from": "ada@example.test",
+  "subject": "Complaint",
+  "body": "The fee is wrong."
+}

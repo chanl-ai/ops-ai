@@ -11,7 +11,7 @@ TEAM = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"
 INTRANET = "https://intranet.bank.example"
 
 with agents() as api:
-    # Embeds are created and listed on the channel API (c-339); /v1/widget-deployments is a deprecated alias.
+    # Embeds are created and listed on the channel API; /v1/widget-deployments is a deprecated alias.
     chat = {"type": "chat", "agentId": "ag_fraud", "origins": [INTRANET]}
     made = [data(api.post("/v1/channels", json=chat | {"name": n}, headers=TEAM)) for n in ("Intranet help", "Kiosk")]
     one, two = made[0]["id"], made[1]["id"]

@@ -1,5 +1,5 @@
 // uc-562 Every console page reads well on a phone and on a desktop, ui layer: docs/usecases/console/phone-and-desktop.md
-// (c-562). The demo stack: James starts a credit that waits on a person, offered as two options, and Maya holds the task;
+//. The demo stack: James starts a credit that waits on a person, offered as two options, and Maya holds the task;
 // James opens a case. Maya checks one page per class the console UI sweep found: the decision starts unpicked, phone
 // lists show the name and a fade where more columns sit, search boxes show their placeholder, descriptions read in full,
 // tab strips scroll with a cue, record and Settings pages show where they are and a way back, Profile shows her, the
@@ -200,7 +200,7 @@ await withUiStack(
         const cutInQueue = await item.evaluate((el) => [...el.querySelectorAll('*')].filter((x) => x.childElementCount === 0 && x.innerText?.trim() && x.scrollWidth > x.clientWidth + 1).map((x) => x.innerText.trim()));
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
         const counts = { overview: await page.getByTestId('sidebar-overview-count').count(), reviews: Number((await page.getByTestId('sidebar-count-reviews').innerText().catch(() => 'NaN')).trim()) };
-        await go('/logs/tool-calls');
+        await go('/tools/calls');
         await page.waitForTimeout(4000);
         const calls = await page.evaluate(() => ({ skeletons: document.querySelectorAll('main [data-slot=skeleton], main .animate-pulse').length, notServed: /Totals are not served yet/.test(document.querySelector('main')?.innerText ?? '') }));
         consoleErrors.length = 0;
@@ -211,10 +211,10 @@ await withUiStack(
         let secretsLanded = null;
         if (tools.secrets) {
           await page.locator('main [data-testid^=unset-secrets-]').first().click();
-          await page.waitForURL((u) => u.pathname === '/settings/security/secrets', { timeout: 15_000 }).catch(() => undefined);
+          await page.waitForURL((u) => u.pathname === '/integrations/credentials', { timeout: 15_000 }).catch(() => undefined);
           secretsLanded = new URL(page.url()).pathname;
         }
-        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/settings/security/secrets', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
+        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/integrations/credentials', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
       });
 
       await step('6 a builder sees one Runs list and one Workflows list, with no engine names', async () => {

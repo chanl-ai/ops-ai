@@ -1,0 +1,208 @@
+schemaVersion: 2
+id: email_customer_enrichment
+name: Enrich an email with customer data
+nodes:
+- id: start
+  type: ops.trigger.email
+  typeVersion: 1
+  name: Customer email
+- id: facts
+  type: ops.ai.extractText
+  typeVersion: 1
+  name: Extract facts
+  parameters:
+    text: "Extract intent and reference.\n\n{$.input.body}"
+    fields:
+    - key: intent
+    - key: reference
+- id: search
+  type: ops.action.tool
+  typeVersion: 1
+  name: Search customers
+  parameters:
+    operation: search_customers
+    input:
+      query: $.input.from
+- id: wait
+  type: ops.flow.join
+  typeVersion: 1
+  name: Both ready
+- id: found
+  type: ops.flow.if
+  typeVersion: 1
+  name: One match
+  parameters:
+    conditions:
+    - left: $.nodes.search.out.0.id
+      op: exists
+    - left: $.nodes.search.out.1.id
+      op: empty
+- id: read
+  type: ops.action.tool
+  typeVersion: 1
+  name: Read customer
+  parameters:
+    operation: get_customer
+    input:
+      customer_id: $.nodes.search.out.0.id
+- id: combine
+  type: ops.data.combine
+  typeVersion: 1
+  name: Combine
+  parameters:
+    sources:
+    - name: email
+      values: $.nodes.facts.out
+    - name: customer
+      values: $.nodes.read.out
+- id: gist
+  type: ops.ai.summarise
+  typeVersion: 1
+  name: Summarise
+  parameters:
+    text: "Summarise this message.\n\n{$.input.body}"
+- id: advise
+  type: ops.ai.agent
+  typeVersion: 1
+  name: Recommend
+  parameters:
+    agent: customer-context-analyst
+    prompt: Recommend a queue and next action from the combined context.
+    input:
+      context: $.nodes.combine.out
+      summary: $.nodes.gist.out
+- id: enriched
+  type: ops.flow.end
+  typeVersion: 1
+  name: Enriched
+  parameters:
+    outcome: enriched
+- id: missing
+  type: ops.flow.end
+  typeVersion: 1
+  name: Not found
+  parameters:
+    outcome: customer_not_found
+- id: lookup
+  type: ops.flow.end
+  typeVersion: 1
+  name: Lookup failed
+  parameters:
+    outcome: lookup_failed
+    result: failed
+- id: analysis
+  type: ops.flow.end
+  typeVersion: 1
+  name: Analysis failed
+  parameters:
+    outcome: analysis_failed
+    result: failed
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: facts
+    port: in
+- from:
+    node: start
+    port: payload
+  to:
+    node: search
+    port: in
+- from:
+    node: facts
+    port: ok
+  to:
+    node: wait
+    port: in
+- from:
+    node: facts
+    port: error
+  to:
+    node: analysis
+    port: in
+- from:
+    node: search
+    port: ok
+  to:
+    node: wait
+    port: in
+- from:
+    node: search
+    port: error
+  to:
+    node: lookup
+    port: in
+- from:
+    node: search
+    port: refused
+  to:
+    node: lookup
+    port: in
+- from:
+    node: wait
+    port: out
+  to:
+    node: found
+    port: in
+- from:
+    node: found
+    port: 'true'
+  to:
+    node: read
+    port: in
+- from:
+    node: found
+    port: 'false'
+  to:
+    node: missing
+    port: in
+- from:
+    node: read
+    port: ok
+  to:
+    node: combine
+    port: in
+- from:
+    node: read
+    port: error
+  to:
+    node: lookup
+    port: in
+- from:
+    node: read
+    port: refused
+  to:
+    node: lookup
+    port: in
+- from:
+    node: combine
+    port: out
+  to:
+    node: gist
+    port: in
+- from:
+    node: gist
+    port: ok
+  to:
+    node: advise
+    port: in
+- from:
+    node: gist
+    port: error
+  to:
+    node: analysis
+    port: in
+- from:
+    node: advise
+    port: ok
+  to:
+    node: enriched
+    port: in
+- from:
+    node: advise
+    port: error
+  to:
+    node: analysis
+    port: in

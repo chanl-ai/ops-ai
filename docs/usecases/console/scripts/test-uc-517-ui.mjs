@@ -1,7 +1,7 @@
-// uc-517 the console has no preview mock pages, ui layer: docs/usecases/console/real-pages-not-mocks.md (c-517). A
+// uc-517 the console has no preview mock pages, ui layer: docs/usecases/console/real-pages-not-mocks.md. A
 // private stack with platform sign-in and tools-service. The pieces the mocks drew that the real pages lacked: an
 // agent's ID to copy, and adding an allowed host from a tool whose request goes to an unlisted one, in place, with the
-// Egress page's form. The former preview routes answer 404, except human-tasks, which waits on the owner's layout choice.
+// Egress page's form. Every former preview route answers 404; Human Tasks shipped as a real page (98c3d6c6).
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -84,14 +84,13 @@ await withUiStack(
         await page.context().close();
       });
 
-      await step('4 the former preview pages are gone; human-tasks stays', async () => {
+      await step('4 the former preview pages are gone', async () => {
         const page = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
         const status = {};
         for (const path of ['home', 'case-story', 'start-run', 'deployments', 'access/roles', 'channels', 'settings', 'workflow-layout', 'human-tasks']) {
           status[path] = (await page.goto(`${consoleUrl}/preview/${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 }))?.status();
         }
-        const gone = Object.entries(status).filter(([p]) => p !== 'human-tasks');
-        check('4 the former preview pages are gone; human-tasks stays', gone.every(([, s]) => s === 404) && status['human-tasks'] === 200, status);
+        check('4 the former preview pages are gone', Object.values(status).every((s) => s === 404), status);
         await page.context().close();
       });
       check('5 no page errors', errors.length === 0, errors.slice(0, 3));

@@ -16,6 +16,7 @@ members = [
     "ops-agent-kernel",
     "ops-agents-service",
     "ops-ai",
+    "ops-ai-workspace",
     "ops-checkpointer",
     "ops-contracts",
     "ops-documents-client",
@@ -1555,11 +1556,34 @@ requires-dist = [
 [[package]]
 name = "ops-ai"
 version = "0.1.0"
+source = { editable = "sdk/python" }
+dependencies = [
+    { name = "httpx" },
+    { name = "typing-extensions" },
+]
+
+[package.optional-dependencies]
+plugin = [
+    { name = "ops-plugin-sdk" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "ops-plugin-sdk", marker = "extra == 'plugin'", editable = "packages/ops_plugin_sdk" },
+    { name = "typing-extensions", specifier = ">=4.12" },
+]
+provides-extras = ["plugin"]
+
+[[package]]
+name = "ops-ai-workspace"
+version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ops-access" },
     { name = "ops-agent-kernel" },
     { name = "ops-agents-service" },
+    { name = "ops-ai", extra = ["plugin"] },
     { name = "ops-checkpointer" },
     { name = "ops-contracts" },
     { name = "ops-documents-client" },
@@ -1609,6 +1633,7 @@ requires-dist = [
     { name = "ops-access", editable = "packages/ops_access" },
     { name = "ops-agent-kernel", editable = "packages/ops_agent_kernel" },
     { name = "ops-agents-service", editable = "services/agents-service" },
+    { name = "ops-ai", extras = ["plugin"], editable = "sdk/python" },
     { name = "ops-checkpointer", editable = "packages/ops_checkpointer" },
     { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-documents-client", editable = "packages/ops_documents_client" },
@@ -2268,7 +2293,9 @@ dependencies = [
     { name = "mcp" },
     { name = "ops-agent-kernel" },
     { name = "ops-agents-service" },
+    { name = "ops-documents-client" },
     { name = "ops-email" },
+    { name = "ops-files-client" },
     { name = "ops-identity" },
     { name = "ops-plugin-sdk" },
     { name = "ops-policy" },
@@ -2289,7 +2316,9 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "ops-agent-kernel", editable = "packages/ops_agent_kernel" },
     { name = "ops-agents-service", editable = "services/agents-service" },
+    { name = "ops-documents-client", editable = "packages/ops_documents_client" },
     { name = "ops-email", editable = "packages/ops_email" },
+    { name = "ops-files-client", editable = "packages/ops_files_client" },
     { name = "ops-identity", editable = "packages/ops_identity" },
     { name = "ops-plugin-sdk", editable = "packages/ops_plugin_sdk" },
     { name = "ops-policy", editable = "packages/ops_policy" },

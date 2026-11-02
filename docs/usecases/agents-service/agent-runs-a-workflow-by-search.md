@@ -22,7 +22,7 @@ needed and no real model is called.
 | 3 | The agent calls `workflow__customer_summary` | The tool output carries `runId`, `workflow`, `status: finished` and `outcome {customerId: CUS-1002, summary}`; the reply quotes the summary |
 | 4 | `GET /v1/runs/{runId}` | The run first finds the customer by name (`find`, search_customers, then `found`) and reads their record (`read`, get_customer); the `summarise` step (ops.ai.agent, ag_advisor with the output schema) shows that record in its input and the schema's output through the ok port; the run's outcome is `summarised` |
 | 5 | `PATCH /v1/agents/ag_advisor` without the grant (published), then the same chat | `search_tools` does not return the workflow |
-| 6 | Chat "Start the customer summary workflow directly for Priya Natarajan." (a forced fake rule calls the tool by name) | The call is refused and no run of `customer_summary` starts |
+| 6 | Chat "Start the customer summary workflow directly for Priya Natarajan." (a forced fake rule calls the tool by name) | The call is refused as a tool the agent does not hold, the reply finishes (no error), and no run of `customer_summary` starts |
 
 ## Acceptance layers
 

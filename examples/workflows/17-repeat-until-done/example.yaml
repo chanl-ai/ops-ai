@@ -1,0 +1,28 @@
+id: repeat-until-done
+title: Repeat until done
+track: workflow
+status: built
+difficulty: guided
+outcome: Loop until a predicate holds, or stop at the cap.
+capabilities:
+- id: ops.flow.repeat
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/done.json
+- fixtures/spin.json
+expected:
+- expected/done.json
+- expected/exhausted.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 30
+teaches:
+- the cap is a parameter so the loop cannot spin

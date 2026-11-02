@@ -1,7 +1,7 @@
 // uc-053 a workflow's access is decided in Human Tasks by another person, ui layer:
 // docs/usecases/console/workflow-access-approved-by-another-person.md. Signed in through platform-service as two
 // people: James requests a workflow's access to an operation, Priya follows the Access tab's link and approves it in
-// Human Tasks, where the request waits as its system workflow run (c-166, c-257).
+// Human Tasks, where the request waits as its system workflow run.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -22,12 +22,12 @@ async function signIn(browser, consoleUrl, email) {
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    // The request's system workflow runs on a worker that calls the tools gateway (c-257).
+    // The request's system workflow runs on a worker that calls the tools gateway.
     await stack.startWorker();
     // James's published module with one read, and his request for a workflow's access to it.
     const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
-    // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
+    // Only a Security admin changes the egress allow-list, so Sam lists the host.
     const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: HOST, note: 'uc-053' }) });
     const id = (await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc053-${TAG}`, type: 'http' }) })).json()).data.id;
@@ -46,7 +46,7 @@ await withUiStack(
       const errors = [];
       const row = (page) => page.getByRole('row', { name: new RegExp(wf.name) });
 
-      // c-257: the request runs as the tool_access_request system workflow; the module's Access tab links to the run's
+      // an earlier change: the request runs as the tool_access_request system workflow; the module's Access tab links to the run's
       // review by its run key and decides nothing itself.
       check('1 the request names its workflow run', approval.reviewId === `tool_access.requested:${approval.id}`, approval);
       const P = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
@@ -71,7 +71,7 @@ await withUiStack(
       await row(pp).getByRole('link', { name: 'Decide in Human Tasks' }).click();
       const sheet = pp.getByTestId('review-sheet');
       await sheet.waitFor({ state: 'visible', timeout: 60_000 });
-      check('3 Human Tasks opens the request for another person in the owner team', (await sheet.innerText()).includes(`Let ${wf.name} use Statements ${TAG}?`));
+      check('3 Human Tasks opens the request for another person in the maintainers team', (await sheet.innerText()).includes(`Let ${wf.name} use Statements ${TAG}?`));
       const decided = armed(pp.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decision'), { timeout: 60_000 }));
       // A workflow step decides by its options; Approve authorises the run's grant (Reject asks for a reason).
       await pp.getByTestId('option-decision-form').getByTestId('decide-approve').click();

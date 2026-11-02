@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Roles, sign-ins and limits hold as given",
+  "description": "A person holds only the roles they were given, removing someone from a team removes their saved sign-ins to other systems, and limits apply to each key, person and address. One busy key or a guessing address no longer spends everyone's allowance.",
+  "tag": "fix",
+  "cards": [
+    "c-615"
+  ]
+}

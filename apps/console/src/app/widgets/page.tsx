@@ -25,6 +25,7 @@ import { useCanBuild } from '@/hooks/me-queries';
 import { useCreateWidget, useWidgetTemplatesPage } from '@/hooks/widget-queries';
 import { relativeTime } from '@/lib/format';
 import type { WidgetTemplate } from '@/lib/types/widgets';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = WidgetTemplate & { onRowClick: (w: WidgetTemplate) => void; href: string };
 
@@ -146,15 +147,7 @@ export default function WidgetsPage() {
           searchColumn="name"
           searchPlaceholder="Search widgets…"
           onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           filterResetKey={filterResetKey}
           hideViewSwitcher
           emptyState={<ListEmpty icon={LayoutTemplate} noun="widgets" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} createLabel={canBuild ? 'New widget' : undefined} onCreate={() => setCreating(true)} description="Create one, lay it out from the building blocks, and publish it so agents can pin it." />}

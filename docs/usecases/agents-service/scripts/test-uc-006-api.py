@@ -40,7 +40,7 @@ with agents(timer_poll_seconds=0.3) as api:
     timers = {t["timerId"]: t["state"] for t in state(api, tid)["sla"]["timers"]}
     breach = next((t for t in timers if ":breach:" in t), "")
     check("a breach timer is open", timers.get(breach) == "open", timers)
-    # No HTTP route fires a timer (c-168): the agents service's PostgreSQL poller fires it once it is due.
+    # No HTTP route fires a timer: the agents service's PostgreSQL poller fires it once it is due.
     gone = api.post(f"/v1/threads/{tid}/timers/{breach}/fire", headers=SERVICE)
     check("no route fires a timer", gone.status_code in (404, 405), gone.status_code)
     # Non-vacuous: before the deadline the review stays with tier1, so the escalation below is the timer's doing.

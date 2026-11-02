@@ -95,6 +95,15 @@ class FakeFilesService:
             refs.discard((m.group(2), m.group(3)))
             f["referenceCount"] = len(refs)
             return httpx.Response(200, json={"data": self._info(f)})
+        if request.method == "GET" and path == "/v1/files":
+            # The team's files whose name holds `search`, as files-service's list answers (c-613's file lookup).
+            asked = request.url.params.get("search", "").lower()
+            rows = [
+                self._info(f)
+                for f in self.files.values()
+                if (f["tenant"], f["team"]) == (tenant, team) and asked in str(f["name"]).lower()
+            ]
+            return httpx.Response(200, json={"data": {"data": rows, "pagination": {"total": len(rows)}}})
         if m := re.fullmatch(r"/v1/files/([^/]+)(/content)?", path):
             f = self.files.get(m.group(1))
             if f is None or (f["tenant"], f["team"]) != (tenant, team):

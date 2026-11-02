@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo
+.PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (ISOLATED=1 for a second stack)
 
@@ -58,11 +58,11 @@ down: ## Stop what `make up` started, then compose (KEEP_DB=1 leaves compose run
 
 restart: ## Restart the services `make up` started (SVC=agents|worker|tools|kb|files|platform|console for one), migrating each first
 	@# Each service's chain is applied between stop and start, as make up does, so a restart of newer code never
-	@# meets a table without its new columns. The console, the embed app, the API docs page and the runner have no
-	@# database; the worker uses agents-service's.
+	@# meets a table without its new columns. The console, the embed app, the API docs page, the runner and the fakes
+	@# have no database; the worker uses agents-service's.
 	@if [ -n "$(SVC)" ]; then \
 		$(STACK) stop $(SVC) && \
-		{ case "$(SVC)" in console|worker|embed|apidocs|runner) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate && $(STACK) note-migrations;; esac; } && \
+		{ case "$(SVC)" in console|worker|embed|apidocs|runner|fakeai|fakebank) ;; *) $(MAKE) -s -C $(SVC_DIR_$(SVC)) migrate && $(STACK) note-migrations;; esac; } && \
 		$(STACK) start $(SVC); \
 	else \
 		$(STACK) down && \
@@ -88,6 +88,16 @@ demo-walk: ## Walk the sample team: chat, guardrail, bank reads, a write a perso
 
 demo: sample-team demo-walk ## Install the sample team, then walk it
 
+demo-salesforce: ## The Salesforce plugin demo on the shared stack: switches, plugin, fake Salesforce (SF=real: the owner's org), model alias, account switch; RESET=1 starts the team admin's steps again
+	@SF=$(SF) RESET=$(RESET) PLUGIN_REF=$(PLUGIN_REF) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_salesforce.py
+
+demo-salesforce-templates: ## Story 3 of the Salesforce demo: the team admin adds the plugin's case helper and triage workflow as team copies through the Python SDK, and publishes them
+	@# The SDK is its own project (sdk/python), as a developer installs it.
+	@uv run --quiet --project $(ROOT)/sdk/python python $(ROOT)/scripts/demo_salesforce.py templates
+
+demo-salesforce-walk: ## Walk the Salesforce demo's five stories in a browser on the shared console; screenshots in .logs/demo-salesforce (SF=real stops at the owner's Allow)
+	@SF=$(SF) node $(ROOT)/scripts/demo-salesforce/walk.mjs
+
 demo-model: ## Point the agents' chat alias at a cheap real OpenAI model (MODEL=gpt-5-nano), or back at the fake (MODEL=fake)
 	@MODEL=$(MODEL) uv run python scripts/demo_model.py
 
@@ -95,3 +105,24 @@ ports: ## Print the ports this stack uses
 	@printf '  stack %s, compose project %s\n' "$(OPS_STACK)" "$(OPS_COMPOSE_PROJECT)"
 	@printf '  console %s (runtime %s), agents %s, tools %s, opa %s, postgres %s\n' $(OPS_CONSOLE_PORT) \
 		$(OPS_CONSOLE_RUNTIME_PORT) $(OPS_AGENTS_PORT) $(OPS_TOOLS_PORT) $(OPS_OPA_PORT) $(OPS_PG_PORT)
+
+##@ Call an API as a dev user (c-614)
+
+# `make api GET /v1/me AS=viewer`: the method and path are the words after `api`, so they become goals that do nothing.
+# A query string goes in Q=, since make reads any word holding `=` as a variable.
+ifneq ($(filter api,$(firstword $(MAKECMDGOALS))),)
+API_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+$(eval $(API_WORDS):;@:)
+endif
+AS ?= admin
+ENV ?= local
+
+.PHONY: api sdk-call
+api: ## make api GET /v1/me AS=admin|builder|approver|viewer|security|platform [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
+	@[ -n "$(word 2,$(API_WORDS))" ] || { echo "make api: name the method and path, e.g. make api GET /v1/me AS=viewer" >&2; exit 2; }
+	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as $(AS) --env $(ENV) \
+		$(if $(BODY),--body '$(BODY)') $(if $(TEAM),--team $(TEAM)) $(if $(SVC),--service $(SVC))
+
+sdk-call: ## make sdk-call CALL='ops.raw.platform.me_me()' AS=<role> [TEAM=] [ENV=staging]: one Python SDK call as that dev user
+	@[ -n "$(CALL)" ] || { echo "make sdk-call: give the call, e.g. CALL='ops.raw.platform.me_me()' (double quotes inside it)" >&2; exit 2; }
+	@uv run --quiet python scripts/api_as.py sdk '$(CALL)' --as $(AS) --env $(ENV) $(if $(TEAM),--team $(TEAM))

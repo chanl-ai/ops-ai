@@ -17,7 +17,9 @@ from mcp_types import Implementation
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity
+from ops_service_kit.flags import Flags
 from ops_service_kit.settings import Settings
+from ops_tools.app import MCP_OFF
 from ops_tools.modules.seed import load
 from ops_tools.store.calls import gateway_calls
 from ops_tools.store.modules import ModuleStore
@@ -197,3 +199,16 @@ async def test_a_key_holding_tools_run_cannot_use_the_test_console(stack: Stack)
         "/v1/tool-modules/mod_document_service/test", json=body, headers={"Authorization": "Bearer ok_lending"}
     )
     assert (r.status_code, r.json()["error"]["code"]) == (403, "role_required"), r.text
+
+
+async def test_with_the_flag_off_the_mcp_address_says_it_is_off(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str
+) -> None:
+    """mcp_gateway is off unless the install config names it (c-611): /mcp answers 404 with the setting that turns it
+    on, and no MCP session is started."""
+    app = build_app(engine, seed, tenant, mcp=True, flags=Flags())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as http:
+        r = await http.post("/mcp/test/team_lending", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert r.status_code == 404, r.text
+    error = r.json()["error"]
+    assert (error["code"], error["message"]) == ("feature_off", MCP_OFF), error

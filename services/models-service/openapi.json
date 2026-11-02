@@ -1180,9 +1180,22 @@
       "ProviderIn": {
         "additionalProperties": false,
         "properties": {
+          "apiVersion": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apiversion"
+          },
           "baseUrl": {
             "anyOf": [
               {
+                "maxLength": 400,
                 "type": "string"
               },
               {
@@ -1194,6 +1207,7 @@
           "keyRef": {
             "anyOf": [
               {
+                "maxLength": 120,
                 "type": "string"
               },
               {
@@ -1203,11 +1217,25 @@
             "title": "Keyref"
           },
           "name": {
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
+          "region": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
           "type": {
-            "pattern": "^(openai-compatible|anthropic|scripted)$",
+            "pattern": "^(openai-compatible|azure-openai|anthropic|scripted)$",
             "title": "Type",
             "type": "string"
           }
@@ -1279,7 +1307,19 @@
       },
       "ProviderOut": {
         "additionalProperties": false,
+        "description": "A provider connection: where its calls go and the name of the key it signs in with, never the key.",
         "properties": {
+          "apiVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apiversion"
+          },
           "baseUrl": {
             "anyOf": [
               {
@@ -1310,6 +1350,39 @@
             "title": "Name",
             "type": "string"
           },
+          "observedRegion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observedregion"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "regionMismatch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regionmismatch"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -1328,6 +1401,18 @@
       "ProviderRebind": {
         "additionalProperties": false,
         "properties": {
+          "apiVersion": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apiversion"
+          },
           "baseUrl": {
             "maxLength": 400,
             "minLength": 1,
@@ -1337,6 +1422,7 @@
           "keyRef": {
             "anyOf": [
               {
+                "maxLength": 120,
                 "type": "string"
               },
               {
@@ -1344,6 +1430,18 @@
               }
             ],
             "title": "Keyref"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
           }
         },
         "required": [
@@ -2515,6 +2613,16 @@
             },
             "description": "Server error"
           },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The provider refused or failed"
+          },
           "503": {
             "content": {
               "application/json": {
@@ -2523,7 +2631,7 @@
                 }
               }
             },
-            "description": "Service unavailable"
+            "description": "The provider key the connection names is not saved"
           }
         },
         "summary": "Completions",
@@ -2952,6 +3060,7 @@
     },
     "/v1/models/providers": {
       "get": {
+        "description": "Every provider connection: where its calls go and the name of the key it signs in with, never a key.",
         "operationId": "providers_list_providers",
         "parameters": [
           {
@@ -2968,6 +3077,54 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
             }
           }
         ],
@@ -2990,7 +3147,7 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "A value the connection's type refuses"
           },
           "401": {
             "content": {
@@ -3010,7 +3167,7 @@
                 }
               }
             },
-            "description": "Not allowed"
+            "description": "Not an account admin"
           },
           "404": {
             "content": {
@@ -3077,9 +3234,10 @@
         "tags": [
           "providers"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       },
       "post": {
+        "description": "Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and\napi-version; its region is optional).",
         "operationId": "providers_create_provider",
         "parameters": [
           {
@@ -3096,6 +3254,54 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
             }
           }
         ],
@@ -3128,7 +3334,7 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "A value the connection's type refuses"
           },
           "401": {
             "content": {
@@ -3148,7 +3354,7 @@
                 }
               }
             },
-            "description": "Not allowed"
+            "description": "Not an account admin"
           },
           "404": {
             "content": {
@@ -3215,12 +3421,12 @@
         "tags": [
           "providers"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/providers/{provider_id}": {
       "put": {
-        "description": "Points a connection at another endpoint and credential name. Every alias version bound to it follows on its\nnext call, which is how one alias moves between a fake and the real provider without a new version.",
+        "description": "Points a connection at another endpoint, credential name, api-version and region. Every alias version bound\nto it follows on its next call, which is how one alias moves between a fake and the real provider without a\nnew version.",
         "operationId": "providers_rebind_provider",
         "parameters": [
           {
@@ -3246,6 +3452,54 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
             }
           }
         ],
@@ -3278,7 +3532,7 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "A value the connection's type refuses"
           },
           "401": {
             "content": {
@@ -3298,7 +3552,7 @@
                 }
               }
             },
-            "description": "Not allowed"
+            "description": "Not an account admin"
           },
           "404": {
             "content": {
@@ -3365,7 +3619,7 @@
         "tags": [
           "providers"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       }
     },
     "/v1/provider-keys": {

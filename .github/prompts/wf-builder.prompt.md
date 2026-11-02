@@ -16,16 +16,18 @@ A developer says what the workflow is for. The skill picks the seeded example cl
 `workflows/<id>.json` beside the developer, has the engine on the named profile check it, and shows the steps and
 every way out of each step. Nothing is created until the developer says so. The ops CLI is not built yet (c-527), so
 `scripts/wf_builder.py` calls the Python SDK on the profile the developer names. Every command below runs as
-`uv run --with-editable sdk/python python scripts/wf_builder.py ...` from the repository root, which brings in the SDK;
+`uv run python scripts/wf_builder.py ...` from the repository root, which brings in the SDK;
 `python3 scripts/wf_builder.py` is short for that here.
 
 ## Steps
 
 1. Ask which profile to use (`--profile`, from `~/.config/ops-ai/config.json` or `OPS_CONFIG`), unless they named
    one. Read the node types that profile serves: `python3 scripts/wf_builder.py catalog --profile <name>`. Use only
-   those types; never write one from memory.
-2. Read `docs/guide/skills/wf-builder/rules.md` and pick the closest example in
-   `docs/guide/skills/wf-builder/examples.md`.
+   those types; never write one from memory. Creating a workflow needs a person: the profile's `accessToken` (their
+   session token) or `OPS_TOKEN`. An API key reads and validates, and is refused a create.
+2. Prefer a folder under `examples/workflows/` and the generic `ops workflows validate|apply|run` commands.
+   `docs/guide/skills/wf-builder/examples.md` is generated seed topology for the local demo, not the developer catalog.
+   Read `docs/guide/skills/wf-builder/rules.md` before drawing steps.
 3. Write a goal file: the new workflow's `id`, the `goal` in the developer's words and the `example` to adapt, as
    `{"id": "invoice_po_match", "goal": "Compare an invoice with its purchase order and send a person any amount that
    differs.", "example": "two_source_match"}`. Then a dry run:

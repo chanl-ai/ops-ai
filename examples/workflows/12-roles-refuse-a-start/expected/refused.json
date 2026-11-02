@@ -1,0 +1,6 @@
+{
+  "status": 403,
+  "code": "role_required",
+  "area": "workflows",
+  "action": "edit"
+}

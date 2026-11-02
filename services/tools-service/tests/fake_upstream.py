@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import FastAPI, Request
@@ -60,6 +61,16 @@ def fake_bank(mcp_tools: list[dict[str, Any]] | None = None) -> tuple[FastAPI, l
     @app.get("/v1/accounts/{account_id}")
     async def account(account_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         return {"accountId": account_id, "balance": 1200.5, "holder": {"name": "Marcus Webb", "sin": "123-456-789"}}
+
+    @app.post("/v1/echo-body")
+    async def echo_body(request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        # Echoes the body and, form-encoded, the Authorization header: a system that repeats a credential back.
+        auth = urlencode({"auth": request.headers.get("authorization", "")})
+        return {
+            "contentType": request.headers.get("content-type"),
+            "body": (await request.body()).decode(),
+            "echo": auth,
+        }
 
     @app.post("/v1/holds")
     async def hold(request: Request) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]

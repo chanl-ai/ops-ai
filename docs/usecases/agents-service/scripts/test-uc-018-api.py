@@ -33,7 +33,7 @@ with models() as models_url, agents(models_url=models_url) as api:
         headers=TEAM,
     )
     edited = data(res)
-    # Edits save into the one draft (c-172): before any publish that is still v1.
+    # Edits save into the one draft: before any publish that is still v1.
     check(
         "edit saved into the draft, nothing published",
         (edited["version"], edited["publishedVersion"]) == (1, None),

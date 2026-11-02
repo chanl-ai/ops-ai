@@ -28,6 +28,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { Workflow } from '@/lib/types/domain';
 import type { WorkflowFilters } from '@/lib/types/query';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Workflow & { onRowClick: (w: Workflow) => void };
 
@@ -181,15 +182,7 @@ export default function WorkflowsPage() {
           onColumnFiltersChange={list.onColumnFiltersChange}
           selectionResetKey={resetKey}
           bulkActions={canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'outline', onClick: (rows) => setBulk({ kind: 'delete', rows }) }] : undefined}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={Route}

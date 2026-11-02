@@ -19,6 +19,7 @@ import { createSignInPolicyHttp } from './sign-in-http';
 import { createInvitesHttp } from './invites-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
+import { createProviderConnectionsHttp } from './provider-connections-http';
 import { createProviderKeysHttp } from './provider-keys-http';
 import { createSignInProvidersHttp } from './sign-in-providers-http';
 import { createWorkspaceTeamsHttp } from './workspace-teams-http';
@@ -285,13 +286,14 @@ export function createHttpApi(baseUrl: string): OpsApi {
     workspaceTeams: createWorkspaceTeamsHttp(get, send),
     signInProviders: createSignInProvidersHttp(get, send),
     providerKeys: createProviderKeysHttp(get, send),
+    providerConnections: createProviderConnectionsHttp(get, send),
     evals: createEvalsHttp(get, send, qs),
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),
     egress: createEgressHttp(get, send, qs),
     secrets: createSecretsHttp(get, send, qs),
     connections: createConnectionsHttp(get, send),
-    integrations: createIntegrationsHttp(get, send, qs),
+    integrations: createIntegrationsHttp(get),
     files: createFilesHttp(get, send, qs),
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),

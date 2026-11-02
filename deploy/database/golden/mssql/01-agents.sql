@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0094_template_copies_digest
+-- agents-service, stamped at 0096_system_reads_team_defaults
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -37,6 +37,7 @@ CREATE TABLE engine_runs (
 	waiting NVARCHAR(max) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	started_via VARCHAR(200) NULL, 
+	started_by_approver BIT NOT NULL DEFAULT 0, 
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	finished_at VARCHAR(32) NULL, 
@@ -1297,5 +1298,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0094_template_copies_digest');
+INSERT INTO alembic_version (version_num) VALUES ('0096_system_reads_team_defaults');
 GO

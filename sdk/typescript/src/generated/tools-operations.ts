@@ -11,6 +11,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "connections_check_credential": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/connections/{connection_id}/test-credential",
+    "pathParams": [
+      "connection_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "connections_complete_sign_in": {
     "body": "json",
     "headers": [],
@@ -64,6 +75,17 @@ export const toolsOperations = {
     ],
     "stream": false
   },
+  "connections_get_app": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/apps/{app_id}",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "connections_get_connection": {
     "body": null,
     "headers": [],
@@ -75,11 +97,31 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "connections_give_own_credentials": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/me/connections/{connection_id}/credentials",
+    "pathParams": [
+      "connection_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "connections_kinds": {
     "body": null,
     "headers": [],
     "method": "GET",
     "path": "/v1/connection-kinds",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "connections_list_app_credentials": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/app-credentials",
     "pathParams": [],
     "query": [],
     "stream": false
@@ -103,7 +145,9 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/systems",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "include"
+    ],
     "stream": false
   },
   "connections_my_connections": {
@@ -112,7 +156,9 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/me/connections",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "every"
+    ],
     "stream": false
   },
   "connections_open_connect_link": {
@@ -121,6 +167,17 @@ export const toolsOperations = {
     "method": "POST",
     "path": "/v1/connections/connect-links/sign-in",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "connections_pin_default": {
+    "body": null,
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/connections/{connection_id}/default",
+    "pathParams": [
+      "connection_id"
+    ],
     "query": [],
     "stream": false
   },
@@ -283,6 +340,28 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "plugins_add_account": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/plugins/{plugin_id}/accounts",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "plugins_app_users": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/plugins/{plugin_id}/team/users",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "plugins_delete_app_secret": {
     "body": null,
     "headers": [],
@@ -323,6 +402,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "plugins_plugin_update": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/plugins/{plugin_id}/team/update",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "plugins_set_app_secret": {
     "body": "json",
     "headers": [],
@@ -339,6 +429,17 @@ export const toolsOperations = {
     "headers": [],
     "method": "PUT",
     "path": "/v1/plugins/{plugin_id}/team",
+    "pathParams": [
+      "plugin_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "plugins_take_plugin_update": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/plugins/{plugin_id}/team/update",
     "pathParams": [
       "plugin_id"
     ],
@@ -577,7 +678,9 @@ export const toolsOperations = {
       "module_id",
       "op_id"
     ],
-    "query": [],
+    "query": [
+      "environment"
+    ],
     "stream": false
   },
   "tool_modules_list_modules": {
@@ -662,6 +765,18 @@ export const toolsOperations = {
     "path": "/v1/tool-modules/{module_id}/approvals/revoke",
     "pathParams": [
       "module_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "tool_modules_run_tool": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/tool-modules/{module_id}/operations/{operation}/run",
+    "pathParams": [
+      "module_id",
+      "operation"
     ],
     "query": [],
     "stream": false

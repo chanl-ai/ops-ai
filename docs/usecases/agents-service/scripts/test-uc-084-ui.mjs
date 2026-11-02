@@ -1,4 +1,4 @@
-// uc-084 an agent finds and runs a workflow whose agent step answers by schema, ui layer (c-062 T005).
+// uc-084 an agent finds and runs a workflow whose agent step answers by schema, ui layer (an earlier change T005).
 // withUiStack's demo stack: ag_advisor holds the seeded v2 customer summary workflow, whose ops.ai.agent step runs
 // ag_advisor with the output schema {customerId, summary}; the demo fake-OpenAI rules script both turns. Signed in
 // through platform-service as James. UC084_UNGRANTED=1 drops the workflow from ag_advisor's tools first, so search

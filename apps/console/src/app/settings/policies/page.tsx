@@ -7,6 +7,8 @@ import { Lock } from 'lucide-react';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
+import { EntityPicker } from '@/components/shared/entity-picker';
+import { FormFieldGroup } from '@/components/shared/form-field';
 import { ChoiceCards } from '@/components/shared/setting/choice-cards';
 import { Note } from '@/components/shared/setting/note';
 import { SettingCard } from '@/components/shared/setting/setting-card';
@@ -14,8 +16,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { appOptions } from '@/hooks/options-queries';
 import { usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
-import { useRealConnections, useSaveSendPolicy, useSendPolicy } from '@/hooks/systems-queries';
+import { useSaveSendPolicy, useSendPolicy } from '@/hooks/systems-queries';
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
@@ -34,7 +37,7 @@ const SWITCH = [
   { value: 'true', title: 'On', description: '' },
   { value: 'false', title: 'Off', description: '' },
 ];
-const isMap = (v: PolicyValue): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+const isMap = (v: PolicyValue): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const asChoice = (v: PolicyValue) => (v === null ? 'none' : isMap(v) ? '' : String(v));
 const fromChoice = (c: string): PolicyValue => (c === 'none' ? null : c === 'true' ? true : c === 'false' ? false : Number(c));
 // A row from before kinds were served is read from its value's shape.
@@ -47,9 +50,10 @@ const isTeamSwitch = (p: WorkspacePolicy) => kindOf(p) === 'bool' && isMap(p.def
 const defaultLabel = (p: WorkspacePolicy) => {
   const unit = UNITS[kindOf(p)];
   if (isTeamSwitch(p)) return 'Off for every team';
+  if (kindOf(p) === 'names') return 'No app listed';
   if (isMap(p.default)) return 'Review major changes';
   if (typeof p.default === 'boolean') return p.default ? 'On' : 'Off';
-  if (p.default === null) return unit ? 'No limit' : 'None';
+  if (p.default === null || Array.isArray(p.default)) return unit ? 'No limit' : 'None';
   return unit ? `${p.default} ${unit}` : `${Math.round(p.default * 100)}%`;
 };
 
@@ -72,16 +76,26 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
   const roles = cells[policy.changedBy] ?? [];
   const common = { id: `policy-${policy.key}`, title: titleOf(policy), description: policy.effect, help: `Default: ${defaultLabel(policy)}${roles.length ? ` · Changed by ${roles.join(', ')}` : ''}`, locked: !(policy.changedBy in cells) || sample, requiredRole: roles.join(' or ') || undefined };
   const per = kind === 'publish_modes';
+  // A per-team list (appWritesNeedApproval): the acting team's names under its id; a team that set nothing lists none.
+  const names = kind === 'names';
+  const teamNames = React.useMemo(() => {
+    const listed = isMap(policy.value) ? policy.value[teamId] : undefined;
+    return Array.isArray(listed) ? listed.map(String) : [];
+  }, [policy.value, teamId]);
+  const [picked, setPicked] = React.useState<string[]>(teamNames);
+  React.useEffect(() => {
+    setPicked(teamNames);
+  }, [teamNames]);
   const save = async () => {
     try {
-      const value: PolicyValue = per ? modes : unit ? (draft.trim() === '' || draft === 'none' ? null : Number(draft)) : fromChoice(draft);
+      const value: PolicyValue = names ? picked : per ? modes : unit ? (draft.trim() === '' || draft === 'none' ? null : Number(draft)) : fromChoice(draft);
       await set.mutateAsync({ key: policy.key, value, teamId });
       toast.success(`Saved ${titleOf(policy)}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
       toast.error('Couldn’t save the policy', { description: (e as Error).message });
     }
   };
-  const dirty = per ? JSON.stringify(modes) !== JSON.stringify(teamModes) : draft !== current;
+  const dirty = names ? JSON.stringify(picked) !== JSON.stringify(teamNames) : per ? JSON.stringify(modes) !== JSON.stringify(teamModes) : draft !== current;
   // Which publishes need a review is edited in one place, Publish reviews; this card says so and links there (c-214).
   if (per)
     return (
@@ -89,6 +103,23 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
         <Button asChild variant="outline" size="sm" data-testid="policy-open-publish-reviews">
           <Link href="/settings/publish-reviews">Set it on Publish reviews</Link>
         </Button>
+      </SettingCard>
+    );
+  if (names)
+    return (
+      <SettingCard {...common} onSave={save} saving={set.isPending} dirty={dirty}>
+        <FormFieldGroup label="Apps whose writes need approval" hint="A write from a listed app waits for a person; other writes run unless their tool asks.">
+        <EntityPicker
+          source={appOptions}
+          value={picked}
+          onChange={setPicked}
+          addLabel="Add app"
+          searchPlaceholder="Search apps"
+          emptyText="No app matches. Apps your team connected are listed on Apps."
+          disabled={common.locked}
+          testId={`policy-${policy.key}-apps`}
+        />
+        </FormFieldGroup>
       </SettingCard>
     );
   return (
@@ -162,7 +193,6 @@ export default function PoliciesPage() {
   const sample = usePoliciesAreSample();
   // The resolved team: its id is what the server files a per-team policy under.
   const { team } = useTeam();
-  const sendPolicy = useRealConnections();
   return (
     <SettingsPageLayout section="Policies" description="Who may decide what, and which publishes need a review. Every default is open." sample={sample}>
       <Note title="Every default is open">A policy you have not set behaves as its default. A change applies to new requests; open ones keep the rule they were made under.</Note>
@@ -184,7 +214,7 @@ export default function PoliciesPage() {
             <React.Fragment key={p.key}>
               <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
               {/* The words Check before sending reads, right after the switch that turns it on. */}
-              {sendPolicy && p.key === 'checkBeforeSend' && <SendPolicyCard locked={!(p.changedBy in (editor.data?.cells ?? {})) || sample} />}
+              {p.key === 'checkBeforeSend' && <SendPolicyCard locked={!(p.changedBy in (editor.data?.cells ?? {})) || sample} />}
             </React.Fragment>
           ))}
         </div>

@@ -19,7 +19,7 @@ def _ever_published(m: dict[str, Any]) -> bool:
 
 def _host(m: dict[str, Any], op: dict[str, Any]) -> str | None:
     path = str(op.get("path") or "")
-    return urlsplit(path if "://" in path else str(m["endpoint"] or "")).hostname
+    return urlsplit(path if "://" in path else str(m.get("endpoint") or "")).hostname
 
 
 def _summary(op: dict[str, Any]) -> dict[str, Any]:

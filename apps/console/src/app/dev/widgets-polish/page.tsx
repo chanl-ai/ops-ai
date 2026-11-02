@@ -1,6 +1,5 @@
 'use client';
 
-import { notFound } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 
 import { KindEmpty, KindError, KindLoading, KindView, type KindViewProps } from '@/components/chat/widgets/kind-view';
@@ -35,7 +34,6 @@ const KINDS: Record<string, { name: string; empty: string; error: string }> = {
  * lib/widgets/kind-samples.json, which the kernel's tests check against each kind's schema. Dev server only.
  */
 export default function WidgetsPolishPreview() {
-  if (process.env.NODE_ENV !== 'development') notFound();
   const all = samples as Record<string, { industry: string; data: Record<string, unknown> }[]>;
   return (
     <PageLayout icon={Sparkles} title="Chat widgets (c-176)" description="Every kind an agent can show, in two industries each, then its loading, empty and error states.">

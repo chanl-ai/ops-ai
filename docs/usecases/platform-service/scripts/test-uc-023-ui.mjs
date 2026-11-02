@@ -114,7 +114,7 @@ await withUiStack(
         const said = await form.innerText();
         const passwordAsked = await newcomer.locator('#inv-password').count();
         await newcomer.locator('#inv-name').fill(NAME);
-        // The workspace signs in by password, so a new person sets one (c-188); a test value for this run.
+        // The workspace signs in by password, so a new person sets one; a test value for this run.
         if (passwordAsked) {
           await newcomer.locator('#inv-password').fill('uc023-newcomer-pass');
           await newcomer.locator('#inv-confirm').fill('uc023-newcomer-pass').catch(() => undefined);
@@ -196,25 +196,25 @@ await withUiStack(
         check('7 a builder cannot manage members', invite === 0 && r.status === 403 && code === 'admin_required', { invite, status: r.status, code });
       });
 
-      // 8. An invitation to someone who already has an account (Omar, Fraud) never signs in whoever holds the link:
-      // a stranger's browser is asked to sign in as Omar and the service refuses the bare link; Omar, signed in as
+      // 8. An invitation to someone who already has an account (Nadia, Security) never signs in whoever holds the link:
+      // a stranger's browser is asked to sign in as Nadia and the service refuses the bare link; Nadia, signed in as
       // himself, joins Operations as viewer and keeps his own account and teams.
       await step('8 an existing person accepts only as themselves', async () => {
-        const OMAR = 'o.haddad@harborpine.example';
+        const NADIA = 'n.petrov@harborpine.example';
         await priya.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await priya.getByTestId('access-invite').click();
         const dialog = priya.getByRole('dialog');
-        await dialog.getByRole('textbox').first().fill(OMAR);
+        await dialog.getByRole('textbox').first().fill(NADIA);
         await dialog.getByRole('radio', { name: /Viewer/ }).click();
         await dialog.getByRole('button', { name: /^Invite/ }).click();
-        const omarLink = await priya.getByRole('textbox', { name: `Invitation link for ${OMAR}` }).inputValue();
+        const nadiaLink = await priya.getByRole('textbox', { name: `Invitation link for ${NADIA}` }).inputValue();
         await priya.getByRole('button', { name: 'Done' }).click();
 
         const stranger = await (await browser.newContext()).newPage();
-        await stranger.goto(omarLink, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await stranger.goto(nadiaLink, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const asked = await stranger.getByTestId('invite-sign-in-first').waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const strangerStored = await stored(stranger);
-        const bare = await fetch(`${platform}/v1/invites/${omarLink.split('/invite/')[1]}/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Not Omar' }) });
+        const bare = await fetch(`${platform}/v1/invites/${nadiaLink.split('/invite/')[1]}/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Not Nadia' }) });
         const bareCode = (await bare.json()).error?.code;
 
         await stranger.getByTestId('invite-sign-in-first').getByRole('link').first().click();
@@ -224,11 +224,11 @@ await withUiStack(
         await stranger.getByTestId('invite-join').waitFor({ timeout: 60_000 });
         await stranger.getByTestId('invite-join').getByRole('button').first().click();
         await stranger.waitForURL((u) => !u.pathname.startsWith('/invite'), { timeout: 60_000 });
-        const omar = await stored(stranger);
+        const nadia = await stored(stranger);
         check(
           '8 an existing person accepts only as themselves',
-          asked && strangerStored === null && bare.status === 401 && bareCode === 'sign_in_as_invitee' && omar?.principal?.email === OMAR && omar?.principal?.roles?.team_ops === 'viewer' && omar?.principal?.roles?.team_fraud === 'approver',
-          { asked, bare: bare.status, bareCode, roles: omar?.principal?.roles },
+          asked && strangerStored === null && bare.status === 401 && bareCode === 'sign_in_as_invitee' && nadia?.principal?.email === NADIA && nadia?.principal?.roles?.team_ops === 'viewer' && nadia?.principal?.roles?.team_security === 'approver',
+          { asked, bare: bare.status, bareCode, roles: nadia?.principal?.roles },
         );
       });
 

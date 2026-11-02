@@ -39,7 +39,7 @@ system refuses marks the connection as needing attention.
 | 8 | The same on a connection whose secret the bank refuses | Failed, naming `invalid_client` |
 
 The console's connect dialog runs on the mock only, so the ui layer sets its connections up through the API and
-tests them on the connection page (shown with the `NEXT_PUBLIC_OPS_PERSONAL_SIGNIN` switch on).
+tests them on the connection page.
 
 ## Acceptance layers
 

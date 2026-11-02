@@ -1,5 +1,5 @@
 // uc-477 A person follows an email from arrival to every case it opened, ui layer: docs/usecases/console/follow-an-email-run.md
-// (c-477). uc-246's demo stack (platform sign-in, the fake model's committed reads, the core fake bank, a worker). James
+//. uc-246's demo stack (platform sign-in, the fake model's committed reads, the core fake bank, a worker). James
 // saves copies of the seeded court order notice workflows and sends the intake a test email with the levy notice; then:
 // 2 the email run's page shows the email and a row for the attachment's run named after the attachment; 3 that row
 // opens the document run, whose page shows the read beside the document with field boxes; 4 a row per debtor, named,

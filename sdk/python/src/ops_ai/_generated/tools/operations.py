@@ -19,6 +19,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "connections_check_credential": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/connections/{connection_id}/test-credential",
+        "pathParams": ["connection_id"],
+        "query": [],
+        "stream": False,
+    },
     "connections_complete_sign_in": {
         "body": "json",
         "headers": [],
@@ -64,6 +73,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["environment"],
         "stream": False,
     },
+    "connections_get_app": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
     "connections_get_connection": {
         "body": None,
         "headers": [],
@@ -73,11 +91,29 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "connections_give_own_credentials": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/me/connections/{connection_id}/credentials",
+        "pathParams": ["connection_id"],
+        "query": [],
+        "stream": False,
+    },
     "connections_kinds": {
         "body": None,
         "headers": [],
         "method": "GET",
         "path": "/v1/connection-kinds",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "connections_list_app_credentials": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/app-credentials",
         "pathParams": [],
         "query": [],
         "stream": False,
@@ -97,7 +133,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/systems",
         "pathParams": [],
-        "query": [],
+        "query": ["include"],
         "stream": False,
     },
     "connections_my_connections": {
@@ -106,7 +142,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/me/connections",
         "pathParams": [],
-        "query": [],
+        "query": ["every"],
         "stream": False,
     },
     "connections_open_connect_link": {
@@ -115,6 +151,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/connections/connect-links/sign-in",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "connections_pin_default": {
+        "body": None,
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/connections/{connection_id}/default",
+        "pathParams": ["connection_id"],
         "query": [],
         "stream": False,
     },
@@ -253,6 +298,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "plugins_add_account": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/plugins/{plugin_id}/accounts",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_app_users": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/plugins/{plugin_id}/team/users",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
     "plugins_delete_app_secret": {
         "body": None,
         "headers": [],
@@ -289,6 +352,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "plugins_plugin_update": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/plugins/{plugin_id}/team/update",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
     "plugins_set_app_secret": {
         "body": "json",
         "headers": [],
@@ -303,6 +375,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "PUT",
         "path": "/v1/plugins/{plugin_id}/team",
+        "pathParams": ["plugin_id"],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_take_plugin_update": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/plugins/{plugin_id}/team/update",
         "pathParams": ["plugin_id"],
         "query": [],
         "stream": False,
@@ -493,7 +574,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tool-modules/{module_id}/operations/{op_id}/mocks",
         "pathParams": ["module_id", "op_id"],
-        "query": [],
+        "query": ["environment"],
         "stream": False,
     },
     "tool_modules_list_modules": {
@@ -570,6 +651,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "tool_modules_run_tool": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/tool-modules/{module_id}/operations/{operation}/run",
+        "pathParams": ["module_id", "operation"],
+        "query": [],
+        "stream": False,
+    },
     "tool_modules_set_connection": {
         "body": "json",
         "headers": [],
@@ -623,6 +713,14 @@ class Operations:
         "Health Background"
         return self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def connections_list_app_credentials(self) -> list[AppCredential]:
+        "List App Credentials"
+        return self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def connections_get_app(self, app_id: str) -> AppPage:
+        "Get App"
+        return self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def connections_kinds(self) -> ConnectionKinds:
         "Kinds"
         return self._t.call(SERVICE, OPERATIONS["connections_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -670,6 +768,12 @@ class Operations:
             SERVICE, OPERATIONS["connections_delete_connection"], {"connection_id": connection_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def connections_pin_default(self, connection_id: str) -> ConnectionDetail:
+        "Pin Default"
+        return self._t.call(
+            SERVICE, OPERATIONS["connections_pin_default"], {"connection_id": connection_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def connections_set_environment(
         self, connection_id: str, environment: str, body: EnvironmentIn
     ) -> ConnectionDetail:
@@ -703,6 +807,12 @@ class Operations:
         "Test Connection"
         return self._t.call(
             SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def connections_check_credential(self, connection_id: str, body: CredentialCheckIn) -> Any:
+        "Check Credential"
+        return self._t.call(
+            SERVICE, OPERATIONS["connections_check_credential"], {"connection_id": connection_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     def egress_allow_list(self) -> AllowList:
@@ -784,9 +894,9 @@ class Operations:
         "Knowledge Sources"
         return self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_my_connections(self) -> list[MyConnection]:
+    def connections_my_connections(self, *, every: bool | None = None) -> list[MyConnection]:
         "My Connections"
-        return self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
 
     def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
         "Disconnect"
@@ -799,6 +909,12 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def connections_give_own_credentials(self, connection_id: str, body: PersonCredentialsIn) -> MyConnection:
+        "Give Own Credentials"
+        return self._t.call(
+            SERVICE, OPERATIONS["connections_give_own_credentials"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
         return self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
@@ -806,6 +922,10 @@ class Operations:
     def plugins_list_plugins(self) -> PluginList:
         "List Plugins"
         return self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
+        "Add Account"
+        return self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
         "Set App Secret"
@@ -818,6 +938,18 @@ class Operations:
     def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
         "Set Team Plugin"
         return self._t.call(SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def plugins_plugin_update(self, plugin_id: str) -> PluginUpdateView:
+        "Plugin Update"
+        return self._t.call(SERVICE, OPERATIONS["plugins_plugin_update"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def plugins_take_plugin_update(self, plugin_id: str, body: TakeUpdateIn) -> PluginUpdateView:
+        "Take Plugin Update"
+        return self._t.call(SERVICE, OPERATIONS["plugins_take_plugin_update"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def plugins_app_users(self, plugin_id: str) -> AppUsers:
+        "App Users"
+        return self._t.call(SERVICE, OPERATIONS["plugins_app_users"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def secrets_list_secrets(
         self,
@@ -858,9 +990,9 @@ class Operations:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def connections_list_systems(self) -> list[SystemCard]:
+    def connections_list_systems(self, *, include: str | None = None) -> list[SystemCard]:
         "List Systems"
-        return self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {"include": include}, {}, None)  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -990,10 +1122,15 @@ class Operations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def tool_modules_list_mocks(self, module_id: str, op_id: str) -> MockList:
+    def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
         "List Mocks"
         return self._t.call(
-            SERVICE, OPERATIONS["tool_modules_list_mocks"], {"module_id": module_id, "op_id": op_id}, {}, {}, None
+            SERVICE,
+            OPERATIONS["tool_modules_list_mocks"],
+            {"module_id": module_id, "op_id": op_id},
+            {"environment": environment},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def tool_modules_add_mock(self, module_id: str, op_id: str, body: MockIn) -> MockAnswer:
@@ -1037,6 +1174,12 @@ class Operations:
             body,
         )  # type: ignore[no-any-return]
 
+    def tool_modules_run_tool(self, module_id: str, operation: str, body: ToolRunIn) -> ToolRunResult:
+        "Run Tool"
+        return self._t.call(
+            SERVICE, OPERATIONS["tool_modules_run_tool"], {"module_id": module_id, "operation": operation}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def tool_modules_discard_changes(self, module_id: str) -> ToolModuleDetail:
         "Discard Changes"
         return self._t.call(SERVICE, OPERATIONS["tool_modules_discard_changes"], {"module_id": module_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1067,6 +1210,14 @@ class AsyncOperations:
     async def health_health_background(self) -> BackgroundHealthOut:
         "Health Background"
         return await self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def connections_list_app_credentials(self) -> list[AppCredential]:
+        "List App Credentials"
+        return await self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def connections_get_app(self, app_id: str) -> AppPage:
+        "Get App"
+        return await self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def connections_kinds(self) -> ConnectionKinds:
         "Kinds"
@@ -1115,6 +1266,12 @@ class AsyncOperations:
             SERVICE, OPERATIONS["connections_delete_connection"], {"connection_id": connection_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def connections_pin_default(self, connection_id: str) -> ConnectionDetail:
+        "Pin Default"
+        return await self._t.call(
+            SERVICE, OPERATIONS["connections_pin_default"], {"connection_id": connection_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def connections_set_environment(
         self, connection_id: str, environment: str, body: EnvironmentIn
     ) -> ConnectionDetail:
@@ -1150,6 +1307,12 @@ class AsyncOperations:
         "Test Connection"
         return await self._t.call(
             SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def connections_check_credential(self, connection_id: str, body: CredentialCheckIn) -> Any:
+        "Check Credential"
+        return await self._t.call(
+            SERVICE, OPERATIONS["connections_check_credential"], {"connection_id": connection_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def egress_allow_list(self) -> AllowList:
@@ -1231,9 +1394,9 @@ class AsyncOperations:
         "Knowledge Sources"
         return await self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_my_connections(self) -> list[MyConnection]:
+    async def connections_my_connections(self, *, every: bool | None = None) -> list[MyConnection]:
         "My Connections"
-        return await self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
 
     async def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
         "Disconnect"
@@ -1246,6 +1409,12 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
+    async def connections_give_own_credentials(self, connection_id: str, body: PersonCredentialsIn) -> MyConnection:
+        "Give Own Credentials"
+        return await self._t.call(
+            SERVICE, OPERATIONS["connections_give_own_credentials"], {"connection_id": connection_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
         return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
@@ -1253,6 +1422,10 @@ class AsyncOperations:
     async def plugins_list_plugins(self) -> PluginList:
         "List Plugins"
         return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
+        "Add Account"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
         "Set App Secret"
@@ -1269,6 +1442,20 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def plugins_plugin_update(self, plugin_id: str) -> PluginUpdateView:
+        "Plugin Update"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_plugin_update"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def plugins_take_plugin_update(self, plugin_id: str, body: TakeUpdateIn) -> PluginUpdateView:
+        "Take Plugin Update"
+        return await self._t.call(
+            SERVICE, OPERATIONS["plugins_take_plugin_update"], {"plugin_id": plugin_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def plugins_app_users(self, plugin_id: str) -> AppUsers:
+        "App Users"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_app_users"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def secrets_list_secrets(
         self,
@@ -1313,9 +1500,9 @@ class AsyncOperations:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def connections_list_systems(self) -> list[SystemCard]:
+    async def connections_list_systems(self, *, include: str | None = None) -> list[SystemCard]:
         "List Systems"
-        return await self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {"include": include}, {}, None)  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,
@@ -1457,10 +1644,15 @@ class AsyncOperations:
             SERVICE, OPERATIONS["tool_modules_import_operations"], {"module_id": module_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def tool_modules_list_mocks(self, module_id: str, op_id: str) -> MockList:
+    async def tool_modules_list_mocks(self, module_id: str, op_id: str, *, environment: str | None = None) -> MockList:
         "List Mocks"
         return await self._t.call(
-            SERVICE, OPERATIONS["tool_modules_list_mocks"], {"module_id": module_id, "op_id": op_id}, {}, {}, None
+            SERVICE,
+            OPERATIONS["tool_modules_list_mocks"],
+            {"module_id": module_id, "op_id": op_id},
+            {"environment": environment},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def tool_modules_add_mock(self, module_id: str, op_id: str, body: MockIn) -> MockAnswer:
@@ -1502,6 +1694,12 @@ class AsyncOperations:
             {},
             {},
             body,
+        )  # type: ignore[no-any-return]
+
+    async def tool_modules_run_tool(self, module_id: str, operation: str, body: ToolRunIn) -> ToolRunResult:
+        "Run Tool"
+        return await self._t.call(
+            SERVICE, OPERATIONS["tool_modules_run_tool"], {"module_id": module_id, "operation": operation}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def tool_modules_discard_changes(self, module_id: str) -> ToolModuleDetail:

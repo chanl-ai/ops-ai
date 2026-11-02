@@ -6,6 +6,7 @@ from ops_documents.store.document_types import DocumentTypesStore, NameTakenErro
 from ops_documents.store.extractions import ExtractionRow, ExtractionsStore
 from ops_documents.store.layouts import LayoutsStore
 from ops_documents.store.metadata import engine_for, metadata
+from ops_documents.store.template_copies import TemplateCopies
 
 __all__ = [
     "DocumentTypesStore",
@@ -13,6 +14,7 @@ __all__ = [
     "ExtractionsStore",
     "LayoutsStore",
     "NameTakenError",
+    "TemplateCopies",
     "engine_for",
     "metadata",
 ]

@@ -63,6 +63,9 @@ class FakeTools:
 
 
 class FakeReviews:
+    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        return None  # every review here waits for a person
+
     async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
         return f"{run_id}:{node_id}:{iteration}"
 

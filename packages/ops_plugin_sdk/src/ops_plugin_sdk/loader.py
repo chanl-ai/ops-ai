@@ -30,6 +30,19 @@ class Loaded:
         return self.plugin is not None
 
 
+def plugin_root(folder: Path) -> Path | None:
+    """The folder holding plugin.yaml: `folder` itself, or the one package under its src/."""
+    if (folder / "plugin.yaml").is_file():
+        return folder
+    found = sorted((folder / "src").glob("*/plugin.yaml")) if (folder / "src").is_dir() else []
+    return found[0].parent if len(found) == 1 else None
+
+
+def project_of(root: Path) -> Path:
+    """The project folder above a src/<package> layout, else the package folder itself."""
+    return root.parent.parent if root.parent.name == "src" else root
+
+
 def _from_folder(folder: Path) -> Any:
     """A package folder's `plugin` object, imported by the folder's name with its parent on the path."""
     sys.path.insert(0, str(folder.parent))
@@ -40,8 +53,8 @@ def _from_folder(folder: Path) -> Any:
 
 
 def discover(found: Iterable[EntryPoint] | None = None, folders: Iterable[str] = ()) -> list[Loaded]:
-    """Every entry point in the `ops_ai.plugins` group, then each package folder in `folders` (a developer's plugin
-    on a local stack), loaded or failed; `found` replaces the installed set (tests)."""
+    """Every entry point in the `ops_ai.plugins` group, then each folder in `folders` (the install's plugins folder,
+    then a developer's plugin paths), loaded or failed; `found` replaces the installed set (tests)."""
     out: list[Loaded] = []
     seen: set[str] = set()
     loaders: list[tuple[str, Callable[[], Any], str]] = [
@@ -49,7 +62,10 @@ def discover(found: Iterable[EntryPoint] | None = None, folders: Iterable[str] =
         for ep in sorted(found if found is not None else entry_points(group=GROUP), key=lambda e: e.name)
     ]
     for f in folders:
-        folder = Path(f).resolve()
+        # A plugin dropped into the plugins folder may be its package folder or its whole project (src/<package>);
+        # a folder with neither is still tried, so its failure is reported under its own name.
+        given = Path(f).resolve()
+        folder = plugin_root(given) or given
         loaders.append((folder.name, lambda folder=folder: _from_folder(folder), str(folder)))
     for name, load, where in loaders:
         try:

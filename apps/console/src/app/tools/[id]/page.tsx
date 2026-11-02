@@ -24,20 +24,21 @@ import { AddOperationDialog } from '@/components/tools/add-operation-dialog';
 import { EditModuleDialog } from '@/components/tools/edit-module-dialog';
 import { ReasonDialog, RequestApprovalDialog } from '@/components/tools/approval-dialogs';
 import { ApprovalsTable } from '@/components/tools/approvals-table';
-import { ConnectionChip, IntegrationStatusBadge, SystemMark } from '@/components/integrations/integration-meta';
-import { ApprovalStateBadge, ENV_LABEL, ModuleMark, ModuleTypeBadge } from '@/components/tools/module-meta';
+import { ConnectionChip } from '@/components/integrations/integration-meta';
+import { ConnectionSelect } from '@/components/tools/connection-select';
+import { ApprovalStateBadge, ENV_LABEL, ModuleMark, OperationKindBadge, ownerText } from '@/components/tools/module-meta';
+import { baseOfApp } from '@/components/tools/tool-workbench';
 import { OperationsTable } from '@/components/tools/operations-table';
 import { ReviewPanel } from '@/components/tools/review-panel';
 import { ChangeList, VersionsPanel } from '@/components/tools/versions-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useIntegrationOptions } from '@/hooks/integration-queries';
 import { useToolCall } from '@/hooks/governance-queries';
+import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useWorkflows } from '@/hooks/queries';
@@ -60,11 +61,12 @@ import {
 } from '@/hooks/tool-module-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { plural, shortDate } from '@/lib/format';
+import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 
 const TABS = ['operations', 'access', 'approval', 'connection', 'activity', 'versions'] as const;
 type Tab = (typeof TABS)[number];
-const LABEL: Record<Tab, string> = { operations: 'Operations', access: 'Access', approval: 'Approval', connection: 'Connection', activity: 'Activity', versions: 'Versions' };
+const LABEL: Record<Tab, string> = { operations: 'Operations', access: 'Access', approval: 'Approval', connection: 'App', activity: 'Activity', versions: 'Versions' };
 const REJECT = ['Scope wider than the workflow needs', 'Missing justification', 'Use a read-only operation instead', 'Workflow not yet approved by its owner'];
 const REVOKE = ['No longer needed', 'Workflow retired', 'Security review finding', 'Granted in error'];
 
@@ -104,18 +106,18 @@ export default function ModulePage() {
   const importOps = useImportOperations();
   const discover = useDiscoverModule();
   const setConnection = useSetModuleConnection();
-  const connections = useIntegrationOptions(tab === 'connection');
+  const connections = useConnectionOptions(tab === 'connection');
 
   if (query.isPending)
     return (
-      <PageLayout title="Module" backHref="/tools">
+      <PageLayout title="Tools" backHref="/tools">
         <PageSkeleton statCards={0} tableRows={6} showToolbar={false} />
       </PageLayout>
     );
   if (query.isError)
     return (
-      <PageLayout title="Module" backHref="/tools">
-        <QueryError what="this module" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to tools', href: '/tools' }} />
+      <PageLayout title="Tools" backHref="/tools">
+        <QueryError what="these tools" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} back={{ label: 'Back to tools', href: '/tools' }} />
       </PageLayout>
     );
 
@@ -154,10 +156,10 @@ export default function ModulePage() {
       badge={<ApprovalStateBadge state={m.approvalState} />}
       description={
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <ModuleTypeBadge type={m.type} />
+          <OperationKindBadge operations={m.operations} />
           <span className="text-xs">{m.status === 'draft' ? `Draft v${m.version}` : `v${m.version}`}</span>
-          <span>Owner {m.ownerTeam}</span>
-          {m.endpoint && <span className="max-w-full truncate font-mono text-xs">{m.endpoint}</span>}
+          <span>{ownerText(m.ownerTeam)}</span>
+          {baseOfApp(m.connection) && <span className="max-w-full truncate font-mono text-xs">{baseOfApp(m.connection)}</span>}
           {m.description && <span className="w-full text-sm">{m.description}</span>}
           <ConnectionChip connection={m.connection} />
         </span>
@@ -227,7 +229,7 @@ export default function ModulePage() {
         </Tabs>
       }
     >
-      <ReadOnlyNotice noun="tool modules" />
+      <ReadOnlyNotice noun="tools" />
       <div className="grid gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           {m.pendingChanges.length > 0 && (
@@ -255,7 +257,7 @@ export default function ModulePage() {
                 {m.operations.length
                   ? 'Workflows cannot request it yet. Check the operations’ access classes and record bindings, then request a security review from the header.'
                   : 'Add its first operation, by hand or from an MCP server or OpenAPI spec. Review and approval come when you request a security review.'}
-                {m.type === 'code' && ' Code operations run in the gateway sandbox, which ships after the first workflow; until then they can be drafted and stubbed but not called.'}
+                {m.operations.some((o) => o.executor === 'code') && ' Code operations run in the gateway sandbox, which ships after the first workflow; until then they can be drafted and stubbed but not called.'}
               </AlertDescription>
             </Alert>
           )}
@@ -280,12 +282,13 @@ export default function ModulePage() {
               <AlertDescription className="flex flex-col items-start gap-2">
                 <p>
                   {m.connection && m.connection.status !== 'healthy' && m.connection.status !== 'expiring'
-                    ? `Its connection ${m.connection.name} is ${m.connection.status === 'revoked' ? 'revoked' : m.connection.status === 'error' ? 'failing to sign in' : 'expired'}. Calls fail into the workflow’s human step until it is fixed in Integrations.`
-                    : 'Calls fail into the workflow’s human step until the system responds.'}
+                    ? `Its app ${m.connection.name} is ${m.connection.status === 'revoked' ? 'revoked' : m.connection.status === 'error' ? 'failing to sign in' : 'expired'}. Calls fail into the workflow’s human step until it is fixed in Apps.`
+                    : 'Calls fail into the workflow’s human step until the app responds.'}
                 </p>
                 {m.connection && (
                   <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
-                    <Link href={`/integrations/${m.connection.id}`}>Open connection</Link>
+                    {/* An app connected by name is its own app page (c-617); the sample connection page is gone. */}
+                    <Link href={`/integrations/apps/${encodeURIComponent(m.connection.id)}`}>Open app</Link>
                   </Button>
                 )}
               </AlertDescription>
@@ -347,7 +350,7 @@ export default function ModulePage() {
                 icon={CircleDashed}
                 testId="approval-draft"
                 title="No approval gates on a draft"
-                description={`${m.operations.length ? 'Request a security review from the header when the operations are ready.' : 'Add an operation first; then request a security review from the header.'}${m.connection ? '' : ' It has no connection yet, so it calls nothing outside the gateway; attach one on the Connection tab before review.'}`}
+                description={`${m.operations.length ? 'Request a security review from the header when the operations are ready.' : 'Add an operation first; then request a security review from the header.'}${m.connection ? '' : ' It has no app yet, so it calls nothing outside the gateway; pick its app on the App tab before review.'}`}
               />
             ) : (
               <ReviewPanel major={m.major} versions={m.versions} drift={m.drift} canRequest={!reviewOpenNow} onRequest={() => setReviewOpen(true)} />
@@ -365,44 +368,18 @@ export default function ModulePage() {
                 )}
                 {!m.connection && ' A draft may have none yet.'}
               </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={m.connection?.id ?? ''}
-                  onValueChange={(v) =>
-                    setConnection.mutate(
-                      { id: m.id, connectionId: v },
-                      { onSuccess: (x) => toast.success(`Connected through ${x.connection?.name}`), onError: fail('change the connection') },
-                    )
-                  }
-                  disabled={setConnection.isPending || connections.isPending}
-                >
-                  <SelectTrigger className="min-w-64" aria-label="Connection" data-testid="module-connection-select">
-                    <SelectValue placeholder={connections.isPending ? 'Loading connections…' : 'Choose a connection'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(connections.data ?? [])
-                      .filter((c) => c.status !== 'revoked' || c.id === m.connection?.id)
-                      .map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          <span className="flex items-center gap-2">
-                            <SystemMark kind={c.kind} size="sm" /> {c.name}
-                            {c.status !== 'healthy' && <IntegrationStatusBadge status={c.status} />}
-                          </span>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/integrations?tab=catalog">
-                    <Plus className="size-4" /> Connect a new system
-                  </Link>
-                </Button>
-                {m.connection && (
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/integrations/${m.connection.id}`}>Open connection</Link>
-                  </Button>
-                )}
-              </div>
+              <ConnectionSelect
+                value={m.connection}
+                options={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+                loading={connections.isPending}
+                disabled={setConnection.isPending}
+                onChange={(v) =>
+                  setConnection.mutate(
+                    { id: m.id, connectionId: v },
+                    { onSuccess: (x) => toast.success(`Calls ${x.connection?.name} now`), onError: fail('change the app') },
+                  )
+                }
+              />
             </div>
           )}
           </BuilderFieldset>
@@ -464,7 +441,7 @@ export default function ModulePage() {
         onCreate={async () => undefined}
         onAppend={async (input) => {
           const x = await importOps.mutateAsync({ id: m.id, ...input });
-          toast.success(`Imported ${plural(input.operations.length, 'operation')}`, { description: x.drift ? 'The server no longer lists some operations this module has. See the drift notice.' : undefined });
+          toast.success(`Imported ${plural(input.operations.length, 'operation')}`, { description: x.drift ? 'The server no longer lists some operations these tools have. See the drift notice.' : undefined });
           setImportOpen(false);
         }}
       />
@@ -623,7 +600,7 @@ export default function ModulePage() {
       <DeleteDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        entityType="module"
+        entityType="tools"
         entityName={m.displayName}
         requireNameConfirmation
         description={`Its ${plural(m.operations.length, 'operation')} are removed from every agent that holds them.${m.workflows.length ? ` ${plural(m.workflows.length, 'workflow')} still ${m.workflows.length === 1 ? 'holds an approval' : 'hold approvals'}; revoke ${m.workflows.length === 1 ? 'it' : 'them'} first.` : ''}`}

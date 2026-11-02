@@ -282,13 +282,17 @@ class TeamTools(CountingTools):
 
     def __init__(self) -> None:
         super().__init__()
-        self.teams: list[str | None] = []
+        self.teams: list[tuple[str | None, str | None]] = []
 
     async def call(
         self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
     ) -> ToolResult:
-        self.teams.append(isolation.team())
+        self.teams.append((isolation.tenant(), isolation.team()))
         return await super().call(operation, input, key, generation, token)
+
+    def teams_of(self, tenant: str) -> list[str | None]:
+        """The teams `tenant`'s calls acted as: a loop drains every tenant's queued work, other tests' included."""
+        return [team for t, team in self.teams if t == tenant]
 
 
 class TeamEvents(RunEvents):
@@ -312,6 +316,8 @@ async def test_a_pass_acts_as_its_runs_team_whatever_team_the_claiming_loop_hold
     policy (fb-16aa519c)."""
     tenant, tools, saver = f"t-{uuid4().hex[:8]}", TeamTools(), InMemorySaver()
     run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
+    # The loop serves every tenant: another tenant's queued run is drained by the same pass and is not this run's call.
+    await start(engine, f"t-{uuid4().hex[:8]}", {"customerId": "C-2", "amount": 250})
     owner = f"test-{uuid4().hex[:6]}"
     events = TeamEvents(EventLog(engine))
     host = WorkerHost(
@@ -332,7 +338,7 @@ async def test_a_pass_acts_as_its_runs_team_whatever_team_the_claiming_loop_hold
         written = await EventLog(engine).run_events(run_id, run_id, 0)
     assert run["status"] == "waiting"
     assert events.teams and set(events.teams) == {"team_a"}, events.teams
-    assert tools.teams == ["team_a"]
+    assert tools.teams_of(tenant) == ["team_a"]
     assert written and written[0]["type"] == "started"
 
 

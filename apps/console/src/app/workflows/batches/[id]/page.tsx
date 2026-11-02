@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
@@ -19,7 +18,6 @@ import { Badge } from '@/components/ui/badge';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { useBatch, useBatchResultsCsv, useRetryBatch } from '@/hooks/batch-queries';
 import { useDefinition } from '@/hooks/engine-queries';
-import { useHostedForms } from '@/hooks/use-switches';
 import { plural } from '@/lib/format';
 import type { BatchRow, BatchView } from '@/lib/types/batches';
 import type { PaginationState } from '@/lib/types/pagination';
@@ -92,13 +90,6 @@ function BatchBar({ finished, failed, total }: { finished: number; failed: numbe
 
 export default function BatchPage() {
   const { id } = useParams<{ id: string }>();
-  const on = useHostedForms();
-  if (!on)
-    return (
-      <PageLayout icon={Layers} title="Batch" backHref="/workflows">
-        <EmptyState icon={Layers} title="Starting from a file is not turned on" description="Ask an admin to turn on hosted forms for this workspace." />
-      </PageLayout>
-    );
   return <Batch id={id} />;
 }
 

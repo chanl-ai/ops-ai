@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 
 from ops_policy import CipherError
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from .store import ProviderKeyStore
 
@@ -60,7 +61,9 @@ class ProviderKeys:
         if self.store is None:
             return None
         try:
-            return await self.store.value(tenant_id, name)
+            # A call that names no tenant reads the deployment's keys: the transaction acts in the tenant read.
+            with isolation.scope(tenant_id, None):
+                return await self.store.value(tenant_id, name)
         except CipherError:
             # The secrets key changed since the value was sealed: the admin saves the key again. Never the value.
             log.warning("provider_key_unreadable", name=name, tenant_id=tenant_id)

@@ -1,0 +1,6 @@
+name: Account-opening guide
+role: guide
+instructions: Follow the checklist. Refuse investment advice.
+model: default
+memory:
+  enabled: false

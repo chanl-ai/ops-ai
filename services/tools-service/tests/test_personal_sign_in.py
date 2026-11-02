@@ -20,7 +20,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import ActingForPerson, Auth, Identity, ServiceAuth, service_verifiers
-from ops_policy import AesGcmCipher
 from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator, AuthFailed
 from ops_tools.auth.tokens import Tokens
@@ -29,7 +28,7 @@ from ops_tools.modules.seed import load
 from ops_tools.store.connections import SHARED, ConnectionStore
 from ops_tools.store.modules import ModuleStore
 
-from .conftest import CONSOLE_URL, build_app, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
@@ -67,7 +66,6 @@ async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backu
         "team_id": TEAM,
         "name": "CRM",
         "auth_kind": "oauth2_auth_code",
-        "available_to": None,
         "sign_in": sign_in,
         "team_backup": backup,
         "status": "healthy",
@@ -90,7 +88,7 @@ def rig(
     engine: AsyncEngine, upstream: httpx.AsyncClient | None = None
 ) -> tuple[ConnectionStore, Tokens, Authenticator]:
     store = ConnectionStore(engine)
-    tokens = Tokens(store, AesGcmCipher(Settings().secrets_key.get_secret_value()), upstream, AnyUrl())  # pyright: ignore[reportArgumentType]
+    tokens = Tokens(store, credentials(), upstream, AnyUrl())  # pyright: ignore[reportArgumentType]
     return store, tokens, Authenticator(store, None, tokens, ConnectLinks(store, CONSOLE_URL))
 
 
@@ -157,7 +155,12 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
         await bearer(auth, tenant, conn, JAMES)
     found = await store.get(tenant, conn)
     assert found is not None and found["status"] == "healthy"
-    assert await store.token(tenant, conn, "test", JAMES.sub) is None
+    # Kept and marked refused (c-595), so Your connections says it expired; James's next call asks him to connect.
+    held = await store.token(tenant, conn, "test", JAMES.sub)
+    assert held is not None and held["refused_at"] is not None
+    with pytest.raises(AuthFailed) as again:
+        await bearer(auth, tenant, conn, JAMES)
+    assert again.value.code == "CONNECTION_NOT_LINKED" and again.value.details["reason"] == "refused"
     assert await bearer(auth, tenant, conn, MAYA) == "Bearer at-maya"
 
 

@@ -44,12 +44,17 @@ export const useFileLayout = (fileId: string) =>
 
 export interface ReadResult {
   runId: string;
-  /** The run's status when the console stopped waiting: finished, or waiting at a Human Task for a person. */
+  /** The run's status when the console stopped waiting: finished, waiting at a Human Task for a person, or `reading`
+   * while the file is still being read. */
   status: string;
   outcome: string | null;
 }
 
-const settled = (status: string) => ['succeeded', 'failed', 'cancelled', 'waiting'].includes(status);
+// A run parked on its own read (a long file read in the background, c-525) is not waiting for a person: it is said as
+// `reading`, and the file's page shows the read's fields as soon as the read is done.
+const onTheRead = (run: { status: string; waiting?: { payload?: Record<string, unknown> } | null }) =>
+  run.status === 'waiting' && run.waiting?.payload?.kind === 'external';
+const settled = (run: { status: string }) => ['succeeded', 'failed', 'cancelled', 'waiting'].includes(run.status);
 
 /**
  * Reads the file: a read request on files-service raises the file's read event, which starts the system extract
@@ -69,11 +74,11 @@ export function useStartExtraction() {
       if (req.status === 'unhandled') throw new Error('No live workflow reads files in this workspace. Publish the Extract from file workflow, then try again.');
       if (!req.runId) throw new Error('The read was requested but its run has not started yet. Look for it under Runs in a moment.');
       let run = await api.engine.run(req.runId);
-      for (let i = 0; !settled(run.status) && i < 240; i++) {
+      for (let i = 0; !settled(run) && i < 240; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         run = await api.engine.run(req.runId);
       }
-      return { runId: req.runId, status: run.status, outcome: run.outcome ?? null };
+      return { runId: req.runId, status: onTheRead(run) ? 'reading' : run.status, outcome: run.outcome ?? null };
     },
     onSuccess: (_, { fileId }) =>
       Promise.all([qc.invalidateQueries({ queryKey: ek.byFile(fileId) }), qc.invalidateQueries({ queryKey: ['files'] })]),

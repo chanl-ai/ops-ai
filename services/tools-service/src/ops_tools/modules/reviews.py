@@ -29,6 +29,10 @@ class ReviewOpener(Protocol):
         security: bool = True,
     ) -> str: ...
 
+    async def open_host(
+        self, credentials: dict[str, str], *, tenant_id: str, team_id: str, host: str, app: str
+    ) -> dict[str, Any]: ...
+
 
 class Reviews:
     def __init__(self, agents: ServiceClient) -> None:
@@ -81,3 +85,29 @@ class Reviews:
             refused.status = e.status
             raise refused from e
         return str(data["id"])
+
+    async def open_host(
+        self, credentials: dict[str, str], *, tenant_id: str, team_id: str, host: str, app: str
+    ) -> dict[str, Any]:
+        """The Security task for an app's first address on an unlisted host (c-616 S13), as agents-service answers it:
+        the one still waiting for the host, its latest refusal, or a new one. Raises when Reviews cannot be reached,
+        so nothing is held for a task that was never opened."""
+        headers = {k: v for k, v in credentials.items() if k in FORWARDED} | {"X-Team-Id": team_id}
+        try:
+            data = await self.agents.post(
+                "/v1/publish-requests/egress-hosts",
+                {"host": host, "app": app},
+                headers=headers,
+                tenant=tenant_id,
+                token_header="X-Service-Authorization",
+            )
+        except ServiceUnreachable as e:
+            raise ServiceUnavailable(
+                "Reviews could not be reached, so Security was not asked; try again shortly.",
+                code="reviews_unavailable",
+            ) from e
+        except ServiceCallError as e:
+            refused = ApiError(str(e) or "Reviews refused the request.", code=e.code or "reviews_refused")
+            refused.status = e.status
+            raise refused from e
+        return dict(data)

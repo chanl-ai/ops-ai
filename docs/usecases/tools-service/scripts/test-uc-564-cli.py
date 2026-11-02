@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from apps_walk import apps_stack, ops_cli, target
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -105,7 +106,13 @@ AUTH = {
 
 def ops(*args: str) -> subprocess.CompletedProcess[str]:
     """`ops`, as a developer runs it from the repository."""
-    return subprocess.run(["uv", "run", "--quiet", "ops", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        ["uv", "run", "--quiet", "ops", *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def broken_copy(folder: Path, old: str, new: str) -> Path:
@@ -204,16 +211,17 @@ with ExitStack() as stack:
         {"loaded": loaded, "failed": failed, "on": on.text[:200], "reached": str(reached)[:300]},
     )
 
-# 29. With plugins off, the default until their release, tools-service loads none and serves no plugin route, though
-# the install switch still says on and the same folders are named.
+# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route,
+# though the install switch still says on.
 with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
+    empty = stack.enter_context(tempfile.TemporaryDirectory(prefix="uc564-no-plugins-"))
     gw = stack.enter_context(
         tools(
             {
                 **AUTH,
-                "OPS_PLUGINS": "false",
-                "OPS_PLUGIN_PATHS": folders,
+                "OPS_PLUGINS_DIR": empty,
+                "OPS_PLUGIN_PATHS": "[]",
                 "OPS_CONSOLE_URL": "https://console.acme.test",
             }
         )
@@ -229,10 +237,40 @@ with ExitStack() as stack:
     rows = data(gw.get("/v1/grantable-operations", headers=headers | {"X-Team-Id": "team_ops"})) or []
     names = [str(r["name"]) for r in rows]
     check(
-        "29 with plugins off, no plugin loads, the plugin routes answer 404 and no plugin tool can be granted",
+        "29 with no plugin installed, none loads, the plugin routes answer 404 and no plugin tool can be granted",
         listed.status_code == 404 and team_on.status_code == 404 and bool(names)
         and not any(n.startswith(("salesforce_", "reach_")) for n in names),
         {"plugins": listed.status_code, "team": team_on.status_code, "tools": names},
     )  # fmt: skip
+
+# 44 (group D). A builder lists an app's tools and runs one Mock and Real with `ops tools`, signed in as their
+# dev role the way `make api` signs in, on the Apps stack (docs/usecases/lib/apps_walk.py) and its fake system.
+with apps_stack() as w:
+    app = "plugin:test.header-key"
+    account = w.turn_on("admin", "test.header-key", credentials={"key": w.m["secrets"]["key"]})
+    given = Path(tempfile.mkdtemp(prefix="uc564-cli-")) / "input.json"
+    given.write_text(json.dumps({"id": "rec-1042"}))
+    listed_code, listed = ops_cli("builder", "tools", "list", "--app", app)
+    sent = len(w.m["fake"].state()["calls"])
+    mock_code, mocked = ops_cli(
+        "builder", "tools", "run", app, "header_key_get_record", "--mock", "--input", str(given)
+    )
+    after_mock = len(w.m["fake"].state()["calls"])
+    real_code, real = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--real", "--input", str(given))
+    check(
+        "44 `ops tools list --app` lists the tool, `ops tools run --mock` reaches nothing, and `--real` reads the "
+        "record with the team's account",
+        account != "con_missing"
+        and listed_code == 0
+        and "header_key_get_record" in str(listed)
+        and mock_code == 0
+        and after_mock == sent
+        and real_code == 0
+        and "rec-1042" in str(real),
+        (
+            target("L2, P1 and S3"),
+            {"list": (listed_code, listed), "mock": (mock_code, mocked), "real": (real_code, real)},
+        ),
+    )
 
 finish()

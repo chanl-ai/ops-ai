@@ -53,6 +53,8 @@ class CallPeople:
         return person_of((await first_run(runs, run)).get("created_by")) if run is not None else None
 
     async def headers(self, ctx: RunContext, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]:
+        if ctx.team_account:
+            return {}
         email = await self.email(ctx)
         if email is None or not tenant_id or not team_id:
             return {}

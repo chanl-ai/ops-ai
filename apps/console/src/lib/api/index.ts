@@ -65,7 +65,7 @@ function createApi(): OpsApi {
   }
   if (knowledgeUrl) api = { ...api, ...createKnowledgeOnlyHttp(knowledgeUrl) };
   if (filesUrl) api = { ...api, files: { ...api.files, ...createFilesServiceHttp(filesUrl), storage: createStorageHttp(filesUrl) } };
-  if (modelsUrl) api = { ...api, providerKeys: createModelsHttp(modelsUrl) };
+  if (modelsUrl) api = { ...api, ...createModelsHttp(modelsUrl) };
   if (documentsUrl) api = { ...api, files: { ...api.files, documentTypes: createDocumentsHttp(documentsUrl), extractions: createExtractionsHttp(documentsUrl), layouts: createLayoutsHttp(documentsUrl) } };
   // No service owns notifications yet: once any area is on a real service, the mock feed is not shown beside it.
   if (!baseUrl && onRealService) api = { ...api, notifications: createNoNotifications() };
@@ -112,11 +112,10 @@ const AREAS: { prefix: string; served: boolean }[] = [
   // Background processes are agents-service's /v1/background (c-516).
   { prefix: '/logs/background', served: Boolean(registryUrl) },
   { prefix: '/tools', served: Boolean(toolsUrl) },
-  { prefix: '/logs/tool-calls', served: Boolean(toolsUrl) },
   { prefix: '/settings/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/security/egress', served: Boolean(toolsUrl) },
   { prefix: '/settings/secrets', served: Boolean(toolsUrl) },
-  { prefix: '/settings/security/secrets', served: Boolean(toolsUrl) },
+  { prefix: '/integrations/credentials', served: Boolean(toolsUrl) },
   { prefix: '/knowledge', served: Boolean(knowledgeUrl) },
   // A source's page sits under Connections but its data and settings are kb-service's.
   { prefix: '/integrations/sources', served: Boolean(knowledgeUrl) },
@@ -136,7 +135,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/logs/audit', served: onPlatform },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's (c-558).
-  { prefix: '/settings/account/connections', served: Boolean(toolsUrl) },
+  { prefix: '/integrations/my-accounts', served: Boolean(toolsUrl) },
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
@@ -161,6 +160,8 @@ export const policiesOnService = onPlatform || Boolean(baseUrl);
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */
 export const filesOnService = Boolean(filesUrl) && !baseUrl;
+/** A signed form link opens on the embed app; without its origin Share as a form is members-only. */
+export const publicFormPage = Boolean(embedUrl);
 /** What's new and Coming next as the build read them (next.config.ts, c-510); lib/changelog.ts parses them. */
 export const changelogSource = process.env.OPS_CHANGELOG ?? '[]';
 export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
@@ -176,9 +177,9 @@ export const invitesToCurrentTeam = onPlatform;
 
 export function isPreviewPath(pathname: string): boolean {
   if (baseUrl || !onRealService) return false;
-  // With real connections on, the Connections grid reads tools-service (c-580); a connection's own pages under it stay
-  // sample data until they move.
-  if (realConnections && pathname === '/integrations') return false;
+  // The Connections catalog and each app's page read tools-service (c-580, c-607); a connection's older pages under it
+  // stay sample data until they move.
+  if (pathname === '/integrations' || pathname.startsWith('/integrations/apps/')) return false;
   const under = (prefix: string) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`));
   const area = AREAS.filter((a) => under(a.prefix)).sort((x, y) => y.prefix.length - x.prefix.length)[0];
   return !!area && !area.served;
@@ -231,19 +232,6 @@ export const brand = {
 
 /** The Feedback button in development (c-504): `1` when `make up` found the ui-feedback collector running. */
 export const uiFeedback = process.env.NEXT_PUBLIC_UI_FEEDBACK;
-/**
- * Each person's own sign-in to a connected system (c-558): the chat's Connect card, the sign-in pages, Your connections
- * and a connection's sign-in setting. Off unless NEXT_PUBLIC_OPS_PERSONAL_SIGNIN is `1` or `true`, so a release can
- * carry the screens before they are offered; off, a refused call shows as any failed tool call.
- */
-export const personalSignIn = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_PERSONAL_SIGNIN ?? '');
-/**
- * Connecting systems for real (c-580): Connections as a grid of the team's systems, one connect dialog with keys or the
- * team's own app for test and production, health per environment, the sending policy and an operation's mock answers.
- * Off unless NEXT_PUBLIC_OPS_REAL_CONNECTIONS is `1` or `true`, so a release carries the screens before they are offered;
- * off, Connections, Policies and the operation page stay as they ship.
- */
-export const realConnections = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_REAL_CONNECTIONS ?? '');
 /** Each service's address as the console is told it, for the generated SDK client (lib/api/ops-sdk.ts, c-580). */
 export const serviceUrls = {
   platform: platformUrl,
@@ -257,23 +245,6 @@ export const serviceUrls = {
 /**
  * The release switches a changelog entry may name (lib/changelog.ts): an entry for a feature behind one shows in What's
  * new only while it is on. Each is read by its full name, as Next inlines only a literal `process.env.NEXT_PUBLIC_*`
- * reference; scripts/changelog-check.mjs keeps the same names.
+ * reference; scripts/changelog-check.mjs keeps the same names. Empty: a shipped feature has no switch (owner, 10-31).
  */
-export const releaseSwitches: Readonly<Record<string, boolean>> = {
-  NEXT_PUBLIC_OPS_PLUGINS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_PLUGINS ?? ''),
-  NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: personalSignIn,
-  NEXT_PUBLIC_OPS_REAL_CONNECTIONS: realConnections,
-  NEXT_PUBLIC_OPS_DOCUMENT_READS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_DOCUMENT_READS ?? ''),
-  NEXT_PUBLIC_OPS_HOSTED_FORMS: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_HOSTED_FORMS ?? ''),
-  NEXT_PUBLIC_OPS_WORKFLOW_BUILDER: ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_WORKFLOW_BUILDER ?? ''),
-};
-/**
- * Reading a document without a document type (c-535): Full text and "Let the model propose the fields" in the Read
- * dialog, the file's Text tab, saving a proposed read as a document type, and those choices in the Extract from file
- * step. Off unless NEXT_PUBLIC_OPS_DOCUMENT_READS is `1` or `true`; the API serves them either way.
- */
-export const documentReads = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_DOCUMENT_READS ?? '');
-/** Sharing a workflow as a hosted form and starting runs from a file (c-535). Off unless NEXT_PUBLIC_OPS_HOSTED_FORMS is `1` or `true`. */
-export const hostedForms = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_HOSTED_FORMS ?? '');
-/** Describing a workflow to get it drawn from the existing steps (c-535). Off unless NEXT_PUBLIC_OPS_WORKFLOW_BUILDER is `1` or `true`. */
-export const workflowBuilder = ['1', 'true'].includes(process.env.NEXT_PUBLIC_OPS_WORKFLOW_BUILDER ?? '');
+export const releaseSwitches: Readonly<Record<string, boolean>> = {};

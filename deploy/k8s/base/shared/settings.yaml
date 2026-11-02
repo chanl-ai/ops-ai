@@ -21,6 +21,7 @@ data:
   OPS_OPA_URL: http://opa:8181
   OPS_FILES_DIR: /data/files
   OPS_KB_FILES_DIR: /data/kb-files
+  OPS_PLUGINS_DIR: /plugins
   OPS_FILES_SCANNING: eicar
   OPS_MAILBOX_SOURCE: none
   OPS_MAIL_PROVIDER: none

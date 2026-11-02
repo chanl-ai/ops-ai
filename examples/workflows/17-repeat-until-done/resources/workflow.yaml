@@ -1,0 +1,41 @@
+schemaVersion: 2
+id: repeat_until_done
+name: Repeat until done
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Counter
+- id: loop
+  type: ops.flow.repeat
+  typeVersion: 1
+  name: Until done
+  parameters:
+    conditions:
+    - left: $.input.done
+      op: eq
+      right: true
+    max: 2
+- id: finished
+  type: ops.flow.end
+  typeVersion: 1
+  name: Done
+  parameters:
+    outcome: done
+    output: $.nodes.loop.out
+- id: stop
+  type: ops.flow.end
+  typeVersion: 1
+  name: Exhausted
+  parameters:
+    outcome: exhausted
+    output: $.nodes.loop.out
+connections:
+- from: {node: start, port: payload}
+  to: {node: loop, port: in}
+- from: {node: loop, port: again}
+  to: {node: loop, port: in}
+- from: {node: loop, port: done}
+  to: {node: finished, port: in}
+- from: {node: loop, port: exhausted}
+  to: {node: stop, port: in}

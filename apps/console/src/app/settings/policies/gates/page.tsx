@@ -23,6 +23,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count } from '@/lib/format';
 import type { GatePolicy } from '@/lib/types/domain';
 import type { PolicyFilters } from '@/lib/types/query';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = GatePolicy & { onRowClick: (p: GatePolicy) => void };
 
@@ -157,15 +158,7 @@ export default function GatePoliciesPage() {
             { label: 'Change reviewers', icon: Users, variant: 'outline', onClick: (rows) => setBulk({ kind: 'reviewers', rows }) },
             { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rows) => setBulk({ kind: 'delete', rows }) },
           ]}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={ShieldQuestion}

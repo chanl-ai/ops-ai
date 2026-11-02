@@ -285,6 +285,17 @@ function regionsOf(r: Review, details: KindNode[]): TaskView {
       legacy: false,
     };
   }
+  if (r.egressHost) {
+    const { host, app, requestedBy } = r.egressHost;
+    return {
+      question: r.title,
+      evidence: [],
+      decide: [{ type: 'entity', title: 'The request', fields: [{ label: 'Host', value: host }, { label: 'App', value: app }, { label: 'Asked by', value: requestedBy }] }],
+      details,
+      consequence: `Approve: ${host} is added to the allowed hosts and ${app} can call it. Refuse: ${requestedBy} sees your reason.`,
+      legacy: false,
+    };
+  }
   const special = r.toolModule || r.publish || r.modelValidation || r.skillPublish || r.agentPublish || r.templateSubmission;
   if (special) return { question: r.title, evidence: [], decide: [], details, consequence: '', legacy: true };
   // A held action: the document it is about and the agent's reason first; then what each choice does and sends, as

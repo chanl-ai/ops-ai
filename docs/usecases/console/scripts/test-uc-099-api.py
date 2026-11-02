@@ -1,4 +1,4 @@
-"""uc-099 a viewer sees the team's records read-only, api layer (the server half, c-115):
+"""uc-099 a viewer sees the team's records read-only, api layer (the server half):
 docs/usecases/console/viewer-sees-read-only-pages.md. platform-service signs the seeded people in; agents-service and
 kb-service verify its tokens. James (builder on team_ops) makes one of each record; Ravi (viewer) and Maya (reviewer)
 then send every write the console's builder pages send, with the bodies they send, straight to the services, and each

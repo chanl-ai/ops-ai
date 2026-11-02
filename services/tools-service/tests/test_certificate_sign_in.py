@@ -17,13 +17,12 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
-from ops_policy import AesGcmCipher
-from ops_service_kit.settings import Settings
 from ops_tools.auth import STRATEGIES, Prepared, StrategyInput
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.auth.tokens import AuthFailed, ClientProof, Tokens
 from ops_tools.store.connections import ConnectionStore
 
+from .conftest import credentials
 from .test_assertion import pair, parts
 from .test_auth_strategies import AnyUrl, _connection  # pyright: ignore[reportPrivateUsage]
 from .test_connections import admin, client  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -111,8 +110,8 @@ def token_endpoint(seen: list[dict[str, str]]) -> httpx.AsyncClient:
 async def tokens_for(engine: AsyncEngine, tenant: str, seen: list[dict[str, str]]) -> tuple[Tokens, str]:
     store = ConnectionStore(engine)
     conn = await _connection(store, tenant)
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    return Tokens(store, cipher, token_endpoint(seen), AnyUrl()), conn  # pyright: ignore[reportArgumentType]
+    vault = credentials()
+    return Tokens(store, vault, token_endpoint(seen), AnyUrl()), conn  # pyright: ignore[reportArgumentType]
 
 
 async def test_a_token_request_sends_a_signed_assertion_and_no_client_secret(engine: AsyncEngine, tenant: str) -> None:

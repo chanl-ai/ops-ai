@@ -101,34 +101,36 @@ Status is read from the engine's type registry (`packages/ops_engine`). Types th
 |---|---|---|---|---|---|
 | Trigger | Request (`ops.trigger.request`) | Starts a run from an authenticated call or a system event; payload checked against the input schema | payload | none | built |
 | Trigger | Email received (`ops.trigger.email`) | A watched mailbox; attachments stored as files, never parsed here | payload | none | built |
-| Trigger | Service event (`ops.trigger.event`) | Starts a run when a service reports an event, such as a file deleted or a tool access request; only a system workflow the platform maintains is started by one | payload | none | built |
-| Trigger | Schedule, batch file, chat message | One run per tick, per CSV row, or per message | tick, row, message | none | planned as trigger adapters |
+| Trigger | Service event (`ops.trigger.event`) | Starts a run when a service reports an event, such as a file deleted or a tool access request; only a system workflow the platform maintains is started by one. An input schema, when set, is also the form Start run shows | payload | none | built |
+| Trigger | Schedule (`ops.trigger.schedule`) | Starts a run when the platform clock reaches the due time; the same key fires once | payload | none | built |
+| Trigger | Batch file, chat message | One run per CSV row or per message | row, message | none | planned as trigger adapters |
 | Data | Set fields (`ops.data.set`) | Maps and renames, with no model; cannot fail | out | none | built |
 | Data | Match (`ops.data.match`) | Matches a record by name plus another identifier | matched, none | none | built |
 | Data | Combine (`ops.data.combine`) | Puts facts from several steps together | out | none | built |
 | Data | Calculate (`ops.data.compute`) | Works out a value, such as the smaller of an asked amount and a balance | out, error | none | built |
 | Data | Parse attachments | Message body and attachments to documents with pages; a file with no text layer goes out the `unreadable` port | pages, unreadable | read | planned; reading now runs in Extract with Detect |
-| Data | Transform | One JMESPath expression | out, error | none | planned |
-| Data | Filter or dedupe | Keeps or drops items | kept, dropped | none | planned |
+| Data | Transform (`ops.data.transform`) | One path expression; a missing path takes error | out, error | none | built |
+| Data | Filter (`ops.data.filter`) | Keeps or drops items by field predicates | kept, dropped, error | none | built |
 | Data | Code | A sandboxed, deterministic script | out, error | none | deferred |
 | AI | Agent (`ops.ai.agent`) | Runs a published agent's turn on the step's prompt and mapped input, with the agent's own tools and knowledge; with an output schema its answer must match | ok, error | model | built |
 | AI | Extract (`ops.ai.extract`) | Fields from a document by schema, or Detect, which recognises the document type first | ok, error | model | built |
 | AI | Classify, Summarise, Extract from text, Draft (`ops.ai.classify`, `ops.ai.summarise`, `ops.ai.extractText`, `ops.ai.draft`) | One model call each, with no saved agent | one per label (classify), out, error | model | built |
-| AI | Answer from knowledge | Retrieval with citations; knowledge bases chosen on the node | found, notFound, error | model, read | planned |
+| AI | Retrieve from knowledge (`ops.ai.knowledge`) | Retrieval with citations; knowledge bases chosen on the node | found, notFound | read | built |
 | Action | Call a tool (`ops.action.tool`) | A governed call through the tool gateway; the operation's approval policy applies | ok, refused, error | read or write | built |
 | Action | Start workflow (`ops.action.workflow`) | Starts another workflow of the team once or for each item, keyed so a retry never starts a second; with Wait for them on, it pauses until every child has ended | started, error; done, timeout when waiting | write | built |
 | Action | Open case, Add to case (`ops.action.openCase`, `ops.action.addToCase`) | Opens a case or adds a note to one | opened or added, error | write | built |
 | Action | Save data on file (`ops.files.setData`) | Keeps a read on the file it came from | ok, error | write | built |
-| Action | Send message, reply | Email or notification on the channel that started the run; approval when policy says | sent, refused, error | write | planned (reply is a tool call today) |
+| Action | Send a message (`ops.action.send`) | Reply on the channel that started the run through send_reply; one attempt | sent, error | write | built |
 | Flow | If (`ops.flow.if`) | Routes by rules over fields | true, false | none | built |
 | Flow | Switch (`ops.flow.switch`) | Named cases, with an otherwise port | one per case, otherwise | none | built |
 | Flow | Join (`ops.flow.join`) | Waits for every branch that can still arrive, then runs once with each branch's output | out | none | built |
 | Flow | Wait (`ops.flow.wait`) | Pauses for a duration, or until a date read from a step (error when the value is not a date) | out, error | none | built |
 | Flow | Loop over items | Runs a branch per item in parallel, then joins | each, done | none | planned; Run workflow for each item covers most uses |
-| Flow | Repeat | A bounded while or until | again, done, exhausted | none | planned |
+| Flow | Repeat (`ops.flow.repeat`) | A bounded while or until; the cap is a parameter so the loop cannot spin | again, done, exhausted | none | built |
 | Flow | End (`ops.flow.end`) | Names the outcome, the output and whether the run counts as succeeded or failed | none | none | built |
 | Human | Human review (`ops.flow.humanReview`) | Options as out ports (Approve and Reject by default), approvers from the operation's policy or the node, deadline, reminders, step-up | one per option; timeout when it can expire | human | built |
-| Human | Ask, handoff | Asks the customer and waits for the reply by conversation key; moves a conversation to a live team | answered, timedOut; closed | wait | planned |
+| Human | Ask (`ops.flow.ask`) | Pauses for a reply on a conversation key; a zero deadline times out | replied, timedOut | human | built |
+| Human | Handoff | Moves a conversation to a live team | closed | wait | planned |
 
 ## Files own parsing
 

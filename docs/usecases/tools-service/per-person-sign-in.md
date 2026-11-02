@@ -18,9 +18,8 @@ the request body.
 | S3 | An admin tests the connection, and a run with nobody behind it uses the team account only when the backup is on | api | 8-9 | 9 |
 | S4 | A sign-in that lacks a scope is asked again, and a person who disconnects is asked again | api | 10-11 | 11 |
 | S5 | A person asked in chat connects in a pop-up and the chat goes on as them | ui | 12-13, 15 | 13 |
-| S6 | A person sees their own sign-ins in Your connections and disconnects one | ui | 14, 16 | 16 |
-| S7 | An admin sets whose account a connection uses and tests it with their own | ui | 17-18 | 18 |
-| S8 | With the console switch off, none of this shows | ui | 19 | 19 |
+| S6 | A person sees their own sign-ins in My accounts and disconnects one | ui | 14, 16 | 16 |
+| S7 | An admin sets who signs in on the app's Settings and connects their own account there | ui | 17-18 | 18 |
 
 ## Preconditions
 
@@ -49,21 +48,21 @@ the request body.
 | 9b | The update operation is marked `needsPerson` and republished; the same call with nobody behind it, backup still on | `CONNECTION_NOT_LINKED` with reason `needs_person`; the team account is not used |
 | 10 | Priya, signed in from the connection itself in step 8 (its scopes only, no `cases.write`), runs | `CONNECTION_NOT_LINKED` with reason `insufficient_scope` and a link asking for `cases.write` |
 | 11 | James lists `GET /v1/me/connections`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run asks him to connect again |
-| 12 | With `NEXT_PUBLIC_OPS_PERSONAL_SIGNIN` on, James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
+| 12 | James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
 | 13 | He presses Connect, signs in to Salesforce in the pop-up as `handler@kestrel.example` | The pop-up closes, the card reads Connected, the chat sends a follow-up and the agent's new call updates the case: Salesforce records exactly one edit, his |
-| 14 | He opens Your connections from the person menu | His Salesforce sign-in is listed with its account |
-| 15 | At 375 px, Your connections and the chat with the card | Neither page scrolls sideways |
-| 16 | He disconnects on Your connections | The list is empty and `GET /v1/me/connections` returns none |
-| 17 | Priya opens the connection's page and chooses "Each person, team account as backup" | Three settings are offered with "Each person's own account" chosen; after Save the connection reads `person_or_team` with the backup on |
-| 18 | She connects her own account from the page and presses Test connection | The page shows 200; the connection keeps a passing health with her own account |
-| 19 | The console built without the switch | No Your connections in the person menu, and its page is not found |
+| 14 | He opens My accounts from the person menu (Your connections until an earlier change; the old address opens it) | His Salesforce sign-in is listed with its account |
+| 15 | At 375 px, My accounts and the chat with the card | Neither page scrolls sideways |
+| 16 | He disconnects on My accounts (the old address opens it) | His row offers Connect again and `GET /v1/me/connections` returns none |
+| 17 | Priya opens the old connection address, then Settings on the app's page, and turns Everyone signs in with their own account off and on | It reads on; off saves `team`, on saves `person` again |
+| 18 | Priya opens the old connection address and presses Connect my account on the app's page | The Accounts row reads Connected as `lead@kestrel.example`, and `GET /v1/me/connections` lists it |
+| 19 | Retired: the console switch was removed (af724998) | |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-558-api.py` | passing (2026-10-29) |
-| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-10-29); the console switch `NEXT_PUBLIC_OPS_PERSONAL_SIGNIN` on |
+| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-10-29) |
 
 ## Non-vacuous check
 

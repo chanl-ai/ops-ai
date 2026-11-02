@@ -1,4 +1,4 @@
-// uc-127 the live console follows the owner's layout rules, ui layer: docs/usecases/console/layout-rules-sweep.md.
+// uc-127 the live console follows the maintainers' layout rules, ui layer: docs/usecases/console/layout-rules-sweep.md.
 // Signed in through platform-service as James (builder). One check per rule, on the pages that have the control.
 import { PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

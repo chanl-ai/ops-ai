@@ -11,7 +11,7 @@ await withUiStack(async (consoleUrl) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
 
-    // An operation is tested on its own workbench page (c-088): the module page has no side panel, and a row opens it.
+    // An operation is tested on its own workbench page: the module page has no side panel, and a row opens it.
     await page.goto(`${consoleUrl}/tools/${MODULE}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     const row = page.getByRole('row', { name: /get_loan_account/ });
     await row.waitFor({ timeout: 120_000 });

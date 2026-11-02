@@ -6,7 +6,7 @@ docs/usecases/agents-service/a-file-is-extracted-and-purged.md.
 Own services, no real model: models-service on the fake OpenAI with the levy notice's extraction rule, kb-service's
 files-service with scanning off delivering its service events to this run's agents-service, documents-service with
 the demo's document types, agents-service, and a workflow worker. The event workflows (system_extract,
-extraction_corrected_save, file_deleted_purge) are the ones agents-service ships (c-250, c-252)."""
+extraction_corrected_save, file_deleted_purge) are the ones agents-service ships."""
 
 from __future__ import annotations
 

@@ -1,0 +1,34 @@
+id: narrow-one-conversation
+title: Narrow one conversation
+track: agent
+status: built
+difficulty: guided
+outcome: Narrow one conversation to a model, knowledge and tool subset.
+capabilities:
+- id: agent.overrides
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/widen.json
+- fixtures/narrow.json
+expected:
+- expected/refused.json
+- expected/narrowed.json
+- expected/tool.json
+surfaces:
+  ui: built
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- A widen thread override is refused with 422 naming the field
+- A narrow override of model, knowledge and tools applies and is recorded
+- Effective settings appear on the thread and the turn
+gaps:
+- ops chat send
+- agent.eval
+- high-level ops.agents.chat overrides

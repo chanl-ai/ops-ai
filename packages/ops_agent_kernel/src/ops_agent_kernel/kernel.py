@@ -24,6 +24,7 @@ from pydantic_ai import (
     ToolApproved,
     ToolDenied,
 )
+from pydantic_ai.capabilities import ToolSearch
 from pydantic_ai.exceptions import ApprovalRequired, ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -76,6 +77,10 @@ from .types import (
 )
 
 KNOWLEDGE_K = 3
+
+
+# The server a call to a name outside the agent's grants is recorded under: it reached none.
+UNGRANTED = "none"
 
 
 def refusal_code(body: object) -> str | None:
@@ -131,13 +136,15 @@ class _TurnState:
             key = pending.key
         else:
             key = f"{self.req.run_id}:{self.req.turn_id}:{self.step}:{len(self.order)}"
-        grant = self.grants[tool]
+        # A name the agent is not granted (guessed, or a deferred tool not yet found) is recorded with no server; the
+        # model gets pydantic-ai's retry and nothing is sent anywhere.
+        grant = self.grants.get(tool)
         rec = ToolCallRecord(
             tool_call_id=tool_call_id,
             key=key,
             tool=tool,
-            server=grant.server,
-            access=grant.access,
+            server=grant.server if grant else UNGRANTED,
+            access=grant.access if grant else "read",
             input=arguments,
             input_hash=input_hash(arguments),
             status="running",
@@ -271,7 +278,7 @@ def _search(state: _TurnState) -> Tool[None]:
     )
 
 
-def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]:
+def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: bool = False) -> Tool[None]:
     resume = state.req.resume
     token = resume.approval_token if resume and resume.decision == "approved" else None
 
@@ -319,6 +326,8 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant) -> Tool[None]
     )
     # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
     tool.requires_approval = grant.gated
+    # Above the agent's tool-search threshold its schema is sent only once a search finds it (c-610).
+    tool.defer_loading = deferred
 
     async def offered(_ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
         return None if state.tools_closed else tool_def
@@ -448,6 +457,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # call with no tools (memory extraction, a workflow's AI step) answers with its schema's JSON only, so it is offered
     # nothing to call.
     builtins = bool(req.tools) or req.output_schema is None
+    # Many tools: each is deferred and pydantic-ai's tool search (search.strategy) reveals the ones the model finds;
+    # its `search_tools` replaces the kernel's own, so that one is not added (c-610).
+    above = req.settings.tool_search_above
+    searching = builtins and above is not None and len(req.tools) > above
     state = _TurnState(
         req=req,
         grants={
@@ -455,8 +468,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             **({present.NAME: present.grant(req.settings), search.NAME: search.SEARCH} if builtins else {}),
         },
     )
-    tools = [_tool(state, ports, g) for g in sorted(req.tools, key=lambda t: t.name)] + (
-        [_present(state), _search(state)] if builtins else []
+    tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
+        [_present(state), *([] if searching else [_search(state)])] if builtins else []
     )
     if (load_grant := skillset.grant(req.settings.skills)) is not None:
         state.grants[skillset.NAME] = load_grant
@@ -599,12 +612,14 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if req.output_schema is not None
         else str
     )
+    finder = ToolSearch[None](strategy=search.strategy, max_results=search.LIMIT, tool_description=search.DEFERRED)
     agent = Agent[None, Any](
         model,
         deps_type=type(None),
         output_type=[answer_type, DeferredToolRequests],
         tools=tools,
         instructions=system_prompt,
+        capabilities=[finder] if searching else None,
     )
     if req.output_schema is not None:
         # The output tool carries the schema to the model but does not hold the answer to it; this does. A mismatch
@@ -668,6 +683,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                             continue
                         if isinstance(event.part, RetryPromptPart):
                             rec.status, rec.output = "error", event.part.model_response()
+                        elif rec.status == "running":
+                            # A call no kernel function recorded (pydantic-ai's search_tools): its result as returned.
+                            rec.status, rec.output = "ok", event.part.content
                         yield ToolOutput(rec)
                     elif isinstance(event, AgentRunResultEvent):
                         output = event.result.output

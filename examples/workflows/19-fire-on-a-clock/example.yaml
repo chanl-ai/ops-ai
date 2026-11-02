@@ -1,0 +1,25 @@
+id: fire-on-a-clock
+title: Fire on a clock
+track: workflow
+status: built
+difficulty: guided
+outcome: A due tick starts one run. A second tick with the same key does not.
+capabilities:
+- id: ops.trigger.schedule
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/tick.json
+expected:
+- expected/once.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- the work-queue clock starts the run
+- run key makes a retry one run

@@ -46,7 +46,7 @@ await withUiStack(
       // The spend is the stored reply's, read once the thread reloads after the turn.
       await panel.getByTestId('test-step-spent').getByText(/tokens?/).first().waitFor({ timeout: 30_000 }).catch(() => {});
       const spent = await panel.getByTestId('test-step-spent').innerText();
-      check('3b Why says what the reply spent: tokens, cost and seconds (c-286)', /\d[\d,]* tokens?/.test(spent) && /\d+\.\d{2}/.test(spent) && / s\b/.test(spent), spent);
+      check('3b Why says what the reply spent: tokens, cost and seconds', /\d[\d,]* tokens?/.test(spent) && /\d+\.\d{2}/.test(spent) && / s\b/.test(spent), spent);
       await page.screenshot({ path: join(SHOTS, 'agent-test-panel-why.png'), fullPage: false });
 
       await panel.getByRole('tab', { name: 'Versions' }).click();
@@ -72,7 +72,7 @@ await withUiStack(
       check('5 at 400 px, Test brings the panel into view with its composer usable and the test still there', !!at && at.y < 860 && at.y + 40 > 0 && (await panel.getByLabel('Message').isEditable()) && kept, { at, kept });
       await page.screenshot({ path: join(SHOTS, 'agent-test-panel-400.png'), fullPage: false });
 
-      // Compare (c-286): a saved draft and the published version answer the same question side by side, each with its
+      // Compare: a saved draft and the published version answer the same question side by side, each with its
       // spend. The draft is saved over the API, as the page's autosave would.
       const signIn = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'j.richardson@harborpine.example', password: 'northfield-demo' }) });
       const J = { Authorization: `Bearer ${(await signIn.json()).data.token}`, 'Content-Type': 'application/json' };

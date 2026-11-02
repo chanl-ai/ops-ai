@@ -23,21 +23,24 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 from ops_access import Access
-from ops_identity import Auth, CurrentPrincipal, current_service, install_auth
+from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
 from ops_metering import Price, Usage, cost
-from ops_policy import AesGcmCipher, Cipher
+from ops_policy import CredentialStore
+from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.http import Envelope, error_body, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.database import Database
 
+from .connection_settings import azure_openai_problem
 from .provider_keys import ProviderKeys
-from .providers import ProviderError, StreamUsage, provider_for
+from .providers import AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
 from .schemas import (
     Admission,
     AliasOut,
@@ -60,16 +63,44 @@ class _Wire(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
+# The wire name of each field connection_problem names.
+_FIELD = {"endpoint": "baseUrl", "api_version": "apiVersion"}
+
+
+def connection_problem(kind: str, base_url: str | None, api_version: str | None, region: str | None) -> str | None:
+    """Why a connection of `kind` with these values cannot be called, naming the field; None when it can. Azure's rule
+    is the install settings' own (`connection_settings.azure_openai_problem`); only Azure connections carry an
+    api-version or a region."""
+    if kind == "azure-openai":
+        problem = azure_openai_problem(base_url, api_version)
+        return f"{_FIELD[problem[0]]} {problem[1]}" if problem else None
+    if api_version is not None or region is not None:
+        return "apiVersion and region apply to azure-openai connections only"
+    if kind == "openai-compatible" and not base_url:
+        return "baseUrl is missing: the endpoint's base URL, ending in /v1"
+    return None
+
+
 class ProviderIn(_Wire):
-    name: str
-    type: str = Field(pattern="^(openai-compatible|anthropic|scripted)$")
-    base_url: str | None = None
-    key_ref: str | None = None
+    name: str = Field(min_length=1, max_length=120)
+    type: str = Field(pattern="^(openai-compatible|azure-openai|anthropic|scripted)$")
+    base_url: str | None = Field(default=None, max_length=400)
+    key_ref: str | None = Field(default=None, max_length=120)
+    api_version: str | None = Field(default=None, max_length=32)
+    region: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _callable(self) -> ProviderIn:
+        if (why := connection_problem(self.type, self.base_url, self.api_version, self.region)) is not None:
+            raise ValueError(why)
+        return self
 
 
 class ProviderRebind(_Wire):
     base_url: str = Field(min_length=1, max_length=400)
-    key_ref: str | None = None
+    key_ref: str | None = Field(default=None, max_length=120)
+    api_version: str | None = Field(default=None, max_length=32)
+    region: str | None = Field(default=None, max_length=64)
 
 
 class ProviderKeyIn(_Wire):
@@ -164,6 +195,20 @@ def _alias_view(r: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _provider_view(r: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "type": r["type"],
+        "baseUrl": r["base_url"],
+        "keyRef": r["key_ref"],
+        "apiVersion": r["api_version"],
+        "region": r["region"],
+        "observedRegion": r["observed_region"],
+        "regionMismatch": region_mismatch(r["observed_region"], r["region"]),
+    }
+
+
 def _provider_key_view(r: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "name": r["name"],
@@ -192,13 +237,13 @@ def create_models_app(
     provider_secrets: Mapping[str, str] | None = None,
     overlap_seconds: int = 900,
     upstream: httpx.AsyncClient | None = None,
-    cipher: Cipher | None = None,
+    credentials: CredentialStore | None = None,
     keys_tenant: str | None = None,
     security_team: str | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
-    Provider keys are the accounts' own (`provider_keys`), sealed with `cipher` (the settings' secrets key by
+    Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `keys_tenant` is the deployment's
     tenant, whose key a call naming no tenant uses; `security_team` is where an account admin holds settings.manage."""
     http = upstream or httpx.AsyncClient(timeout=60)
@@ -218,16 +263,16 @@ def create_models_app(
     install_error_handlers(app)
     settings = Settings()
     if settings.cors_origins:
-        # The console calls the provider key routes from the browser (Settings > Model providers).
+        # The console calls the provider key and connection routes from the browser (Settings > Model providers).
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
-            allow_methods=["GET", "PUT", "DELETE"],
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
             allow_headers=["Content-Type", "Accept", "Authorization", "X-Team-Id"],
             max_age=600,
         )
     install_auth(app, auth or Auth.from_settings(settings, audience="models"))
-    key_vault = ProviderKeyStore(db, cipher or AesGcmCipher(settings.secrets_key.get_secret_value()))
+    key_vault = ProviderKeyStore(db, credentials or credential_store(settings))
     keys = ProviderKeys(key_vault, provider_secrets, tenant=keys_tenant or settings.model_keys_tenant)
     access = Access(security_team=security_team or settings.security_team_id)
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
@@ -238,59 +283,83 @@ def create_models_app(
     # role check, and only aliases, admit and calls stay service-only.
     guard = Depends(current_service)
 
+    async def connections_caller(p: CurrentTenantCaller) -> Principal:
+        """Provider connections are set up by an install's own scripts (a service token) or by an account admin on
+        Settings > Model providers (settings.manage, as for provider keys): one API for both."""
+        if p.kind != "service":
+            access.can(p, "settings", "manage", what="model provider connections", code="admin_only")
+        return p
+
+    connections_guard = Depends(connections_caller)
+
     @app.get("/health", tags=["health"], response_model=Health)
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
 
+    connection_errors = error_responses({400: "A value the connection's type refuses", 403: "Not an account admin"})
+
     @app.get(
         "/v1/models/providers",
-        dependencies=[guard],
+        dependencies=[connections_guard],
         tags=["providers"],
         response_model=Envelope[list[ProviderOut]],
-        responses=ERRORS,
+        responses=connection_errors,
     )
     async def list_providers() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(
-            [
-                {"id": r["id"], "name": r["name"], "type": r["type"], "baseUrl": r["base_url"], "keyRef": r["key_ref"]}
-                for r in await providers.all()
-            ]
-        )
+        """Every provider connection: where its calls go and the name of the key it signs in with, never a key."""
+        return ok([_provider_view(r) for r in await providers.all()])
 
     @app.post(
         "/v1/models/providers",
-        dependencies=[guard],
+        dependencies=[connections_guard],
         tags=["providers"],
         status_code=201,
         response_model=Envelope[ProviderCreated],
-        responses=ERRORS,
+        responses=connection_errors,
     )
     async def create_provider(body: ProviderIn) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and
+        api-version; its region is optional)."""
         pid = new_id("prov")
-        row = {"id": pid, "name": body.name, "type": body.type, "base_url": body.base_url, "key_ref": body.key_ref}
+        row = {
+            "id": pid,
+            "name": body.name,
+            "type": body.type,
+            "base_url": body.base_url,
+            "key_ref": body.key_ref,
+            "api_version": body.api_version,
+            "region": body.region,
+        }
         if not await providers.create({**row, "created_at": now_iso()}):
             return refused(409, "provider_exists", f"A provider connection named {body.name} exists.")
         return ok({"id": pid, "name": body.name, "type": body.type}, status=201)
 
     @app.put(
         "/v1/models/providers/{provider_id}",
-        dependencies=[guard],
+        dependencies=[connections_guard],
         tags=["providers"],
         response_model=Envelope[ProviderOut],
-        responses=ERRORS,
+        responses=connection_errors,
     )
     async def rebind_provider(provider_id: str, body: ProviderRebind) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Points a connection at another endpoint and credential name. Every alias version bound to it follows on its
-        next call, which is how one alias moves between a fake and the real provider without a new version."""
+        """Points a connection at another endpoint, credential name, api-version and region. Every alias version bound
+        to it follows on its next call, which is how one alias moves between a fake and the real provider without a
+        new version."""
         row = await providers.get(provider_id)
         if row is None:
             return refused(404, "provider_not_found", f"No provider connection {provider_id}.")
         # A connection's type never changes after it is made, so the check holds without a lock.
         if row["type"] == "scripted":
             return refused(409, "provider_not_rebindable", "A scripted connection has no endpoint to change.")
-        await providers.rebind(provider_id, body.base_url, body.key_ref)
-        view = {"id": provider_id, "name": row["name"], "type": row["type"], "baseUrl": body.base_url}
-        return ok({**view, "keyRef": body.key_ref})
+        # An api-version or region left out keeps the stored one: the install scripts move only the base URL and key.
+        given = body.model_fields_set
+        version = body.api_version if "api_version" in given else row["api_version"]
+        region = body.region if "region" in given else row["region"]
+        if (why := connection_problem(row["type"], body.base_url, version, region)) is not None:
+            return refused(400, "validation_failed", why)
+        fields = {"base_url": body.base_url, "key_ref": body.key_ref, "api_version": version, "region": region}
+        await providers.rebind(provider_id, fields)
+        return ok(_provider_view({**row, **fields, "observed_region": None}))
 
     def account_admin(p: CurrentPrincipal) -> str:
         """settings.manage, held in the Security team: an account admin (owner, 2026-10-27). Returns the actor."""
@@ -547,7 +616,9 @@ def create_models_app(
             if not x_tenant_id:
                 await log("denied", "tenant_required")
                 return refused(400, "tenant_required", f"Model key {key['id']} spends per tenant; send X-Tenant-Id.")
-            share = await key_store.tenant_share(key["id"], x_tenant_id, key["tenant_budget"])
+            # The share is the named tenant's: read as that tenant, which the database holds the row to (c-616 C4).
+            with isolation.scope(x_tenant_id, None):
+                share = await key_store.tenant_share(key["id"], x_tenant_id, key["tenant_budget"])
             if share["spent"] >= share["budget"]:
                 await log("denied", "tenant_budget_exhausted")
                 return refused(
@@ -582,8 +653,15 @@ def create_models_app(
         async def settle(input_tokens: int, output_tokens: int) -> None:
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), price)
             tenant = x_tenant_id if key["tenant_budget"] is not None else None
-            await key_store.spend(key["id"], spend, tenant_id=tenant)
-            await log("ok", None, input_tokens=input_tokens, output_tokens=output_tokens, cost=spend, **version)
+            if tenant is not None:
+                with isolation.scope(tenant, None):
+                    await key_store.spend(key["id"], spend, tenant_id=tenant)
+            else:
+                await key_store.spend(key["id"], spend)
+            # An Azure answer from another region than its connection names is recorded on the row, not refused.
+            mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
+            values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+            await log("ok", mismatch[:64] if mismatch else None, **values, **version)
 
         ref = alias_row.get("key_ref")
         provider_key = await keys.get(str(ref), x_tenant_id) if ref else None
@@ -605,6 +683,18 @@ def create_models_app(
             body["reasoning_effort"] = alias_row["reasoning_effort"]
         call_id = new_id("chatcmpl")
         created = int(time.time())
+
+        async def observed() -> None:
+            """Records the region an Azure resource answered from on its connection, when it changed."""
+            seen = provider.observed_region if isinstance(provider, AzureOpenAIProvider) else None
+            if seen and seen != alias_row.get("observed_region"):
+                await providers.observe(str(alias_row["provider_id"]), seen)
+
+        async def failed(e: Exception) -> JSONResponse:
+            await observed()
+            await log("error", "provider_error", **version)
+            return refused(502, "provider_error", str(e) or "The provider answered with an empty stream.")
+
         if request.stream:
             usage = StreamUsage()
             chunks = provider.stream(str(alias_row["model_id"]), body, usage)
@@ -613,8 +703,8 @@ def create_models_app(
             try:
                 first = await anext(chunks)
             except (ProviderError, StopAsyncIteration) as e:
-                await log("error", "provider_error", **version)
-                return refused(502, "provider_error", str(e) or "The provider answered with an empty stream.")
+                return await failed(e)
+            await observed()
 
             async def events() -> AsyncIterator[str]:
                 settling: asyncio.Task[None] | None = None
@@ -640,8 +730,8 @@ def create_models_app(
         try:
             done = await provider.complete(str(alias_row["model_id"]), body)
         except ProviderError as e:
-            await log("error", "provider_error", **version)
-            return refused(502, "provider_error", str(e))
+            return await failed(e)
+        await observed()
         await settle(done.input_tokens, done.output_tokens)
         message: dict[str, Any] = {"role": "assistant", "content": done.text}
         if done.tool_calls:
@@ -662,11 +752,15 @@ def create_models_app(
         )
 
     # OpenAI's path shape: clients built on the OpenAI SDK append `/chat/completions` to their base URL.
+    provider_errors = {
+        502: "The provider refused or failed",
+        503: "The provider key the connection names is not saved",
+    }
     app.post(
         "/v1/models/chat/completions",
         tags=["completions"],
         response_model=ChatCompletion,
-        responses={200: {"content": {"text/event-stream": {}}}, **ERRORS},
+        responses={200: {"content": {"text/event-stream": {}}}, **error_responses(provider_errors)},
     )(completions)
 
     return app

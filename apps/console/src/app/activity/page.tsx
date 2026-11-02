@@ -21,6 +21,7 @@ import { ACTIVITY_STATUS, activityStatus } from '@/lib/activity-status';
 import { relativeTime } from '@/lib/format';
 import type { ActivityKind, ActivityRow, ActivityStatus } from '@/lib/types/activity';
 import { cn } from '@/lib/utils';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 const KIND: Record<ActivityKind, string> = { workflow_run: 'Workflow run', agent_run: 'Agent run', chat: 'Chat', email: 'Email received', decision: 'Human Task decision', tool_call: 'Tool call', case: 'Case', reminder: 'Reminder', system_workflow: 'Shipped workflow update', background: 'Background job' };
 const STATUS = ACTIVITY_STATUS;
@@ -170,15 +171,7 @@ export default function ActivityPage() {
             ]}
             initialColumnFilters={columnFiltersOf(linked)}
             onColumnFiltersChange={list.onColumnFiltersChange}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={<ListEmpty icon={Activity} noun="activity" filtered={list.isFiltered || !!source} description="Runs, chats, emails received and decisions appear here as they happen." />}
           />
         </div>

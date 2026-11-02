@@ -1,0 +1,27 @@
+id: answer-from-instructions
+title: Answer from instructions
+track: agent
+status: built
+difficulty: intro
+outcome: Ask a published agent one question and read the reply.
+capabilities:
+- id: agent.instructions
+  status: built
+- id: agent.chat
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+expected:
+- expected/reply.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 20
+gaps:
+- ops chat send
+- agent.eval

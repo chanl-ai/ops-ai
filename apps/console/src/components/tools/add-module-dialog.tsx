@@ -1,25 +1,27 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, Braces, Globe, Plug, Plus } from 'lucide-react';
+import { AlertTriangle, Braces, Globe, Plug } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FileUpload, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Stepper } from '@/components/shared/stepper';
-import { AccessBadge } from '@/components/status-badges';
+import { SaveProblem } from '@/components/shared/save-problem';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { plural } from '@/lib/format';
 import type { ToolAccess } from '@/lib/types/domain';
-import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource, ModuleType } from '@/lib/types/tool-modules';
+import type { IntegrationStatus } from '@/lib/types/integrations';
+import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource } from '@/lib/types/tool-modules';
+import { useConnectionOptions } from '@/hooks/systems-queries';
 import { cn } from '@/lib/utils';
 
-import { HttpOperationBuilder, inputsOf } from './http-operation-builder';
+import { ConnectionSelect } from './connection-select';
+import { HttpOperationBuilder } from './http-operation-builder';
 import { OperationPicker } from './operation-picker';
 
 const STEPS = ['Source', 'Operations'] as const;
@@ -50,8 +52,9 @@ const kebab = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace
 /**
  * Import operations from an MCP server, an OpenAPI spec or one HTTP request. `create` saves a new draft module named
  * from what was read and opens its page; `append` adds the chosen operations to an existing module and offers MCP
- * and OpenAPI only. A module's endpoint and its secret headers are how it reaches the system, so there is no
- * connection record to pick (docs/architecture/tool-lifecycle.md).
+ * and OpenAPI only. An HTTP or OpenAPI module may name the app it calls (group F): the app's connection gives the
+ * address and sign-in, so an HTTP request is a path on it. Nothing here sends a module type or endpoint; the service
+ * takes the kind from the source and the address from the app or the source.
  */
 export function AddModuleDialog({
   open,
@@ -88,10 +91,12 @@ export function AddModuleDialog({
   const [found, setFound] = React.useState<DiscoveryResult | null>(null);
   const [selected, setSelected] = React.useState<Map<string, ToolAccess>>(new Map());
   const [http, setHttp] = React.useState<HttpOperationInput>(EMPTY_HTTP);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   /** Errors that belong to one field render under it, not in the banner. */
   const [fieldErr, setFieldErr] = React.useState<Partial<Record<'url' | 'spec' | 'display' | 'name', string>>>({});
   const [touched, setTouched] = React.useState(false);
+  const [connectionId, setConnectionId] = React.useState<string | null>(null);
+  const connections = useConnectionOptions(open && mode === 'create');
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -109,17 +114,20 @@ export function AddModuleDialog({
     setError(null);
     setFieldErr({});
     setTouched(false);
+    setConnectionId(null);
   }, [open]);
 
 
   const append = mode === 'append';
+  // A path on the picked app's address, or a full https URL when no app is picked.
+  const urlOk = (u: string) => (connectionId ? /^\/[^\s]*$/.test(u) : /^https:\/\/[^\s]+$/.test(u));
   const kinds = append ? KINDS.filter((k) => k.kind !== 'http') : KINDS;
 
   React.useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
 
-  const httpErrors = touched ? { name: /^[a-z][a-z0-9_]{2,}$/.test(http.name) ? undefined : 'Use lower case letters, digits and underscores.', url: /^https:\/\/[^\s]+$/.test(http.url) ? undefined : 'Enter the full https URL.' } : undefined;
+  const httpErrors = touched ? { name: /^[a-z][a-z0-9_]{2,}$/.test(http.name) ? undefined : 'Use lower case letters, digits and underscores.', url: urlOk(http.url) ? undefined : connectionId ? 'Enter a path on the app, such as /accounts/{id}.' : 'Enter the full https URL.' } : undefined;
 
   async function next() {
     setError(null);
@@ -170,16 +178,14 @@ export function AddModuleDialog({
     }
   }
 
-  const type: ModuleType = kind === 'http' ? 'http' : kind === 'openapi' ? 'openapi' : 'mcp';
   const chosen: DiscoveredOperation[] = kind === 'http' ? [] : (found?.operations ?? []).filter((o) => selected.has(o.name)).map((o) => ({ ...o, access: selected.get(o.name)! }));
-  const httpInputs = inputsOf(http);
 
   /** Saves straight from the operations step: the module is named from what was read, and renamed on its page. */
   async function finish() {
     setError(null);
     if (kind === 'http') {
       setTouched(true);
-      if (!/^[a-z][a-z0-9_]{2,}$/.test(http.name) || !/^https:\/\/[^\s]+$/.test(http.url)) return;
+      if (!/^[a-z][a-z0-9_]{2,}$/.test(http.name) || !urlOk(http.url)) return;
     } else if (!chosen.length) {
       setError('Choose at least one operation.');
       return;
@@ -199,20 +205,21 @@ export function AddModuleDialog({
           return '';
         }
       })();
-      const label = kind === 'http' ? host.charAt(0).toUpperCase() + host.slice(1) : (found?.system ?? '');
+      // With an app picked, the module is named after it; the request is a path on the app's address.
+      const app = connections.data?.data.find((c) => c.id === connectionId)?.name;
+      const label = kind === 'http' ? (app ?? host.charAt(0).toUpperCase() + host.slice(1)) : (found?.system ?? '');
       await onCreate({
-        name: kind === 'http' ? kebab(host) : (found?.suggestedName ?? kebab(label)),
+        name: kind === 'http' ? kebab(app ?? host) : (found?.suggestedName ?? kebab(label)),
         displayName: label,
         system: label,
-        type,
-        endpoint: found?.endpoint ?? '',
+        ...(connectionId && kind !== 'mcp' ? { connectionId } : {}),
         operations: kind === 'http' ? undefined : chosen,
         source: kind === 'http' ? undefined : source,
         http: kind === 'http' ? http : undefined,
         uniqueName: true,
       });
     } catch (e) {
-      setError((e as Error).message);
+      setError(e);
     }
   }
 
@@ -243,7 +250,11 @@ export function AddModuleDialog({
         </div>
       }
     >
-      {error && <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {!!error && (
+        <div className="mb-3">
+          <SaveProblem error={error} />
+        </div>
+      )}
 
       {step === 1 && (
         <div className="flex flex-col gap-5">
@@ -259,6 +270,16 @@ export function AddModuleDialog({
               </label>
             ))}
           </RadioGroup>
+          {!append && kind !== 'mcp' && (
+            <FormField id="import-app" label="App" optional hint="Its address and sign-in come from the app, so an HTTP request is a path on it. Add a custom app for one not listed.">
+              <ConnectionSelect
+                value={connectionId ? { id: connectionId, name: connections.data?.data.find((c) => c.id === connectionId)?.name ?? '' } : null}
+                options={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+                loading={connections.isPending}
+                onChange={setConnectionId}
+              />
+            </FormField>
+          )}
           {kind === 'mcp' && (
             <FormField id="mcp-url" label="Server URL" error={fieldErr.url} hint="Streamable HTTP endpoint. The gateway lists its tools now and keeps that list as the reviewed snapshot.">
               <Input id="mcp-url" value={url} aria-invalid={!!fieldErr.url} onChange={(e) => (setUrl(e.target.value), setFieldErr({}))} placeholder="e.g. https://servicenow.harborpine.internal/mcp" className="font-mono text-sm" />

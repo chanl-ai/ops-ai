@@ -25,7 +25,6 @@ and one or two sentences, with a Coming next tab for the roadmap. A dot marks an
 | 5 | At 1280 px, find What's new and open it | A round 48 px button in the bottom-right corner, not in the sidebar; the popover ends with "Version" and the release tag (`v2026-10-23.1`) or `main · <short commit>` |
 | 6 | At 375 px, open it | The popover opens upward inside the screen; no sideways scroll |
 | 7 | Through all of it | No page error |
-| 8 | With the console's release switches off, open What's new | No entry for a feature behind a switch is listed: plugins, a person's own sign-in |
 
 The non-vacuous check is step 3: before the popover remembered what was opened, the dot showed on every load.
 Step 5 fails on the sidebar version: its trigger sits in the sidebar footer and the popover has no version line.
@@ -35,3 +34,6 @@ Step 5 fails on the sidebar version: its trigger sits in the sidebar footer and 
 | Layer | Script | State |
 |---|---|---|
 | ui | `console/scripts/test-uc-510-ui.mjs` | passing |
+
+Step 8 (an entry behind a release switch that is off is not listed) was removed on 10-31: a shipped feature has no
+switch, so no entry names one.

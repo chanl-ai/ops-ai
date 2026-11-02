@@ -1,5 +1,5 @@
 // uc-243 Builders manage document types, versions, samples and test runs in the console, ui layer:
-// docs/usecases/documents-service/builders-manage-document-types.md (c-243). The run's own stack with the documents
+// docs/usecases/documents-service/builders-manage-document-types.md. The run's own stack with the documents
 // fixtures' fake model; platform sign-in as James, a builder of Operations.
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

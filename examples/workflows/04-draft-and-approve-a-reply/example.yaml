@@ -1,0 +1,45 @@
+id: draft-and-approve-a-reply
+title: Draft and approve a customer reply
+track: workflow
+status: built
+difficulty: guided
+outcome: Draft a reply and send it only after a person approves the exact text.
+capabilities:
+- id: ops.ai.draft
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.action.tool
+  status: built
+- id: ops.ai.classify
+  status: built
+- id: ops.ai.summarise
+  status: built
+- id: ops.trigger.email
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/complaint.json
+- fixtures/reject.json
+- fixtures/timeout.json
+expected:
+- expected/complaint.json
+- expected/reject.json
+- expected/broken.json
+- expected/timeout.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 45
+teaches:
+- purpose-built draft is not a send
+- human review pauses the run
+- reject leaves with no write
+- send_reply is approved by the review
+- review timeout leaves escalated with no write

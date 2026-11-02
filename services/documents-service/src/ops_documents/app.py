@@ -59,8 +59,10 @@ from ops_documents.models import (
     TestEstimate,
     TestRun,
 )
-from ops_documents.store import DocumentTypesStore, ExtractionsStore, LayoutsStore, NameTakenError
+from ops_documents.store import DocumentTypesStore, ExtractionsStore, LayoutsStore, NameTakenError, TemplateCopies
 from ops_documents.store.metadata import reachable
+from ops_documents.templates import templates_router
+from ops_documents.tools_client import PluginTemplates
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
@@ -164,11 +166,13 @@ def create_documents_app(
     document_types: DocumentTypes,
     auth: Auth | None = None,
     layouts: Layouts | None = None,
+    plugin_templates: PluginTemplates | None = None,
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
 ) -> FastAPI:
     """`extractor` and `document_types` read bytes through files-service as the caller's team; `auth` resolves
     callers through ops_identity, by default from Settings for audience "documents". `layouts` serves the layout
-    routes, by default the extractor's own, else a cache on `engine`."""
+    routes, by default the extractor's own, else a cache on `engine`. `plugin_templates` reads the team's plugin
+    templates from tools-service for /v1/templates (c-590); without it those routes answer 503."""
     config = Settings()
     layouts = layouts or extractor.layouts or Layouts(extractor.files, LayoutsStore(engine))
 
@@ -440,6 +444,16 @@ def create_documents_app(
 
     app.include_router(docs)
     app.include_router(types)
+    app.state.plugin_templates = plugin_templates
+    app.include_router(
+        templates_router(
+            copies=TemplateCopies(engine),
+            document_types=document_types,
+            caller=who,
+            scope=service_scope,
+            responses=errors,
+        )
+    )
     return app
 
 

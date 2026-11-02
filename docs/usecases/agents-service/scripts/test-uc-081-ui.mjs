@@ -157,7 +157,7 @@ await withUiStack(
       const dialog = page.getByRole('dialog', { name: 'New workflow' });
       await dialog.getByLabel('Name').fill(NEW);
       await dialog.getByLabel('Starts when').fill('A customer asks to raise a card limit');
-      // One kind of workflow (c-562): the dialog asks no shape.
+      // One kind of workflow: the dialog asks no shape.
       const noShapes = (await dialog.getByRole('radio').count()) === 0;
       const published = page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 });
       await dialog.getByRole('button', { name: 'Create and open' }).click();
@@ -173,7 +173,7 @@ await withUiStack(
       const row = page.getByRole('row').filter({ hasText: NEW });
       await row.first().waitFor({ timeout: 60_000 }).catch(() => {});
       const listed = await page.locator('main tbody tr').allInnerTexts();
-      // The list names no engine (c-562): every workflow on it is the current runner's.
+      // The list names no engine: every workflow on it is the current runner's.
       const engineNamed = listed.some((t) => /Runner · v2|Graph · v1/.test(t));
       check('search finds it in the Workflows list as a draft, with no engine named', listed.length === 1 && !engineNamed && /Draft/.test(listed[0] ?? '') && /raise a card limit/.test(listed[0] ?? ''), { listed, engineNamed });
       await row.first().getByText(NEW, { exact: true }).click();

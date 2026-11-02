@@ -6,19 +6,21 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.types import Receive, Scope, Send
 
-from ops_access import can
+from ops_access import Access, can
 from ops_identity import Auth, CurrentService, Principal, install_auth
 from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.flags import Flags
 from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
@@ -28,12 +30,15 @@ from ops_store.background import report as background_report
 from .auth import Authenticator
 from .code_runs import CodeExecutor, resolve_handles, run_acting_for, run_caller, run_claims
 from .egress import EgressPolicy, egress_client
+from .environments import ConnectionEnvironment
 from .executor import Executor, HttpExecutor
 from .gateway_calls import API, WRITES, CallRequest, GatewayCalls, Outcome, Refused
+from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
 from .modules.directory import Directory
-from .modules.policy import WriteApprovals
+from .modules.policy import WriteApprovals, app_ids, approves_own_writes
+from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
 from .plugins.executor import PluginExecutor
 from .plugins.host import PluginHost
@@ -59,7 +64,9 @@ class RunContext(_Wire):
     act: str | None = None
     # Which of a connection's environments the call uses (c-330): live runs send production, everything else test.
     # Absent is test, so a caller that does not say never reaches a production credential.
-    environment: Literal["test", "production"] | None = None
+    environment: ConnectionEnvironment | None = None
+    # One of the team's accounts of the tool's app, by name (c-608, with several_accounts on); none uses the default.
+    account: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class FenceIn(_Wire):
@@ -150,6 +157,15 @@ def as_response(outcome: Outcome) -> JSONResponse:
     return JSONResponse({"success": True, "data": data})
 
 
+MCP_OFF = "The MCP address is off for this install. Add mcp_gateway to OPS_FLAGS in the install config to turn it on."
+
+
+async def _mcp_off(scope: Scope, receive: Receive, send: Send) -> None:
+    """Every /mcp request while the mcp_gateway flag is off: a 404 that says why, not a bare not-found."""
+    if scope["type"] == "http":
+        await JSONResponse(error_body(404, "feature_off", MCP_OFF), status_code=404)(scope, receive, send)
+
+
 def create_gateway_app(
     *,
     opa: OpaClient,
@@ -174,6 +190,8 @@ def create_gateway_app(
     code: CodeExecutor | None = None,
     plugins: PluginHost | None = None,
     cursor_key: bytes = b"",
+    flags: Flags | None = None,
+    modules: ModuleService | None = None,
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -187,6 +205,7 @@ def create_gateway_app(
     `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
     `authenticator` signs a module's calls in through its connection (c-330); without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to (c-356); without it no /mcp.
+    `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on (c-611).
     `code` runs code operations on runner-service and checks their calls back (c-531); without it they fail."""
     # Resolved secrets go into the URLs this gateway requests, and httpx logs each URL at INFO; the gateway turns those
     # lines off whether or not its process called configure_logging.
@@ -208,6 +227,18 @@ def create_gateway_app(
     async def all_writes_wait(tenant_id: str, team_id: str | None) -> bool:
         return write_approvals is not None and await write_approvals.all_writes(tenant_id, team_id)
 
+    async def app_writes_wait(tenant_id: str, team_id: str | None, module: Aggregate | None) -> bool:
+        """Whether the team listed this module's app in appWritesNeedApproval; an unreadable list counts as listed."""
+        if write_approvals is None or module is None:
+            return False
+        listed = await write_approvals.apps(tenant_id, team_id)
+        return listed is None or bool(app_ids(module) & set(listed))
+
+    access_check = Access()
+
+    def approver(p: Principal) -> bool:
+        return approves_own_writes(access_check, p)
+
     calls = GatewayCalls(
         registry=registry,
         log=log,
@@ -217,12 +248,17 @@ def create_gateway_app(
         send_check=send_check,
         all_writes_wait=all_writes_wait,
         clock=clock,
+        app_writes_wait=app_writes_wait,
+        approver=approver,
     )
+    if modules is not None:
+        # A tool page's Real run is this gateway's call, never a path of the registry's own (c-616).
+        modules.real_runs = calls.console_run
 
     resolved_auth = auth or Auth.from_settings(Settings(), audience="tools")
     mcp = (
         McpAdapter(calls=calls, registry=registry, directory=directory, auth=resolved_auth)
-        if directory is not None
+        if directory is not None and (flags or Flags()).on("mcp_gateway")
         else None
     )
 
@@ -242,6 +278,7 @@ def create_gateway_app(
 
     app = FastAPI(title="Ops AI tool gateway", lifespan=lifespan, generate_unique_id_function=operation_id)
     install_error_handlers(app)
+    install_held_hosts(app)
     install_auth(app, resolved_auth)
     if cors_origins:
         app.add_middleware(
@@ -256,6 +293,8 @@ def create_gateway_app(
     if mcp is not None:
         # A raw ASGI mount: the SDK writes its own responses, and MCP is not part of the REST OpenAPI.
         app.mount("/mcp", mcp)
+    else:
+        app.mount("/mcp", _mcp_off)
 
     @app.get("/health", response_model=None, tags=["gateway"])
     async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -292,6 +331,20 @@ def create_gateway_app(
         if await all_writes_wait(caller.tenant_id, caller.team_id):
             # The caller's team has every write wait, so the agents that list these pause before each one.
             rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
+        elif write_approvals is not None and any(r["access"] in WRITES for r in rows):
+            # The apps the team listed in appWritesNeedApproval: their writes pause too (c-616).
+            listed = await write_approvals.apps(caller.tenant_id, caller.team_id)
+            mods = (
+                {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
+                if registry.modules
+                else {}
+            )
+
+            def held(r: dict[str, Any]) -> bool:
+                m = mods.get(str(r.get("module_id") or ""))
+                return listed is None or (m is not None and bool(app_ids(m) & set(listed)))
+
+            rows = [r | {"requires_approval": True} if r["access"] in WRITES and held(r) else r for r in rows]
         data = [GrantableOperation.model_validate(r).model_dump(by_alias=True) for r in rows]
         return JSONResponse({"success": True, "data": data})
 

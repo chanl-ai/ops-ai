@@ -1,5 +1,5 @@
 // uc-256 A case page says what it is about, what it waits on and what is next, ui layer:
-// docs/usecases/console/case-page-assembled.md (c-292). Platform sign-in as Priya (admin of Operations); a workflow
+// docs/usecases/console/case-page-assembled.md. Platform sign-in as Priya (admin of Operations); a workflow
 // configured here opens a seeded `complaint` case and waits on a person, so nothing in the console knows the use case.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

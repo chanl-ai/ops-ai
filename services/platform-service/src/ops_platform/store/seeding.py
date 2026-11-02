@@ -19,10 +19,12 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import ANY_TEAM
+from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.ids import now_iso
+from ops_store.outbox import add as add_event
 
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
-from .tables import members, role_assignments, teams, tenants, users
+from .tables import members, platform_outbox, role_assignments, teams, tenants, users
 from .tenancy import TenantDb
 
 
@@ -79,11 +81,18 @@ async def write_seed(
                 "owner_groups": team["ownerGroups"],
                 "scope": team["scope"],
             }
-            await c.execute(
+            made = await c.execute(
                 insert(teams)
                 .values(id=team["id"], tenant_id=tenant_id, created_at=now, **fields)
                 .on_conflict_do_nothing(index_elements=[teams.c.id])
             )
+            if made.rowcount:
+                # A seeded team, the install's first team included, gets each service's defaults like any new team
+                # (c-616 PV2); a team already there reports nothing again.
+                await add_event(
+                    c, platform_outbox, tenant_id=tenant_id, team_id=str(team["id"]), name=TEAM_CREATED,
+                    key=str(team["id"]), payload={}, actor="seed",
+                )  # fmt: skip
         for person in data["people"]:
             fields = {"email": person["email"], "name": person["name"], "status": "active"}
             # A seeded person's address and name belong to the seed file (no route changes them), so a database seeded

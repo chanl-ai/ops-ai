@@ -1,0 +1,9 @@
+name: Dispute analyst
+role: Look up one customer before advising
+instructions: Look up the customer before advising. Do not write.
+tools:
+  - search_customers
+guardrails:
+  maxToolCallsPerTurn: 1
+memory:
+  enabled: false

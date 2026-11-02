@@ -34,6 +34,9 @@ class StartSpec:
     via: str
     form: Mapping[str, Any] | None = None
     form_parameter: str | None = None
+    # A Service event trigger: Start run exists only when `form_parameter` names a schema with properties. With none,
+    # the event is still the only way in.
+    when_schema: bool = False
 
     def schema(self, parameters: Mapping[str, Any]) -> dict[str, Any]:
         if self.form is not None:
@@ -100,3 +103,24 @@ def trigger_node(definition: Mapping[str, Any] | None) -> dict[str, Any] | None:
 def only_from_workflows(definition: Mapping[str, Any] | None) -> bool:
     node = trigger_node(definition)
     return bool(node and cast(dict[str, Any], node.get("parameters") or {}).get(ONLY_FROM_WORKFLOWS))
+
+
+def _empty(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
+
+
+def form_values(schema: Mapping[str, Any], values: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """A filled start form as a run takes it (c-378): each empty field the schema gives a `default` takes it, and the
+    required fields still empty, by their labels. The console's start dialog and every API start of a form read the
+    same rule, so a start the console refuses is refused by the API too."""
+    props = cast(Mapping[str, Any], schema.get("properties") or {})
+    out = dict(values)
+    for name, field in props.items():
+        if isinstance(field, Mapping) and "default" in field and _empty(out.get(name)):
+            out[str(name)] = cast(Mapping[str, Any], field)["default"]
+    missing = [
+        str(cast(Mapping[str, Any], props.get(k) or {}).get("title") or k)
+        for k in cast(list[str], schema.get("required") or [])
+        if _empty(out.get(k))
+    ]
+    return out, missing

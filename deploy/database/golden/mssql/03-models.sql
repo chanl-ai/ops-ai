@@ -1,12 +1,15 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at models_0007
+-- models-service, stamped at models_0010
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	type VARCHAR(32) NOT NULL, 
 	base_url VARCHAR(400) NULL, 
 	key_ref VARCHAR(120) NULL, 
+	api_version VARCHAR(32) NULL, 
+	region VARCHAR(64) NULL, 
+	observed_region VARCHAR(64) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT provider_connections_pkey PRIMARY KEY (id), 
 	CONSTRAINT provider_connections_name_key UNIQUE (name)
@@ -99,10 +102,32 @@ CREATE TABLE model_aliases (
 GO
 CREATE UNIQUE INDEX ux_model_aliases_current ON model_aliases (name) WHERE status = 'current';
 GO
+IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.models_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE FUNCTION ops_security.models_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE SECURITY POLICY ops_security.provider_keys_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.provider_keys,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.provider_keys AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.provider_keys AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.model_key_tenants_tenant
+    ADD FILTER PREDICATE ops_security.models_tenant_read(tenant_id) ON dbo.model_key_tenants,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_key_tenants AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.models_tenant_write(tenant_id) ON dbo.model_key_tenants AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_models (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('models_0007');
+INSERT INTO alembic_version_models (version_num) VALUES ('models_0010');
 GO

@@ -1,0 +1,32 @@
+id: draft-a-note-for-approval
+title: Draft a note for approval
+track: agent
+status: built
+difficulty: guided
+outcome: Draft a customer note that waits for approval before writing.
+capabilities:
+- id: agent.tool.write
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/reject.json
+- fixtures/approve.json
+- fixtures/changed.json
+expected:
+- expected/waiting.json
+- expected/rejected.json
+- expected/approved.json
+- expected/changed.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+gaps:
+- ops chat send
+- agent.eval
+- public replay of an approval token with a changed input

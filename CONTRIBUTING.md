@@ -127,3 +127,4 @@ the backend: one test per failure mode, and each new test is seen failing once b
 | Routes | Every route is authenticated, except health and the OpenAPI document |
 | Model calls in tests | Scripted model only; real calls are capped at 10 per experiment unless a maintainer approves more |
 | Gate | `make verify` before every commit |
+| Names | A name or comment says what the thing is. Do not cite a card id, a board slice (`A2`, `W1`, `R7`) or a path into the private planning board. A public checkout does not have the board |

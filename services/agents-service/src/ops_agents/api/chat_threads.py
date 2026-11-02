@@ -60,7 +60,7 @@ from .auth import Principal, caller_of
 from .deps import Runtime
 from .event_log import designed_type
 from .memory import fill_remembered
-from .review_text import call_label, humanize, object_rows, shown, tool_titles
+from .review_text import call_label, input_rows, tool_titles
 from .runs import graph_store
 
 CHAT_GRAPH = "agent_wrapper"
@@ -151,7 +151,7 @@ class AssistantBuilder:
                 LabelValue(label=label, value=value) for label, v in tpl.fields if (value := fill(v, values)).strip()
             ]
             if tpl
-            else [LabelValue(**row) for row in _input_rows(args)],
+            else [LabelValue(**row) for row in input_rows(args)],
             risk=tpl.risk if tpl else "high",
             consequence=tpl.consequence if tpl else None,
             step_up=bool(p.get("step_up")) or None,
@@ -298,18 +298,6 @@ class AssistantBuilder:
     def apply_run_event(self, e: dict[str, Any]) -> list[ChatStreamEvent]:
         """A run-stream event (`{event, node, data}`), as `execute` yields it."""
         return self.apply(designed_type(e), e.get("data"))
-
-
-def _input_rows(args: dict[str, Any]) -> list[dict[str, str]]:
-    """Every input the call will send, as rows (c-565): a value as a person reads it, an object as one row per field,
-    so an approver never reads a raw object."""
-    rows: list[dict[str, str]] = []
-    for k, v in args.items():
-        if isinstance(v, dict):
-            rows += object_rows(humanize(k), cast(dict[str, Any], v))
-        elif (value := shown(v, money=False, currency=None)).strip():
-            rows.append({"label": humanize(k), "value": value})
-    return rows
 
 
 def approval_widget_id(interrupt_id: str) -> str:

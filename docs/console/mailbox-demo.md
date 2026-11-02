@@ -58,7 +58,7 @@ and Mail.Send. Keep the notice PDF to hand: `services/agents-service/tests/fixtu
 
 | # | Who and where | What you do | What you see |
 |---|---|---|---|
-| 1 | Sam (Security admin), Settings > Secrets | Add the app password as a secret for Operations, e.g. `DEAN_GMAIL_APP_PASSWORD` | The secret listed, value hidden |
+| 1 | Sam (Security admin), Settings > Secrets | Add the app password as a secret for Operations, e.g. `User_GMAIL_APP_PASSWORD` | The secret listed, value hidden |
 | 2 | Sam, Settings > Egress | Allow `imap.gmail.com` and `smtp.gmail.com` | Both hosts allowed |
 | 3 | James (builder), Channels > Email > Connect mailbox | Gmail, your address, the secret; replies by SMTP from the same address and secret; Test connection | Every test step passes, with your newest message's sender and subject |
 | 4 | James, Workflows > the court order intake workflow (`Levy intake`) | Pick your mailbox in the Email received trigger, save, request publish | A publish review waits |

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0043_conn_details_health
+-- tools-service, stamped at tools_0059_connection_origin
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -26,6 +26,7 @@ CREATE TABLE gateway_calls (
 	approval_token_id VARCHAR(64) NULL, 
 	replay_of VARCHAR(64) NULL, 
 	tenant_id VARCHAR(64) NULL, 
+	team_id VARCHAR(64) NULL, 
 	environment VARCHAR(16) NULL, 
 	connection_id VARCHAR(64) NULL, 
 	acting_for VARCHAR(320) NULL, 
@@ -57,17 +58,15 @@ CREATE TABLE tool_modules (
 	display_name VARCHAR(200) NOT NULL, 
 	system VARCHAR(200) NOT NULL, 
 	description VARCHAR(max) NOT NULL, 
-	type VARCHAR(16) NOT NULL, 
 	status VARCHAR(16) NOT NULL, 
 	owner_team VARCHAR(120) NOT NULL, 
 	owner_contacts NVARCHAR(max) NOT NULL, 
-	endpoint VARCHAR(max) NOT NULL, 
 	auth NVARCHAR(max) NOT NULL, 
 	timeout_ms INTEGER NOT NULL, 
 	data_classification VARCHAR(16) NOT NULL, 
 	catalog_id VARCHAR(64) NULL, 
 	connection_id VARCHAR(64) NULL, 
-	sign_in VARCHAR(16) NOT NULL DEFAULT 'either', 
+	sign_in VARCHAR(16) NOT NULL DEFAULT 'person_or_team', 
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	reachable BIT NOT NULL, 
@@ -86,6 +85,30 @@ GO
 CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL AND team_id IS NOT NULL;
 GO
 CREATE UNIQUE INDEX ux_tool_modules_shared_name ON tool_modules (tenant_id, name) WHERE team_id IS NULL;
+GO
+CREATE TABLE operation_mocks (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	module_id VARCHAR(64) NOT NULL, 
+	operation VARCHAR(120) NOT NULL, 
+	environment VARCHAR(16) NOT NULL, 
+	position INTEGER NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	match NVARCHAR(max) NOT NULL, 
+	status INTEGER NOT NULL, 
+	body NVARCHAR(max) NULL, 
+	headers NVARCHAR(max) NOT NULL, 
+	delay_ms INTEGER NOT NULL, 
+	timeout BIT NOT NULL, 
+	is_default BIT NOT NULL, 
+	from_call_id VARCHAR(64) NULL, 
+	created_by VARCHAR(200) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	updated_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT operation_mocks_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_operation_mocks_operation ON operation_mocks (tenant_id, operation, environment, position);
 GO
 CREATE TABLE service_outbox (
 	id VARCHAR(64) NOT NULL, 
@@ -111,7 +134,6 @@ CREATE TABLE connections (
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	auth_kind VARCHAR(40) NOT NULL, 
-	available_to NVARCHAR(max) NULL, 
 	status VARCHAR(24) NOT NULL, 
 	status_detail VARCHAR(max) NULL, 
 	expires_at DATETIMEOFFSET NULL, 
@@ -122,6 +144,9 @@ CREATE TABLE connections (
 	category VARCHAR(80) NULL, 
 	description VARCHAR(300) NULL, 
 	docs_url VARCHAR(500) NULL, 
+	plugin_id VARCHAR(120) NULL, 
+	account_name VARCHAR(200) NULL, 
+	origin VARCHAR(16) NULL, 
 	revision INTEGER NOT NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
@@ -137,6 +162,7 @@ CREATE TABLE oauth_states (
 	state_hash VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
 	environment VARCHAR(16) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	person_id VARCHAR(200) NOT NULL, 
 	verifier_ct VARCHAR(max) NOT NULL, 
 	redirect_uri VARCHAR(max) NOT NULL, 
@@ -151,6 +177,7 @@ CREATE TABLE connection_audit (
 	id INTEGER NOT NULL IDENTITY, 
 	tenant_id VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	action VARCHAR(32) NOT NULL, 
 	environment VARCHAR(16) NULL, 
 	actor VARCHAR(200) NOT NULL, 
@@ -199,30 +226,6 @@ CREATE TABLE egress_audit (
 );
 GO
 CREATE INDEX ix_egress_audit_tenant_id ON egress_audit (tenant_id);
-GO
-CREATE TABLE operation_mocks (
-	tenant_id VARCHAR(64) NOT NULL, 
-	id VARCHAR(64) NOT NULL, 
-	module_id VARCHAR(64) NOT NULL, 
-	operation VARCHAR(120) NOT NULL, 
-	environment VARCHAR(16) NOT NULL, 
-	position INTEGER NOT NULL, 
-	name VARCHAR(200) NOT NULL, 
-	match NVARCHAR(max) NOT NULL, 
-	status INTEGER NOT NULL, 
-	body NVARCHAR(max) NULL, 
-	headers NVARCHAR(max) NOT NULL, 
-	delay_ms INTEGER NOT NULL, 
-	timeout BIT NOT NULL, 
-	is_default BIT NOT NULL, 
-	from_call_id VARCHAR(64) NULL, 
-	created_by VARCHAR(200) NOT NULL, 
-	created_at DATETIMEOFFSET NOT NULL, 
-	updated_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT operation_mocks_pkey PRIMARY KEY (tenant_id, id)
-);
-GO
-CREATE INDEX ix_operation_mocks_operation ON operation_mocks (tenant_id, operation, environment, position);
 GO
 CREATE TABLE operation_rate_windows (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -283,6 +286,9 @@ CREATE TABLE plugin_bindings (
 	settings NVARCHAR(max) NOT NULL, 
 	updated_by VARCHAR(320) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
+	version VARCHAR(40) NULL, 
+	digest VARCHAR(64) NULL, 
+	declarations NVARCHAR(max) NULL, 
 	CONSTRAINT plugin_bindings_pkey PRIMARY KEY (tenant_id, team_id, plugin_id)
 );
 GO
@@ -307,6 +313,14 @@ CREATE TABLE send_checks (
 	CONSTRAINT send_checks_pkey PRIMARY KEY (tenant_id, team_id, input_hash, policy_version)
 );
 GO
+CREATE TABLE team_defaults (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	applied_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT team_defaults_pkey PRIMARY KEY (tenant_id, team_id)
+);
+GO
 CREATE TABLE module_operations (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -322,6 +336,7 @@ CREATE TABLE module_operations (
 	path VARCHAR(max) NULL, 
 	headers NVARCHAR(max) NOT NULL DEFAULT '[]', 
 	body VARCHAR(max) NULL, 
+	body_encoding VARCHAR(8) NULL, 
 	response_transform VARCHAR(max) NULL, 
 	timeout_ms INTEGER NULL, 
 	input NVARCHAR(max) NOT NULL, 
@@ -338,7 +353,6 @@ CREATE TABLE module_operations (
 	output_shape VARCHAR(16) NULL, 
 	response_schema NVARCHAR(max) NULL, 
 	code NVARCHAR(max) NULL, 
-	stub NVARCHAR(max) NOT NULL, 
 	CONSTRAINT module_operations_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT ck_module_operations_access CHECK (access IN ('read', 'write')), 
 	CONSTRAINT ux_module_operations_name UNIQUE (tenant_id, module_id, name), 
@@ -417,9 +431,12 @@ CREATE TABLE connection_environments (
 	tenant_id VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
 	environment VARCHAR(16) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	settings NVARCHAR(max) NOT NULL, 
 	secrets NVARCHAR(max) NOT NULL, 
 	health NVARCHAR(max) NULL, 
+	platform_app VARCHAR(120) NULL, 
+	plugin_settings NVARCHAR(max) NULL, 
 	updated_by VARCHAR(200) NOT NULL, 
 	updated_at DATETIMEOFFSET NOT NULL, 
 	CONSTRAINT connection_environments_pkey PRIMARY KEY (tenant_id, connection_id, environment), 
@@ -430,6 +447,7 @@ CREATE TABLE connection_tokens (
 	tenant_id VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
 	environment VARCHAR(16) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
 	person_id VARCHAR(200) NOT NULL, 
 	access_ct VARCHAR(max) NOT NULL, 
 	refresh_ct VARCHAR(max) NULL, 
@@ -438,6 +456,9 @@ CREATE TABLE connection_tokens (
 	account VARCHAR(320) NULL, 
 	rotations INTEGER NOT NULL, 
 	refreshed_at DATETIMEOFFSET NOT NULL, 
+	refused_at DATETIMEOFFSET NULL, 
+	refused_reason VARCHAR(300) NULL, 
+	pinned BIT NOT NULL DEFAULT 0, 
 	CONSTRAINT connection_tokens_pkey PRIMARY KEY (tenant_id, connection_id, environment, person_id), 
 	CONSTRAINT connection_tokens_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
@@ -459,10 +480,82 @@ CREATE TABLE connect_links (
 	CONSTRAINT connect_links_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
 GO
+IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.tools_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE FUNCTION ops_security.tools_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+GO
+CREATE FUNCTION ops_security.tools_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+GO
+CREATE FUNCTION ops_security.tools_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+GO
+CREATE SECURITY POLICY ops_security.connections_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connections,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connections AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connections AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.oauth_states_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.oauth_states,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.oauth_states AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.oauth_states AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.connection_audit_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_audit,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_secrets_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_secrets,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_secrets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_secrets AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.secret_audit_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.secret_audit,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.secret_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.secret_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.plugin_app_keys_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.plugin_app_keys,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.plugin_app_keys AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.plugin_app_keys AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.connection_environments_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_environments,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_environments AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_environments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.connection_tokens_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_tokens,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_tokens AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_tokens AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.connect_links_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connect_links,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connect_links AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connect_links AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_tools (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0043_conn_details_health');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0059_connection_origin');
 GO

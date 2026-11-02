@@ -12,7 +12,7 @@ inside the workspace.
 | Path | What it is |
 |---|---|
 | `.devcontainer/devcontainer.json` | Workspace image, Node and pnpm pins, forwarded console and Mailpit ports, `OPS_INFRA=external` |
-| `.devcontainer/compose.yaml` | Includes `deploy/compose/compose.yaml` and adds the workspace service; each checkout is its own compose project |
+| `.devcontainer/compose.yaml` | Includes `deploy/compose/compose.yaml` and adds the workspace plus a fake-bank sidecar aliased as `api.bank.test`; `.run`, `.logs` and `.data` are overlay volumes so a container `make up` never writes the host stack's pids; each checkout is its own compose project |
 | `.devcontainer/.env.local.example` | Names the provider keys; copy to `.env.local` (gitignored) and fill in |
 | `deploy/devhost/` | Coder template (Terraform, Docker provider, envbuilder) |
 

@@ -491,8 +491,9 @@ def ensure_bank_module(builder: Session, admin: Session) -> None:
         for op in module["operations"]:
             if op["name"] == "place_hold":
                 policy = {"approvers": 1, "approverTeam": builder.team, "requiresApproval": True, "stepUp": True}
-                data(api.patch(f"/v1/tool-modules/{made['id']}/operations/{op['id']}", json=policy))
-            elif op["name"] == "notify_webhook":
+                if any(op.get(k) != v for k, v in policy.items()):
+                    data(api.patch(f"/v1/tool-modules/{made['id']}/operations/{op['id']}", json=policy))
+            elif op["name"] == "notify_webhook" and op.get("requiresApproval") is not False:
                 data(
                     api.patch(
                         f"/v1/tool-modules/{made['id']}/operations/{op['id']}",
@@ -596,33 +597,53 @@ def ensure_agents(
 SEEDED_DOCUMENT_TYPES = ROOT / "services" / "documents-service" / "scripts" / "seed_document_types.py"
 
 
-def ensure_document_types(builder: Session, kinds: list[dict[str, Any]]) -> None:
-    """The team's own copy of a seeded document type (its fields from documents-service's seed), under its own id."""
+def _create_document_type(builder: Session, module: Any, kind: dict[str, Any]) -> httpx.Response:
+    body = {
+        **getattr(module, kind["seed"]),
+        "id": kind["id"],
+        "name": kind["name"],
+        "description": kind["description"],
+    }
+    return builder("documents").post("/v1/document-types", json=body)
+
+
+def _retarget_document_type(spec: dict[str, Any], old: str, new: str) -> None:
+    """Workflows that named `old` as this team's type now name `new`."""
+    for wf in spec.get("workflows") or []:
+        mapping = wf.get("documentTypes")
+        if isinstance(mapping, dict):
+            wf["documentTypes"] = {k: new if v == old else v for k, v in mapping.items()}
+
+
+def ensure_document_types(builder: Session, spec: dict[str, Any]) -> None:
+    """The team's own copy of a seeded document type (its fields from documents-service's seed), under its own id.
+    An id another team already holds is created under this team's prefix, and the workflows that name it follow."""
     loaded = importlib.util.spec_from_file_location("seed_document_types", SEEDED_DOCUMENT_TYPES)
     assert loaded and loaded.loader
     module = importlib.util.module_from_spec(loaded)
     loaded.loader.exec_module(module)
-    for kind in kinds:
-        body = {
-            **getattr(module, kind["seed"]),
-            "id": kind["id"],
-            "name": kind["name"],
-            "description": kind["description"],
-        }
-        made = builder("documents").post("/v1/document-types", json=body)
+    prefix = prefix_of(str((spec.get("team") or {}).get("name") or "team"))
+    for kind in spec["documentTypes"]:
+        kind.setdefault("key", kind["id"])
+        made = _create_document_type(builder, module, kind)
         if made.status_code == 409:
             # The id is taken in the workspace; it is this team's only if the team can read it.
             if builder("documents").get(f"/v1/document-types/{kind['id']}").status_code == 200:
                 say("FOUND", f"document type {kind['name']}", kind["id"])
-            else:
-                say(
-                    "FAIL",
-                    f"document type {kind['name']}",
-                    f"{kind['id']} is another team's: seed with --workflow-prefix",
-                )
-            continue
+                continue
+            old = kind["id"]
+            kind["id"] = old if old.startswith(prefix) else f"{prefix}{old}"
+            if kind["id"] == old:
+                say("FAIL", f"document type {kind['name']}", f"{old} is another team's")
+                continue
+            _retarget_document_type(spec, old, kind["id"])
+            made = _create_document_type(builder, module, kind)
+            if made.status_code == 409:
+                say("FAIL", f"document type {kind['name']}", f"{kind['id']} is another team's")
+                continue
         data(made)
-        say("MADE", f"document type {kind['name']}", f"{kind['id']} v1, {len(body['fields'])} fields")
+        fields = getattr(module, kind["seed"]).get("fields") or []
+        say("MADE", f"document type {kind['name']}", f"{kind['id']} v1, {len(fields)} fields")
 
 
 # ── The team mailbox ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -959,25 +980,25 @@ TEMPLATE_READS = {"caseType": "/v1/case-types/{id}", "taskType": "/v1/task-types
 
 
 def ensure_templates(builder: Session, templates: list[dict[str, Any]]) -> None:
-    """The built-in types the team installs from templates (c-541). Until the install routes exist, each type is one
+    """The built-in types the team installs from templates (c-541). GET /v1/templates lists plugin copies (c-590);
+    POST /v1/templates/install is not that list's write. Until a case/task install route exists, each type is one
     every team reads already, so it is checked rather than made."""
     api = builder("agents")
-    installable = api.get("/v1/templates").status_code == 200
     for t in templates:
         what = f"template {t['kind']} {t['id']}"
-        if installable:
-            r = api.post("/v1/templates/install", json={"kind": t["kind"], "id": t["id"], "version": t["version"]})
-            if r.status_code == 409:
-                say("FOUND", what, f"v{t['version']}")
+        r = api.post("/v1/templates/install", json={"kind": t["kind"], "id": t["id"], "version": t["version"]})
+        if r.status_code == 404:
+            read = api.get(TEMPLATE_READS[t["kind"]].format(id=t["id"]))
+            if read.status_code == 200:
+                say("FOUND", what, "built in")
             else:
-                data(r)
-                say("MADE", what, f"v{t['version']}")
+                say("FAIL", what, f"not readable ({read.status_code}) and no template install route (c-541)")
             continue
-        read = api.get(TEMPLATE_READS[t["kind"]].format(id=t["id"]))
-        if read.status_code == 200:
-            say("FOUND", what, "built in")
+        if r.status_code == 409:
+            say("FOUND", what, f"v{t['version']}")
         else:
-            say("FAIL", what, f"not readable ({read.status_code}) and no template install route (c-541)")
+            data(r)
+            say("MADE", what, f"v{t['version']}")
 
 
 FAKE_PROVIDER = "fake-demo"
@@ -1197,11 +1218,11 @@ def install(args: argparse.Namespace) -> int:
     agents = ensure_agents(builder, approver, spec["agents"], knowledge, model, pins=pins)
     MODELS.agents = agents
     ensure_default_agent(admin, agents, spec["team"].get("defaultAgent"))
-    names = {f"agent:{k}": v for k, v in agents.items()} | ids_by_key(spec)
     if not args.no_levy:
         security = sign_in(urls, email, password, SECURITY_TEAM)
         ensure_code_modules(builder, security, spec["codeModules"])
-    ensure_document_types(builder, spec["documentTypes"])
+    ensure_document_types(builder, spec)
+    names = {f"agent:{k}": v for k, v in agents.items()} | ids_by_key(spec)
     mailbox = ensure_mailbox(admin, lead, env, spec["mailbox"])
     ensure_workflows(builder, approver, team_workflows(spec, no_levy=args.no_levy), names, mailbox)
     if args.tool_access:

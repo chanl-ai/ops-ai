@@ -51,6 +51,7 @@ from ..auth import (
     started_by,
 )
 from ..chat_budget import cap_at_agent, run_api_answer
+from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..event_log import REVIEW_KINDS
@@ -407,8 +408,9 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
     await store.set_thread_status(thread_id, "busy", now_iso(), generation=generation)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
-        async for e in execute(rt, row, graph, graph_input=graph_input, run_id=run_id, kind=kind):
-            yield _frame(e)
+        with acting_for(me):
+            async for e in execute(rt, row, graph, graph_input=graph_input, run_id=run_id, kind=kind):
+                yield _frame(e)
 
     return EventSourceResponse(stream(), sep="\n", ping=15)
 

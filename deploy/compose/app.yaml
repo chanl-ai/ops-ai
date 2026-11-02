@@ -37,7 +37,11 @@ x-settings: &settings
   OPS_OPA_URL: http://opa:8181
   OPS_FILES_DIR: /data/files
   OPS_KB_FILES_DIR: /data/kb-files
+  # The install's plugins folder (docs/guide/plugins.md): tools and kb mount it here and load every plugin in it.
+  OPS_PLUGINS_DIR: /plugins
   OPS_FILES_SCANNING: ${OPS_FILES_SCANNING:-eicar}
+  # The features this install turns on (docs/deploy/install.md, Feature flags); empty turns none on.
+  OPS_FLAGS: ${OPS_FLAGS:-}
   OPS_MAILBOX_SOURCE: none
   OPS_MAIL_PROVIDER: ${OPS_MAIL_PROVIDER:-none}
   OPS_MAIL_FROM: ${OPS_MAIL_FROM:-}
@@ -116,6 +120,9 @@ services:
       OPS_SERVICE_SIGNING_KID: svc-tools-1
       OPS_REVIEW_KEY: ${OPS_REVIEW_KEY:?}
       OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
+    # The host folder `ops plugin install --into` writes; the checkout's plugins/ unless OPS_PLUGINS_HOST_DIR names one.
+    volumes:
+      - ${OPS_PLUGINS_HOST_DIR:-../../plugins}:/plugins:ro
 
   # Code tools' functions: Python on WASM with no network, no database and no secrets. tools-service is its only
   # caller and the only service it calls back.
@@ -147,6 +154,7 @@ services:
       OPS_SERVICE_SIGNING_KID: svc-kb-1
     volumes:
       - kb-data:/data
+      - ${OPS_PLUGINS_HOST_DIR:-../../plugins}:/plugins:ro
 
   files:
     <<: *service

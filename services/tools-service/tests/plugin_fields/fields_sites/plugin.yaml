@@ -1,0 +1,31 @@
+# Sign-in parameters on the sign-in address, as Atlassian asks for, and one lookup after sign-in that finds the site
+# the account can reach, whose id every call's address names.
+schema: ops-ai/plugin@2
+id: test.fields-sites
+title: Sites desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [oauth2_auth_code]
+  authorize_url: "{login_url}/authorize"
+  token_url: "{login_url}/token"
+  scopes:
+    - { id: openid, label: Know which account signed in, required: true }
+  sign_in: [team, person, person_or_team]
+  authorize_params: { audience: "{audience}", prompt: consent }
+  after_sign_in: { url: "{base_url}/sites/accessible", read: "[0].id", setting: site_id }
+  token_hosts: [.multi.test]
+  health_check: { path: "/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+  login_url: { type: string, title: Sign-in address, default: "https://login.multi.test/salesforce" }
+  audience: { type: string, title: Audience, default: api.multi.test }
+  site_id: { type: string, title: Site, after_sign_in: true }
+egress: ["{base_url}"]
+endpoint: "{base_url}/sites/{site_id}"
+tools:
+  - name: get_record
+    title: Read a record
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }

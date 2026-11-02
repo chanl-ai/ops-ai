@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Pick whose account a plugin uses when you connect it",
+  "description": "Connecting a plugin such as Salesforce now asks whose account calls use: the team's, each person's, or each person's with the team account as backup, and the backup is on from the start. Each row of a tool's call log says whether the call signed in as the person or with the team account.",
+  "tag": "improved",
+  "cards": [
+    "c-564"
+  ]
+}

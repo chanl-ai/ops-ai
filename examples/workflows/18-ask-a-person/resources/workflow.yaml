@@ -1,0 +1,36 @@
+schemaVersion: 2
+id: ask_a_person
+name: Ask a person
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Ask
+- id: ask
+  type: ops.flow.ask
+  typeVersion: 1
+  name: Confirm
+  parameters:
+    prompt: $.input.prompt
+    key: $.input.key
+    timeoutSeconds: 0
+- id: replied
+  type: ops.flow.end
+  typeVersion: 1
+  name: Replied
+  parameters:
+    outcome: replied
+- id: late
+  type: ops.flow.end
+  typeVersion: 1
+  name: Timed out
+  parameters:
+    outcome: timed_out
+    output: $.nodes.ask.out
+connections:
+- from: {node: start, port: payload}
+  to: {node: ask, port: in}
+- from: {node: ask, port: replied}
+  to: {node: replied, port: in}
+- from: {node: ask, port: timedOut}
+  to: {node: late, port: in}

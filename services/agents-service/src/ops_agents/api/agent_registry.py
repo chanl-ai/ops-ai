@@ -56,7 +56,7 @@ PLATFORM_CONVERSATION_CALLS = 200
 PLATFORM_CONVERSATION_COST = 5.0
 # What the runtime acts on, so the agent page offers only these (c-068 T004). Chat is the one channel an agent talks
 # on; of the guardrail settings the tool-call and model-call caps reach a turn (definition_of), topics are blocked
-# through pinned guardrails; no eval service runs, so the page shows no evals.
+# through pinned guardrails; eval-runs score a dataset on the newest version (c-630).
 CONTROLS: dict[str, Any] = {
     "channels": ["chat"],
     "guardrails": [
@@ -67,7 +67,7 @@ CONTROLS: dict[str, Any] = {
         "maxModelCallsPerConversation",
         "maxCostPerConversation",
     ],
-    "evals": False,
+    "evals": True,
 }
 
 
@@ -179,17 +179,23 @@ SEED_BY = "seed"
 
 
 async def seed_agent_version(
-    rt: Runtime, agent_id: str, change: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]], note: str
+    rt: Runtime,
+    agent_id: str,
+    change: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
+    note: str,
+    *,
+    by: str = SEED_BY,
 ) -> None:
     """A seed's change to an agent (a pinned guardrail or skill) as a new version from the published spec: published
     at once in dev, through an `agent_publish` review elsewhere. A draft a person saved is never stepped over: the
-    seed waits, and the person can pin it themselves."""
+    seed waits, and the person can pin it themselves. `by` is who the change is recorded as made by: the seed, or the
+    platform for a team's Ops Assistant (c-616)."""
     reg = registry(rt)
     row = await reg.row(agent_id)
     if row["published_version"] is None:
         return
     newest = await reg.version(agent_id, int(row["version"]))
-    if row["version"] != row["published_version"] and newest["saved_by"] != SEED_BY:
+    if row["version"] != row["published_version"] and newest["saved_by"] != by:
         log.info("seed_agent_change_deferred", agent=agent_id, note=note, draft_saved_by=newest["saved_by"])
         return
     if any(r["status"] == "pending" for r in await reg.requests("agent", agent_id)):
@@ -197,19 +203,19 @@ async def seed_agent_version(
         return
     live = dict((await reg.version(agent_id, int(row["published_version"])))["spec"])
     spec = await change(dict(live))
-    n = await reg.save(agent_id, spec, by=SEED_BY, note=note)
+    n = await reg.save(agent_id, spec, by=by, note=note)
     # A seed's change follows the team's policy like a person's publish (c-086).
     from .publish_policy import decide  # noqa: PLC0415 - publish_policy imports this module's callers' layer
 
     decision = await decide(rt, area="agents", team_id=row["team_id"], old=live, new=spec)
     if not decision.review_required:
-        await reg.publish(agent_id, n, by=SEED_BY, review_id="seed")
+        await reg.publish(agent_id, n, by=by, review_id="seed")
         if not row["paused"]:
             go_live(rt, agent_id, n, spec)
         return
     v = await reg.version(agent_id, n)
-    body = {**agent_review_body(agent_id, spec, row, v, note=note, by=SEED_BY), **decision.record()}
-    await reg.open_request("agent", agent_id, n, note=note, by=SEED_BY, body=body, approved=False)
+    body = {**agent_review_body(agent_id, spec, row, v, note=note, by=by), **decision.record()}
+    await reg.open_request("agent", agent_id, n, note=note, by=by, body=body, approved=False)
 
 
 def require_owner_or_admin(me: Principal, *, area: str, team_id: str, created_by: str, what: str) -> None:

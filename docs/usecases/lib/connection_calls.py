@@ -1,4 +1,4 @@
-"""What the connection use cases share (c-330): the bank stand-in's hosts allowed, a connection set up per environment
+"""What the connection use cases share: the bank stand-in's hosts allowed, a connection set up per environment
 as a person sets it in the console, a published one-operation module that signs in through it, and a call made the way
 agents-service makes one. Every setup call's status is checked, so a refused setup fails the use case."""
 

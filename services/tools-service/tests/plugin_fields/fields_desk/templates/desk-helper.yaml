@@ -1,0 +1,5 @@
+name: Desk helper
+role: Posts updates to the desk
+channels: [chat]
+instructions: |-
+  You post short updates to the desk's channel with post_message when the person asks.

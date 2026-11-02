@@ -39,7 +39,7 @@ export function EditModuleDialog({
   }, [open, initialName, initialDescription]);
 
   const submit = async () => {
-    if (!displayName.trim()) return setError('Give the module a display name.');
+    if (!displayName.trim()) return setError('Give it a display name.');
     try {
       await onSave({ displayName: displayName.trim(), description: description.trim() });
     } catch (e) {
@@ -54,7 +54,7 @@ export function EditModuleDialog({
       onOpenChange={onOpenChange}
       size="md"
       title="Edit details"
-      description={`Module name ${moduleName} stays the same; workflows pin it.`}
+      description={`The name ${moduleName} stays the same; workflows pin it.`}
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>

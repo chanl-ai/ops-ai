@@ -318,6 +318,8 @@ async def test_an_approved_hold_reads_the_amount_the_approver_placed(stack: Stac
     assert review["status"] == "approved" and review["amount"] == 2140.55, review["amount"]
     assert "2,140.55" in review["proposal"], review["proposal"]
     assert any(f["value"].startswith("2,140.55") for f in review["options"][0]["fields"]), review["options"]
+    # The task offers the amount as a field; without `inputs` on the option the console draws none.
+    assert review["options"][0]["inputs"] == hold["inputs"], review["options"][0]
     page = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
     [action] = page["actions"]
     assert action["status"] == "approved" and "2,140.55" in action["label"], action

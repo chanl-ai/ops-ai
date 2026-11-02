@@ -21,12 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.activities.catalog import Catalog, load_catalog
 from ops_email import MemorySender
 from ops_identity import Auth, Identity, dev_service_signer, mint_service_token
-from ops_policy import AesGcmCipher
+from ops_policy import CredentialStore
 from ops_service_kit import opa_server
 from ops_service_kit.contract import response_checker
+from ops_service_kit.credentials import credential_store
+from ops_service_kit.flags import Flags
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_store import isolation
 from ops_tools.app import create_gateway_app
 from ops_tools.auth import Authenticator, Tokens
 from ops_tools.auth.discovery import Discovery
@@ -64,6 +67,12 @@ AGENTS_FIXTURES = Path(__file__).resolve().parents[2] / "agents-service" / "test
 FIXTURES = Path(__file__).parent / "fixtures"
 # This process's own OPA, never the shared one on :8181, whose key and policy any tools-service start rewrites.
 OPA_URL = opa_server.session_url()
+
+
+def credentials() -> CredentialStore:
+    """The credential store the app under test puts and reads values through, chosen from the settings as the service
+    chooses it; a test that plants or reads a value goes through it too, so the suite runs on any adapter."""
+    return credential_store(Settings())
 
 
 def opa_client() -> httpx.AsyncClient:
@@ -112,6 +121,18 @@ def _no_dev_egress_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPS_EGRESS_RESOLVE", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _acting_for_the_tests_tenant(request: pytest.FixtureRequest) -> Iterator[None]:
+    """The connection store runs each transaction as the caller's tenant and team (c-602); a test that drives the store,
+    Tokens or the Authenticator itself, with no request in between, acts for every team of its own tenant. A test
+    proving the team boundary enters `isolation.scope` inside this."""
+    if "tenant" not in request.fixturenames:
+        yield
+        return
+    with isolation.tenant_wide("TESTS", tenant_id=request.getfixturevalue("tenant")):
+        yield
+
+
 @pytest.fixture(scope="session")
 def seed() -> dict[str, Any]:
     return json.loads((FIXTURES / "tool_modules.json").read_text())
@@ -140,10 +161,19 @@ class FakeReviews:
 
     def __init__(self) -> None:
         self.opened: list[dict[str, Any]] = []
+        self.hosts: list[dict[str, Any]] = []
 
     async def open(self, credentials: dict[str, str], **kw: Any) -> str:
         self.opened.append({"credentials": credentials, **kw})
         return f"TMP-{1000 + len(self.opened)}"
+
+    async def open_host(self, credentials: dict[str, str], **kw: Any) -> dict[str, Any]:
+        """A held host's task as agents-service answers it: the one already asked for the host, else a new one."""
+        held = next((h for h in self.hosts if h["host"] == kw["host"]), None)
+        if held is None:
+            held = {"id": f"EGH-{1001 + len(self.hosts)}", "status": "pending", **kw}
+            self.hosts.append(held)
+        return held
 
 
 @dataclass
@@ -245,20 +275,22 @@ def build_app(
     write_approvals: Any = None,
     send_check: Any = None,
     mcp: bool = False,
+    flags: Flags | None = None,
 ) -> FastAPI:
     """The gateway app as __main__ builds it, on the tenant's registry. `opa` defaults to an address nothing answers,
     for tests that never reach a decision; `upstream` is what http operations call. `mcp` serves /mcp: its SDK manager
     runs a task group that must be left in the task that entered it, so a test using it enters the lifespan itself,
-    never in a fixture whose teardown runs in another task."""
+    never in a fixture whose teardown runs in another task. `flags` default to `mcp_gateway` on when `mcp` is
+    asked for."""
     settings = Settings()
     catalog = load_catalog(AGENTS_FIXTURES)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     store, calls = ModuleStore(engine), CallLog(engine)
     policy = EgressPolicy(EgressStore(engine))
-    cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
-    resolver = SecretResolver(SecretStore(engine), cipher)
+    vault = credentials()
+    resolver = SecretResolver(SecretStore(engine), vault)
     connections = ConnectionStore(engine)
-    tokens = Tokens(connections, cipher, upstream, policy)
+    tokens = Tokens(connections, vault, upstream, policy)
     authenticator = Authenticator(connections, resolver, tokens, ConnectLinks(connections, CONSOLE_URL))
     service = ModuleService(
         store,
@@ -283,14 +315,14 @@ def build_app(
             modules_router(service, directory),
             executions_router(service, directory),
             egress_router(EgressStore(engine)),
-            secrets_router(SecretStore(engine), cipher, modules=ModuleStore(engine)),
+            secrets_router(resolver, modules=ModuleStore(engine)),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
             connections_router(
                 ConnectionService(
                     connections,
-                    SecretStore(engine),
-                    cipher,
+                    resolver,
+                    vault,
                     tokens,
                     directory,
                     egress=policy,
@@ -309,6 +341,8 @@ def build_app(
         send_check=send_check,
         authenticator=authenticator,
         directory=directory if mcp else None,
+        flags=flags if flags is not None else Flags(frozenset({"mcp_gateway"}) if mcp else frozenset()),
+        modules=service,
     )
 
 

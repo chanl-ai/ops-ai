@@ -106,6 +106,37 @@ In `dba` mode, `backup`, `restore` and `upgrade` need an admin login that may du
 `--admin-url-file <file holding postgresql://admin:password@host:5432/db>`. A runtime login cannot dump it (row-level
 security); without the file the script stops and says to ask the DBA.
 
+## Feature flags
+
+A feature that is not yet fully released ships behind a flag, off until the install turns it on. There is no admin
+screen: `OPS_FLAGS` in `ops-ai.env` names the flags that are on, separated by commas, and every service reads it at
+start. Change it, then restart the services (`./install.sh` on a running install applies a changed `ops-ai.env`).
+
+```bash
+OPS_FLAGS=mcp_gateway
+```
+
+| Flag | Turns on | Owner |
+|---|---|---|
+| `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` | an earlier change |
+| `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need | an earlier change |
+| `several_accounts` | A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused | an earlier change |
+
+The list above is a copy for reading; the registry is `packages/ops_service_kit/src/ops_service_kit/flags.py`, and
+`docker compose`, the Kubernetes overlay (`ops-origin`) and Fly (`[env]`) each pass `OPS_FLAGS` to every service. A name
+the registry does not hold stops every service at start with "unknown flag … in OPS_FLAGS; known flags: …", so a typo
+never reads as off. The console reads the flags from platform-service's `GET /v1/me` and hides a feature whose flag is
+off.
+
+For developers:
+
+| Step | What to do |
+|---|---|
+| Add a flag | One entry in `FLAGS` and its name in `FlagName` (`flags.py`): name, a one-line description, the card that owns the feature, and when to remove it. `packages/ops_service_kit/tests/test_flags.py` fails an entry with no card or removal note. Regenerate `services/platform-service/openapi.json` and run `make sdk`, so the console's types carry the name |
+| Read it in a service | `settings.feature_flags.on("<name>")`; a name the registry does not hold raises |
+| Read it in the console | `useFlag('<name>')`, or `flag: '<name>'` on a list entry filtered by `useFlagged` (`apps/console/src/hooks/flag-queries.ts`); both are off while the answer loads |
+| Remove it | The release that fully ships the feature deletes the entry, every check that reads it and this table's row, so an install never sets a flag to get a shipped feature |
+
 ## What is proven and what is not
 
 | Claim | Evidence |

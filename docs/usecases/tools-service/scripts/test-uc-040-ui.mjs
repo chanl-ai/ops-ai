@@ -1,6 +1,6 @@
 // uc-040 Security decides a tool module review, ui layer: docs/usecases/tools-service/security-decides-a-module-review.md.
 // Headless Chromium, three people signed in through platform-service: James requests, Maya (approver on Operations)
-// cannot decide, Nadia (approver on Security) decides it in Human Tasks, where every review is decided (c-163).
+// cannot decide, Nadia (approver on Security) decides it in Human Tasks, where every review is decided.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;

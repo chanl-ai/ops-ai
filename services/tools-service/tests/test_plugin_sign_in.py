@@ -27,7 +27,6 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import discover
 from ops_plugin_sdk.manifest import PER_PERSON_KINDS
-from ops_policy import AesGcmCipher
 from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator
 from ops_tools.auth.kinds import KINDS
@@ -47,7 +46,7 @@ from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .test_plugins import AllowAll, Policy
 from .test_review_decisions import introspect, jwks, person
 
@@ -132,19 +131,25 @@ async def rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> AsyncIt
     system = System()
     upstream = system.client()
     app = build_app(engine, seed, tenant, auth=auth, upstream=upstream)
-    cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
+    vault = credentials()
     store = ConnectionStore(engine)
-    tokens = Tokens(store, cipher, upstream, AllowAll())  # type: ignore[arg-type]
+    tokens = Tokens(store, vault, upstream, AllowAll())  # type: ignore[arg-type]
     directory = Directory.from_seed(seed, datetime.now(UTC))
     connections = ConnectionService(
-        store, SecretStore(engine), cipher, tokens, directory, egress=None, console_url=CONSOLE_URL
+        store,
+        SecretResolver(SecretStore(engine), vault),
+        vault,
+        tokens,
+        directory,
+        egress=None,
+        console_url=CONSOLE_URL,
     )
     loaded = discover(found=[], folders=[str(p) for p in sorted(KINDS_DIR.glob("kinds_*"))])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
     policy = {item.plugin.manifest.id: {"enabled": True} for item in loaded if item.plugin}
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded)
-    app.include_router(plugins_router(host, connections, directory, PluginAppKeys(engine, cipher)))
-    resolver = SecretResolver(SecretStore(engine), cipher)
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded, store)
+    app.include_router(plugins_router(host, connections, directory, PluginAppKeys(engine, vault)))
+    resolver = SecretResolver(SecretStore(engine), vault)
     authenticator = Authenticator(store, resolver, tokens, ConnectLinks(store, CONSOLE_URL))
     executor = PluginExecutor(
         host,
@@ -270,6 +275,42 @@ async def test_a_client_credentials_plugin_fetches_its_token_and_gets_a_new_one_
     grants = [r["grant_type"] for r in rig.system.token_requests]
     assert grants and set(grants) == {"client_credentials"} and len(rig.system.issued) >= 2, rig.system.token_requests
     assert all(r.get("client_id") == CLIENT and r.get("scope") == "api" for r in rig.system.token_requests)
+
+
+async def test_the_dialogs_client_id_in_credentials_turns_a_client_credentials_plugin_on(rig: Rig, tenant: str) -> None:
+    """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials`, as it does every
+    other kind's (c-580 PM test: refused as client_missing, so no such plugin could be turned on from the console)."""
+    on = await turn_on(rig, tenant, "test.client", credentials={"clientId": CLIENT, "clientSecret": CLIENT_SECRET})
+    assert on.status_code == 200, on.text
+    assert (await call_as_team(rig, tenant, "test.client")).ok
+    assert [r.get("client_id") for r in rig.system.token_requests] == [CLIENT], rig.system.token_requests
+    assert CLIENT_SECRET not in on.text
+
+
+async def test_a_sign_in_address_the_plugin_fixes_is_refused_rather_than_typed_over(rig: Rig, tenant: str) -> None:
+    """A typed token address would replace the plugin's, and the client secret would go to it."""
+    moved = await turn_on(
+        rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET,
+        credentials={"tokenUrl": "https://elsewhere.test/token"},
+    )  # fmt: skip
+    assert moved.status_code == 400 and "tokenUrl" in moved.text, moved.text
+
+
+async def test_a_cancelled_connect_leaves_nothing_and_the_next_turn_on_makes_a_new_connection(
+    rig: Rig, tenant: str
+) -> None:
+    """The connect dialog's Cancel removes the connection it made, then turns the plugin off (c-580 PM test: a
+    half-made connection was left, and a binding naming a removed connection could never be turned on again)."""
+    first = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
+    made = str(first.json()["data"]["connectionId"])
+    gone = await rig.client.delete(f"/v1/connections/{made}", headers=admin(tenant))
+    assert gone.status_code in (200, 204), gone.text
+    off = await rig.client.put("/v1/plugins/test.bearer/team", json={"enabled": False}, headers=admin(tenant))
+    assert off.status_code == 200 and off.json()["data"]["connectionId"] is None, off.text
+    again = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
+    assert again.status_code == 200, again.text
+    assert again.json()["data"]["connectionId"] not in (None, made)
+    assert (await call_as_team(rig, tenant, "test.bearer")).ok
 
 
 async def test_a_wrong_client_secret_fails_at_the_token_fetch_and_the_connection_needs_reconnecting(

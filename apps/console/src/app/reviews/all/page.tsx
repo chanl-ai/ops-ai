@@ -35,6 +35,7 @@ import { useCurrentPerson } from '@/hooks/auth-queries';
 import { pct } from '@/lib/format';
 import type { Review, ReviewDecision } from '@/lib/types/domain';
 import type { ReviewFilters, ReviewView } from '@/lib/types/query';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 const RISK_OPTIONS = (['critical', 'high', 'medium', 'low'] as const).map((r) => ({ label: r[0].toUpperCase() + r.slice(1), value: r }));
 const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({ label, value }));
@@ -205,15 +206,7 @@ export default function AllTasksPage() {
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             selectionResetKey={selectionResetKey}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             bulkActions={
               view === 'resolved'
                 ? []

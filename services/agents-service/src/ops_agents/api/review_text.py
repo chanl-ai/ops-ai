@@ -60,14 +60,46 @@ def shown(value: Any, *, money: bool, currency: str | None) -> str:
     return "" if value is None else str(value)
 
 
-def object_rows(label: str, value: dict[str, Any]) -> list[dict[str, str]]:
+def _object(value: Any) -> bool:
+    """A record, or a list that holds one: expand into rows, never flatten into the sentence."""
+    return isinstance(value, dict) or (
+        isinstance(value, list) and any(isinstance(v, dict) for v in cast(list[Any], value))
+    )
+
+
+def object_rows(label: str, value: Any) -> list[dict[str, str]]:
     """An object the call sends as rows a person reads (c-565): one row per field, named "Fields · Status", so an
-    approver sees each value the call would change rather than a raw object, or nothing at all."""
+    approver sees each value the call would change rather than a raw object, or nothing at all. A list of objects is
+    one group of rows per item. Nested records recurse the same way, so chat and the run page share this expander."""
+    if isinstance(value, list):
+        rows: list[dict[str, str]] = []
+        for i, item in enumerate(cast(list[Any], value), start=1):
+            rows += object_rows(f"{label} · {i}", item)
+        return rows
+    if isinstance(value, Mapping):
+        rows = []
+        for k, v in cast(Mapping[str, Any], value).items():
+            name = f"{label} · {humanize(str(k))}"
+            if _object(v):
+                rows += object_rows(name, v)
+            else:
+                shown_v = shown(v, money=False, currency=None)
+                if shown_v:
+                    rows.append({"label": name, "value": shown_v})
+        return rows
+    shown_v = shown(value, money=False, currency=None)
+    return [{"label": label, "value": shown_v}] if shown_v else []
+
+
+def input_rows(args: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Every input the call will send, as rows: a scalar as a person reads it, a record or list of records as one
+    row per field. Chat approval cards and the run page both read a call this way."""
     rows: list[dict[str, str]] = []
-    for k, v in value.items():
-        shown_v = shown(v, money=False, currency=None)
-        if shown_v:
-            rows.append({"label": f"{label} · {humanize(str(k))}", "value": shown_v})
+    for k, v in args.items():
+        if _object(v):
+            rows += object_rows(humanize(str(k)), v)
+        elif (value := shown(v, money=False, currency=None)).strip():
+            rows.append({"label": humanize(str(k)), "value": value})
     return rows
 
 
@@ -214,15 +246,9 @@ async def describe_call(
     # the card, though never part of the sentence.
     for k, v in args.items():
         if _object(v):
-            rows = object_rows(titles.get(_norm(k), humanize(k)), cast(dict[str, Any], v))
+            rows = object_rows(titles.get(_norm(k), humanize(k)), v)
             fields += [r for r in rows if not _MACHINE_ID.match(r["value"])]
     return {"label": label, "sentence": sentence, "consequence": f"{said}." if said else None, "fields": fields}
-
-
-def _object(value: Any) -> bool:
-    return isinstance(value, dict) or (
-        isinstance(value, list) and any(isinstance(v, dict) for v in cast(list[Any], value))
-    )
 
 
 def question(*, options: list[str], first: dict[str, Any] | None, customer: str, title: str) -> str:

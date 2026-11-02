@@ -1,5 +1,5 @@
-// uc-245 a team's mailbox runs end to end, ui layer: docs/usecases/agents-service/a-team-s-mailbox-runs-end.md (c-230,
-// epic c-227). withUiStack on the banker demo (platform sign-in, models on the fake OpenAI with the demo's committed
+// uc-245 a team's mailbox runs end to end, ui layer: docs/usecases/agents-service/a-team-s-mailbox-runs-end.md (
+// epic an earlier change). withUiStack on the banker demo (platform sign-in, models on the fake OpenAI with the demo's committed
 // rules, tools-service with the core fake bank), GreenMail and Mailpit reachable through tools-service (tools.mail),
 // publish reviews kept pending, and a worker. Run isolated (ISOLATED=1). Real mail both ways: the script sends SMTP to
 // GreenMail and reads the reply in Mailpit's API; nothing else is faked but the bank and the model.
@@ -52,7 +52,7 @@ async function step(name, body) {
 
 // A notice the model misreads (the demo rule answers a debtor the page does not name), so its read scores below the
 // floor and waits on Check the read: the same page uc-223 sends. The message is built once and the same bytes are sent
-// each time, so a second send is a redelivery (a new message reusing the Message-ID would run, c-231).
+// each time, so a second send is a redelivery (a new message reusing the Message-ID would run).
 const EML = join(process.env.TMPDIR ?? '/tmp', `uc245-${RUN}.eml`);
 function sendNotice() {
   const script = `

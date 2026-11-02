@@ -45,12 +45,7 @@ WAITING: dict[str, set[str]] = {
         "registry_workflows",
     },
     "c-414": {
-        # connect_links (c-558) is team-owned and read through team_visible; its database policy comes with these.
-        "connect_links",
-        "connection_audit",
-        "connection_environments",
-        "connection_tokens",
-        "connections",
+        # connect_links, connection_environments, connection_tokens and oauth_states are isolated by c-602.
         "egress_audit",
         "egress_hosts",
         "egress_ranges",
@@ -60,26 +55,18 @@ WAITING: dict[str, set[str]] = {
         "module_egress_hosts",
         "module_operations",
         "module_versions",
-        "oauth_states",
         "operation_mocks",
         "operation_rate_windows",
         "plugin_bindings",
-        # Account-scoped by design, with no team: the platform's own OAuth app secret per plugin (c-565).
-        "plugin_app_keys",
-        "secret_audit",
         "send_checks",
         "send_policies",
+        # Each team's defaults version (c-616), team-owned like tool_modules beside it; isolated with them.
+        "team_defaults",
         "tool_modules",
-        "tool_secrets",
     },
-    # provider_keys (c-509) is filtered by tenant in its store; the database policy comes with the other model tables.
     "c-416": {
         "model_aliases",
         "model_call_log",
-        "model_key_tenants",
-        "model_keys",
-        "provider_connections",
-        "provider_keys",
     },
 }
 
@@ -103,3 +90,20 @@ def test_every_marked_table_compiles_to_its_policy(dialect: str) -> None:
         kind = isolation_kind(t)
         statements = isolation_ddl(t, dialect, chain="probe")
         assert bool(statements) == (kind in ("team", "tenant")), t
+
+
+# A table holding sign-in material: a sealed value (`*_ct`, `ciphertext`) or a person's own row (`person_id`) (c-602).
+# Each is isolated by the database, or waits here for the card that isolates it; the list only shrinks.
+# Every table holding sign-in material is isolated by the database (c-616 C1, C3); a new one waits here with its card.
+SIGN_IN_MATERIAL_WAITING: set[str] = set()
+
+
+def _holds_sign_in_material(t: sa.Table) -> bool:
+    return any(c.name.endswith("_ct") or c.name in ("ciphertext", "person_id") for c in t.columns)
+
+
+def test_every_table_holding_sign_in_material_is_isolated_by_the_database() -> None:
+    holding = {name for name, t in _tables().items() if _holds_sign_in_material(t)}
+    open_ = {name for name in holding if isolation_kind(_tables()[name]) not in ("team", "tenant")}
+    assert sorted(open_ - SIGN_IN_MATERIAL_WAITING) == [], "isolate these by tenant and team in the database"
+    assert sorted(SIGN_IN_MATERIAL_WAITING - open_) == [], "now isolated or gone: take these off the waiting list"

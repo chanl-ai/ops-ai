@@ -35,7 +35,7 @@ a secret part written once and never shown. A change against a revision someone 
 | 6 | The same on a connection whose production password is wrong | Failed, 401 |
 
 The console's connect dialog runs on the mock only, so the ui layer sets its connections up through the API and
-tests them on the connection page (shown with the `NEXT_PUBLIC_OPS_PERSONAL_SIGNIN` switch on).
+tests them on the connection page.
 
 ## Acceptance layers
 

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from fastapi.testclient import TestClient
 
 APP = Path(__file__).resolve().parents[1] / "scripts" / "fake_bank" / "app.py"
@@ -39,6 +40,7 @@ def test_customers_are_found_by_name_address_or_the_whole_last_four() -> None:
         "44": [],  # an SSN fragment is matched whole or not at all
         "whitfield": ["CUS-1003"],
         "5555": ["CUS-1003"],
+        "ada@example.test": ["CUS-1004"],
         "   ": [],  # stripped before the length check
         " 12 ": [],  # a street number is not an address match
         "harbour street": ["CUS-1001"],
@@ -131,3 +133,14 @@ def test_a_dispute_opens_on_the_coastal_air_charge() -> None:
         "/disputes", json={"accountId": "VISA-5521", "transactionId": txn, "reason": "wrong amount"}, headers=KEY
     )
     assert r.status_code == 201, r.text
+
+
+def test_a_compose_sidecar_listens_on_all_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAKE_BANK_BIND=0.0.0.0 is the compose sidecar; loopback would be refused on egress."""
+    main = Path(__file__).resolve().parents[1] / "scripts" / "fake_bank" / "__main__.py"
+    spec = importlib.util.spec_from_file_location("fake_bank_main", main)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setenv("FAKE_BANK_BIND", "0.0.0.0")
+    assert module.listen_address() == "0.0.0.0"

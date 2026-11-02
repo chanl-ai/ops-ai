@@ -15,13 +15,10 @@ import { RunInputForm, withFile } from '@/components/workflows/run-input-form';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { type CheckedFile, StartFromFile } from '@/components/workflows/start-from-file';
-import { useStartBatch } from '@/hooks/batch-queries';
+import { BatchFilePicker, batchCheckHref, type PickedFile } from '@/components/workflows/start-from-file';
 import { useDefinition, useStartEngineRun, useStartWorkflow } from '@/hooks/engine-queries';
 import { fileWorkflowOptions, type OptionSource, startableWorkflowOptions } from '@/hooks/options-queries';
-import { useHostedForms } from '@/hooks/use-switches';
 import type { StartForm } from '@/lib/types/engine';
-import { plural } from '@/lib/format';
 
 export type RunMode = 'live' | 'test';
 
@@ -134,14 +131,11 @@ export function StartDefinitionRunDialog({
   const [pending, setPending] = React.useState(false);
   const schema = startForm && onStartForm ? startForm.schema : undefined;
   const router = useRouter();
-  const hostedForms = useHostedForms();
   const inputs = (schema?.properties ?? {}) as Record<string, { title?: string }>;
   // A file's columns can only name a form trigger's inputs.
-  const fromFile = hostedForms && !!workflowId && startForm?.kind === 'form' && Object.keys(inputs).length > 0;
+  const fromFile = !!workflowId && startForm?.kind === 'form' && Object.keys(inputs).length > 0;
   const [tab, setTab] = React.useState<'form' | 'file'>('form');
-  const [checked, setChecked] = React.useState<CheckedFile | null>(null);
-  const [batchError, setBatchError] = React.useState<string | undefined>();
-  const { mutateAsync: startBatch } = useStartBatch(workflowId ?? '');
+  const [picked, setPicked] = React.useState<PickedFile | null>(null);
   // Each opening starts from a clean form, with the file it was opened for already attached. Read through a ref so a
   // form object rebuilt on every render of the parent does not clear what is being typed.
   const opening = React.useRef({ file, schema });
@@ -152,8 +146,7 @@ export function StartDefinitionRunDialog({
     setValues(f && s ? withFile(s, {}, f) : {});
     setError(undefined);
     setTab('form');
-    setChecked(null);
-    setBatchError(undefined);
+    setPicked(null);
   }, [open]);
 
   const run = async (go: () => Promise<void>) => {
@@ -168,19 +161,11 @@ export function StartDefinitionRunDialog({
     }
   };
 
-  const startFile = async () => {
-    if (!checked) return;
-    setBatchError(undefined);
-    setPending(true);
-    try {
-      const batch = await startBatch({ fileId: checked.fileId, mode });
-      onOpenChange(false);
-      router.push(`/workflows/batches/${encodeURIComponent(batch.id)}`);
-    } catch (e) {
-      setBatchError(e instanceof Error ? e.message : 'The runs did not start');
-    } finally {
-      setPending(false);
-    }
+  // The dialog only picks the file; checking it and starting its runs need room, so they have their own page.
+  const checkFile = () => {
+    if (!picked || !workflowId) return;
+    onOpenChange(false);
+    router.push(batchCheckHref(workflowId, picked, mode));
   };
 
   const submit = async () => {
@@ -212,7 +197,7 @@ export function StartDefinitionRunDialog({
       pending={pending}
       loadingText="Starting…"
       {...(fromFile && tab === 'file'
-        ? { submitTestId: 'batch-start', startLabel: checked ? `Start ${plural(checked.dry.rows, 'run')}` : 'Start runs', canStart: !!checked, onStart: startFile }
+        ? { submitTestId: 'batch-check', startLabel: 'Check the file', canStart: !!picked, onStart: checkFile }
         : { submitTestId: 'definition-start-run-submit', startLabel: schema ? startForm!.action : 'Start run', onStart: submit })}
     >
       <RadioGroup value={mode} onValueChange={(v) => setMode(v as RunMode)} className="mb-4 gap-2" aria-label="Run mode">
@@ -245,7 +230,7 @@ export function StartDefinitionRunDialog({
             <RunInputForm schema={schema} value={values} onChange={setValues} error={error} fileSource={fileSource} />
           </TabsContent>
           <TabsContent value="file" className="min-w-0">
-            <StartFromFile workflowId={workflowId!} mode={mode} inputs={inputs} onChecked={setChecked} startError={batchError} />
+            <BatchFilePicker inputs={inputs} onPicked={setPicked} />
           </TabsContent>
         </Tabs>
       ) : schema ? (

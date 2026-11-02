@@ -10,7 +10,7 @@ import socket
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import httpx2
@@ -18,6 +18,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_ai.models import Model
 
+from ops_access.platform_events import platform_events_router
 from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_model
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import load_catalog
@@ -64,7 +65,7 @@ from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
 from .model_aliases import HttpModelAliases, StaticModelAliases
 from .model_ledger import LedgerModel, LedgerSource
-from .ops_tools import OpsReads
+from .ops_tools import OpsReads, catch_up_assistants, team_created_handlers
 from .people_names import PlatformPeopleNames
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
@@ -109,6 +110,7 @@ from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
 from .routers import team_usage as team_usage_routes
 from .routers import timers as timer_routes
+from .routers import tool_uses as tool_uses_routes
 from .routers import widget as embed_routes
 from .routers import widgets as widget_routes
 from .schemas import ERROR_RESPONSES
@@ -254,7 +256,12 @@ def create_app(
     `completions_client` reaches an in-process models-service; `auth` resolves callers against a stand-in for
     platform-service; `kb_client` reaches a stand-in for kb-service; `knowledge` replaces kb-service outright (tests
     with fixture passages)."""
-    catalog = load_catalog(settings.seed_dir, settings.agents_seed_file)
+    catalog = load_catalog(
+        settings.seed_dir,
+        settings.agents_seed_file,
+        tool_search=settings.feature_flags.on("tool_search"),
+        tool_search_above=settings.tool_search_above,
+    )
     db = engine or open_database(settings.database_url)
     model_error: str | None = None
     # With models-service and its key, turns run there on their agent's alias and no provider key is read here.
@@ -381,14 +388,17 @@ def create_app(
                 rt.graph_deps = deps
                 # Listed background processes (c-516): each writes its heartbeat and logs its jobs in the job's team.
                 beats, jobs = heartbeats(db), BackgroundJobs(db)
-                sweeper = asyncio.create_task(
-                    sweep_forever(rt, settings.sweep_interval_seconds, beats=beats, jobs=jobs)
-                )
-                stack.callback(sweeper.cancel)
+                # SQLite tests share one connection. A sweep or expiry commit rolls back a request's half-done
+                # write, so a row just created reads 404 (c-616 T022). Those loops run on PostgreSQL only.
+                if db.dialect.name != "sqlite":
+                    sweeper = asyncio.create_task(
+                        sweep_forever(rt, settings.sweep_interval_seconds, beats=beats, jobs=jobs)
+                    )
+                    stack.callback(sweeper.cancel)
                 if settings.timer_poll_seconds > 0 and db.dialect.name == "postgresql":
                     poller = asyncio.create_task(poll_forever(rt, settings.timer_poll_seconds, beats=beats, jobs=jobs))
                     stack.callback(poller.cancel)
-                if settings.platform_url:
+                if settings.platform_url and db.dialect.name != "sqlite":
                     # Memory retention (c-206): the workspace policy lives in platform-service.
                     platform_http = httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
                     stack.push_async_callback(platform_http.aclose)
@@ -410,6 +420,8 @@ def create_app(
                     await engine_seed.load_seed(rt, engine_seed.seed_path(seed_dir, settings.agents_seed_file))
                 await workflow_registry.load(rt, seed_dir)
                 await workflow_registry.follow_seed(rt, seeded)
+            # Each team's Ops Assistant nobody changed takes the declared one (c-616 team defaults).
+            await catch_up_assistants(rt)
             if rt.channels is not None:
                 await seed_deployments(rt.channels, settings.deployments_seed_file)
             await seed_mailboxes(db, settings.mailboxes_seed_file)
@@ -475,6 +487,7 @@ def create_app(
     mount(workflows.router, "Workflows")
     mount(workflows.refs_router, "Workflows")
     mount(knowledge_usage_routes.router, "Agents")
+    mount(tool_uses_routes.router, "Agents")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
     mount(guardrail_routes.router, "Agents")
@@ -495,11 +508,14 @@ def create_app(
     mount(activity.router, "Activity")
     mount(forms.router, "Forms")
     mount(templates.router, "Templates")
+    mount(templates.resources, "Resources")
     mount(batches.router, "Batches")
     mount(background.router, "Background")
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")
     mount(service_events.router, "Workflows")
+    # platform-service's events (c-616): a new team gets its Ops Assistant, its default here, before its first chat.
+    mount(platform_events_router(team_created_handlers(lambda: cast(Runtime, app.state.runtime)), tags=()), "Agents")
     mount(overview.router, "Cases")
     mount(step_up.router, "Auth")
     mount(events.router, "Threads")

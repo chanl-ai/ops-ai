@@ -1,0 +1,5 @@
+{
+  "from": "clerk@court.example",
+  "subject": "Notice",
+  "body": "Please confirm."
+}

@@ -1,5 +1,5 @@
-"""`/v1/templates` (c-590): the agents, skills and workflows a team may install from its plugins, and the install that
-makes the team's own copy.
+"""`/v1/templates` (c-590): the agents, skills and workflows a team may install from its plugins; and
+`/v1/resources/{resource}/copies` (c-616), Add to team, which makes the team's own copy.
 
 tools-service is the one service that loads plugins; it answers the templates of the plugins on for the acting team,
 with each body (`GET /v1/plugin-templates`). A copy is made through the checks its create route makes, called here
@@ -39,6 +39,9 @@ from .engine import DefinitionInput, create_definition, definitions
 from .skills import SkillCreateInput
 
 router = APIRouter(prefix="/v1/templates", tags=["templates"])
+# Add to team in the screen's words (c-616): a resource is an agent, skill or workflow an app brings, copied into the
+# team. documents-service answers the same route for document types.
+resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
 
@@ -141,12 +144,20 @@ def _copy_view(row: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("", response_model=Envelope[list[TemplateView]])
-async def list_templates(rt: Rt, me: Me, kind: Annotated[Kind | None, Query()] = None) -> JSONResponse:
-    """The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it."""
+async def list_templates(
+    rt: Rt,
+    me: Me,
+    kind: Annotated[Kind | None, Query()] = None,
+    source: Annotated[str | None, Query(max_length=200)] = None,
+) -> JSONResponse:
+    """The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`
+    keeps one plugin's (a plugin update's review shows the version each copy came from, c-609)."""
     team = _team(me)
     held = await TemplateCopies(rt.db).of_team()
     out: list[dict[str, Any]] = []
     for t in await _listed(rt, team, kind):
+        if source is not None and t["source"] != source:
+            continue
         mine = [c for c in held if c["source"] == t["source"] and c["template_id"] == t["id"]]
         newest = max((int(c["version"]) for c in mine), default=None)
         latest = max(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), default=None)
@@ -236,16 +247,26 @@ def _needs(t: dict[str, Any], body: InstallInput) -> list[dict[str, str]]:
     return out
 
 
-@router.post(
-    "/{source}/{template_id}/install",
+def resource_ref(resource: str) -> tuple[str, str]:
+    """`<source>:<template id>` as `GET /v1/apps/{app}/resources` names it; the source carries a colon of its own
+    (`plugin:<id>`), so the template id is what follows the last one."""
+    source, _, template_id = resource.rpartition(":")
+    if not source or not template_id:
+        raise TemplateNotFound(f"No resource {resource}; a resource is named <source>:<template id>.")
+    return source, template_id
+
+
+@resources.post(
+    "/{resource}/copies",
     response_model=Envelope[Installation],
     status_code=201,
     responses={200: {"model": Envelope[Installation], "description": "The team already holds a copy of this version"}},
 )
-async def install_template(rt: Rt, me: Me, source: str, template_id: str, body: InstallInput) -> JSONResponse:
-    """Makes the team's own copy of the template: 201 with it, or 200 with the copy the team already holds of this
-    version. 404 `template_not_found` when the team's plugins bring no such template (its plugin off for the team),
+async def copy_resource(rt: Rt, me: Me, resource: str, body: InstallInput) -> JSONResponse:
+    """Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds
+    of this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),
     `template_version_not_found` for a version they do not ship."""
+    source, template_id = resource_ref(resource)
     team = _team(me)
     t = next((x for x in await _listed(rt, team, None) if x["source"] == source and x["id"] == template_id), None)
     if t is None:

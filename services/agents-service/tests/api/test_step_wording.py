@@ -140,7 +140,8 @@ async def test_a_task_list_reads_the_directory_once(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    james = person("usr_james", ["team_ops"])
+    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    james = person("usr_james", ["team_ops"], role="builder")
     for _ in range(3):
         await drafted(dev_platform, james)
     transport = cast(ASGITransport, dev_platform._transport)  # pyright: ignore[reportPrivateUsage]
@@ -287,3 +288,19 @@ def test_a_chat_approval_shows_an_object_as_rows_never_raw() -> None:
     rows = {f.label: f.value for f in widget.fields}
     assert rows.get("Fields · Status") == "Escalated" and rows.get("Object") == "Case", rows
     assert not any("{" in v for v in rows.values()), rows
+
+
+def test_a_chat_approval_shows_a_list_of_records_as_rows() -> None:
+    """Chat used to join a list of accounts into one string; the run page 500'd on the same shape. One expander."""
+    builder = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m1", role="assistant", content="", at="t"))
+    held = {
+        "tool": "compute_levy_hold",
+        "input": {"accounts": [{"id": "CHQ-2219", "balance": 5000.0}]},
+        "review_id": "r1",
+    }
+    events = builder.apply("waiting_review", {"id": "i1", "payload": held})
+    widget = next(e.widget for e in events if isinstance(e, WidgetEvent))
+    assert isinstance(widget, ApprovalWidget), widget
+    rows = {f.label: f.value for f in widget.fields}
+    assert rows.get("Accounts · 1 · Id") == "CHQ-2219", rows
+    assert "5,000" in (rows.get("Accounts · 1 · Balance") or ""), rows

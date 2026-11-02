@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, dev_service_signer, install_auth, mint_service_token
-from ops_policy import AesGcmCipher, context_of
+from ops_policy import context_of
 from ops_service_kit.http import install_error_handlers
 from ops_service_kit.settings import Settings
 from ops_tools.egress import EgressPolicy, OverrideResolver
@@ -30,6 +30,8 @@ from ops_tools.mailboxes import mailboxes_router
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.secrets import SecretStore
+
+from .conftest import credentials
 
 SMTP = int(os.environ.get("OPS_GREENMAIL_SMTP_PORT", "3025"))
 IMAP = int(os.environ.get("OPS_GREENMAIL_IMAP_PORT", "3143"))
@@ -98,7 +100,7 @@ class Env:
 
 def app_for(engine: AsyncEngine, environment: str = "dev") -> FastAPI:
     settings = Settings()
-    resolver = SecretResolver(SecretStore(engine), AesGcmCipher(settings.secrets_key.get_secret_value()))
+    resolver = SecretResolver(SecretStore(engine), credentials())
     policy = EgressPolicy(EgressStore(engine), OverrideResolver({HOST: f"{private_address()}:{IMAP}"}))
     app = FastAPI()
     install_error_handlers(app)
@@ -116,8 +118,8 @@ async def env(engine: AsyncEngine, tenant: str) -> AsyncIterator[Env]:
     store = EgressStore(engine)
     await store.add(tenant, "host", HOST, actor="test", note="", at=now)
     await store.add(tenant, "range", f"{private_address()}/32", actor="test", note="", at=now)
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    blob = cipher.encrypt("app-password", context=context_of(tenant, SECRET))
+    vault = credentials()
+    blob = await vault.put("app-password", context=context_of(tenant, SECRET))
     await SecretStore(engine).create(tenant, TEAM, SECRET, blob, actor="sam", at=now)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(engine)), base_url="http://tools") as c:
         yield Env(c, tenant, address, engine)
@@ -154,7 +156,7 @@ async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
 async def test_the_same_name_in_another_team_does_not_serve_this_team(env: Env) -> None:
     """Another team's row under the same name is that team's: the mailbox's own team holds none, so nothing is read."""
     store, now = SecretStore(env.engine), datetime.now(UTC)
-    blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt("x", context=context_of(env.tenant, SECRET))
+    blob = await credentials().put("x", context=context_of(env.tenant, SECRET))
     await store.create(env.tenant, "team_fraud", SECRET, blob, actor="sam", at=now)
     assert await store.delete(env.tenant, TEAM, SECRET, actor="sam", at=now)
     r = await env.read(now=True)

@@ -74,6 +74,7 @@ event nobody handles is recorded `unhandled`.
 | `file.deleted` | files-service | `file_deleted_purge`: purge what documents-service derived from the file | built |
 | `file.read_requested` | files-service | `system_extract`: read the file and save what was read on it | built |
 | `extraction.corrected` | documents-service | `extraction_corrected_save`: save the corrected read on its file, so the files list's Read as and to-check count follow it; sent only for the file's newest read | built |
+| `extraction.read` | documents-service, when a read of a document type ends with fields | `extraction_read_save`: save what the file was read as, so a read by any workflow, agent or API call shows in Files | built |
 | `task.requested` | agents-service itself, from `POST /v1/tasks` (`api/routers/tasks.py:41`), with a new key per post | `api_task`: a Human Review step on the posted task type; the task id is the run id | built |
 
 A service reports only the events this catalogue gives it (`EVENT_OWNERS` in agents-service `api/service_events.py`:

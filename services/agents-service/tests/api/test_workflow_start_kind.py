@@ -42,6 +42,11 @@ WORKFLOWS = {
     ),
     "child": workflow("child", "ops.trigger.request", {"inputSchema": NOTICE_FORM, "onlyFromWorkflows": True}),
     "on_event": workflow("on_event", "ops.trigger.event", {"event": "file.deleted"}),
+    "extract_by_hand": workflow(
+        "extract_by_hand",
+        "ops.trigger.event",
+        {"event": "file.read_requested", "inputSchema": NOTICE_FORM},
+    ),
 }
 
 
@@ -72,6 +77,10 @@ async def test_each_definition_says_how_its_trigger_is_started_by_hand(stack: St
     plain = await form_of(c, "by_form")
     assert plain is not None and plain["takesFiles"] is False
     assert await form_of(c, "on_event") is None
+    extract = await form_of(c, "extract_by_hand")
+    assert (
+        extract is not None and extract["kind"] == "form" and extract["takesFiles"] and extract["schema"] == NOTICE_FORM
+    )
 
 
 async def test_a_form_start_runs_with_its_values_and_says_how_it_started(stack: Stack) -> None:  # noqa: F811
@@ -96,6 +105,24 @@ async def test_a_viewer_starts_nothing_by_hand(stack: Stack) -> None:  # noqa: F
         assert refused(res), (mode, res.text)
 
 
+async def test_an_event_workflow_with_a_file_schema_starts_from_that_file(stack: Stack) -> None:  # noqa: F811
+    c, _ = stack
+    await saved(c)
+    empty = await c.post(
+        "/v1/runs/start", json={"workflowId": "extract_by_hand", "mode": "test", "values": {}}, headers=BUILDER
+    )
+    assert empty.status_code == 422 and empty.json()["error"]["code"] == "invalid_input", empty.text
+    res = await c.post(
+        "/v1/runs/start",
+        json={"workflowId": "extract_by_hand", "mode": "test", "values": {"notice": "fil_1"}},
+        headers=BUILDER,
+    )
+    assert res.status_code == 202, res.text
+    run = (await c.get(f"/v1/runs/{res.json()['data']['runId']}", headers=BUILDER)).json()["data"]
+    assert run["input"] == {"notice": "fil_1"}
+    assert run["startedBy"]["via"] == {"kind": "start", "id": "form", "name": "form"}
+
+
 async def test_a_trigger_only_its_source_starts_is_not_started_by_hand(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
     await saved(c)
@@ -117,5 +144,5 @@ async def test_the_pickers_offer_what_a_person_may_start_and_what_takes_a_file(s
     assert every["child"]["start"] == {"kind": "form", "byHand": False, "takesFiles": False}
     assert every["on_event"]["start"] == {"kind": "source", "byHand": False, "takesFiles": False}
     assert every["by_email"]["start"] == {"kind": "email", "byHand": True, "takesFiles": True}
-    assert set(await listed(c, "startable=true")) == {"by_email", "by_form_file", "by_form"}
-    assert set(await listed(c, "startable=true&takesFiles=true")) == {"by_email", "by_form_file"}
+    assert set(await listed(c, "startable=true")) == {"by_email", "by_form_file", "by_form", "extract_by_hand"}
+    assert set(await listed(c, "startable=true&takesFiles=true")) == {"by_email", "by_form_file", "extract_by_hand"}

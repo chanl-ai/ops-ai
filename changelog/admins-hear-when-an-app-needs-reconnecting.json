@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Admins get a task when an app needs reconnecting",
+  "description": "When an app turns down your team's account or its sign-in ends, your team's admins get a Human Task saying which app, what it said and where to fix it. A workflow that fails on it says the same in its reason.",
+  "tag": "improved",
+  "cards": [
+    "c-616"
+  ]
+}

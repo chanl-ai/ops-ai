@@ -7,15 +7,18 @@ import { ConnectionChip } from '@/components/integrations/integration-meta';
 
 import { CopyButton } from '@/components/shared/copy-button';
 import { Button } from '@/components/ui/button';
+import { useFlag } from '@/hooks/flag-queries';
 import { relativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { DeployChannel, Deployment, DeployEnvironment } from '@/lib/types/domain';
+import type { FlagName } from '@/lib/types/flags';
 
-export const CHANNELS: Record<DeployChannel, { label: string; description: string; icon: typeof Mail }> = {
+/** A channel with a `flag` is offered only while the install turns that flag on (c-611). */
+export const CHANNELS: Record<DeployChannel, { label: string; description: string; icon: typeof Mail; flag?: FlagName }> = {
   widget: { label: 'Chat widget', description: "Embed an agent's chat on your intranet or website; people sign in with your SSO", icon: MessageSquare },
   api: { label: 'API', description: 'Your systems call the workflow over HTTPS', icon: Code2 },
   email: { label: 'Mailbox', description: 'A shared mailbox; each email opens a case with drafted actions', icon: Mail },
-  mcp: { label: 'MCP', description: 'Staff assistants call the workflow as a tool on the workspace MCP URL', icon: Plug },
+  mcp: { label: 'MCP', description: 'Staff assistants call the workflow as a tool on the workspace MCP URL', icon: Plug, flag: 'mcp_gateway' },
   chat: { label: 'Console chat', description: 'Staff chat with the agent in the console; created for every published agent', icon: MessagesSquare },
 };
 
@@ -92,6 +95,7 @@ export function CodeBlock({ label, code, onCopy }: { label: string; code: string
 
 /** How to connect the channel: the snippet, request or routing a developer or mail admin needs. */
 export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deployment; onReconnect?: () => void; reconnecting?: boolean }) {
+  const mcpOn = useFlag('mcp_gateway');
   if (d.channel === 'widget' && d.widget) {
     const snippet = `<script src="https://cdn.harborpine.example/ops-ai/widget-1.4.2.js"\n  integrity="sha384-Q8mJ3yN0vR2kXwTf6pLd9aHs4eB7cU1oZgVy5iKnM2tPqW8rSx3jF0lAbCdE9hGu"\n  crossorigin="anonymous"\n  data-deployment="${d.id}"\n  data-position="${d.widget.position}"\n  async></script>`;
     return (
@@ -132,6 +136,9 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
         </div>
       </div>
     );
+  }
+  if (d.channel === 'mcp' && d.mcp && !mcpOn) {
+    return <p className="text-sm text-muted-foreground">Outside assistants are off for this install, so no assistant can call this workflow.</p>;
   }
   if (d.channel === 'mcp' && d.mcp) {
     return (

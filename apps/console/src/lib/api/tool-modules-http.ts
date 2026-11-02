@@ -1,5 +1,8 @@
 import type { ListParams } from '@/lib/types/query';
 
+import type { ToolModuleDetail } from '@/lib/types/tool-modules';
+
+import { type HeldHost, unlessHeld } from './held-host';
 import type { ToolModulesApi } from './tool-modules-contract';
 
 type Get = <T>(path: string) => Promise<T>;
@@ -13,10 +16,11 @@ export function createToolModulesHttp(get: Get, send: Send, qs: (p: ListParams &
     list: (p) => get(`${base}?${qs(p)}`),
     get: (id) => get(`${base}/${id}`),
     discover: (source) => send('POST', `${base}/discover`, source),
-    create: (i) => send('POST', base, i),
-    createBlankModule: (i) => send('POST', `${base}/blank`, i),
+    // The three writes that may first set an app's address can be held for Security (202) instead of saved.
+    create: (i) => send<ToolModuleDetail | HeldHost>('POST', base, i).then(unlessHeld),
+    createBlankModule: (i) => send<ToolModuleDetail | HeldHost>('POST', `${base}/blank`, i).then(unlessHeld),
     updateModuleDetails: (id, patch) => send('PATCH', `${base}/${id}`, patch),
-    addOperation: (id, i) => send('POST', `${base}/${id}/operations`, i),
+    addOperation: (id, i) => send<ToolModuleDetail | HeldHost>('POST', `${base}/${id}/operations`, i).then(unlessHeld),
     importOperations: (id, i) => send('POST', `${base}/${id}/operations/import`, i),
     setConnection: (id, connectionId) => send('PUT', `${base}/${id}/connection`, { connectionId }),
     remove: (id) => send('DELETE', `${base}/${id}`),

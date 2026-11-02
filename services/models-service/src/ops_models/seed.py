@@ -1,7 +1,9 @@
 """Development seed: the scripted provider, three bank aliases, a key per seeded agent and agents-service's own key.
-With a fake OpenAI URL, also connection openai-local at that URL and alias `default` (agents-service's default) on it.
-Idempotent: rows that exist are left alone, so a restart never resets a spent budget, except openai-local's URL,
-which follows the fake's until an operator binds it to a real provider with a credential."""
+With the install's model connection in settings (OPENAI_API_TYPE or OPENAI_API_BASE, c-605), connection openai-local
+is that provider, rewritten from the settings on every start; otherwise, with a fake OpenAI URL, openai-local is at
+that URL. Either way alias `default` (agents-service's default) is on it. Idempotent: rows that exist are left alone,
+so a restart never resets a spent budget, except openai-local, which follows the settings, or the fake's URL until an
+operator binds it to a real provider with a credential."""
 
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ from ops_service_kit.ids import now_iso
 from ops_store.database import Database
 
 from .app import secret_hash
+from .connection_settings import ModelConnectionSettings
 from .store import Aliases, ModelKeys, Providers
 
 SCRIPTED = "prov_scripted"
@@ -39,17 +42,53 @@ OPENAI_ALIASES: dict[str, tuple[str, str, str, str, str]] = {
 }
 
 
+# OpenAI's own endpoint, for OPENAI_API_TYPE=openai with no OPENAI_API_BASE.
+OPENAI_URL = "https://api.openai.com/v1"
+# The key name the dev stack saves OPENAI_API_KEY under (scripts/stack.sh, OPS_MODEL_PROVIDER_KEYS).
+OPENAI_KEY_NAME = "openai"
+
+
+def install_connection(settings: ModelConnectionSettings) -> dict[str, str | None] | None:
+    """openai-local's fields from the install's model settings, or None when neither OPENAI_API_TYPE nor
+    OPENAI_API_BASE is set. A base with no type is an OpenAI-compatible endpoint. The settings class has already refused
+    a combination that cannot work."""
+    if settings.openai_api_type is None and settings.openai_api_base is None:
+        return None
+    if settings.openai_api_type == "azure":
+        return {
+            "type": "azure-openai",
+            "base_url": settings.openai_api_base,
+            "api_version": settings.openai_api_version,
+            "region": settings.openai_api_region,
+            "key_ref": OPENAI_KEY_NAME,
+        }
+    base = settings.openai_api_base or OPENAI_URL
+    return {
+        "type": "openai-compatible",
+        "base_url": base,
+        "api_version": None,
+        "region": None,
+        "key_ref": OPENAI_KEY_NAME,
+    }
+
+
 def dev_secret(agent: str) -> str:
     """The seeded keys' secrets in development, so a local agents-service can be configured without reading a log."""
     return f"mk_dev_{agent}"
 
 
-async def seed(db: Database, fake_openai_url: str | None = None) -> None:
+async def seed(db: Database, fake_openai_url: str | None = None, install: dict[str, str | None] | None = None) -> None:
     providers, aliases, keys = Providers(db), Aliases(db), ModelKeys(db)
     scripted = {"id": SCRIPTED, "name": "scripted", "type": "scripted", "base_url": None, "key_ref": None}
     await providers.ensure({**scripted, "created_at": now_iso()})
     bound = {name: (SCRIPTED, *row) for name, row in ALIASES.items()}
-    if fake_openai_url:
+    if install is not None:
+        # The settings win over whatever the row held, type included, so setting OPENAI_API_TYPE moves the stack's
+        # default model on the next start; the fake is not used.
+        await providers.ensure({"id": OPENAI_LOCAL, "name": OPENAI_LOCAL, **install, "created_at": now_iso()})
+        await providers.rebind(OPENAI_LOCAL, install)
+        bound |= {name: (OPENAI_LOCAL, *row) for name, row in OPENAI_ALIASES.items()}
+    elif fake_openai_url:
         local = {"id": OPENAI_LOCAL, "name": OPENAI_LOCAL, "type": "openai-compatible", "key_ref": None}
         await providers.ensure({**local, "base_url": fake_openai_url, "created_at": now_iso()})
         # The fake's URL wins over whatever a dev database kept (an old port, a provider with no credential), so

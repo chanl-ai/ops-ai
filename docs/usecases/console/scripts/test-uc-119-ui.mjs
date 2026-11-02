@@ -1,5 +1,5 @@
 // uc-119 a bank page shows the full chat through the loader and the embed app, ui layer:
-// docs/usecases/console/embedded-chat-on-a-bank-page.md (c-158). The stack runs with platform sign-in and the embed app;
+// docs/usecases/console/embedded-chat-on-a-bank-page.md. The stack runs with platform sign-in and the embed app;
 // this script serves the bank's intranet page (which mints sessions on its own server with the deployment's mint key)
 // and a page on an origin the deployment does not list, then drives them in a browser. Each check stands alone.
 import { createServer } from 'node:http';
@@ -186,7 +186,7 @@ await withUiStack(
       });
 
       // 7. Only listed pages may frame the chat: the page's CSP names the bank origin for it, and the console's own for
-      // its Preview (c-232), and nobody for another.
+      // its Preview, and nobody for another.
       await step('7 the chat page allows framing only by the listed page', async () => {
         const url = `${embedUrl}/embed/${dep}?tenant=${tenant}`;
         const listed = (await fetch(url, { headers: { Referer: `${HOST}/` } })).headers.get('content-security-policy');

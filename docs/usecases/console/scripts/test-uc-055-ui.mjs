@@ -3,7 +3,7 @@
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { grantTools, openHeldChatWrite } from '../../lib/workflow_ui.mjs';
+import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -11,7 +11,7 @@ const AGENT = 'ag_branch';
 const JAMES = 'j.richardson@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-// Egress is changed only by an admin of the Security team (c-079).
+// Egress is changed only by an admin of the Security team.
 const SAM = 's.adeyemi@harborpine.example';
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
@@ -90,7 +90,7 @@ await withUiStack(
         check('2 James imports the open spec and saves the draft', res?.status() === 201 && ops.get_account?.access === 'read' && ops.place_hold?.access === 'write', { status: res?.status(), access: Object.fromEntries(Object.entries(ops).map(([k, o]) => [k, o.access])) });
       });
 
-      // 3. The owner requests a security review from the module page.
+      // 3. The maintainers requests a security review from the module page.
       await step('3 James requests a security review', async () => {
         await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await james.getByTestId('header-request-review').click({ timeout: 120_000 });
@@ -100,7 +100,7 @@ await withUiStack(
         check('3 James requests a security review', res?.status() === 200 && (await res.json()).data?.status === 'in_review', res?.status());
       });
 
-      // 4. Security approves it in Human Tasks, where every review is decided (c-163), which publishes it.
+      // 4. Security approves it in Human Tasks, where every review is decided, which publishes it.
       await step('4 Nadia approves the module in Human Tasks and it publishes', async () => {
         const nadia = await signIn(browser, consoleUrl, NADIA, errors);
         const J = await headers(JAMES);
@@ -113,16 +113,16 @@ await withUiStack(
         check('4 Nadia approves the module in Human Tasks and it publishes', res?.status() === 200 && after?.status === 'published', { status: res?.status(), state: after?.status });
       });
 
-      // 5. The owner tries each operation with no workflow approval: the read for real, the write from the stub.
-      await step('5 (c-048 T008) James tries the read for real and the write from the stub, as owner', async () => {
+      // 5. The maintainers tries each operation with no workflow approval: the read for real, the write from the stub.
+      await step('5 (an earlier change T008) James tries the read for real and the write from the stub, as owner', async () => {
         const panel = james.getByTestId('module-test-panel');
         const results = {};
         for (const op of ['get_account', 'place_hold']) {
-          // Each operation is tried on its own workbench (c-088).
+          // Each operation is tried on its own workbench.
           await james.goto(`${consoleUrl}/tools/${moduleId}/operations/${op}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await panel.waitFor({ timeout: 120_000 });
-          // The panel starts on the mock; the owner's real read is the Test environment target.
-          await panel.getByRole('radio', { name: 'Test environment' }).or(panel.getByRole('button', { name: 'Test environment' })).first().click();
+          // The panel starts on the mock; the maintainers' real call is the Real target.
+          await panel.getByRole('radio', { name: 'Real' }).or(panel.getByRole('button', { name: 'Real' })).first().click();
           const input = panel.locator('#t-accountId');
           if (await input.count()) await input.fill('CHQ-2219');
           const ran = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${moduleId}/test`), { timeout: 60_000 }));
@@ -133,14 +133,17 @@ await withUiStack(
         const read = results.get_account;
         const write = results.place_hold;
         check(
-          '5 (c-048 T008) James tries the read for real and the write from the stub, as owner',
-          read?.status === 200 && read.stubbed === false && read.reachedHost === stack.bank.host && write?.status === 200 && write.stubbed === true,
+          '5 (an earlier change T008) James runs the read and the write for real, as owner',
+          read?.status === 200 && read.stubbed === false && read.reachedHost === stack.bank.host && write?.status === 200 && write.stubbed === false && write.reachedHost === stack.bank.host,
           { read: { status: read?.status, decision: read?.decision, reasons: read?.reasons, stubbed: read?.stubbed, reachedHost: read?.reachedHost, sent: read?.sent }, write: { status: write?.status, decision: write?.decision, reasons: write?.reasons, stubbed: write?.stubbed, sent: write?.sent } },
         );
       });
 
       // 6. Grant both operations to Branch Concierge, save the draft and publish it.
       await step('6 James grants both operations to Branch Concierge and publishes it', async () => {
+        // Approvals are off by default (2026-11-01): steps 8 and 9 prove a held chat write, so the team turns tool
+        // write approvals on here, after step 5's owner run of the write.
+        await writeApprovalsOn();
         await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
         const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -165,33 +168,35 @@ await withUiStack(
         check('7 a chat read runs get_account', replied, (await james.locator('main').innerText().catch(() => '')).slice(-400));
       });
 
-      // 8. A chat write waits for an approval and sends nothing.
+      // 8. A chat write waits for an approval and sends nothing. Step 5's real write is already in the log, so steps 8
+      // and 9 count the writes sent after it.
       let heldThread;
+      let before = 0;
+      const sentWrites = async () => ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: await headers(JAMES) })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok').length;
       await step('8 a chat write holds for approval', async () => {
+        before = await sentWrites();
         await chat(james, consoleUrl, 'call place_hold {"accountId": "CHQ-2219"}');
         heldThread = /\/chat\/([^/?#]+)/.exec(james.url())?.[1];
         // The person who asked waits on someone else: the card names who decides, with no Approve of his own.
         const card = await james.getByTestId('approval-waiting-on').last().waitFor({ timeout: 60_000 }).then(() => true, () => false) && (await james.getByRole('button', { name: /^Approve/ }).count()) === 0;
-        const J = await headers(JAMES);
-        const calls = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: J })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok');
-        check('8 a chat write holds for approval', card && calls.length === 0, { card, sentWrites: calls.length, thread: heldThread });
+        const after = await sentWrites();
+        check('8 a chat write holds for approval', card && after === before, { card, before, after, thread: heldThread });
       });
 
       // 9. An approver on the module's team decides it in Reviews; the write runs once.
-      await step('9 (c-048 T013) Maya approves the held write in Reviews and it runs once', async () => {
+      await step('9 (an earlier change T013) Maya approves the held write in Reviews and it runs once', async () => {
         const maya = await signIn(browser, consoleUrl, MAYA, errors);
         const form = await openHeldChatWrite(maya, consoleUrl, heldThread);
         const decided = armed(maya.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 }));
         await form.getByRole('button', { name: 'Approve', exact: true }).click();
         const res = await decided;
-        const J = await headers(JAMES);
         // The approval resumes the conversation, which then makes the call; give it a moment to land.
-        let sent = [];
-        for (let i = 0; i < 10 && sent.length === 0; i++) {
-          sent = ((await (await fetch(`${tools}/v1/tool-modules/${moduleId}/activity`, { headers: J })).json()).data?.recent ?? []).filter((c) => c.target === 'place_hold' && c.status === 'ok');
-          if (sent.length === 0) await new Promise((r) => setTimeout(r, 2_000));
+        let sent = before;
+        for (let i = 0; i < 10 && sent === before; i++) {
+          sent = await sentWrites();
+          if (sent === before) await new Promise((r) => setTimeout(r, 2_000));
         }
-        check('9 (c-048 T013) Maya approves the held write in Reviews and it runs once', res?.status() === 200 && sent.length === 1, { decision: res?.status(), sent: sent.length });
+        check('9 (an earlier change T013) Maya approves the held write in Reviews and it runs once', res?.status() === 200 && sent === before + 1, { decision: res?.status(), before, sent });
       });
 
       // 10. The module's Activity tab shows the calls.
@@ -206,7 +211,7 @@ await withUiStack(
       });
 
       // 11. An operation that stops being offered shows on the agent as no longer offered, with Remove.
-      await step('11 (c-048 T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', async () => {
+      await step('11 (an earlier change T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', async () => {
         const J = await headers(JAMES);
         const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
         const op = detail.operations.find((o) => o.name === 'get_account');
@@ -220,7 +225,7 @@ await withUiStack(
         const approved = waitingAgain ? ((await approveToolReview(moduleId, N, J)).status === 'published' ? 200 : 'not published') : 'no review';
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
-        // Grants no longer offered are listed under the tools picker (c-135), not inside a dialog.
+        // Grants no longer offered are listed under the tools picker, not inside a dialog.
         const grant = james.getByTestId('stale-grants');
         let stale = false;
         for (const until = Date.now() + 45_000; !stale && Date.now() < until; ) {
@@ -233,7 +238,7 @@ await withUiStack(
         const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
         const offered = ((await (await fetch(`${agents}/v1/tools`, { headers: J })).json()).data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
         const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
-        check('11 (c-048 T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
+        check('11 (an earlier change T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });
 
       check('no page errors', errors.length === 0, errors);

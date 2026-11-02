@@ -14,13 +14,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDocumentTypes } from '@/hooks/document-type-queries';
 import { type ReadResult, useStartExtraction } from '@/hooks/extraction-queries';
-import { useDocumentReads } from '@/hooks/use-switches';
 import { cn } from '@/lib/utils';
 
 /** What each end of the extract workflow means for the person who pressed Extract. */
 const READ_OUTCOME: Record<string, string> = {
   saved: 'Its fields are saved on the file.',
   waiting: 'Some fields wait for a person to check them in Human Tasks.',
+  reading: 'The file is still being read; its fields show here when it finishes.',
   needs_manual_read: 'A person said this file needs reading by hand.',
   unreadable: 'No text could be read from it.',
   not_saved: 'The fields were read but not saved on the file.',
@@ -38,8 +38,7 @@ const MODES: { mode: ReadMode; label: string; sub: string; testId: string }[] = 
 ];
 
 /** Reads a file with a document type and version (screen 3 of the documents design). */
-export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, onFullText }: { open: boolean; onOpenChange: (open: boolean) => void; fileId: string; fileName: string; onDone: (run: ReadResult) => void; /** Full text starts no read: the page shows the file's Text tab. */ onFullText?: () => void }) {
-  const reads = useDocumentReads();
+export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, onFullText }: { open: boolean; onOpenChange: (open: boolean) => void; fileId: string; fileName: string; onDone: (run: ReadResult) => void; /** Full text starts no read: the page shows the file's Text tab, its first `pages` pages when given. */ onFullText?: (pages?: number) => void }) {
   const types = useDocumentTypes();
   const start = useStartExtraction();
   const router = useRouter();
@@ -54,7 +53,7 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
   const items = types.data?.items ?? [];
   const chosen = items.find((t) => t.id === typeId);
   const detect = typeId === DETECT;
-  const byType = !reads || mode === 'fields';
+  const byType = mode === 'fields';
   const pagesLimit = maxPages.trim() ? Number(maxPages) : undefined;
   const pagesError = pagesLimit !== undefined && (!Number.isInteger(pagesLimit) || pagesLimit < 1) ? 'A whole number of pages, 1 or more.' : undefined;
 
@@ -67,8 +66,9 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
 
   const submit = async () => {
     if (!byType && mode === 'text') {
+      if (pagesError) return;
       onOpenChange(false);
-      return onFullText?.();
+      return onFullText?.(pagesLimit);
     }
     if (byType && !chosen && !detect) return setError('Choose a document type, or Detect the type.');
     if (!byType && pagesError) return;
@@ -81,7 +81,7 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
           : {};
       const run = await start.mutateAsync({ fileId, input, key });
       if (run.status === 'failed' || run.status === 'cancelled') return setError(`The read stopped (${run.status}). Open run ${run.runId} for the step that failed.`);
-      const said = READ_OUTCOME[run.status === 'waiting' ? 'waiting' : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
+      const said = READ_OUTCOME[run.status === 'waiting' || run.status === 'reading' ? run.status : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
       // Top centre: the default corner sits over the fields the read just filled.
       toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/workflows/runs/${encodeURIComponent(run.runId)}`) } });
       onOpenChange(false);
@@ -127,26 +127,27 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {reads && (
-          <FormField id="extract-mode" label="What to read">
-            <RadioGroup id="extract-mode" value={mode} onValueChange={(v) => (setMode(v as ReadMode), setError(null))} className="flex flex-col gap-2">
-              {MODES.map((m) => (
-                <label key={m.mode} htmlFor={`extract-mode-${m.mode}`} className={cn('flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5', mode === m.mode && 'border-primary bg-primary/5')} data-testid={m.testId}>
-                  <RadioGroupItem value={m.mode} id={`extract-mode-${m.mode}`} className="mt-0.5" />
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-sm font-medium">{m.label}</span>
-                    <span className="text-xs text-muted-foreground">{m.sub}</span>
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-          </FormField>
-        )}
-        {reads && mode === 'propose' && (
+        <FormField id="extract-mode" label="What to read">
+          <RadioGroup id="extract-mode" value={mode} onValueChange={(v) => (setMode(v as ReadMode), setError(null))} className="flex flex-col gap-2">
+            {MODES.map((m) => (
+              <label key={m.mode} htmlFor={`extract-mode-${m.mode}`} className={cn('flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5', mode === m.mode && 'border-primary bg-primary/5')} data-testid={m.testId}>
+                <RadioGroupItem value={m.mode} id={`extract-mode-${m.mode}`} className="mt-0.5" />
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-sm font-medium">{m.label}</span>
+                  <span className="text-xs text-muted-foreground">{m.sub}</span>
+                </span>
+              </label>
+            ))}
+          </RadioGroup>
+        </FormField>
+      
+        {mode !== 'fields' && (
           <>
-            <FormField id="extract-hint" label="What is it?" optional hint="Helps the model name the fields.">
-              <Input id="extract-hint" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="e.g. a supplier invoice" maxLength={200} data-testid="extract-hint" />
-            </FormField>
+            {mode === 'propose' && (
+              <FormField id="extract-hint" label="What is it?" optional hint="Helps the model name the fields.">
+                <Input id="extract-hint" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="e.g. a supplier invoice" maxLength={200} data-testid="extract-hint" />
+              </FormField>
+            )}
             <FormField id="extract-max-pages" label="Pages to read" optional hint="Every page when empty." error={pagesError}>
               <Input id="extract-max-pages" type="number" inputMode="numeric" min={1} value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="e.g. 10" aria-invalid={!!pagesError} data-testid="extract-max-pages" />
             </FormField>

@@ -16,7 +16,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useMailboxes } from '@/hooks/channels-queries';
-import { useDocumentReads, useHostedForms, useWorkflowBuilder } from '@/hooks/use-switches';
 import type { DefinitionCheck, EngineNode, EngineNodeType } from '@/lib/types/engine';
 
 import { groupLook } from './definition-node';
@@ -24,7 +23,6 @@ import { NodeSettingsForm, type StepRefs } from './node-form';
 import { ShareAsForm } from './share-as-form';
 
 const EXTRACT = 'ops.ai.extract';
-const COMBINE = 'ops.data.combine';
 const REQUEST_TRIGGER = 'ops.trigger.request';
 const KIND: Record<string, string> = { trigger: 'Trigger', data: 'Data', flow: 'Flow', action: 'Action', ai: 'AI', human: 'Person' };
 const pretty = (p: Record<string, unknown> | undefined) => JSON.stringify(p ?? {}, null, 2);
@@ -58,7 +56,6 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
   const byField = Object.fromEntries(errors.filter((c) => c.field).map((c) => [c.field as string, c.message]));
   const look = groupLook(type?.group, node?.type);
   const trigger = type?.group === 'trigger';
-  const forms = useHostedForms();
   return (
     <DetailSheet
       open={!!node}
@@ -115,7 +112,7 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
           )}
           {trigger && node.type === EMAIL_TRIGGER && <EmailTriggerDetails parameters={node.parameters ?? {}} readOnly={readOnly} onConnected={(address) => onChange({ parameters: { ...(node.parameters ?? {}), mailbox: address } })} />}
           {trigger && node.type !== EMAIL_TRIGGER && <TriggerDetails workflowId={workflowId} schema={(node.parameters?.inputSchema ?? {}) as InputSchema} />}
-          {forms && node.type === REQUEST_TRIGGER && <ShareAsForm workflowId={workflowId} schema={(node.parameters?.inputSchema ?? {}) as Record<string, unknown>} readOnly={readOnly} />}
+          {node.type === REQUEST_TRIGGER && <ShareAsForm workflowId={workflowId} schema={(node.parameters?.inputSchema ?? {}) as Record<string, unknown>} readOnly={readOnly} />}
           {/* Keyed by node id so moving to another step resets the field drafts. */}
           <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
         </fieldset>
@@ -267,8 +264,6 @@ function StepFields({
   const lastSent = React.useRef(text);
   // A type with no form (an unknown type) can only be edited as JSON, so its settings start open.
   const [allOpen, setAllOpen] = React.useState(!type?.ui?.order.length);
-  const reads = useDocumentReads();
-  const builder = useWorkflowBuilder();
 
   // Parameters changed outside this field (the form above, or a reload after save) replace the draft text.
   React.useEffect(() => {
@@ -307,9 +302,6 @@ function StepFields({
         <NodeSettingsForm form={type.ui} schema={type.parameters} value={node.parameters ?? {}} steps={steps} idPrefix={`node-${node.id}`}
           errors={errors}
           onChange={(parameters) => onChange({ parameters })}
-          // Full text and proposed fields are behind the document reads switch; with it off the step reads fields.
-          // Combine facts' Disagree port is behind the workflow builder switch; with it off the step goes on.
-          hiddenChoices={node.type === EXTRACT && !reads ? { read: ['text', 'propose'] } : node.type === COMBINE && !builder ? { onDisagreement: ['port'] } : undefined}
           testIds={node.type === EXTRACT ? { read: 'step-what-to-read' } : undefined}
         />
       ) : null}

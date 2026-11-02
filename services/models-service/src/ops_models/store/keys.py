@@ -10,10 +10,11 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.database import Database
 from ops_store.dialect import insert_ignore, locked
 
+from .provider_keys import ROLE
 from .tables import model_key_tenants as shares
 from .tables import model_keys as t
 
@@ -72,21 +73,25 @@ class ModelKeys:
     async def tenant_share(self, key_id: str, tenant_id: str, budget: Decimal) -> dict[str, Any]:
         """The tenant's row on a per-tenant key, made at `budget` the first time the tenant spends."""
         where = (shares.c.key_id == key_id, shares.c.tenant_id == tenant_id)
-        async with self.db.begin() as c:
+        async with isolation.isolated_tx(self.db, role=ROLE) as c:
             row = {"key_id": key_id, "tenant_id": tenant_id, "budget": budget, "spent": Decimal(0)}
             await c.execute(insert_ignore(c, shares, row, keys=["key_id", "tenant_id"]))
             return dict((await c.execute(shares.select().where(*where))).mappings().one())
 
     async def spend(self, key_id: str, amount: Decimal, *, tenant_id: str | None = None) -> None:
-        """Adds `amount` to the key's spend and, for a per-tenant key, to the tenant's share."""
-        async with self.db.begin() as c:
+        """Adds `amount` to the key's spend and, for a per-tenant key, to the tenant's share, run as ROLE in that
+        tenant so the database holds the share to it."""
+        if tenant_id is None:
+            async with self.db.begin() as c:
+                await c.execute(t.update().where(t.c.id == key_id).values(spent=t.c.spent + amount))
+            return
+        async with isolation.isolated_tx(self.db, role=ROLE) as c:
             await c.execute(t.update().where(t.c.id == key_id).values(spent=t.c.spent + amount))
-            if tenant_id is not None:
-                await c.execute(
-                    shares.update()
-                    .where(shares.c.key_id == key_id, shares.c.tenant_id == tenant_id)
-                    .values(spent=shares.c.spent + amount)
-                )
+            await c.execute(
+                shares.update()
+                .where(shares.c.key_id == key_id, shares.c.tenant_id == tenant_id)
+                .values(spent=shares.c.spent + amount)
+            )
 
     async def ensure(self, row: Mapping[str, Any]) -> None:
         """Adds the key unless the identity has one, which keeps its secret and its spend."""

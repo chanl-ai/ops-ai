@@ -39,15 +39,22 @@ in the team that owns the workflow; the person who decides needs the approver ro
 from ops_ai import OpsAI
 
 ops = OpsAI(api_key="ok_...", base_url="https://ops.example.com", team="team_customer_ops")
-started = ops.runs.start("card_dispute_intake", input={
-    "cardholder": "Jordan Whitfield", "ssnLast4": "5555", "merchant": "Northline Electronics",
-    "amount": "482.10", "postedOn": "2026-10-11", "cardType": "debit",
-    "reason": "Ordered a monitor on 11 October; the parcel never arrived.",
-})
-run = ops.runs.wait(started["runId"])          # returns at the approval, with the task's id
+started = ops.runs.start(
+    "card_dispute_intake",
+    input={
+        "cardholder": "Jordan Whitfield",
+        "ssnLast4": "5555",
+        "merchant": "Northline Electronics",
+        "amount": "482.10",
+        "postedOn": "2026-10-11",
+        "cardType": "debit",
+        "reason": "Ordered a monitor on 11 October; the parcel never arrived.",
+    },
+)
+run = ops.runs.wait(started["runId"])  # returns at the approval, with the task's id
 approver = OpsAI(api_key="ok_...approver", base_url="https://ops.example.com", team="team_customer_ops")
 approver.tasks.decide(run["taskId"], "approved", reason="Inside the 90-day debit limit.")
-print(ops.runs.wait(started["runId"])["outcome"])   # credited
+print(ops.runs.wait(started["runId"])["outcome"])  # credited
 ```
 
 ```ts tab="TypeScript"

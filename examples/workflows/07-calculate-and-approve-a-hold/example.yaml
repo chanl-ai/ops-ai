@@ -1,0 +1,51 @@
+id: calculate-and-approve-a-hold
+title: Calculate and approve an account hold
+track: workflow
+status: built
+difficulty: advanced
+outcome: Cap a hold at the available balance, let a person approve it, then place
+  it.
+capabilities:
+- id: ops.trigger.request
+  status: built
+- id: ops.action.tool
+  status: built
+- id: ops.data.match
+  status: built
+- id: ops.data.set
+  status: built
+- id: ops.data.compute
+  status: built
+- id: ops.flow.if
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.action.openCase
+  status: built
+- id: ops.action.addToCase
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/hold.json
+- fixtures/missing.json
+- fixtures/failed.json
+expected:
+- expected/hold.json
+- expected/missing.json
+- expected/failed.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 60
+teaches:
+- Match a request name to one customer
+- Compute caps the hold at the first account balance
+- a person approves, then place_hold writes and a case opens

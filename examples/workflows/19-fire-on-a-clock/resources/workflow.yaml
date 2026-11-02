@@ -1,0 +1,20 @@
+schemaVersion: 2
+id: fire_on_a_clock
+name: Fire on a clock
+nodes:
+- id: start
+  type: ops.trigger.schedule
+  typeVersion: 1
+  name: Due
+  parameters:
+    key: morning
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Ticked
+  parameters:
+    outcome: ticked
+    output: $.input
+connections:
+- from: {node: start, port: payload}
+  to: {node: done, port: in}

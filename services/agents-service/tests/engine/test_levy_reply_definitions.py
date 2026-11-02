@@ -24,7 +24,7 @@ FILES = Path(__file__).parents[4] / "scripts" / "sample-team" / "workflows"
 NAMES = {
     "agent:levy": "ag_levy",
     "workflow:levy_reply_debtor": "levy_reply_debtor",
-    "documentType:garnishment_notice": "garnishment_notice",
+    "documentType:legal_notice": "legal_notice",
 }
 
 
@@ -75,6 +75,9 @@ class Bank:
 
 
 class Reviews:
+    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        return None  # every review here waits for a person
+
     async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
         return f"{run_id}:{node_id}:{iteration}"
 

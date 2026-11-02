@@ -11,11 +11,10 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_policy import AesGcmCipher, context_of
-from ops_service_kit.settings import Settings
+from ops_policy import context_of
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import Bank, service_headers
+from .conftest import Bank, credentials, service_headers
 from .test_secrets import MODULE, ROTATED, TEAM, VALUE, keyed  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 BASE = f"/v1/tool-modules/{MODULE}"
@@ -46,7 +45,7 @@ async def test_a_secret_lists_the_operations_that_read_it_staged_ones_included(k
         (f"echo_{tenant}", False),
     ]
     staged = await c.patch(
-        f"{BASE}/operations/{MODULE}_op2", json={"headers": [{"key": "X-Api-Key", "value": "{{NEW_KEY}}"}]}
+        f"{BASE}/operations/{MODULE}_op2", json={"headers": [{"key": "X-Partner-Token", "value": "{{NEW_KEY}}"}]}
     )
     assert staged.status_code == 200, staged.text
     assert [(u["operation"], u["staged"]) for u in (await _secret(k, "NEW_KEY"))["usedBy"]] == [
@@ -99,8 +98,8 @@ async def test_a_name_made_before_the_64_character_rule_keeps_working(k: Bank, e
     long = "LEGACY_" + "K" * 73
     assert (await c.post("/v1/secrets", json={"name": long, "value": VALUE})).status_code in (400, 422)
     store = SecretStore(engine)
-    # Written as the older rule allowed, with the cipher the app uses (tests/conftest.py build_app).
-    blob = AesGcmCipher(Settings().secrets_key.get_secret_value()).encrypt(VALUE, context=context_of(tenant, long))
+    # Written as the older rule allowed, with the vault the app uses (tests/conftest.py build_app).
+    blob = await credentials().put(VALUE, context=context_of(tenant, long))
     assert await store.create(tenant, TEAM, long, blob, actor="before c-093", at=datetime.now(UTC))
     assert (await c.post(f"/v1/secrets/{long}/rotate", json={"value": ROTATED})).status_code == 200
     assert long in [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]

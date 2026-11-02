@@ -162,6 +162,12 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
+| `guide/build-with-ops-ai.md` | Developer landing: the simple-first ladder, the two public bridges, and the Example folders |
+| `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `ops workflows` |
+| `guide/agents.md` | Author, publish and chat with agents from the SDK and `ops agents` |
+| `guide/workflow-example-coverage.md` | Generated: every built node type and the Example that teaches it |
+| `guide/agent-example-coverage.md` | Generated: every Agent Example and the capabilities it teaches |
+| `guide/developer-surface-coverage.md` | Generated: API, Python, TypeScript, CLI and UI proof per lifecycle operation |
 | `guide/data-and-database.md` | The entities, each service's tables, tenant and team isolation, files and knowledge, retention and the audit trail |
 | `guide/security-and-governance.md` | Sign-in and SSO, roles, approvals, the tool gateway and allow-list, secrets, masking, hardening |
 | `guide/models.md` | The AI gateway: aliases, keys, budgets, data sensitivity and the test model |
@@ -169,6 +175,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/install.md` | What to arrange before an install, then the install script's steps, included from `deploy/install.md` |
 | `guide/operate.md` | Health, logs, upgrade and roll back, back up and restore, scaling, what to watch, key rotation |
 | `guide/azure-sql.md` | Azure SQL: the scripts ready for review and what is still to come |
+| `guide/apps.md` | Apps: the Apps menu, turning an App on, team and personal Accounts, App credentials and Secrets, Tools, Resources, approvals, a run waiting for a person, turning an App off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
 | `guide/support.md` | The support contact (placeholder) |
 | `guide/skills/ops-run.md` | Developer skill for Claude Code and GitHub Copilot (ops-run): run the stack on a laptop, in the devcontainer or on a shared VM, on the fake or OpenAI; generated into `.claude/skills/ops-run/SKILL.md` and `.github/prompts/ops-run.prompt.md` by `scripts/agent_skills.py` |
@@ -185,6 +192,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
 | `guide/vendor-onboarding-plugin.md` | Building a plugin from the vendor-onboarding example in `examples/plugins/`: what is YAML and what is Python, the function's tests, installing it through the public APIs today, and the gaps found |
 | `guide/plugins.md` | Building a plugin: the manifest, Python tools, knowledge sources, `ops plugin validate` and `test`, installing it, the `OPS_PLUGINS` switch, the platform and team OAuth apps, and per-person sign-in |
+| `guide/build-your-first-tool.md` | Build your first tool: a REST Tool on an App, a request with a form body, Mock then Real, to an agent that uses it; Mock and Real compared; what is not built yet |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
@@ -332,7 +340,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
 | `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop (preview part for the maintainers' walk) |
 | `usecases/console/screen-speed.md` | uc-560: with OPS_REQUEST_TIMING on, each request's JSON line and Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
-| `usecases/console/connect-every-system.md` | uc-580: a team admin connects every system for real; the team's systems as a grid with search and a category filter, behind the real-connections switch |
+| `usecases/console/connect-every-system.md` | uc-580, superseded by uc-607: kept for the record; its steps moved to uc-607 |
+| `usecases/console/connect-apps.md` | uc-607: a team connects apps from one catalog; a catalog of apps, Connect in a small window, and an app's page where a person connects their own account |
 | `usecases/tools-service/module-traffic-from-real-calls.md` | uc-042: a module's call counts, error rate, p95 and activity come from the gateway's call log |
 | `usecases/tools-service/security-decides-a-module-review.md` | uc-040: only Security's approver decides a module's security review, from Reviews or the module page |
 | `usecases/tools-service/tool-module-details-page.md` | uc-015: the tool module details page, test panel beside the tabs and executions with their caller |
@@ -348,6 +357,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/levy-from-mailbox.md` | uc-076, retired: the v1 court order flow from the mailbox deployment; uc-210 replaces it |
 | `usecases/agents-service/workflow-runner-basic-nodes.md` | uc-081: basic workflow nodes run through the queue and survive a worker crash |
 | `usecases/agents-service/agent-runs-a-workflow-by-search.md` | uc-084: an agent finds a workflow with search_tools and runs it; its agent step answers by schema |
+| `usecases/agents-service/an-agent-finds-its-tool-by-search.md` | uc-610: An agent with many tools finds the one it needs by searching, and runs it through the same checks |
+| `usecases/tools-service/an-agent-reads-a-team-file.md` | uc-613: An agent reads a team's file and a document's fields by its type, and never another team's |
 | `usecases/agents-service/agent-guardrails-blocked-topics.md` | uc-085: an agent refuses a blocked topic before answering, through a guardrail it pins by version |
 | `usecases/kb-service/knowledge-cited-answers.md` | uc-080: uploaded PDFs indexed by page and section; a granted agent cites them in chat; a replaced document leaves a change row |
 | `usecases/kb-service/add-documents-from-files.md` | uc-129: Add documents on a base uploads to Files or picks from it; both index and Files keeps them referenced |
@@ -401,15 +412,29 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
 | `usecases/agents-service/another-team-s-records-answer-not.md` | uc-526: Another team's records answer not found |
 | `usecases/models-service/an-account-admin-saves-a-model.md` | uc-532: An account admin saves a model provider key on Settings and a model call signs in to the provider with it; no other person sees or sets one |
+| `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
 | `usecases/tools-service/a-team-turns-on-the-salesforce.md` | uc-564: a team turns on the Salesforce plugin; its agents work cases and cite its articles |
+| `usecases/tools-service/plugin-sign-in-methods.md` | uc-588: a developer's plugin signs in every way a system asks (none, API key, password, token, OAuth client, each person, client certificate) |
+| `usecases/tools-service/plugin-sign-in-with-a-certificate.md` | uc-583: a team connects a system that allows only certificate sign-in (an Entra app's signed assertion, a Google or DocuSign signed JWT grant) |
+| `usecases/tools-service/plugin-manifest-fields.md` | uc-584: a plugin sends the headers, forms, sign-in steps and limits a system needs (headers, form bodies, basic client auth, sign-in parameters, a lookup after sign-in, amount limits) |
+| `usecases/tools-service/plugin-updates.md` | uc-609: a team reviews a plugin update before its tools change (each team keeps its version, the review, who uses each tool, the take) |
 | `usecases/agents-service/memory-follows-a-person-across-a.md` | uc-561: Memory follows a person across a team's agents and they take it back |
 | `usecases/agents-service/run-outcomes.md` | uc-567: every workflow run ends with a clear outcome: Stuck with Retry, uncertain writes, outages, set-aside emails |
+| `usecases/agents-service/plugin-templates.md` | uc-590: a team installs a plugin's agent, skill, workflow and document type as its own copies |
 | `usecases/platform-service/a-developer-installs-the-sample-team.md` | uc-563: A developer installs the sample team with one command, and a second run makes nothing |
 | `usecases/agents-service/a-sql-server-install-migrates-agents.md` | uc-565: A SQL Server install migrates agents to the head |
 | `usecases/agents-service/agents-starts-and-a-chat-turn-saves-its.md` | uc-566: Agents starts and a chat turn saves its checkpoint |
 | `usecases/agents-service/document-workflows.md` | uc-568: document workflows: full-text and proposed reads, hosted forms, CSV batches, describe-to-build |
+| `usecases/tools-service/a-developer-builds-a-rest-tool.md` | uc-611: A developer builds a REST tool and runs it for real |
+| `usecases/tools-service/an-install-turns-a-feature-on.md` | uc-612: An install turns a feature on or off from its config |
+| `usecases/platform-service/a-developer-calls-any-api-as.md` | uc-614: A developer calls any API as a standard dev user |
+| `usecases/tools-service/a-team-admin-sets-its-own.md` | uc-615: A team admin sets its own app credential and tests it with their account |
+| `usecases/tools-service/usage-shows-only-this-team-s.md` | uc-616: Usage shows only this team's tool calls and whom each ran as |
+| `usecases/tools-service/an-app-that-fails-says-why.md` | uc-617: An app that fails says why: an expired account, a run waiting for a person's account, an unknown host |
+| `usecases/tools-service/turning-an-app-off-names-its.md` | uc-618: Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key |
+| `usecases/agents-service/a-new-team-s-assistant-answers.md` | uc-619: A new team's assistant answers from its knowledge and files |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
@@ -440,7 +465,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/kb-service/overview.md` | kb-service: knowledge bases with owners, file sources, sync into page and section passages, full-text retrieval, changes, and what is not built |
 | `services/models-service/overview.md` | models-service: aliases, keys with budgets, admission and OpenAI-compatible egress with a metadata-only call log |
 | `services/platform-service/overview.md` | platform-service: sign-in, sessions, members, invites, API keys and audit; the only token issuer, verified elsewhere through ops_identity |
-| `services/tools-service/design.md` | tools-service design: the flow, the Connections screens as wireframes, the API, the data and the sequences |
+| `services/tools-service/design.md` | tools-service design: the flow, the API, the data and the sequences; the console's screens are the Apps menu (guide/apps.md) |
 | `services/documents-service/design.md` | documents-service design: the flow, six screens as wireframes, the API, the data, the sequences, the workflows that use it and the sample documents |
 | `services/tools-service/overview.md` | tools-service: the tool-module registry, calls resolved and validated through it, executors, and the executions log |
 | `services/files-service/overview.md` | files-service on :8750: uploads, proxy routes, dedupe, downloads, scan hook, retention and legal holds over local, S3 and Azure Blob stores; its client |
@@ -465,3 +490,8 @@ File names are topics. Specs keep their number (01–17; 05 and 06 unused) and d
 title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/plugin-sign-in-methods.md` | uc-588: a developer's plugin signs in every way a system asks (none, API key, password, token, OAuth client, each person, client certificate) |
 | `usecases/tools-service/plugin-sign-in-with-a-certificate.md` | uc-583: a team connects a system that allows only certificate sign-in (an Entra app's signed assertion, a Google or DocuSign signed JWT grant) |
+| `usecases/agents-service/any-file-a-workflow-or-chat.md` | uc-620: Any file a workflow or chat reads ends read or with a reason |
+| `usecases/agents-service/a-builder-runs-the-three.md` | uc-621: A builder runs the three foundation Examples |
+| `usecases/agents-service/a-builder-asks-the-first-three.md` | uc-622: A builder asks the first three published agents |
+| `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
+| `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |

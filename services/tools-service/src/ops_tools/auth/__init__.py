@@ -19,16 +19,25 @@ from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
 
+from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
+from ..connections.records import EXPIRED, REFUSED
+from ..environments import TEST
 from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import SHARED, ConnectionStore
 from .assertion import SigningError, read_certificate
-from .kinds import TEST, Kind, kind_of, origin
+from .kinds import Kind, kind_of, origin
 from .tokens import AuthFailed, ClientProof, Tokens, scope_list
+
+# Why a call is refused CONNECTION_NOT_LINKED: never connected, a scope missing, an operation that needs a person
+# while the team backs the rest, a call with nobody behind it, or the system refused the person's own key or sign-in.
+# The console's CONNECTION_REQUIRED_REASONS is this list (lib/types/connections.ts), held equal by
+# tests/test_person_credentials.py.
+NotLinkedReason = Literal["not_connected", "insufficient_scope", "needs_person", "no_person", "refused"]
 
 # The account's own OAuth app secret for a plugin (c-565): (tenant, plugin id) to the value, or None.
 AppSecret = Callable[[str, str], Awaitable[str | None]]
@@ -36,7 +45,7 @@ AppSecret = Callable[[str, str], Awaitable[str | None]]
 if TYPE_CHECKING:
     from ..connections.connect_links import ConnectLinks
 
-__all__ = ["STRATEGIES", "AuthFailed", "Authenticator", "ClientCertificate", "Prepared", "Tokens"]
+__all__ = ["STRATEGIES", "AuthFailed", "Authenticator", "ClientCertificate", "NotLinkedReason", "Prepared", "Tokens"]
 
 
 @dataclass(frozen=True)
@@ -71,6 +80,8 @@ class Prepared:
     renewable: bool = False
     # Whose sign-in signed the call, for the call log: person or team; None for a kind that holds no token (c-558).
     credential: str | None = None
+    # The person whose own row signed the call (c-595), so a refusal marks theirs alone; None for the team's.
+    person: str | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +210,15 @@ class Authenticator:
         # Makes the link a call hands back when the person it acts for has not signed in (c-558).
         self.links = links
 
+    async def addressed(self, module: dict[str, Any], environment: str | None) -> dict[str, Any]:
+        """The module as a call reaches it: its address is its connection's for the run's environment (c-616), the only
+        home an address has. Empty with no connection, or one not set for the environment, and `prepare` says why."""
+        connection_id = module.get("connection_id")
+        conn = await self.connections.get(str(module["tenant_id"]), str(connection_id)) if connection_id else None
+        envs: dict[str, dict[str, Any]] = (conn or {}).get("environments") or {}
+        settings: dict[str, Any] = (envs.get(environment or TEST) or {}).get("settings") or {}
+        return {**module, "endpoint": str(settings.get("baseUrl") or "")}
+
     async def prepare(
         self,
         module: dict[str, Any],
@@ -252,18 +272,37 @@ class Authenticator:
             )
         names: dict[str, str] = dict(setting["secrets"] or {})
         values = await self._secret_values(tenant_id, str(conn["team_id"]), names, tool=tool, actor=actor)
-        if (app := plain.get("platformApp")) and self.app_secret is not None:
+        if (app := setting.get("platform_app")) and self.app_secret is not None:
             found = await self.app_secret(tenant_id, str(app))
             if found is not None:
                 values = {**values, "clientSecret": found}
         prepared = Prepared(str(connection_id), env, values=list(values.values()))
         kind = kind_of(str(conn["auth_kind"]))
-        missing = [f.label for f in kind.requires(plain) if f.secret and f.name not in values]
+        # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of
+        # the team's (c-595).
+        person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
+        missing = [
+            f.label for f in kind.requires(plain, each_person=person != SHARED) if f.secret and f.name not in values
+        ]
         if missing:
             raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)} for {env}.")
         settings = plain
-        person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
-        if person != SHARED and acting_for is not None and scopes:
+        held_own: dict[str, Any] | None = None
+        if person != SHARED and acting_for is not None:
+            held_own = await self.connections.token(tenant_id, str(connection_id), env, person)
+            if held_own is not None and held_own.get("refused_at") is not None:
+                # The system refused this key or sign-in before: ask for a new one rather than send it again.
+                raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes), reason="refused")
+        if person != SHARED and kind.person_fields:
+            own = await self.tokens.own(tenant_id, str(connection_id), env, person, row=held_own)
+            if own is None:
+                assert acting_for is not None
+                raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes))
+            secret = {f: v for f, v in own.items() if (k := kind.field(f)) is not None and k.secret}
+            settings = {**plain, **{f: v for f, v in own.items() if f not in secret}}
+            values = {**values, **secret}
+            prepared.values.extend(secret.values())
+        if person != SHARED and acting_for is not None and scopes and kind.holds_token:
             held = await self.connections.token(tenant_id, str(connection_id), env, person)
             granted = scope_list((held or {}).get("scopes"))
             if held is not None and not set(scopes) <= set(granted):
@@ -278,21 +317,52 @@ class Authenticator:
         except AuthFailed as e:
             if person != SHARED and acting_for is not None and e.code == "NOT_SIGNED_IN":
                 raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes)) from e
+            if person == SHARED and (stopped := await self._team_account_stopped(conn, env, e, actor)) is not None:
+                raise stopped from e
             if e.side == "upstream":
-                # The system refused the sign-in. The team's: the connection needs a person, and its activity says
-                # when and why. A person's own: only that person's sign-in is spent, everyone else's keeps working.
-                if person == SHARED:
-                    await self.connections.set_status(tenant_id, str(connection_id), "needs_reconnect", str(e))
-                else:
-                    await self.connections.forget_token(tenant_id, str(connection_id), env, person)
-                event = {"action": "refresh_failed", "environment": env, "actor": actor, "at": datetime.now(UTC)}
-                detail = {"code": e.code, **({"own": True} if person != SHARED else {})}
-                await self.connections.note(tenant_id, str(connection_id), {**event, "detail": detail})
+                # The system refused a person's own sign-in: only theirs is spent, everyone else's keeps working. Kept
+                # and marked (c-595), so Your connections says the sign-in expired and offers Reconnect.
+                at = datetime.now(UTC)
+                await self.connections.mark_refused(tenant_id, str(connection_id), env, person, reason=str(e), at=at)
+                event = {"action": "refresh_failed", "environment": env, "actor": actor, "at": at}
+                await self.connections.note(
+                    tenant_id, str(connection_id), {**event, "detail": {"code": e.code, "own": True}}
+                )
             raise
-        prepared.credential = ("person" if person != SHARED else "team") if kind.holds_token else None
+        # A team key is not logged as a sign-in; a person's own key is, as their token is.
+        prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
+        prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
         prepared.certificate = certificate_of(settings, values)
         return prepared
+
+    async def _team_account_stopped(
+        self, conn: dict[str, Any], env: str, e: AuthFailed, actor: str
+    ) -> AuthFailed | None:
+        """A team account the system refused, or whose sign-in ended with no refresh token to renew it (c-616 S12): the
+        call says which app needs reconnecting and who does it, and the team's admins are told once per breakage
+        through the outbox. None for any other failure, such as a team account nobody has signed in to yet, which is
+        setup still to do rather than a breakage."""
+        tenant_id, connection_id, name = str(conn["tenant_id"]), str(conn["id"]), str(conn["name"])
+        held = await self.connections.token(tenant_id, connection_id, env, SHARED)
+        at = datetime.now(UTC)
+        ended: datetime | None = (held or {}).get("expires_at")
+        if e.side == "upstream":
+            state, why, since = REFUSED, str(e), (held or {}).get("refreshed_at")
+        elif e.code == "NOT_SIGNED_IN" and ended is not None and ended <= at:
+            state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
+        else:
+            return None
+        notice = needs_reconnect_event(conn, env, state=state, reason=why, since=since, at=at)
+        await self.connections.needs_reconnect(tenant_id, connection_id, str(e) if state == REFUSED else None, notice)
+        if state == REFUSED:
+            event = {"action": "refresh_failed", "environment": env, "actor": actor, "at": at}
+            await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
+        message = (
+            f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
+        )
+        details = {"connectionId": connection_id, "app": name, "account": "team", "state": state}
+        return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
     @staticmethod
     def _whose(conn: dict[str, Any], kind: Kind, acting_for: ActingForPerson | None, needs_person: bool) -> str:
@@ -313,10 +383,30 @@ class Authenticator:
             if backed
             else f"{name} signs in as each person, and this call acts for nobody."
         )
-        details = {"connectionId": str(conn["id"]), "connection": str(name)}
-        raise AuthFailed(
-            "CONNECTION_NOT_LINKED", message, details={**details, "reason": "needs_person" if backed else "no_person"}
+        reason: NotLinkedReason = "needs_person" if backed else "no_person"
+        details = {"connectionId": str(conn["id"]), "connection": str(name), "reason": reason}
+        raise AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
+
+    async def refused(
+        self, module: dict[str, Any], prepared: Prepared, acting_for: ActingForPerson, reason: str
+    ) -> AuthFailed:
+        """The system refused a person's own key with 401 (c-595): their row alone is marked, so their next call asks
+        for a new key, and this call answers CONNECTION_NOT_LINKED with reason `refused` for the card to ask now. The
+        connection's status and everyone else's rows are left as they are."""
+        tenant_id, connection_id = str(module["tenant_id"]), prepared.connection_id
+        assert prepared.person is not None
+        at = datetime.now(UTC)
+        await self.connections.mark_refused(
+            tenant_id, connection_id, prepared.environment, prepared.person, reason=reason, at=at
         )
+        event = {"action": "refresh_failed", "environment": prepared.environment, "actor": acting_for.email, "at": at}
+        await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": "REFUSED", "own": True}})
+        conn = await self.connections.get(tenant_id, connection_id)
+        if conn is None:
+            return AuthFailed("CONNECTION_MISSING", "This module's connection no longer exists.")
+        envs = cast(dict[str, dict[str, Any]], conn["environments"])
+        settings = cast(dict[str, Any], (envs.get(prepared.environment) or {}).get("settings") or {})
+        return await self._not_linked(conn, prepared.environment, acting_for, settings, scopes=[], reason="refused")
 
     async def _not_linked(
         self,
@@ -326,14 +416,22 @@ class Authenticator:
         settings: dict[str, Any],
         *,
         scopes: list[str],
-        reason: str = "not_connected",
+        reason: NotLinkedReason = "not_connected",
     ) -> AuthFailed:
         """CONNECTION_NOT_LINKED with a link only `person` can use to sign in their own account, asking for the
         connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted)."""
+        kind = kind_of(str(conn["auth_kind"]))
+        # The kind and the fields a person gives, so the console asks for a key in place of a sign-in it cannot start.
         details: dict[str, Any] = {
             "connectionId": str(conn["id"]),
             "connection": str(conn["name"]),
             "reason": reason,
+            "authKind": kind.id,
+            "personFields": list(kind.person_fields),
+            # What a run that waits for this person to connect waits on (c-616 S12): their connecting reports it.
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn["id"]), env, person.sub)},
+            # Whether the team account may stand in for the person (`_whose`): a call acting for nobody uses it.
+            "teamAccount": str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup")),
         }
         if self.links is not None:
             details |= await self.links.make(
@@ -346,11 +444,10 @@ class Authenticator:
                 reason=reason,
             )
         who = person.email or "this person"
-        message = (
-            f"{conn['name']} needs {who} to connect their own account again, allowing more."
-            if reason == "insufficient_scope"
-            else f"{conn['name']} needs {who} to connect their own account."
-        )
+        message = {
+            "insufficient_scope": f"{conn['name']} needs {who} to connect their own account again, allowing more.",
+            "refused": f"{conn['name']} refused the key or sign-in of {who}; they connect again to go on.",
+        }.get(reason, f"{conn['name']} needs {who} to connect their own account.")
         return AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
 
     async def _secret_values(

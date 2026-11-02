@@ -1,0 +1,28 @@
+id: retrieve-from-knowledge
+title: Retrieve from knowledge
+track: workflow
+status: built
+difficulty: guided
+outcome: Search the handbook and take found or notFound.
+capabilities:
+- id: ops.ai.knowledge
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/empty.json
+expected:
+- expected/found.json
+- expected/missing.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- the retrieve step uses the same knowledge port as a citing agent

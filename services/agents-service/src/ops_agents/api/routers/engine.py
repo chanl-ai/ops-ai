@@ -30,7 +30,15 @@ from ops_engine.store import (
 )
 from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, Unprocessable
+from ops_service_kit.errors import (
+    ApiError,
+    Conflict,
+    Forbidden,
+    NotFound,
+    ServiceUnavailable,
+    Unprocessable,
+    ValidationFailed,
+)
 from ops_service_kit.http import Envelope, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -47,6 +55,7 @@ from ..actors import ActorView, actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
+    approves_own_writes,
     key_scope,
     principal,
     require_builder,
@@ -56,12 +65,12 @@ from ..auth import (
     started_by,
 )
 from ..deps import Runtime, runtime
-from ..email_trigger import binding_of, run_again
+from ..email_trigger import run_again
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
 from ..file_names import named
 from ..run_story import decisions_in, files_in, steps_view
-from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview
+from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview  # pyright: ignore[reportPrivateImportUsage]
 from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
@@ -154,6 +163,53 @@ class DefinitionCheck(Out):
     message: str
     # The top-level parameter a schema error names, so the editor shows the message under that field; None otherwise.
     field: str | None = None
+    # A source path a builder can jump to (`nodes.find.parameters.operation`); None for a whole-definition check.
+    path: str | None = None
+    # The port an unknown or unconnected check names; None otherwise.
+    port: str | None = None
+    # What to change so the next validate passes; None when the message already says it.
+    suggestion: str | None = None
+
+
+# What to change for each engine check code, from the existing node/field/message. No new engine semantics.
+_CHECK_SUGGESTION = {
+    "unknown_type": "Use a type from GET /v1/workflows/node-types.",
+    "unknown_type_version": "Pin typeVersion to a registered version of this type.",
+    "unknown_port": "Connect a port this node type declares.",
+    "unconnected_port": "Connect this out port or remove the node.",
+    "invalid_parameter": "Set the named field to a value that matches the type schema.",
+    "no_trigger": "Add one trigger node.",
+    "many_triggers": "Keep one trigger node.",
+    "unreachable": "Connect this node from the trigger.",
+    "invalid_definition": "Fix the YAML or JSON so it parses as a schema v2 definition.",
+    "duplicate_node": "Give each node its own id.",
+    "unknown_node": "Point the connection at a node id in this definition.",
+    "unknown_reference": "Point the mapping at a node id in this definition.",
+    "join_needs_branches": "Connect at least two steps into this Join.",
+    "duplicate_port": "Give each way out its own name.",
+}
+
+
+def _port_in(message: str) -> str | None:
+    """The port name an engine check already put in its message (`no out port maybe`, `Out port approve`)."""
+    for marker in ("out port ", "in port ", "Out port ", "port "):
+        if marker in message:
+            rest = message.split(marker, 1)[1]
+            return rest.split()[0].rstrip(".") if rest.split() else None
+    return None
+
+
+def enrich_check(check: dict[str, Any]) -> dict[str, Any]:
+    """Adds path, port and suggestion from the check the engine already returned. Does not change its meaning."""
+    node, field, code, message = check.get("node"), check.get("field"), check.get("code"), check.get("message") or ""
+    path = f"nodes.{node}.parameters.{field}" if node and field else (f"nodes.{node}" if node else None)
+    return {
+        **check,
+        "path": check.get("path") or path,
+        "port": check.get("port")
+        or (_port_in(message) if code in {"unknown_port", "unconnected_port", "duplicate_port"} else None),
+        "suggestion": check.get("suggestion") or _CHECK_SUGGESTION.get(str(code or "")),
+    }
 
 
 class DefinitionValidation(Out):
@@ -248,10 +304,12 @@ async def validate_definition(rt: Rt, body: DefinitionInput) -> JSONResponse:
     try:
         d = parse(body.yaml if body.yaml is not None else body.definition or {})
     except InvalidDefinitionError as e:
-        check = {"node": None, "level": "error", "code": "invalid_definition", "message": str(e)}
+        check = enrich_check({"node": None, "level": "error", "code": "invalid_definition", "message": str(e)})
         return ok({"ok": False, "workflowId": None, "digest": None, "checks": [check]})
-    checks = validate(d, REGISTRY)
-    warnings = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, current_team() or "", d)
+    checks = [enrich_check(c) for c in validate(d, REGISTRY)]
+    warnings = [
+        enrich_check(c) for c in advise(d, REGISTRY) + await step_shapes.field_warnings(rt, current_team() or "", d)
+    ]
     return ok({"ok": not checks, "workflowId": d.id, "digest": d.digest(), "checks": checks + warnings})
 
 
@@ -267,11 +325,18 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     the caller is a builder or admin of the team that owns the workflow (the acting team for a new one)."""
     d = _parsed(body)
     held = await definitions(rt).get(d.id, team=current_team())
+    # A new workflow belongs to the team the caller names, or its own; a dev session acts across teams, so with neither
+    # it is refused rather than saved as no team's, which every team would see (c-602).
+    new_team = current_team() or me.team_id or None
+    if held is None and new_team is None:
+        raise ValidationFailed(
+            "Choose a team with the X-Team-Id header; a workflow belongs to one team.", code="team_required"
+        )
     if held is not None:
         engine_lifecycle.require_rights(me, held, "save")
     else:
         require_builder(me, area="workflows", team_id=current_team(), action="save", what="a workflow")
-    checks = validate(d, REGISTRY)
+    checks = [enrich_check(c) for c in validate(d, REGISTRY)]
     if checks:
         raise Unprocessable(
             f"The definition has {len(checks)} failing checks.", code="definition_checks", details={"checks": checks}
@@ -287,12 +352,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     digest = d.digest()
     # An existing workflow keeps its owner, a shared one (no team) included, so a team's builder edits a shared
     # workflow through review instead of being told it is another team's.
-    team = held["team_id"] if held is not None else current_team()
-    if held is None and team is None and binding_of(d.wire()) is not None:
-        # A dev session acts across teams and saves workflows no team owns, but a workflow that watches a mailbox
-        # must belong to the mailbox's team (email_trigger.bindable): a new one is saved under the acting team, an
-        # existing one keeps its owner.
-        team = held["team_id"] if held is not None else (me.team_id or None)
+    team = held["team_id"] if held is not None else new_team
     try:
         version, created = await definitions(rt).publish(
             d.id,
@@ -693,6 +753,8 @@ class EngineRunInput(WireModel):
     # The caller's key for what started the run; a repeated key returns the first run. A new key when left out.
     run_key: str | None = Field(default=None, max_length=200)
     mode: Literal["live", "test"] = "live"
+    # Hold the start work row until then on the database clock (ops.trigger.schedule). 0 is due now.
+    after_seconds: float = 0
 
 
 class RunStarted(Out):
@@ -709,6 +771,19 @@ class RunWaiting(Out):
     node: str
     iteration: int
     payload: dict[str, Any]
+
+
+class RunFailure(Out):
+    """The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps."""
+
+    code: str | None = None
+    message: str
+    node_id: str | None = None
+    node_name: str | None = None
+    field: str | None = None
+    attempt: int | None = None
+    retryable: bool | None = None
+    suggestion: str | None = None
 
 
 class RunRow(Out):
@@ -909,6 +984,8 @@ class RunStory(Out):
 
 class RunDetail(RunRow):
     steps: list[EngineRunStep]
+    # Structured projection of `error` plus the failing step, when one is known. Older clients keep reading `error`.
+    failure: RunFailure | None = None
     # Set once the run reached an End, a failure End too: what that End returned.
     result: RunResult | None
     # The runs its steps started, in step and item order, each with its status (c-209's for each), read here so the
@@ -953,6 +1030,29 @@ def can_cancel(me: Principal, run: dict[str, Any]) -> bool:
     except ApiError:
         return False
     return True
+
+
+def run_failure(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
+    message = run.get("error")
+    if not message:
+        return None
+    failed = next((s for s in reversed(steps) if s.get("error")), None)
+    attempts = list((failed or {}).get("attempts") or [])
+    return {
+        "code": None,
+        "message": message,
+        "nodeId": (failed or {}).get("nodeId"),
+        "nodeName": None,
+        "field": None,
+        "attempt": attempts[-1]["attempt"] if attempts else None,
+        "retryable": run.get("status") == "stuck",
+        "suggestion": (
+            "Retry this stuck run from its last recorded step."
+            if run.get("status") == "stuck"
+            else "Inspect the failing step, fix its input or resource, then start a test run."
+        ),
+    }
 
 
 def run_view(r: dict[str, Any]) -> dict[str, Any]:
@@ -1054,14 +1154,18 @@ async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse
     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
     one workflow (c-246) starts that one only, on the version it pins when it pins one."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
+    form = start_form(stored["definition"], REGISTRY)
+    payload = run_starts.filled(form, body.input) if form and form.get("kind") == "form" else body.input
     run, created = await start_run(
         runs(rt),
         stored,
         team_id=me.team_id,
         mode=body.mode,
-        input=body.input,
+        input=payload,
         run_key=body.run_key,
         created_by=started_by(me),
+        started_by_approver=approves_own_writes(me),
+        after_seconds=body.after_seconds,
     )
     return ok(started_view(run, created), status=202 if created else 200)
 
@@ -1117,6 +1221,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     told = await run_story.story(rt, run, steps, scope=key_scope(me), masking=False)
     body = run_view(run) | {
         "workflowName": told.pop("workflowName"),
+        "failure": run_failure(run, steps),
         "steps": steps,
         "children": await started_runs(store, steps),
         "files": await named(rt, str(run["team_id"]), files_in(run["input"])),

@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { EmbedDialog } from '@/components/deployments/widget-embed';
 import { useAgent } from '@/hooks/queries';
 import { useChannels } from '@/hooks/channel-queries';
+import { useFlagged } from '@/hooks/flag-queries';
 import { useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
 import { useListParams } from '@/hooks/use-list-params';
 import type { ChannelType } from '@/lib/types/channels';
@@ -22,7 +23,7 @@ import { ChannelGallery } from './channel-gallery';
 import { ChannelLanding } from './channel-landing';
 import { ChannelTable } from './channel-table';
 import { ChannelTabs } from './channel-tabs';
-import { kindInfo } from './kinds';
+import { KINDS, kindInfo } from './kinds';
 
 /** Where a kind is set up; Channels links there instead of keeping a second form. */
 const CONNECT: Partial<Record<ChannelType, { label: string; href: string; note?: string }>> = {
@@ -38,6 +39,9 @@ export function ChannelsHubPage() {
   const movedAgent = params.get('agent');
   const list = useListParams<Record<string, never>>('name');
   const q = useChannels({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search });
+  const connectable = ['email', 'chat', 'api'] as const;
+  // The kinds still to come, named from the visible ones, so a kind behind an install flag that is off is not mentioned.
+  const soon = new Intl.ListFormat('en', { type: 'conjunction' }).format(useFlagged(KINDS).filter((k) => !(connectable as readonly ChannelType[]).includes(k.type)).map((k) => k.title));
   return (
     <PageLayout
       icon={Radio}
@@ -52,7 +56,7 @@ export function ChannelsHubPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {(['email', 'chat', 'api'] as const).map((t) => {
+            {connectable.map((t) => {
               const k = kindInfo(t);
               const Icon = k.icon;
               return (
@@ -64,7 +68,7 @@ export function ChannelsHubPage() {
               );
             })}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">MCP, Slack and Teams are coming soon</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{soon} are coming soon</DropdownMenuLabel>
           </DropdownMenuContent>
         </DropdownMenu>
       }

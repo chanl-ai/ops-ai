@@ -1,4 +1,4 @@
-// uc-445 A person starts any workflow from a clear form, ui layer: docs/usecases/console/start-run-form.md (c-445).
+// uc-445 A person starts any workflow from a clear form, ui layer: docs/usecases/console/start-run-form.md.
 // James (Operations) starts copies of the demo card dispute and the seeded levy notice workflows from the Workflows
 // list: choosing one opens its form, labels come from the schema's titles, the card type is a choice and the notice's
 // file is uploaded or picked from Files. The copies are read from the committed files at run time, so the run tests
@@ -32,7 +32,7 @@ function copies(agentId) {
   const dispute = JSON.parse(readFileSync(join(ROOT, 'scripts/sample-team/workflows/card_dispute_intake.json'), 'utf8').replaceAll('{agent:dispute}', agentId));
   const seeded = JSON.parse(readFileSync(join(ROOT, 'services/agents-service/seed/engine_workflows.json'), 'utf8')).find((w) => w.id === 'mail_document');
   const { teamId: _team, ...notice } = structuredClone(seeded);
-  // The seed marks the notice read as started only by the email intake (c-466); this use case starts it by hand.
+  // The seed marks the notice read as started only by the email intake; this use case starts it by hand.
   for (const n of notice.nodes) if (n.type === 'ops.trigger.request') delete n.parameters.onlyFromWorkflows;
   return {
     dispute: { ...dispute, id: 'uc445_dispute', name: 'Card dispute intake (uc-445)' },
@@ -63,7 +63,7 @@ async function body(consoleUrl) {
     await page.getByRole('button', { name: /^Sign in/ }).first().click();
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-    // Start run: <name> for a trigger with a start form (c-466), Start a run of <name> before it.
+    // Start run: <name> for a trigger with a start form, Start a run of <name> before it.
     const form = page.getByRole('dialog', { name: /^Start a run(:| of)/ });
     const shot = async (name) => {
       for (const width of [1280, 400]) {
@@ -101,7 +101,7 @@ async function body(consoleUrl) {
       await form.getByTestId('definition-start-run-submit').click();
       const res = await started;
       const body = JSON.parse(res.request().postData() ?? '{}');
-      // POST /v1/runs/start sends the form as `values` (c-466); POST /v1/runs sent it as `input`.
+      // POST /v1/runs/start sends the form as `values`; POST /v1/runs sent it as `input`.
       const sent = { ...body, input: body.values ?? body.input };
       const runId = (await res.json()).data?.runId;
       const run = runId ? (await (await fetch(`${agents}/v1/runs/${runId}`, { headers: J })).json()).data : null;

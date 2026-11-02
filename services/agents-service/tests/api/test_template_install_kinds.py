@@ -84,7 +84,7 @@ async def client() -> AsyncGenerator[AsyncClient]:
 
 
 async def install(client: AsyncClient, tid: str, who: dict[str, str] = OPS, **body: Any) -> Any:
-    return await client.post(f"/v1/templates/{SOURCE}/{tid}/install", json=body, headers=who)
+    return await client.post(f"/v1/resources/{SOURCE}:{tid}/copies", json=body, headers=who)
 
 
 async def test_a_skill_copy_is_the_teams_draft_and_its_tools_are_checked(client: AsyncClient) -> None:

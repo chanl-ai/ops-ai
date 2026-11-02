@@ -66,7 +66,7 @@ await withUiStack(
         if (await maya.evaluate(() => !!document.activeElement?.closest('tbody'))) inTable++;
         else after++;
       }
-      // Each row is three stops since c-181 (rule 4): its select checkbox, its copy-id button, its record link. Counting starts
+      // Each row is three stops since an earlier change (rule 4): its select checkbox, its copy-id button, its record link. Counting starts
       // at the first row's link, so that row's checkbox and copy button (which come before it) are not in the count.
       check('three Tab stops per row (select, copy id, link): 73 inside the table', inTable === 25 * 3 - 2, { inTable });
       check('at most 3 stops between the last row and the pagination', reached && after <= 3, { after, reached });
@@ -118,7 +118,7 @@ await withUiStack(
       check('the Save button saves a new version', saved, puts);
 
       // Steps 5-6: a page no service serves says Preview; one a service serves does not.
-      // Webhooks have no service yet; Members and Access are platform-service's since c-077.
+      // Webhooks have no service yet; Members and Access are platform-service's since an earlier change.
       await sam.goto(`${consoleUrl}/settings/webhooks`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const header = sam.getByTestId('page-header');
       await header.waitFor({ timeout: 120_000 });

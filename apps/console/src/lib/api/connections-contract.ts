@@ -18,8 +18,10 @@ export interface ConnectionsApi {
   completeSignIn(id: string, input: { code: string; state: string }): Promise<ConnectionDetail>;
   /** Starts the sign-in a `CONNECTION_NOT_LINKED` link names; 404 once used or expired, 403 for anyone else. */
   openConnectLink(link: string): Promise<SignInStart>;
-  /** The caller's own sign-ins on this team's connections (Your connections). */
-  mine(): Promise<MyConnection[]>;
+  /** The caller's own sign-ins on this team's connections (Your connections); `every` adds those they can connect. */
+  mine(every?: boolean): Promise<MyConnection[]>;
+  /** The caller's own key, password or token on a connection each person signs in to (c-595); never answered back. */
+  giveOwn(id: string, input: { environment: ConnectionEnvironment; credentials: Record<string, string> }): Promise<MyConnection>;
   /** Ends the caller's own sign-in, asking the system to revoke it; the next call asks them to connect again. */
   disconnect(id: string, environment: ConnectionEnvironment): Promise<void>;
 }

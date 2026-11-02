@@ -1,4 +1,4 @@
-// What the sign-in ui scripts share (c-553): typing a password on the console's sign-in page, and resetting it the way
+// What the sign-in ui scripts share: typing a password on the console's sign-in page, and resetting it the way
 // a person does, by asking on Forgot password and following the mailed link. Mail is platform-service's fake mailer,
 // which writes each message to the stack's mail folder (withUiStack with `signIn: true`).
 import { readdirSync, readFileSync } from 'node:fs';

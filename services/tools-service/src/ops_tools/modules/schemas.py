@@ -12,12 +12,18 @@ from pydantic.alias_generators import to_camel
 
 from ops_service_kit.http import ListResult, Out
 
+from ..environments import ConnectionEnvironment, ModuleEnvironment
+
 Access = Literal["read", "write"]
 ModuleType = Literal["mcp", "openapi", "http", "code"]
 Method = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+# How an operation's body is sent (c-591); none is json.
+BodyEncoding = Literal["json", "form", "raw"]
 # Whose account a module's calls may sign in with (c-558); a connection whose sign-in does not fit is refused.
-ModuleSignIn = Literal["team", "person", "either"]
-Environment = Literal["dev", "test", "production"]
+ModuleSignIn = Literal["team", "person", "person_or_team"]
+# `either`, the name before c-591, is still taken on input for one release and stored as person_or_team.
+ModuleSignInIn = Literal["team", "person", "person_or_team", "either"]
+Environment = ModuleEnvironment
 BindingSource = Literal["case.account", "case.customerId", "case.id", "case.requesterEmail", "case.queue"]
 ChangeKind = Literal["added", "removed", "access_widened", "schema_changed", "binding_changed", "settings"]
 FieldType = Literal["string", "number", "integer", "boolean", "object", "array"]
@@ -62,6 +68,8 @@ class ConnectionRef(Out):
     kind: str
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     expires_at: str | None = None
+    # The connection's base address by environment (test, production), where the module's paths go (c-616).
+    base_urls: dict[str, str] = Field(default_factory=dict[str, str])
 
 
 class OperationChange(Out):
@@ -106,7 +114,7 @@ class ToolModule(Out):
     drift: bool
     connection_id: str | None = None
     connection: ConnectionRef | None
-    sign_in: ModuleSignIn = "either"
+    sign_in: ModuleSignIn = "person_or_team"
     updated_at: str
     # The review waiting on Security, if any: what the Reviews page's Tool modules tab lists.
     pending_review: PendingReview | None = None
@@ -155,12 +163,16 @@ class ModuleOperation(Out):
     access: Access
     enabled: bool
     # How the gateway runs it; only `http` operations have a call shape a builder edits.
-    executor: Literal["http", "mcp", "stub", "local", "code"]
+    executor: Literal["http", "mcp", "stub", "local", "code", "plugin"]
     method: Method | None = None
     path: str | None = None
     # Literals or {{NAME}} secret references; a literal credential is refused on save, so no value here is secret.
     headers: list[OperationHeader] = Field(default_factory=list[OperationHeader])
+    # The sign-in header (Authorization, X-Api-Key, Cookie) a tool saved before they were refused still sends (c-616):
+    # its page says to move the key to the app. Null when it sends none.
+    sign_in_header: str | None = None
     body: str | None = None
+    body_encoding: BodyEncoding | None = None
     response_transform: str | None = None
     timeout_ms: int | None = None
     input: list[SchemaField]
@@ -172,7 +184,8 @@ class ModuleOperation(Out):
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
     # may approve is the tenant's requesterMayDecide policy (c-186), not a per-operation setting.
     approvers: int
-    approver_team: str
+    # None on a plugin's module, which no team owns: the run's own team approves (owner, 2026-10-22).
+    approver_team: str | None
     # Approving asks the approver for a step-up: set here, or implied by two approvers.
     step_up: bool
     idempotent: bool
@@ -262,8 +275,11 @@ class RunContextOption(Out):
 
 
 class ModuleAuth(Out):
-    kind: Literal["oauth_client_credentials", "oauth_authorization_code", "mtls", "api_key", "basic", "bearer", "none"]
+    # The connection's kind (auth/kinds.py), or none.
+    kind: str
     header: str | None = None
+    # A client certificate is sent, whatever the kind.
+    certificate: bool | None = None
 
 
 class ToolModuleDetail(ToolModule):
@@ -427,6 +443,7 @@ class HttpOperationIn(In):
     url: str
     headers: list[HeaderIn] = Field(default_factory=list[HeaderIn])
     body: str | None = None
+    body_encoding: BodyEncoding | None = None
 
 
 SECRET_NAME = r"^[A-Z][A-Z0-9_]*$"
@@ -461,12 +478,15 @@ class CodeOperationIn(In):
 class ModuleIn(In):
     name: str
     display_name: str
-    system: str
-    type: ModuleType
-    endpoint: str
-    # Optional: the endpoint plus the operations' secret headers are the connection; none means auth kind "none".
+    system: str = ""
+    # Optional (c-616): the kind follows its operations (http, a source's kind, or code for a function).
+    type: ModuleType | None = None
+    # The system's base address, for a module with no connection. A module on a connection calls its connection's
+    # base address (c-616), so a hand-built operation names a path and an endpoint beside the connection is refused.
+    endpoint: str = ""
+    # Optional: the app the module's calls sign in through; none means auth kind "none".
     connection_id: str | None = None
-    sign_in: ModuleSignIn = "either"
+    sign_in: ModuleSignInIn = "person_or_team"
     operations: list[DiscoveredOperationIn] | None = None
     # Where `operations` were discovered. Given, the service re-reads it and takes each operation's method, path,
     # inputs and headers from there; the caller's copies only pick operations and confirm reads.
@@ -483,8 +503,11 @@ class ModuleIn(In):
 class BlankModuleIn(In):
     display_name: str
     name: str
-    type: ModuleType
+    # Optional (c-616): the kind follows the operations added; http until then.
+    type: ModuleType | None = None
     description: str | None = None
+    # The app whose base address and sign-in its tools use (c-616).
+    connection_id: str | None = None
     # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
@@ -493,7 +516,7 @@ class BlankModuleIn(In):
 class ModuleDetailsPatchIn(In):
     display_name: str | None = None
     description: str | None = None
-    sign_in: ModuleSignIn | None = None
+    sign_in: ModuleSignInIn | None = None
     # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
@@ -516,6 +539,7 @@ class OperationPatchIn(In):
     path: str | None = None
     headers: list[HeaderIn] | None = None
     body: str | None = None
+    body_encoding: BodyEncoding | None = None
     response_transform: str | None = None
     timeout_ms: int | None = None
     enabled: bool | None = None
@@ -578,6 +602,23 @@ class ModuleTestIn(In):
     draft: TestDraftIn | None = None
     # Values for this one call, by secret name; never stored, logged or returned (c-088).
     secret_values: dict[str, str] | None = None
+    # Which of the connection's environments a Real run uses (c-616); test unless the person picks production.
+    environment: ConnectionEnvironment = "test"
+
+
+class ToolRunIn(In):
+    """One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway
+    call, with every check, in the environment picked."""
+
+    mode: Literal["mock", "real"]
+    input: dict[str, Any] = Field(default_factory=dict[str, Any])
+    environment: ConnectionEnvironment = "test"
+
+
+class ToolRunResult(ModuleTestResult):
+    # True when the answer came from a mock, never the system: every Mock run, and a Real one the test environment's
+    # mock answers for this input (c-332).
+    mocked: bool
 
 
 # Executions
@@ -596,6 +637,13 @@ class CallApproval(Out):
     by: str | None = None
 
 
+class CallRunAs(Out):
+    """Whom a call ran as: a person (by the email their acting-for token named) or the team account."""
+
+    kind: Literal["person", "team"]
+    email: str | None = None
+
+
 class ToolCallRow(Out):
     """One gateway call as the console's ToolCallRow, with the identity fields the executions log fills."""
 
@@ -610,6 +658,9 @@ class ToolCallRow(Out):
     case_id: str | None = None
     target: str
     system: str
+    # The tool's display name and its app's (c-607): what a chat, an approval and the log show in place of `target`.
+    title: str | None = None
+    app: str | None = None
     operation: Literal["read", "write", "completion"]
     record: str | None = None
     approval: CallApproval
@@ -633,13 +684,14 @@ class ToolCallRow(Out):
     # The row whose call carries the write's side effect (the claim), as opposed to a refusal or a replay of it.
     effect: bool = False
     # The environment the call used and the connection that signed it in (c-330); absent on older rows.
-    environment: Literal["test", "production"] | None = None
+    environment: ConnectionEnvironment | None = None
     connection_id: str | None = None
     # Where the call came in (c-356): POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
-    channel: Literal["api", "mcp"] | None = None
+    channel: Literal["api", "mcp", "console"] | None = None
     client_name: str | None = None
     acting_for: str | None = None
     credential: Literal["person", "team"] | None = None
+    run_as: CallRunAs | None = None
 
 
 class ExecutionList(ListResult[ToolCallRow]):

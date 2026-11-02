@@ -25,7 +25,7 @@ a spreadsheet of 200 cases each needs new code or a person retyping it.
 | api: agents-service with files-, documents-, models-service and a workflow worker on the run's database | `models()` on `fake_openai`, `kb(..., models_url=, document_types=True, agents_url=)`, `agents(...)`, a worker with `OPS_FILES_URL`, `OPS_DOCUMENTS_URL`, `OPS_MODELS_URL` |
 | A fake model that answers a propose read and the read after it | A rules folder the script writes to a temporary folder: the propose prompt (`Document:` after an optional hint) answers four fields; a `Fields:` prompt naming the scan's marker answers each value with its quote and page |
 | A 12-page scan with no text layer | Built with reportlab from page images (Pillow), read with `ocr: true` (Tesseract) |
-| ui: the demo stack with the embed app and the three switches on | `withUiStack(..., { demo: true, embed: true, consoleSwitches: { NEXT_PUBLIC_OPS_DOCUMENT_READS: '1', NEXT_PUBLIC_OPS_HOSTED_FORMS: '1', NEXT_PUBLIC_OPS_WORKFLOW_BUILDER: '1' } })` |
+| ui: the demo stack with the embed app | `withUiStack(..., { demo: true, embed: true })` |
 | cli: `scripts/wf_builder.py` and two SDK profiles | A temporary `OPS_CONFIG` holding profile `local` and profile `staging`, both on the run's agents-service, each on a fresh team `team_uc568_<hex>`; a profile is local when it is named `local` and its base URL is on this machine |
 | People | Dev auth on api and cli (`X-Team-Id: team_ops`; `team_security` is the non-member); James Richardson (team_ops builder) on ui |
 
@@ -56,13 +56,14 @@ a spreadsheet of 200 cases each needs new code or a person retyping it.
 | 24 | (cli) `--create` on profile `staging` without the id typed back | Refused; nothing created |
 | 31 | (ui) James opens a file's Read dialog | It offers Full text (`file-read-full-text`) and "Let the model propose the fields" (`file-read-propose`) |
 | 32 | (ui) Full text, then the Text tab | 12 page entries (`file-text-page`) in order; words under 0.7 confidence are shaded |
-| 33 | (ui) Propose, rename a field, Save as document type | The type exists in team_ops with the renamed field |
+| 32b | (ui) Full text with Pages to read 3, then Show every page | Pages 1 to 3 of 12, then all 12 |
+| 33 | (ui) Propose, rename a field, Save as document type | The header says Fields proposed, a wait for a person names each field and why, and the type exists in team_ops with the renamed field |
 | 34 | (ui) An Extract from file step's sheet | "What to read" (`step-what-to-read`) offers Fields, Full text and Let the model propose the fields |
 | 35 | (ui) Share as a form on the Request trigger | A link (`form-link`), its QR code (`form-qr`, the same image the link makes) with Download QR code, and Rotate (`form-rotate`) |
 | 36 | (ui) The link in the embed app (`/f/<slug>?t=`), filled and sent | Only the form's title, description and fields; then the thank-you; a run started |
 | 37 | (ui) The rotated link, and a capped form | Each shows why it was refused (`hosted-form-refused`) |
 | 38 | (ui) The members-only form in the console (`/forms/<slug>`) | The form for a signed-in member |
-| 39 | (ui) Start run, Start from a file, a 12-row CSV, dry run | The row count and the first 5 rows mapped; Start runs; once chosen, the file replaces the drop zone |
+| 39 | (ui) Start run, Start from a file, a 12-row CSV, Check the file | The dialog only picks the file, which replaces the drop zone; the check page shows the row count and the first 5 rows mapped; Start runs |
 | 40 | (ui) The batch page | "N of M finished, K failed" with K = 2; failed rows first; Retry failed rows; Download as CSV gives the table; the bar shows the failed share in the error colour |
 | 41 | (ui) The Text tab, the hosted form and the batch page at 375 px | No sideways scroll; the main action on screen |
 

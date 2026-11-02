@@ -1,11 +1,11 @@
 // uc-214 five wrong passwords lock sign-in for fifteen minutes, and a reset ends the lock, ui layer:
-// docs/usecases/platform-service/wrong-passwords-lock-sign-in.md. Lena types a wrong password five times on the sign-in
+// docs/usecases/platform-service/wrong-passwords-lock-sign-in.md. Ravi types a wrong password five times on the sign-in
 // page and is told she is locked out; her right password is refused while the lock holds. She resets it through Forgot
 // password and the mailed link, and signs in with the new one. Platform sign-in with the fake mailer.
 import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { askForReset, resetLinks, setPasswordFromLink, tryPassword } from '../../lib/signin_ui.mjs';
 
-const LENA = 'l.fischer@harborpine.example';
+const LENA = 'r.menon@harborpine.example';
 const NEW = `quay steps ${Math.random().toString(36).slice(2, 8)}`;
 
 await withUiStack(
@@ -19,7 +19,7 @@ await withUiStack(
       for (let i = 0; i < 5; i++) tries.push(await tryPassword(page, consoleUrl, LENA, `wrong guess ${i}`));
       const last = tries[4];
       check(
-        '1 Lena types a wrong password five times: four are refused, the fifth locks sign-in and the page says so',
+        '1 Ravi types a wrong password five times: four are refused, the fifth locks sign-in and the page says so',
         tries.slice(0, 4).every((t) => t.status === 401) && last.status === 429 && /lock|too many|try again/i.test(last.says) && !/lock|too many|try again/i.test(tries[3].says),
         { statuses: tries.map((t) => t.status), fourth: tries[3].says.slice(0, 200), fifth: last.says.slice(0, 300) },
       );

@@ -23,6 +23,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { relativeTime, shortDate } from '@/lib/format';
 import type { ApiKey } from '@/lib/types/settings';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 function columns(showTeam: boolean, onRevoke: (k: ApiKey) => void): ColumnDef<ApiKey>[] {
   return [
@@ -123,15 +124,7 @@ export default function ApiKeysPage() {
           searchColumn="name"
           searchPlaceholder="Search names, prefixes or creators…"
           onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={<ListEmpty icon={KeyRound} noun="API keys" filtered={list.isFiltered} createLabel="Create key" onCreate={() => setCreateOpen(true)} description="Create a key for each system that calls Ops AI, so each one can be revoked on its own." />}
         />
       )}

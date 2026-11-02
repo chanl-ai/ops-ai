@@ -1,0 +1,28 @@
+id: normalize-a-request
+title: Normalize a support request
+track: workflow
+status: built
+difficulty: intro
+outcome: An app posts a support request; the workflow returns canonical fields.
+capabilities:
+- id: ops.trigger.request
+  status: built
+- id: ops.data.set
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/valid.json
+- fixtures/missing-email.json
+expected:
+- expected/accepted.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: built
+setupSeconds: 15

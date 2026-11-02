@@ -18,13 +18,14 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
 
 from ops_access import Access
 from ops_identity import ActingForPerson, Principal
-from ops_policy import Cipher, context_of
+from ops_plugin_sdk.manifest import PLATFORM_AUTHORIZE_PARAMS
+from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import page_window, paged
 from ops_service_kit.ids import new_id
@@ -32,29 +33,36 @@ from ops_service_kit.ids import new_id
 from ..auth import AppSecret, Authenticator, AuthFailed, Prepared
 from ..auth.assertion import SigningError, key_matches, read_certificate
 from ..auth.discovery import Discovery
-from ..auth.kinds import BY_ID, CERTIFICATE, ENVIRONMENTS, Kind, kind_of, origin, views
+from ..auth.kinds import BY_ID, CERTIFICATE, Kind, kind_of, views
 from ..auth.pkce import challenge, verifier
-from ..auth.tokens import ClientProof, Tokens
+from ..auth.tokens import ClientProof, Tokens, account_of
 from ..egress import EgressDenied, EgressPolicy, for_tenant
+from ..environments import CONNECTION_ENVIRONMENTS as ENVIRONMENTS
+from ..environments import views as environment_rows
 from ..executor import transport_failure
 from ..modules.directory import Directory
 from ..modules.service import Caller
-from ..store.connections import SHARED, ConnectionInUse, ConnectionStore, StaleConnection
-from ..store.secrets import SecretStore
+from ..secrets import SecretResolver
+from ..store.connections import SHARED, ConnectionInUse, ConnectionStore, StaleConnection, verifier_context
+from .account_events import connected_event
 from .records import status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
 SIGN_IN_RETURN_PATH = "/connections/sign-in/return"
 SIGN_IN_TTL = timedelta(minutes=10)
+# Whose token a sign-in's state is for when it is an admin's credential check (c-616): nobody's, so none is kept. Not a
+# person id or SHARED, so a check's state can never finish as a sign-in.
+CHECK = "check"
 # How long Test connection waits for the system's answer.
 TEST_TIMEOUT_S = 10.0
 # The right to sign in your own account on a connection each person signs in to (c-558); see ConnectionService._can.
 OWN = "own"
 # Settings changes that make a held token wrong for the system: it is dropped, so the next call signs in again.
 # (tenant, connection id, token answer) -> environment settings to add, or None; raises ValueError to refuse it.
-# tenant, connection, the token answer, and the environment signed in (c-580).
-OnToken = Callable[[str, str, dict[str, Any], str], Awaitable[dict[str, Any] | None]]
+# tenant, connection, the token answer, the environment signed in (c-580), and whether it is a person's own sign-in
+# (c-584), which may not change what the team's sign-in set. A ValueError with a `code` names why for the event.
+OnToken = Callable[[str, str, dict[str, Any], str, bool], Awaitable[dict[str, Any] | None]]
 TOKEN_SETTINGS = (
     "tokenUrl", "clientId", "scopes", "audience", "resource", "authorizeUrl", "clientAuth", "signingCertificate",
     "subject", "scopeIn",
@@ -76,14 +84,6 @@ def secret_name(connection_id: str, environment: str, field: str) -> str:
     snake = re.sub(r"(?<!^)(?=[A-Z])", "_", field)
     parts = (connection_id, environment, snake)
     return "CONN_" + "_".join(_NOT_UPPER.sub("_", p.upper()).strip("_") for p in parts)
-
-
-_ENVIRONMENT_LABELS = {"test": "Test", "production": "Production"}
-
-
-def environment_views() -> list[dict[str, Any]]:
-    """Each environment a connection is set for, with its name and whether live runs call it."""
-    return [{"id": e, "label": _ENVIRONMENT_LABELS[e], "production": e == "production"} for e in ENVIRONMENTS]
 
 
 def _iso(at: datetime | None) -> str | None:
@@ -133,8 +133,8 @@ class ConnectionService:
     def __init__(
         self,
         store: ConnectionStore,
-        secrets: SecretStore,
-        cipher: Cipher,
+        secrets: SecretResolver,
+        credentials: CredentialStore,
         tokens: Tokens,
         directory: Directory,
         *,
@@ -154,7 +154,7 @@ class ConnectionService:
         runs."""
         self.store = store
         self.secrets = secrets
-        self.cipher = cipher
+        self.credentials = credentials
         self.tokens = tokens
         self.dir = directory
         self.egress = egress
@@ -183,6 +183,11 @@ class ConnectionService:
             action = "view"
         connection_rights(who.principal, action, security_team=self.security_team, what=what)
 
+    def check(self, who: Caller, action: str, what: str = "connections") -> None:
+        """Refuses a caller who may not take `action` on the team's connections, by the same rights every route here
+        reads; for an answer joined outside this service, such as the app credentials list."""
+        self._can(who, action, what)
+
     def _event(
         self, who: Caller, action: str, environment: str, detail: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -207,7 +212,7 @@ class ConnectionService:
     # ── Views ─────────────────────────────────────────────────────────────
 
     async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, dict[str, Any]]:
-        rows = {r["name"]: r for r in await self.secrets.listed(tenant_id, team_id) if r["name"] in names}
+        rows = {r["name"]: r for r in await self.secrets.store.listed(tenant_id, team_id) if r["name"] in names}
         return rows
 
     def _environment(
@@ -242,6 +247,7 @@ class ConnectionService:
             "secrets": secrets,
             "signedIn": signed,
             "health": env.get("health"),
+            "platformApp": env.get("platform_app"),
         }
         if cert := settings.get("signingCertificate"):
             try:
@@ -273,6 +279,8 @@ class ConnectionService:
             "category": conn.get("category"),
             "description": conn.get("description"),
             "docsUrl": conn.get("docs_url"),
+            "pluginId": conn.get("plugin_id"),
+            "accountName": conn.get("account_name"),
         }
         if not detail:
             return out
@@ -315,7 +323,7 @@ class ConnectionService:
 
     def kinds(self) -> dict[str, Any]:
         return views() | {
-            "environments": environment_views(),
+            "environments": environment_rows(),
             "redirectUri": self._redirect() if self.console_url else None,
         }
 
@@ -355,15 +363,21 @@ class ConnectionService:
         sign_in = str(i.get("sign_in") or "team")
         self._sign_in_fits(BY_ID[i["auth_kind"]], sign_in)
         now = self.clock()
+        plugin_id = i.get("plugin_id")
         row = {
             "tenant_id": who.tenant_id,
-            "id": new_id("con"),
+            # An app's account (c-608) is a connected account, `ca_`; a connection made by name
+            # keeps `con_`.
+            "id": new_id("ca" if plugin_id else "con"),
             "team_id": who.team.id,
             "name": name,
+            "plugin_id": plugin_id,
+            "account_name": (str(i.get("account_name") or "").strip() or name) if plugin_id else None,
             "auth_kind": i["auth_kind"],
-            "available_to": None,
             "sign_in": sign_in,
-            "team_backup": False,
+            # "Each person, team account as backup" is the backup on: made with it, a run with nobody behind it signs
+            # in as the team at once, rather than only after a later change turns the backup on.
+            "team_backup": sign_in == "person_or_team",
             **_details(i),
             "status": "draft",
             "status_detail": None,
@@ -414,8 +428,9 @@ class ConnectionService:
                 f"{conn['name']} was changed by someone else. Reload it and try again.", code="stale_version"
             ) from e
 
-    def _checked(self, kind: Kind, settings: dict[str, Any]) -> dict[str, Any]:
-        """The environment's plain settings, each a field of the kind or of the client certificate."""
+    def _checked(self, kind: Kind, settings: dict[str, Any], *, each_person: bool = False) -> dict[str, Any]:
+        """The environment's plain settings, each a field of the kind or of the client certificate. `each_person`: the
+        connection signs in as each person only, so a field each person gives (a username) is not asked of the team."""
         out: dict[str, Any] = {}
         for k, v in settings.items():
             f = kind.field(k)
@@ -433,7 +448,7 @@ class ConnectionService:
         for f in kind.fields:
             if not f.secret and f.default is not None and f.name not in out:
                 out[f.name] = f.default
-        missing = [f.label for f in kind.requires(out) if not f.secret and f.name not in out]
+        missing = [f.label for f in kind.requires(out, each_person=each_person) if not f.secret and f.name not in out]
         if missing:
             raise ValidationFailed(f"{kind.label} needs {', '.join(missing)}.")
         for k in ("tokenUrl", "authorizeUrl", "baseUrl"):
@@ -442,16 +457,29 @@ class ConnectionService:
         return out
 
     async def set_environment(
-        self, who: Caller, connection_id: str, environment: str, i: dict[str, Any]
+        self,
+        who: Caller,
+        connection_id: str,
+        environment: str,
+        i: dict[str, Any],
+        *,
+        plugin_settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """One environment's settings and secret parts. A secret part sent replaces the stored one; one left out keeps
-        it. Only a person's request reaches here with secret values (`can` refuses a service token's manage)."""
+        it. Only a person's request reaches here with secret values (`can` refuses a service token's manage). A
+        plugin's turn-on also gives the environment's own plugin settings; the public route leaves them as they are."""
         self._can(who, "manage")
         if environment not in ENVIRONMENTS:
             raise NotFound(f"Environment {environment}")
         conn = await self._get(who, connection_id)
         kind = kind_of(str(conn["auth_kind"]))
-        settings = self._checked(kind, dict(i.get("settings") or {}))
+        each_person = (conn.get("sign_in") or "team") == "person"
+        # Settings merge as secret parts do (c-616): one sent replaces the stored one, an empty one removes it, one left
+        # out keeps it, so setting the team's own client id alone keeps the environment's addresses.
+        kept = cast(dict[str, Any], conn["environments"].get(environment) or {})
+        stored = cast(dict[str, Any], kept.get("settings") or {})
+        held = {k: v for k, v in stored.items() if (f := kind.field(k)) and not f.secret}
+        settings = self._checked(kind, {**held, **dict(i.get("settings") or {})}, each_person=each_person)
         given = cast(dict[str, str], i.get("secret_values") or {})
         values = {k: v for k, v in given.items() if v}
         for k in values:
@@ -460,12 +488,19 @@ class ConnectionService:
                 raise ValidationFailed(f"{k} is not a secret part of {kind.label}.", details={"field": k})
         before = conn["environments"].get(environment)
         names = _names(before)
-        missing = [f.label for f in kind.requires(settings) if f.secret and f.name not in names | values]
+        needs = kind.requires(settings, each_person=each_person)
+        missing = [f.label for f in needs if f.secret and f.name not in names | values]
         if missing:
             raise ValidationFailed(f"{kind.label} needs {', '.join(missing)} for {environment}.")
         await self._pair_checked(who, conn, before, settings, values)
         names |= {k: secret_name(str(conn["id"]), environment, k) for k in values}
         old = dict(before["settings"] or {}) if before else {}
+        # The platform's app stays through a save of the fields it shows (Edit keys, c-580); the team's own client
+        # secret, or another client id, puts the environment on the team's own app.
+        own_app = "clientSecret" in values or old.get("clientId") != settings.get("clientId")
+        more: dict[str, Any] = {"platform_app": None} if before and before.get("platform_app") and own_app else {}
+        if plugin_settings is not None:
+            more["plugin_settings"] = plugin_settings
         status = "healthy" if conn["status"] in ("draft", "needs_reconnect", "error") else conn["status"]
         # The environment row (naming its secrets) lands first, against the revision read; a stale write stores no
         # value. A failure before the values below leaves a name with no value, which a call refuses as SECRET_MISSING
@@ -475,22 +510,23 @@ class ConnectionService:
             conn,
             i["revision"],
             {"status": status, "status_detail": None},
-            environment=(environment, settings, names),
+            environment=(environment, settings, names, more),
             action="secret_set" if values else "changed",
             detail={"settings": sorted(settings), "secrets": sorted(values)},
         )
         now = self.clock()
         for k, v in values.items():
             name = names[k]
-            blob = self.cipher.encrypt(v, context=context_of(who.tenant_id, name))
             # A secret part belongs to the connection's team, as the connection does (c-509).
             team = str(conn["team_id"])
             if not await self.secrets.create(
-                who.tenant_id, team, name, blob, actor=who.name, at=now, connection_id=str(conn["id"])
+                who.tenant_id, team, name, v, actor=who.name, at=now, connection_id=str(conn["id"])
             ):
-                await self.secrets.rotate(who.tenant_id, team, name, blob, actor=who.name, at=now)
+                await self.secrets.rotate(who.tenant_id, team, name, v, actor=who.name, at=now)
         if any(old.get(k) != settings.get(k) for k in TOKEN_SETTINGS) or {"clientSecret", "signingKey"} & set(values):
-            await self.store.forget_token(who.tenant_id, str(conn["id"]), environment)
+            await self.tokens.drop(
+                who.tenant_id, await self.store.forget_token(who.tenant_id, str(conn["id"]), environment)
+            )
         return await self.detail(who, connection_id)
 
     async def _pair_checked(
@@ -537,8 +573,9 @@ class ConnectionService:
                 code="connection_in_use",
                 details={"modules": e.modules},
             ) from e
-        if not deleted:
+        if deleted is None:
             raise NotFound(f"Connection {connection_id}")
+        await self.tokens.drop(who.tenant_id, deleted)
         for env in cast(dict[str, dict[str, Any]], conn["environments"]).values():
             for name in _names(env).values():
                 await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=self.clock())
@@ -577,9 +614,10 @@ class ConnectionService:
             except AuthFailed as e:
                 raise ValidationFailed(str(e), code="sign_in_not_found") from e
         made = await self.create(who, {"name": i.get("name") or host, "auth_kind": "oauth2_auth_code"})
-        scheme, server_host, port = origin(found.resource)
         settings = {
-            "baseUrl": f"{scheme}://{server_host}" + ("" if port == 443 else f":{port}"),
+            # The server's own address, path included: an MCP module's calls go to it (c-616), and its sign-in is
+            # sent only to its origin.
+            "baseUrl": url.rstrip("/"),
             "authorizeUrl": found.authorize_url,
             "tokenUrl": found.token_url,
             "clientId": str(client_id),
@@ -623,13 +661,15 @@ class ConnectionService:
         *,
         scopes: list[str] | None = None,
         hint: str | None = None,
+        check: bool = False,
     ) -> dict[str, Any]:
         """The address to send the person's browser to. The sign-in address must be https on a listed host, so the
         console never sends a person somewhere the tenant has not allowed. On a connection each person signs in to,
         the caller signs in their own account (OWN); the team's account needs connections.manage.
-        `scopes` are asked for beside the connection's, and `hint` is the email the system's sign-in starts with."""
+        `scopes` are asked for beside the connection's, and `hint` is the email the system's sign-in starts with.
+        `check`: an admin's Test with my account of the app credential (c-616), which keeps no token."""
         found = await self._get(who, connection_id)
-        personal = (found.get("sign_in") or "team") != "team" and account == "self"
+        personal = (found.get("sign_in") or "team") != "team" and account == "self" and not check
         conn, env = await self._signs_in(who, connection_id, environment, right=OWN if personal else "manage")
         settings: dict[str, Any] = dict(env["settings"])
         url = str(settings["authorizeUrl"])
@@ -647,21 +687,25 @@ class ConnectionService:
         needed = [] if personal else await self.store.operation_scopes(who.tenant_id, str(conn["id"]))
         wanted: list[str] = [*str(settings.get("scopes") or "").split(), *(scopes or []), *needed]
         asked = list(dict.fromkeys(wanted))
-        await self.store.add_state(
+        expired = await self.store.add_state(
             {
                 "tenant_id": who.tenant_id,
                 "state_hash": _hash(state),
                 "connection_id": conn["id"],
                 "environment": environment,
                 "person_id": _person(who),
-                "token_for": own_key(who) if personal else SHARED,
-                "verifier_ct": self.cipher.encrypt(secret, context=context_of(who.tenant_id, f"pkce/{_hash(state)}")),
+                "token_for": CHECK if check else own_key(who) if personal else SHARED,
+                "verifier_ct": await self.credentials.put(
+                    secret, context=verifier_context(who.tenant_id, _hash(state))
+                ),
                 "redirect_uri": redirect,
                 "expires_at": now + SIGN_IN_TTL,
                 "scopes": " ".join(asked),
             },
             now=now,
         )
+        # Expired sign-ins never finished, so their verifiers are read by nobody.
+        await self.tokens.drop(who.tenant_id, expired)
         query = {
             "response_type": "code",
             "client_id": str(settings["clientId"]),
@@ -676,6 +720,9 @@ class ConnectionService:
             query["login_hint"] = hint
         if settings.get("resource"):
             query["resource"] = str(settings["resource"])
+        # A system's own sign-in parameters (Atlassian's audience and prompt, c-584); never one the platform sets.
+        extra = parse_qsl(str(settings.get("authorizeParams") or ""), keep_blank_values=True)
+        query = {**{k: v for k, v in extra if k.lower() not in PLATFORM_AUTHORIZE_PARAMS}, **query}
         sep = "&" if urlsplit(url).query else "?"
         return {
             "authorizeUrl": f"{url}{sep}{urlencode(query)}",
@@ -684,27 +731,35 @@ class ConnectionService:
             "connectionId": str(conn["id"]),
         }
 
-    async def complete_sign_in(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
-        """Exchanges the code the console was handed. The state is used once, within ten minutes, by the person who
-        started it; any other answer is the same refusal, so a guess learns nothing. A person's own sign-in needs OWN,
-        the team's connections.manage."""
+    async def _taken(
+        self, who: Caller, connection_id: str, state: str, *, check: bool
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """The sign-in `state` started, used once, within ten minutes, by the person who started it, with its
+        connection and environment. Any other answer is the same refusal, so a guess learns nothing; a credential
+        check's state never finishes a sign-in, nor a sign-in's a check, so a check can never replace an account."""
         self._can(who, OWN)
         taken = await self.store.take_state(
             who.tenant_id, _hash(state), connection_id=connection_id, person=_person(who), now=self.clock()
         )
-        if taken is None:
+        if taken is None or (str(taken.get("token_for")) == CHECK) != check:
             raise ValidationFailed(
                 "This sign-in has expired or was already used. Start it again.", code="sign_in_expired"
             )
-        environment = str(taken["environment"])
         token_for = str(taken.get("token_for") or SHARED)
-        right = "manage" if token_for == SHARED else OWN
-        conn, env = await self._signs_in(who, connection_id, environment, right=right)
+        right = OWN if token_for not in (SHARED, CHECK) else "manage"
+        conn, env = await self._signs_in(who, connection_id, str(taken["environment"]), right=right)
+        return taken, conn, env
+
+    async def _code_answer(
+        self, who: Caller, taken: dict[str, Any], conn: dict[str, Any], env: dict[str, Any], code: str
+    ) -> dict[str, Any]:
+        """The system's token answer for the code, through the environment's app; raises AuthFailed."""
         settings: dict[str, Any] = dict(env["settings"])
         proof = await self._client_proof(who, conn, env, f"sign-in {conn['name']}")
-        code_verifier = self.cipher.decrypt(
-            str(taken["verifier_ct"]), context=context_of(who.tenant_id, f"pkce/{taken['state_hash']}")
-        )
+        # The state was taken once (used_at set), so its verifier is never read again.
+        pkce = verifier_context(who.tenant_id, str(taken["state_hash"]))
+        code_verifier = await self.credentials.get(str(taken["verifier_ct"]), context=pkce)
+        await self.credentials.delete(str(taken["verifier_ct"]), context=pkce)
         form = {
             "grant_type": "authorization_code",
             "code": code,
@@ -713,8 +768,32 @@ class ConnectionService:
         }
         if settings.get("resource"):
             form["resource"] = str(settings["resource"])
+        return await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+
+    async def check_credential(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
+        """Finishes an admin's Test with my account (c-616): the code is exchanged through the environment's app, and
+        the answer says whether it worked and as whom. No token is kept and the team account is not touched, so a
+        check never changes what calls sign in with. A refused exchange is a failed check, answered 200."""
+        taken, conn, env = await self._taken(who, connection_id, state, check=True)
+        environment = str(taken["environment"])
         try:
-            answer = await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+            answer = await self._code_answer(who, taken, conn, env, code)
+            health = {"status": "ok", "account": account_of(answer)}
+        except AuthFailed as e:
+            health = {"status": "failed", "account": None, "message": str(e)}
+        detail = {"status": health["status"], "account": health["account"]}
+        await self.store.note(who.tenant_id, connection_id, self._event(who, "credential_checked", environment, detail))
+        return {"health": {**health, "environment": environment, "at": _iso(self.clock()), "by": who.name}}
+
+    async def complete_sign_in(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
+        """Exchanges the code the console was handed. A person's own sign-in needs OWN, the team's
+        connections.manage (`_taken`)."""
+        taken, conn, env = await self._taken(who, connection_id, state, check=False)
+        environment = str(taken["environment"])
+        token_for = str(taken.get("token_for") or SHARED)
+        settings: dict[str, Any] = dict(env["settings"])
+        try:
+            answer = await self._code_answer(who, taken, conn, env, code)
         except AuthFailed as e:
             await self.store.note(
                 who.tenant_id, connection_id, self._event(who, "sign_in_failed", environment, {"code": e.code})
@@ -723,12 +802,13 @@ class ConnectionService:
         extra: dict[str, Any] = {}
         if self.on_token is not None:
             try:
-                extra = await self.on_token(who.tenant_id, connection_id, answer, environment) or {}
+                extra = (
+                    await self.on_token(who.tenant_id, connection_id, answer, environment, token_for != SHARED) or {}
+                )
             except ValueError as e:
+                code = str(getattr(e, "code", "token_host"))
                 await self.store.note(
-                    who.tenant_id,
-                    connection_id,
-                    self._event(who, "sign_in_failed", environment, {"code": "token_host"}),
+                    who.tenant_id, connection_id, self._event(who, "sign_in_failed", environment, {"code": code})
                 )
                 raise ValidationFailed(f"{conn['name']} did not finish the sign-in: {e}", code="sign_in_failed") from e
         requested = str(taken.get("scopes") or "").split()
@@ -750,30 +830,40 @@ class ConnectionService:
                 detail={"settings": sorted(extra)},
             )
         detail = {"account": token.account, **({"own": True} if token_for != SHARED else {})}
-        await self.store.note(who.tenant_id, connection_id, self._event(who, "signed_in", environment, detail))
+        own = connected_event(conn, environment, token_for) if token_for != SHARED else None
+        event = self._event(who, "signed_in", environment, detail)
+        await self.store.note(who.tenant_id, connection_id, event, report=own)
         return await self.detail(who, connection_id)
 
     async def use_platform_app(
-        self, who: Caller, connection_id: str, environment: str, plugin_id: str, settings: dict[str, Any]
+        self,
+        who: Caller,
+        connection_id: str,
+        environment: str,
+        plugin_id: str,
+        settings: dict[str, Any],
+        *,
+        plugin_settings: dict[str, Any] | None = None,
     ) -> None:
-        """Puts a plugin's connection on the platform's own OAuth app (c-565): the environment's settings, with the mark
-        that sends a token exchange to the account's sealed secret, and no client secret of the team's. Only a
-        plugin's team switch calls this. The public settings route refuses `platformApp` as a setting no sign-in kind
-        has, so no team points a connection at the account's app by hand."""
+        """Puts a plugin's connection on the platform's own OAuth app (c-565): the environment's settings, and its
+        `platform_app` naming the plugin, which sends a token exchange to the account's sealed secret, with no client
+        secret of the team's. Only a plugin's team switch calls this: the public settings route has no way to name the
+        account's app, so no team points a connection at it by hand."""
         self._can(who, "manage")
         conn = await self._get(who, connection_id)
         status = "healthy" if conn["status"] in ("draft", "needs_reconnect", "error") else conn["status"]
-        marked = {**settings, "platformApp": plugin_id}
         await self._write(
             who,
             conn,
             int(conn["revision"]),
             {"status": status, "status_detail": None},
-            environment=(environment, marked, {}),
+            environment=(environment, settings, {}, {"platform_app": plugin_id, "plugin_settings": plugin_settings}),
             action="changed",
-            detail={"settings": sorted(marked)},
+            detail={"settings": sorted(settings), "platformApp": plugin_id},
         )
-        await self.store.forget_token(who.tenant_id, str(conn["id"]), environment)
+        await self.tokens.drop(
+            who.tenant_id, await self.store.forget_token(who.tenant_id, str(conn["id"]), environment)
+        )
 
     async def _client_proof(self, who: Caller, conn: dict[str, Any], env: dict[str, Any], tool: str) -> ClientProof:
         """How the OAuth app proves itself, from the connection's team, each secret's use audited as `tool`: its client
@@ -781,7 +871,7 @@ class ConnectionService:
         settings = dict(env.get("settings") or {})
         held = await self._held(who, conn, env, ["clientSecret", "signingKey"], tool)
         secret = held.get("clientSecret")
-        if (app := settings.get("platformApp")) and self.app_secret is not None:
+        if (app := env.get("platform_app")) and self.app_secret is not None:
             secret = await self.app_secret(who.tenant_id, str(app))
         cert = settings.get("signingCertificate")
         return ClientProof(secret, held.get("signingKey"), str(cert) if cert else None)
@@ -793,31 +883,82 @@ class ConnectionService:
         names = {p: n for p in parts if (n := _names(env).get(p))}
         if not names:
             return {}
-        found = await self.secrets.use(
+        found = await self.secrets.present(
             who.tenant_id, str(conn["team_id"]), list(names.values()), actor=who.name, tool=tool, at=self.clock()
         )
-        return {
-            p: self.cipher.decrypt(found[n][0], context=context_of(who.tenant_id, n))
-            for p, n in names.items()
-            if n in found
-        }
+        return {p: found[n] for p, n in names.items() if n in found}
 
-    async def mine(self, who: Caller) -> list[dict[str, Any]]:
-        """The caller's own sign-ins on their team's connections (c-558): Your connections."""
+    async def mine(self, who: Caller, *, every: bool = False) -> list[dict[str, Any]]:
+        """The caller's own sign-ins on their team's connections (c-558): Your connections, each with how the person
+        signs in and never a value. `every` (c-595): also each environment of the team's connections a person signs
+        in to that the caller has not connected yet, so the page offers its key form or sign-in."""
         self._can(who, OWN)
-        return [
-            {
-                "connectionId": str(r["connection_id"]),
-                "connection": str(r["name"]),
-                "connectionStatus": str(r["status"]),
-                "environment": str(r["environment"]),
-                "account": r.get("account"),
-                "scopes": r.get("scopes") or [],
-                "since": _iso(r.get("refreshed_at")),
-                "expiresAt": _iso(r.get("expires_at")),
-            }
-            for r in await self.store.mine(who.tenant_id, who.team.id, own_key(who))
-        ]
+        mine = own_key(who)
+        if every:
+            kinds = [k.id for k in BY_ID.values() if k.per_person]
+            rows = await self.store.connectable(who.tenant_id, who.team.id, mine, kinds)
+        else:
+            rows = await self.store.mine(who.tenant_id, who.team.id, mine)
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            kind = kind_of(str(r["auth_kind"]))
+            out.append(
+                {
+                    "connectionId": str(r["connection_id"]),
+                    "connection": str(r["name"]),
+                    "connectionStatus": str(r["status"]),
+                    "environment": str(r["environment"]),
+                    "method": kind.label,
+                    "authKind": kind.id,
+                    "personFields": list(kind.person_fields),
+                    "connected": not every or r.get("person_id") is not None,
+                    "docsUrl": r.get("docs_url"),
+                    "account": r.get("account"),
+                    "scopes": r.get("scopes") or [],
+                    "since": _iso(r.get("refreshed_at")),
+                    "expiresAt": _iso(r.get("expires_at")),
+                    "refused": r.get("refused_at") is not None,
+                    "refusedAt": _iso(r.get("refused_at")),
+                    "refusedReason": r.get("refused_reason"),
+                }
+            )
+        return out
+
+    async def give_own(
+        self, who: Caller, connection_id: str, environment: str, given: dict[str, str]
+    ) -> dict[str, Any]:
+        """A person's own key, password or token (c-595), sealed in their own row: only on a connection each person
+        signs in to, with a kind that takes them, every person field given and no other."""
+        self._can(who, OWN)
+        if environment not in ENVIRONMENTS:
+            raise NotFound(f"Environment {environment}")
+        conn = await self._get(who, connection_id)
+        kind = kind_of(str(conn["auth_kind"]))
+        if (conn.get("sign_in") or "team") == "team" or not kind.person_fields:
+            raise ValidationFailed(
+                f"{conn['name']} signs in with the team's account or a sign-in at the system, not your own "
+                f"{kind.label.lower()}.",
+                code="sign_in_unsupported",
+            )
+        if environment not in conn["environments"]:
+            raise ValidationFailed(f"{conn['name']} is not set for {environment} yet; ask its admin to set it.")
+        for k, v in given.items():
+            if k not in kind.person_fields:
+                raise ValidationFailed(f"{k} is not yours to give for {kind.label}.", details={"field": k})
+            if len(v) > 2000:
+                raise ValidationFailed(f"{k} is longer than 2,000 characters.", details={"field": k})
+        missing = [f for f in kind.person_fields if not given.get(f, "").strip()]
+        if missing:
+            labels = [field.label if (field := kind.field(f)) else f for f in missing]
+            raise ValidationFailed(f"{kind.label} needs your {', '.join(labels)}.", details={"field": missing[0]})
+        mine = own_key(who)
+        values = {f: given[f] for f in kind.person_fields}
+        await self.tokens.store_own(who.tenant_id, str(conn["id"]), environment, mine, values)
+        detail = {"own": True, "method": kind.id}
+        event = self._event(who, "signed_in", environment, detail)
+        await self.store.note(who.tenant_id, str(conn["id"]), event, report=connected_event(conn, environment, mine))
+        rows = await self.mine(who)
+        return next(r for r in rows if r["connectionId"] == str(conn["id"]) and r["environment"] == environment)
 
     async def disconnect(self, who: Caller, connection_id: str, environment: str) -> None:
         """Disconnect (c-558): deletes the caller's own sign-in, so their next call asks them to connect again, after
@@ -840,7 +981,9 @@ class ConnectionService:
             revoked = await self.tokens.revoke(
                 who.tenant_id, str(conn["id"]), environment, held, settings=settings, proof=proof
             )
-        await self.store.forget_token(who.tenant_id, str(conn["id"]), environment, mine)
+        await self.tokens.drop(
+            who.tenant_id, await self.store.forget_token(who.tenant_id, str(conn["id"]), environment, mine)
+        )
         detail = {"own": True, "revoked": revoked}
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "disconnected", environment, detail))
 
@@ -884,6 +1027,11 @@ class ConnectionService:
             raise ValidationFailed(f"Set {conn['name']}'s {environment} settings before testing it.")
         settings: dict[str, Any] = dict(env["settings"] or {})
         path = str(settings.get("testPath") or "")
+        if not path.startswith("/") and conn.get("plugin_id"):
+            # A plugin's test address comes with its sign-in, which names the instance (c-616): nobody types one.
+            raise ValidationFailed(
+                f"Sign {conn['name']} in first: its test reads the system its sign-in names.", code="not_signed_in"
+            )
         if not path.startswith("/"):
             raise ValidationFailed(
                 f"Set {conn['name']}'s test address, a read on the system such as /services/oauth2/userinfo.",
@@ -946,6 +1094,9 @@ class ConnectionService:
             else:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}
+                if res.status_code == 401 and person is not None and prepared is not None and prepared.person:
+                    # The person's own key, refused: marked on their row as a call's refusal is (c-595).
+                    await self.auth.refused(probe, prepared, person, message)
         status: tuple[str, str | None] | None = None
         if not own and conn["status"] != "revoked":
             # A sign-in the system refused was marked needs_reconnect by Authenticator.prepare, after `conn` was read.
@@ -973,8 +1124,22 @@ class ConnectionService:
             extensions=for_tenant(tenant_id, prepared.certificate if prepared else None),
         )
 
+    async def pin_default(self, who: Caller, connection_id: str) -> dict[str, Any]:
+        """Makes the caller's own sign-in on this account their default among the app's accounts (c-608): a call
+        naming no account uses it. Refused on a connection made by name and on an account they have not signed in to."""
+        conn = await self._get(who, connection_id)
+        plugin_id = conn.get("plugin_id")
+        if not plugin_id:
+            raise ValidationFailed(f"{conn['name']} is not an account of an app.", code="not_an_account")
+        ids = [str(a["id"]) for a in await self.store.accounts(who.tenant_id, str(conn["team_id"]), str(plugin_id))]
+        if not await self.store.pin(who.tenant_id, own_key(who), connection_id, ids):
+            raise ValidationFailed(f"Sign in to {conn['name']} first.", code="not_signed_in")
+        return await self.detail(who, connection_id)
+
     async def sign_out(self, who: Caller, connection_id: str, environment: str) -> dict[str, Any]:
         await self._signs_in(who, connection_id, environment)
-        if await self.store.forget_token(who.tenant_id, connection_id, environment):
+        forgotten = await self.store.forget_token(who.tenant_id, connection_id, environment)
+        await self.tokens.drop(who.tenant_id, forgotten)
+        if forgotten:
             await self.store.note(who.tenant_id, connection_id, self._event(who, "signed_out", environment))
         return await self.detail(who, connection_id)

@@ -60,6 +60,11 @@ APPROVED_AFTER = {
     "07770915": (
         "Standards-exception: E09 dev-caller moved into ops_store.isolation in 07770915; approved by proto-orch"
     ),
+    # E23 appWritesNeedApproval, off by default (owner, 2026-11-01, c-616); its commit's trailer named no approver.
+    "2214769e": (
+        "Standards-exception: E23 appWritesNeedApproval defaults to no app listed (owner, 2026-11-01); "
+        "approved by proto-orch"
+    ),
 }
 
 # The always-on baseline the owner set (roles-and-permissions.md, "How access is decided"): token identity, team and

@@ -9,7 +9,8 @@ restraining_notice version 1 (c-248), with the synthetic restraining notices' te
 The samples' bytes go to files-service first, as the console uploads them; the type and its samples go to
 documents-service.
 
-The seeded levy workflows name levy_notice v1 (services/agents-service/seed/engine_workflows.json)."""
+The seeded workflows name legal_notice v1 (services/agents-service/seed/engine_workflows.json).
+levy_notice stays so older reads that already name it keep working."""
 
 from __future__ import annotations
 
@@ -68,6 +69,14 @@ LEVY_NOTICE: dict[str, Any] = {
         {"key": "court", "label": "Court", "type": "text"},
         {"key": "case_no", "label": "Case number", "type": "text", "required": True},
     ],
+}
+
+LEGAL_NOTICE: dict[str, Any] = {
+    **LEVY_NOTICE,
+    "id": "legal_notice",
+    "name": "Legal notice",
+    "description": "A court or agency notice naming the people and the amount to hold for each.",
+    "note": "The fields a legal notice is read with. The seeded workflows name this type.",
 }
 
 SAMPLES: dict[str, list[dict[str, Any]]] = {
@@ -397,8 +406,9 @@ def seed_type(
 
 def seed(documents: httpx.Client, files: httpx.Client) -> str:
     levy = seed_type(documents, files, LEVY_NOTICE, SAMPLES, FIXTURES)
+    legal = seed_type(documents, files, LEGAL_NOTICE, SAMPLES, FIXTURES)
     done = [seed_type(documents, files, kind, samples(), folder) for kind, samples, folder in SEEDED.values()]
-    return "; ".join([levy, *done])
+    return "; ".join([levy, legal, *done])
 
 
 def sign_in(platform: str, email: str, password: str) -> dict[str, str]:

@@ -4,6 +4,7 @@ re-implementing the adapters, nothing else."""
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -28,6 +29,12 @@ class ToolResult:
     lost: bool = False
     # The gateway refused the key as abandoned: the call never ran under it and never will (c-561).
     not_sent: bool = False
+
+
+# Set while a step sends a call on the team's account in place of the person the run acts for (c-616 S12, "Run as the
+# team account"); the host's tool port then sends the call acting for nobody, which the gateway signs in with the team
+# account where the app allows one. A context value, so no ToolPort implementation changes its signature.
+AS_TEAM_ACCOUNT: ContextVar[bool] = ContextVar("ops_engine_as_team_account", default=False)
 
 
 class ToolPort(Protocol):
@@ -65,6 +72,12 @@ class ReviewPort(Protocol):
     async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
         """Opens the review for this step, or finds the one already open (upsert on run, node, iteration); returns its
         id. The decision arrives later as a resume of the run."""
+        ...
+
+    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """The decision of a step that approves a write when the person who started the run may approve it themselves
+        (roles decide approvals, owner 2026-11-01): {decision, by, call, approval}, recorded as theirs. None to pause
+        for a person as before."""
         ...
 
 

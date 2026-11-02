@@ -36,6 +36,8 @@ class RunContext:
     environment: str | None = None
     # The engine run making the call, whose starter the call acts for (c-558); None outside a run.
     run_id: str | None = None
+    # A call a person chose to run on the team's account in place of their own (c-616 S12): it acts for nobody.
+    team_account: bool = False
 
 
 TEST, PRODUCTION = "test", "production"
@@ -139,6 +141,13 @@ class GatewayClient:
         """Applies a tool module review's decision in tools-service (c-163): publish the reviewed version, or return it
         to draft or withdraw it. Raises on any answer but success, so the request stays marked to apply again."""
         await self.tools.post(f"/v1/tool-modules/{module_id}/review-decisions", decision)
+
+    async def egress_host_decision(self, decision: dict[str, Any]) -> None:
+        """Applies an approved host in tools-service (c-616 S13): the host joins the tenant's allow-list. Raises on any
+        answer but success, so the request stays marked to apply again."""
+        # The one call that claims secrets_egress:manage, so no other call of this client carries it.
+        listing = replace(self.tools, scopes=[*self.tools.scopes, "secrets_egress:manage"])
+        await listing.post("/v1/egress/held-hosts/decisions", decision)
 
     async def raise_fence(self, thread_id: str, generation: int) -> int:
         """Raises the thread's write fence in tools-service to `generation` (E2c) and returns the fence. Raises

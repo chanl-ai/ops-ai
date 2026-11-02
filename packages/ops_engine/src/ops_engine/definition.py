@@ -201,15 +201,24 @@ def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[dict[str, An
 
 
 REQUEST_TRIGGER = "ops.trigger.request"
+EVENT_TRIGGER = "ops.trigger.event"
 # `$.input.<name>` or `$.input.<name>.fileId`: a whole run input a step reads as a file.
 INPUT_FILE_PATH = re.compile(r"^\$\.input\.([A-Za-z0-9_]+)(?:\.fileId)?$")
 
 
 def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
-    """`file_input_unmarked`: a step parameter its type marks `format: "file"` reads a Request trigger's input that the
-    trigger's schema does not declare a file field, so the start form would ask for a file id in a text box (c-466).
-    The rule reads the node types' schemas, never a field's or step's name."""
-    trigger = next((n for n in d.nodes if n.type == REQUEST_TRIGGER), None)
+    """`file_input_unmarked`: a step parameter its type marks `format: "file"` reads a start form's input that the
+    trigger's schema does not declare a file field, so the form would ask for a file id in a text box (c-466). A
+    Request trigger always has a form. A Service event trigger has one only when it declares an input schema. The
+    rule reads the node types' schemas, never a field's or step's name."""
+    trigger = next(
+        (
+            n
+            for n in d.nodes
+            if n.type == REQUEST_TRIGGER or (n.type == EVENT_TRIGGER and n.parameters.get("inputSchema"))
+        ),
+        None,
+    )
     if trigger is None:
         return []
     schema = cast(dict[str, Any], trigger.parameters.get("inputSchema") or {})

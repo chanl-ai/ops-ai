@@ -1,0 +1,143 @@
+schemaVersion: 2
+id: wait_for_verification
+name: Wait for an external verification result
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Start a check
+  parameters:
+    inputSchema:
+      type: object
+      required:
+      - subject
+      properties:
+        subject:
+          type: string
+- id: begin
+  type: ops.action.tool
+  typeVersion: 1
+  name: Start check
+  parameters:
+    operation: start_check
+    input:
+      id: $.input.subject
+- id: wait
+  type: ops.flow.waitFor
+  typeVersion: 1
+  name: Wait for the result
+  parameters:
+    event: verification.result
+    key: $.nodes.begin.out.id
+    timeoutSeconds: 6
+- id: route
+  type: ops.flow.switch
+  typeVersion: 1
+  name: Result
+  parameters:
+    cases:
+    - name: clear
+      conditions:
+      - left: $.nodes.wait.out.status
+        op: eq
+        right: clear
+    - name: review
+      conditions:
+      - left: $.nodes.wait.out.status
+        op: eq
+        right: review
+- id: review
+  type: ops.flow.humanReview
+  typeVersion: 1
+  name: Ambiguous result
+  parameters:
+    title: Review this check
+    summary:
+      status: $.nodes.wait.out.status
+      checkId: $.nodes.begin.out.id
+- id: clear
+  type: ops.flow.end
+  typeVersion: 1
+  name: Clear
+  parameters:
+    outcome: clear
+- id: flagged
+  type: ops.flow.end
+  typeVersion: 1
+  name: Flagged
+  parameters:
+    outcome: flagged
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Failed
+  parameters:
+    outcome: check_failed
+    result: failed
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: begin
+    port: in
+- from:
+    node: begin
+    port: ok
+  to:
+    node: wait
+    port: in
+- from:
+    node: begin
+    port: error
+  to:
+    node: failed
+    port: in
+- from:
+    node: begin
+    port: refused
+  to:
+    node: failed
+    port: in
+- from:
+    node: wait
+    port: ok
+  to:
+    node: route
+    port: in
+- from:
+    node: wait
+    port: timeout
+  to:
+    node: failed
+    port: in
+- from:
+    node: route
+    port: clear
+  to:
+    node: clear
+    port: in
+- from:
+    node: route
+    port: review
+  to:
+    node: review
+    port: in
+- from:
+    node: route
+    port: otherwise
+  to:
+    node: review
+    port: in
+- from:
+    node: review
+    port: approve
+  to:
+    node: clear
+    port: in
+- from:
+    node: review
+    port: reject
+  to:
+    node: flagged
+    port: in

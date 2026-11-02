@@ -111,8 +111,13 @@ export class Transport {
   }
 
   async *stream(service: Service, op: Operation, args: CallArgs = {}): AsyncGenerator<ServerEvent> {
-    const headers = { ...this.headers(args.headers), Accept: 'text/event-stream' };
-    const response = await this.fetch(this.url(service, op, args.path, args.query), { method: op.method, headers });
+    const headers: Record<string, string> = { ...this.headers(args.headers), Accept: 'text/event-stream' };
+    const init: RequestInit = { method: op.method, headers };
+    if (args.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(args.body);
+    }
+    const response = await this.fetch(this.url(service, op, args.path, args.query), init);
     if (!response.ok || !response.body) {
       await result(response);
       return;

@@ -78,7 +78,8 @@ class PluginExecutor:
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
         name = str(op["name"]).removeprefix(f"{plugin.manifest.short}_")
-        tool = plugin.manifest.tool(name)
+        # The team's version of the tool (c-609), so a query or paged tool runs as the team's version declared it.
+        tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
             return await self._data(tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for)
         if tool is None or tool.function is None:
@@ -106,6 +107,7 @@ class PluginExecutor:
         """One Python tool's call through the SDK's context, its requests sent signed in as `prepared`."""
         name = tool.name
         allowed = list(module.get("egress_hosts") or [])
+        plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
@@ -118,7 +120,8 @@ class PluginExecutor:
                 await policy.check_url(tenant, url)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
-            headers = dict(prepared.headers) if prepared else {}
+            # The plugin's headers first, then the connection's, which win over a name they share (c-584).
+            headers = {**plugin_headers, **(dict(prepared.headers) if prepared else {})}
             query = {**(dict(params or {})), **(dict(prepared.params) if prepared else {})}
             r = await client.request(
                 method,

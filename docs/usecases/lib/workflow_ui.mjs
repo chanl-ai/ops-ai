@@ -1,4 +1,4 @@
-// What the workflow-engine ui scripts share (c-553): a person's headers from a platform sign-in, saving and starting a
+// What the workflow-engine ui scripts share: a person's headers from a platform sign-in, saving and starting a
 // workflow through agents-service as a builder would from the editor, and reading a run back from its console page as
 // a person sees it, never from the API, so each check proves the page shows what the run did.
 import { AGENTS_PORT, PLATFORM_PORT } from '@ops-ai/usecase-runner/harness';
@@ -18,6 +18,15 @@ export async function as(email, team = 'team_ops') {
   const token = (await r.json()).data?.token;
   if (!token) throw new Error(`signing ${email} in: ${r.status}`);
   return { Authorization: `Bearer ${token}`, 'X-Team-Id': team, 'Content-Type': 'application/json' };
+}
+
+/**
+ * Turns `team`'s tool write approvals on (toolWritesNeedApproval), as its admin does in Policies. Approvals are off by
+ * default (2026-11-01), so a use case proving a held chat or workflow write turns them on first.
+ */
+export async function writeApprovalsOn(team = 'team_ops') {
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/toolWritesNeedApproval`, { method: 'PUT', headers: await as(PRIYA, team), body: JSON.stringify({ value: true }) });
+  if (!r.ok) throw new Error(`turning write approvals on for ${team}: ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
 /** Polls `probe` once a second until it returns something truthy, or `seconds` pass (then undefined). */
@@ -185,7 +194,7 @@ export function aiDefinition(id, steps, wires) {
 }
 
 /**
- * Grants each operation through the agent page's tools picker (EntityPicker, c-135): open, search, pick, signed in as
+ * Grants each operation through the agent page's tools picker (EntityPicker): open, search, pick, signed in as
  * `email`. agents-service reads the tool directory through a 30-second cache, so an operation published moments ago is
  * offered only once that cache turns over; the script waits for the options route to offer it (up to 60 s) before
  * searching, so the picker's first search finds it.

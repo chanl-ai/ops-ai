@@ -1,0 +1,47 @@
+id: reconcile-invoice-and-po
+title: Reconcile an invoice with a purchase order
+track: workflow
+status: built
+difficulty: guided
+outcome: Merge invoice and PO records and ask a person only when they disagree.
+capabilities:
+- id: ops.trigger.request
+  status: built
+- id: ops.action.tool
+  status: built
+- id: ops.flow.join
+  status: built
+- id: ops.flow.if
+  status: built
+- id: ops.data.combine
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.action.addToCase
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+- resources/tools.yaml
+fixtures:
+- fixtures/match.json
+- fixtures/mismatch.json
+- fixtures/missing.json
+expected:
+- expected/match.json
+- expected/mismatch.json
+- expected/missing.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 45
+teaches:
+- parallel read tools meet at Join
+- Combine facts leaves by disagree when amount, currency, vendor or PO number differ
+- a person settles a mismatch, then Add to case records it

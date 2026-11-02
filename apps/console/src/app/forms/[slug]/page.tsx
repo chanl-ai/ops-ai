@@ -5,10 +5,8 @@ import { ClipboardList } from 'lucide-react';
 
 import { HostedForm, HostedFormRefused } from '@/components/forms/hosted-form';
 import { PageLayout } from '@/components/page-layout';
-import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { useMemberForm, useSubmitMemberForm } from '@/hooks/form-queries';
-import { useHostedForms } from '@/hooks/use-switches';
 
 /**
  * A members-only hosted form (c-535): opened behind sign-in, sent as the signed-in person, and refused with why for
@@ -16,14 +14,6 @@ import { useHostedForms } from '@/hooks/use-switches';
  */
 export default function MemberFormPage() {
   const { slug } = useParams<{ slug: string }>();
-  const on = useHostedForms();
-  if (!on) {
-    return (
-      <PageLayout icon={ClipboardList} title="Form">
-        <EmptyState icon={ClipboardList} title="Forms are not turned on" description="Ask an admin to turn on hosted forms for this workspace." />
-      </PageLayout>
-    );
-  }
   return <MemberForm slug={slug} />;
 }
 

@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { useCan } from '@/hooks/me-queries';
 import { useFileExtractions } from '@/hooks/extraction-queries';
 import { useFile } from '@/hooks/file-queries';
-import { useDocumentReads } from '@/hooks/use-switches';
+import { readBadge, waitReason } from '@/lib/read-state';
 import type { Extraction } from '@/lib/types/extractions';
 import type { FileDetail } from '@/lib/types/files';
 
@@ -49,12 +49,12 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
   const canRecord = useCan('files', 'create');
   const canExtract = canRead === true && canRecord === true;
   const canCorrect = useCan('documents', 'edit') === true;
-  const reads = useDocumentReads();
   const [extracting, setExtracting] = React.useState(false);
   // The run the last Extract started rides in the address (?run=), so the tab it lands on links it and a reload keeps it.
   const params = useSearchParams();
   const lastRun = params.get('run');
   const waiting = params.get('waiting') === '1';
+  const reading = params.get('reading') === '1';
 
   if (file.isPending) return <RecordSkeleton />;
   if (file.isError)
@@ -79,13 +79,13 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
       icon={fileIcon(f.name)}
       backHref="/files"
       title={f.name}
-      badge={<ReadAs data={f.data} compact />}
+      badge={readBadge(f.data, latest) ? <span className="text-xs text-muted-foreground" data-testid="read-as">{readBadge(f.data, latest)}</span> : <ReadAs data={f.data} compact />}
       tabs={
         <RouteTabs
           tabs={[
             { href: base, label: 'Preview' },
             { href: `${base}/fields`, label: fieldCount ? `Fields · ${fieldCount}` : 'Fields' },
-            ...(reads ? [{ href: `${base}/text`, label: 'Text', testId: 'file-text-tab' }] : []),
+            { href: `${base}/text`, label: 'Text', testId: 'file-text-tab' },
             { href: `${base}/versions`, label: `Versions · ${f.versions.length}` },
             { href: `${base}/activity`, label: rows.length ? `Activity · ${rows.length}` : 'Activity' },
           ]}
@@ -109,12 +109,19 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
             <Link href={`/workflows/runs/${encodeURIComponent(lastRun)}`} className="font-medium underline underline-offset-2" data-testid="file-last-run-link">
               run {lastRun}
             </Link>
-            {waiting ? ', waiting for a person to check fields in Human Tasks.' : '.'}
+            {lastRunNote({ waiting, reading, why: waitReason(latest), done: !!latest })}
           </AlertDescription>
         </Alert>
       )}
       {children({ file: f, extractions: rows, latest, openExtract: () => setExtracting(true), canExtract, canCorrect })}
-      <ExtractDialog open={extracting} onOpenChange={setExtracting} fileId={f.id} fileName={f.name} onDone={(run) => router.push(`${base}/fields?${new URLSearchParams({ run: run.runId, ...(run.status === 'waiting' ? { waiting: '1' } : {}) })}`)} onFullText={() => router.push(`${base}/text`)} />
+      <ExtractDialog open={extracting} onOpenChange={setExtracting} fileId={f.id} fileName={f.name} onDone={(run) => router.push(`${base}/fields?${new URLSearchParams({ run: run.runId, ...(run.status === 'waiting' ? { waiting: '1' } : run.status === 'reading' ? { reading: '1' } : {}) })}`)} onFullText={(pages) => router.push(`${base}/text${pages ? `?pages=${pages}` : ''}`)} />
     </PageLayout>
   );
+}
+
+/** What the banner says after the read's run: why it waits for a person, or that the file is still being read. */
+function lastRunNote({ waiting, reading, why, done }: { waiting: boolean; reading: boolean; why: string | null; done: boolean }): string {
+  if (reading && !done) return ', still reading the file; its fields show here when it finishes.';
+  if (!waiting) return '.';
+  return why ? `, waiting for a person to check it in Human Tasks: ${why}.` : ', waiting for a person in Human Tasks.';
 }

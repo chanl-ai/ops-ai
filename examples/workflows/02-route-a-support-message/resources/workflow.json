@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 2,
+  "id": "route_support_message",
+  "name": "Route an inbound support message",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.request",
+      "typeVersion": 1,
+      "name": "Message",
+      "parameters": {
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "text"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "sort",
+      "type": "ops.ai.classify",
+      "typeVersion": 1,
+      "name": "Classify",
+      "parameters": {
+        "text": "$.input.text",
+        "categories": [
+          {
+            "name": "billing",
+            "description": "invoices, charges, refunds"
+          },
+          {
+            "name": "technical",
+            "description": "login, outage, app"
+          },
+          {
+            "name": "cancellation",
+            "description": "close or cancel an account"
+          }
+        ],
+        "minConfidence": 0.6
+      }
+    },
+    {
+      "id": "billing",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Billing",
+      "parameters": {
+        "outcome": "billing"
+      }
+    },
+    {
+      "id": "technical",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Technical",
+      "parameters": {
+        "outcome": "technical"
+      }
+    },
+    {
+      "id": "cancellation",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Cancellation",
+      "parameters": {
+        "outcome": "cancellation"
+      }
+    },
+    {
+      "id": "other",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Other",
+      "parameters": {
+        "outcome": "other"
+      }
+    },
+    {
+      "id": "failed",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "classify_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "sort",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "sort",
+        "port": "billing"
+      },
+      "to": {
+        "node": "billing",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "sort",
+        "port": "technical"
+      },
+      "to": {
+        "node": "technical",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "sort",
+        "port": "cancellation"
+      },
+      "to": {
+        "node": "cancellation",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "sort",
+        "port": "otherwise"
+      },
+      "to": {
+        "node": "other",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "sort",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    }
+  ]
+}

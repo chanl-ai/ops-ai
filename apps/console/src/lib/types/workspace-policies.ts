@@ -1,9 +1,9 @@
-/** A policy value: a switch, a number (a threshold, days, hours), null for none, or a per-area map (publish review). */
-export type PolicyValue = boolean | number | null | Record<string, unknown>;
+/** A policy value: a switch, a number (a threshold, days, hours), null for none, a list of names, or a per-area map (publish review). */
+export type PolicyValue = boolean | number | null | string[] | Record<string, unknown>;
 
 /** One workspace access policy as platform-service serves it (GET /v1/policies, c-186). Every default is open. */
 /** How a policy's value is set: a switch, a confidence floor, a number of days or hours, or a mode per area. */
-export type PolicyKind = 'bool' | 'floor' | 'days' | 'hours' | 'publish_modes' | 'plugins';
+export type PolicyKind = 'bool' | 'floor' | 'days' | 'hours' | 'publish_modes' | 'plugins' | 'names';
 
 export interface WorkspacePolicy {
   key: string;

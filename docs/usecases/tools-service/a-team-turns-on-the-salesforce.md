@@ -1,8 +1,8 @@
 # A team turns on the Salesforce plugin, and its agents work cases and cite its articles
 
 Status: current on main behind the `OPS_PLUGINS` switch, which every layer turns on for its own services. Id: `uc-564`.
-Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, ui, cli. Cards: an earlier change (the
-prototype), an earlier change (on main). Design: the planning repo `docs/plans/ops-ai/plugin-architecture.html` and
+Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, sdk, cli, ui. Cards: an earlier change (the
+prototype), an earlier change (on main), an earlier change (story group D of `docs/plans/ops-ai/apps.html`, steps 40-46). Design: the planning repo `docs/plans/ops-ai/plugin-architecture.html` and
 `plugin-contents-and-knowledge.html`.
 
 ## Stories
@@ -15,7 +15,11 @@ prototype), an earlier change (on main). Design: the planning repo `docs/plans/o
 | S4 | A team admin turns Salesforce off and its tools disappear; turned on again, everything is still there | api | 8-12 | 10 |
 | S5 | A developer validates and tests the plugin, and a broken plugin installed beside it stops nothing else | cli | 20-23 | 22 |
 | S6 | A team with no OAuth app of its own signs in with the platform's, a team with its own keeps it, and neither team's account serves the other | api | 24-28 | 26 |
-| S7 | With plugins switched off, no plugin loads and none of its tools can be granted | cli | 29 | 29 |
+| S7 | On an install with no plugin, none loads and no plugin tool can be granted | cli | 29 | 29 |
+| S8 | The app's page lists its tools, and a builder runs one Mock (nothing reaches Salesforce) and Real (the team's account, through the gateway) | api | 40-42 | 42 |
+| S9 | An agent granted a new tool offers it in chat right after it is published (task S7) | api | 45 | 45 |
+| S10 | A builder lists an app's tools and runs one Mock and Real through the Python SDK | sdk | 43 | 43 |
+| S11 | A builder lists an app's tools and runs one Mock and Real with `ops tools` | cli | 44 | 44 |
 
 ## Preconditions
 
@@ -54,21 +58,29 @@ prototype), an earlier change (on main). Design: the planning repo `docs/plans/o
 | 21 | `ops plugin validate` on copies with an unknown sign-in kind, a write used as a knowledge tool, and a template that needs a missing tool | Each refused, naming the problem |
 | 22 | `ops plugin test ../ops-ai-plugins/plugins/salesforce` | Every tool and the knowledge listing pass against the plugin's fake |
 | 23 | tools-service starts with a broken plugin beside Salesforce, and a Python tool calls a host the plugin does not list | `/v1/plugins` lists the broken one as failed and Salesforce as loaded; the call fails `EGRESS_DENIED` |
-| 24 | Sam sets up the platform's OAuth app: its client id in the `plugins` policy, its secret with `PUT /v1/plugins/opsai.salesforce/app-secret`; Priya tries the secret | 200 for Sam; 403 for Priya |
+| 24 | Sam sets up the platform's OAuth app: its client id in the `plugins` policy, its secret with `PUT /v1/plugins/opsai.salesforce/app-secret`; James, a builder, tries the secret | 200 for Sam; 403 for James |
 | 25 | Wanjiru turns Salesforce on for team_platform with no app of its own; a team_platform call runs before it signs in | The call is refused; Salesforce receives nothing, though team_ops is signed in |
 | 26 | Wanjiru signs the team in | The token exchange carries the platform's client id and secret; team_platform's calls run |
 | 27 | Priya signs team_ops in again | The exchange carries team_ops's own app |
 | 28 | Read the plugins and team_platform's connection, as Sam and as Wanjiru | The platform's secret appears in none |
-| 29 | tools-service starts with `OPS_PLUGINS=false`, the same plugin folders and the install switch on | `/v1/plugins` and the team switch answer 404; no `salesforce_` or other plugin tool is grantable |
+| 29 | tools-service starts with an empty plugins folder (`OPS_PLUGINS_DIR`), no plugin paths and the install switch on | `/v1/plugins` and the team switch answer 404; no `salesforce_` or other plugin tool is grantable |
 | 30 | Priya opens the source page while its answer names a source type this console does not know | The page opens with its Sync now button and no page error |
+| 40 | Priya reads the app's page (`GET /v1/apps/plugin:opsai.salesforce`) | Its tools list salesforce_query with its title |
+| 41 | James runs `POST /v1/tool-modules/{module}/operations/salesforce_query/run` with mode `mock` | 200, `mocked` true; Salesforce received no query |
+| 42 | James runs it with mode `real` | 200 with case 00044818 and a call id; Salesforce received the query |
+| 43 | Through the SDK on the Apps stack, James lists the header-key desk's tools and runs `header_key_get_record` Mock and Real (`ops.tools.list`, `ops.tools.run`) | The tool listed; Mock reaches nothing; Real reads rec-1042 |
+| 44 | James runs `ops tools list --app plugin:test.header-key`, then `ops tools run … --mock --input input.json` and `--real` | Each exits 0; Mock reaches nothing; Real reads rec-1042 |
+| 45 | With team_ops's publish policy at always, James makes an agent and asks to publish it (the request waits); he grants salesforce_query, saves and asks again; Maya approves; he chats "call salesforce_query …" | The request for the newest draft (201) replaces the one waiting; after Maya approves, the first chat turn calls salesforce_query and reads the case |
+| 46 | The console steps for group D (the app page's Tools tab, the tool page's Mock or Real, the chat tool row "title · app, as person") | Written by the console builder with tasks U3 and U6 |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-564-api.py` | passing |
+| api | `tools-service/scripts/test-uc-564-api.py` | passing to step 30; 41-42 target: wait on P1 (the run route); 45 with S7 |
 | ui | `tools-service/scripts/test-uc-564-ui.mjs` | passing |
-| cli | `tools-service/scripts/test-uc-564-cli.py` | passing |
+| sdk | `tools-service/scripts/test-uc-564-sdk.py` | target: waits on P1 and K1 |
+| cli | `tools-service/scripts/test-uc-564-cli.py` | passing to step 29; 44 target: waits on L2 |
 
 ## Non-vacuous check
 

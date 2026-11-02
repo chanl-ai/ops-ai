@@ -38,16 +38,10 @@ const tryGit = (argv, cwd = repo) => {
 // ("10,000,000 rows", "used to sign in", "contact us") pass.
 
 const TAGS = new Set(['new', 'improved', 'fix']);
-// The console's release switches (apps/console/src/lib/changelog.ts SWITCHES): an entry for a feature behind one names
-// it, and What's new shows the entry only while it is on. A name the console does not read would hide the entry for good.
-const SWITCHES = new Set([
-  'NEXT_PUBLIC_OPS_PLUGINS',
-  'NEXT_PUBLIC_OPS_PERSONAL_SIGNIN',
-  'NEXT_PUBLIC_OPS_REAL_CONNECTIONS',
-  'NEXT_PUBLIC_OPS_DOCUMENT_READS',
-  'NEXT_PUBLIC_OPS_HOSTED_FORMS',
-  'NEXT_PUBLIC_OPS_WORKFLOW_BUILDER',
-]);
+// The console's release switches (apps/console/src/lib/api/index.ts releaseSwitches): an entry for a feature behind one
+// names it, and What's new shows the entry only while it is on. A name the console does not read would hide the entry for
+// good. Empty: a shipped feature has no switch (owner, 10-31), so an entry naming any switch is refused.
+const SWITCHES = new Set([]);
 const REFUSED = [
   [/(^|\s)(apps|services|packages|src|docs|scripts)\/\S*/i, 'names a file path'],
   [/\S+\/\S*\.[a-z]{1,5}\b/i, 'names a file path'],
@@ -239,12 +233,11 @@ function selfTest() {
     'a 61-character title': { title: 'x'.repeat(61) },
     'three sentences': { description: 'One. Two. Three.' },
     'no full stop': { description: 'Pages wait for your team' },
-    'a switch the console does not know': { switch: 'NEXT_PUBLIC_OPS_PLUGINZ' },
+    'a switch the console does not know': { switch: 'NEXT_PUBLIC_OPS_UNKNOWN' },
   };
   for (const [what, change] of Object.entries(red)) expect(`refused: ${what}`, entryProblems({ ...clean, ...change }).length > 0);
   const green = ['Imports 10,000,000 rows.', 'People who used to sign in with a password keep their access.', 'If it fails, contact us.', 'Search shows what it found.', 'A form can be used to start a case.'];
   for (const d of green) expect(`passes: "${d}"`, entryProblems({ ...clean, description: d }).length === 0);
-  expect('passes: an entry behind a release switch', entryProblems({ ...clean, switch: 'NEXT_PUBLIC_OPS_PLUGINS' }).length === 0);
   expect('a roadmap item passes', roadmapProblems({ title: 'Cases from chat', line: 'Start a case from any conversation.' }).length === 0);
   expect('refused: a roadmap line with a path', roadmapProblems({ title: 'Cases', line: 'Edits in services/agents-service land.' }).length > 0);
 

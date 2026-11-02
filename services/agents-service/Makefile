@@ -30,7 +30,7 @@ typecheck: ## Strict pyright
 	uv run pyright $(TYPED_DIRS)
 
 test: ## pytest on the test database (needs db-up)
-	$(TEST_DB) uv run pytest tests
+	$(TEST_DB) uv run pytest $(or $(T),tests)
 
 loader-test: ## The embedded chat loader's rules in a real browser (c-131)
 	node --test tests/loader/loader.browser.mjs

@@ -1,4 +1,4 @@
-"""A fake Salesforce for per-person sign-in use cases (c-558): its sign-in served by navikt's mock-oauth2-server, a
+"""A fake Salesforce for per-person sign-in use cases: its sign-in served by navikt's mock-oauth2-server, a
 standard OAuth 2.0 server run in Docker, and a REST API that accepts only that server's tokens.
 
 Both answer on https on this machine's private address with one self-signed certificate: `login.salesforce.test`
@@ -48,18 +48,24 @@ LOGIN_HOST = "login.salesforce.test"
 API_HOST = "kestrel.my.salesforce.test"
 ISSUER_ID = "salesforce"
 ISSUER = f"https://{LOGIN_HOST}/{ISSUER_ID}"
+# A sandbox org: its own sign-in address on the same login host, and its own instance, so a use case can show a
+# sandbox sign-in landing on the sandbox and production's on production, and a token from one refused by the other.
+SANDBOX_ID = "sandbox"
+SANDBOX_ISSUER = f"https://{LOGIN_HOST}/{SANDBOX_ID}"
+SANDBOX_HOST = "kestrel--uat.sandbox.my.salesforce.test"
+INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST}
 AUDIENCE = "salesforce-api"
 IMAGE = "ghcr.io/navikt/mock-oauth2-server:2.1.10"
 API = "/services/data/v61.0"
 CASE_ID = "5003000000D8cuIAAR"
-# A second case the Salesforce plugin's use case works (c-564); writing it needs no extra scope, as in Salesforce.
+# A second case the Salesforce plugin's use case works; writing it needs no extra scope, as in Salesforce.
 PLUGIN_CASE_ID = "5003000000D8cuJAAR"
 ARTICLES = "Knowledge__kav"
 # Articles per listing page, so a listing of the three seeded articles takes two pages and one nextRecordsUrl.
 PAGE_SIZE = 2
 # The scope an operation that writes a case needs, beyond `api`; a token signed in without it is refused (US4).
 WRITE_SCOPE = "cases.write"
-# One account's data for the query tools (c-581): three open escalated cases, one escalated case in the recycle bin,
+# One account's data for the query tools: three open escalated cases, one escalated case in the recycle bin,
 # a contact, and a list view of escalated cases. The fake answers the fixed query shapes the plugin's tools send.
 ACCOUNT_ID = "001300000000ACMEAA"
 LIST_VIEW_ID = "00B300000000ESCAAA"
@@ -99,7 +105,9 @@ def _certificate(folder: Path) -> tuple[Path, Path]:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(LOGIN_HOST), x509.DNSName(API_HOST)]), critical=False)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(h) for h in (LOGIN_HOST, API_HOST, SANDBOX_HOST)]), critical=False
+        )
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
     )
@@ -117,12 +125,14 @@ def oauth_server(token_expiry_s: int = 300) -> Generator[str]:
     token it issues names the API as its audience."""
     config = {
         "interactiveLogin": True,
+        # The production org and the sandbox org each issue tokens for the API.
         "tokenCallbacks": [
             {
-                "issuerId": ISSUER_ID,
+                "issuerId": issuer,
                 "tokenExpiry": token_expiry_s,
                 "requestMappings": [{"requestParam": "grant_type", "match": "*", "claims": {"aud": [AUDIENCE]}}],
             }
+            for issuer in (ISSUER_ID, SANDBOX_ID)
         ],
     }
     name = f"uc-salesforce-idp-{uuid.uuid4().hex[:8]}"
@@ -203,17 +213,22 @@ class Salesforce:
         }
         # Every SOQL query received, so a use case can read what a tool sent.
         self.queries: list[str] = []
+        # The Sforce-Query-Options header each query-all call carried, and each userinfo call's caller.
+        self.query_options: list[str | None] = []
+        self.userinfo: list[str] = []
         # Each article or attachment read by id, so a use case can tell an unchanged article was not fetched again.
         self.fetched: list[str] = []
         # A listing's next-page locators, as Salesforce keeps a query cursor server-side.
         self._locators: dict[str, str] = {}
-        # Cases the query tools read (c-581), by id; the deleted one only through queryAll.
+        # Cases the query tools read, by id; the deleted one only through queryAll.
         self.seeded: dict[str, dict[str, Any]] = {c["Id"]: dict(c) for c in SEEDED_CASES}
         # Set through /_control/mode: answer the next API request 401, answer the listing's second page 429 once,
         # or name a host outside Salesforce as the token's instance_url.
         self.fail_next: int | None = None
         self.limit_second_page = False
         self.bad_instance = False
+        # Refresh grants answer invalid_grant, as Salesforce does once a refresh token is revoked: the team reconnects.
+        self.refuse_refresh = False
         self.edits: list[dict[str, Any]] = []
         self.refused: list[str] = []
         self.revoked: list[str] = []
@@ -223,7 +238,11 @@ class Salesforce:
         self._scope_by_code: dict[str, str] = {}
         self._scope_by_token: dict[str, str] = {}
         self._pending: dict[str, str] = {}
-        self._jwks = jwt.PyJWKClient(f"{upstream}/{ISSUER_ID}/jwks")
+        # The OAuth server signs each issuer's tokens with that issuer's own key.
+        self._jwks = {
+            ISSUER: jwt.PyJWKClient(f"{upstream}/{ISSUER_ID}/jwks"),
+            SANDBOX_ISSUER: jwt.PyJWKClient(f"{upstream}/{SANDBOX_ID}/jwks"),
+        }
 
     def app(self) -> Any:
         from starlette.applications import Starlette  # noqa: PLC0415 - the agents-service environment has it
@@ -245,8 +264,14 @@ class Salesforce:
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
         try:
-            key = self._jwks.get_signing_key_from_jwt(token)
-            claims = jwt.decode(token, key.key, algorithms=["RS256"], audience=AUDIENCE, issuer=ISSUER)
+            said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
+            if said not in self._jwks:
+                raise jwt.InvalidIssuerError(f"no org signs as {said or 'nobody'}")
+            key = self._jwks[said].get_signing_key_from_jwt(token)
+            claims = jwt.decode(token, key.key, algorithms=["RS256"], audience=AUDIENCE, issuer=list(INSTANCES))
+            # Each org answers its own tokens only: a sandbox token at production's instance is refused, and back.
+            if INSTANCES[str(claims["iss"])] != host:
+                raise jwt.InvalidIssuerError(f"a token of {claims['iss']} at {host}")
         except jwt.PyJWTError as e:
             self.refused.append(type(e).__name__)
             return JSONResponse([{"errorCode": "INVALID_SESSION_ID", "message": str(e)}], 401)
@@ -315,7 +340,7 @@ class Salesforce:
         return JSONResponse([{"errorCode": "NOT_FOUND", "message": path}], 404)
 
     def _query_tools(self, request: Any, path: str) -> Any:
-        """The Salesforce calls the plugin's query tools make (c-581), or None for any other path."""
+        """The Salesforce calls the plugin's query tools make, or None for any other path."""
         from starlette.responses import JSONResponse  # noqa: PLC0415
 
         params = request.query_params
@@ -325,6 +350,8 @@ class Salesforce:
         ):
             q = params["q"] + (" ALL" if path.endswith("queryAll") else "")
             self.queries.append(params["q"])
+            if path.endswith("queryAll"):
+                self.query_options.append(request.headers.get("sforce-query-options"))
             return JSONResponse(self._cases_page(q, 0))
         if path == f"{API}/search":
             self.queries.append(params.get("q", ""))
@@ -460,6 +487,7 @@ class Salesforce:
             self.fail_next = body.get("failNext")
             self.limit_second_page = bool(body.get("limitSecondPage"))
             self.bad_instance = bool(body.get("badInstance"))
+            self.refuse_refresh = bool(body.get("refuseRefresh"))
             if body.get("expireLocators"):
                 # Salesforce drops a query locator after a while; the next page asked of it is refused.
                 self._locators.clear()
@@ -474,9 +502,13 @@ class Salesforce:
         if path.endswith("/revoke"):
             self.revoked.append(parse_qs(body.decode()).get("token", [""])[0])
             return Response(status_code=200)
+        if path == "/services/oauth2/userinfo":
+            return self._userinfo(request)
         headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
         headers |= {"Host": LOGIN_HOST, "X-Forwarded-Proto": "https", "X-Forwarded-Port": "443"}
         query = str(request.url.query)
+        if path.endswith("/token") and self.refuse_refresh and "grant_type=refresh_token" in body.decode():
+            return JSONResponse({"error": "invalid_grant", "error_description": "expired access/refresh token"}, 400)
         if path.endswith("/authorize"):
             state = parse_qs(query).get("state", [""])[0]
             self._pending[state] = parse_qs(query).get("scope", [""])[0]
@@ -504,15 +536,53 @@ class Salesforce:
                 scope = self._scope_by_token.get(form.get("refresh_token", [""])[0], "")
             answer["scope"] = scope
             # Salesforce names the org's own address in every token answer; a plugin reads its instance from here.
-            answer["instance_url"] = "https://evil.example" if self.bad_instance else f"https://{API_HOST}"
+            issuer = SANDBOX_ISSUER if path.startswith(f"/{SANDBOX_ID}/") else ISSUER
+            answer["instance_url"] = "https://evil.example" if self.bad_instance else f"https://{INSTANCES[issuer]}"
             self._scope_by_token[answer["access_token"]] = scope
             if answer.get("refresh_token"):
                 self._scope_by_token[answer["refresh_token"]] = scope
             return JSONResponse(answer, 200)
         return Response(r.content, status_code=r.status_code, headers=out)
 
+    def _userinfo(self, request: Any) -> Any:
+        """Salesforce's UserInfo endpoint on the sign-in host, in its format: who signed in, their org, and the org's
+        addresses, its My Domain under `urls.custom_domain` (help.salesforce.com, "Using the UserInfo Endpoint")."""
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        auth = request.headers.get("authorization", "")
+        token = auth[7:] if auth.startswith("Bearer ") else ""
+        try:
+            said = str(jwt.decode(token, options={"verify_signature": False}).get("iss") or "")
+            if said not in self._jwks:
+                raise jwt.InvalidIssuerError(f"no org signs as {said or 'nobody'}")
+            key = self._jwks[said].get_signing_key_from_jwt(token)
+            claims = jwt.decode(token, key.key, algorithms=["RS256"], audience=AUDIENCE, issuer=list(INSTANCES))
+        except jwt.PyJWTError:
+            return JSONResponse({"error": "invalid_token", "error_description": "Bad_OAuth_Token"}, 403)
+        who = str(claims["sub"])
+        self.userinfo.append(who)
+        # Each org's own My Domain: a sandbox token names the sandbox's instance.
+        domain = "https://evil.example" if self.bad_instance else f"https://{INSTANCES[str(claims['iss'])]}"
+        return JSONResponse(
+            {
+                "sub": f"https://{LOGIN_HOST}/id/00Dkestrel/005{who}",
+                "user_id": f"005{who}",
+                "organization_id": "00Dkestrel",
+                "preferred_username": who,
+                "active": True,
+                "user_type": "STANDARD",
+                "urls": {
+                    "rest": f"{domain}/services/data/v{{version}}/",
+                    "query": f"{domain}/services/data/v{{version}}/query/",
+                    "custom_domain": domain,
+                },
+            }
+        )
+
     def state(self) -> dict[str, Any]:
         return {
+            "query_options": list(self.query_options),
+            "userinfo": list(self.userinfo),
             "case": dict(self.case),
             "cases": {k: dict(v) for k, v in self.cases.items()},
             "queries": list(self.queries),
@@ -578,9 +648,13 @@ def salesforce(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
             yield {
                 "settings": {
                     "OPS_EGRESS_CA_FILE": str(cert),
-                    "OPS_EGRESS_RESOLVE": json.dumps({LOGIN_HOST: f"{address}:{port}", API_HOST: f"{address}:{port}"}),
+                    "OPS_EGRESS_RESOLVE": json.dumps(
+                        dict.fromkeys((LOGIN_HOST, API_HOST, SANDBOX_HOST), f"{address}:{port}")
+                    ),
                 },
-                "hosts": [LOGIN_HOST, API_HOST],
+                "hosts": [LOGIN_HOST, API_HOST, SANDBOX_HOST],
+                "sandbox_login": SANDBOX_ISSUER,
+                "sandbox_base": f"https://{SANDBOX_HOST}",
                 "range": f"{address}/32",
                 "authorize_url": f"{ISSUER}/authorize",
                 "token_url": f"{ISSUER}/token",

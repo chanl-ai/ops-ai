@@ -13,11 +13,14 @@ from typing import Any
 import httpx
 import uvicorn
 
+from ops_access.platform_events import platform_events_router
 from ops_agents.activities.catalog import load_catalog
+from ops_documents_client import DocumentsClient
 from ops_email import EmailProviders, MailSender
+from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_identity.fastapi import DEV_TENANT
-from ops_policy import AesGcmCipher
+from ops_service_kit.credentials import credential_store
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.model_calls import StructuredCalls
 from ops_service_kit.settings import Settings, require_keys
@@ -31,10 +34,14 @@ from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
 from .connections.routes import connections_router
 from .connections.service import ConnectionService
+from .defaults import catch_up_at_start
 from .egress import EgressPolicy, OverrideResolver, egress_client, egress_transport
 from .egress_routes import egress_router
 from .expression_routes import expressions_router
+from .file_tools import FileTools
 from .graph_mailbox import cursor_key, graph_clients
+from .header_keys import move_at_start
+from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mock_routes import mocks_router
 from .modules.directory import Directory
@@ -44,8 +51,10 @@ from .modules.reviews import Reviews
 from .modules.routes import executions_router, modules_router
 from .modules.seed import load
 from .modules.service import ModuleService
+from .modules.tool_users import AgentsToolUsers
 from .modules.workflows import AgentsWorkflows
 from .opa import OpaClient
+from .platform_events import member_removed_handlers, team_created_handlers
 from .plugins.host import PluginHost
 from .plugins.routes import plugins_router
 from .plugins.switches import InstallSwitches
@@ -66,6 +75,7 @@ from .store.plugin_bindings import PluginBindings
 from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
 from .store.send_policies import SendPolicies
+from .store.team_defaults import TeamDefaults
 from .systems import Systems, systems_router
 from .tools import LocalToolRunner, ToolCaller
 
@@ -121,15 +131,16 @@ def main() -> None:
     store, calls = ModuleStore(engine), CallLog(engine)
     policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve))
     ca = str(settings.egress_ca_file) if settings.egress_ca_file else None
-    cipher = AesGcmCipher(settings.secrets_key.get_secret_value())
-    secrets = SecretResolver(SecretStore(engine), cipher)
+    # Every secret value is put and read through the credential store; rows keep only its reference (c-616 C6).
+    credentials = credential_store(settings)
+    secrets = SecretResolver(SecretStore(engine), credentials)
     # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
     connection_store = ConnectionStore(engine)
-    tokens = Tokens(connection_store, cipher, egress_client(policy, ca_file=ca), policy)
+    tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
     # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
-    # The platform's own OAuth app secrets for plugins (c-565), sealed at the account; only with plugins on.
-    app_keys = PluginAppKeys(engine, cipher) if settings.plugins else None
+    # The platform's own OAuth app secrets for plugins (c-565), sealed at the account; only on an install with plugins.
+    app_keys = PluginAppKeys(engine, credentials) if settings.plugins else None
     authenticator = Authenticator(
         connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
     )
@@ -140,9 +151,8 @@ def main() -> None:
         http = httpx.AsyncClient(base_url=base_url, timeout=5)
         return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
 
-    # The installed plugins (c-565), read once at start: a failed one is reported on /v1/plugins and left out. Off
-    # (OPS_PLUGINS, the default until release) nothing is loaded, the plugin routes are not mounted and calls never
-    # reach a plugin.
+    # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is reported on
+    # /v1/plugins and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
     plugins = PluginHost.when_on(
         settings,
         store,
@@ -150,6 +160,10 @@ def main() -> None:
         InstallSwitches(
             client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
         ),
+        connection_store,
+        # The lookup after a plugin's sign-in goes out through the egress client, as any call does (c-584).
+        http=egress_client(policy, ca_file=ca),
+        policy=policy,
     )
     modules = ModuleService(
         store,
@@ -171,6 +185,10 @@ def main() -> None:
         ),
         auth=authenticator,
     )
+    # The call log names a plugin tool by its manifest title (c-607).
+    modules.titles = plugins.title_of if plugins else None
+    # A plugin tool's page names the team's own account of the app (c-616).
+    modules.team_connections = plugins.team_connection if plugins else None
     # send_reply naming a mailbox (c-200): the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
     # Microsoft 365 mailboxes (c-228): Graph and its token endpoint, dialled through each tenant's allow-list.
@@ -185,8 +203,8 @@ def main() -> None:
     )
     connection_service = ConnectionService(
         connection_store,
-        SecretStore(engine),
-        cipher,
+        secrets,
+        credentials,
         tokens,
         directory,
         egress=policy,
@@ -206,7 +224,11 @@ def main() -> None:
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
         registry=ToolRegistry(catalog, store, plugins),
         plugins=plugins,
+        # A tool page's Real run goes through this gateway's checks (c-616).
+        modules=modules,
         cursor_key=cursor_key(settings.secrets_key.get_secret_value()),
+        # /mcp is served only with the mcp_gateway flag on in the install config (c-611).
+        flags=settings.feature_flags,
         log=calls,
         # The mail provider settings pick (OPS_MAIL_PROVIDER); a missing secret stops start-up here. An SMTP password
         # named by OPS_SMTP_PASSWORD_SECRET is read from the Secrets page at each send, as send_reply.
@@ -216,6 +238,13 @@ def main() -> None:
             mailbox_sender=mailbox_senders.sender,
             cases=client("agents", agents_url, ["cases:view", "cases:create"]),
             decisions=modules,
+            # read_file and read_document (c-613) read through documents-service as the calling team.
+            file_tools=FileTools(
+                FilesClient.from_settings(settings, service="tools", scopes=["files:view"]),
+                DocumentsClient.from_settings(settings, service="tools", scopes=["documents:view", "documents:run"]),
+            ),
+            # search_knowledge (c-616) searches the calling team's knowledge bases through kb-service.
+            knowledge=KnowledgeSearch(client("kb", settings.kb_url, ["knowledge:view"])) if settings.kb_url else None,
         ),
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
@@ -243,6 +272,10 @@ def main() -> None:
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
             # Tool access requests and module reviews start their system workflows through these events (c-257).
             lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit"])),
+            # Once at start: every team behind this release's defaults version is brought up to date (c-616).
+            lambda: catch_up_at_start(store, TeamDefaults(engine)),
+            # Once at start: a tool's sign-in header saved before they were refused moves to its connection (c-616).
+            lambda: move_at_start(store, connection_store),
         ),
         secret_resolver=secrets,
         authenticator=authenticator,
@@ -266,13 +299,31 @@ def main() -> None:
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
             expressions_router(),
-            secrets_router(SecretStore(engine), cipher, modules=store),
+            secrets_router(secrets, modules=store),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
-            *([plugins_router(plugins, connection_service, directory, app_keys)] if plugins and app_keys else []),
+            *(
+                [
+                    plugins_router(
+                        plugins,
+                        connection_service,
+                        directory,
+                        app_keys,
+                        users=AgentsToolUsers(client("agents", agents_url, ["agents:view"])),
+                    )
+                ]
+                if plugins and app_keys
+                else []
+            ),
             *([plugin_templates_router(plugins)] if plugins else []),
             connections_router(connection_service, directory),
-            systems_router(Systems(connection_service, store, plugins, app_keys), directory),
+            systems_router(Systems(connection_service, store, plugins, app_keys, modules), directory),
+            platform_events_router(
+                {
+                    **member_removed_handlers(connection_service.store, credentials),
+                    **team_created_handlers(store, TeamDefaults(engine)),
+                }
+            ),
         ),
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.gateway_port, log_level="info")

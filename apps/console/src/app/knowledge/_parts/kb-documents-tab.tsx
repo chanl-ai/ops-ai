@@ -21,6 +21,7 @@ import type { DocumentFilters, DocumentRow, ItemStatus, KnowledgeBaseDetail, Sen
 import { DocumentPanel } from '@/components/knowledge/document-panel';
 import { AddPageDialog } from '@/components/knowledge/add-page-dialog';
 import { Button } from '@/components/ui/button';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = DocumentRow & { onRowClick: (d: DocumentRow) => void };
 
@@ -154,15 +155,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
           { column: 'tags', title: 'Tag', options: Object.keys(facets.tags ?? {}).sort().map((t) => ({ label: t, value: t, count: facets.tags?.[t] ?? 0 })) },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={FileText}

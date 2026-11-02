@@ -1,0 +1,125 @@
+schemaVersion: 2
+id: read_claim_and_open_case
+name: Read a claim document and open a case
+nodes:
+- id: start
+  type: ops.trigger.email
+  typeVersion: 1
+  name: Claim email
+- id: read
+  type: ops.ai.extract
+  typeVersion: 1
+  name: Extract fields
+  parameters:
+    file: $.input.attachments.0.fileId
+    documentType:
+      id: levy_notice
+- id: save
+  type: ops.files.setData
+  typeVersion: 1
+  name: Save the read
+  parameters:
+    file: $.input.attachments.0.fileId
+    read: $.nodes.read.out
+- id: review
+  type: ops.flow.humanReview
+  typeVersion: 1
+  name: Correct low confidence
+  parameters:
+    title: Check the read
+- id: open
+  type: ops.action.openCase
+  typeVersion: 1
+  name: Open a claim case
+  parameters:
+    subject: $.nodes.read.out.records.0.values.name
+    caseType: complaint
+    fields:
+      claimant: $.nodes.read.out.records.0.values.name
+      amount: $.nodes.read.out.records.0.values.amount
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Opened
+  parameters:
+    outcome: opened
+- id: unreadable
+  type: ops.flow.end
+  typeVersion: 1
+  name: Unreadable
+  parameters:
+    outcome: unreadable
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Failed
+  parameters:
+    outcome: extract_failed
+    result: failed
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: read
+    port: in
+- from:
+    node: read
+    port: ok
+  to:
+    node: save
+    port: in
+- from:
+    node: read
+    port: review
+  to:
+    node: review
+    port: in
+- from:
+    node: read
+    port: unreadable
+  to:
+    node: unreadable
+    port: in
+- from:
+    node: read
+    port: error
+  to:
+    node: failed
+    port: in
+- from:
+    node: save
+    port: ok
+  to:
+    node: open
+    port: in
+- from:
+    node: save
+    port: error
+  to:
+    node: failed
+    port: in
+- from:
+    node: review
+    port: approve
+  to:
+    node: save
+    port: in
+- from:
+    node: review
+    port: reject
+  to:
+    node: failed
+    port: in
+- from:
+    node: open
+    port: opened
+  to:
+    node: done
+    port: in
+- from:
+    node: open
+    port: error
+  to:
+    node: failed
+    port: in

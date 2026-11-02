@@ -1,5 +1,5 @@
 // uc-525 a workflow waits for long-running work and carries on when it finishes, ui layer:
-// docs/usecases/console/wait-for-long-work.md (c-525). The demo stack with a worker, files-service and documents-service.
+// docs/usecases/console/wait-for-long-work.md. The demo stack with a worker, files-service and documents-service.
 // 1-3: a tax levy over five pages, which documents-service reads in the background: Extract from file parks instead of
 // holding a worker, documents-service reports extraction.finished, the run resumes on it, and a Decide step branches on
 // the amount it found. 4-6: a Wait for step parks and resumes on its signed callback; a forged token and a second call
@@ -76,7 +76,7 @@ const trigger = {
 const end = (id, outcome, result) => ({ id, type: 'ops.flow.end', typeVersion: 1, name: id, parameters: { outcome, ...(result ? { result } : {}) } });
 const link = (from, port, to) => ({ from: { node: from, port }, to: { node: to, port: 'in' } });
 
-/** Read the levy, then decide on the amount it found: the case the owner asked for. */
+/** Read the levy, then decide on the amount it found: the case the maintainers asked for. */
 const READ_AND_DECIDE = {
   schemaVersion: 2,
   id: 'uc525_read_decide',

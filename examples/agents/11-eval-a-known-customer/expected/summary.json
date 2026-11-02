@@ -1,0 +1,6 @@
+{
+  "passed": 3,
+  "total": 4,
+  "regressions": 0,
+  "failingCase": "write-must-not-search"
+}

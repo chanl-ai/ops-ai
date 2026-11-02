@@ -24,6 +24,7 @@ import { useTeam } from '@/hooks/use-team';
 import { count, pct, relativeTime } from '@/lib/format';
 import type { Webhook } from '@/lib/types/settings';
 import { cn } from '@/lib/utils';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Webhook & { onRowClick: (w: Webhook) => void };
 
@@ -125,15 +126,7 @@ export default function WebhooksPage() {
           searchPlaceholder="Search names, URLs or events…"
           initialColumnVisibility={{ events: false }}
           onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={<ListEmpty icon={WebhookIcon} noun="webhooks" filtered={list.isFiltered} createLabel="Add webhook" onCreate={() => setAddOpen(true)} description="Send review decisions, failed runs or audit entries to a SIEM, case manager or ticketing system." />}
         />
       )}

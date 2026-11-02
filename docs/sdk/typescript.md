@@ -43,7 +43,10 @@ console.log(run.status, run.outcome);
 ## What the client offers
 
 The same attributes as the [Python SDK](python.md#what-the-client-offers), with `list()` as an async iterator and
-`raw.<service>.<operation>({ path, query, body })` for every other public operation.
+`raw.<service>.<operation>({ path, query, body })` for every other public operation. The Apps area's verbs are camel
+case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addCustom(kind, name, { baseAddress })`,
+`credentials.set(app, { clientId, clientSecret })`, `accounts.makeDefault(account)`, `accounts.setKey(account, key)`,
+`tools.run(app, tool, input, { real })`.
 
 ## Errors
 

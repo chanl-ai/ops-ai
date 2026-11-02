@@ -29,6 +29,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { pct, relativeTime, shortId } from '@/lib/format';
 import type { Agent } from '@/lib/types/domain';
 import type { EvalCase, EvalCaseFilters, EvalRunFilters, EvalRunRow } from '@/lib/types/evals';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type CaseRow = EvalCase & { rowTestId: string };
 type RunRow = EvalRunRow & { onRowClick: (r: EvalRunRow) => void; rowTestId: string };
@@ -295,15 +296,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             onColumnFiltersChange={caseList.onColumnFiltersChange}
             selectionResetKey={resetKey}
             bulkActions={[{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rows) => setBulkDeleting(rows) }]}
-            serverPagination={{
-              enabled: true,
-              total: cases.data?.pagination.total ?? 0,
-              page: caseList.pagination.page,
-              pageSize: caseList.pagination.pageSize,
-              totalPages: cases.data?.pagination.totalPages,
-              onPaginationChange: caseList.setPagination,
-              isLoading: cases.isFetching && cases.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(caseList, cases)}
             emptyState={<ListEmpty icon={FlaskConical} noun="eval cases" filtered={caseList.isFiltered} description="Add the cases this agent must keep getting right." createLabel="Add case" onCreate={() => setAddOpen(true)} />}
           />
         )}
@@ -327,15 +320,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
               { column: 'status', title: 'Status', options: [{ value: 'running', label: 'Running', count: runFacets.status?.running ?? 0 }, { value: 'complete', label: 'Complete', count: runFacets.status?.complete ?? 0 }] },
             ]}
             onColumnFiltersChange={runList.onColumnFiltersChange}
-            serverPagination={{
-              enabled: true,
-              total: runs.data?.pagination.total ?? 0,
-              page: runList.pagination.page,
-              pageSize: runList.pagination.pageSize,
-              totalPages: runs.data?.pagination.totalPages,
-              onPaginationChange: runList.setPagination,
-              isLoading: runs.isFetching && runs.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(runList, runs)}
             emptyState={<ListEmpty icon={History} noun="eval runs" filtered={runList.isFiltered} description="Runs appear here after each save and each time someone runs evals." />}
           />
         )}

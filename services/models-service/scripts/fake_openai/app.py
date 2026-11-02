@@ -1,4 +1,5 @@
-"""POST /v1/chat/completions, streaming and not, and GET /v1/models, answered from a rule set.
+"""POST /v1/chat/completions, streaming and not, GET /v1/models, and Azure OpenAI's two chat paths, answered from a rule
+set.
 
 When the request offers tools and its last message is the user's, the first rule whose `when` pattern matches that
 message and whose `tool` is offered becomes a tool call with the rule's arguments; a rule with `text` instead answers
@@ -26,6 +27,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from ops_models.providers import Completion, ScriptedProvider, completion_chunks
 
 GIST_WORDS = 12
+# The output tool a structured call (a guardrail or memory check) offers for its answer: not a tool to act with.
+ANSWER_TOOL = "final_result"
 _AGENT = re.compile(r"\bYou are ([^,.\n]+)")
 
 
@@ -41,8 +44,12 @@ class Rule:
     # fill `{name}` in `text` and in string arguments, so an answer quotes its evidence rather than a constant.
     result: str | None = None
     # Calls `tool` even when the request does not offer it, as a model might: how a use case proves that a tool an
-    # agent does not hold is refused rather than run.
+    # agent does not hold is refused rather than run. Only in a request that offers a tool to act with: a guardrail or
+    # memory check offers none, or only its answer's `final_result`, and is answered by its own rules.
     force: bool = False
+    # A pattern an earlier user message must match, its named groups filling `{name}` as `when`'s do: a follow-up such
+    # as "I connected Salesforce. Please go ahead." acts on the case the person asked about before it.
+    before: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,7 @@ def load_script(folder: Path) -> Script:
             str(r["after"]) if r.get("after") else None,
             str(r["result"]) if r.get("result") else None,
             bool(r.get("force")),
+            str(r["before"]) if r.get("before") else None,
         )
         for r in listed
     ]
@@ -109,6 +117,21 @@ def _last_call(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _fit(arguments: dict[str, Any], declared: dict[str, Any]) -> dict[str, Any]:
+    """The rule's arguments cut to the properties the answer's schema declares, so one rule written for what a customer
+    said can answer a classify, a summary and a draft step alike: each step keeps only the fields it asks for."""
+    return {k: v for k, v in arguments.items() if k in declared} if declared else arguments
+
+
+def _declared(parameters: Any) -> dict[str, Any]:
+    """`properties` of a JSON schema, empty when it names none."""
+    if isinstance(parameters, dict):
+        found = cast(dict[str, Any], parameters).get("properties")
+        if isinstance(found, dict):
+            return cast(dict[str, Any], found)
+    return {}
+
+
 def _fill(template: Any, captured: dict[str, str]) -> Any:
     """`{name}` in a string (or in the strings of a list or dict) replaced by what the rule's patterns captured."""
     if isinstance(template, str):
@@ -136,9 +159,15 @@ def _rule_for(script: Script, messages: list[dict[str, Any]], offered: set[str])
     finished = _last_call(messages)
     user_said = [_text(m) for m in messages if m.get("role") == "user"]
     for rule in script.rules:
-        if rule.tool and rule.tool not in offered and not rule.force:
+        if rule.tool and rule.tool not in offered and not (rule.force and offered - {ANSWER_TOOL}):
             continue
         captured: dict[str, str] = {}
+        if rule.before:
+            hits = (re.search(rule.before, t, re.IGNORECASE | re.DOTALL) for t in reversed(user_said[:-1]))
+            earlier = next((m for m in hits if m is not None), None)
+            if earlier is None:
+                continue
+            captured.update({k: v for k, v in earlier.groupdict().items() if v is not None})
         if rule.after:
             if finished != rule.after:
                 continue
@@ -176,17 +205,41 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
     if (hit := _rule_for(script, messages, offered | ({native} if native else set()))) is not None:
         matched, captured = hit
         if matched.tool and matched.tool == native and native not in offered:
-            text = json.dumps(_fill(matched.arguments, captured))
+            filled = _fit(_fill(matched.arguments, captured), _declared(schema.get("schema")))
+            text = json.dumps(filled)
             return Completion(text, prompt_tokens, len(text.split()))
         if matched.tool:
+            wanted = next((f.get("parameters") for f in functions if f.get("name") == matched.tool), None)
+            filled = _fit(_fill(matched.arguments, captured), _declared(wanted))
             call = {
                 "id": f"call_fake_{len(messages)}",
                 "type": "function",
-                "function": {"name": matched.tool, "arguments": json.dumps(_fill(matched.arguments, captured))},
+                "function": {"name": matched.tool, "arguments": json.dumps(filled)},
             }
             return Completion(None, prompt_tokens, 1, [call])
         text = str(_fill(matched.text, captured))
         return Completion(text, prompt_tokens, len(text.split()))
+    if last.get("role") == "user":
+        asked = _text(last)
+        specialists = sorted(n for n in offered if n.startswith("agent__"))
+        if specialists and re.search(r"(?i)research|handbook|delegate|specialist", asked):
+            call = {
+                "id": f"call_fake_{len(messages)}",
+                "type": "function",
+                "function": {"name": specialists[0], "arguments": json.dumps({"question": asked})},
+            }
+            return Completion(None, prompt_tokens, 1, [call])
+        workflows = sorted(n for n in offered if n.startswith("workflow__"))
+        if workflows and re.search(r"(?i)start a customer hold|start.*hold", asked):
+            args: dict[str, Any] = {}
+            if named := re.search(r"(?i)hold for (.+?) for ([\d.]+)", asked):
+                args = {"customer": named.group(1).strip(), "amount": float(named.group(2))}
+            call = {
+                "id": f"call_fake_{len(messages)}",
+                "type": "function",
+                "function": {"name": workflows[0], "arguments": json.dumps(args)},
+            }
+            return Completion(None, prompt_tokens, 1, [call])
     if offered and last.get("role") == "user":
         scripted = await ScriptedProvider().complete(model, body)
         if scripted.tool_calls:
@@ -199,9 +252,38 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
     return Completion(text, prompt_tokens, len(text.split()))
 
 
-def create_app(script: Script, api_key: str | None = None) -> FastAPI:
+# Azure OpenAI's annotations: a first stream frame with no choices carrying the prompt's filter results, filter results
+# on each choice, and a choice with no delta once the answer is checked. Callers must ignore all three.
+_FILTERED = {"hate": {"filtered": False, "severity": "safe"}, "violence": {"filtered": False, "severity": "safe"}}
+_PROMPT_FRAME: dict[str, Any] = {
+    "id": "",
+    "object": "",
+    "created": 0,
+    "model": "",
+    "choices": [],
+    "prompt_filter_results": [{"prompt_index": 0, "content_filter_results": _FILTERED}],
+}
+# Azure answers a call on a deployment path with no api-version, or any path it does not serve, with this.
+_NOT_FOUND = {"error": {"code": "404", "message": "Resource not found"}}
+_DENIED = {
+    "error": {
+        "code": "401",
+        "message": "Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid "
+        "key for an active subscription and use a correct regional API endpoint for your resource.",
+    }
+}
+# The first dated version whose streams carry usage under stream_options.include_usage.
+_STREAM_USAGE_SINCE = "2024-09-01"
+
+
+def create_app(script: Script, api_key: str | None = None, azure_region: str = "Sweden Central") -> FastAPI:
     """With `api_key`, a request that sends a credential must send that one, or it is refused as OpenAI refuses a wrong
-    key; a request with none is still answered, for the connections in the same stack that name no key."""
+    key; a request with none is still answered, for the connections in the same stack that name no key.
+
+    Azure OpenAI's two paths are served beside OpenAI's: `/openai/deployments/{deployment}/chat/completions` needs an
+    `api-version` query and the key in the `api-key` header (a bearer token is refused there), and
+    `/openai/v1/chat/completions` takes the deployment as `model` and the key as `api-key` or a bearer token. Both
+    answer with Azure's `x-ms-region` header (`azure_region`) and its filter annotations."""
     app = FastAPI(title="Fake OpenAI", version="1.0.0")
 
     def wrong_key(request: Request) -> JSONResponse | None:
@@ -210,6 +292,60 @@ def create_app(script: Script, api_key: str | None = None) -> FastAPI:
             return None
         error = {"message": "Incorrect API key provided.", "type": "invalid_request_error", "code": "invalid_api_key"}
         return JSONResponse({"error": error}, status_code=401)
+
+    def azure_denied(request: Request, *, bearer: bool) -> JSONResponse | None:
+        """None when the request signs in as Azure takes it: `api-key`, or on the v1 path also a bearer token."""
+        sent = request.headers.get("api-key")
+        if sent is None and bearer:
+            auth = request.headers.get("authorization") or ""
+            sent = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else None
+        if sent is None or (api_key is not None and sent != api_key):
+            return JSONResponse(_DENIED, status_code=401, headers={"x-ms-region": azure_region})
+        return None
+
+    async def reply(body: dict[str, Any], model: str, *, azure: bool, stream_usage: bool = True) -> Response:
+        done = await answer(script, model, body)
+        messages: list[Any] = list(body.get("messages") or [])
+        base = {"id": f"chatcmpl-fake-{len(messages)}", "created": 0, "model": model}
+        headers = {"x-ms-region": azure_region} if azure else {}
+        if body.get("stream"):
+            options: dict[str, Any] = dict(body.get("stream_options") or {})
+            with_usage = bool(options.get("include_usage")) and stream_usage
+
+            async def events() -> AsyncIterator[str]:
+                if azure:
+                    yield f"data: {json.dumps(_PROMPT_FRAME)}\n\n"
+                for chunk in completion_chunks(done):
+                    out: dict[str, Any] = chunk
+                    if chunk.get("usage"):
+                        if not with_usage:
+                            continue
+                        if azure:
+                            # The answer's own check, after its last delta: a choice with no delta.
+                            checked = {"index": 0, "finish_reason": None, "content_filter_results": _FILTERED}
+                            frame = {**base, "object": "chat.completion.chunk", "choices": [checked]}
+                            yield f"data: {json.dumps(frame)}\n\n"
+                    elif azure:
+                        choices: list[dict[str, Any]] = chunk["choices"]
+                        out = {**chunk, "choices": [{**c, "content_filter_results": {}} for c in choices]}
+                    yield f"data: {json.dumps({**base, **out})}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(events(), media_type="text/event-stream", headers=headers)
+        message: dict[str, Any] = {"role": "assistant", "content": done.text}
+        if done.tool_calls:
+            message["tool_calls"] = done.tool_calls
+        usage = {
+            "prompt_tokens": done.input_tokens,
+            "completion_tokens": done.output_tokens,
+            "total_tokens": done.input_tokens + done.output_tokens,
+        }
+        choice: dict[str, Any] = {"index": 0, "message": message, "finish_reason": done.finish_reason}
+        out: dict[str, Any] = {**base, "object": "chat.completion", "choices": [choice], "usage": usage}
+        if azure:
+            choice["content_filter_results"] = _FILTERED
+            out["prompt_filter_results"] = _PROMPT_FRAME["prompt_filter_results"]
+        return JSONResponse(out, headers=headers)
 
     @app.get("/health")
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
@@ -227,31 +363,23 @@ def create_app(script: Script, api_key: str | None = None) -> FastAPI:
         if (refused := wrong_key(request)) is not None:
             return refused
         body: dict[str, Any] = await request.json()
-        model = str(body.get("model") or "unknown")
-        done = await answer(script, model, body)
-        messages: list[Any] = list(body.get("messages") or [])
-        base = {"id": f"chatcmpl-fake-{len(messages)}", "created": 0, "model": model}
-        if body.get("stream"):
-            options: dict[str, Any] = dict(body.get("stream_options") or {})
-            with_usage = bool(options.get("include_usage"))
+        return await reply(body, str(body.get("model") or "unknown"), azure=False)
 
-            async def events() -> AsyncIterator[str]:
-                for chunk in completion_chunks(done):
-                    if chunk.get("usage") and not with_usage:
-                        continue
-                    yield f"data: {json.dumps({**base, **chunk})}\n\n"
-                yield "data: [DONE]\n\n"
+    @app.post("/openai/deployments/{deployment}/chat/completions")
+    async def azure_deployment(request: Request, deployment: str) -> Response:  # pyright: ignore[reportUnusedFunction]
+        version = request.query_params.get("api-version")
+        if not version:
+            return JSONResponse(_NOT_FOUND, status_code=404)
+        if (refused := azure_denied(request, bearer=False)) is not None:
+            return refused
+        body: dict[str, Any] = await request.json()
+        return await reply(body, deployment, azure=True, stream_usage=version >= _STREAM_USAGE_SINCE)
 
-            return StreamingResponse(events(), media_type="text/event-stream")
-        message: dict[str, Any] = {"role": "assistant", "content": done.text}
-        if done.tool_calls:
-            message["tool_calls"] = done.tool_calls
-        usage = {
-            "prompt_tokens": done.input_tokens,
-            "completion_tokens": done.output_tokens,
-            "total_tokens": done.input_tokens + done.output_tokens,
-        }
-        choice = {"index": 0, "message": message, "finish_reason": done.finish_reason}
-        return JSONResponse({**base, "object": "chat.completion", "choices": [choice], "usage": usage})
+    @app.post("/openai/v1/chat/completions")
+    async def azure_v1(request: Request) -> Response:  # pyright: ignore[reportUnusedFunction]
+        if (refused := azure_denied(request, bearer=True)) is not None:
+            return refused
+        body: dict[str, Any] = await request.json()
+        return await reply(body, str(body.get("model") or "unknown"), azure=True)
 
     return app

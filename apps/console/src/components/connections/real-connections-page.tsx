@@ -1,8 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { type SystemCard } from '@/hooks/systems-queries';
+import { useSearchParams } from 'next/navigation';
+import { type SystemCard, useConnectionKinds } from '@/hooks/systems-queries';
+import type { Kinds } from '@/lib/connect-plan';
 
+import { ConnectSmallDialog, connectsSmall } from './connect-small-dialog';
 import { ConnectSystemDialog, type ConnectMode, type ConnectTarget } from './connect-system-dialog';
 import { SystemsGrid } from './systems-grid';
 
@@ -15,16 +18,28 @@ function targetOf(system: SystemCard | null): ConnectTarget | null {
   return null;
 }
 
-/** The real-connections Connections page (c-580): the systems grid, and the one connect dialog it opens. */
+/**
+ * Connections (c-607): the apps catalog. A plugin that signs in through Ops AI's app connects in the small window;
+ * anything that needs keys or its own app opens c-580's connect dialog.
+ */
 export function RealConnectionsPage() {
+  const kinds = useConnectionKinds();
   const [open, setOpen] = React.useState<{ target: ConnectTarget; mode: ConnectMode; key: number } | null>(null);
+  const [small, setSmall] = React.useState<SystemCard | null>(null);
+  // A link from a tool's app picker (`?new=1`) opens Add custom app here, the one place an app is added.
+  const asked = useSearchParams().get('new') === '1';
+  React.useEffect(() => {
+    if (asked) setOpen({ target: { kind: 'new' }, mode: 'connect', key: Date.now() });
+  }, [asked]);
   const show = (system: SystemCard | null, mode: ConnectMode) => {
+    if (system && mode === 'connect' && connectsSmall(system, kinds.data as Kinds | undefined)) return setSmall(system);
     const target = targetOf(system);
     if (target) setOpen({ target, mode, key: Date.now() });
   };
   return (
     <>
       <SystemsGrid onConnect={(s, mode) => show(s, mode)} onNew={() => show(null, 'connect')} />
+      {small && kinds.data && <ConnectSmallDialog card={small} kinds={kinds.data as Kinds} open onOpenChange={(o) => !o && setSmall(null)} />}
       {open && <ConnectSystemDialog key={open.key} target={open.target} mode={open.mode} open onOpenChange={(o) => !o && setOpen(null)} />}
     </>
   );

@@ -11,7 +11,7 @@ const MOVED = [
   ['/account/security', '/settings/account/security'],
   ['/account', '/settings/account'],
   ['/settings/usage', '/settings/workspace/usage'],
-  ['/settings/secrets', '/settings/security/secrets'],
+  ['/settings/secrets', '/integrations/credentials'],
   ['/settings/egress', '/settings/security/egress'],
   ['/settings/sign-in', '/settings/security/sign-in'],
   ['/settings/notifications', '/settings/team/notifications'],
@@ -61,14 +61,14 @@ await withUiStack(
       await sam.waitForURL(/\/settings\/(workspace\/)?storage/, { timeout: 30_000 });
       check('F focuses Find and a search opens the page', found);
 
-      // The page's primary action is in the header, once, and the page header names the section.
+      // Secrets live on Apps › Credentials: the old address opens its Secrets tab, with Add secret there once.
       await sam.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await sam.getByTestId('page-header').getByRole('button', { name: 'Add secret' }).waitFor({ timeout: 120_000 });
+      await sam.getByTestId('secrets-add').waitFor({ timeout: 120_000 });
       const header = {
         title: await sam.getByTestId('page-title').first().innerText(),
         add: await sam.getByRole('button', { name: 'Add secret' }).count(),
       };
-      check('Secrets names itself in the page header and its Add secret button is there once', header.title === 'Secrets' && header.add === 1, header);
+      check('Secrets opens on Credentials, which names itself in the page header, with its Add secret button there once', header.title === 'Credentials' && header.add === 1, header);
 
       // The secret picker: a builder picks an existing secret as a header value and has no Add option; a Security admin has it.
       const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -76,14 +76,18 @@ await withUiStack(
       const tag = Math.random().toString(36).slice(2, 6);
       const S = { Authorization: `Bearer ${await tok('s.adeyemi@harborpine.example')}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
       const J = { Authorization: `Bearer ${await tok('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
+      // A secret belongs to one team, so it is made in team_ops, where James builds, by that team's admin.
+      const P = { Authorization: `Bearer ${await tok('p.shah@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
       const KEY = `PICK_${tag.toUpperCase()}`;
-      await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: S, body: JSON.stringify({ name: KEY, value: 'not-a-key' }) });
+      await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: P, body: JSON.stringify({ name: KEY, value: 'not-a-key' }) });
       await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: `pick-${tag}.bank.example`, note: 'uc-152' }) });
       const made = await (await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Pick ${tag}`, name: `pick-${tag}`, type: 'http' }) })).json();
       const opName = `get_pick_${tag}`;
       await fetch(`${tools}/v1/tool-modules/${made.data.id}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: opName, description: '', access: 'read', method: 'GET', url: `https://pick-${tag}.bank.example/v1/x` }) });
       const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/tools/${made.data.id}/operations/${opName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // Headers are a tab of the REST tool page.
+      await james.getByRole('tab', { name: 'Headers' }).click({ timeout: 120_000 });
       await james.getByRole('button', { name: 'Add header' }).click({ timeout: 120_000 });
       await james.getByRole('button', { name: 'Insert a secret as the header value' }).first().click();
       const addOption = await james.getByRole('option', { name: 'Add a secret' }).count();
@@ -93,11 +97,14 @@ await withUiStack(
       const perms = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/me/permissions`, { headers: { Authorization: `Bearer ${await tok('j.richardson@harborpine.example')}` } })).json()).data;
       const mayAdd = perms.teams.some((t) => t.permissions.some((p) => p.area === 'secrets_egress' && p.action === 'create'));
       check('a builder picks a secret as a header value and is offered Add a secret exactly when the server’s grid lets him', value === `{{${KEY}}}` && (addOption === 1) === mayAdd, { value, addOption, mayAdd });
-      await sam.goto(`${consoleUrl}/tools/${made.data.id}/operations/${opName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await sam.getByRole('button', { name: 'Add header' }).click({ timeout: 120_000 }).catch(() => undefined);
-      await sam.getByRole('button', { name: 'Insert a secret as the header value' }).first().click({ timeout: 10_000 }).catch(() => undefined);
-      const samAdd = await sam.getByRole('option', { name: 'Add a secret' }).count();
-      check('a Security admin is offered Add a secret in the same picker', samAdd === 1, { samAdd });
+      // The module's team adds its own secrets, so its admin is the one offered Add a secret there.
+      const priya = await signIn(browser, consoleUrl, 'p.shah@harborpine.example');
+      await priya.goto(`${consoleUrl}/tools/${made.data.id}/operations/${opName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await priya.getByRole('tab', { name: 'Headers' }).click({ timeout: 120_000 }).catch(() => undefined);
+      await priya.getByRole('button', { name: 'Add header' }).click({ timeout: 120_000 }).catch(() => undefined);
+      await priya.getByRole('button', { name: 'Insert a secret as the header value' }).first().click({ timeout: 10_000 }).catch(() => undefined);
+      const adminAdd = await priya.getByRole('option', { name: 'Add a secret' }).count();
+      check('the team admin is offered Add a secret in the same picker', adminAdd === 1, { adminAdd });
 
       // Workspace General and Team General are sample data and say so; Team General also holds the live default agent.
       const general = {};
@@ -119,16 +126,17 @@ await withUiStack(
       const current = await sam.locator('[data-sidebar="menu-button"][data-active="true"], [data-sidebar="menu-sub-button"][data-active="true"]').allInnerTexts();
       check('on Team › Webhooks exactly Webhooks is the current sidebar row', current.length === 1 && current[0].trim() === 'Webhooks', current);
 
-      // My account › Memory: a tab of the account, the memory list inside it, and no Preview badge (agents-service serves it).
+      // My memory: its own entry in the settings sidebar (the account tabs are gone), the memory list on it, and no Preview
+      // badge (agents-service serves it).
       await sam.goto(`${consoleUrl}/settings/account/memory`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await sam.getByTestId('account-memory').waitFor({ timeout: 120_000 });
       await sam.waitForTimeout(500);
       const memory = {
-        tab: await sam.getByRole('tab', { name: 'Memory' }).or(sam.getByRole('link', { name: 'Memory', exact: true })).count(),
+        tab: await sam.getByRole('link', { name: 'My memory', exact: true }).count(),
         body: (await sam.getByTestId('account-memory').innerText()).trim().length > 0,
         preview: await sam.getByTestId('page-header').getByTestId('preview-badge').count(),
       };
-      check('My account has a Memory tab that lists what agents remember and carries no Preview badge', memory.tab > 0 && memory.body && memory.preview === 0, memory);
+      check('My memory is in the settings sidebar, lists what agents remember and carries no Preview badge', memory.tab > 0 && memory.body && memory.preview === 0, memory);
 
       // Each moved page answers at its new route and the old route redirects to it.
       const seen = {};

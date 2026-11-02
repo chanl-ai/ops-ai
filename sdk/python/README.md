@@ -19,7 +19,7 @@ if run.get("taskId"):
 
 `AsyncOpsAI` has the same surface with every call awaited. Any public operation without a named method is
 `ops.raw.<service>.<operationId>(...)`. The address, key and team can also come from `OPS_BASE_URL`, `OPS_API_KEY`
-and `OPS_TEAM`, or from the profile `ops login` saves.
+and `OPS_TEAM`, or from a profile file you write at `~/.config/ops-ai/config.json`.
 
 The `_generated` folder is written by `sdk/generate.py` from the services' OpenAPI documents; run `make sdk` after a
 route changes, and `make sdk-check` fails until you do.

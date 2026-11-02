@@ -52,7 +52,7 @@ await withUiStack(
     const N = await as('n.petrov@harborpine.example', 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-107' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-107' }) });
-    // Operations' own secret (c-509): James, a builder there, adds it in the team his module belongs to.
+    // Operations' own secret: James, a builder there, adds it in the team his module belongs to.
     await json(await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: KEY, value: 'not-the-key' }) }));
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Statements ${TAG}`, name: `uc107-stmt-${TAG}`, type: 'http' }) }))).id;
     for (const name of [...OPS, ...MORE]) {
@@ -89,7 +89,7 @@ await withUiStack(
         await james.goto(`${consoleUrl}/tools/${id}/operations/${op}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const panel = james.getByTestId('module-test-panel');
         await panel.waitFor({ timeout: 120_000 });
-        await panel.getByRole('radio', { name: 'Test environment' }).or(panel.getByRole('button', { name: 'Test environment' })).first().click();
+        await panel.getByRole('radio', { name: 'Real' }).or(panel.getByRole('button', { name: 'Real' })).first().click();
         await panel.locator('#t-account_id').fill(ACCOUNT);
         const ran = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`), { timeout: 60_000 }));
         await panel.getByRole('button', { name: 'Run' }).click();

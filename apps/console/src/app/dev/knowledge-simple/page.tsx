@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { notFound } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { BookOpen, FileText, Link2, Settings2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,7 +32,6 @@ import { BASE, DOCS, PRESETS, type PreviewDoc } from './sample';
  * nav; nothing here calls a service.
  */
 export default function KnowledgeSimplePreview() {
-  if (process.env.NODE_ENV !== 'development') notFound();
   return <Preview />;
 }
 

@@ -1,4 +1,4 @@
-// uc-234 A Human Task opens as its own page, ui layer: docs/usecases/console/human-task-page.md (c-289). Platform
+// uc-234 A Human Task opens as its own page, ui layer: docs/usecases/console/human-task-page.md. Platform
 // sign-in; James reads TEST012.pdf in Operations through files-service, which starts the system extract workflow; the
 // fake model leaves the garnishee off the page, so the run waits for a person to check the read. Maya decides it.
 import { mkdirSync } from 'node:fs';
@@ -260,8 +260,6 @@ await withUiStack(
           ['p.shah@harborpine.example', 'team_ops'],
           ['n.petrov@harborpine.example', 'team_security'],
           ['s.adeyemi@harborpine.example', 'team_security'],
-          ['o.haddad@harborpine.example', 'team_fraud'],
-          ['l.fischer@harborpine.example', 'team_fraud'],
           ['w.kamau@harborpine.example', 'team_platform'],
         ];
         let review = null;
@@ -354,7 +352,7 @@ await withUiStack(
         const differs = await page.getByTestId('read-differs-0-case_no').count();
         const agreesElsewhere = await page.getByTestId('read-differs-0-court').count();
         await page.screenshot({ path: join(SHOTS, 'task-read-sources-1280.png') });
-        // c-261's screen evidence: the same check at 1280 and 400.
+        // an earlier change's screen evidence: the same check at 1280 and 400.
         mkdirSync(evidenceDir('261', 'screens'), { recursive: true });
         await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-1280.png') });
         await page.setViewportSize({ width: 400, height: 800 });

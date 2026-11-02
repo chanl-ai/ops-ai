@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import os
 
-# requesterMayDecide is open by default (c-186); this use case runs a workspace that switched it off. The dev identity
+# requesterMayDecide is open by default; this use case runs a workspace that switched it off. The dev identity
 # carries the policy as a platform token would.
 os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
-from usecase_harness import TEAM, agents, check, data, finish, sse
+from usecase_harness import agents, check, data, finish, sse
+
+# The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
+# bases, so the chat runs in Operations.
+TEAM = {"X-Team-Id": "team_ops"}
 
 DANA, LEE = "dana@harborpine.example", "lee@harborpine.example"
 

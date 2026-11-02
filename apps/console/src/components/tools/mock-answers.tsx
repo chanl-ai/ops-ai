@@ -227,7 +227,7 @@ function MockAnswerDialog({ moduleId, opId, mock, onClose }: { moduleId: string;
         <label className="flex items-center justify-between gap-3 text-sm" htmlFor="mock-timeout">
           <span>
             <span className="block font-medium">Times out</span>
-            <span className="block text-xs text-muted-foreground">The call waits and gets no answer, as when the system is down.</span>
+            <span className="block text-xs text-muted-foreground">The call waits and gets no answer, as when the app is down.</span>
           </span>
           <Switch id="mock-timeout" checked={d.timeout} onCheckedChange={(v) => set({ timeout: v })} />
         </label>

@@ -18,6 +18,7 @@ import { bytes, count, mimeLabel, relativeTime, shortDate } from '@/lib/format';
 import type { ErrorClass, Item, ItemFilters, ItemStatus, SourceDetail } from '@/lib/types/knowledge';
 
 import { DocumentPanel } from '@/components/knowledge/document-panel';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Item & { onRowClick: (i: Item) => void };
 
@@ -125,15 +126,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
           { column: 'errorClass', title: 'Error', options: [...classes.map((c) => ({ label: ERROR_CLASS_LABEL[c], value: c, count: facets.errorClass?.[c] ?? 0 })), { label: 'No error', value: 'none', count: facets.errorClass?.none ?? 0 }] },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={FileSearch}

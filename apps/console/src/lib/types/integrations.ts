@@ -39,6 +39,8 @@ export interface ConnectionRef {
   kind: IntegrationKind;
   status: IntegrationStatus;
   expiresAt?: string;
+  /** The app's base address per environment ({ test, production }): every operation's path hangs off it. */
+  baseUrls?: Record<string, string>;
 }
 
 export interface ScopeDef {

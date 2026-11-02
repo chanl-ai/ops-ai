@@ -23,6 +23,8 @@ Design: `the planning repo/docs/plans/ops-ai/data-gateway-spec.md` section c; th
 | Calls | Counted by the host, not the guest: past `limits.calls` each call is refused `call_limit` | `test_calls_past_the_limit_are_refused` |
 | Secrets | `ops.secret(NAME)` is a handle sent as `{"$secret": NAME}`; the value never enters the sandbox | `test_a_secret_leaves_the_sandbox_as_a_handle` |
 
+A saved tool arrives as source, not a snippet the test builds. `tests/test_loaded_source.py` runs `scripts/sample-team/code/compute_levy_hold.py` as a file, and `settle` from `tests/fixtures/notice_hold.py` via `inspect.getsource`.
+
 ## How `ops.call` works
 
 CPython in WASI cannot call host functions without ctypes, so the guest's stdin and stdout are the only channel: two

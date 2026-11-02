@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-31",
+  "title": "A tool sends a form or raw body",
+  "description": "A REST tool's operation can now send its body as JSON, as a form, or as raw text with its own Content-Type. Systems that take only forms, such as Stripe, can be called from a tool.",
+  "tag": "improved",
+  "cards": [
+    "c-591"
+  ]
+}

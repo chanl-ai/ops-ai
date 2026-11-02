@@ -1,0 +1,10 @@
+cases:
+  - name: claim
+    input: fixtures/claim.json
+    expected: expected/claim.json
+  - name: low
+    input: fixtures/low.json
+    expected: expected/low.json
+  - name: unreadable
+    input: fixtures/unreadable.json
+    expected: expected/unreadable.json

@@ -61,6 +61,9 @@ FAKE_BANK_PORT=${OPS_FAKE_BANK_PORT:-8745}
 # loaded, and the sign-in mode defaults to the one recorded for the shared stack, not to dev.
 if [ -f ".env" ]; then set -a; . ".env" >/dev/null 2>&1 || true; set +a; fi
 if [ -f ".devcontainer/.env.local" ]; then set -a; . ".devcontainer/.env.local" >/dev/null 2>&1 || true; set +a; fi
+# A demo's settings on top (make demo-salesforce writes the plugin switch, its folder and a fake system's CA and host map),
+# so every restart keeps them; removing the file drops them at the next restart.
+if [ -f "$RUN_DIR/demo-addons.env" ]; then set -a; . "$RUN_DIR/demo-addons.env" >/dev/null 2>&1 || true; set +a; fi
 # An isolated stack's services reach its own models-service, fake model and fake bank: a laptop .env that names the
 # shared stack's sent an isolated run's model calls to the shared stack's aliases, real models included, and had its
 # tools-service trust the shared fake bank's certificate.
@@ -169,8 +172,9 @@ cmd_of() {
     # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail (c-229).
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
+    # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=$(egress_ca) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=$(egress_ca) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions (c-531): Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
@@ -181,13 +185,13 @@ cmd_of() {
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
     # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
-    # Plugin knowledge sources are read through tools-service's gateway, when OPS_PLUGINS is on (c-565).
+    # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any (c-565).
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
     # files-service delivers its service events (file.deleted, file.read_requested) to agents-service (c-250).
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
     # documents-service extracts on its own models-service key (c-235, c-256), whatever key the root .env hands agents.
-    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
+    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
     console)
       local dist=.next

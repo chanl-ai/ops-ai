@@ -63,7 +63,8 @@ await withUiStack(
       await decision.getByRole('button', { name: 'Approve' }).click();
       await decision.getByText('Approved').waitFor({ timeout: 10_000 }).catch(() => undefined);
       const decided = (await log()).at(-1);
-      const shown = (await decision.getByText('Approved').count()) === 1 && (await decision.getByRole('button', { name: 'Approve' }).count()) === 0;
+      // The answered card keeps its buttons, off; the badge says what was decided.
+      const shown = (await decision.getByText('Approved', { exact: true }).count()) === 1 && (await decision.getByRole('button', { name: 'Approve' }).isDisabled());
       check('approving the decision sends its hold id and the card shows it approved', shown && JSON.stringify(decided) === JSON.stringify({ widget: 'decision-hold', holdId: 'hold_demo_1', approved: true }), { shown, decided });
 
       check('no page errors', errors.length === 0, errors);

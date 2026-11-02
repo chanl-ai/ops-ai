@@ -1,0 +1,43 @@
+id: email-customer-enrichment
+title: Enrich an email with customer data
+track: workflow
+status: built
+difficulty: guided
+outcome: Identify the sender, fetch the customer, and return one enriched context
+  record.
+capabilities:
+- id: ops.trigger.email
+  status: built
+- id: ops.ai.extractText
+  status: built
+- id: ops.action.tool
+  status: built
+- id: ops.flow.join
+  status: built
+- id: ops.flow.if
+  status: built
+- id: ops.data.combine
+  status: built
+- id: ops.ai.summarise
+  status: built
+- id: ops.ai.agent
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/known-customer.json
+- fixtures/unknown-customer.json
+expected:
+- expected/known-customer.json
+- expected/unknown-customer.json
+- expected/analysis-failed.json
+- expected/enriched.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 60

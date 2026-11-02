@@ -19,6 +19,7 @@ from typing import Any, Literal, cast
 from ops_email import InboundAttachment, InboundMessage
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
+from ops_engine.starts import form_values
 from ops_engine.store import RunStore
 from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable
@@ -26,7 +27,7 @@ from ops_service_kit.ids import now_iso
 
 from ..store.engine import EngineTransactions
 from ..store.tenancy import current_tenant
-from .auth import Principal, started_by
+from .auth import Principal, approves_own_writes, started_by
 from .deps import Runtime
 from .email_trigger import EmailStarts, Target, binding_of
 from .engine_runs import start_run
@@ -61,6 +62,7 @@ async def by_form(rt: Runtime, h: HandStart) -> dict[str, Any]:
         run_key=None,
         created_by=started_by(h.me),
         started_via=h.via,
+        started_by_approver=approves_own_writes(h.me),
     )
     return run
 
@@ -125,7 +127,27 @@ async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
     return started.run
 
 
-ADAPTERS: dict[str, Adapter] = {"form": by_form, "email": by_email}
+ADAPTERS: dict[str, Adapter] = {"form": by_form, "email": by_email, "schedule": by_form}
+
+
+def _blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
+
+
+def filled(form: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+    """The start form's values with its defaults, or 422 `invalid_input` naming each required field left empty, as the
+    console's start dialog says it (c-378). Every start of a form takes this path: by hand, the hosted form, and
+    POST /v1/runs for a Request trigger. `details.path` is the schema property name."""
+    schema = cast(dict[str, Any], form.get("schema") or {})
+    out, missing = form_values(schema, values)
+    if missing:
+        paths = [str(k) for k in cast(list[Any], schema.get("required") or []) if _blank(out.get(k))]
+        raise Unprocessable(
+            f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} required.",
+            code="invalid_input",
+            details={"missing": missing, "path": paths[0] if paths else missing[0]},
+        )
+    return out
 
 
 async def start(
@@ -136,4 +158,4 @@ async def start(
     adapter = ADAPTERS.get(str(form["kind"])) if form else None
     if form is None or adapter is None:
         raise Unprocessable("This workflow's trigger is started only by its source, not by hand.", code="no_start_form")
-    return await adapter(rt, HandStart(me, stored, values, mode, VIA_PREFIX + str(form["kind"])))
+    return await adapter(rt, HandStart(me, stored, filled(form, values), mode, VIA_PREFIX + str(form["kind"])))

@@ -30,7 +30,8 @@ def headers(platform: str | None) -> dict[str, str]:
     r = httpx.post(f"{platform}/v1/auth/sign-in", json={"email": EMAIL, "password": PASSWORD}, timeout=30)
     if r.status_code != 200:
         sys.exit(f"seed_fixture_knowledge: sign-in failed: {r.status_code} {r.text[:200]}")
-    return {"Authorization": f"Bearer {r.json()['data']['token']}"}
+    # James's team, named: a stack that seeds everyone as an account admin gives his token every team.
+    return {"Authorization": f"Bearer {r.json()['data']['token']}", "X-Team-Id": "team_ops"}
 
 
 def ok(r: httpx.Response) -> Any:
@@ -90,7 +91,7 @@ def main() -> None:
         httpx.Client(base_url=args.files, headers=auth, timeout=120) as files,
     ):
         # Each base is owned by whoever seeds it: kb-service links a source to a base only for its owner or an admin of
-        # its team (c-115). Under dev auth that is the dev user, James unless OPS_DEV_USER_EMAIL names another.
+        # its team. Under dev auth that is the dev user, James unless OPS_DEV_USER_EMAIL names another.
         owner = EMAIL if args.platform else os.environ.get("OPS_DEV_USER_EMAIL", EMAIL)
         print(json.dumps(seed(kb, files, owner)))
 

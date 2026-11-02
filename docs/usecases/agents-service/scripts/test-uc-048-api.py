@@ -5,11 +5,20 @@ and the scripted model; the operations call the fake bank on https, so "the call
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any
 
+# Roles decide approvals and the dev identity may decide, so chat would approve its own write. This use case
+# proves the card, so it runs a workspace where a requester may not decide their own request.
+os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
+
 from fake_bank_https import HOST, fake_bank
-from usecase_harness import AGENTS_PORT, TEAM, TOOLS_PORT, agents, approve_tool_review, check, data, finish, sse, tools
+from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, approve_tool_review, check, data, finish, sse, tools
+
+# The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
+# bases, so the chat runs in Operations.
+TEAM = {"X-Team-Id": "team_ops"}
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 RUN = int(time.time())
@@ -40,7 +49,11 @@ def module(gw: Any) -> tuple[str, str]:
             "url": f"{url}/accounts/{{accountId}}/holds",
         },
     ):
-        gw.post(f"/v1/tool-modules/{made['id']}/operations", json=op)
+        added = data(gw.post(f"/v1/tool-modules/{made['id']}/operations", json=op))
+    # Approvals are off by default (2026-11-01): this use case proves the approval path, so it turns the write's
+    # own switch on, as a builder does on its tool page.
+    write_id = next(o["id"] for o in added["operations"] if o["name"] == WRITE)
+    gw.patch(f"/v1/tool-modules/{made['id']}/operations/{write_id}", json={"requiresApproval": True})
     reviewed = data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-048"}))
     return str(made["id"]), next(v["reviewId"] for v in reviewed["versions"] if v["status"] == "in_review")
 
@@ -128,7 +141,7 @@ with (
         started == [READ] and "found" in text and len(reads) == 1,
         {"events": [e.get("type") for e in events], "started": started, "received": len(reads)},
     )
-    # c-055 T004: the bank's answer is one flat object, so it streams as a record part and is kept on reload.
+    # an earlier change T004: the bank's answer is one flat object, so it streams as a record part and is kept on reload.
     parts = [e["part"] for e in events if e.get("type") == "part"]
     kept = [p for m in data(api.get(f"/chat/threads/{thread}", headers=TEAM))["messages"] for p in m.get("parts") or []]
     check(

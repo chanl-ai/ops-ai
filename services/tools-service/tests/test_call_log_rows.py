@@ -26,3 +26,12 @@ def test_a_chat_call_carries_its_thread_and_no_workflow() -> None:
     row = call_row(_row(access="read", tool="get_account"), {}, None)
     assert (row["runId"], row["workflowId"], row["agentSlug"]) == ("th_abc", "", "ag_branch")
     assert row["approval"] == {"kind": "none"}
+
+
+def test_a_call_shows_its_tools_title_and_app_never_only_the_slug() -> None:
+    """c-607: a chat, an approval and the call log read the tool's title and its app's name from the row."""
+    module = {"id": "mod_plugin_salesforce", "display_name": "Salesforce", "system": "Salesforce"}
+    row = call_row(_row(tool="salesforce_get_record"), {}, module, "Get a record")
+    assert (row["title"], row["app"]) == ("Get a record", "Salesforce"), row
+    plain = call_row(_row(), {}, None)
+    assert (plain["title"], plain["app"]) == ("place_hold", ""), plain

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Chat doesn't ask you to approve a write you may approve",
+  "description": "When an agent in chat drafts a write that needs approval and you decide your team's reviews, it runs as approved by you without showing an approval card. A write that needs a step-up still asks, and with the four-eyes rule on someone else decides.",
+  "tag": "improved",
+  "cards": [
+    "c-616"
+  ]
+}

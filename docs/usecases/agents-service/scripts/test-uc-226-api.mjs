@@ -1,5 +1,5 @@
 // uc-226 a mailbox workflow takes every shape of email, api layer: docs/usecases/agents-service/every-shape-of-email.md
-// (c-259). The demo stack with platform sign-in, documents-service, the fake model and a worker. James publishes a
+//. The demo stack with platform sign-in, documents-service, the fake model and a worker. James publishes a
 // workflow that switches on what came in and starts it with three emails as the Email received trigger hands them on:
 // text only, two attachments, and a text that disagrees with its attachment.
 import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, check, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

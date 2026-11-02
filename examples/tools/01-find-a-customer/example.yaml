@@ -1,0 +1,20 @@
+id: find-a-customer
+title: Find a customer
+track: tool
+status: built
+difficulty: intro
+outcome: Call one read operation with a known email and see the customer record.
+capabilities:
+- id: tools.call
+  status: built
+entrypoint: fixtures/input.json
+fixtures:
+- fixtures/input.json
+expected:
+- expected/customer.json
+surfaces:
+  ui: built
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 20

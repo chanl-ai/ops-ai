@@ -1,0 +1,40 @@
+id: schedule-an-sla-follow-up
+title: Schedule an SLA follow-up
+track: workflow
+status: built
+difficulty: guided
+outcome: Wait until a response date, then create a human task.
+capabilities:
+- id: ops.trigger.request
+  status: built
+- id: ops.data.compute
+  status: built
+- id: ops.flow.wait
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/future.json
+- fixtures/past.json
+- fixtures/invalid.json
+expected:
+- expected/future.json
+- expected/past.json
+- expected/invalid.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 20
+teaches:
+- Wait until an ISO date, not natural language
+- a past date continues at once
+- an invalid date takes the error end

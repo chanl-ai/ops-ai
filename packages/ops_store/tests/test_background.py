@@ -4,6 +4,7 @@ process still looks alive; heartbeat writes slow the loop they report on; a proc
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -119,14 +120,17 @@ def test_a_process_not_on_the_list_does_not_start() -> None:
         Beat("nightly_export", MemoryHeartbeats())
 
 
-def test_the_knowledge_schedule_is_listed_only_with_plugins_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    # With OPS_PLUGINS off kb-service never starts the schedule; listing it anyway would show it late on Background.
+def test_the_knowledge_schedule_is_listed_only_when_the_install_has_plugins(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # With no plugin installed kb-service never starts the schedule; listing it anyway would show it late on Background.
     def keys() -> set[str]:
         background.plugins_on.cache_clear()
         return {str(p["key"]) for p in background.report([], "kb", 0.0)}
 
-    monkeypatch.delenv("OPS_PLUGINS", raising=False)
+    monkeypatch.delenv("OPS_PLUGIN_PATHS", raising=False)
+    monkeypatch.setenv("OPS_PLUGINS_DIR", str(tmp_path))
     assert "knowledge_schedule" not in keys()
-    monkeypatch.setenv("OPS_PLUGINS", "true")
+    (tmp_path / "ops_plugin_desk").mkdir()
     assert "knowledge_schedule" in keys()
     background.plugins_on.cache_clear()

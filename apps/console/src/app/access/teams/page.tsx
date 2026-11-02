@@ -23,6 +23,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { useArchiveWorkspaceTeam, useCreateWorkspaceTeam, useRenameWorkspaceTeam, useRestoreWorkspaceTeam, useWorkspaceTeams, useWorkspaceTeamsEditor } from '@/hooks/workspace-team-queries';
 import { shortDate } from '@/lib/format';
 import type { WorkspaceTeam, WorkspaceTeamFilters } from '@/lib/types/team';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Act = { rename: (t: WorkspaceTeam) => void; archive: (t: WorkspaceTeam) => void; restore: (t: WorkspaceTeam) => void };
 
@@ -126,15 +127,7 @@ export default function TeamsPage() {
         searchPlaceholder="Search teams…"
         filters={[{ column: 'status', title: 'Status', options: [{ label: 'Active', value: 'active' }, { label: 'Archived', value: 'archived' }] }]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={<ListEmpty icon={Users} noun="teams" filtered={list.isFiltered} createLabel={canManage ? 'Create team' : undefined} onCreate={canManage ? () => setDialog({ open: true, team: null }) : undefined} description="Each group gets a team that owns its agents, workflows, tools, knowledge and secrets." />}
       />
     );

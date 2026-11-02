@@ -80,6 +80,10 @@ CORRECTION_SETTLE_SECONDS = 5.0
 # Reported from the transaction that ends every read (done, unreadable, failed), keyed by the extraction id: a workflow
 # step that parked on a long read resumes on it (c-525).
 FINISHED_EVENT = "extraction.finished"
+# Reported beside it when a read of a document type finished with fields (outcome ok or review), keyed by the
+# extraction id: its event workflow saves what the file was read as, so a file read by any workflow, agent or API call
+# shows it in Files, not only one whose workflow has a Save data on file step (c-378).
+READ_EVENT = "extraction.read"
 SUPERSEDED = "superseded by a newer correction"
 
 extraction_corrections = sa.Table(
@@ -101,6 +105,26 @@ extraction_corrections = sa.Table(
     sa.Column("team", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
+
+
+def file_read(
+    file_id: str, extraction_id: str, doc_type: Mapping[str, Any], answer: Mapping[str, Any], *, name: str | None = None
+) -> dict[str, Any]:
+    """What an event tells the workflow that saves a read on its file (Save data on file's `read`): the document type,
+    its name, how it was read and the fields waiting for a person. One shape for extraction.read and
+    extraction.corrected, so both saves record the same thing."""
+    payload: dict[str, Any] = {
+        "fileId": file_id,
+        "extractionId": extraction_id,
+        "documentType": dict(doc_type),
+        "needsReview": list(cast(list[Any], answer.get("needsReview") or [])),
+    }
+    for key in ("path", "templateId", "classification"):
+        if answer.get(key):
+            payload[key] = answer[key]
+    if typed := name or doc_type.get("name"):
+        payload["typeName"] = str(typed)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -244,7 +268,7 @@ class ExtractionsStore:
                 .values(**values)
             )
             e = extractions
-            q = sa.select(e.c.team, e.c.file_id, e.c.type_id, e.c.asked_by).where(
+            q = sa.select(e.c.team, e.c.file_id, e.c.type_id, e.c.asked_by, e.c.request).where(
                 e.c.tenant_id == tenant, e.c.id == extraction_id, team_visible(e)
             )
             row = (await c.execute(q)).first()
@@ -263,6 +287,13 @@ class ExtractionsStore:
                     c, service_outbox, tenant_id=tenant, team_id=row.team, name=FINISHED_EVENT,
                     key=extraction_id, payload=payload, actor=row.asked_by,
                 )  # fmt: skip
+                doc_type = cast(dict[str, Any], json.loads(row.request)).get("documentType")
+                if status == "done" and outcome in ("ok", "review") and isinstance(doc_type, dict):
+                    read = file_read(row.file_id, extraction_id, cast(dict[str, Any], doc_type), result or {})
+                    await add(
+                        c, service_outbox, tenant_id=tenant, team_id=row.team, name=READ_EVENT,
+                        key=extraction_id, payload=read, actor=row.asked_by,
+                    )  # fmt: skip
 
     async def tokens_per_call(self, type_id: str | None, *, last: int = 20) -> tuple[float, float] | None:
         """The mean input and output tokens of the tenant's last `last` measured extractions, of one document type when

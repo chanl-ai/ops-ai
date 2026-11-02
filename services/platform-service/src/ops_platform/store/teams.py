@@ -13,13 +13,15 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_access.platform_events import TEAM_CREATED
 from ops_service_kit.http import page_window
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.outbox import add as add_event
 
 from .audit import record
 from .roles import mirror_membership
-from .tables import members, teams, users
+from .tables import members, platform_outbox, teams, users
 from .tenancy import TenantDb
 from .workspace import security_team_in
 
@@ -160,6 +162,18 @@ class TeamAdminStore:
                     security_team=await security_team_in(c, tenant_id, self.security_team),
                     granted_by=by,
                     at=at,
+                )
+                # Each service writes the new team's defaults when it hears this (c-616 PV2): in the transaction that
+                # makes the team, so neither commits without the other, and relayed until heard.
+                await add_event(
+                    c,
+                    platform_outbox,
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                    name=TEAM_CREATED,
+                    key=team_id,
+                    payload={},
+                    actor=by,
                 )
                 await record(
                     c,

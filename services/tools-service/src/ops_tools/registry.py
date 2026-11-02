@@ -14,9 +14,11 @@ from typing import TYPE_CHECKING, Any, cast
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
-from .modules.seed import PLATFORM_TOOLS, SENDS, ensure_platform_tools
+from .defaults import ensure_defaults
+from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.modules import Aggregate, ModuleStore, served_operations
+from .store.team_defaults import TeamDefaults
 
 if TYPE_CHECKING:
     from .plugins.host import PluginHost
@@ -27,7 +29,7 @@ JSON_TYPES = {"string", "number", "integer", "boolean", "object", "array"}
 # Workflow tools that are not in the agent catalogue: their access and whether a write waits for approval. send_reply
 # emails a customer, so it is a write that waits; the platform's own tools come from their one declaration.
 WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {name: ("write", waits) for name, (_, waits) in SENDS.items()} | {
-    str(t["name"]): (str(t["access"]), bool(t["requires_approval"])) for t in PLATFORM_TOOLS
+    str(t["name"]): (str(t["access"]), bool(t["requires_approval"])) for t in [*PLATFORM_TOOLS, *READ_TOOLS]
 }
 
 
@@ -104,7 +106,15 @@ class ToolRegistry:
         team = team_id if team_id is not None else acting_team()
         if self.modules is None or (tenant_id, team) in self._platform_checked:
             return
-        await ensure_platform_tools(self.modules, tenant_id=tenant_id, team_id=team, at=datetime.now(UTC))
+        now = datetime.now(UTC)
+        if team:
+            # The team's defaults on its first lookup in this process, until the team-created event (c-616 PV2)
+            # provisions a new team; a team already current writes nothing. Before the platform module, so a tool the
+            # team's own built-in copy holds is not added there too.
+            await ensure_defaults(
+                self.modules, TeamDefaults(self.modules.engine), tenant_id=tenant_id, team_id=team, at=now
+            )
+        await ensure_platform_tools(self.modules, tenant_id=tenant_id, team_id=team, at=now)
         self._platform_checked.add((tenant_id, team))
 
     def access(self, tool: str) -> str:
@@ -126,7 +136,8 @@ class ToolRegistry:
                     "description": t.description,
                     "access": t.access,
                     "input_schema": t.input_schema,
-                    "requires_approval": t.access in WRITES and t.requires_approval is not False,
+                    # Off unless the tool declares it (approvals are off by default, owner 2026-11-01).
+                    "requires_approval": t.access in WRITES and t.requires_approval is True,
                     "approvers": t.approvers,
                     "step_up": t.approvers > 1,
                     "output_shape": None,
@@ -141,17 +152,31 @@ class ToolRegistry:
         rows: list[dict[str, Any]] = []
         # A person's grant list reads their team's modules; another service's, every team's (`all_teams`).
         modules = await (self.modules.all(tenant_id) if sees is not None else self.modules.all_teams(tenant_id))
+        # A tool the acting team holds in a module of its own (its built-in copy, c-616) is the one a call resolves to,
+        # so the workspace-level module's operation of that name is not offered beside it.
+        team = acting_team()
+        own = {str(o["name"]) for m in modules if team and m["team_id"] == team for o in m["operations"]}
         for module in modules:
             if module["status"] != "published" or module["drift"] or (sees is not None and not sees(module)):
                 continue
-            # With plugins off (OPS_PLUGINS) a module a plugin left from an earlier start is listed to nobody, as the
+            # With no plugin installed, a module a plugin left from an earlier start is listed to nobody, as the
             # gateway refuses its every call.
             if self.plugins is None and str(module.get("template_id") or "").startswith("plugin:"):
                 continue
             if self.plugins is not None and not await self.plugins.visible(tenant_id, acting_team(), module):
                 continue
-            for op in served_operations(module):
-                if not op["enabled"]:
+            # A plugin's tools as the acting team's version declares them (c-609), so the list offers what a call
+            # allows: a tool only a newer version has is not offered, and one the team's version keeps stays listed.
+            view = module
+            if (
+                self.plugins is not None
+                and self.plugins.versions
+                and str(module.get("template_id") or "").startswith("plugin:")
+            ):
+                view = await self.plugins.for_call(tenant_id, acting_team(), module)
+            for served in served_operations(module):
+                op = self.plugins.operation(view, served) if view is not module and self.plugins is not None else served
+                if not op["enabled"] or (module["team_id"] is None and op["name"] in own):
                     continue
                 rows.append(
                     {
@@ -210,14 +235,15 @@ class ToolRegistry:
 
     async def requires_approval(self, tool: str, tenant_id: str, team_id: str | None = None) -> bool:
         """Whether a write to `tool` waits for a person's approval, from its registry entry alone: the operation's own
-        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing waits."""
+        flag, else the workflow tool's or the agents catalogue's declaration. A write that declares nothing runs:
+        approvals are off by default and a team turns them on in its policies (owner, 2026-11-01)."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
         if resolved is not None and resolved.operation is not None:
             return bool(resolved.operation["requires_approval"])
         if tool in WORKFLOW_TOOLS:
             return WORKFLOW_TOOLS[tool][1]
         definition = self.catalog.tool(tool)
-        return definition is None or definition.requires_approval is not False
+        return definition is not None and definition.requires_approval is True
 
     async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's
@@ -258,10 +284,18 @@ class ToolRegistry:
         return inferred(stub) if stub not in (None, {"ok": True}) else None
 
     async def resolve(
-        self, tool: str, *, tenant_id: str, team_id: str | None = None, environment: str = "production"
+        self,
+        tool: str,
+        *,
+        tenant_id: str,
+        team_id: str | None = None,
+        environment: str = "production",
+        account: str | None = None,
+        person: str | None = None,
     ) -> Resolved | None:
         """`environment` picks a plugin module's instance and hosts for a call (c-580); a listing or an access check,
-        which shows the same tools either way, takes production's."""
+        which shows the same tools either way, takes production's. `account` names one of the team's accounts of the
+        plugin's app for the call (c-608); none uses `person`'s default account, else the team's."""
         if self.modules is None:
             access = self.access(tool)
             return None if access == "unknown" else Resolved(access, "local")
@@ -285,6 +319,6 @@ class ToolRegistry:
             # One binding lookup per call (c-564): the team's connection, endpoint and egress hosts, and a rate window
             # of the team's own, since windows are kept per tenant and operation.
             team = team_id if team_id is not None else acting_team()
-            module = await self.plugins.for_call(tenant_id, team, module, environment)
-            op = {**op, "rate_key": f"{op['name']}@{team}"}
+            module = await self.plugins.for_call(tenant_id, team, module, environment, account=account, person=person)
+            op = {**self.plugins.operation(module, op), "rate_key": f"{op['name']}@{team}"}
         return Resolved(op["access"], op["executor"], module, op)

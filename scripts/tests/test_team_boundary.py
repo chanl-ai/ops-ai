@@ -42,15 +42,14 @@ TENANT_HELD = {
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
+    "platform_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
 }
 # Until c-509 gives each team its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {
     "tool_modules": "tools per team: c-509",
-    "connections": "tools per team: c-509",
     "send_policies": "tools per team: c-509",
     "send_checks": "tools per team: c-509",
-    "tool_secrets": "tools per team: c-509",
-    "secret_audit": "tools per team: c-509",
+    "gateway_calls": "the call log records the acting team for Usage (c-616); the database lock on it is c-414's",
 }
 # The account's background processes (docs/architecture/identity-and-tenancy.md, "The team is the workspace").
 BACKGROUND = {

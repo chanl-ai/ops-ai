@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "New features stay off until your install turns them on",
+  "description": "Features still being released are listed as flags and stay off until your install's settings name them. The address that lets outside assistants such as Claude or Cursor use your team's tools is the first: it stays hidden until it is turned on.",
+  "tag": "improved",
+  "cards": [
+    "c-611"
+  ]
+}

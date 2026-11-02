@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from usecase_harness import TEAM, agents, check, data, finish, sse
+from usecase_harness import agents, check, data, finish, sse
+
+# The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
+# bases, so the chat runs in Operations.
+TEAM = {"X-Team-Id": "team_ops"}
 
 
 def _wire_limits(c: dict) -> bool:

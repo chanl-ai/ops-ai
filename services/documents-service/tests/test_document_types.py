@@ -292,6 +292,30 @@ async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_a
     assert payload["typeName"] == "Invoice notice"
 
 
+async def test_a_read_of_a_document_type_reports_what_the_file_was_read_as_and_a_read_of_own_fields_does_not(
+    make: Make, engine: AsyncEngine
+) -> None:
+    """extraction.read (c-378): a workflow with no Save data on file step, an agent or an API call reads a file, and the
+    file shows it in Files only if the read reports itself. One event per typed read, keyed by the extraction, with the
+    same shape extraction.corrected carries; a read of fields of its own names no type, so it records nothing."""
+    s = make(Models(), Floor(0.95))
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
+        typed = data(await extract(c, fid, documentTypeId="invoice_notice"))
+        data(await extract(c, fid, fields=FIELDS))
+    async with engine.connect() as conn:
+        o = service_outbox
+        q = sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.read")
+        events: list[dict[str, Any]] = [dict(r) for r in (await conn.execute(q)).mappings()]
+    [event] = events
+    assert (event["event_key"], event["team_id"]) == (typed["id"], "team_ops"), event
+    payload: dict[str, Any] = event["payload"]
+    assert (payload["fileId"], payload["extractionId"], payload["needsReview"]) == (fid, typed["id"], ["amount"])
+    assert payload["documentType"] == {"id": "invoice_notice", "version": 1, "name": "Invoice notice"}, payload
+    assert (payload["typeName"], payload["path"]) == ("Invoice notice", "model"), payload
+
+
 async def test_a_cleanup_rule_that_is_not_known_is_refused_when_the_type_is_saved(make: Make) -> None:
     """c-287: a misspelt rule would otherwise be ignored on every read."""
     s = make(Models(), Floor())

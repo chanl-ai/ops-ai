@@ -5,7 +5,8 @@ Status: current. Each flow below is exercised end to end by the release's automa
 Three flows cover most of what Ops AI does: a person chats with an agent that wants to change something, a workflow
 pauses for a person and resumes days later, and an email becomes cases that people decide. In each one the same three
 rules hold: a write waits for an approval bound to its exact input, every outside call leaves through a gateway, and a
-run's state is saved after every step so a crash or a restart loses nothing.
+run's state is saved after every step so a crash or a restart loses nothing. Developers who want runnable folders start
+at [build-with-ops-ai.md](build-with-ops-ai.md).
 
 ## A chat turn with a tool approval
 

@@ -202,6 +202,91 @@ class FireResult:
     attempts: int | None = None
 
 
+async def arm_job(rt: Runtime, thread_id: str, *, delay: float, key: str) -> dict[str, Any]:
+    """Arms one `job` timer on `thread_id`. A second call with the same key does not start another run."""
+    store = store_of(rt)
+    if not store.enabled:
+        return await fire_job_now(rt, thread_id)
+    wanted: Wanted = {(key, "job"): ("schedule", None, max(0.0, delay))}
+    existing = [r for r in await store.rows(thread_id) if key_of(r) == (key, "job")]
+    if existing and existing[0].fired_at is not None:
+        return {"threadId": thread_id, "duplicate": True, "timerId": existing[0].timer_id}
+    _, armed = await store.sync(thread_id, wanted, None)
+    timer_id = armed[0][0] if armed else (existing[0].timer_id if existing else f"{key}:job:0")
+    if delay <= 0:
+        result = await fire(rt, thread_id, timer_id)
+        return {"threadId": thread_id, "timerId": timer_id, "status": result.status, "runId": result.run_id}
+    return {"threadId": thread_id, "timerId": timer_id, "armed": True}
+
+
+async def fire_job_now(rt: Runtime, thread_id: str) -> dict[str, Any]:
+    """Starts the scheduled agent turn when the database has no timer clock (SQLite tests)."""
+    result = await fire_job(
+        rt,
+        type(
+            "Row",
+            (),
+            {"thread_id": thread_id, "timer_id": "job", "kind": "job", "is_due": True, "fired_at": None, "attempts": 0},
+        )(),
+    )
+    return {"threadId": thread_id, "status": result.status, "runId": result.run_id}
+
+
+async def fire_job(rt: Runtime, row: Any) -> FireResult:
+    """Starts the agent turn the thread's schedule meta names. Idempotent on the timer id."""
+    store = graph_store(rt)
+    thread = await store.thread(row.thread_id)
+    if thread is None:
+        if getattr(row, "timer_id", None) and row.timer_id != "job":
+            await store_of(rt).close(row, None, "cancelled")
+        return FireResult("cancelled", row.timer_id)
+    meta = cast(dict[str, Any], thread.get("meta") or {})
+    schedule = cast(dict[str, Any], meta.get("schedule") or {})
+    if store_of(rt).enabled and row.timer_id != "job":
+        require_graphs(rt)
+        assert rt.leases is not None
+        run_id = new_id("run")
+        try:
+            generation = await rt.leases.acquire(row.thread_id, run_id)
+        except LeaseHeldError:
+            return FireResult("busy", row.timer_id)
+        claim = await store_of(rt).claim(row.thread_id, row.timer_id, generation, waiting=True)
+        if claim.outcome != "claimed":
+            await rt.leases.release(row.thread_id, run_id)
+            return FireResult(claim.outcome, row.timer_id)
+    else:
+        require_graphs(rt)
+        assert rt.leases is not None
+        run_id = new_id("run")
+        try:
+            generation = await rt.leases.acquire(row.thread_id, run_id)
+        except LeaseHeldError:
+            return FireResult("busy", row.timer_id)
+    agent_id = str(schedule.get("agentId") or "")
+    if str(thread["graph"]).startswith("agent:"):
+        agent_id = str(thread["graph"]).removeprefix("agent:")
+    message = str(schedule.get("message") or "Review held wires.")
+    if not await store.start_run(
+        run_id, row.thread_id, "timer", now_iso(), {"input": {"message": message}}, generation=generation
+    ):
+        await rt.leases.release(row.thread_id, run_id)
+        return FireResult("busy", row.timer_id)
+    await store.set_thread_status(row.thread_id, "busy", now_iso(), generation=generation)
+    thread_row, graph = await resolve(rt, row.thread_id)
+    graph_input: dict[str, Any] = {
+        "message": message,
+        "agent_id": agent_id,
+        "history": [],
+        "requested_by": str(meta.get("ownerEmail") or ""),
+    }
+    async for _ in execute(rt, thread_row, graph, graph_input=graph_input, run_id=run_id, kind="timer"):
+        pass
+    if store_of(rt).enabled and row.timer_id != "job":
+        accepted = await store_of(rt).close(row, generation, "fired", owner="schedule")
+        return FireResult("fired" if accepted else "retry", row.timer_id, run_id=run_id)
+    return FireResult("fired", row.timer_id, run_id=run_id)
+
+
 def _matching(row: Any, waiting: list[dict[str, Any]]) -> dict[str, Any] | None:
     """The waiting interrupt this timer belongs to: by interrupt and round for warn and breach, by node for max
     wait."""
@@ -229,6 +314,8 @@ async def fire(rt: Runtime, thread_id: str, timer_id: str, *, after_accept: Hook
     if not row.is_due:
         # An early wake-up from a scheduler whose clock runs ahead: nothing happens, and the timer stays armed.
         return FireResult("not_due", timer_id)
+    if row.kind == "job":
+        return await fire_job(rt, row)
     if row.kind == "warn":
         return await _fire_warning(rt, row)
     require_graphs(rt)

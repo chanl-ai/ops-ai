@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_access import Access, require_provisioner
+from ops_identity import CurrentService
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
 from ops_service_kit.settings import Settings
@@ -73,6 +74,14 @@ class Change(Out):
     changed: bool
 
 
+class HeldHostDecisionIn(_In):
+    request_id: str
+    host: str
+    decision: Literal["approved", "rejected", "returned"]
+    reason: str | None = None
+    by: str | None = None
+
+
 def egress_router(store: EgressStore, *, security_team: str | None = None) -> APIRouter:
     caller = person
     team = security_team or Settings().security_team_id
@@ -116,6 +125,25 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
             for x in stamp["ranges"]
         ]
         return hosts, ranges
+
+    @r.post("/held-hosts/decisions", response_model=Envelope[Change])
+    async def decide_held_host(body: HeldHostDecisionIn, svc: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A Security admin's decision on a held host (c-616 S13), sent by agents-service with its own token: a person
+        decides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must
+        hold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes)."""
+        Access(security_team=team).can(svc, "secrets_egress", "manage", what="the egress list")
+        host = _valid("host", body.host)
+        if body.decision != "approved":
+            return ok({"kind": "host", "value": host, "changed": False})
+        added = await store.add(
+            svc.tenant_id,
+            "host",
+            host,
+            actor=body.by or "Security",
+            note=f"Approved in Human Tasks ({body.request_id})",
+            at=datetime.now(UTC),
+        )
+        return ok({"kind": "host", "value": host, "changed": added})
 
     @r.get("", response_model=Envelope[AllowList])
     async def allow_list(who: Annotated[Person, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

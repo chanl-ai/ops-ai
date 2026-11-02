@@ -12,7 +12,7 @@ for the agent. The design is [tool lifecycle](../../architecture/tool-lifecycle.
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
 | platform-service's dev seed | James Richardson (builder) on Operations, Nadia Petrov (approver) and Sam Adeyemi (admin) on Security; password `northfield-demo` |
-| A published module with a read and a write | set up through the API: Sam lists `rates.bank.test`, James creates the module with `get_rate` (header `X-Api-Key: {{RATES_KEY_…}}`) and `place_fx_hold`, Nadia approves its review |
+| A published module with a read and a write | set up through the API: Sam lists `rates.bank.test`, James creates the module with `get_rate` (header `X-Partner-Token: {{RATES_KEY_…}}`) and `place_fx_hold`, Nadia approves its review |
 
 ## Steps and expected results
 

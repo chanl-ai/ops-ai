@@ -4,7 +4,7 @@
 docs/usecases/kb-service/people-and-services-read-knowledge-usage.md.
 
 Own services in dev: kb-service with its files-service, and agents-service with its seeded agents and workflows.
-People are dev callers naming their team; services sign their own tokens with the dev key (c-222)."""
+People are dev callers naming their team; services sign their own tokens with the dev key."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from usecase_harness import (
 )
 
 OPS = {"X-Team-Id": "team_ops", "X-Dev-User": "j.richardson@harborpine.example"}
-FRAUD = {"X-Team-Id": "team_fraud", "X-Dev-User": "o.haddad@harborpine.example"}
+FRAUD = {"X-Team-Id": "team_security", "X-Dev-User": "s.adeyemi@harborpine.example"}
 CARDS = {"X-Team-Id": "team_cards", "X-Dev-User": "j.richardson@harborpine.example"}
 
 
@@ -53,7 +53,7 @@ def main() -> None:
         cited = next((kb_id for kb_id, agents_of in named.items() if agents_of), None)
         as_kb = api.get("/v1/knowledge-usage", headers=svc("agents", "kb", ["agents:view"]))
         check(
-            # Usage stays in one team (c-507): another team neither names nor counts a team's agents.
+            # Usage stays in one team: another team neither names nor counts a team's agents.
             "1 a person reads which of their team's agents cite each base; another team sees none of them",
             cited is not None
             and all(not agents_of and n == 0 for agents_of, n in counted.values())
@@ -63,7 +63,7 @@ def main() -> None:
 
         bases = "/v1/knowledge-bases"
         mine = data(knowledge.post(bases, json={"name": "Ops desk", "owner": "j@x.com"}, headers=OPS))
-        theirs = data(knowledge.post(bases, json={"name": "Fraud desk", "owner": "o@x.com"}, headers=FRAUD))
+        theirs = data(knowledge.post(bases, json={"name": "Security desk", "owner": "o@x.com"}, headers=FRAUD))
         refs = ids(data(knowledge.get(f"{bases}/refs", headers=OPS)))
         ask_mine = {"kbIds": [mine["id"]], "question": "opening hours"}
         ask_theirs = {"kbIds": [theirs["id"]], "question": "opening hours"}

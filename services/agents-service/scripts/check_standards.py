@@ -52,6 +52,8 @@ ORDER = [
     "ops_checkpointer",
     # The workflow runner sits below every ops_agents layer, so rule 1 refuses any import of ops_agents from it.
     "ops_engine",
+    "ops_agents.domain",
+    "ops_agents.app",
     "ops_agents.activities",
     "ops_agents.graphs",
     "ops_agents.store",

@@ -2,6 +2,7 @@
 approval, a step-up or two approvers is decided by the caller."""
 
 from .cipher import AesGcmCipher, Cipher, CipherError, context_of
+from .credentials import CredentialStore, CredentialUnreadable, InMemoryVault, RowSealed
 from .jcs import CanonicalJsonError, canonicalize, input_hash
 from .step_up import STEP_UP_TTL_S, StepUp, mint_step_up, verify_step_up
 from .tokens import (
@@ -22,9 +23,13 @@ __all__ = [
     "CanonicalJsonError",
     "Cipher",
     "CipherError",
+    "CredentialStore",
+    "CredentialUnreadable",
     "Ed25519Signer",
     "Ed25519Verifier",
     "HmacSigner",
+    "InMemoryVault",
+    "RowSealed",
     "Signer",
     "StepUp",
     "TokenError",

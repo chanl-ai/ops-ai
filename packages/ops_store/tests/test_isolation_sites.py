@@ -38,6 +38,8 @@ WIDENINGS: dict[str, set[str]] = {
     "SEED": {
         "services/agents-service/src/ops_agents/api/app.py",
         "services/agents-service/src/ops_agents/api/engine_seed.py",
+        # c-602: the dev seed writes every team's connections into the dev tenant.
+        "services/tools-service/src/ops_tools/modules/seed.py",
     },
     "ENGINE_PASS": {"services/agents-service/src/ops_agents/api/worker.py"},
     "MEMORY_RETENTION": {"services/agents-service/src/ops_agents/api/memory_retention.py"},
@@ -47,6 +49,8 @@ WIDENINGS: dict[str, set[str]] = {
     },
     "CLAIM_THREAD": {"services/agents-service/src/ops_agents/store/graphs.py"},
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
+    "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
+    "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
     # c-561: the run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
@@ -95,6 +99,14 @@ ENTRIES: dict[str, set[str]] = {
         "services/agents-service/src/ops_agents/api/runs.py",
         "services/platform-service/src/ops_platform/store/tenancy.py",
         "services/kb-service/src/ops_kb/schedule.py",
+        # c-616 C1: a Security admin's request on another team's secrets, after the rights check, acts in that team.
+        "services/tools-service/src/ops_tools/secrets/routes.py",
+        # c-616 D3b-2b: the start-up move of sign-in header keys acts on each module in the module's own team.
+        "services/tools-service/src/ops_tools/header_keys.py",
+        # c-616 C3: a model call reads its tenant's provider key, or the deployment's when it names none.
+        "services/models-service/src/ops_models/provider_keys.py",
+        # c-616 C4: a per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).
+        "services/models-service/src/ops_models/app.py",
     },
 }
 # Names a service once used to set its own context. `set_acting_team` is c-407's filter; kb-service still sets it for

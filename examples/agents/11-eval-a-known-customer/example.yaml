@@ -1,0 +1,30 @@
+id: eval-a-known-customer
+title: Evaluate a known customer
+track: agent
+status: built
+difficulty: guided
+outcome: Score A3 look-up cases on a published agent through ops.agents.eval.
+capabilities:
+- id: agent.eval
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/cases.json
+expected:
+- expected/summary.json
+evaluation: fixtures/cases.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: built
+setupSeconds: 40
+teaches:
+- Dataset cases run through POST /v1/agents/{id}/eval-runs
+- A pass case and a fail case change summary.passed
+- The Example calls ops.agents.eval; it does not loop POST /test
+gaps:
+- workflow.eval
+- eval-cases console

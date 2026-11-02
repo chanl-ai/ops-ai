@@ -1,0 +1,22 @@
+id: search-a-page
+title: Search a handbook page
+track: knowledge
+status: built
+difficulty: intro
+outcome: Add one handbook page and search it.
+capabilities:
+- id: knowledge.search
+  status: built
+entrypoint: fixtures/query.json
+resources:
+- resources/documents/handbook.md
+fixtures:
+- fixtures/query.json
+expected:
+- expected/passage.json
+surfaces:
+  ui: built
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 30

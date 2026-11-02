@@ -1,0 +1,28 @@
+id: run-in-three-modes
+title: Run an agent in three modes
+track: agent
+status: built
+difficulty: advanced
+outcome: Start one agent in stream, wait and background modes.
+capabilities:
+- id: agent.run-api
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+expected:
+- expected/reply.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- ops.agents.run starts stream, wait and background on the existing thread routes
+- wait returns the finished reply
+- background returns a run id that can be re-attached
+gaps:
+- console run modes

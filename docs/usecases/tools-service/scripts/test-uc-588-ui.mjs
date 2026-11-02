@@ -1,12 +1,14 @@
 // uc-588 A developer's plugin signs in every way a system asks, ui layer: docs/usecases/tools-service/plugin-sign-in-methods.md,
 // stories S3 (steps 16-17) and S5 (step 18). The demo stack with plugins on (OPS_PLUGINS), the test plugins of
-// services/tools-service/tests/plugin_kinds (OPS_PLUGIN_PATHS), the console switch NEXT_PUBLIC_OPS_PERSONAL_SIGNIN on and the
+// services/tools-service/tests/plugin_kinds (OPS_PLUGIN_PATHS), and the
 // fake system (docs/usecases/lib/fake_multi_auth.py). Set-up goes through the API as the api layer proved it: the
 // install switch, the hosts, the person plugin turned on for each person's own sign-in and the header-key plugin with its
 // key, and an agent holding the person plugin's read tool. James asks the agent for a record in chat; the call is
 // refused with a Connect card, he signs in through the pop-up with his own account, and the chat goes on with the
 // record the system answered to his account. The Connections page then lists both plugin connections with no key on
-// it. Screenshots go to evidenceDir('588', 'uc').
+// it. Maya then asks for a record on the API-key desk each person connects with their own key: the card asks
+// for her key in place, she types it, and the chat goes on with the record read as her. Screenshots go to
+// evidenceDir('588', 'uc').
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
@@ -30,6 +32,10 @@ process.env.OPS_PLUGIN_PATHS = JSON.stringify(FOLDERS);
 // The fake model's answers: the request asks for the person plugin's read tool, the follow-up after connecting asks for
 // it again, and the answer names the account the system read the record with. The demo's own rules follow.
 const OURS = [
+  { when: '\\bRead key record (?P<id>rec-\\d+)', tool: 'person_key_get_record', arguments: { id: '{id}' } },
+  { when: '\\bI connected Person key desk\\. Please go ahead', tool: 'person_key_get_record', arguments: { id: 'rec-1042' } },
+  { after: 'person_key_get_record', result: 'CONNECTION_NOT_LINKED', text: 'I could not read it: Person key desk needs your own key. Give it in the card above and I will go ahead.' },
+  { after: 'person_key_get_record', result: '"as": ?"(?P<who>[^"]+)"', text: 'Harbor ticket 1042 is open; Person key desk answered to {who}.' },
   { when: '\\bRead record (?P<id>rec-\\d+)', tool: 'person_get_record', arguments: { id: '{id}' } },
   { when: '\\bI connected (?P<system>[^.\\n]+)\\. Please go ahead', tool: 'person_get_record', arguments: { id: 'rec-1042' } },
   { after: 'person_get_record', result: 'CONNECTION_NOT_LINKED', text: 'I could not read it: Person desk needs your own account. Connect it from the card above and I will go ahead.' },
@@ -113,7 +119,7 @@ try {
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
       // Set-up through the API, as the api layer's steps 1-8 do.
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true }, 'test.header-key': { enabled: true } } });
+      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true }, 'test.header-key': { enabled: true }, 'test.person-key': { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-588' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-588' });
       let listed = await call(tools, 'GET', '/v1/plugins', priya);
@@ -121,16 +127,19 @@ try {
       const person = await call(tools, 'PUT', '/v1/plugins/test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
       const keyed = await call(tools, 'PUT', '/v1/plugins/test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
       await call(tools, 'POST', `/v1/connections/${keyed.data?.connectionId}/test`, priya, { environment: 'production' });
+      // an earlier change: each person brings their own key to this one; the team gives none.
+      const ownKeyed = await call(tools, 'PUT', '/v1/plugins/test.person-key/team', priya, { enabled: true, signIn: 'person' });
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
       // agents-service keeps the grantable tools for 30 s, so the plugin's operation is offered within that.
-      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['person_get_record'] });
-      for (let i = 0; i < 40 && patched.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['person_get_record'] }));
+      const toolIds = ['person_get_record', 'person_key_get_record'];
+      let patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds });
+      for (let i = 0; i < 40 && patched.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds }));
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-588' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(
         'setup: the person plugin asks each person to sign in, the header-key plugin holds its key, and the agent holds the read tool',
-        installed.status === 200 && person.status === 200 && keyed.status === 200 && patched.status === 200 && live.status < 300,
-        { installed: installed.text, person: person.text, keyed: keyed.status, patched: patched.text, live: live.text },
+        installed.status === 200 && person.status === 200 && keyed.status === 200 && ownKeyed.status === 200 && patched.status === 200 && live.status < 300,
+        { installed: installed.text, person: person.text, keyed: keyed.status, ownKeyed: ownKeyed.text, patched: patched.text, live: live.text },
       );
 
       const browser = await chromium.launch();
@@ -203,6 +212,37 @@ try {
           check('18 each plugin connection opens on its page, the header-key one tested and working, and no key or client secret', keyPage && personPage && !html.includes(fake.info.secrets.key) && !html.includes(fake.info.clients['multi-app']), { keyPage, personPage, key: html.includes(fake.info.secrets.key), shown: shown['Header key desk'].replace(/\s+/g, ' ').slice(0, 400) });
         }, page);
 
+        await step('22 Maya asks for a record on the key desk, types her own key into the card, and the chat answers with the record read as her', async () => {
+          const mine = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+          mine.on('pageerror', (e) => errors.push(`maya: ${e.message}`));
+          await mine.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await mine.getByLabel('Work email').fill('m.okafor@harborpine.example');
+          await mine.getByLabel('Password').fill(PASSWORD);
+          await mine.getByTestId('login-submit').click();
+          await mine.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+          await mine.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const box = mine.getByLabel('Message');
+          await box.waitFor({ timeout: 120_000 });
+          await mine.getByTestId('home-agent').filter({ hasText: 'Ticket desk' }).waitFor({ timeout: 60_000 });
+          await box.fill('Read key record rec-1042.');
+          await mine.getByRole('button', { name: 'Send' }).click();
+          const field = mine.getByTestId('own-field-key');
+          await field.waitFor({ timeout: 90_000 });
+          await mine.screenshot({ path: join(SHOTS, 'chat-key-form-1280.png') });
+          const typed = fake.info.person_keys.maya;
+          await field.fill(typed);
+          await mine.getByTestId('own-credentials-save').click();
+          await mine.getByText('Person key desk answered to maya').waitFor({ timeout: 90_000 });
+          await mine.screenshot({ path: join(SHOTS, 'chat-key-answered-1280.png') });
+          const reads = (await fakeState()).calls.filter((c) => c.method === 'person-key' && c.accepted).map((c) => c.as);
+          const page = await mine.content();
+          check(
+            '22 Maya asks for a record on the key desk, types her own key into the card, and the chat answers with the record read as her',
+            reads.length >= 1 && reads.every((w) => w === 'maya') && !page.includes(typed),
+            { reads, keyShown: page.includes(typed) },
+          );
+        }, page);
+
         check('no page errors', errors.length === 0, errors.slice(0, 3));
       } finally {
         await browser.close();
@@ -212,7 +252,6 @@ try {
       demo: true,
       fakeModelRules: RULES,
       tools: { env: { ...fake.info.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify(FOLDERS) } },
-      consoleSwitches: { NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: '1' },
     },
   );
 } finally {

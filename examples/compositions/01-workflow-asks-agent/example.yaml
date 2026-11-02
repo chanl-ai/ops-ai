@@ -1,0 +1,25 @@
+id: workflow-asks-agent
+title: A workflow asks an agent
+track: composition
+status: built
+difficulty: guided
+outcome: A workflow Agent step calls the citing agent and keeps its structured answer.
+capabilities:
+- id: ops.ai.agent
+  status: built
+- id: bridge.workflow-to-agent
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/ask.json
+expected:
+- expected/answered.json
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 40

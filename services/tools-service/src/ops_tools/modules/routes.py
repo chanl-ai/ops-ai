@@ -14,6 +14,7 @@ from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Envelope, error_responses, ok
 
 from ..callers import caller_in
+from ..held_hosts import HELD
 from .directory import Directory
 from .schemas import (
     ApprovalRequestIn,
@@ -42,6 +43,8 @@ from .schemas import (
     ToolCallRow,
     ToolGrantList,
     ToolModuleDetail,
+    ToolRunIn,
+    ToolRunResult,
 )
 from .service import Caller, ModuleService
 
@@ -130,7 +133,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     ) -> JSONResponse:
         return ok(await service.discover(who, body.model_dump()))
 
-    @r.post("/blank", response_model=Envelope[ToolModuleDetail], status_code=201)
+    @r.post("/blank", response_model=Envelope[ToolModuleDetail], status_code=201, responses=HELD)
     async def create_blank_module(body: BlankModuleIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.create_blank(who, body.model_dump()), 201)
 
@@ -138,7 +141,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     async def bulk_remove_modules(body: IdsIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.bulk_remove(who, body.ids))
 
-    @r.post("", response_model=Envelope[ToolModuleDetail], status_code=201)
+    @r.post("", response_model=Envelope[ToolModuleDetail], status_code=201, responses=HELD)
     async def create_module(body: ModuleIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.create(who, body.model_dump()), 201)
 
@@ -170,7 +173,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         await service.remove(who, module_id)
         return Response(status_code=204)
 
-    @r.post("/{module_id}/operations", response_model=Envelope[ToolModuleDetail])
+    @r.post("/{module_id}/operations", response_model=Envelope[ToolModuleDetail], responses=HELD)
     async def add_operation(
         module_id: str, body: HttpOperationIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -259,6 +262,17 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         # Unset keys stay out, so a draft that leaves the mock or transform out uses the operation's own.
         return ok(await service.test(who, module_id, body.model_dump(exclude_unset=True)))
+
+    @r.post("/{module_id}/operations/{operation}/run", response_model=Envelope[ToolRunResult])
+    async def run_tool(  # pyright: ignore[reportUnusedFunction]
+        module_id: str, operation: str, body: ToolRunIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and
+        Real as the gateway's call, so the two never decide differently."""
+        target = "stub" if body.mode == "mock" else "sandbox"
+        given = {"operation": operation, "context_id": "owner", "target": target, "input": body.input}
+        out = await service.test(who, module_id, {**given, "environment": body.environment})
+        return ok({**out, "mocked": body.mode == "mock" or out.get("mockId") is not None})
 
     @r.get("/{module_id}/activity", response_model=Envelope[ModuleActivity])
     async def module_activity(module_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

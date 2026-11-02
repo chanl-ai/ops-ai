@@ -11,6 +11,7 @@ import { TaskDecision } from '@/components/reviews/task-decision';
 import type { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { KIND_LABEL, ReviewStatusBadge, RiskBadge, SlaText } from '@/components/status-badges';
 import { TaskDecide } from '@/components/tasks/task-page';
+import { ConnectWait } from '@/components/reviews/connect-wait';
 import type { TaskView } from '@/components/tasks/task-regions';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -93,6 +94,10 @@ export function DecisionPanel({
         </div>
       </header>
 
+      {/* A run waiting for a person's account is not decided: the person connects, or the run goes on as the team account. */}
+      {review.kind === 'connect_account' ? (
+        <ConnectWait review={review} />
+      ) : (
       <TaskDecision review={review} view={view} checks={checks} decider={decider} me={me} owners={owners} platformTeam={platformTeam} layout="panel">
         {({ choice, decide }) => (
           <>
@@ -132,6 +137,7 @@ export function DecisionPanel({
           </>
         )}
       </TaskDecision>
+      )}
     </aside>
   );
 }

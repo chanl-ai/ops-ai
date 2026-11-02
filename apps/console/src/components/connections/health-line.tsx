@@ -15,6 +15,28 @@ export interface HealthView {
   environment?: string;
 }
 
+/** What a failed test's code means, in the words a person reads; a code not listed reads as its own words. */
+const CODE_WORDS: Record<string, string> = {
+  AUTH_FAILED: 'Sign-in refused',
+  AUTH_EXPIRED: 'Sign-in expired',
+  NOT_SIGNED_IN: 'Not signed in yet',
+  CONNECTION_REVOKED: 'Sign-in ended',
+  SECRET_MISSING: 'A key is missing',
+  SECRET_UNAVAILABLE: 'A key could not be read',
+  EGRESS_DENIED: 'Address not allowed',
+  CONNECTION_HOST_MISMATCH: 'Address not allowed',
+  TLS_FAILED: 'Certificate refused',
+  CONNECT_FAILED: 'Could not reach it',
+  CONNECT_TIMEOUT: 'Could not reach it in time',
+  POOL_TIMEOUT: 'Too busy to try',
+  UPSTREAM_TIMEOUT: 'No answer in time',
+  UPSTREAM_ERROR: 'The answer broke off',
+  ANSWER_UNREADABLE: 'The answer did not read',
+  RATE_LIMITED: 'Too many calls',
+};
+
+export const codeWords = (code: string): string => CODE_WORDS[code] ?? code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, ' ');
+
 /**
  * One test's result as the connection page and the connect dialog both show it: Working or Failed, the system's status
  * or why there was no answer, how long it took, and when.
@@ -32,7 +54,7 @@ export function HealthLine({ health, testId = 'health', who = true }: { health: 
           {ok ? 'Working' : 'Failed'}
         </Badge>
         <span className="text-sm">
-          {health.httpStatus ? `${health.httpStatus}` : (health.code ?? 'No answer')}
+          {health.httpStatus ? `${health.httpStatus}` : health.code ? codeWords(health.code) : 'No answer'}
           {health.latencyMs != null && ` in ${health.latencyMs} ms`}
         </span>
       </div>

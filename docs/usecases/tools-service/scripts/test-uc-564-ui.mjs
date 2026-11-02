@@ -210,7 +210,7 @@ try {
           const early = await page.getByText('is now Escalated in Salesforce').count();
           // Each field the write sends is a row a person reads, never the raw object.
           const shown = await card.innerText();
-          // The plugin's title for the tool (c-581), never its operation name.
+          // The plugin's title for the tool, never its operation name.
           const readable = /Fields · Status/.test(shown) && /Escalated/.test(shown) && !/[{}]/.test(shown) && /Update a record/.test(shown) && !/salesforce_update_record/.test(shown);
           check('14 asked to escalate it, the card names the tool by its title and shows the field it changes; the change waits and Salesforce is unchanged', !!reviewId && (await caseEdits()).length === 0 && early === 0 && readable, { reviewId, edits: await caseEdits(), early, card: shown.slice(0, 300) });
         }, page);

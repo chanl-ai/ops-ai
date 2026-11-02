@@ -38,7 +38,7 @@ def call(gw: httpx.Client, key: str, payload: dict[str, Any]) -> httpx.Response:
 with ExitStack() as stack:
     bank = stack.enter_context(core_bank())
     gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
-    # agents-service holds the module's review (c-163), which the publish below waits on.
+    # agents-service holds the module's review, which the publish below waits on.
     stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     address = json.loads(bank["settings"]["OPS_EGRESS_RESOLVE"])[bank["host"]]
     inbox = f"https://{address}/webhooks.json"

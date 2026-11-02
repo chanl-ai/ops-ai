@@ -2,7 +2,8 @@
 
 The port is FAKE_OPENAI_PORT, else `port` in <dir>/script.json, else 8746. It prints the setting models-service seeds
 its openai-local connection from. With FAKE_OPENAI_API_KEY set, a request that sends a credential must send that key
-(a provider connection naming a key proves the key reaches the provider)."""
+(a provider connection naming a key proves the key reaches the provider). It serves Azure OpenAI's two paths too
+(`app.create_app`)."""
 
 from __future__ import annotations
 
@@ -27,7 +28,9 @@ def main() -> None:
     # OPS_BIND_HOST takes it (deploy/fly/staging).
     host = os.environ.get("FAKE_OPENAI_HOST") or "127.0.0.1"
     host = "" if host == "*" else host
-    app = create_app(script, os.environ.get("FAKE_OPENAI_API_KEY") or None)
+    # FAKE_AZURE_REGION: the region its Azure paths answer from (`x-ms-region`), to show a region mismatch.
+    region = os.environ.get("FAKE_AZURE_REGION") or "Sweden Central"
+    app = create_app(script, os.environ.get("FAKE_OPENAI_API_KEY") or None, region)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

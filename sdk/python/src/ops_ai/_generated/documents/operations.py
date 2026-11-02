@@ -226,6 +226,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_copy_resource": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies",
+        "pathParams": ["resource"],
+        "query": [],
+        "stream": False,
+    },
+    "templates_list_templates": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/templates",
+        "pathParams": [],
+        "query": ["kind"],
+        "stream": False,
+    },
 }
 
 
@@ -369,6 +387,14 @@ class Operations:
     def documents_purge(self, body: PurgeIn) -> Purged:
         "Purge"
         return self._t.call(SERVICE, OPERATIONS["documents_purge"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+        "Copy Resource"
+        return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+        "List Templates"
+        return self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
 
 
 class AsyncOperations:
@@ -517,3 +543,11 @@ class AsyncOperations:
     async def documents_purge(self, body: PurgeIn) -> Purged:
         "Purge"
         return await self._t.call(SERVICE, OPERATIONS["documents_purge"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+        "Copy Resource"
+        return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+        "List Templates"
+        return await self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]

@@ -377,7 +377,8 @@ def create_files_app(
         done = await files.complete(who, file_id)
         return ok(done.model_dump(mode="json", by_alias=True))
 
-    @public.get("", response_model=Envelope[FileList])
+    # Services holding files:view list their token's team's files too: the read_file tool finds a file by name (c-613).
+    @public.get("", response_model=Envelope[FileList], dependencies=[service_scope("view")])
     async def list_files(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
         *,

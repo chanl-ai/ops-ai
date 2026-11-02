@@ -1,4 +1,4 @@
-// uc-141 the one Activity page, ui layer: docs/usecases/console/activity-page.md (c-242). Platform sign-in; James works
+// uc-141 the one Activity page, ui layer: docs/usecases/console/activity-page.md. Platform sign-in; James works
 // in Operations. A canvas workflow is saved and run through the API; everything after that is read in the console.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

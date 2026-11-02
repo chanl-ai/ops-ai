@@ -28,13 +28,20 @@ const columns: ColumnDef<Row>[] = [
   {
     // Holds every searched field so the table's own filter finds a call by caller, run or record too.
     id: 'target',
-    accessorFn: (r) => `${r.target} ${r.subject?.name ?? ''} ${r.actor?.name ?? ''} ${r.workflowName} ${r.agentName} ${r.runId} ${r.record ?? ''}`,
+    accessorFn: (r) => `${r.title ?? ''} ${r.app ?? ''} ${r.target} ${r.subject?.name ?? ''} ${r.actor?.name ?? ''} ${r.workflowName} ${r.agentName} ${r.runId} ${r.record ?? ''}`,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />,
     cell: ({ row }) => (
       <div className="flex min-w-0 flex-col items-start gap-1">
-        <code className="max-w-56 truncate font-mono text-[13px] font-medium" title={row.original.target}>
-          {row.original.target}
-        </code>
+        {row.original.title && row.original.title !== row.original.target ? (
+          <span className="max-w-56 truncate text-sm font-medium" title={row.original.target}>
+            {row.original.title}
+            {row.original.app && <span className="font-normal text-muted-foreground"> · {row.original.app}</span>}
+          </span>
+        ) : (
+          <code className="max-w-56 truncate font-mono text-[13px] font-medium" title={row.original.target}>
+            {row.original.target}
+          </code>
+        )}
         <OperationBadge operation={row.original.operation} />
       </div>
     ),
@@ -96,7 +103,7 @@ export function ExecutionsTable({ calls, onOpen }: { calls: ToolCallRow[]; onOpe
       searchColumn="target"
       searchPlaceholder="Search operation, caller, run or record…"
       initialColumnVisibility={{ record: false }}
-      emptyState={<ListEmpty icon={ScrollText} noun="calls" filtered={false} description="Calls appear here once a workflow calls this module." />}
+      emptyState={<ListEmpty icon={ScrollText} noun="calls" filtered={false} description="Calls appear here once a workflow calls these tools." />}
     />
   );
 }

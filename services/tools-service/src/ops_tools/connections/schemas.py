@@ -10,7 +10,8 @@ from pydantic.alias_generators import to_camel
 
 from ops_service_kit.http import ListResult, Out
 
-Environment = Literal["test", "production"]
+from ..environments import ConnectionEnvironment as Environment
+
 Team = str
 # Whose account a call signs in with (c-558): the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
@@ -72,6 +73,14 @@ class SignInIn(_In):
     account: Literal["self", "team"] = "self"
 
 
+class PersonCredentialsIn(_In):
+    """A person's own key, password or token on a connection each person signs in to (c-595): the kind's person
+    fields, each a value of at most 2,000 characters."""
+
+    environment: Environment
+    credentials: dict[str, str] = Field(max_length=4)
+
+
 class ConnectionTestIn(_In):
     environment: Environment
     # `self` tests with the caller's own sign-in on a connection each person signs in to; `team` with the team's,
@@ -90,6 +99,29 @@ class SignInCompleteIn(_In):
     code: str = Field(min_length=1, max_length=2000)
 
 
+class CredentialCheckIn(_In):
+    """Test with my account (c-616): `environment` starts it; the `state` and `code` the sign-in page was handed back
+    finish it, on the same route."""
+
+    environment: Environment = "production"
+    state: str | None = Field(default=None, min_length=16, max_length=200)
+    code: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
+class CheckedCredential(Out):
+    status: Literal["ok", "failed"]
+    # Who signed in, when the system's answer says; for display only.
+    account: str | None = None
+    message: str | None = None
+    environment: Environment
+    at: str
+    by: str
+
+
+class CredentialCheck(Out):
+    health: CheckedCredential
+
+
 class KindField(Out):
     name: str
     label: str
@@ -102,6 +134,8 @@ class KindField(Out):
     # Required once each named setting holds its value, or no longer required then (`Kind.requires`).
     required_when: dict[str, str] | None = None
     optional_when: dict[str, str] | None = None
+    # PEM text: a multi-line box and a file to read it from, never one line.
+    pem: bool = False
 
 
 class AuthKind(Out):
@@ -112,6 +146,9 @@ class AuthKind(Out):
     holds_token: bool
     # Whether each person may sign in with their own account (c-558); a kind without it takes the team's only.
     per_person: bool
+    # The fields each person gives for themselves on a connection each person signs in to (c-595); empty for a kind
+    # whose person signs in at the system.
+    person_fields: list[str]
 
 
 class EnvironmentOption(Out):
@@ -119,6 +156,8 @@ class EnvironmentOption(Out):
     label: str
     # The one environment live runs call; every other run calls a non-production one.
     production: bool
+    # Whether a connection holds keys for it; the console draws a key section for each that does.
+    keys: bool
 
 
 class ConnectionKinds(Out):
@@ -183,6 +222,8 @@ class ConnectionEnvironment(Out):
     certificate: SigningCertificate | None = None
     # This environment's last Test connection (c-580); the connection's `health` is the deciding environment's.
     health: ConnectionHealth | None = None
+    # The plugin whose platform app this environment signs in with (c-565); null on the team's own app.
+    platform_app: str | None = None
 
 
 class ConnectionEvent(Out):
@@ -204,6 +245,19 @@ class MyConnection(Out):
     # The connection's own status; the person's sign-in is held while it is listed.
     connection_status: str
     environment: Environment
+    # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account" (c-595).
+    method: str
+    auth_kind: str
+    # What the person gives for a key, password or token kind; empty for a sign-in at the system.
+    person_fields: list[str]
+    # False for a connection the person can connect and has not, listed only with `every` (c-595).
+    connected: bool
+    # Where the system says how to find the key, from the connection's card details.
+    docs_url: str | None = None
+    # The system refused the person's key or sign-in (c-595): when, and what it said; a new one clears it.
+    refused: bool = False
+    refused_at: str | None = None
+    refused_reason: str | None = None
     account: str | None = None
     scopes: list[str]
     since: str | None = None
@@ -232,6 +286,9 @@ class ConnectionRow(Out):
     category: str | None = None
     description: str | None = None
     docs_url: str | None = None
+    # An app's account (c-608): the plugin it belongs to and the name a tool or step uses for it.
+    plugin_id: str | None = None
+    account_name: str | None = None
 
 
 class PersonSignedIn(Out):

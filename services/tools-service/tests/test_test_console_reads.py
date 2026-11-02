@@ -1,11 +1,15 @@
-"""The test console's "Test environment" target (c-038): a read is the real call the gateway would make, a write
-answers from the stub and says so. One test per way the panel could claim a call it did not make."""
+"""The test console's Real target (c-038, c-591): a read or a write is the real call the gateway would make, a real
+write is logged under the person who sent it, and Mock sends nothing. One test per way the panel could claim a call it
+did not make, or make a call nobody approved."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ops_tools.store.modules import ModuleStore
 
 from .test_apply_tool_access import apply_access
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -19,6 +23,9 @@ async def g(gateway: Gateway) -> Gateway:  # noqa: F811
 
 
 SECURITY = {"X-Dev-User": "Nadia Petrov"}
+# The team the console acts in, sent with every request as the console sends it: a Real run is a gateway call made in
+# the person's acting team, which owns the bank module (c-616).
+TEAM = {"X-Team-Id": "team_platform"}
 
 
 async def _context(g: Gateway) -> dict[str, Any]:
@@ -35,14 +42,14 @@ async def _context(g: Gateway) -> dict[str, Any]:
     decided = await apply_access(g.client, g.tenant, {**approval.json()["data"], "moduleId": MODULE})
     assert decided.status_code == 200 and decided.json()["data"]["ok"], decided.text
     contexts: list[dict[str, Any]] = (await g.client.get(BASE)).json()["data"]["runContexts"]
-    assert contexts, "the approved workflow has a case to test as"
-    return contexts[0]
+    # The owner's context is listed first (c-048 T019); the workflow's is the one this asks for.
+    return next(c for c in contexts if c["id"] != "owner")
 
 
 async def _test(g: Gateway, base: str, args: dict[str, Any], **extra: Any) -> dict[str, Any]:
     ctx = await _context(g)
     body = {"operation": g.tool(base), "contextId": ctx["id"], "target": "sandbox", "input": args, **extra}
-    r = await g.client.post(f"{BASE}/test", json=body)
+    r = await g.client.post(f"{BASE}/test", json=body, headers=TEAM)
     assert r.status_code == 200, r.text
     return r.json()["data"]
 
@@ -54,10 +61,18 @@ async def test_a_sandbox_read_is_the_real_call(g: Gateway) -> None:
     assert out["output"]["accountId"] == "CHQ-2219" and out["output"]["holder"]["sin"] == "[redacted]", "masked"
 
 
-async def test_a_sandbox_write_answers_from_the_stub_and_says_so(g: Gateway) -> None:
+async def test_a_real_write_in_a_workflows_context_needs_a_real_approval(g: Gateway) -> None:
+    """simulateApproval stands in for an approval on Mock only: a real write never runs on a made-up one (ADR-0005)."""
     out = await _test(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24}, simulateApproval=True)
-    assert out["decision"] == "allow" and out["stubbed"] is True
-    assert g.received == [], "a test console never writes to the system"
+    assert (out["decision"], out.get("denyReason")) == ("deny", "approval_token_missing"), out
+    assert g.received == [], "nothing reached the system"
+
+
+async def test_a_mock_write_sends_nothing(g: Gateway) -> None:
+    args = {"accountId": "A", "hours": 24}
+    body = {"operation": g.tool("place_hold"), "contextId": "owner", "target": "stub", "input": args}
+    out = (await g.client.post(f"{BASE}/test", json=body)).json()["data"]
+    assert out["decision"] == "allow" and g.received == [], out
 
 
 async def test_a_sandbox_read_runs_the_published_call_not_a_staged_edit(g: Gateway) -> None:
@@ -77,7 +92,7 @@ async def test_a_sandbox_read_that_fails_reports_the_side_and_status(g: Gateway)
 
 async def _as_owner(g: Gateway, base: str, args: dict[str, Any], **headers: str) -> Any:
     body = {"operation": g.tool(base), "contextId": "owner", "target": "sandbox", "input": args}
-    return await g.client.post(f"{BASE}/test", json=body, headers=headers)
+    return await g.client.post(f"{BASE}/test", json=body, headers={**TEAM, **headers})
 
 
 async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway) -> None:
@@ -85,15 +100,21 @@ async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway
     r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"})
     assert r.status_code == 200, r.text
     out = r.json()["data"]
-    assert (out["decision"], out["stubbed"]) == ("allow", False), out
+    assert (out["decision"], out["stubbed"]) == ("allow", False), (out.get("denyReason"), out.get("denyMessage"))
     assert [x["path"] for x in g.received] == ["/v1/accounts/CHQ-2219"], "the system was called"
 
 
-async def test_the_owners_write_answers_from_the_stub_and_never_reaches_the_system(g: Gateway) -> None:
+async def test_a_real_write_runs_for_an_approver_and_is_logged_from_the_console(g: Gateway) -> None:
+    """c-616: Real is a gateway call. The module holds place_hold for approval, and the dev caller, who passes every
+    role rule, holds the approver role (reviews.decide), so it is not asked: the write runs, and the log names it as
+    the write's approver under the console channel and the test environment."""
     r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24})
     out = r.json()["data"]
-    assert (out["decision"], out["stubbed"]) == ("allow", True), out
-    assert g.received == [], "a test console never writes to the system"
+    assert (out["decision"], out["stubbed"]) == ("allow", False), out
+    assert [x["path"] for x in g.received] == ["/v1/holds"], "the system was called"
+    rows = (await g.client.get("/v1/executions", params={"tool": g.tool("place_hold")})).json()["data"]["data"]
+    assert [(x["channel"], x["environment"], x["decision"]) for x in rows] == [("console", "test", "allow")], rows
+    assert rows[0]["approval"].get("by"), rows[0]["approval"]
 
 
 async def test_a_team_that_does_not_own_the_module_cannot_try_it_as_owner(g: Gateway) -> None:
@@ -120,5 +141,32 @@ async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_wait
         "target": "sandbox",
         "input": {"accountId": "CHQ-2219", "hours": 24},
     }
-    out = (await g.client.post(f"{BASE}/test", json=body)).json()["data"]
-    assert (first["id"], out["decision"], out["stubbed"]) == ("owner", "allow", True), out
+    out = (await g.client.post(f"{BASE}/test", json=body, headers=TEAM)).json()["data"]
+    # Decided as the owner's try, never refused as the waiting workflow's no_approval.
+    assert (first["id"], out["decision"]) == ("owner", "allow"), out
+
+
+async def test_a_real_run_uses_the_environment_the_person_picked(g: Gateway, engine: AsyncEngine) -> None:
+    """c-616: Real ran on test whatever the page said; it now signs in with the picked environment's key."""
+    store = ModuleStore(engine)
+    m = await store.get(g.tenant, MODULE)
+    assert m is not None
+    made = (
+        await g.client.post("/v1/connections", json={"name": "Ledger", "authKind": "api_key"}, headers=TEAM)
+    ).json()["data"]
+    for env, key in (("test", "k-test"), ("production", "k-prod")):
+        fresh = (await g.client.get(f"/v1/connections/{made['id']}", headers=TEAM)).json()["data"]
+        body = {
+            "revision": fresh["revision"],
+            "settings": {"name": "X-Api-Key", "baseUrl": "https://bank.test/v1"},
+            "secretValues": {"key": key},
+        }
+        put = await g.client.put(f"/v1/connections/{made['id']}/environments/{env}", json=body, headers=TEAM)
+        assert put.status_code == 200, put.text
+    await store.put({**m, "connection_id": made["id"]}, expected_revision=m["revision"])
+    body = {"operation": g.tool("get_account"), "contextId": "owner", "target": "sandbox", "input": {"accountId": "A"}}
+    for env, key in (("production", "k-prod"), ("test", "k-test")):
+        r = await g.client.post(f"{BASE}/test", json={**body, "environment": env}, headers=TEAM)
+        assert r.json()["data"]["decision"] == "allow", r.text
+        sent = g.received[-1]
+        assert (sent["headers"].get("x-api-key"), sent["path"]) == (key, "/v1/accounts/A"), (env, sent)

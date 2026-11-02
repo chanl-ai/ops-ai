@@ -1,8 +1,9 @@
 """Each service that switches roles per transaction (SET LOCAL ROLE) works as its own deployed login: no superuser, no
 BYPASSRLS, and a member of a role only once an install script or a migration made it one (c-444). On a scratch
-database the files and documents chains migrate; each login starts as staging's did, made by a roles.sql older than
-the roles; then one path that grants membership runs alone: the chains' own migrations, or grants.sql as make db-ddl
-writes it. After it, the login runs a team transaction as its tenant role and the outbox relay as its system role.
+database the files, documents and tools chains migrate; each login starts as staging's did, made by a roles.sql older
+than the roles; then one path that grants membership runs alone: the chains' own migrations, or grants.sql as make
+db-ddl writes it. After it, the login runs a team transaction as its tenant role and, where the service has one, the
+outbox relay as its system role (tools has none, c-602).
 
 Runs on the server of OPS_TEST_DATABASE_URL (make python-verify sets it); skipped without a PostgreSQL URL. Roles are
 cluster-wide, so each case revokes the logins' memberships before it starts."""
@@ -31,6 +32,8 @@ from ops_documents.store.metadata import SYSTEM_ROLE as DOCUMENTS_SYSTEM
 from ops_files.store import files as files_store
 from ops_store import isolation
 from ops_store.outbox import Relay, add
+from ops_tools.store.connections import ROLE as TOOLS_ROLE
+from ops_tools.store.connections import connection_tokens
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from postgres import Postgres
@@ -44,9 +47,18 @@ PASSWORD = "runtime-login-test"
 class Service:
     chain: str
     tenant_role: str
-    system_role: str
-    outbox: sa.Table
+    # The relay's role and the outbox it reads; None for a service whose transactions only run as the tenant role.
+    system_role: str | None
+    outbox: sa.Table | None
     team_table: sa.Table
+    # The revision a release goes back to and forward from: the one before the login's membership is granted.
+    before: str
+    # The revision that grants the membership.
+    grants: str
+
+    @property
+    def roles(self) -> set[str]:
+        return {self.tenant_role} | ({self.system_role} if self.system_role else set())
 
     @property
     def login(self) -> str:
@@ -54,8 +66,33 @@ class Service:
 
 
 SERVICES = [
-    Service("files", files_store.ROLE, files_store.SYSTEM_ROLE, files_store.service_outbox, files_store.files),
-    Service("documents", DOCUMENTS_ROLE, DOCUMENTS_SYSTEM, documents_outbox, document_types),
+    Service(
+        "files",
+        files_store.ROLE,
+        files_store.SYSTEM_ROLE,
+        files_store.service_outbox,
+        files_store.files,
+        "files_0011",
+        "files_0012",
+    ),
+    Service(
+        "documents",
+        DOCUMENTS_ROLE,
+        DOCUMENTS_SYSTEM,
+        documents_outbox,
+        document_types,
+        "documents_0011",
+        "documents_0012",
+    ),
+    Service(
+        "tools",
+        TOOLS_ROLE,
+        None,
+        None,
+        connection_tokens,
+        "tools_0043_conn_details_health",
+        "tools_0044_sign_in_isolation",
+    ),
 ]
 
 
@@ -82,7 +119,7 @@ def _as_staging_made_it(scratch: URL) -> None:
         statements = [
             f"DO $$ BEGIN CREATE ROLE {s.login} LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
             f"ALTER ROLE {s.login} LOGIN PASSWORD '{PASSWORD}' NOSUPERUSER NOBYPASSRLS INHERIT",
-            f"REVOKE {s.tenant_role}, {s.system_role} FROM {s.login}",
+            f"REVOKE {', '.join(sorted(s.roles))} FROM {s.login}",
         ]
         asyncio.run(_admin(scratch.set(database="postgres"), *statements))
         asyncio.run(
@@ -125,7 +162,8 @@ def scratch() -> Iterator[URL]:
 
 
 async def _works_as_its_login(scratch: URL, s: Service) -> None:
-    """A team transaction writes an event as the tenant role; the relay delivers it as the system role."""
+    """A team transaction reads its team table as the tenant role and writes an event; the relay delivers it as the
+    system role. Without an outbox, the team transaction alone."""
     engine = create_async_engine(scratch.set(username=s.login, password=PASSWORD))
     sent: list[dict[str, Any]] = []
 
@@ -142,7 +180,12 @@ async def _works_as_its_login(scratch: URL, s: Service) -> None:
         with isolation.scope(tenant, "team_a"):
             async with isolation.isolated_tx(engine, role=s.tenant_role) as c:
                 await c.execute(sa.select(sa.func.count()).select_from(s.team_table))
-                await add(c, s.outbox, tenant_id=tenant, team_id="team_a", name="login.checked", key=tenant, payload={})
+                if s.outbox is not None:
+                    await add(
+                        c, s.outbox, tenant_id=tenant, team_id="team_a", name="login.checked", key=tenant, payload={}
+                    )
+        if s.outbox is None:
+            return
         assert await Relay(engine, s.outbox, send, role=s.system_role).once() >= 1
         assert tenant in {e["tenantId"] for e in sent}
     finally:
@@ -154,7 +197,7 @@ def test_the_chain_s_migrations_make_its_login_a_member(scratch: URL, service: S
     """Staging: a login made before the roles existed; the release command migrates as the superuser."""
     _as_staging_made_it(scratch)
     # Back to the revision that made the roles, then forward again as a release command would.
-    _migrate(scratch, service.chain, f"{service.chain}_0011", how="downgrade")
+    _migrate(scratch, service.chain, service.before, how="downgrade")
     _migrate(scratch, service.chain, "head")
     asyncio.run(_works_as_its_login(scratch, service))
 
@@ -166,32 +209,33 @@ def test_grants_sql_makes_each_login_a_member_of_the_roles_its_tables_grant_to(s
     pg = Postgres(_server().set(database="postgres").render_as_string(hide_password=False))
     url = scratch.render_as_string(hide_password=False)
     dump = pg.dump_schema(url)
-    tables = {s.chain: [t.name for t in s.outbox.metadata.sorted_tables] for s in SERVICES}
+    tables = {s.chain: [t.name for t in s.team_table.metadata.sorted_tables] for s in SERVICES}
     runtime = {s.chain: s.login for s in SERVICES}
     granted = pg.roles(url, {g for e in dump.entries for g in pg.grantees(e)})
     members = memberships(pg, dump.entries, runtime=runtime, tables=tables, sequences={}, roles=set(granted))
-    assert members[service.login] == {service.tenant_role, service.system_role}
+    assert members[service.login] == service.roles
     pg.execute(url, pg.grants_script(runtime, tables, {}, {}, members))
     asyncio.run(_works_as_its_login(scratch, service))
 
 
-@pytest.mark.parametrize("chain", [s.chain for s in SERVICES])
-def test_a_dba_upgrade_grants_the_membership_in_the_superuser_script(chain: str) -> None:
+@pytest.mark.parametrize("service", SERVICES, ids=lambda s: s.chain)
+def test_a_dba_upgrade_grants_the_membership_in_the_superuser_script(service: Service) -> None:
     """The DBA runs upgrade.sql as the migrator, who may not grant a role: the step's grants go to upgrade-roles.sql."""
     env = {**os.environ, "OPS_DATABASE_URL": OFFLINE_URL}
     done = subprocess.run(
-        ["uv", "run", "alembic", "upgrade", f"{chain}_0011:{chain}_0012", "--sql"],
+        ["uv", "run", "alembic", "upgrade", f"{service.before}:{service.grants}", "--sql"],
         check=False,
-        cwd=ROOT / "services" / f"{chain}-service",
+        cwd=ROOT / "services" / f"{service.chain}-service",
         env=env,
         capture_output=True,
         text=True,
     )
     assert done.returncode == 0, done.stderr[-2000:]
     body, moved = Postgres.superuser_statements(done.stdout)
-    login = runtime_role(chain)
-    assert sorted(m.split(" THEN ")[1].split(";")[0] for m in moved) == [
-        f"GRANT ops_{chain}_system TO {login}",
-        f"GRANT ops_{chain}_tenant TO {login}",
-    ]
+    login = service.login
+    # The step that also makes the role (tools) moves its CREATE ROLE there too; the memberships are what is checked.
+    granted = (m.split(" THEN ")[1].split(";")[0] for m in moved)
+    assert sorted(g for g in granted if g.startswith("GRANT ")) == sorted(
+        f"GRANT {role} TO {login}" for role in service.roles
+    )
     assert f"TO {login}" not in body

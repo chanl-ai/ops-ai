@@ -1,5 +1,5 @@
 // uc-516 An account admin sees every background process and what it did, ui layer:
-// docs/usecases/agents-service/an-account-admin-sees-every-background-process.md (c-516). The run's own demo stack;
+// docs/usecases/agents-service/an-account-admin-sees-every-background-process.md. The run's own demo stack;
 // platform sign-in as Wanjiru (an Admin in every team), James (a builder of Operations) and Nadia (Security).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

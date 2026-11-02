@@ -19,7 +19,7 @@ const armed = (p) => (p.catch(() => undefined), p);
 
 await withUiStack(
   async (consoleUrl) => {
-    // Egress is changed only by an admin of the Security team (c-079).
+    // Egress is changed only by an admin of the Security team.
     const P = { ...as(await tokenFor('s.adeyemi@harborpine.example')), 'X-Team-Id': 'team_security' };
     const J = as(await tokenFor('j.richardson@harborpine.example'));
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: HOST, note: 'uc-059 ui' }) });
@@ -41,17 +41,17 @@ await withUiStack(
       await row.waitFor({ timeout: 120_000 });
       const before = await row.getByText('Two approvals').count();
 
-      // The row opens the operation's workbench (c-088); its access and approval policy is in the sheet it opens.
+      // The row opens the operation's workbench; its access and approval policy is in the sheet it opens.
       await row.click();
       await page.getByTestId('workbench-policy').click({ timeout: 60_000 });
       await page.getByLabel('Approvals per call').waitFor({ timeout: 30_000 });
-      // A held write is decided by its run's team (c-509): the sheet names no approving team and offers no picker.
+      // A held write is decided by its run's team: the sheet names no approving team and offers no picker.
       const teamPicker = (await page.getByLabel('Approving team').count()) + (await page.getByTestId('op-approval-policy').count());
       check('the write shows one approver and names no approving team', before === 0 && teamPicker === 0, { before, teamPicker });
 
       await page.getByLabel('Approvals per call').click();
       await page.getByRole('option', { name: 'Two different people' }).click();
-      // Whether the asker may approve is the tenant's requesterMayDecide policy (c-186): the sheet offers no switch.
+      // Whether the asker may approve is the tenant's requesterMayDecide policy: the sheet offers no switch.
       const selfSwitch = await page.getByRole('switch', { name: 'The person who asked may approve' }).count();
       const staged = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/tool-modules/${id}/operations/`), { timeout: 60_000 }));
       await page.getByTestId('op-stage').click();
