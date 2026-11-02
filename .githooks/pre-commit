@@ -2,4 +2,11 @@
 # Blocks commits that break the console's standards (apps/console/CLAUDE.md). Fix the code; do not bypass with --no-verify.
 # The gates run on the commit's own content (scripts/verify-staged.sh), so another builder's unfinished file never blocks it.
 cd "$(git rev-parse --show-toplevel)" || exit 1
+# This repo is public and its history is the trunk, so no private name, key or private path may enter a commit. The
+# rules name what must not leak, so they live in the private half; a checkout without it (an outside contributor's)
+# skips this step, and CI's own scan covers their PRs.
+main=$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")
+if [ -f "$main/.private/agents/checks/staged.py" ]; then
+  python3 "$main/.private/agents/checks/staged.py" || exit 1
+fi
 scripts/verify-staged.sh || { echo "pre-commit: pnpm verify failed on the staged content (see apps/console/CLAUDE.md)"; exit 1; }

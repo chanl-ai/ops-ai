@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Git rules for the shared ops-ai tree, enforced as a Claude Code PreToolUse hook on Bash.
+"""Git rules for ops-ai checkouts, enforced as a Claude Code PreToolUse hook on Bash.
 
-Several builders edit one working tree at once, so a git command that rewrites the index, the working files or the
-branch for everyone loses someone else's unfinished work. This hook refuses those commands before they run and says,
-in plain words, which readable command to use instead (make/git.mk). Exit 2 blocks the call; stderr is the reason.
+Each person and each agent works in their own checkout: the main one (ops-ai/) or a lane worktree beside it
+(ops-ai-lane-<name>/), on their own branch, and main changes only through a pull request. Branches, commits, merges
+and rebases inside your own checkout are normal git. This hook refuses only what loses work or skips review: a stash
+(work nobody else can see), a hard reset or clean (unpushed work gone), skipped hooks, a force push, and a push
+straight to main. Exit 2 blocks the call; stderr is the reason and what to do instead.
 
-Applies only to commands that run in the ops-ai tree (the hook's cwd, or a `cd`/`-C` into it). Rules are in RULES:
-each is a pattern, the reason a person would give, and what to run instead. `python3 scripts/git-rules.py --self-test`
-checks every rule against an allowed and a refused command.
+Applies to commands that run in ops-ai or a lane (the hook's cwd, or a `cd`/`-C` into one), not in `.private/`, which
+is its own repository. `python3 scripts/git-rules.py --self-test` checks every rule.
 """
 
 from __future__ import annotations
@@ -17,87 +18,58 @@ import os
 import re
 import sys
 
-# The shared tree is the checkout this script lives in; another repo beside it is not checked.
+# The checkout this script lives in; its lane worktrees sit beside it as <name>-lane-<lane>.
 TREE = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-COMMIT = "make commit FILES='path/one path/two' MSG='type(scope): subject' CARD=c-NNN"
+LANES = os.path.join(os.path.dirname(TREE), os.path.basename(TREE) + "-lane-")
 # Where a command starts: the line start, after a separator or `$(`, then any VAR=value prefixes.
 GIT = r"(?:^|[;&|(\n]|\$\()\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*git\s+"
 
 RULES: list[tuple[str, str, str]] = [
     (
-        r"\bgit\s+(-C\s+\S+\s+)?commit\b",
-        "A plain git commit takes whatever is staged in the shared index, including other builders' files, "
-        "and can skip checks.",
-        f"Commit only your files: {COMMIT}",
-    ),
-    (
         r"\bgit\s+(-C\s+\S+\s+)?stash\b",
-        "A stash takes every builder's unfinished work out of the tree.",
-        "Leave the tree as it is. To compare with HEAD: git diff HEAD -- <path>",
-    ),
-    (
-        r"\bgit\s+(-C\s+\S+\s+)?checkout\s+(\S+\s+)?--\s",
-        "Checking out a file from HEAD overwrites the lines other builders have not committed yet.",
-        "To drop only your own change, edit the lines back by hand. After a commit, leave shared files alone.",
-    ),
-    (
-        r"\bgit\s+(-C\s+\S+\s+)?restore\b(?!.*--staged)(?!.*\s-S\b)",
-        "Restoring a file overwrites the lines other builders have not committed yet.",
-        "To unstage only: make unstage FILES='path'. To drop your own change, edit it back by hand.",
+        "A stash hides work where no one, including the next session, will find it.",
+        "Commit it to your branch (a work-in-progress commit is fine) or leave it in the tree.",
     ),
     (
         r"\bgit\s+(-C\s+\S+\s+)?reset\b.*--(hard|merge|keep)\b",
-        "A hard reset throws away every builder's unfinished work.",
-        "To unstage only: make unstage FILES='path'.",
+        "A hard reset throws away uncommitted and unpushed work.",
+        "Commit what you want to keep first; to undo a commit, git revert it.",
     ),
     (
         r"\bgit\s+(-C\s+\S+\s+)?clean\b",
-        "git clean deletes other builders' new files that are not committed yet.",
+        "git clean deletes new files that are not committed yet.",
         "Delete only files you created, by name.",
-    ),
-    (
-        r"\bgit\s+(-C\s+\S+\s+)?(switch\b|checkout\s+(-[bB]\s+)?[A-Za-z0-9._/-]+\s*($|[;&|]))",
-        "Switching branches moves the ground under every builder and every running server.",
-        "Stay on main. Release branches are made by scripts/ops-ai/repo.sh snapshot, from the orchestrator.",
-    ),
-    (
-        r"\bgit\s+(-C\s+\S+\s+)?worktree\s+add\b",
-        "A private worktree hides work from the shared tree, the claims and QA.",
-        "Work in the shared tree; put scratch files in your session's scratchpad.",
     ),
     (
         r"\bgit\s+[^;&|\n]*--no-verify\b|(?:^|[;&|(\n])\s*NOHOOK=",
         "Skipping the hooks skips the checks that keep main green.",
-        f"Fix what the check reports, then: {COMMIT}",
-    ),
-    (
-        r"\bgit\s+(-C\s+\S+\s+)?add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))",
-        "Staging everything stages other builders' unfinished files.",
-        f"Name your files: {COMMIT}",
+        "Fix what the check reports, then commit or push again.",
     ),
     (
         r"\bgit\s+(-C\s+\S+\s+)?push\b.*(\s-f\b|--force)",
-        "A force push rewrites history other builders have already pulled.",
-        "Ask the orchestrator; releases go through scripts/ops-ai/repo.sh.",
+        "A force push rewrites history others have already pulled or reviewed.",
+        "Push a new commit instead, or ask the owner.",
     ),
     (
-        r"\bgit\s+(-C\s+\S+\s+)?(rebase|cherry-pick|merge)(?![-\w])",
-        "Rewriting or merging history in the shared tree changes HEAD under every builder.",
-        "Ask the orchestrator.",
+        r"\bgit\s+(-C\s+\S+\s+)?push\b[^;&|\n]*(\s|:)main(\s|$)",
+        "main changes only through a reviewed pull request.",
+        "Push your branch (git push -u origin HEAD) and open a PR (gh pr create).",
     ),
 ]
 
 
 def in_tree(path: str) -> bool:
-    return path == TREE or path.startswith(TREE + "/")
+    # .private is its own repository (the private half of Ops AI), so its git commands follow its own rules.
+    private = os.path.join(TREE, ".private")
+    if path == private or path.startswith(private + "/") or "/.private" in path[len(LANES) :]:
+        return False
+    return path == TREE or path.startswith(TREE + "/") or path.startswith(LANES)
 
 
 def check(command: str, cwd: str) -> str | None:
     # Each step is checked in the folder it runs in: a `cd` moves the folder for the steps after it, and `git -C dir`
-    # names its own, so a chain that commits in another repo after visiting ops-ai is not refused.
-    # commit-paths.sh and the make targets run git inside themselves; only what is typed is checked. A rule matches a
-    # git command where a command starts (line start, after ; & | ( or env assignments), so "git commit" quoted inside
-    # a message, a heredoc or a commit body is not a command.
+    # names its own. A rule matches a git command where a command starts, so "git stash" quoted inside a message, a
+    # heredoc or a commit body is not a command.
     here = cwd
     for step in re.split(r"&&|\|\||;|\n", command):
         moved = re.match(r"\s*cd\s+['\"]?([^'\"\s;&|]+)", step)
@@ -110,58 +82,45 @@ def check(command: str, cwd: str) -> str | None:
             continue
         for pattern, why, instead in RULES:
             if re.search(pattern.replace(r"\bgit\s+", GIT), step, re.MULTILINE):
-                return f"Refused in the shared ops-ai tree: {why}\nInstead: {instead}"
+                return f"Refused in ops-ai: {why}\nInstead: {instead}"
     return None
 
 
 def self_test() -> int:
     cases = [
-        ("git commit -m x", True),
-        ("git -C . commit -am x", True),
         ("git stash", True),
-        ("git checkout HEAD -- README.md", True),
-        ("git checkout -- a.py", True),
-        ("git restore a.py", True),
-        ("git restore --staged a.py", False),
+        ("FOO=1 git stash", True),
         ("git reset --hard", True),
         ("git reset HEAD a.py", False),
         ("git clean -fd", True),
-        ("git switch main", True),
-        ("git checkout -b feat/x", True),
-        ("git checkout main", True),
-        ("git worktree add ../wt", True),
         ("NOHOOK=1 make x", True),
-        ("git add -A", True),
-        ("git add .", True),
-        ("git add a.py", False),
+        ("git commit --no-verify -m x", True),
         ("git push --force", True),
-        ("git rebase main", True),
-        ("git merge-base --is-ancestor a HEAD", False),
-        ("git merge feat/x", True),
+        ("git push origin main", True),
+        ("git push origin HEAD:main", True),
+        ("git push -u origin HEAD", False),
+        ("git push -u origin feat/api-own-account-run", False),
+        ("git commit -m x", False),
+        ("git add -A", False),
+        ("git switch -c feat/x", False),
+        ("git checkout main", False),
+        ("git worktree add ../ops-ai-lane-x", False),
+        ("git rebase origin/main", False),
+        ("git merge origin/main", False),
         ("git log --oneline", False),
-        ("git diff HEAD -- a.py", False),
-        ("bash scripts/commit-paths.sh /tmp/m a.py", False),
-        ("make commit FILES=a MSG=x", False),
-        ("git status --short", False),
-        ("git show HEAD:a.py", False),
-        ("cd /x && git commit -m y", False),
-        ("cd services/agents-service && git commit -m y", True),
-        ("FOO=1 git stash", True),
-        ("echo ok; git add -A", True),
-        ("make commit MSG='a plain git commit lost lines' FILES=a", False),
-        ("cat <<'EOF' > m\nwhy: a git checkout -- a.py wiped lines\nEOF", False),
-        ("python3 - <<'EOF'\ns = 'a git stash was blocked'\nEOF", False),
+        ("make commit MSG='a git stash was blocked' FILES=a", False),
+        ("python3 - <<'EOF'\ns = 'git push origin main'\nEOF", False),
     ]
     bad = [(c, want) for c, want in cases if (check(c, TREE) is not None) != want]
     for c, want in bad:
         print(f"FAIL {'refuse' if want else 'allow'}: {c}")
     hub = os.path.join(os.path.dirname(TREE), "other-repo")
     elsewhere = [
-        ("git commit -m x", hub, False),
-        (f"cd {TREE} && make x; cd ../other-repo && git commit -q -m y -- a", hub, False),
+        ("git stash", hub, False),
         (f"cd {TREE} && git stash", hub, True),
-        (f"git -C {TREE} commit -m x", hub, True),
-        (f"cd ../{os.path.basename(TREE)} && git add -A", hub, True),
+        ("git stash", LANES + "backend", True),
+        ("git stash", os.path.join(TREE, ".private"), False),
+        ("git push origin main", os.path.join(TREE, ".private"), False),
     ]
     for c, where, want in elsewhere:
         if (check(c, where) is not None) != want:

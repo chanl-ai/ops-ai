@@ -18,8 +18,15 @@ export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.e
 # checksum of this checkout's path: with one name for every checkout, `make db-down ISOLATED=1` in one removed the
 # stack a run in another was using. Two checkouts' isolated stacks still use the same ports, so a second one's `up`
 # fails on a taken port rather than joining the first.
+#
+# A lane worktree (scripts/lane.sh) carries its number in .lane, so every make target run there acts on that lane's own
+# stack: ports +number×1000, its own compose project and database. ISOLATED=1 from the main checkout is lane 1's ports.
+OPS_LANE := $(shell sed -n 's/^number=//p' '$(ROOT)/.lane' 2>/dev/null)
+ifneq ($(filter-out 0,$(OPS_LANE)),)
+  ISOLATED := 1
+endif
 ifeq ($(ISOLATED),1)
-  OPS_PORT_OFFSET := 1000
+  OPS_PORT_OFFSET := $(if $(filter-out 0,$(OPS_LANE)),$(OPS_LANE)000,1000)
   OPS_STACK := isolated
   OPS_COMPOSE_PROJECT := ops-runtime-isolated-$(shell printf '%s' '$(ROOT)' | cksum | cut -d' ' -f1)
 else
