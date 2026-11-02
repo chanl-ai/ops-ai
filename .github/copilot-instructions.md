@@ -13,12 +13,11 @@ Ops AI is an operational AI platform: Python services in `services/`, libraries 
 | Fixtures | Demo data lives only in `apps/console/src/lib/api/mock/`. Never put fixtures in types, hooks, components or pages |
 | Data flow | Pages read data through hooks; hooks call the API contract; components take props only |
 | Docs | Follow the doc standards in `CONTRIBUTING.md`; update cross-references when a file moves |
-| Hooks | Do not bypass the pre-commit hook with `--no-verify`; fix the cause |
+| Branches | Work on a branch and open a PR (`CONTRIBUTING.md`); never `--no-verify`, a stash or a push to `main` |
 | Secrets | Never commit `.env`, credentials or real customer data; `.env.example` is the only env file in git |
+| Names in code | A name or comment says what the thing is, never a card id (`c-631`), a board slice (`A2`) or a private path; readers have only this repo |
 
 ## Four rules every change follows
-
-The owner set these, and a review refuses a change that breaks one, even when a card or brief asks for it.
 
 | Rule | What it means here |
 |---|---|
@@ -26,8 +25,6 @@ The owner set these, and a review refuses a change that breaks one, even when a 
 | No hard coding | Who may do what is decided only by `can()` over the roles grid and team policies, with open defaults: never a check on a role name, an owner, an id prefix or a flag in code. Agents, workflows, tools, skills, guardrails and document types are database records seeded from files, never definitions in code. Settings come from the settings class, and states, kinds and limits are named constants or settings, not literal strings scattered through code. |
 | Use cases are configuration | Ops AI must serve thousands of use cases like the levy example. A use case is workflows, document types, agents, tools and settings a builder configures, never a code path, a screen or a field written for one use case. Screens and nodes are generic and read what to show from the step's settings and data; levy is one worked example among several in tests and docs. |
 | Design in layers | Inside a service: domain, then app, then adapters, then api, each depending only inward. Across the product: services, then API, then SDK, then console and CLI as thin peers. Subsystems never call each other to act; workflows compose them (`docs/architecture/service-map.md`). Anything that may later live outside us (a vault, models, search) sits behind a port with ours as one adapter. |
-
-Every spec has a short "Layers and reuse" section: each change's layer and the existing piece it reuses.
 
 ## Prompts for common tasks
 
