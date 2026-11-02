@@ -202,7 +202,7 @@ Read one levy document. One document of a levy email: its kind is detected, a do
 | Restraining notice handled (`notice_done`) | `ops.flow.end` |
 | Tax levy handled (`levy_done`) | `ops.flow.end` |
 | A case per person named (`notices`) | `ops.action.workflow` |
-| Levy notice handled (`notices_done`) | `ops.flow.end` |
+| Legal notice handled (`notices_done`) | `ops.flow.end` |
 | Handled by a person (`for_a_person`) | `ops.flow.end` |
 | Could not finish (`failed`) | `ops.flow.end` |
 | Save what was read (`save`) | `ops.files.setData` |
@@ -220,7 +220,7 @@ Read one levy document. One document of a levy email: its kind is detected, a do
 | `facts` | out | `kind` |
 | `kind` | restraining_notice | `notice_terms` |
 | `kind` | tax_levy | `levy_terms` |
-| `kind` | levy_notice | `notices` |
+| `kind` | legal_notice | `notices` |
 | `notices` | started | `notices_done` |
 | `notices` | error | `failed` |
 | `kind` | otherwise | `person` |
