@@ -1,0 +1,7 @@
+cases:
+  - name: known-customer
+    input: fixtures/known-customer.json
+    expected: expected/known-customer.json
+  - name: unknown-customer
+    input: fixtures/unknown-customer.json
+    expected: expected/unknown-customer.json

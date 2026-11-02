@@ -61,7 +61,7 @@ await withUiStack(
       const text = shown ? await card.innerText() : '';
       const ledger = (await (await fetch(`${agents}/chat/threads/${jt}`, { headers: J })).json()).data.messages.find((m) => m.budget)?.budget;
       const paused = { shown, text, ledger, raise: await james.getByTestId('budget-raise').count(), composer: await james.getByText('paused on its budget').count() };
-      check('a spent budget shows a card with the server’s numbers, Continue for the owner and no Raise for a builder', shown && !!ledger && text.includes(`${ledger.spent} of ${ledger.cap} model calls`) && paused.raise === 0 && paused.composer > 0, paused);
+      check('a spent budget shows a card with the server’s numbers, Continue for the maintainers and no Raise for a builder', shown && !!ledger && text.includes(`${ledger.spent} of ${ledger.cap} model calls`) && paused.raise === 0 && paused.composer > 0, paused);
 
       // The wrong person on each action is refused by the server.
       const otherContinue = await fetch(`${agents}/chat/threads/${jt}/budget`, { method: 'POST', headers: M, body: JSON.stringify({ action: 'continue' }) });

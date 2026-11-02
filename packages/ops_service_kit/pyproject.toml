@@ -19,3 +19,6 @@ packages = ["src/ops_service_kit"]
 [tool.uv.sources]
 ops-contracts = { workspace = true }
 ops-policy = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

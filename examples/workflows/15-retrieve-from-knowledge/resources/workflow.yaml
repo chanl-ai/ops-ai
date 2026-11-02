@@ -1,0 +1,35 @@
+schemaVersion: 2
+id: retrieve_from_knowledge
+name: Retrieve from knowledge
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Question
+- id: search
+  type: ops.ai.knowledge
+  typeVersion: 1
+  name: Handbook
+  parameters:
+    query: $.input.question
+    limit: 3
+- id: found
+  type: ops.flow.end
+  typeVersion: 1
+  name: Found
+  parameters:
+    outcome: found
+    output: $.nodes.search.out
+- id: missing
+  type: ops.flow.end
+  typeVersion: 1
+  name: Not found
+  parameters:
+    outcome: not_found
+connections:
+- from: {node: start, port: payload}
+  to: {node: search, port: in}
+- from: {node: search, port: found}
+  to: {node: found, port: in}
+- from: {node: search, port: notFound}
+  to: {node: missing, port: in}

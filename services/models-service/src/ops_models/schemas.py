@@ -16,11 +16,19 @@ class Health(BaseModel):
 
 
 class ProviderOut(Out):
+    """A provider connection: where its calls go and the name of the key it signs in with, never the key."""
+
     id: str
     name: str
     type: str
     base_url: str | None
     key_ref: str | None
+    # azure-openai only: `v1` or a dated version, the region it names, and the region Azure last answered from.
+    api_version: str | None = None
+    region: str | None = None
+    observed_region: str | None = None
+    # `answered from <region>, expected <region>` when they differ; computed here so no client compares regions.
+    region_mismatch: str | None = None
 
 
 class ProviderKeyOut(Out):

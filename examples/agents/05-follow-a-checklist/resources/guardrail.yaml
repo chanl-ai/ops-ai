@@ -1,0 +1,8 @@
+name: No investment advice
+kind: blocked_topics
+topics:
+  - investment advice
+  - which fund or stock to buy
+message: I can't give investment advice. A licensed adviser at the branch can help with that.
+scopes:
+  investment advice: Buy, sell or recommend a security, fund or stock. Bank deposit products are not this topic.

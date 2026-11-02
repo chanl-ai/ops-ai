@@ -242,7 +242,18 @@
         "typeVersion": 1,
         "name": "Read requested",
         "parameters": {
-          "event": "file.read_requested"
+          "event": "file.read_requested",
+          "inputSchema": {
+            "type": "object",
+            "required": ["fileId"],
+            "properties": {
+              "fileId": {
+                "type": "string",
+                "title": "File",
+                "format": "file"
+              }
+            }
+          }
         }
       },
       {
@@ -623,6 +634,87 @@
   },
   {
     "schemaVersion": 2,
+    "id": "extraction_read_save",
+    "name": "Save a read on its file",
+    "description": "When a file is read as a document type by any workflow, agent or API call, saves what it was read as on the file, so Files shows Read as and the fields to check.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "File read",
+        "parameters": {
+          "event": "extraction.read"
+        }
+      },
+      {
+        "id": "save",
+        "type": "ops.files.setData",
+        "typeVersion": 1,
+        "name": "Save what was read",
+        "parameters": {
+          "file": "$.input.fileId",
+          "read": "$.input",
+          "typeName": "$.input.typeName",
+          "checked": false
+        }
+      },
+      {
+        "id": "saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Saved",
+        "parameters": {
+          "outcome": "saved",
+          "output": "$.nodes.save.out"
+        }
+      },
+      {
+        "id": "not_saved",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Not saved",
+        "parameters": {
+          "outcome": "not_saved",
+          "result": "failed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "save",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "ok"
+        },
+        "to": {
+          "node": "saved",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
     "id": "api_task",
     "name": "Task from the API",
     "description": "A task an API caller posted with a task type and its values; a person decides it in Human Tasks and the caller reads the decision.",
@@ -696,6 +788,113 @@
         },
         "to": {
           "node": "rejected",
+          "port": "in"
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "id": "app_account_reconnect",
+    "name": "Reconnect an app",
+    "description": "An app turned down the team's account, or its sign-in ended; the team's admins reconnect it on the app's page.",
+    "nodes": [
+      {
+        "id": "start",
+        "type": "ops.trigger.event",
+        "typeVersion": 1,
+        "name": "Account stopped working",
+        "parameters": {
+          "event": "app_account.needs_reconnect",
+          "inputSchema": {
+            "type": "object",
+            "required": ["app", "environment", "state", "reason"],
+            "properties": {
+              "app": {"type": "string", "title": "App"},
+              "environment": {"type": "string", "title": "Environment"},
+              "state": {"type": "string", "title": "State"},
+              "reason": {"type": "string", "title": "What the app said"}
+            }
+          }
+        }
+      },
+      {
+        "id": "task",
+        "type": "ops.flow.humanReview",
+        "typeVersion": 1,
+        "name": "Reconnect the app",
+        "parameters": {
+          "title": "Reconnect an app",
+          "taskType": {
+            "id": "app_reconnect"
+          },
+          "params": {
+            "title": "Reconnect {$.input.app}'s team account",
+            "said": "{$.input.reason} Reconnect it on the app's page under Apps; runs that use it fail until then.",
+            "facts": [
+              {
+                "label": "App",
+                "value": "$.input.app"
+              },
+              {
+                "label": "Environment",
+                "value": "$.input.environment"
+              },
+              {
+                "label": "State",
+                "value": "$.input.state"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "reconnected",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Reconnected",
+        "parameters": {
+          "outcome": "reconnected"
+        }
+      },
+      {
+        "id": "dismissed",
+        "type": "ops.flow.end",
+        "typeVersion": 1,
+        "name": "Dismissed",
+        "parameters": {
+          "outcome": "dismissed"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "from": {
+          "node": "start",
+          "port": "payload"
+        },
+        "to": {
+          "node": "task",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "task",
+          "port": "approve"
+        },
+        "to": {
+          "node": "reconnected",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "task",
+          "port": "reject"
+        },
+        "to": {
+          "node": "dismissed",
           "port": "in"
         }
       }

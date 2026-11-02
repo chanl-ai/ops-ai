@@ -40,6 +40,10 @@ fi
 GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-docs.mjs docs/README.md "${present[@]}"
 if touches '^scripts/check-public-paths\.mjs$'; then node scripts/check-public-paths.mjs --self-test; fi
 if [ "${#present[@]}" -gt 0 ]; then node scripts/check-public-paths.mjs "${present[@]}"; fi
+if [ "${#present[@]}" -gt 0 ]; then
+  "$root/.venv/bin/python" "$root/scripts/scrub_board_paths.py" --root "$PWD" --check "${present[@]}" \
+    || { echo "verify-staged: a staged file names a home path or the machine login; run uv run python scripts/scrub_board_paths.py --apply"; exit 1; }
+fi
 # Access decided outside can() (a 403, a role name, a system lock, a closed policy default) fails unless the access
 # register records it (access-exceptions-allowlist.txt). It reads service and package code and the console, so it runs
 # when one of those or the allowlist is staged. GIT_DIR lets it read the allowlist at HEAD, so a line being added on a
@@ -73,6 +77,11 @@ gate golden-ddl '(^|/)migrations/|/store/|^packages/ops_store/|^deploy/database/
   "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider deploy/database/tests/test_mssql_ddl.py \
     deploy/database/tests/test_offline.py deploy/database/tests/test_model_parity.py
 # Every table is marked TENANT_SCOPED or system(reason); a migration that adds one unmarked turned HEAD red overnight.
+# A migration's downgrade must undo its upgrade: the runtime-logins test migrates each chain down and back up, and
+# three empty downgrades (tools 0048, 0049, 0050) each held QA red for about an hour on 10-31.
+gate downgrades '/migrations/versions/.*\.py$' \
+  "a staged migration's downgrade() does nothing; make it undo exactly what upgrade() did" \
+  python3 "$root/scripts/check_downgrades.py" --root "$PWD" "${staged[@]}"
 gate isolation '(^|/)migrations/|/store/|^packages/ops_store/' \
   "a table is not marked TENANT_SCOPED or system(reason) (above); mark it in its store models" \
   "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider deploy/database/tests/test_isolation_markings.py \
@@ -111,6 +120,12 @@ gate standards '^(services|packages)/.*\.py$' \
 # Python files in the commit get the same lint, format, type and inventory checks verify-head runs. They slipped past the
 # console-only gate above and turned HEAD red for every builder until someone fixed them forward.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
+# Lint and format first: they take a second and fail most often, so a commit that will be refused says so before the
+# minutes of import, openapi and type checks below (the same checks, only earlier).
+if [ "${#py[@]}" -gt 0 ]; then
+  "$root/.venv/bin/ruff" check "${py[@]}"
+  "$root/.venv/bin/ruff" format --check "${py[@]}"
+fi
 # Database code only in store packages, and the layers' import directions (.importlinter, c-346), on this export: the
 # shared venv's editable installs point at the working tree, so the export's source goes first on PYTHONPATH.
 if [ "${#py[@]}" -gt 0 ] || [ -n "$(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only -- .importlinter)" ]; then
@@ -146,8 +161,6 @@ if grep -q -- '--commits' scripts/check_portable_store.py && { [ "${#py[@]}" -gt
   "$root/.venv/bin/python" "$root/scripts/check_portable_store.py" --commits
 fi
 if [ "${#py[@]}" -gt 0 ]; then
-  "$root/.venv/bin/ruff" check "${py[@]}"
-  "$root/.venv/bin/ruff" format --check "${py[@]}"
   # Strict pyright on the commit's own Python files, the ones a service or package type-checks, on this export. The
   # shared virtualenv's editable installs point at the working tree, where another builder's uncommitted edit made it
   # fail or pass a commit by accident, so a pyrightconfig.json written into the export puts the export's sources first

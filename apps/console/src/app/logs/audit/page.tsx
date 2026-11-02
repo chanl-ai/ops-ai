@@ -28,6 +28,7 @@ import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api';
 import { dateTime, plural, relativeTime } from '@/lib/format';
 import type { AuditEntry, AuditFilters, AuditView } from '@/lib/types/governance';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = AuditEntry & { onRowClick: (e: AuditEntry) => void };
 
@@ -200,15 +201,7 @@ export default function AuditPage() {
               ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', teams.map((t) => ({ value: t.id, label: t.name }))) }] : []),
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
                 icon={History}

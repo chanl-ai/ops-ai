@@ -13,10 +13,12 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from apps_layer import run_path
 from fake_salesforce import salesforce
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
+    agents,
     bearer,
     check,
     data,
@@ -94,6 +96,8 @@ with ExitStack() as stack:
     gw = stack.enter_context(
         tools({**sf["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
     )
+    # agents-service on the scripted model, for step 45's chat turn; its tools come from this tools-service.
+    chat = stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH))
     sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
     priya_session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(priya_session, "team_ops")
@@ -213,6 +217,89 @@ with ExitStack() as stack:
         {"again": again, "works": works.status_code},
     )
 
+    # 40-42 (group D): the app's tools on its page, and a tool run from the tool page.
+    page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
+    tools_on_page = {t.get("name"): t.get("title") for t in page.get("tools") or []}
+    module = str(((page.get("card") or {}).get("moduleIds") or ["mod_missing"])[0])
+    run = run_path(module, "salesforce_query")
+    check(
+        "40 the app's page lists its tools by name and title",
+        bool(tools_on_page.get("salesforce_query")) and tools_on_page["salesforce_query"] != "salesforce_query",
+        tools_on_page,
+    )
+
+    # 41. A Mock run answers from the tool's mock and nothing reaches Salesforce.
+    sent_before = len(sf["fake"].state()["queries"])
+    mocked = gw.post(run, json={"mode": "mock", "input": {"q": QUERY}}, headers=james)
+    check(
+        "41 a Mock run answers without reaching Salesforce",
+        mocked.status_code == 200
+        and (data(mocked) or {}).get("mocked") is True
+        and len(sf["fake"].state()["queries"]) == sent_before,
+        ("target: waits on P1", mocked.text[:200]),
+    )
+
+    # 42. A Real run goes through the gateway's checks with the team's account and reaches Salesforce.
+    real = gw.post(run, json={"mode": "real", "input": {"q": QUERY}}, headers=james)
+    records = ((data(real) or {}).get("output") or {}).get("records") or [{}]
+    check(
+        "42 a Real run reads the case with the team's account through the gateway, and the call is logged",
+        real.status_code == 200
+        and records[0].get("CaseNumber") == "00044818"
+        and bool((data(real) or {}).get("callId"))
+        and QUERY in sf["fake"].state()["queries"][sent_before:],
+        ("target: waits on P1", real.text[:300]),
+    )
+
+    # 45 (S7). A grant saved while an older publish request waits is what goes live, and chat offers it at
+    # once: the request for the newest draft replaces the waiting one, Maya approves it, and the first turn calls it.
+    maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
+    # Every agent publish in team_ops waits for review here, so the first request is still waiting at the second.
+    policy = api.put("/v1/policies/publishReview", json={"value": {"agents": "always"}}, headers=priya)
+    helper = data(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james)) or {}
+    first = (
+        data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james)) or {}
+    )
+    waiting = chat.post(
+        f"/v1/agents/{helper.get('id')}/publish-requests", json={"version": first.get("version")}, headers=james
+    )
+    granted = data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"toolIds": ["salesforce_query"]}, headers=james))
+    asked = chat.post(
+        f"/v1/agents/{helper.get('id')}/publish-requests",
+        json={"version": (granted or {}).get("version")},
+        headers=james,
+    )
+    # The team's policy may publish the newest draft at once (its builder holds the reviewer role); else Maya approves.
+    if (data(asked) or {}).get("status") != "approved":
+        chat.post(
+            f"/v1/publish-requests/{(data(asked) or {}).get('id')}/decision",
+            json={"decision": "approved"},
+            headers=maya,
+        )
+    old = data(chat.get(f"/v1/publish-requests/{(data(waiting) or {}).get('id')}", headers=maya)) or {}
+    thread = data(chat.post("/chat/threads", json={"agentId": helper.get("id"), "kbIds": []}, headers=james)) or {}
+    turn = chat.post(
+        f"/chat/threads/{thread.get('id')}/messages",
+        json={"content": f'call salesforce_query {{"q": "{QUERY}"}}'},
+        headers=james | {"Accept": "text/event-stream"},
+    )
+    check(
+        "45 the request for the newest draft replaces the waiting one, and after Maya approves it the first chat turn "
+        "calls the newly granted salesforce_query",
+        (data(waiting) or {}).get("status") == "pending"
+        and asked.status_code == 201
+        and old.get("status") == "returned"
+        and "salesforce_query" in turn.text
+        and '"totalSize": 1' in turn.text,
+        {
+            "policy": policy.text[:160],
+            "waiting": (data(waiting) or {}).get("status"),
+            "asked": (asked.status_code, (data(asked) or {}).get("status")),
+            "old": old.get("status"),
+            "turn": turn.text[-300:],
+        },
+    )
+
     # 11. The platform admin turns it off for the install: every team's calls stop within seconds, with no restart.
     install(api, sam, False)
     time.sleep(6)
@@ -236,14 +323,14 @@ with ExitStack() as stack:
     )
 
     # 24. The platform sets up its own OAuth app once: the client id in the install switch, the secret at the account.
-    # A team admin cannot set it.
-    by_team = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=priya)
+    # A team's builder cannot set it.
+    by_team = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=james)
     policy = install(api, sam, True, client=PLATFORM_CLIENT)
     secret = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=sam)
     check(
-        "24 the platform admin sets up the platform's own OAuth app; a team admin cannot",
+        "24 the platform admin sets up the platform's own OAuth app; a team's builder cannot",
         by_team.status_code == 403 and policy.status_code == 200 and secret.status_code == 200,
-        {"team admin": by_team.status_code, "policy": policy.text[:200], "secret": secret.text[:200]},
+        {"builder": by_team.status_code, "policy": policy.text[:200], "secret": secret.text[:200]},
     )
 
     # 25. A second team turns Salesforce on with no app of its own. Until it signs in, its calls never run on another

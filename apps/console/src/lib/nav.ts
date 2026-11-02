@@ -61,8 +61,8 @@ export const NAV: NavGroup[] = [
       // Wiki is hidden from the sidebar (owner, 2026-10-23); its pages still answer at /wiki.
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      // One row per system, with switches for syncing knowledge and exposing tools.
-      { title: 'Connections', url: '/integrations', icon: IconPlugConnected },
+      // The Apps menu: the catalog, My accounts and Tools as tabs (owner, 11-01).
+      { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
       { title: 'Files', url: '/files', icon: IconFolder },
@@ -74,7 +74,7 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/logs/tool-calls', icon: IconTool }, { title: 'Audit log', url: '/logs/audit', adminOnly: true, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', adminOnly: true, icon: IconHeartbeat }] },
+      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', icon: IconTool }, { title: 'Audit log', url: '/logs/audit', adminOnly: true, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', adminOnly: true, icon: IconHeartbeat }] },
       { title: 'Access', tabTitle: 'Members', url: '/access', icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
       { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },

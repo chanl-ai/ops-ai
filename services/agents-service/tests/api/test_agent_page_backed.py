@@ -100,7 +100,7 @@ async def test_the_agent_says_which_controls_work(stack: tuple[AsyncClient, Runt
             "maxModelCallsPerConversation",
             "maxCostPerConversation",
         ],
-        "evals": False,
+        "evals": True,
     }
 
 

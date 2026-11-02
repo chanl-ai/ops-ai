@@ -1,0 +1,48 @@
+id: wait-for-verification
+title: Wait for an external verification result
+track: workflow
+status: built
+difficulty: advanced
+outcome: Start a check, release the worker, and resume when the result arrives.
+capabilities:
+- id: ops.trigger.request
+  status: built
+- id: ops.action.tool
+  status: built
+- id: ops.flow.waitFor
+  status: built
+- id: ops.flow.switch
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+- resources/tools.yaml
+fixtures:
+- fixtures/clear.json
+- fixtures/review.json
+- fixtures/missing.json
+- fixtures/timeout.json
+- fixtures/start.json
+expected:
+- expected/clear.json
+- expected/review.json
+- expected/missing.json
+- expected/timeout.json
+- expected/waiting.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+teaches:
+- start a check then release the worker
+- resume on the public callback
+- switch clear versus review
+- timeout or a failed start ends as check_failed

@@ -1,0 +1,35 @@
+schemaVersion: 2
+id: send_a_message
+name: Send a message
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Inbound
+- id: send
+  type: ops.action.send
+  typeVersion: 1
+  name: Reply
+  parameters:
+    body: $.input.body
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Sent
+  parameters:
+    outcome: sent
+    output: $.nodes.send.out
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Failed
+  parameters:
+    outcome: send_failed
+    result: failed
+connections:
+- from: {node: start, port: payload}
+  to: {node: send, port: in}
+- from: {node: send, port: sent}
+  to: {node: done, port: in}
+- from: {node: send, port: error}
+  to: {node: failed, port: in}

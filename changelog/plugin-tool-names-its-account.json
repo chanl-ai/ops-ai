@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "An app's tool page names your team's account",
+  "description": "A tool from an app your team connected shows the team's account it runs with, instead of saying it has no connection yet.",
+  "tag": "fix",
+  "cards": [
+    "c-616"
+  ]
+}

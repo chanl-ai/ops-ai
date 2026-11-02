@@ -11,24 +11,28 @@ deciding a task and starting a run are the person's own presses on the card.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any, cast
 
 from langgraph.config import get_config
 
 from ops_access import can
+from ops_access.platform_events import TEAM_CREATED, Handler
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
 from ops_contracts.chat import ChatMessage
 from ops_engine.node_types import start_form
 from ops_service_kit.errors import ApiError
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..activities.catalog import AgentDefinition
 from ..graphs.common import OPS_SERVER
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
+from ..store.tenancy import ASSISTANT_CATCH_UP
 from . import hitl_facade
-from .agent_registry import go_live, registry, spec_from_seed
+from .agent_registry import SEED_FIELDS, go_live, registry, seed_agent_version, spec_from_seed
 from .auth import Principal, caller_of, reader_teams
 from .child_runs import TURN_PERSON, ChildRuns, engine_workflows
 from .deps import Runtime
@@ -38,13 +42,17 @@ from .runs import graph_store
 log = get_logger("ops_agents.ops_tools")
 
 LIMIT = 5
-# Who the registry records as having made a team's Ops Assistant: the platform, on the team's first chat.
+# Who the registry records as having made a team's Ops Assistant: the platform.
 SYSTEM = "system:ops-assistant"
-# The team's Ops Assistant, made on its first chat when it has no default agent: read tools only, fixed instructions.
+# The built-in read tools tools-service provisions in every team (its BUILT_IN apps, c-616): the assistant is granted
+# them like any other tool, through the team's tool gateway.
+BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
+# The team's Ops Assistant, the team default agents-service provisions (c-616): read tools only, fixed instructions.
+# `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
-    "role": "Finds your cases, Human Tasks and runs, and starts workflows",
-    "version": 1,
+    "role": "Finds your cases, Human Tasks and runs, answers from your knowledge and files, and starts workflows",
+    "version": 2,
     "instructions": [
         {
             "text": "You are Ops Assistant, the team's assistant in Ops AI. You help the person you are talking with "
@@ -57,11 +65,16 @@ OPS_ASSISTANT: dict[str, Any] = {
             "details; never repeat a card's fields."
         },
         {
+            "text": "Use search_knowledge to answer from the team's knowledge bases and say where the answer came "
+            "from; read_file to read a file the team uploaded, by its name or id; read_document to read a document's "
+            "fields with one of the team's document types."
+        },
+        {
             "text": "You cannot decide a task or start a run yourself: the person does that with the buttons on the "
             "card. If they ask you to, show the card and say which button to press."
         },
     ],
-    "tools": [],
+    "tools": list(BUILT_IN_READS),
     "default_kb_ids": [],
     "suggestions": ["What needs me today?", "Find a case", "Start a workflow", "What happened to my last run?"],
     "max_tool_calls": 4,
@@ -72,19 +85,63 @@ def ops_assistant_id(team_id: str) -> str:
     return f"ag_ops_{team_id}"
 
 
+def _declared(rt: Runtime, aid: str) -> dict[str, Any]:
+    return spec_from_seed(AgentDefinition.model_validate({**OPS_ASSISTANT, "id": aid}), rt.settings.model_alias)
+
+
+async def follow_declared(rt: Runtime, team_id: str) -> None:
+    """Brings the team's Ops Assistant to the declared one (OPS_ASSISTANT) as a new version, when its published version
+    is still the platform's; once a person has published a version the assistant is the team's and is left alone."""
+    aid = ops_assistant_id(team_id)
+    reg = registry(rt)
+    row = await reg.row(aid)
+    if row["published_version"] is None:
+        return
+    published = await reg.version(aid, int(row["published_version"]))
+    if published["saved_by"] != SYSTEM:
+        return
+    want = {k: v for k, v in _declared(rt, aid).items() if k in SEED_FIELDS}
+    if all(published["spec"].get(k) == v for k, v in want.items()):
+        return
+
+    async def change(s: dict[str, Any]) -> dict[str, Any]:
+        return {**s, **want}
+
+    await seed_agent_version(rt, aid, change, f"Ops Assistant {OPS_ASSISTANT['version']}", by=SYSTEM)
+
+
 async def ensure_ops_assistant(rt: Runtime, team_id: str) -> AgentDefinition:
     """The team's Ops Assistant, made, published and set as the team's default on its first chat when the team has no
-    default agent (c-469). Its id comes from the team, so two first chats at once make one: the second insert meets the
-    first's row and serves it. Setting the default is recorded like a team admin's (`TeamDefaults.set_agent`, `by`)."""
+    default agent (c-469), as the declared one (c-616). Its id comes from the team, so two first chats at once make one:
+    the second insert meets the first's row and serves it. Setting the default is recorded like a team admin's
+    (`TeamDefaults.set_agent`, `by`)."""
     aid = ops_assistant_id(team_id)
     if (live := rt.catalog.agent(aid)) is None:
-        spec = spec_from_seed(AgentDefinition.model_validate({**OPS_ASSISTANT, "id": aid}), rt.settings.model_alias)
+        spec = _declared(rt, aid)
         # False when another first chat of the team made it a moment ago; either way it is served below.
-        await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=team_id, agent_id=aid)
-        go_live(rt, aid, 1, spec)
+        if not await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=team_id, agent_id=aid):
+            await follow_declared(rt, team_id)
+        if rt.catalog.agent(aid) is None:
+            go_live(rt, aid, 1, spec)
         live = cast(AgentDefinition, rt.catalog.agent(aid))
     await TeamDefaults(rt.db).set_agent(team_id, aid, by=SYSTEM)
     return live
+
+
+async def catch_up_assistants(rt: Runtime) -> int:
+    """At start: every team whose default agent is its Ops Assistant gets the declared one, if nobody changed it; a
+    failure in one tenant is logged and the rest go on. Returns how many teams were looked at."""
+    seen = 0
+    for tenant_id, team_id, agent_id in await TeamDefaults(rt.db).on_agents(ops_assistant_id("")):
+        if agent_id != ops_assistant_id(team_id):
+            continue
+        seen += 1
+        try:
+            with isolation.tenant_wide(ASSISTANT_CATCH_UP, tenant_id=tenant_id):
+                await follow_declared(rt, team_id)
+        except Exception as e:  # one tenant's failure must not stop the others, nor the service's start
+            log.warning("ops_assistant_catch_up_failed", tenant=tenant_id, error=type(e).__name__)
+    return seen
 
 
 _TEXT = {"type": "string", "maxLength": 200}
@@ -327,3 +384,17 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
                 await _filled(rt, me, cast(dict[str, Any], c)) for c in cast(list[Any], cards) if isinstance(c, dict)
             ]
             call.output = {**output, "cards": filled}
+
+
+def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:
+    """A team platform-service just made gets its Ops Assistant as its default agent (c-616 PV2), unless the team
+    already has a default (a repeat delivery after a team admin chose another), which is left as it is."""
+
+    async def provision(_tenant: str, team_id: str, _payload: dict[str, Any]) -> int:
+        rt = runtime()
+        if await TeamDefaults(rt.db).agent(team_id) is not None:
+            return 0
+        await ensure_ops_assistant(rt, team_id)
+        return 1
+
+    return {TEAM_CREATED: Handler("agents", "create", provision)}

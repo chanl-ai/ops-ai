@@ -1,7 +1,8 @@
-// uc-101 a builder builds and debugs a tool operation on its full-width workbench, ui layer:
-// docs/usecases/console/tool-workbench.md. Signed in through platform-service as the seeded people. A published module
-// with the core bank's statement read (its key in the query string, as the fake's legacy route takes it) is set up
-// through the API; everything after is clicked on the workbench. Each step is checked on its own.
+// uc-101 a builder builds and debugs a REST tool on its own page, ui layer: docs/usecases/console/tool-workbench.md.
+// Signed in through platform-service as the seeded people. A published module with the core bank's statement read (its
+// key in the query string, as the fake's legacy route takes it) and a mock answer are set up through the API; everything
+// after is clicked on the REST tool page (the API-client layout; functions keep the Function workbench). Each step is
+// checked on its own.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -43,6 +44,8 @@ await withUiStack(
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-101' }) }));
     await approveToolReview(id, N, J);
     const opNow = async () => (await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }))).operations.find((o) => o.name === OP);
+    // The operation's example answer, which Mock answers with and a Real run in Test never does: a balance to transform.
+    await json(await fetch(`${tools}/v1/tool-modules/${id}/operations/${(await opNow()).id}/mocks`, { method: 'POST', headers: J, body: JSON.stringify({ name: 'statement', environment: 'example', default: true, status: 200, body: { accountId: ACCOUNT, closingBalance: 1520.33, lines: 4 } }) }));
 
     const browser = await chromium.launch();
     const errors = [];
@@ -57,13 +60,18 @@ await withUiStack(
       const panel = page.getByTestId('module-test-panel');
       const run = async () => {
         const ran = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/tool-modules/${id}/test`), { timeout: 60_000 }));
-        await panel.getByRole('button', { name: 'Run' }).click();
+        await panel.getByTestId('run').click();
         const res = await ran;
         return { res, body: res ? await res.text() : '', data: res ? (JSON.parse((await res.text()) || '{}').data ?? {}) : {} };
       };
       const tab = async (name) => {
         await panel.getByRole('tab', { name }).click();
-        return panel.getByRole('tabpanel').innerText();
+        return panel.getByRole('tabpanel').last().innerText();
+      };
+      // Raw response, Log, Transform and Mock answers sit under the answer's More.
+      const more = async (item) => {
+        await panel.getByTestId('answer-more').click();
+        await page.getByRole('menuitem', { name: item }).click();
       };
 
       // 1. A row of the operations table opens the operation on its own page; the module page has no side console.
@@ -71,51 +79,45 @@ await withUiStack(
         await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const row = page.getByRole('row', { name: new RegExp(OP) });
         await row.waitFor({ timeout: 120_000 });
-        // The row is one tab stop: one link to the workbench in its name cell, and no tabindex on the row itself.
+        // The row is one tab stop: one link to the tool page in its name cell, and no tabindex on the row itself.
         const rowLinks = await row.locator(`a[href$="/operations/${OP}"]`).count();
         const rowTabindex = await row.getAttribute('tabindex');
         const sideConsole = await page.getByTestId('module-test-panel').count();
         await row.click();
         await page.waitForURL(`**/tools/${id}/operations/${OP}`, { timeout: 60_000 });
-        const shown = await page.getByTestId('tool-workbench').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-        const width = shown ? (await page.getByTestId('tool-workbench').boundingBox())?.width ?? 0 : 0;
+        const shown = await panel.waitFor({ timeout: 60_000 }).then(() => true, () => false);
+        const width = shown ? (await panel.boundingBox())?.width ?? 0 : 0;
         check('1 the operation opens on its own full-width page', sideConsole === 0 && shown && width > 900 && rowLinks === 1 && rowTabindex === null, { sideConsole, shown, width, rowLinks, rowTabindex });
       });
 
-      // 2. A draft mock and transform run on the mock without staging; the operation agents call is unchanged.
-      await step('2 a draft mock and transform run without changing the operation', async () => {
-        await page.locator('#wb-stub').fill(JSON.stringify({ accountId: ACCOUNT, closingBalance: 1520.33, lines: 4 }));
+      // 2. The mock answer and a draft transform run on Mock without saving; the operation agents call is unchanged.
+      await step('2 a mock answer and a draft transform run without changing the operation', async () => {
+        await more('Transform');
         await page.locator('#wb-transform').fill('{"balance": {{ data.closingBalance }}}');
-        await panel.locator(`#t-account_id`).fill(ACCOUNT);
+        await page.getByRole('tab', { name: 'Inputs' }).click().catch(() => undefined);
+        await panel.locator('#t-account_id').fill(ACCOUNT);
         const { res, data } = await run();
-        const output = await tab('Output');
-        const raw = await tab('Raw response');
+        const output = await tab('Response');
+        await more('Raw response');
+        const raw = await panel.getByRole('tabpanel').last().innerText();
         const op = await opNow();
         const detail = await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
         check(
-          '2 a draft mock and transform run without changing the operation',
-          res?.status() === 200 && /"balance":\s*1520\.33/.test(output) && /closingBalance/.test(raw) && !op.responseTransform && JSON.stringify(op.stub) === '{"ok":true}' && detail.pendingChanges.length === 0,
-          { status: res?.status(), output: output.slice(0, 120), raw: raw.slice(0, 120), stub: op.stub, transform: op.responseTransform ?? null, pending: detail.pendingChanges.length, log: data.log?.map((l) => l.message) },
+          '2 a mock answer and a draft transform run without changing the operation',
+          res?.status() === 200 && /"balance":\s*1520\.33/.test(output) && /closingBalance/.test(raw) && !op.responseTransform && detail.pendingChanges.length === 0,
+          { status: res?.status(), output: output.slice(0, 120), raw: raw.slice(0, 120), transform: op.responseTransform ?? null, pending: detail.pendingChanges.length, log: data.log?.map((l) => l.message) },
         );
-      });
-
-      // 2b. The Run-as list names each context plainly: the owner's has no workflow, so no dangling separator.
-      await step('2b the Run-as list has no dangling separator', async () => {
-        await panel.locator('#t-ctx').click();
-        const options = await page.getByRole('option').allInnerTexts();
-        await page.keyboard.press('Escape');
-        check('2b the Run-as list has no dangling separator', options.length > 0 && options.some((o) => o.trim() === 'Module owner, no case') && !options.some((o) => o.trim().startsWith('·')), options);
       });
 
       // 3. A secret value typed for one run reaches the bank; the request shows it masked, and nothing returns it.
       await step('3 a typed secret runs live and shows masked', async () => {
         await page.locator('#wb-transform').fill('');
+        await page.getByRole('tab', { name: 'Headers' }).click();
         await page.getByLabel('STATEMENTS_API_KEY test value').fill(BANK_KEY);
-        await panel.getByRole('radio', { name: 'Test environment' }).or(panel.getByRole('button', { name: 'Test environment' })).first().click();
-        await panel.locator(`#t-account_id`).fill(ACCOUNT);
+        await panel.getByTestId('run-mode').getByRole('radio', { name: 'Real' }).click();
         const { res, body, data } = await run();
-        const request = await tab('Request');
-        const output = await tab('Output');
+        const request = await tab('Request sent');
+        const output = await tab('Response');
         const ok = await panel.getByText('Allowed').count();
         check(
           '3 a typed secret runs live and shows masked',
@@ -127,6 +129,7 @@ await withUiStack(
       // 3b. A value typed for one run leaves the page when the run ends. React writes a controlled input's value into its
       // `value` attribute, so a kept state keeps the secret in the page's HTML.
       await step('3b the typed secret is gone from the page once the run ends', async () => {
+        await page.getByRole('tab', { name: 'Headers' }).click();
         const input = page.getByLabel('STATEMENTS_API_KEY test value');
         const kept = await input.inputValue();
         const attribute = await input.getAttribute('value');
@@ -134,15 +137,16 @@ await withUiStack(
         check('3b the typed secret is gone from the page once the run ends', kept === '' && !attribute && !inHtml, { kept: kept ? 'still typed' : '', attribute, inHtml });
       });
 
-      // 4. A transform that fails says why under the field and on the result; the output is the raw answer.
+      // 4. A transform that fails says why under the field and on the result; the response is the raw answer.
       await step('4 a failing transform shows its reason', async () => {
-        await panel.getByRole('radio', { name: 'Mock' }).or(panel.getByRole('button', { name: 'Mock' })).first().click();
+        await panel.getByTestId('run-mode').getByRole('radio', { name: 'Mock' }).click();
         await page.locator('#wb-transform').fill('{"b": {{ data.closing.balance }}}');
-        await panel.locator(`#t-account_id`).fill(ACCOUNT);
+        await page.getByRole('tab', { name: 'Inputs' }).click().catch(() => undefined);
+        await panel.locator('#t-account_id').fill(ACCOUNT);
         const { data } = await run();
         const onResult = await panel.getByTestId('test-transform-error').waitFor({ timeout: 30_000 }).then(() => true, () => false);
         const underField = await page.locator('#wb-transform').locator('xpath=ancestor::*[@data-slot="form-item" or contains(@class,"flex-col")][1]').innerText().catch(() => '');
-        const output = await tab('Output');
+        const output = await tab('Response');
         check(
           '4 a failing transform shows its reason',
           !!data.transformError && onResult && underField.includes('closing') && /closingBalance/.test(output),
@@ -150,22 +154,23 @@ await withUiStack(
         );
       });
 
-      // 5. The edited mock is staged with the rest and listed as a change to publish.
-      await step('5 the edited mock is staged and listed for review', async () => {
-        await page.locator('#wb-transform').fill('');
-        const staged = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/tool-modules/${id}/operations/`), { timeout: 60_000 }));
+      // 5. A saved transform is a change to publish, listed on the module.
+      await step('5 a saved transform is listed as an unpublished change', async () => {
+        await page.locator('#wb-transform').fill('{"balance": {{ data.closingBalance }}}');
+        const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/tool-modules/${id}/operations/`), { timeout: 60_000 }));
         await page.getByTestId('workbench-stage').click();
-        const res = await staged;
+        const res = await saved;
         const sent = res ? JSON.parse(res.request().postData() ?? '{}') : {};
         const detail = await json(await fetch(`${tools}/v1/tool-modules/${id}`, { headers: J }));
-        const change = detail.pendingChanges.find((c) => c.operation === OP && c.detail === 'Mock response edited');
+        const change = detail.pendingChanges.find((c) => c.operation === OP);
         await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const listed = await page.getByText(/unpublished change/).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
-        check('5 the edited mock is staged and listed for review', res?.status() === 200 && sent.stub?.closingBalance === 1520.33 && change?.major === false && listed, { status: res?.status(), sent: sent.stub, change, listed });
+        check('5 a saved transform is listed as an unpublished change', res?.status() === 200 && /closingBalance/.test(sent.responseTransform ?? '') && !!change && listed, { status: res?.status(), sent, change, listed });
       });
 
-      // 6. A viewer opens the same page read-only; a builder never sees the notice, not even while the role loads.
-      await step('6 a viewer sees the workbench read-only and a builder never sees View only', async () => {
+      // 6. A viewer opens the same page read-only and may still run it; a builder never sees the notice, not even while
+      // the role loads.
+      await step('6 a viewer sees the tool page read-only with Run off and why, and a builder never sees View only', async () => {
         const url = `${consoleUrl}/tools/${id}/operations/${OP}`;
         const open = async (email, watchNotice) => {
           const p = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
@@ -184,58 +189,42 @@ await withUiStack(
           await p.getByRole('button', { name: /^Sign in/ }).first().click();
           await p.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
           await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await p.getByTestId('tool-workbench').waitFor({ timeout: 120_000 });
+          await p.getByTestId('module-test-panel').waitFor({ timeout: 120_000 });
           return p;
         };
         const ravi = await open(RAVI, false);
         const notice = await ravi.getByTestId('read-only-notice').waitFor({ timeout: 30_000 }).then(() => true, () => false);
         const viewer = {
           notice,
-          stage: await ravi.getByTestId('workbench-stage').count(),
+          save: await ravi.getByTestId('workbench-stage').count(),
           policy: await ravi.getByTestId('workbench-policy').count(),
-          stubDisabled: await ravi.locator('#wb-stub').isDisabled(),
-          secretDisabled: await ravi.getByLabel('STATEMENTS_API_KEY test value').isDisabled(),
+          appDisabled: await ravi.getByTestId('module-connection-select').isDisabled(),
+          // A viewer may not run tools (tools.run): Run is off and the page says why, rather than answering a refusal.
+          runEnabled: await ravi.getByTestId('run').isEnabled(),
+          runWhy: ((await ravi.getByTestId('run-help').innerText().catch(() => '')) ?? '').includes('can’t run tools'),
         };
-        // Below lg Definition and Run are tabs; the fieldset that disables a viewer's fields must not disable the tabs.
-        await ravi.setViewportSize({ width: 390, height: 800 });
-        const runTab = ravi.getByRole('tab', { name: 'Run' });
-        viewer.runTabEnabled = await runTab.isEnabled();
-        await runTab.click({ timeout: 5_000 }).catch(() => undefined);
-        viewer.runShown = await ravi.getByTestId('module-test-panel').isVisible();
         const james = await open(JAMES, true);
         await james.getByTestId('workbench-stage').waitFor({ timeout: 30_000 });
         await james.waitForTimeout(1500);
-        const builder = { stage: await james.getByTestId('workbench-stage').count(), policy: await james.getByTestId('workbench-policy').count(), notice: await james.getByTestId('read-only-notice').count(), flashed: await james.evaluate(() => window.__viewOnly), stubDisabled: await james.locator('#wb-stub').isDisabled() };
+        const builder = { save: await james.getByTestId('workbench-stage').count(), policy: await james.getByTestId('workbench-policy').count(), notice: await james.getByTestId('read-only-notice').count(), flashed: await james.evaluate(() => window.__viewOnly), appDisabled: await james.getByTestId('module-connection-select').isDisabled() };
         check(
-          '6 a viewer sees the workbench read-only and a builder never sees View only',
-          viewer.notice && viewer.stage === 0 && viewer.policy === 0 && viewer.stubDisabled && viewer.secretDisabled && viewer.runTabEnabled && viewer.runShown && builder.stage === 1 && builder.policy === 1 && builder.notice === 0 && !builder.flashed && !builder.stubDisabled,
+          '6 a viewer sees the tool page read-only with Run off and why, and a builder never sees View only',
+          viewer.notice && viewer.save === 0 && viewer.policy === 0 && viewer.appDisabled && !viewer.runEnabled && viewer.runWhy && builder.save === 1 && builder.policy === 1 && builder.notice === 0 && !builder.flashed && !builder.appDisabled,
           { viewer, builder },
         );
       });
 
-      // 7. On a phone the definition and the run are tabs, so Run is one tap away instead of below five sections; the wide
-      // layout keeps both side by side with no tabs.
-      await step('7 on a phone Definition and Run are tabs, and the wide layout has none', async () => {
-        await page.goto(`${consoleUrl}/tools/${id}/operations/${OP}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByTestId('tool-workbench').waitFor({ timeout: 120_000 });
-        await page.locator('#wb-stub').waitFor({ timeout: 60_000 });
-        const wideTabs = await page.getByRole('tab', { name: 'Run' }).count();
-        const wideBoth = (await page.getByTestId('module-test-panel').isVisible()) && (await page.locator('#wb-stub').isVisible());
+      // 7. On a phone the page is one column: Run sits with the address, above the inputs, and nothing scrolls sideways.
+      await step('7 on a phone Run is above the inputs and nothing scrolls sideways', async () => {
         await page.setViewportSize({ width: 390, height: 800 });
         await page.goto(`${consoleUrl}/tools/${id}/operations/${OP}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        await page.getByTestId('tool-workbench').waitFor({ timeout: 120_000 });
-        const runTab = page.getByRole('tab', { name: 'Run' });
-        const definitionFirst = (await page.getByRole('tab', { name: 'Definition' }).getAttribute('aria-selected')) === 'true' && (await page.locator('#wb-stub').isVisible()) && !(await page.getByTestId('module-test-panel').isVisible());
-        await runTab.click();
-        const runBox = await panel.getByRole('button', { name: 'Run' }).boundingBox();
-        const runShown = await panel.getByRole('button', { name: 'Run' }).isVisible();
-        const stubHidden = !(await page.locator('#wb-stub').isVisible());
+        await panel.waitFor({ timeout: 120_000 });
+        // Save shows once the role is known; until then the page lays Run out for a viewer.
+        await page.getByTestId('workbench-stage').waitFor({ timeout: 60_000 });
+        const runBox = await panel.getByTestId('run').boundingBox();
+        const inputsBox = await panel.getByRole('tab', { name: 'Inputs' }).boundingBox();
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-        check(
-          '7 on a phone Definition and Run are tabs, and the wide layout has none',
-          wideTabs === 0 && wideBoth && definitionFirst && runShown && stubHidden && !!runBox && runBox.y < 800 && !overflow,
-          { wideTabs, wideBoth, definitionFirst, runShown, stubHidden, runY: runBox?.y, overflow },
-        );
+        check('7 on a phone Run is above the inputs and nothing scrolls sideways', !!runBox && !!inputsBox && runBox.y < inputsBox.y && !overflow, { runY: runBox?.y, inputsY: inputsBox?.y, overflow });
         await page.setViewportSize({ width: 1440, height: 1000 });
       });
 

@@ -7,10 +7,11 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import httpx
 import uvicorn
 
 from ops_email import EmailProviders
-from ops_identity import ServiceAuth, service_verifiers
+from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
@@ -21,6 +22,7 @@ from .api.app import create_internal_app, create_public_app
 from .keys import signer_from
 from .seed import seed
 from .signin_options import SignInOptions
+from .store.event_relay import SCOPES, keep_relaying
 from .store.identity import IdentityStore
 from .store.lifecycle import LifecycleStore
 from .workspace_lifecycle import WorkspacePurge
@@ -65,10 +67,22 @@ async def serve(settings: Settings) -> None:
     )
     stop = asyncio.Event()
     purging = asyncio.create_task(run_background("workspace_lifecycle", purge.once, stop=stop, store=LOCAL_BEATS))
+    # Events other services act on (event_relay.py) go to each one this install runs; with no address for a service,
+    # its events are delivered by doing nothing.
+    urls = {"tools": settings.tools_url, "agents": settings.agents_url}
+    clients = {
+        name: ServiceClient.for_settings(
+            settings, httpx.AsyncClient(base_url=url, timeout=10), service="platform", audience=name, scopes=scopes
+        )
+        for name, scopes in SCOPES.items()
+        if (url := urls.get(name))
+    }
+    relaying = asyncio.create_task(keep_relaying(store.db.engine, clients))
     try:
         await asyncio.gather(*(s.serve() for s in servers))
     finally:
         stop.set()
+        relaying.cancel()
         await purging
         await store.close()
 

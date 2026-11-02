@@ -3,6 +3,7 @@ team; docs: https://opsai.chanl.ai/docs/sdk/python"""
 
 from ._client import AsyncOpsAI, OpsAI
 from ._config import Config
+from ._workflows import WorkflowCheck
 from .errors import (
     BadRequest,
     Conflict,
@@ -26,5 +27,6 @@ __all__ = [
     "RateLimited",
     "ServerError",
     "Unauthorized",
+    "WorkflowCheck",
 ]
 __version__ = "0.1.0"

@@ -16,7 +16,7 @@ import copy
 import json
 import re
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -41,10 +41,11 @@ from ops_service_kit.ids import new_id
 
 from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
-from ..auth.kinds import TEST
-from ..connections.records import module_auth, ref_of, status_of
+from ..connections.records import auth_of, connection_base, module_auth, ref_of, sign_in_of, status_of
 from ..egress import EgressDenied, EgressPolicy, egress_client, for_tenant
-from ..executor import HttpExecutor, McpExecutor, Trial, masked, secret_names, with_defaults
+from ..environments import CONNECTION_ENVIRONMENTS, TEST
+from ..executor import Trial, masked, secret_names
+from ..held_hosts import HostHeld, refused
 from ..limits import amount_refusal
 from ..mocks import MockAnswers
 from ..registry import approval_policy
@@ -59,7 +60,7 @@ from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
 from .review_events import ACCESS_REQUESTED, access_event
 from .reviews import ReviewOpener
-from .seed import blank, major_of
+from .seed import blank, kind_of, major_of, open_connection
 from .workflows import StaticWorkflows, WorkflowDirectory
 
 Traffic = dict[tuple[str, str | None], dict[str, Any]]
@@ -82,7 +83,6 @@ OWNER_CONTEXT = "owner"
 SAMPLE_CASE = "sample"
 STATUS_ORDER = {"requested": 0, "approved": 1, "expired": 2, "rejected": 3, "revoked": 4}
 CREDENTIAL_HEADER = re.compile(r"^(authorization|x-api-key|cookie)$", re.IGNORECASE)
-SECRET_REFERENCE = re.compile(r"^\{\{[A-Z][A-Z0-9_]*\}\}$")
 OPERATION_NAME = re.compile(r"^[a-z][a-z0-9_]{2,}$")
 # An argument placeholder in a path; the inner braces of a `{{SECRET}}` reference are not one, so a secret the URL
 # reads never becomes an input an agent fills.
@@ -205,6 +205,16 @@ def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _kind_of(i: dict[str, Any]) -> str:
+    """A new module's kind: as given, else what its first operations are (c-616: the kind follows the executor)."""
+    if i.get("type"):
+        return str(i["type"])
+    if i.get("function"):
+        return "code"
+    source = cast(dict[str, Any] | None, i.get("source"))
+    return str(source["kind"]) if source else "http"
+
+
 def _code_operation(f: dict[str, Any]) -> dict[str, Any]:
     """A new code operation from CodeOperationIn's dump."""
     return {
@@ -283,11 +293,21 @@ def _refuse_during_review(m: Aggregate, what: str) -> None:
         raise Conflict(f"A version is waiting for Security's review; {what} once it is decided.")
 
 
+def refuse(problems: list[str]) -> None:
+    """One 400 for every problem a save found (c-591): the message reads them all, and `details.problems` lists them
+    for a form to show each beside its field."""
+    if len(problems) == 1:
+        raise ValidationFailed(problems[0], details={"problems": problems})
+    if problems:
+        raise ValidationFailed(f"{len(problems)} problems: " + " ".join(problems), details={"problems": problems})
+
+
 def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
     """A module takes only a connection whose sign-in it supports (c-558): `team` a team connection, `person` one each
-    person signs in to (the team backup included), `either` any; refused when the connection is chosen."""
+    person signs in to (the team backup included), `person_or_team` any; refused when the connection is chosen."""
+    module_sign_in = sign_in_of(module_sign_in)
     given = str(conn.get("sign_in") or "team")
-    if module_sign_in == "either" or (module_sign_in == "team") == (given == "team"):
+    if module_sign_in == "person_or_team" or (module_sign_in == "team") == (given == "team"):
         return
     want = "the team's account" if module_sign_in == "team" else "each person's own account"
     raise ValidationFailed(
@@ -297,6 +317,14 @@ def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
 
 
 class ModuleService:
+    # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
+    titles: Callable[[dict[str, Any], str], str | None] | None = None
+    # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
+    team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
+    # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
+    # checks, never a path of its own (c-616).
+    real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
+
     def __init__(
         self,
         store: ModuleStore,
@@ -364,9 +392,18 @@ class ModuleService:
         """`delta` before now, in the call log's created_at format, so the two compare as text."""
         return (self.clock() - delta).astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    async def _traffic(self, tenant_id: str, mods: list[Aggregate]) -> Traffic:
+    async def _traffic(self, tenant_id: str, teams: list[str], mods: list[Aggregate]) -> Traffic:
+        """The last day's calls on `mods` made in `teams`: a shared module's counts are the team's own calls."""
         since = self._since(timedelta(days=1))
-        return await self.calls.traffic([m["id"] for m in mods], since, tenant_id=tenant_id)
+        return await self.calls.traffic([m["id"] for m in mods], since, tenant_id=tenant_id, team_ids=teams)
+
+    def _call_teams(self, who: Caller) -> list[str]:
+        """The teams whose calls the caller reads (c-616): its own acting team. A call is its team's even on a module
+        every team shares, so Usage never shows another team's calls. Only the dev header caller acting in an all-scope
+        team reads every directory team's, as `_sees` lets it read every team's modules."""
+        if not who.verified and who.team.scope == "all":
+            return [t.id for t in self.dir.teams]
+        return [who.team.id]
 
     async def _secret_names(self, tenant_id: str, mods: list[Aggregate]) -> dict[str | None, set[str]]:
         """The names of the secrets each of the modules' teams has set (c-509: a module reads its own team's only);
@@ -375,6 +412,20 @@ class ModuleService:
             return {}
         owners = sorted({str(m["team_id"]) for m in mods if m["team_id"]})
         return {team: {str(r["name"]) for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
+
+    async def _as_team_sees(self, tenant_id: str, team_id: str, mods: list[Aggregate]) -> list[Aggregate]:
+        """The modules with a plugin's module showing the team's own connection (c-616): the gateway signs a plugin
+        tool in through the team's binding, so its page names that account instead of no connection."""
+        if self.team_connections is None:
+            return mods
+        out: list[Aggregate] = []
+        for m in mods:
+            if not m["connection_id"] and str(m.get("template_id") or "").startswith("plugin:"):
+                conn = await self.team_connections(tenant_id, team_id, m)
+                out.append(cast(Aggregate, {**m, "connection_id": conn}))
+            else:
+                out.append(m)
+        return out
 
     async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, dict[str, Any]]:
         return await self.connections.by_ids(
@@ -417,12 +468,12 @@ class ModuleService:
             "displayName": m["display_name"],
             "system": m["system"],
             "description": m["description"],
-            "type": m["type"],
+            "type": kind_of(m),
             "status": m["status"],
             "version": m["version"],
             "major": major_of(m["version"]),
             "ownerTeam": m["owner_team"],
-            "endpoint": m["endpoint"],
+            "endpoint": connection_base(conn) if conn else "",
             "operationCount": len(ops),
             "accessClasses": [acc for acc in ACCESS_ORDER if any(o["access"] == acc for o in ops)],
             "approvalState": state,
@@ -433,7 +484,7 @@ class ModuleService:
             "reachable": m["reachable"] and status not in ("revoked", "needs_reconnect", "error"),
             "drift": m["drift"],
             "connection": ref_of(conn, now) if conn else None,
-            "signIn": m.get("sign_in") or "either",
+            "signIn": sign_in_of(m.get("sign_in")),
             "updatedAt": _iso(m["updated_at"]),
         }
         if next_expiry is not None:
@@ -541,7 +592,17 @@ class ModuleService:
         if o.get("code"):
             out["code"] = o["code"]
         out["headers"] = o.get("headers") or []
-        for key, col in (("body", "body"), ("responseTransform", "response_transform"), ("timeoutMs", "timeout_ms")):
+        # A tool saved before sign-in headers were refused (c-616) still sends one; its page asks to move it to the app.
+        held = cast(list[dict[str, str]], out["headers"])
+        out["signInHeader"] = next(
+            (h["key"] for h in held if CREDENTIAL_HEADER.match(h["key"].strip()) and h["value"].strip()), None
+        )
+        for key, col in (
+            ("body", "body"),
+            ("bodyEncoding", "body_encoding"),
+            ("responseTransform", "response_transform"),
+            ("timeoutMs", "timeout_ms"),
+        ):
             if o.get(col) is not None:
                 out[key] = o[col]
         if o["amount_max"] is not None:
@@ -551,6 +612,8 @@ class ModuleService:
             # callers written when a secret could be limited to some teams.
             mine = have.get(m["team_id"], set())
             out["secrets"] = [{"name": n, "set": n in mine, "available": n in mine} for n in secret_names(o)]
+        # The operation's example mock under its old name, while the console still reads it; removed in D3c/D3d (c-616),
+        # when the console reads GET .../mocks?environment=example.
         out["stub"] = o.get("stub")
         return out
 
@@ -569,14 +632,15 @@ class ModuleService:
 
     async def _detail(self, m: Aggregate, team: Team, who: Caller | None = None) -> dict[str, Any]:
         """`who` is the person asking; their rights on the module ride along. A service applying a decision has none."""
-        traffic = await self._traffic(str(m["tenant_id"]), [m])
+        m = (await self._as_team_sees(str(m["tenant_id"]), team.id, [m]))[0]
+        traffic = await self._traffic(str(m["tenant_id"]), self._call_teams(who) if who else [team.id], [m])
         have = await self._secret_names(str(m["tenant_id"]), [m])
         approvals = self._approvals(m)
         ordered = sorted(
             approvals,
             key=lambda a: (STATUS_ORDER[a["status"]], _iso(a["expires_at"]) or "9"),
         )
-        auth = {k: v for k, v in m["auth"].items() if v is not None}
+        auth = auth_of(m["auth"])
         return {
             **self._row(m, traffic, have, await self._connections_of(str(m["tenant_id"]), [m])),
             "ownerContacts": m["owner_contacts"],
@@ -740,7 +804,8 @@ class ModuleService:
     ) -> dict[str, Any]:
         now = self.clock()
         mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
-        traffic = await self._traffic(who.tenant_id, mods)
+        mods = await self._as_team_sees(who.tenant_id, who.team.id, mods)
+        traffic = await self._traffic(who.tenant_id, self._call_teams(who), mods)
         have = await self._secret_names(who.tenant_id, mods)
         conns = await self._connections_of(who.tenant_id, mods)
         rows = [self._row(m, traffic, have, conns) for m in mods]
@@ -819,18 +884,27 @@ class ModuleService:
         m = await self._find(who, module_id)
         today = self.clock().astimezone(UTC).date()
         first = today - timedelta(days=13)
-        logged = await self.calls.daily(m["id"], first.isoformat(), tenant_id=who.tenant_id)
+        logged = await self.calls.daily(
+            m["id"], first.isoformat(), tenant_id=who.tenant_id, team_ids=self._call_teams(who)
+        )
         days = [
             {"date": d, **logged.get(d, {"count": 0, "errors": 0, "p95Ms": 0})}
             for d in ((first + timedelta(days=i)).isoformat() for i in range(14))
         ]
         since = self._since(timedelta(days=1))
-        tenant = who.tenant_id
+        tenant, teams = who.tenant_id, self._call_teams(who)
         _, denied = await self.calls.search(
-            tenant_id=tenant, module_ids=[m["id"]], decision="deny", since=since, limit=1
+            tenant_id=tenant, team_ids=teams, module_ids=[m["id"]], decision="deny", since=since, limit=1
         )
-        recent, _ = await self.calls.search(tenant_id=tenant, module_ids=[m["id"]], limit=12)
-        return {"days": days, "denied24h": denied, "recent": [call_row(r, _workflow_names([m]), m) for r in recent]}
+        recent, _ = await self.calls.search(tenant_id=tenant, team_ids=teams, module_ids=[m["id"]], limit=12)
+        return {
+            "days": days,
+            "denied24h": denied,
+            "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r["tool"])) for r in recent],
+        }
+
+    def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
+        return self.titles(module, tool) if self.titles is not None and module is not None else None
 
     async def executions(
         self,
@@ -844,8 +918,8 @@ class ModuleService:
         decision: str | None,
         key: str | None = None,
     ) -> dict[str, Any]:
-        """Every call the gateway received, newest first, limited to the modules the caller's team sees. `key` finds
-        the calls sent under one idempotency key: how a workflow run reconciles a write after a crash."""
+        """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
+        sent under one idempotency key: how a workflow run reconciles a write after a crash."""
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_id is not None:
@@ -855,6 +929,7 @@ class ModuleService:
             await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
         rows, total = await self.calls.search(
             tenant_id=who.tenant_id,
+            team_ids=self._call_teams(who),
             tools=[tool] if tool else None,
             module_ids=scope,
             thread_id=thread_id,
@@ -866,7 +941,12 @@ class ModuleService:
         pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
         return {
-            "data": [call_row(r, names, mods.get(r["module_id"] or "")) for r in rows],
+            "data": [
+                call_row(
+                    r, names, mods.get(r["module_id"] or ""), self._title(mods.get(r["module_id"] or ""), r["tool"])
+                )
+                for r in rows
+            ],
             "pagination": {
                 "page": page,
                 "pageSize": page_size,
@@ -879,28 +959,30 @@ class ModuleService:
         }
 
     async def execution(self, who: Caller, call_id: str) -> dict[str, Any]:
-        """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: a call
-        on a module the caller's team does not see is not found, never a different answer."""
-        row = await self.calls.get(call_id, tenant_id=who.tenant_id)
+        """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
+        team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
+        row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
         if row is None:
             raise NotFound("Call")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         if (who.verified or who.team.scope != "all") and row["module_id"] not in mods:
             raise NotFound("Call")
-        return call_row(row, _workflow_names(list(mods.values())), mods.get(row["module_id"] or ""))
+        module = mods.get(row["module_id"] or "")
+        return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row["tool"]))
 
     # ── Creating modules ──────────────────────────────────────────────────
 
     @staticmethod
-    def _checked_headers(headers: list[dict[str, str]]) -> list[dict[str, str]]:
-        """A literal credential in a header is refused: credentials live on the connection or in the vault,
-        referenced as {{NAME}}. Used by add and edit alike."""
+    def _checked_headers(headers: list[dict[str, str]], problems: list[str]) -> list[dict[str, str]]:
+        """A sign-in header is refused whatever it holds, a {{NAME}} reference too: every custom module is on a
+        connection (c-616), which signs every call in, so the key has one home. Used by add and edit alike; each
+        refusal joins `problems`."""
         for header in headers:
             key, value = header["key"].strip(), header["value"].strip()
-            if CREDENTIAL_HEADER.match(key) and value and not SECRET_REFERENCE.match(value):
-                raise ValidationFailed(
-                    f"The {header['key']} header holds a literal value. Reference the vault instead, e.g. "
-                    "{{CORE_API_KEY}}."
+            if CREDENTIAL_HEADER.match(key) and value:
+                problems.append(
+                    f"The {key} header signs in, and the app's connection signs every call: set the key on the "
+                    "connection, not on the tool."
                 )
         return [{"key": h["key"].strip(), "value": h["value"].strip()} for h in headers if h["key"].strip()]
 
@@ -909,6 +991,11 @@ class ModuleService:
         """The base an operation's URL hangs off and its path. https only. A module with an endpoint calls every
         operation on it (the executor joins the endpoint and the path), so a URL on any other base is refused: a
         second system is a second module."""
+        if url.startswith("/"):
+            # A path alone hangs off the module's base address: its connection's for a custom app (c-616).
+            if not endpoint:
+                raise ValidationFailed("Enter the full https URL of the operation, or pick the app's connection first.")
+            return endpoint.rstrip("/"), url
         parts = urlsplit(URL_VAR.sub("x", url))
         if parts.scheme != "https" or not parts.netloc:
             raise ValidationFailed("Enter the full https URL of the operation.")
@@ -918,6 +1005,27 @@ class ModuleService:
                 f"https://{parts.netloc} is not this module's endpoint ({base}). A second system is a second module."
             )
         return base, url[len(base) :] or "/"
+
+    @classmethod
+    def _encoding_problem(cls, body: str | None, encoding: str | None, headers: list[dict[str, str]]) -> str | None:
+        """Why this body cannot be sent in its encoding (c-591), or None. JSON and form set Content-Type themselves, so
+        a header naming another would contradict them; raw sends the text as typed, so it needs that header."""
+        enc = encoding or "json"
+        typed = any(h["key"].strip().lower() == "content-type" for h in headers)
+        if enc == "raw":
+            return None if typed or not body else "A raw body is sent as typed: add the Content-Type header it needs."
+        if typed:
+            name = "JSON" if enc == "json" else "Form"
+            return f"Content-Type is set by the body encoding, {name}. Remove the header, or choose Raw."
+        if enc == "json":
+            return cls._body_problem(body)
+        try:
+            fields: object = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            fields = None
+        if not isinstance(fields, dict) or not all(isinstance(v, str) for v in cast(dict[str, Any], fields).values()):
+            return "A form body is a set of fields, each a name and a text value such as {{email}}."
+        return None
 
     @staticmethod
     def _body_problem(body: str | None) -> str | None:
@@ -938,13 +1046,20 @@ class ModuleService:
         return None
 
     def _http_operation(self, h: dict[str, Any], endpoint: str = "") -> tuple[dict[str, Any], str]:
-        """One hand-built HTTP operation as a discovered one, and the base it calls."""
-        headers = self._checked_headers(h.get("headers") or [])
+        """One hand-built HTTP operation as a discovered one, and the base it calls. Every problem is found before
+        any is reported, so one save lists them all."""
+        problems: list[str] = []
+        headers = self._checked_headers(h.get("headers") or [], problems)
         if not OPERATION_NAME.match(h["name"]):
-            raise ValidationFailed("Name the operation in lower case letters, digits and underscores.")
-        origin, path = self._split_url(h["url"], endpoint)
-        if problem := self._body_problem(h.get("body")):
-            raise ValidationFailed(problem)
+            problems.append("Name the operation in lower case letters, digits and underscores.")
+        origin, path = "", "/"
+        try:
+            origin, path = self._split_url(h["url"], endpoint)
+        except ValidationFailed as e:
+            problems.append(e.message)
+        if problem := self._encoding_problem(h.get("body"), h.get("body_encoding"), headers):
+            problems.append(problem)
+        refuse(problems)
         names = [*URL_VAR.findall(h["url"]), *BODY_VAR.findall(h.get("body") or "")]
         op = {
             "name": h["name"],
@@ -956,6 +1071,7 @@ class ModuleService:
             "input": [_sample_field(n) for n in dict.fromkeys(names)],
             "headers": headers,
             "body": h.get("body"),
+            "body_encoding": h.get("body_encoding"),
         }
         return op, origin
 
@@ -976,13 +1092,16 @@ class ModuleService:
             "path": o.get("path"),
             "headers": o.get("headers") or [],
             "body": o.get("body"),
+            "body_encoding": o.get("body_encoding"),
             "response_transform": None,
             "timeout_ms": None,
             "input": o["input"],
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            "requires_approval": o["access"] != "read",
+            # Approvals are off by default (owner, 2026-11-01): a new write runs until its tool's switch or a team
+            # policy turns approval on.
+            "requires_approval": False,
             "amount_max": None,
             # The source's example response when it gives one, so a stubbed call answers like the system.
             "stub": o.get("stub") if o.get("stub") is not None else {"ok": True},
@@ -1015,20 +1134,10 @@ class ModuleService:
             raise Conflict(f"A module named {name} already exists.")
         if not i["display_name"].strip():
             raise ValidationFailed("Give the module a display name.")
-        # A module's endpoint and its secret headers are its connection (docs/architecture/tool-lifecycle.md); a
-        # connection record is optional, and when one is named it must exist and be live.
-        conn = None
-        if i.get("connection_id") is not None:
-            conn = await self.connections.get(who.tenant_id, i["connection_id"])
-            if conn is None:
-                raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
-            if status_of(conn, self.clock()) == "revoked":
-                raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
-            if not may_use(conn, who.team.id):
-                raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
-            sign_in_fits(str(i.get("sign_in") or "either"), conn)
+        conn = await self._usable_connection(who, i.get("connection_id"), i.get("sign_in"))
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
-        if i["type"] == "code":
+        kind = _kind_of(i)
+        if kind == "code":
             # A code module's functions run on runner-service (c-531): no endpoint and no egress host of its own.
             if not i.get("function"):
                 raise ValidationFailed("Write the module's first function.")
@@ -1039,12 +1148,25 @@ class ModuleService:
             found = await self._discover(who, {"connection_id": i.get("connection_id"), **_given(i["source"])})
             ops_in = self._chosen(found, ops_in)
             endpoint = found["endpoint"]
-        if i.get("http"):
+        if i.get("http") and conn is not None:
+            # A custom app's base address and key live on its connection only (c-616): one beside it is refused.
+            if endpoint:
+                raise ValidationFailed(
+                    f"The base address comes from the {conn['name']} connection; leave the module's endpoint empty."
+                )
+            op, endpoint = self._http_operation(i["http"], connection_base(conn))
+            ops_in = [op]
+        elif i.get("http"):
             op, endpoint = self._http_operation(i["http"])
             ops_in = [op]
         if not ops_in:
             raise ValidationFailed("Choose at least one operation to expose.")
         await self._names_free(who, ops_in)
+        await self._held_unless_listed(who, urlsplit(endpoint).hostname, conn["name"] if conn else i["display_name"])
+        if conn is None and kind != "code":
+            conn = await self._open_connection(who, i["display_name"], endpoint)
+        elif conn is not None and endpoint:
+            await self._address_on(who, conn, endpoint)
         module_id = new_id("mod")
         now = self.clock()
         # The creator's team approves the module's writes; an all-scope team (team_ops) has no owner group to map from.
@@ -1059,16 +1181,15 @@ class ModuleService:
                 owner=owner,
                 me=who.name,
                 at=now,
-                input={"displayName": i["display_name"], "name": name, "type": i["type"]},
+                input={"displayName": i["display_name"], "name": name, "type": kind},
             ),
             "system": i["system"].strip() or i["display_name"].strip(),
-            "description": f"{i['system']} operations behind the data gateway.",
-            "endpoint": endpoint,
+            "description": f"{i['system'].strip() or i['display_name'].strip()} operations behind the data gateway.",
             "auth": module_auth(conn),
             "egress_hosts": [host] if host else [],
             "catalog_id": conn.get("catalog_id") if conn else None,
             "connection_id": conn["id"] if conn else None,
-            "sign_in": str(i.get("sign_in") or "either"),
+            "sign_in": sign_in_of(i.get("sign_in")),
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
         }
@@ -1085,6 +1206,79 @@ class ModuleService:
         m.update(template)
         return await self._detail(await self._create(m), who.team, who)
 
+    async def _usable_connection(
+        self, who: Caller, connection_id: str | None, sign_in: str | None
+    ) -> dict[str, Any] | None:
+        """The connection a new module signs in through: optional, and when one is named it must exist, be live, be
+        the team's and fit the module's sign-in."""
+        if connection_id is None:
+            return None
+        conn = await self.connections.get(who.tenant_id, connection_id)
+        if conn is None:
+            raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
+        if status_of(conn, self.clock()) == "revoked":
+            raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
+        if not may_use(conn, who.team.id):
+            raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
+        sign_in_fits(sign_in_of(sign_in), conn)
+        return conn
+
+    async def _held_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
+        """An app's address on a host the tenant has not listed asks the Security team instead of failing (c-616 S13),
+        before anything is saved: HostHeld with the task's run key while it waits, its reason once it was refused.
+        Roles decide (owner, 2026-11-01): a caller who may manage the egress list is not asked, and the host is listed
+        in their name, audited. Without Reviews or an egress policy the store's own check refuses the host."""
+        if not host or self.egress is None or self.reviews is None:
+            return
+        if await self.egress.store.host_allowed(who.tenant_id, host):
+            return
+        if who.principal is not None and self._manages_egress(who):
+            note = f"Listed when {app} first named it"
+            await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
+            return
+        task = await self.reviews.open_host(
+            who.credentials, tenant_id=who.tenant_id, team_id=who.team.id, host=host, app=app
+        )
+        if task.get("status") == "rejected":
+            raise refused(host, task)
+        raise HostHeld(host, str(task["id"]))
+
+    def _manages_egress(self, who: Caller) -> bool:
+        try:
+            _can(who, "secrets_egress", "manage", what="the egress list", security_team=self.security_team)
+        except Forbidden:
+            return False
+        return True
+
+    async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
+        """The connection a custom module with none of its own keeps its address on (c-616): no sign-in, the address
+        in every environment, so a call reads it as it reads any app's. Empty until the first tool names one."""
+        now = self.clock()
+        row, environments = open_connection(
+            tenant_id=who.tenant_id, team_id=team_id or who.team.id, connection_id=new_id("con"), name=name, base=base,
+            me=who.name, at=now,
+        )  # fmt: skip
+        if not await self.connections.create(row, actor=who.name, at=now, environments=environments):
+            raise Conflict("Try again; that connection id was just taken.")
+        made = await self.connections.get(who.tenant_id, str(row["id"]))
+        assert made is not None
+        return made
+
+    async def _address_on(self, who: Caller, conn: dict[str, Any], address: str) -> None:
+        """A discovered address (an imported spec's server, an MCP server) onto the module's chosen connection: set
+        where it names none, refused where it names another system (c-616)."""
+        held = connection_base(conn)
+        if not held:
+            envs = list(cast(dict[str, Any], conn.get("environments") or {})) or [TEST]
+            await self.connections.set_base(who.tenant_id, conn["id"], address, envs, actor=who.name, at=self.clock())
+        elif held.rstrip("/") != address.rstrip("/"):
+            # One connection holds one address: a second system, or another path on the same host, is its own app.
+            raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
+
+    async def _address(self, tenant_id: str, m: Aggregate) -> str:
+        conn = await self.connections.get(tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        return connection_base(conn) if conn else ""
+
     async def create_blank(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
         template = _provisioned(who, i)
@@ -1096,6 +1290,7 @@ class ModuleService:
         if not await self._name_free(who, name):
             raise Conflict(f"A module named {name} already exists.")
         owner = self.dir.owner_group(who.team) or "Platform"
+        conn = await self._usable_connection(who, i.get("connection_id"), None)
         m = blank(
             module_id=new_id("mod"),
             tenant_id=who.tenant_id,
@@ -1105,6 +1300,17 @@ class ModuleService:
             at=self.clock(),
             input={**i, "displayName": i["display_name"], "name": name},
         )
+        if conn is not None:
+            # A custom app's tools are paths on its connection's base address (c-616): it is the module's only one.
+            base = connection_base(conn)
+            host = urlsplit(base).hostname
+            await self._held_unless_listed(who, host, conn["name"])
+            m.update(
+                connection_id=conn["id"],
+                auth=module_auth(conn),
+                catalog_id=conn.get("catalog_id"),
+                egress_hosts=[host] if host else [],
+            )
         m.update(template)
         return await self._detail(await self._create(m), who.team, who)
 
@@ -1123,7 +1329,7 @@ class ModuleService:
             conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m["connection_id"] else None
             if conn is not None:
                 sign_in_fits(str(patch["sign_in"]), conn)
-            m["sign_in"] = patch["sign_in"]
+            m["sign_in"] = sign_in_of(patch["sign_in"])
         m.update(_provisioned(who, patch))
         return await self._detail(await self._save(m), who.team, who)
 
@@ -1171,9 +1377,18 @@ class ModuleService:
     async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
         m = await self._changeable(who, module_id)
-        op, origin = self._http_operation(h, m["endpoint"] or "")
-        if not m["endpoint"]:
-            m["endpoint"] = origin
+        conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        op, origin = self._http_operation(h, connection_base(conn) if conn else "")
+        await self._held_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
+        if conn is None:
+            # A blank module's first tool with an address makes the connection that address lives on (c-616), so a
+            # code module never gets an empty app.
+            conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
+            m.update(connection_id=conn["id"], auth=module_auth(conn))
+        elif not connection_base(conn):
+            await self.connections.set_base(
+                who.tenant_id, conn["id"], origin, CONNECTION_ENVIRONMENTS, actor=who.name, at=self.clock()
+            )
         host = urlsplit(origin).hostname
         if host and host not in m["egress_hosts"]:
             m["egress_hosts"] = [*m["egress_hosts"], host]
@@ -1197,7 +1412,7 @@ class ModuleService:
                 raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another one.")
             if not may_use(conn, m["team_id"]):
                 raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
-            sign_in_fits(str(m.get("sign_in") or "either"), conn)
+            sign_in_fits(sign_in_of(m.get("sign_in")), conn)
             m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
         return await self._detail(await self._save(m), who.team, who)
 
@@ -1279,7 +1494,7 @@ class ModuleService:
         names = {f["name"] for f in (new_input if new_input is not None else o["input"])}
         if binding and binding["arg"] not in names:
             raise ValidationFailed(f"{binding['arg']} is not an input of {o['name']}.")
-        shape = self._checked_shape(m, o, patch, fields)
+        shape = self._checked_shape(m, o, patch, fields, await self._address(who.tenant_id, m))
         # A path or body edit alone adds the placeholders it names as inputs (_shape_changes); a schema sent with it
         # must already list them.
         if new_input is not None:
@@ -1303,7 +1518,9 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            o["requires_approval"] = access == "write"
+            # A read never waits; a write keeps its own switch, off unless someone turned it on (owner, 2026-11-01).
+            if access == "read":
+                o["requires_approval"] = False
             if access == "read":
                 o["amount_max"] = None
         if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
@@ -1345,6 +1562,18 @@ class ModuleService:
             detail = f"Approvers {o.get('approvers') or 1} → {approvers}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
+            if approvers > 1 and not o["requires_approval"]:
+                # Asking for two approvers turns the tool's approval on: approvals are off by default (owner,
+                # 2026-11-01), and a write two people approve always waits for them.
+                changes.append(
+                    {
+                        "operation": name,
+                        "kind": "settings",
+                        "detail": "Every call waits for an approval",
+                        "major": False,
+                    }
+                )
+                o["requires_approval"] = True
         if team is not None and team != o.get("approver_team"):
             detail = f"Approved by {team}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
@@ -1388,6 +1617,8 @@ class ModuleService:
                 detail = "No record binding"
             changes.append({"operation": name, "kind": "binding_changed", "detail": detail, "major": widened})
             o["binding"] = binding
+        # Writes the operation's example mock under its old name, while the console still sends it; removed in D3c/D3d
+        # (c-616), when the console writes the example through the mock routes.
         if "stub" in fields:
             stub = patch.get("stub")
             stub = {"ok": True} if stub is None else stub
@@ -1428,13 +1659,13 @@ class ModuleService:
         """Adds a function to a code module (c-531)."""
         _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
         m = await self._changeable(who, module_id)
-        if m["type"] != "code":
+        if kind_of(m) != "code" or m["connection_id"]:
             raise ValidationFailed(f"{m['display_name']} is not a code module; add its operations from its system.")
         await self._append(who, m, [_code_operation(f)])
         return await self._detail(await self._save(m), who.team, who)
 
     def _checked_shape(
-        self, m: Aggregate, o: dict[str, Any], patch: dict[str, Any], fields: set[str]
+        self, m: Aggregate, o: dict[str, Any], patch: dict[str, Any], fields: set[str], base: str
     ) -> dict[str, Any]:
         """The call-shape fields this patch sets, validated as add validates them; nothing is applied here."""
         sent = {k: patch.get(k) for k in CALL_SHAPE if k in fields}
@@ -1445,26 +1676,36 @@ class ModuleService:
         for k in ("method", "path", "headers"):
             if k in sent and sent[k] is None:
                 raise ValidationFailed(f"An HTTP operation keeps a {k}.")
+        # Every problem is found before any is reported, so one save lists them all (c-591).
+        problems: list[str] = []
         if "path" in sent:
             path = str(sent["path"]).strip()
             if not path.startswith("/"):
-                raise ValidationFailed("Enter the path after the module endpoint, starting with /.")
-            if not m["endpoint"]:
-                raise ValidationFailed("Set the module's endpoint before editing a path.")
-            sent["path"] = self._split_url(m["endpoint"].rstrip("/") + path, m["endpoint"])[1]
+                problems.append("Enter the path after the module endpoint, starting with /.")
+            elif not base:
+                problems.append("Set the app's address on its connection before editing a path.")
+            else:
+                try:
+                    sent["path"] = self._split_url(base.rstrip("/") + path, base)[1]
+                except ValidationFailed as e:
+                    problems.append(e.message)
         if "headers" in sent:
-            sent["headers"] = self._checked_headers(cast(list[dict[str, str]], sent["headers"]))
+            sent["headers"] = self._checked_headers(cast(list[dict[str, str]], sent["headers"]), problems)
         if "body" in sent:
             sent["body"] = (sent["body"] or "").strip() or None
-            if problem := self._body_problem(sent["body"]):
-                raise ValidationFailed(problem)
+        if {"body", "body_encoding", "headers"} & sent.keys():
+            body, encoding = sent.get("body", o.get("body")), sent.get("body_encoding", o.get("body_encoding"))
+            headers = cast(list[dict[str, str]], sent["headers"] if "headers" in sent else o.get("headers") or [])
+            if problem := self._encoding_problem(body, encoding, headers):
+                problems.append(problem)
         if "response_transform" in sent:
             sent["response_transform"] = (sent["response_transform"] or "").strip() or None
             if sent["response_transform"] and (problem := transform.problem(sent["response_transform"])):
-                raise ValidationFailed(problem)
+                problems.append(problem)
         limit = sent.get("timeout_ms")
         if limit is not None and not 1_000 <= limit <= 120_000:
-            raise ValidationFailed("Set a timeout between 1 and 120 seconds (1000 to 120000 ms).")
+            problems.append("Set a timeout between 1 and 120 seconds (1000 to 120000 ms).")
+        refuse(problems)
         return {k: v for k, v in sent.items() if v != o.get(k)}
 
     @staticmethod
@@ -1475,12 +1716,12 @@ class ModuleService:
             return []
         name = o["name"]
         out: list[dict[str, Any]] = []
-        contract = [k for k in ("method", "path", "body") if k in shape]
+        contract = [k for k in ("method", "path", "body", "body_encoding") if k in shape]
         if contract:
             before = f"{o['method']} {o['path']}"
             after = f"{shape.get('method', o['method'])} {shape.get('path', o['path'])}"
             detail = f"Call {before} → {after}" if before != after else "Call unchanged"
-            if "body" in shape:
+            if "body" in shape or "body_encoding" in shape:
                 detail += "; body edited"
             out.append({"operation": name, "kind": "schema_changed", "detail": detail, "major": True})
         minor: list[str] = []
@@ -1683,7 +1924,8 @@ class ModuleService:
             who.credentials,
             tenant_id=who.tenant_id,
             team_id=who.team.id,
-            module=m,
+            # The diff names the hosts a path reaches, which hang off the app's address on its connection (c-616).
+            module={**m, "endpoint": await self._address(who.tenant_id, m)},
             version=version,
             changes=changes,
             note=note.strip(),
@@ -1923,15 +2165,16 @@ class ModuleService:
     # ── Test console ──────────────────────────────────────────────────────
 
     async def test(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
-        """What the gateway would decide for this call in this run context, and the answer when it allows: on the
-        sandbox target a read is the real call, through the same executor and egress policy as /v1/calls, on the
-        published call shape; a write answers from the stub (`stubbed`), so the test console never writes to a system.
-        A test call is not a gateway call: it spends no rate and is not in the executions log. The `owner` context is
-        the module's own team trying it (whoever passes the module's team guard): no workflow approval is needed,
-        reads run for real, writes answer from the stub, and a bound field takes the value typed (c-048 T008)."""
+        """What the gateway would decide for this call in this run context, and the answer when it allows. On the
+        sandbox target, the console's Real, the call is a gateway call (c-616): the same approval, limits, egress,
+        account choice and call log as an agent's, in the environment the person picked; on the stub target, Mock,
+        nothing leaves the gateway.
+        The `owner` context is the module's own team trying it (whoever passes the module's team guard): no workflow
+        approval is needed and a bound field takes the value typed (c-048 T008). A workflow's context needs that
+        workflow's approval and, for a write that asks for one, an approval token, which a test run never makes up
+        (ADR-0005)."""
         if who.principal is not None and who.principal.kind == "api_key":
-            # A key's tools.run is for the gateway's call path over MCP (c-356), which logs and limits each call; the
-            # test console is a person's, and its reads are neither logged nor rate limited.
+            # A key's tools.run is for the gateway's call path over MCP (c-356); the test console is a person's page.
             raise Forbidden("An API key runs tools over MCP, not the test console.", code="role_required")
         _can(who, "tools", "run", what="tool modules", security_team=self.security_team)
         m = await self._find(who, module_id)
@@ -2004,8 +2247,8 @@ class ModuleService:
         if amount_refusal(o, args) is not None:  # the gateway's own check (ops_tools.limits)
             return deny("constraint")
         would_pause = o["access"] in WRITES and o["requires_approval"]
-        # The owner's write answers from the stub, so there is nothing for an approval to guard.
-        if would_pause and sandbox and ctx is not None and not i.get("simulate_approval"):
+        # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
+        if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")
         # The workbench's draft transform and mock run in place of the operation's for this test only (c-088): nothing
         # is staged, so what agents get changes only through staging and publishing.
@@ -2026,14 +2269,27 @@ class ModuleService:
             "masked": o["masked_output"],
             "callId": call_id,
         }
-        if would_pause and i.get("simulate_approval"):
+        if would_pause and i.get("simulate_approval") and not sandbox:
             out["testApprovalToken"] = new_id("test-apt")
-        if sandbox and o["access"] in WRITES:
-            out["stubbed"] = True
-        answer = await self.mocks.for_call(who.tenant_id, o["name"], args, TEST) if "stub" not in draft else None
-        if sandbox and o["access"] not in WRITES and o.get("executor") in ("http", "mcp") and self.egress is not None:
-            if self.http is not None:
-                out.update(await self._real_read(m, o, args, i.get("secret_values"), trial))
+        answer = (
+            await self.mocks.for_call(who.tenant_id, m["id"], o["name"], args, TEST) if "stub" not in draft else None
+        )
+        # A plain Mock run answers the saved example, the tool's answer as an agent gets it, already shaped: the
+        # transform reads the system's raw answer and is not applied to it. A workbench run trying a drafted sample
+        # or transform does apply it, which is what it is for.
+        example = not sandbox and answer is None and not {"stub", "response_transform"} & draft.keys()
+        if sandbox and o.get("executor") in ("http", "mcp", "plugin") and self.real_runs is not None:
+            out.update(
+                await self._real_call(
+                    who,
+                    m,
+                    o,
+                    args,
+                    secret_values=i.get("secret_values"),
+                    trial=trial,
+                    environment=str(i.get("environment") or TEST),
+                )
+            )
         elif answer is not None:
             # A mock answer the test environment holds for this input (c-332), as a test run would get it.
             await self.mocks.wait(answer, o.get("timeout_ms") or m["timeout_ms"])
@@ -2041,10 +2297,10 @@ class ModuleService:
             out.update(status=status, output=masked(answer.get("body"), o["masked_output"]), mockId=answer["id"])
             trial.note(f"Answered from the mock answer {answer['name']}")
         else:
-            trial.note("Answered from the mock response")
+            trial.note("Answered from the example" if example else "Answered from the mock response")
         raw = out["output"]
         out["rawResponse"] = raw
-        if template and out["status"] < 400:
+        if template and out["status"] < 400 and not example:
             shaped, failed = await transform.apply(template, raw)
             # After the transform, as the gateway scrubs after its own: a template can repeat what it was given.
             out["output"] = scrub(shaped, trial.used)
@@ -2058,44 +2314,51 @@ class ModuleService:
         out["log"] = [{"atMs": at, "message": message} for at, message in trial.log]
         return out
 
-    async def _real_read(
+    async def _real_call(
         self,
+        who: Caller,
         module: dict[str, Any],
         op: dict[str, Any],
         args: dict[str, Any],
+        *,
         secret_values: dict[str, str] | None,
         trial: Trial,
+        environment: str,
     ) -> dict[str, Any]:
-        """The read the gateway would run: the published call shape (a staged edit runs only once published), the
-        module's egress policy, its secrets and masks. Its latency and host are the real call's. The answer comes back
-        before any transform; the caller applies the draft's. `secret_values` stand in for the tenant's secrets they
-        name, for this call only: they are not stored, logged or returned (the request is scrubbed of them)."""
-        found = await self.store.operation_named(module["tenant_id"], op["name"], module.get("team_id"))
-        if found is not None:
-            module, op = found
-        assert self.egress is not None and self.http is not None
-        runner = (HttpExecutor if op["executor"] == "http" else McpExecutor)(
-            self.http, self.egress, self.secrets, self.auth
-        )
+        """The Real run, as one gateway call (c-616): the gateway decides it as it decides an agent's call (approval,
+        limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
+        back with the request as sent, secrets hidden; `secret_values` stand in for unset secrets for this call only.
+        A test environment holding a saved mock answer for this input answers from it, as an agent's call would."""
+        if self.real_runs is None or who.principal is None:
+            raise NotYetAvailable("This service runs no Real calls from a tool page.")
         started = time.perf_counter()
-        outcome = await runner.run(
-            module,
-            op,
-            with_defaults(op["input"], args),
-            actor="test-console",
-            secret_values=secret_values,
+        ran = await self.real_runs(
+            who.principal,
+            tool=op["name"],
+            args=args,
+            environment=environment,
+            act=f"console:{who.name}",
             trial=trial,
-            # Try it answers from the test system (owner, 2026-10-19: everything but live runs uses test).
-            environment=TEST,
+            secret_values=secret_values,
         )
         result: dict[str, Any] = {
-            "output": outcome.output,
+            "callId": ran["callId"],
             "latencyMs": round((time.perf_counter() - started) * 1000),
-            "reachedHost": urlsplit(str(module["endpoint"])).hostname,
+            "reachedHost": urlsplit(await self._address(str(module["tenant_id"]), module)).hostname,
             "stubbed": False,
         }
-        if not outcome.ok:
-            error = cast(dict[str, Any], cast(dict[str, Any], outcome.output).get("error") or {})
+        if "code" in ran:
+            message = "; ".join(ran["reasons"])
+            return result | {
+                "decision": "deny",
+                "denyReason": ran["code"],
+                "denyMessage": message,
+                "status": ran["status"],
+                "output": {"error": ran["code"], "message": message},
+            }
+        result["output"] = ran["output"]
+        if not ran["ok"]:
+            error = cast(dict[str, Any], cast(dict[str, Any], ran["output"]).get("error") or {})
             # The upstream's own status when it answered; otherwise the gateway's, by whether the call timed out.
             result["status"] = error.get("status") or (504 if "TIMEOUT" in str(error.get("code")) else 502)
         return result
@@ -2150,6 +2413,10 @@ class ModuleService:
         """A discovery's sign-in through the named connection, in the test environment (c-331): its headers and its
         client certificate; nothing for no connection."""
         if not connection_id or self.auth is None:
+            return {}, None
+        conn = await self.connections.get(who.tenant_id, connection_id)
+        if conn is not None and conn["auth_kind"] == "none":
+            # A module's own open connection (c-616) holds only its address: there is nothing to sign in with.
             return {}, None
         probe = {"tenant_id": who.tenant_id, "connection_id": connection_id, "team_id": who.team.id, "endpoint": url}
         try:
@@ -2217,9 +2484,16 @@ class ModuleService:
         fresh = [o for o in self._chosen(found, chosen) if not any(x["name"] == o["name"] for x in m["operations"])]
         if not fresh:
             raise Conflict("Every chosen operation is already in this module.")
-        if m["endpoint"] and m["endpoint"].rstrip("/") != found["endpoint"]:
-            raise Conflict(f"This module calls {m['endpoint']}; the source serves {found['endpoint']}.")
-        m["endpoint"] = found["endpoint"]
+        held = await self._address(who.tenant_id, m)
+        if held and held.rstrip("/") != found["endpoint"]:
+            raise Conflict(f"This module calls {held}; the source serves {found['endpoint']}.")
+        if m["connection_id"] is None:
+            conn = await self._open_connection(who, m["display_name"], found["endpoint"], m["team_id"])
+            m.update(connection_id=conn["id"], auth=module_auth(conn))
+        elif not held:
+            conn = await self.connections.get(who.tenant_id, m["connection_id"])
+            if conn is not None:
+                await self._address_on(who, conn, found["endpoint"])
         if found["type"] == "mcp":
             # A tool the server no longer lists is drift from what was reviewed: calls to it may now do anything.
             servers_names = {o["path"] for o in found["operations"]}

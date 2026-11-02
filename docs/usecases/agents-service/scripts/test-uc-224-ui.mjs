@@ -118,7 +118,7 @@ await withUiStack(
         { status: response.status(), marked, sent: sent?.inputs, levy: levy?.input?.record },
       );
 
-      // Step 3b: the decided task leaves her queue and the queue opens the next one (c-460); 3c shows who decided it.
+      // Step 3b: the decided task leaves her queue and the queue opens the next one; 3c shows who decided it.
       const left = await page.waitForFunction((id) => !document.querySelector(`[data-testid^="queue-item-${id}"]`), started.runId, { timeout: 30_000 }).then(() => true, () => false);
       const now = new URL(page.url()).searchParams.get('review');
       check('3b after deciding, the task leaves her queue and the next task opens', left && now !== started.runId, { left, now });
@@ -154,7 +154,7 @@ await withUiStack(
         { at: ack?.waiting?.node, sheet: sheetText.slice(0, 500), listed },
       );
 
-      // The acknowledgement opened from its own address (c-289), which Human Tasks now opens beside its queue (c-460):
+      // The acknowledgement opened from its own address, which Human Tasks now opens beside its queue:
       // the question, the reply as it will leave, the cases. The question, body and footer are the decision panel's.
       const taskShots = join(ROOT, 'docs/console/proposed/tasks');
       mkdirSync(taskShots, { recursive: true });
@@ -165,7 +165,7 @@ await withUiStack(
       // Whoever the step lets decide sees its type's buttons; the page is the same for everyone else, with who decides.
       const ackFooter = (await page.getByTestId('decision-footer').innerText()).replace(/\s+/g, ' ');
       let who = null;
-      for (const [email, team] of [['m.okafor@harborpine.example', 'team_ops'], ['p.shah@harborpine.example', 'team_ops'], ['n.petrov@harborpine.example', 'team_security'], ['o.haddad@harborpine.example', 'team_fraud'], ['w.kamau@harborpine.example', 'team_platform']]) {
+      for (const [email, team] of [['m.okafor@harborpine.example', 'team_ops'], ['p.shah@harborpine.example', 'team_ops'], ['n.petrov@harborpine.example', 'team_security'], ['w.kamau@harborpine.example', 'team_platform']]) {
         const signed = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data?.token;
         const seen = await fetch(`${agents}/reviews/${encodeURIComponent(started.runId)}`, { headers: { Authorization: `Bearer ${signed}`, 'X-Team-Id': team } });
         if (seen.ok && (await seen.json()).data?.canDecide) {
@@ -188,7 +188,7 @@ await withUiStack(
       await page.setViewportSize({ width: 1440, height: 1000 });
       check('4b as a page the acknowledgement asks whether to send it to its sender, shows the email and the reply, and decides by Send or Do not send', ackQuestion === `Send the acknowledgement to ${SENDER}?` && /We received your document/.test(ackEvidence) && ackButtons.some((b) => /^Send/.test(b)) && ackButtons.some((b) => /Do not send/.test(b)) && caseLinks.every((h) => /^\/cases\//.test(h ?? '')), { ackQuestion, ackEvidence: ackEvidence.slice(0, 120), ackButtons, ackFooter, caseLinks, who });
 
-      // The levy case's own Human Task as a page (c-289): one plain question naming both choices, the notice beside it,
+      // The levy case's own Human Task as a page: one plain question naming both choices, the notice beside it,
       // and a footer that is one row saying what each choice does. No tool name, raw key or raw float on the page.
       // The corrected debtor is no bank customer, so that case ends unmatched; the same notice for a customer the bank
       // has (name and last four of the SSN) reaches the hold-or-flag step.
@@ -229,7 +229,48 @@ await withUiStack(
         { heldTitle, viewer, options, footerHeight, secondSays, raw: rawText?.[0] },
       );
 
-      // The mailed document's run started a levy case for each debtor read (c-209): its page lists each one with its
+      // 4e: the approver changes the proposed amount while approving. The task and the case then show the
+      // amount the bank was told, not the proposed 3,250.00.
+      const holdShots = evidenceDir('420');
+      mkdirSync(holdShots, { recursive: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(heldId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId('option-decision-form').waitFor({ timeout: 60_000 });
+      await page.getByTestId('option-decision-form').getByRole('radio', { name: /Hold/ }).check();
+      const amountBox = page.getByTestId('option-inputs-hold').locator('input').first();
+      await amountBox.waitFor({ timeout: 10_000 }).catch(async () => {
+        throw new Error(`4e: no amount field after choosing Hold: ${JSON.stringify(await json(await fetch(`${agents}/reviews/${encodeURIComponent(heldId)}`, { headers: james }))).slice(0, 1500)}`);
+      });
+      await amountBox.fill('2140.55');
+      // The first press is refused with 422 until the step-up is confirmed; the decision is the 200 after it.
+      const decidedHold = page.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()) && r.status() === 200, { timeout: 60_000 });
+      await page.getByTestId('decide').click();
+      const reauth = page.getByRole('dialog', { name: 'Confirm it is you' });
+      if (await reauth.waitFor({ timeout: 15_000 }).then(() => true, () => false)) {
+        await page.locator('#reauth-secret').fill(PASSWORD);
+        await page.getByTestId('reauth-submit').click();
+      }
+      const holdRes = await decidedHold;
+      await new Promise((r) => setTimeout(r, 1500));
+      const afterHold = await run(james, matched.runId);
+      const caseId = JSON.stringify(afterHold).match(/case_[0-9a-f]{12}/)?.[0];
+      await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(heldId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByText('2,140.55').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const taskText = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
+      await page.screenshot({ path: join(holdShots, 'task-hold-amount-1280.png') });
+      await page.goto(`${consoleUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const actions = page.getByTestId('case-actions');
+      await actions.waitFor({ timeout: 60_000 });
+      const actionText = (await actions.innerText()).replace(/\s+/g, ' ');
+      await actions.screenshot({ path: join(holdShots, 'case-hold-amount-1280.png') });
+      check(
+        '4e an approver who changes the hold to 2,140.55 sees 2,140.55 on the task and the case row, not 3,250.00',
+        holdRes.status() === 200 && /2,140\.55/.test(taskText) && !/3,250\.00/.test(taskText) && /2,140\.55/.test(actionText) && !/3,250\.00/.test(actionText),
+        { status: holdRes.status(), caseId, actionText, task: taskText.match(/.{0,80}(3,250|2,140).{0,40}/g) },
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
+      // The mailed document's run started a levy case for each debtor read: its page lists each one with its
       // status, and the workflow's canvas says the step repeats and over what.
       await page.goto(`${consoleUrl}/workflows/runs/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const children = page.getByTestId('run-children');

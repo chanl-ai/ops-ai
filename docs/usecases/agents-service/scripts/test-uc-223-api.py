@@ -122,7 +122,7 @@ def worker(files_url: str, models_url: str, documents_url: str) -> Generator[Non
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,
-        # The Extract from file step reads through documents-service (c-256).
+        # The Extract from file step reads through documents-service.
         "OPS_DOCUMENTS_URL": documents_url,
         "OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         "OPS_ENGINE_POLL_SECONDS": "0.2",
@@ -309,7 +309,7 @@ def main() -> None:
                 first = f"Garnishment documents {RUN}"
                 first_files = [
                     ("notice-of-garnishment.pdf", "application/pdf", NOTICE_PDF),
-                    # Mail clients often send a CSV as octet-stream; files-service judges it by its bytes (c-234).
+                    # Mail clients often send a CSV as octet-stream; files-service judges it by its bytes.
                     ("debtors.csv", "application/octet-stream", CSV),
                     ("scan-archive.pdf", "application/pdf", b"%PDF-1.4\n" + b"0" * (2 * 1024 * 1024)),
                     ("viewer.exe", "application/octet-stream", b"MZ\x90\x00"),
@@ -335,7 +335,7 @@ def main() -> None:
                     and {d["status"] for d in docs} == {"waiting"}
                     and names
                     == [
-                        # No customer matched: a person finds the customer or closes it as not ours (c-477).
+                        # No customer matched: a person finds the customer or closes it as not ours.
                         ("Jordan Whitfield", "waiting"),
                         ("Marcus Bell", "waiting"),
                         ("Priya Natarajan", "waiting"),
@@ -387,7 +387,7 @@ def main() -> None:
                     {"waiting": waiting_on, "decision": rejected.text[:200], "run": (ended or {}).get("outcome")},
                 )
 
-                # The same message again: a redelivery. Another message reusing its Message-ID would run (c-231).
+                # The same message again: a redelivery. Another message reusing its Message-ID would run.
                 mail(first, first_files, message_id=message_id)
                 time.sleep(6)
                 check(

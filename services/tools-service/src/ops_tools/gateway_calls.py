@@ -21,8 +21,8 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
 from .auth import SIGNED_WITH
-from .auth.kinds import TEST
-from .executor import Executor, invalid_fields
+from .environments import TEST
+from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
@@ -38,6 +38,8 @@ from .tools import ToolCaller
 log = get_logger("ops_tools.gateway_calls")
 
 API, MCP = "api", "mcp"
+# A person's Real run from a tool page (c-616): the same checks as any call, logged under that person.
+CONSOLE = "console"
 
 # Turns a call's input into what is sent, and names the values to scrub from its answer (code runs, c-531).
 Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
@@ -82,6 +84,11 @@ def _token_ref(token: str | None) -> str | None:
     return "apt:" + hashlib.sha256(token.encode()).hexdigest()[:32] if token else None
 
 
+# The refusal for a call acting for a person who has not connected their own account, made before the request is
+# built (auth.Authenticator._not_linked).
+NOT_LINKED = "CONNECTION_NOT_LINKED"
+
+
 def _error_of(outcome: ToolOutcome) -> dict[str, Any] | None:
     """The executor's {code, message} on a failed call, for the call log."""
     output: Any = outcome.output
@@ -117,11 +124,22 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if resolved is None or resolved.operation is None or resolved.module is None:
         return None
     op, module = resolved.operation, resolved.module
+    if module.get("sign_in_needed"):
+        # Each person signs in, and this environment has no instance yet (c-616): the plugin is on. Refused as a
+        # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
+        return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), []
+    if module.get("instance_missing"):
+        # The team account has not signed in for this environment. The plugin is on.
+        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), []
     if module.get("plugin_off"):
         # A plugin off for the install or the team (c-564): refused before approval, so no write waits for a person.
         return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), []
+    if module.get("account_missing"):
+        # The account a call named is not one of the team's accounts of the app (c-608): refused, never defaulted.
+        return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), []
     if not op["enabled"]:
-        return 403, "operation_hidden", f"{op['name']} is hidden in {module['display_name']}", []
+        why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
+        return 403, "operation_hidden", str(why), []
     if module["status"] != "published":
         return 403, "module_not_published", f"{module['display_name']} is not published", []
     if module["drift"]:
@@ -149,6 +167,8 @@ class GatewayCalls:
         send_check: SendCheck | None,
         all_writes_wait: Callable[[str, str | None], Awaitable[bool]],
         clock: Callable[[], float] = time.time,
+        app_writes_wait: Callable[[str, str | None, Aggregate | None], Awaitable[bool]] | None = None,
+        approver: Callable[[Principal], bool] | None = None,
     ) -> None:
         self.registry = registry
         self.log = log
@@ -157,6 +177,10 @@ class GatewayCalls:
         self.counters = counters
         self.send_check = send_check
         self.all_writes_wait = all_writes_wait
+        # Whether the team listed the module's app in appWritesNeedApproval (c-616); none listed without it.
+        self.app_writes_wait = app_writes_wait
+        # Whether the caller holds the approver role in the team (can() over the roles grid, c-616); nobody without it.
+        self.approver = approver
         self.clock = clock
 
     async def _run(self, resolved: Resolved, tool: str, args: dict[str, Any], **kw: Any) -> ToolOutcome:
@@ -169,6 +193,39 @@ class GatewayCalls:
             log.exception("gateway_call_failed", tool=tool, error=type(e).__name__)
             return ToolOutcome(False, {"error": {"code": "CALL_FAILED", "message": f"{tool} failed before an answer."}})
 
+    async def console_run(
+        self,
+        caller: Principal,
+        *,
+        tool: str,
+        args: dict[str, Any],
+        environment: str,
+        act: str,
+        trial: Trial,
+        secret_values: dict[str, str] | None,
+    ) -> dict[str, Any]:
+        """A tool page's Real run (c-616) as one gateway call, so it meets every rule an agent's call meets: approvals,
+        limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
+        service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not."""
+        # The person who pressed Run is whom the call acts for (c-616): their own sign-in signs it on an app each person
+        # signs in to, and Usage names them.
+        person = (
+            ActingForPerson(sub=caller.sub, email=caller.email, name=caller.name, team_id=caller.team_id)
+            if caller.kind == "person" and caller.team_id
+            else None
+        )
+        req = CallRequest(
+            tool=tool,
+            input=args,
+            key=new_id("console"),
+            run_context={"environment": environment, "act": act},
+            acting_for=person,
+        )
+        out = await self.call(caller, req, channel=CONSOLE, trial=trial, secret_values=secret_values)
+        if isinstance(out, Refused):
+            return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
+        return {"callId": out.call_id, "ok": out.ok, "output": out.output}
+
     async def call(
         self,
         caller: Principal,
@@ -179,11 +236,16 @@ class GatewayCalls:
         client_name: str | None = None,
         prepare: Prepare | None = None,
         sees: Callable[[Aggregate], bool] | None = None,
+        trial: Trial | None = None,
+        secret_values: dict[str, str] | None = None,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
         generation (writes are fenced on it); `channel` and `client_name` say where the call came from, for the log.
-        `sees` is the caller's team's view of the modules: an operation of a module outside it is refused."""
+        `sees` is the caller's team's view of the modules: an operation of a module outside it is refused. A tool page's
+        Real run passes `trial`, which records the request as sent with its secrets hidden, and `secret_values`, values
+        typed for this one call in place of unset secrets (never stored or logged)."""
         call_id = new_id("gwc")
+        shown = {"trial": trial, "secret_values": secret_values} if trial is not None else {}
         started = time.monotonic()
 
         def elapsed() -> int:
@@ -192,7 +254,12 @@ class GatewayCalls:
         # The call's environment, live or test, picks a plugin's instance before anything runs (c-580).
         environment = str(req.run_context.get("environment") or TEST)
         resolved = await self.registry.resolve(
-            req.tool, tenant_id=caller.tenant_id, team_id=caller.team_id, environment=environment
+            req.tool,
+            tenant_id=caller.tenant_id,
+            team_id=caller.team_id,
+            environment=environment,
+            account=req.run_context.get("account"),
+            person=req.acting_for.sub if req.acting_for else None,
         )
         access = resolved.access if resolved else "unknown"
         digest = input_hash(req.input)
@@ -200,6 +267,9 @@ class GatewayCalls:
         row: dict[str, Any] = {
             "id": call_id,
             "tenant_id": caller.tenant_id,
+            # The team the call acts in, so Usage shows a team only its own calls, also on a module every team shares;
+            # a caller with no team (a service acting for the tenant) leaves the module's own team.
+            "team_id": caller.team_id or (resolved.module.get("team_id") if resolved and resolved.module else None),
             "tool": req.tool,
             "access": access,
             "input_hash": digest,
@@ -265,14 +335,26 @@ class GatewayCalls:
             )
             return Refused(call_id, status, code, [reason], {"invalid": problems} if problems else {})
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
-        # From the registry and the team's policy, never the caller: whether this write needs an approval token. A
-        # write declared to run at once (open_case) still waits while the team has every write wait.
-        approval_required = access not in WRITES or (
+        # From the registry and the team's policies, never the caller: whether this write needs an approval token.
+        # Approvals are off by default (owner, 2026-11-01): a write waits only when its tool's switch is on, the team
+        # has every write wait, or the team listed its app.
+        module = resolved.module if resolved else None
+        needs = access in WRITES and (
             # Over MCP every write waits for a person, whatever the operation declares (owner, c-354 Q4).
             channel == MCP
             or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
             or await self.all_writes_wait(caller.tenant_id, caller.team_id)
+            or (
+                self.app_writes_wait is not None
+                and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
+            )
         )
+        # When approval is on, roles decide (owner, 2026-11-01): a person holding the approver role in the team is not
+        # asked, and the log names them as the write's approver; anyone else needs an approval token.
+        self_approved = bool(needs and req.approval_token is None and self.approver and self.approver(caller))
+        if self_approved:
+            row["approvers"] = [caller.email]
+        approval_required = access not in WRITES or (needs and not self_approved)
         if access in WRITES and req.approval_token is None and self.send_check is not None:
             # Check before sending (c-300): a write the team's sending policy forbids, or one the check could not
             # judge, waits for a person; a write that carries an approval was decided by one and is not judged again.
@@ -325,6 +407,7 @@ class GatewayCalls:
                 key=req.key,
                 caller=ToolCaller.of(caller, acting_for=req.acting_for),
                 environment=ctx.get("environment"),
+                **shown,
             )
             row["credential"] = SIGNED_WITH.get()
             SIGNED_WITH.reset(signing)
@@ -362,7 +445,7 @@ class GatewayCalls:
             return Allowed(call_id, first["outcome"] == "ok", first["output"], first["view"], replay_of=first["id"])
         if (limited := await over_rate()) is not None:
             return limited
-        approvers = tuple(_approvers(req.approval_token))
+        approvers = (caller.email,) if self_approved else tuple(_approvers(req.approval_token))
         signing = SIGNED_WITH.set(None)
         outcome = await self._run(
             resolved or Resolved(access, "local"),
@@ -371,6 +454,7 @@ class GatewayCalls:
             key=req.key,
             caller=ToolCaller.of(caller, approvers=approvers, acting_for=req.acting_for),
             environment=ctx.get("environment"),
+            **shown,
         )
         credential = SIGNED_WITH.get()
         SIGNED_WITH.reset(signing)
@@ -383,5 +467,8 @@ class GatewayCalls:
             latency_ms=elapsed(),
             error=failed,
             credential=credential,
+            # Refused at sign-in for a person with no account of their own: nothing was sent, and the run waiting for
+            # them sends this write again under its key once they connect (c-616 S12).
+            unsent=(failed or {}).get("code") == NOT_LINKED,
         )
         return Allowed(call_id, outcome.ok, outcome.output, outcome.view)

@@ -21,7 +21,8 @@ import sqlalchemy as sa
 from sqlalchemy.engine.default import DefaultExecutionContext
 
 from ops_access import OWNER
-from ops_store.schema import TENANT_SCOPED
+from ops_store.outbox import outbox_table
+from ops_store.schema import TENANT_SCOPED, system
 
 metadata = sa.MetaData()
 
@@ -419,4 +420,11 @@ TENANT_TABLES = (
     role_assignments,
     *SIGNIN_TABLES,
     policies,
+)
+
+# What platform-service tells other services (c-616 S14, on c-258's outbox): written in the transaction that makes the
+# change, delivered by its relay (event_relay.py) to each service that acts on the event. platform-service never
+# touches another service's tables. Read by the relay across tenants.
+platform_outbox = outbox_table(
+    metadata, "platform_outbox", info=system("platform event outbox, read by its relay across tenants")
 )

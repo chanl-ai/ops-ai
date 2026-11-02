@@ -43,34 +43,46 @@ def test_a_named_team_reads_its_own_document_type_and_starts_its_own_workflows()
     team = manifest()
     sample_team.prefixed(team, sample_team.prefix_of("Northfield Ops"))
     kinds = {k["id"] for k in team["documentTypes"]}
-    assert kinds == {"northfield_ops_garnishment_notice"}, kinds
+    assert kinds == {"northfield_ops_legal_notice"}, kinds
     names = {"agent:levy": "ag_levy_northfield"} | sample_team.ids_by_key(team)
     copy = sample_team.definition_of(
         next(w for w in team["workflows"] if w["key"] == "levy_reply_document"), names, None
     )
     params = {n["id"]: n["parameters"] for n in copy["nodes"]}
     assert copy["id"] == "northfield_ops_levy_reply_document"
-    assert params["read"]["documentType"]["id"] == "northfield_ops_garnishment_notice"
+    assert params["read"]["documentType"]["id"] == "northfield_ops_legal_notice"
     assert params["each"]["workflow"] == "northfield_ops_levy_reply_debtor"
     intake = sample_team.definition_of(next(w for w in team["workflows"] if w["key"] == "levy_mail"), names, "a@b.test")
     starts = [n["parameters"]["workflow"] for n in intake["nodes"] if n["type"] == "ops.action.workflow"]
     assert starts == ["northfield_ops_levy_reply_document"], starts
 
 
-def test_a_type_id_another_team_holds_fails_instead_of_counting_as_found() -> None:
-    class Taken:
-        """documents-service as another team's holder of the id leaves it: the create conflicts, the read is 404."""
+def test_a_type_id_another_team_holds_is_copied_under_the_team_prefix() -> None:
+    created: list[str] = []
 
-        def post(self, *_: object, **__: object) -> httpx.Response:
-            return httpx.Response(409, json={"success": False})
+    class Taken:
+        """documents-service as another team's holder of the id: the create conflicts, the read is 404, a prefixed
+        id is this team's."""
+
+        def post(self, *_: object, **kwargs: object) -> httpx.Response:
+            body = kwargs.get("json") or {}
+            assert isinstance(body, dict)
+            created.append(str(body.get("id")))
+            if body.get("id") == "legal_notice":
+                return httpx.Response(409, json={"success": False})
+            return httpx.Response(201, json={"success": True, "data": {"id": body.get("id")}})
 
         def get(self, *_: object, **__: object) -> httpx.Response:
             return httpx.Response(404, json={"success": False})
 
-    kinds = manifest()["documentTypes"]
+    spec = manifest()
     sample_team.FAILED.clear()
-    sample_team.ensure_document_types(lambda _service: Taken(), kinds)  # pyright: ignore[reportArgumentType]
-    assert [f"document type {kinds[0]['name']}"] == sample_team.FAILED
+    sample_team.ensure_document_types(lambda _service: Taken(), spec)  # pyright: ignore[reportArgumentType]
+    assert sample_team.FAILED == []
+    assert spec["documentTypes"][0]["id"] == "customer_operations_legal_notice"
+    assert created == ["legal_notice", "customer_operations_legal_notice"]
+    mapped = next(w for w in spec["workflows"] if w.get("documentTypes"))
+    assert "customer_operations_legal_notice" in mapped["documentTypes"].values()
 
 
 def test_the_first_admins_password_is_made_once_kept_private_and_never_printed(

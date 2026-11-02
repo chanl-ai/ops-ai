@@ -281,9 +281,13 @@ async def test_a_service_writes_and_reads_a_file_for_the_team_its_token_names(cl
         assert other.status_code == 404
         unscoped = await c.get(f"/v1/files/{file_id}", headers=_kb(tenant, "team_ops", ["files:create"]))
         assert unscoped.status_code == 403 and unscoped.json()["error"]["code"] == "scope_required"
-        # A service reaches only the routes that take service tokens.
-        listing = await c.get("/v1/files", headers=service)
-        assert listing.status_code == 403
+        # A service holding files:view lists its token's team's files, to find one by name (c-613); no other team's,
+        # and not without the scope.
+        listing = _data(await c.get("/v1/files", params={"search": "mail"}, headers=service))
+        assert [f["id"] for f in listing["data"]] == [file_id], listing
+        elsewhere = _data(await c.get("/v1/files", headers=_kb(tenant, "team_security", ["files:view"])))
+        assert elsewhere["data"] == []
+        assert (await c.get("/v1/files", headers=_kb(tenant, "team_ops", ["files:create"]))).status_code == 403
 
 
 # ── signed grants on the cloud backends; bytes still move through obstore inside the adapter ──

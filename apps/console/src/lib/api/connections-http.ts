@@ -16,7 +16,8 @@ export function createConnectionsHttp(get: Get, send: Send): ConnectionsApi {
     startSignIn: (id, i) => send('POST', `${one(id)}/sign-in`, i),
     completeSignIn: (id, i) => send('POST', `${one(id)}/sign-in/complete`, i),
     openConnectLink: (link) => send('POST', '/connections/connect-links/sign-in', { link }),
-    mine: () => get('/me/connections'),
+    mine: (every) => get(every ? '/me/connections?every=true' : '/me/connections'),
+    giveOwn: (id, i) => send('PUT', `/me/connections/${encodeURIComponent(id)}/credentials`, i),
     disconnect: (id, environment) => send('DELETE', `/me/connections/${encodeURIComponent(id)}?environment=${environment}`),
   };
 }

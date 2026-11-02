@@ -1,5 +1,5 @@
 // uc-331 A file is read with Detect from the Files page, ui layer: docs/usecases/files-service/a-file-is-read-with-detect.md
-// (c-335). The demo stack with the documents fixtures' fake model, which knows the invoice fixtures and answers that a
+//. The demo stack with the documents fixtures' fake model, which knows the invoice fixtures and answers that a
 // canteen menu is none of the team's types; platform sign-in as James. A workflow worker runs the system extract.
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -82,7 +82,7 @@ await withUiStack(
         await page.getByTestId('extract-detect').click();
         const versionShown = await page.getByTestId('extract-version').count();
         if (file === invoice) {
-          // c-335's screen evidence: the dialog with Detect chosen, at 1280 and 400.
+          // an earlier change's screen evidence: the dialog with Detect chosen, at 1280 and 400.
           mkdirSync(SHOTS, { recursive: true });
           await page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
           await page.waitForTimeout(500);

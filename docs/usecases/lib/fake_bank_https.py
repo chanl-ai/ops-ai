@@ -106,7 +106,7 @@ def _get(op_id: str, summary: str, shape: str | None = None) -> dict[str, Any]:
     return {"get": op}
 
 
-# Reads whose answers shape into each widget kind (c-055 uc-061): a record, rows, a series by inference, rows declared
+# Reads whose answers shape into each widget kind (an earlier change uc-061): a record, rows, a series by inference, rows declared
 # with x-ops-shape over data that would infer a series (the declared shape wins), a metric, and a nested answer that
 # fits no shape and stays a tool card; and 250 statement lines, more rows than agents-service sends (it cuts at 200).
 SHAPES_SPEC: dict[str, Any] = {
@@ -139,7 +139,7 @@ SHAPED: dict[str, Any] = {
     "daily-spend": [{"date": day, "groceries": 40 + i * 7, "transit": 12 + i * 2} for i, day in enumerate(DAYS)],
     "balances": [{"date": day, "balance": 1200.5 - i * 85} for i, day in enumerate(DAYS)],
     "disputes": {"value": 3, "label": "Open disputes", "unit": "cases", "delta": -1},
-    # Text, not an object: since c-055 T024 a nested object draws as a record, so this is the answer that fits no shape.
+    # Text, not an object: since an earlier change T024 a nested object draws as a record, so this is the answer that fits no shape.
     "profile": "Ada Chen, a customer since 2019, banks at the King St branch.",
     "statement-lines": [
         {
@@ -234,7 +234,7 @@ def _handler(bank: FakeBank) -> type[BaseHTTPRequestHandler]:
             if self.path.startswith("/v1/accounts/"):
                 return self._send(200, {"accountId": self.path.rsplit("/", 1)[1], "balance": 1200.5})
             if self.path.split("?")[0] == "/v1/limits":
-                # A card's daily limit behind a key sent as a query value (c-531): proves which key arrived without
+                # A card's daily limit behind a key sent as a query value: proves which key arrived without
                 # returning it, and repeats the key, as a careless API might, so the gateway's scrubbing shows.
                 key = dict(parse_qsl(urlsplit(self.path).query)).get("rulesKey")
                 if not key:

@@ -246,7 +246,12 @@ def kernel_agents(
 ) -> KernelAgents | None:
     """The agent port the worker hands the engine, built as create_app builds a chat turn's ports; None when no model
     is configured (an agent step then fails with that reason)."""
-    catalog = load_catalog(settings.seed_dir, settings.agents_seed_file)
+    catalog = load_catalog(
+        settings.seed_dir,
+        settings.agents_seed_file,
+        tool_search=settings.feature_flags.on("tool_search"),
+        tool_search_above=settings.tool_search_above,
+    )
     through: ModelsServiceModels | None = None
     if settings.models_url and settings.models_key is not None:
         through = ModelsServiceModels(settings.models_url, settings.models_key.get_secret_value())

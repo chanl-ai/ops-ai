@@ -48,6 +48,7 @@ from ..auth import Principal, principal, require_builder, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
+from ..run_starts import filled
 from ..schemas import Out
 from ..widget_sessions import RateLimit
 
@@ -313,7 +314,7 @@ async def _submit(
 ) -> dict[str, Any]:
     """Starts the form's run on the live version in the form's team, once its place under the daily cap is taken."""
     stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
-    _inputs(stored)
+    values = filled(_inputs(stored), values)
     links = _links(rt)
     reserved = await links.reserve(
         str(row["id"]),

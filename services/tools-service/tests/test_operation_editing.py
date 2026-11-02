@@ -102,13 +102,14 @@ async def test_a_secret_in_the_path_is_never_an_input_and_a_missing_argument_is_
     assert unknown.status_code == 422 and unknown.json()["error"]["details"]["field"] == "input.day", unknown.text
 
 
-async def test_an_access_change_is_major_and_carries_the_approval_with_it(api: Api) -> None:
+async def test_an_access_change_is_major_and_leaves_approval_off(api: Api) -> None:
     op = await _op(api, "get_payoff_statement")
     staged = await _ok(await _patch(api, op, {"access": "write"}))
     change = next(c for c in staged["pendingChanges"] if c["operation"] == "get_payoff_statement")
     assert change == {**change, "kind": "access_widened", "major": True}
     after = next(o for o in staged["operations"] if o["name"] == "get_payoff_statement")
-    assert (after["access"], after["requiresApproval"]) == ("write", True)
+    # Approvals are off by default (owner, 2026-11-01): a read made a write does not start waiting by itself.
+    assert (after["access"], after["requiresApproval"]) == ("write", False)
 
 
 async def test_a_default_reaches_the_agents_schema_once_published(api: Api) -> None:
@@ -125,7 +126,8 @@ async def test_a_default_reaches_the_agents_schema_once_published(api: Api) -> N
 
 async def test_the_secrets_an_operation_reads_show_whether_they_are_set(api: Api) -> None:
     op = await _http_op(api, "get_rate_keyed")
-    await _ok(await _patch(api, op, {"headers": [{"key": "X-Api-Key", "value": "{{CORE_KEY}}"}]}))
+    # Not a sign-in header: the module's connection signs its calls, so a key there is refused (c-616).
+    await _ok(await _patch(api, op, {"headers": [{"key": "X-Partner-Id", "value": "{{CORE_KEY}}"}]}))
     before = await _ok(await api.call("GET", MOD))
     assert next(o for o in before["operations"] if o["id"] == op["id"])["secrets"] == [
         {"name": "CORE_KEY", "set": False, "available": False}
@@ -172,7 +174,7 @@ async def test_a_teams_new_module_counts_its_unset_secret_until_that_team_saves_
     op = {"name": "get_rate_uc090", "description": "A rate", "access": "read", "method": "GET"}
     op |= {
         "url": "https://rates.bank.test/v1/rates/{currency}",
-        "headers": [{"key": "X-Api-Key", "value": "{{RATES_KEY}}"}],
+        "headers": [{"key": "X-Partner-Token", "value": "{{RATES_KEY}}"}],
     }
     added = await api.call("POST", f"/{mid}/operations", team="team_ops", json=op)
     assert added.status_code in (200, 201), added.text
@@ -192,3 +194,12 @@ async def test_a_teams_new_module_counts_its_unset_secret_until_that_team_saves_
     )
     assert mine.status_code == 201, mine.text
     assert await unset() == 0
+
+
+async def test_asking_for_two_approvers_turns_the_tools_approval_on(api: Api) -> None:
+    """With approvals off by default (owner, 2026-11-01), a write set to two approvers would otherwise never wait."""
+    op = await _op(api, "get_payoff_statement")
+    await _ok(await _patch(api, op, {"access": "write"}))
+    staged = await _ok(await _patch(api, op, {"approvers": 2}))
+    after = next(o for o in staged["operations"] if o["name"] == "get_payoff_statement")
+    assert (after["approvers"], after["requiresApproval"]) == (2, True), after

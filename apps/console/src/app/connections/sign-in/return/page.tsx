@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { notFound, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { CircleCheck } from 'lucide-react';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
@@ -10,7 +10,6 @@ import { CONNECTED_MESSAGE, forgetSignIn, signInFor, type ConnectedMessage } fro
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCompleteSignIn } from '@/hooks/connections-queries';
-import { personalSignIn } from '@/lib/api';
 
 /**
  * Where a connected system sends the person back after signing in (tools-service's SIGN_IN_RETURN_PATH, c-558):
@@ -68,8 +67,6 @@ function SignInReturnPage() {
   );
 }
 
-/** Not offered until the personal sign-in switch is on (lib/api/index.ts). */
 export default function Page() {
-  if (!personalSignIn) notFound();
   return <SignInReturnPage />;
 }

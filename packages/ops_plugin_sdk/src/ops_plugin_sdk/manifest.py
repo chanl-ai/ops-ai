@@ -27,8 +27,9 @@ SIGN_IN_KINDS = (
     "oauth2_jwt_bearer",
 )
 SIGN_IN_SETTINGS = ("team", "person", "person_or_team")
-# The kinds that hold a person's own token, so each person may sign in (tools-service auth/kinds.py, per_person).
-PER_PERSON_KINDS = ("oauth2_auth_code",)
+# The kinds that hold each person's own credential, so each person may sign in (tools-service auth/kinds.py,
+# per_person): their own key, password or token, or their own OAuth sign-in (c-595).
+PER_PERSON_KINDS = ("api_key", "basic", "bearer", "oauth2_auth_code")
 # An operation's name in tools-service is `<plugin>_<tool>` and must match this (modules/schemas.py).
 OPERATION_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -37,6 +38,22 @@ KNOWLEDGE_ROLES = ("list_items", "get_item", "list_deleted")
 # The formats a value written into a query can have, each checked and escaped by tools-service (formats.py).
 FORMATS = ("soql_string", "sosl_term", "salesforce_id", "date-time", "date")
 MAX_ITEMS = 50
+# Headers that carry or route the sign-in: a plugin header never names one (validate.py), in any case, so the
+# connection's credential is the only one a call carries.
+SIGN_IN_HEADERS = ("authorization", "proxy-authorization", "cookie", "host")
+# The sign-in address's own parameters, set by tools-service for every connection: a plugin's authorize_params never
+# names one, and tools-service drops any that a connection's settings name (connections/service.py, start_sign_in).
+PLATFORM_AUTHORIZE_PARAMS = (
+    "response_type",
+    "client_id",
+    "redirect_uri",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+    "scope",
+    "login_hint",
+    "resource",
+)
 
 
 class Strict(BaseModel):
@@ -69,6 +86,17 @@ class ApiKey(Strict):
     name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
 
 
+class AfterSignIn(Strict):
+    """One GET after a sign-in, with the token just issued, whose answer fills one setting: Atlassian's cloud id,
+    DocuSign's account address, Salesforce's My Domain. `url` is an https template over settings, or a path on the
+    sign-in host (the origin of `token_url`); its host must be one of the plugin's egress hosts. `read` is the value's
+    path in the answer (`[0].id`, `.accounts[0].base_uri`)."""
+
+    url: str = Field(min_length=1)
+    read: str = Field(min_length=1)
+    setting: str
+
+
 class Connection(Strict):
     kinds: list[str] = Field(min_length=1)
     authorize_url: str | None = None
@@ -83,6 +111,11 @@ class Connection(Strict):
     health_check: HealthCheck | None = None
     # Required when `kinds` lists api_key (validate.py).
     api_key: ApiKey | None = None
+    # Added to the sign-in address (Atlassian's audience and prompt); fixed text or {setting}, never a platform one.
+    authorize_params: dict[str, str] = Field(default_factory=dict[str, str])
+    # How the OAuth client is sent on the token call: in the form, as basic auth (Zoom), or as a signed assertion.
+    client_auth: Literal["body", "basic", "private_key_jwt"] | None = None
+    after_sign_in: AfterSignIn | None = None
 
 
 class Setting(Strict):
@@ -96,6 +129,13 @@ class Setting(Strict):
     lockable: bool = False
     # Stored as a secret reference and never shown back.
     secret: bool = False
+    # Filled by the lookup after sign-in (Connection.after_sign_in), never typed by a person.
+    after_sign_in: bool = False
+
+    @property
+    def at_sign_in(self) -> bool:
+        """Whether the sign-in fills it, from the token or the lookup after it, so nobody types it."""
+        return self.from_token or self.after_sign_in
 
 
 class InputField(Strict):
@@ -133,6 +173,8 @@ class Request(Strict):
     path: str
     # A JSON body template; `{{arg}}` is the argument as JSON.
     body: str | None = None
+    # A form-encoded body instead (Slack's methods, Stripe): each field fixed text or `{{arg}}`, the argument as text.
+    form: dict[str, str] | None = None
     # Query parameters as templates over the inputs; each `{{arg}}` is the value checked and escaped by its format.
     query: dict[str, str] = Field(default_factory=dict[str, str])
     paging: Paging | None = None
@@ -159,10 +201,15 @@ class Tool(Strict):
     function: str | None = None
     knowledge: Literal["list_items", "get_item", "list_deleted"] | None = None
     rate_limit_per_min: int = Field(default=60, ge=1, le=10_000)
-    # A write waits for a person's approval unless the plugin says it need not.
+    # A write waits for a person's approval only when the plugin says so, or a team's policy turns approval on:
+    # approvals are off by default (owner, 2026-11-01).
     requires_approval: bool | None = None
     needs_person: bool = False
     scopes: list[str] = Field(default_factory=list[str])
+    # Sent on this tool's requests over the plugin's own: fixed text or {setting}, never a secret or the sign-in.
+    headers: dict[str, str] = Field(default_factory=dict[str, str])
+    # The most its `amount` input may be; the gateway refuses a call over it, or without an amount.
+    amount_max: float | None = Field(default=None, ge=0)
 
     @field_validator("name")
     @classmethod
@@ -181,8 +228,8 @@ class Tool(Strict):
 
     @property
     def waits(self) -> bool:
-        """Whether a call waits for approval: a write does unless the plugin set requires_approval false."""
-        return self.access == "write" if self.requires_approval is None else self.requires_approval
+        """Whether a call waits for approval: only a write the plugin marked requires_approval true."""
+        return self.access == "write" and self.requires_approval is True
 
 
 class Schedule(Strict):
@@ -232,6 +279,8 @@ class Manifest(Strict):
     settings: dict[str, Setting] = Field(default_factory=dict[str, Setting])
     egress: list[str] = Field(min_length=1)
     endpoint: str
+    # Sent on every request the plugin makes, a Python tool's too: fixed text or {setting}.
+    headers: dict[str, str] = Field(default_factory=dict[str, str])
     tools: list[Tool] = Field(min_length=1)
     knowledge_sources: list[KnowledgeSource] = Field(default_factory=list[KnowledgeSource])
     templates: list[Template] = Field(default_factory=list[Template])

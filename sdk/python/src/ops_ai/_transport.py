@@ -46,10 +46,10 @@ def _url(config: Config, service: str, op: Operation, path: Mapping[str, Any]) -
 
 def _headers(config: Config, extra: Mapping[str, Any]) -> dict[str, str]:
     h = {"Accept": "application/json", "User-Agent": "ops-ai-python"}
-    if config.api_key:
-        h["X-Api-Key"] = config.api_key
-    elif config.access_token:
+    if config.access_token:
         h["Authorization"] = f"Bearer {config.access_token}"
+    elif config.api_key:
+        h["X-Api-Key"] = config.api_key
     if config.team:
         h["X-Team-Id"] = config.team
     h.update({k: str(v) for k, v in extra.items() if v is not None})
@@ -150,7 +150,7 @@ class Transport:
         body: Any,
     ) -> Any:
         if op["stream"]:
-            return self.stream(service, op, path, query, headers)
+            return self.stream(service, op, path, query, headers, body)
         req = _request(self.config, service, op, path, query, headers, body)
         attempts = self.config.max_retries + 1 if _retryable(op, req["headers"]) else 1
         for attempt in range(attempts):
@@ -167,10 +167,16 @@ class Transport:
             return _result(response)
         raise OpsError(0, "unreachable", "no attempt was made")
 
-    def stream(
-        self, service: str, op: Operation, path: Mapping[str, Any], query: Mapping[str, Any], headers: Mapping[str, Any]
+    def stream(  # noqa: PLR0917 - matches call(); the generated stream routes pass these in order
+        self,
+        service: str,
+        op: Operation,
+        path: Mapping[str, Any],
+        query: Mapping[str, Any],
+        headers: Mapping[str, Any],
+        body: Any = None,
     ) -> Iterator[dict[str, Any]]:
-        req = _request(self.config, service, op, path, query, headers, None)
+        req = _request(self.config, service, op, path, query, headers, body)
         req["headers"]["Accept"] = "text/event-stream"
         with self.http.stream(**req, timeout=httpx.Timeout(self.config.timeout, read=None)) as response:
             if response.is_error:
@@ -202,7 +208,7 @@ class AsyncTransport:
         body: Any,
     ) -> Any:
         if op["stream"]:
-            return self.stream(service, op, path, query, headers)
+            return self.stream(service, op, path, query, headers, body)
         req = _request(self.config, service, op, path, query, headers, body)
         attempts = self.config.max_retries + 1 if _retryable(op, req["headers"]) else 1
         for attempt in range(attempts):
@@ -219,10 +225,16 @@ class AsyncTransport:
             return _result(response)
         raise OpsError(0, "unreachable", "no attempt was made")
 
-    async def stream(
-        self, service: str, op: Operation, path: Mapping[str, Any], query: Mapping[str, Any], headers: Mapping[str, Any]
+    async def stream(  # noqa: PLR0917 - matches call(); the generated stream routes pass these in order
+        self,
+        service: str,
+        op: Operation,
+        path: Mapping[str, Any],
+        query: Mapping[str, Any],
+        headers: Mapping[str, Any],
+        body: Any = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        req = _request(self.config, service, op, path, query, headers, None)
+        req = _request(self.config, service, op, path, query, headers, body)
         req["headers"]["Accept"] = "text/event-stream"
         async with self.http.stream(**req, timeout=httpx.Timeout(self.config.timeout, read=None)) as response:
             if response.is_error:

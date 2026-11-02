@@ -18,7 +18,7 @@ server and no secrets, so any static host can serve it. This is how a Vercel pro
 | Output Directory | default (`out` from `vercel.json`) | |
 | Node.js | 22.x | |
 | Environment variables | none | GitHub links use the deployed commit (`VERCEL_GIT_COMMIT_SHA`) |
-| Ignored Build Step | Not set | `git diff --quiet HEAD^ HEAD -- docs services apps/docs pnpm-lock.yaml` would skip commits that change neither the docs nor the site, and it also skips a first deploy of such a commit |
+| Ignored Build Step | `apps/docs/vercel.json` `ignoreCommand` | `git diff --quiet HEAD^ HEAD -- docs services apps/docs pnpm-lock.yaml` skips commits that change neither the docs nor the site |
 
 The site answers at `https://<docs-domain>/docs`; `/` redirects there. To show it at `/docs` on another host later,
 that host adds one rewrite from `/docs/:path*` to `https://<docs-domain>/docs/:path*`.

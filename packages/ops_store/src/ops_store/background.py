@@ -52,7 +52,7 @@ class Process:
 
 @cache
 def plugins_on() -> bool:
-    """OPS_PLUGINS, read once per process (c-565)."""
+    """Whether the install has any plugin (Settings.plugins), read once per process (c-565)."""
     return Settings().plugins
 
 
@@ -171,6 +171,14 @@ PROCESSES: tuple[Process, ...] = (
         900.0,
         "Any workspace's restore window can end; each is purged in its own tenant.",
     ),
+    Process(
+        "platform_relay",
+        "platform",
+        "Platform events",
+        "Tells other services about people and teams, such as a member removed from a team.",
+        2.0,
+        "It delivers every team's people and team events, each as its own team.",
+    ),
 )
 BY_KEY: dict[str, Process] = {p.key: p for p in PROCESSES}
 
@@ -201,6 +209,7 @@ EXEMPT: dict[str, str] = {
     "ops_documents_client.DocumentsClient.extract": "a caller polling its own extraction until it finishes",
     "ops_store.conformance._until": "the conformance suite waiting for a condition",
     "ops_agents.api.child_runs.ChildRuns._run_engine": "a chat turn waiting for the workflow run it started",
+    "ops_tools.file_tools.FileTools._finished": "one file-tool call waiting, within its deadline, for its extraction",
 }
 
 State = Literal["running", "late", "stopped", "not_reported"]

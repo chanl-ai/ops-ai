@@ -148,15 +148,22 @@ def main() -> None:
         check(
             "ungranted, search_tools does not find it", bool(searched) and f"workflow__{WORKFLOW}" not in found, found
         )
-        # The model calls the workflow by name anyway (a forced fake rule): the call is refused and no run starts.
+        # The model calls the workflow by name anyway (a forced fake rule): the call is refused as a tool the agent
+        # does not hold, the reply still finishes, and no run starts. A turn that crashed on the unknown name also
+        # started no run, so the refusal and the finished reply are what this checks.
         before = data(api.get("/v1/runs", params={"workflowId": WORKFLOW}, headers=OPS))["pagination"]["total"]
         _, events = chat(api, AGENT, DIRECT)
-        ran = [c for c in calls(events, f"workflow__{WORKFLOW}") if c["status"] == "success"]
+        tried = calls(events, f"workflow__{WORKFLOW}")
         after = data(api.get("/v1/runs", params={"workflowId": WORKFLOW}, headers=OPS))["pagination"]["total"]
+        crashed = [e for e in events if e.get("type") == "error"]
         check(
-            "ungranted, a direct call to the workflow is refused and starts no run",
-            not ran and after == before,
-            {"ran": ran, "runs": (before, after), "text": turn_text(events)[:200]},
+            "ungranted, a direct call to the workflow is refused clearly, the reply finishes, and no run starts",
+            bool(tried)
+            and all(c["status"] != "success" for c in tried)
+            and not crashed
+            and any(e.get("type") == "done" for e in events)
+            and after == before,
+            {"tried": tried, "errors": crashed[:1], "runs": (before, after), "text": turn_text(events)[:200]},
         )
     finish()
 

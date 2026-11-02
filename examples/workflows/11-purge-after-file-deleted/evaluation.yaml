@@ -1,0 +1,10 @@
+cases:
+  - name: deleted
+    input: fixtures/deleted.json
+    expected: expected/deleted.json
+  - name: again
+    input: fixtures/again.json
+    expected: expected/again.json
+  - name: wrong
+    input: fixtures/wrong.json
+    expected: expected/wrong.json

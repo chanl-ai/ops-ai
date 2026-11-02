@@ -1,0 +1,26 @@
+id: filter-a-list
+title: Filter a list
+track: workflow
+status: built
+difficulty: intro
+outcome: Keep items that match a field predicate.
+capabilities:
+- id: ops.data.filter
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/items.json
+expected:
+- expected/kept.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 30
+teaches:
+- a list in, kept and dropped counts out

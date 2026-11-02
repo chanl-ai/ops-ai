@@ -23,6 +23,8 @@ role named in the console. Without platform-service the page draws sample polici
 | 3 | James opens Policies | "You can't see the policies" with the server's own refusal; `PUT` as James answers 403 |
 | 4 | Sam sets the per-team switch Tool writes need approval to On and reloads | 200; On for his team on the server and after the reload; he puts it back |
 | 5 | He opens the Publish reviews card | It draws no editor and links to Publish reviews, the one place that setting is changed |
+| 6 | He opens Apps whose writes need approval, searches for an app that is not there, then picks the team's first app by part of its name and saves | No app listed by default; the search is read from `GET /v1/systems` and an empty one says No app matches; 200, and the app's id is listed for his team on the server and after the reload |
+| 7 | In that picker, with the search empty | Mailboxes is offered: the built-in apps stay pickable here (`GET /v1/systems?include=builtin`), though the Apps grid leaves them out |
 
 ## Acceptance layers
 

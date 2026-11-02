@@ -12,10 +12,10 @@ from urllib.parse import parse_qs
 import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_policy import AesGcmCipher
-from ops_service_kit.settings import Settings
 from ops_tools.auth.tokens import Tokens
 from ops_tools.store.connections import ConnectionStore
+
+from .conftest import credentials
 
 SETTINGS = {"tokenUrl": "https://login.bank.test/token", "clientId": "ops-console"}
 
@@ -46,7 +46,6 @@ async def _connection(store: ConnectionStore, tenant: str) -> str:
         "team_id": "team_platform",
         "name": "CRM",
         "auth_kind": "oauth2_auth_code",
-        "available_to": None,
         "status": "healthy",
         "revision": 1,
         "created_by": "t",
@@ -62,8 +61,8 @@ async def test_two_calls_past_the_token_refresh_it_once(engine: AsyncEngine, ten
     store = ConnectionStore(engine)
     conn = await _connection(store, tenant)
     seen: list[dict[str, str]] = []
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    tokens = Tokens(store, cipher, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
+    vault = credentials()
+    tokens = Tokens(store, vault, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
     # A sign-in whose token is already inside the refresh window.
     await tokens.store_answer(tenant, conn, "test", {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 5})
     both = await asyncio.gather(
@@ -86,8 +85,8 @@ async def test_a_refresh_after_a_401_replaces_only_the_refused_token(engine: Asy
     store = ConnectionStore(engine)
     conn = await _connection(store, tenant)
     seen: list[dict[str, str]] = []
-    cipher = AesGcmCipher(Settings().secrets_key.get_secret_value())
-    tokens = Tokens(store, cipher, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
+    vault = credentials()
+    tokens = Tokens(store, vault, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
     held = await tokens.store_answer(
         tenant, conn, "test", {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 3600}
     )

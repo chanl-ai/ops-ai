@@ -9,13 +9,12 @@ import secrets
 
 import httpx
 from usecase_harness import (
-    bearer,
+    as_role,
     check,
     data,
     finish,
     security_admin_on_ops,
     set_provider,
-    signed_in,
     signin_stack,
     sso_round_trip,
 )
@@ -23,7 +22,7 @@ from usecase_harness import (
 with signin_stack() as (api, idp, _):
     zone = f"{secrets.token_hex(4)}.harborpine.test"
     base = str(idp.base_url).rstrip("/")
-    priya = signed_in(api, "p.shah@harborpine.example")
+    admin = as_role(api, "admin")
     saml = {
         "kind": "saml",
         "label": "Harbor & Pine SAML",
@@ -35,7 +34,7 @@ with signin_stack() as (api, idp, _):
         },
         "jit": {"team": "team_ops", "role": "chat_user"},
     }
-    r = set_provider(api, idp, "saml-northfield", saml, bearer(priya, "team_ops"))
+    r = set_provider(api, idp, "saml-northfield", saml, admin)
     check("a team admin outside the Security team cannot set providers (403)", r.status_code == 403, r.status_code)
     sam = security_admin_on_ops(api)
     r = set_provider(api, idp, "saml-northfield", saml, sam)

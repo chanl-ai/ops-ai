@@ -24,17 +24,15 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useCreateForm, useFormPageUrl, useRotateForm, useUpdateForm, useWorkflowForms } from '@/hooks/form-queries';
+import { useCreateForm, useFormPageUrl, usePublicFormPage, useRotateForm, useUpdateForm, useWorkflowForms } from '@/hooks/form-queries';
 import { count, shortDate } from '@/lib/format';
 import type { HostedFormLink, HostedFormMode } from '@/lib/types/forms';
 import { cn } from '@/lib/utils';
 
+import { defaultShareMode, shareModes } from './share-form';
+
 type InputSchema = { title?: string; description?: string; properties?: Record<string, unknown> };
 
-const MODES: { mode: HostedFormMode; title: string; hint: string }[] = [
-  { mode: 'link', title: 'Anyone with the link', hint: 'A signed link that stops working when it expires or is rotated' },
-  { mode: 'members', title: 'Team members, signed in', hint: 'Opens in Ops AI after sign-in; the run starts as that person' },
-];
 const THANKS = 'Thank you. We will reply by email within two working days.';
 
 /**
@@ -44,12 +42,14 @@ const THANKS = 'Thank you. We will reply by email within two working days.';
  */
 export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId: string; schema: Record<string, unknown>; readOnly: boolean }) {
   const schema = raw as InputSchema;
+  const publicFormPage = usePublicFormPage();
+  const modes = shareModes(publicFormPage);
   const forms = useWorkflowForms(workflowId);
   const create = useCreateForm(workflowId);
   const [open, setOpen] = React.useState(false);
   // The just-made or just-rotated answer of each form, the only ones that carry a link's token.
   const [fresh, setFresh] = React.useState<Record<string, HostedFormLink>>({});
-  const [mode, setMode] = React.useState<HostedFormMode>('link');
+  const [mode, setMode] = React.useState<HostedFormMode>(() => defaultShareMode(publicFormPage));
   const [days, setDays] = React.useState('30');
   const [cap, setCap] = React.useState('200');
   const [after, setAfter] = React.useState(THANKS);
@@ -64,8 +64,8 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
     setError(null);
     try {
       const made = await create.mutateAsync({
-        mode,
-        ...(mode === 'link' ? { expiresInDays: daysN } : {}),
+        mode: publicFormPage ? mode : 'members',
+        ...(publicFormPage && mode === 'link' ? { expiresInDays: daysN } : {}),
         dailyCap: capN,
         // The page shows the start form's own title when it has one, else the server uses the workflow's name.
         ...(schema.title ? { title: schema.title } : {}),
@@ -97,21 +97,25 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
           {noInputs && <p className="text-sm text-muted-foreground">Add the fields people fill in to the run input first: a form needs at least one.</p>}
           {open && !noInputs && (
             <div className="flex min-w-0 flex-col gap-4 rounded-md border p-3" data-testid="share-form-settings">
-              <FormFieldGroup label="Who can send it">
-                <RadioGroup value={mode} onValueChange={(m) => setMode(m as HostedFormMode)} className="grid gap-2">
-                  {MODES.map((m) => (
-                    <label key={m.mode} htmlFor={`form-mode-${m.mode}`} className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', mode === m.mode && 'border-primary bg-primary/5')}>
-                      <RadioGroupItem value={m.mode} id={`form-mode-${m.mode}`} className="mt-0.5" />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium">{m.title}</span>
-                        <span className="block text-xs text-muted-foreground">{m.hint}</span>
-                      </span>
-                    </label>
-                  ))}
-                </RadioGroup>
-              </FormFieldGroup>
+              {modes.length > 1 ? (
+                <FormFieldGroup label="Who can send it">
+                  <RadioGroup value={mode} onValueChange={(m) => setMode(m as HostedFormMode)} className="grid gap-2">
+                    {modes.map((m) => (
+                      <label key={m.mode} htmlFor={`form-mode-${m.mode}`} className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', mode === m.mode && 'border-primary bg-primary/5')}>
+                        <RadioGroupItem value={m.mode} id={`form-mode-${m.mode}`} className="mt-0.5" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{m.title}</span>
+                          <span className="block text-xs text-muted-foreground">{m.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </FormFieldGroup>
+              ) : (
+                <p className="text-sm text-muted-foreground">Signed-in members of this team fill it in Ops AI.</p>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
-                {mode === 'link' && (
+                {publicFormPage && mode === 'link' && (
                   <FormField id="form-expiry" label="Link expires in (days)" hint="From 1 to 90 days." error={badDays}>
                     <Input id="form-expiry" type="number" inputMode="numeric" min={1} max={90} value={days} aria-invalid={!!badDays} onChange={(e) => setDays(e.target.value)} />
                   </FormField>
@@ -141,7 +145,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
           {forms.isError && <p className="text-sm text-destructive">The shared forms could not be loaded. {forms.error instanceof Error ? forms.error.message : ''}</p>}
           {forms.isSuccess && list.length === 0 && !open && !noInputs && <p className="text-sm text-muted-foreground">Not shared yet.</p>}
           {list.map((f) => (
-            <SharedForm key={f.id} form={fresh[f.id] ?? f} paused={f.paused} readOnly={readOnly} onRotated={(r) => setFresh((x) => ({ ...x, [r.id]: r }))} />
+            <SharedForm key={f.id} form={fresh[f.id] ?? f} paused={f.paused} readOnly={readOnly} publicFormPage={publicFormPage} onRotated={(r) => setFresh((x) => ({ ...x, [r.id]: r }))} />
           ))}
         </div>
       </Section>
@@ -177,15 +181,22 @@ function LinkQr({ url, slug }: { url: string; slug: string }) {
 }
 
 /** One shared form: its link with Copy and its QR code, Rotate (asks first) and whether it takes submissions. */
-function SharedForm({ form, paused, readOnly, onRotated }: { form: HostedFormLink; paused: boolean; readOnly: boolean; onRotated: (f: HostedFormLink) => void }) {
+function SharedForm({ form, paused, readOnly, publicFormPage, onRotated }: { form: HostedFormLink; paused: boolean; readOnly: boolean; publicFormPage: boolean; onRotated: (f: HostedFormLink) => void }) {
   const pageUrl = useFormPageUrl();
   const rotate = useRotateForm();
   const update = useUpdateForm();
   const [asking, setAsking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const members = form.mode === 'members';
-  const url = members ? (typeof window === 'undefined' ? `/forms/${form.slug}` : `${window.location.origin}/forms/${encodeURIComponent(form.slug)}`) : form.token ? pageUrl(form) : null;
+  const url = members
+    ? typeof window === 'undefined'
+      ? `/forms/${form.slug}`
+      : `${window.location.origin}/forms/${encodeURIComponent(form.slug)}`
+    : publicFormPage && form.token
+      ? pageUrl(form)
+      : null;
   const id = `form-link-${form.id}`;
+  const noPublicPage = !members && !publicFormPage;
 
   return (
     <div className="flex min-w-0 flex-col gap-3 rounded-md border p-3" data-testid="shared-form">
@@ -203,7 +214,11 @@ function SharedForm({ form, paused, readOnly, onRotated }: { form: HostedFormLin
           <LinkQr url={url} slug={form.slug} />
         </FormField>
       ) : (
-        <p className="text-sm text-muted-foreground">The link is shown once, when it is made. Rotate it to get a new one; the old link then stops working.</p>
+        <p className="text-sm text-muted-foreground">
+          {noPublicPage
+            ? 'This form was shared as a signed link. This install has no public form page, so the link cannot be opened.'
+            : 'The link is shown once, when it is made. Rotate it to get a new one; the old link then stops working.'}
+        </p>
       )}
       <p className="text-xs text-muted-foreground">
         {members ? 'Signed-in members of this team can send it.' : `Expires ${shortDate(form.expiresAt)}.`} At most {count(form.dailyCap)} a day. Refused sends show in Activity with the reason.
@@ -227,7 +242,7 @@ function SharedForm({ form, paused, readOnly, onRotated }: { form: HostedFormLin
             />
             Taking submissions
           </label>
-          {!members && (
+          {!members && publicFormPage && (
             <LoadingButton type="button" variant="outline" size="sm" isLoading={rotate.isPending} loadingText="Rotating…" className="text-destructive" onClick={() => setAsking(true)} data-testid="form-rotate">
               <RefreshCw /> Rotate link
             </LoadingButton>

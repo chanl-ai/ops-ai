@@ -28,6 +28,8 @@ configMapGenerator:
       - OPS_CONSOLE_URL=https://<ops host>
       - OPS_PLATFORM_PUBLIC_URL=https://<ops host>/api/platform
       - OPS_FILES_PUBLIC_URL=https://<ops host>/api/files
+      # The features this install turns on, separated by commas; empty turns none on (docs/deploy/install.md).
+      - OPS_FLAGS=
   - name: ops-console
     literals:
       - NEXT_PUBLIC_OPS_PLATFORM_API_URL=https://<ops host>/api/platform

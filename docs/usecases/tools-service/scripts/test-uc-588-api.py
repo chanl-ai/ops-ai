@@ -9,12 +9,13 @@ call."""
 from __future__ import annotations
 
 import json
+import re
 from contextlib import ExitStack
 from typing import Any
 from uuid import uuid4
 
 import httpx
-from fake_multi_auth import CLIENTS, SECRETS, digest, multi_auth
+from fake_multi_auth import CLIENTS, PERSON_KEYS, SECRETS, digest, multi_auth
 from usecase_harness import (
     LOG_DIR,
     PLATFORM_INTERNAL_PORT,
@@ -113,7 +114,7 @@ def sign_in_own(gw: httpx.Client, m: dict[str, Any], who: dict[str, str], connec
 with ExitStack() as stack:
     m = stack.enter_context(multi_auth())
     fake = m["fake"]
-    api, _ = stack.enter_context(platform())
+    api, inner = stack.enter_context(platform())
     gw = stack.enter_context(
         tools({**m["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
     )
@@ -124,6 +125,7 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
     maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
+    ravi = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
 
     # 1. The platform admin turns every test plugin on for the install; Security lists the system's hosts.
     loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
@@ -137,8 +139,8 @@ with ExitStack() as stack:
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-588"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-588"}, headers=sam))
     check(
-        "1 all eight test plugins load, the platform admin turns them on, and Security lists the system's hosts",
-        len(ids) == 8 and not loaded.get("failed") and policy.status_code == 200
+        "1 all nine test plugins load, the platform admin turns them on, and Security lists the system's hosts",
+        len(ids) == 9 and not loaded.get("failed") and policy.status_code == 200
         and all(r.status_code in (200, 201, 409) for r in allowed),
         {"ids": ids, "failed": loaded.get("failed"), "policy": policy.text[:200]},
     )  # fmt: skip
@@ -259,13 +261,141 @@ with ExitStack() as stack:
         echoed.text[:300],
     )
 
+    # 20. Each person connects the API-key desk with their own key: Test connection as each reaches the
+    # system as them; a call with nobody behind it uses nobody's key; Your connections lists it by method, no key.
+    def give(who: dict[str, str], conn: str, key: str) -> httpx.Response:
+        body = {"environment": "production", "credentials": {"key": key}}
+        return kept(gw.put(f"/v1/me/connections/{conn}/credentials", json=body, headers=who))
+
+    keyed_on = turn_on(gw, priya, "test.person-key", signIn="person")
+    keyed_id = str((data(keyed_on) or {}).get("connectionId") or "con_missing")
+    offered = data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+    gave = [
+        give(james, keyed_id, PERSON_KEYS["james"]).status_code,
+        give(maya, keyed_id, PERSON_KEYS["maya"]).status_code,
+    ]
+    key_james = health(gw, james, keyed_id)
+    james_key_seen = last(fake, "person-key").get("as")
+    key_maya = health(gw, maya, keyed_id)
+    maya_key_seen = last(fake, "person-key").get("as")
+    nobody_key = call(gw, "person_key_get_record", args={"id": "rec-1042"})
+    listed = data(kept(gw.get("/v1/me/connections", headers=james))) or []
+    check(
+        "20 two people connect an API-key app with their own keys: each one's test reaches the system as them, a call "
+        "with nobody behind it is refused, and Your connections names the method and never the key",
+        keyed_on.status_code == 200 and gave == [200, 200]
+        and any(r["connectionId"] == keyed_id and not r["connected"] and r["personFields"] == ["key"] for r in offered)
+        and key_james.get("status") == "ok" and james_key_seen == "james"
+        and key_maya.get("status") == "ok" and maya_key_seen == "maya"
+        and error(nobody_key).get("code") == "CONNECTION_NOT_LINKED"
+        and any(r["connectionId"] == keyed_id and r["method"] == "API key" for r in listed),
+        {"on": keyed_on.text[:200], "gave": gave, "james": (key_james, james_key_seen),
+         "maya": (key_maya, maya_key_seen), "nobody": nobody_key.text[:300], "listed": listed},
+    )  # fmt: skip
+
+    # 21. A wrong key fails for its person alone; Disconnect removes it, so their next test asks them to connect.
+    give(james, keyed_id, WRONG)
+    wrong = health(gw, james, keyed_id)
+    still = health(gw, maya, keyed_id)
+    status = (data(kept(gw.get(f"/v1/connections/{keyed_id}", headers=priya))) or {}).get("status")
+    gone = kept(gw.delete(f"/v1/me/connections/{keyed_id}", params={"environment": "production"}, headers=james))
+    after = health(gw, james, keyed_id)
+    check(
+        "21 a wrong key fails James's test with the system's 401 while Maya's passes and the connection stays healthy; "
+        "after Disconnect his test asks him to connect",
+        wrong.get("status") != "ok" and "401" in json.dumps(wrong)
+        and still.get("status") == "ok" and status == "healthy"
+        and gone.status_code == 204 and after.get("code") == "CONNECTION_NOT_LINKED",
+        {"wrong": wrong, "maya": still, "status": status, "gone": gone.status_code, "after": after},
+    )  # fmt: skip
+
+    # 23. A key the system refuses is marked on its person's row: Your connections says refused and why, the
+    # next use asks for a new key without sending the refused one again, and a new key clears it.
+    give(james, keyed_id, WRONG)
+    refused_test = health(gw, james, keyed_id)
+    marked = [
+        r
+        for r in data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+        if r["connectionId"] == keyed_id
+    ]
+    sent_before = len([c for c in fake.state()["calls"] if c["method"] == "person-key"])
+    asked_again = health(gw, james, keyed_id)
+    sent_after = len([c for c in fake.state()["calls"] if c["method"] == "person-key"])
+    give(james, keyed_id, PERSON_KEYS["james"])
+    renewed_key = health(gw, james, keyed_id)
+    cleared = [
+        r
+        for r in data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+        if r["connectionId"] == keyed_id
+    ]
+    check(
+        "23 a refused key shows as refused with the system's 401 in Your connections, the next test asks for a new key "
+        "without sending the old one, and a new key clears it",
+        "401" in json.dumps(refused_test)
+        and [(r["refused"], "401" in (r["refusedReason"] or "")) for r in marked] == [(True, True)]
+        and asked_again.get("code") == "CONNECTION_NOT_LINKED" and sent_after == sent_before
+        and renewed_key.get("status") == "ok" and [r["refused"] for r in cleared] == [False],
+        {"refused": refused_test, "marked": marked, "again": asked_again, "sent": (sent_before, sent_after),
+         "renewed": renewed_key, "cleared": cleared},
+    )  # fmt: skip
+
+    # 30-31 (group C): My accounts, from the app page and from a chat card's connect link.
+    def acting(tool: str, email: str) -> httpx.Response:
+        """A read by a run the person started: agents-service sends platform-service's acting-for token."""
+        team_token = service_headers("platform", tenant=TENANT["id"], service="agents", team="team_ops")
+        minted = inner.post("/v1/acting-for-tokens", json={"email": email}, headers=team_token)
+        headers = service_headers("tools", tenant=TENANT["id"], service="agents", team="team_ops")
+        headers |= {"X-Team-Id": "team_ops", "X-Acting-For": str((data(minted) or {}).get("token") or "")}
+        body = {
+            "tool": tool,
+            "input": {"id": "rec-1042"},
+            "key": uuid4().hex,
+            "runContext": {"environment": "production"},
+        }
+        return kept(gw.post("/v1/calls", json=body, headers=headers))
+
+    # 30. Ravi (viewer) connects his own account from the app page; My accounts lists it as connected as him.
+    signed_ravi = sign_in_own(gw, m, ravi, person_id, "ravi.person")
+    mine = [r for r in data(kept(gw.get("/v1/me/connections", headers=ravi))) or [] if r["connectionId"] == person_id]
+    check(
+        "30 Ravi (viewer) connects his own account from the app page, and My accounts reads connected as ravi.person",
+        signed_ravi == 200 and [(r["connected"], r.get("account")) for r in mine] == [(True, "ravi.person")],
+        {"signed": signed_ravi, "mine": mine},
+    )
+
+    # 31. A run Priya started needs her account: the refusal carries a connect link, she opens it and signs in, and
+    # the run's next call reads as her.
+    needed = acting("person_get_record", "p.shah@harborpine.example")
+    found = re.search(r"link=([\w-]+)", needed.text)
+    link = found.group(1) if found else ""
+    opened = kept(gw.post("/v1/connections/connect-links/sign-in", json={"link": link}, headers=priya))
+    link_url = (data(opened) or {}).get("authorizeUrl", "") if opened.status_code == 200 else ""
+    link_back = m["sign_in"](link_url, "priya.person") if link_url else {}
+    kept(
+        gw.post(
+            f"/v1/connections/{person_id}/sign-in/complete",
+            json={"state": link_back.get("state", ""), "code": link_back.get("code", "")},
+            headers=priya,
+        )
+    )
+    again = acting("person_get_record", "p.shah@harborpine.example")
+    check(
+        "31 a run Priya started asks for her account with a connect link; after she signs in from it the run reads as "
+        "priya.person",
+        error(needed).get("code") == "CONNECTION_NOT_LINKED"
+        and bool(link)
+        and opened.status_code == 200
+        and output(again).get("as") == "priya.person",
+        {"needed": needed.text[:200], "opened": opened.text[:200], "again": again.text[:200]},
+    )
+
     # 13. No answer read above, no call log row and no service log line carries any secret given.
     for who in (priya, wanjiru):
         SEEN.append(gw.get("/v1/plugins", headers=who).text)
         SEEN.append(gw.get("/v1/connections", headers=who).text)
         SEEN.append(gw.get("/v1/executions", headers=who).text)
     logs = "".join(p.read_text(errors="replace") for p in LOG_DIR.glob(f"tools-{TOOLS_PORT}.log"))
-    secrets = [*SECRETS.values(), *CLIENTS.values(), WRONG, m["client_key"].split("\n")[1]]
+    secrets = [*SECRETS.values(), *CLIENTS.values(), *PERSON_KEYS.values(), WRONG, m["client_key"].split("\n")[1]]
     leaked = [digest(s) for s in secrets if s != SECRETS["username"] and any(s in t for t in [*SEEN, logs])]
     check(
         "13 no API answer, call log row or tools-service log line shows a key, password, token, client secret or "

@@ -9,6 +9,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { Stepper } from '@/components/shared/stepper';
 import { EmbedDialog } from '@/components/deployments/widget-embed';
 import { useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
+import { useFlagged } from '@/hooks/flag-queries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +24,7 @@ import { CHANNELS } from './deployment-meta';
  * MCP hands off to the MCP tab instead of continuing (see `onChooseMcp`). Console chat is not offered: the platform
  * creates it for every published agent.
  */
-const WIZARD_CHANNELS: DeployChannel[] = (Object.keys(CHANNELS) as DeployChannel[]).filter((c) => c !== 'chat');
+const WIZARD_CHANNELS = (Object.keys(CHANNELS) as DeployChannel[]).filter((c) => c !== 'chat').map((channel) => ({ channel, flag: CHANNELS[channel].flag }));
 
 const STEPS = ['Channel', 'Configure', 'Review'] as const;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -98,6 +99,7 @@ export function CreateDeploymentDialog({
   isPending: boolean;
 }) {
   const [step, setStep] = React.useState(1);
+  const channels: DeployChannel[] = useFlagged(WIZARD_CHANNELS).map((c) => c.channel);
   const [v, setV] = React.useState<Values>({ ...initial(fixedWorkflowId), channel: initialChannel ?? 'widget' });
   const [touched, setTouched] = React.useState(false);
   // A chat widget is an agent's embed (c-224): the wizard hands off to the embed dialog, which picks the agent,
@@ -216,7 +218,7 @@ export function CreateDeploymentDialog({
           aria-label="Channel"
           onKeyDown={(e) => {
             // Arrow keys move the selection, as in a native radio group; only the selected option is tabbable.
-            const keys = WIZARD_CHANNELS;
+            const keys = channels;
             const delta = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
             if (!delta) return;
             e.preventDefault();
@@ -225,7 +227,7 @@ export function CreateDeploymentDialog({
             e.currentTarget.querySelector<HTMLButtonElement>(`[data-channel="${next}"]`)?.focus();
           }}
         >
-          {WIZARD_CHANNELS.map((c) => {
+          {channels.map((c) => {
             const meta = CHANNELS[c];
             return (
               <button

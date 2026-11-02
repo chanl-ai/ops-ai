@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Forms are members-only until public pages are on",
+  "description": "A workflow shared as a form is offered to signed-in team members only; the link anyone can open appears once your install turns public form pages on.",
+  "tag": "fix",
+  "cards": [
+    "c-642"
+  ]
+}

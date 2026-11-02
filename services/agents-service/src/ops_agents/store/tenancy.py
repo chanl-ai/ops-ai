@@ -39,15 +39,19 @@ MEMORY_RETENTION = "memory_retention"  # the retention sweep expires one tenant'
 MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound mailboxes
 RUN_RECONCILER = "run_reconciler"  # the run reconciler gives one tenant's run with nothing behind it its state
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
+ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistants brought to the declared version
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
 CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
 RETENTION_TENANTS = "retention_tenants"  # Memories.tenants, for the retention sweep
+ASSISTANT_TEAMS = "assistant_teams"  # TeamDefaults.on_agents, for the start-up Ops Assistant catch-up
 
 current_tenant = isolation.tenant
 current_team = isolation.team
 
 __all__ = [
+    "ASSISTANT_CATCH_UP",
+    "ASSISTANT_TEAMS",
     "CLAIM_THREAD",
     "ENGINE_PASS",
     "LOCAL_TENANT",

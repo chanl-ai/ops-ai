@@ -19,12 +19,12 @@ Every step happens in the console as a named person. No step needs a direct API 
 |---|---|---|---|
 | Connect: egress host and range | Admin | Built (Egress page) | Unchanged |
 | Connect: credential | Builder | Built (Secrets page) | Unchanged |
-| Connect: connection record | Builder | Console mock; import makes you pick one | Removed as a separate record. A module's endpoint plus its secret headers are its connection. The Connections page lists modules by endpoint from the registry |
+| Connect: connection record | Builder | Console mock; import makes you pick one | Superseded: a custom app is a connection record, which holds the base address and the key; a module on it names paths only, and a sign-in header on it is refused. The Connections page lists modules by endpoint from the registry |
 | Import | Builder | Built for OpenAPI and MCP. Every operation comes in as Write. A spec with no auth imports silently | Access is pre-set from the method (GET is Read, everything else is Write; HEAD is skipped because it answers no body), and the builder confirms each one in the dialog. A spec with no security scheme shows a warning naming the missing header. Each operation's example response becomes its stub |
 | Create, edit, delete | Builder | Built (call shape, transform, timeout; staged until publish) | Unchanged |
 | Access classes | Builder | Read, Write and "Moves money" | **Read and Write only.** How many approvers a write needs is set on the operation (see "Write approval"), not implied by a class |
 | Security review | Owner requests, Security decides | Built | Unchanged |
-| Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval. Reads run for real. Writes answer from the stub |
+| Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval, in Mock or for real on a published module; a real write is logged under them |
 | Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team except the requester decides |
 | Grant to an agent | Builder | Built (an earlier change G1): the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |

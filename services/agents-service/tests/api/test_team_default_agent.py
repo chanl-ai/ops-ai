@@ -43,7 +43,7 @@ async def stack() -> AsyncIterator[Stack]:
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
     auth = Auth(
         Identity(audience="agents", jwks=jwks, introspect=introspect, key_cache_s=0),
-        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents")),
+        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents"), scopes=settings.service_scopes),
     )
     app = create_app(
         settings,

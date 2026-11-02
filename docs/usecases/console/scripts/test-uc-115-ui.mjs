@@ -1,5 +1,5 @@
 // uc-115 a run shows its workflow graph read-only with what passed, failed and was skipped, ui layer:
-// docs/usecases/console/run-on-the-canvas.md (c-097). withUiStack's demo stack with a workflow runner worker: the
+// docs/usecases/console/run-on-the-canvas.md. withUiStack's demo stack with a workflow runner worker: the
 // seeded v2 customer summary workflow runs twice, for Priya Natarajan (the scripted model summarises her) and for a
 // customer it does not know (its agent step fails on its output schema and the run ends at No summary). Signed in
 // through platform-service as James. A third workflow is saved with no node positions, as an API caller or YAML import

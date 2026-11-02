@@ -48,7 +48,7 @@ await withUiStack(
       await dialog.getByTestId('import-next').click();
       const discoverRes = await discovered;
       const found = discoverRes ? (await discoverRes.json()).data : undefined;
-      // Access comes from the method (c-048 T006): both documented operations are GETs, so both read and start selected.
+      // Access comes from the method (an earlier change T006): both documented operations are GETs, so both read and start selected.
       check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operations?.every((o) => o.access === 'read') && found.operations.length === 2, { status: discoverRes?.status(), ops: found?.operations?.map((o) => [o.name, o.access]) });
 
       await dialog.locator('#op-latest_statement').click();
@@ -64,9 +64,10 @@ await withUiStack(
       check('the new module opens on its page', opened, page.url());
 
       // Non-vacuous half: a caller-written method and path for a documented operation is replaced by the document's.
-      // Tool names are unique across modules, so the module made above goes first.
+      // Tool names are unique across modules, so the module made above goes first. It names no connection: the module
+      // gets its own, holding the document's address.
       await fetch(`${tools}/v1/tool-modules/${module?.id}`, { method: 'DELETE' });
-      const forged = await post('/v1/tool-modules', { name: 'uc012-ui-forged', displayName: 'Forged', system: 'Forged', type: 'openapi', endpoint: found.endpoint, connectionId: 'int_core_banking', source: { kind: 'openapi', specUrl }, operations: [{ ...found.operations.find((o) => o.name === 'get_account'), method: 'DELETE', path: '/admin' }] });
+      const forged = await post('/v1/tool-modules', { name: 'uc012-ui-forged', displayName: 'Forged', system: 'Forged', source: { kind: 'openapi', specUrl }, operations: [{ ...found.operations.find((o) => o.name === 'get_account'), method: 'DELETE', path: '/admin' }] });
       const forgedModule = forged.ok ? (await forged.json()).data : undefined;
       const forgedOp = forgedModule?.operations?.[0];
       check('a forged method and path are replaced by the document', forgedOp?.method === 'GET' && forgedOp?.path === '/accounts/{accountId}', { status: forged.status, op: forgedOp && [forgedOp.method, forgedOp.path], body: forged.ok ? undefined : (await forged.text()).slice(0, 200) });

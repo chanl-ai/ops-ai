@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import sample_team as st  # noqa: E402 - the sample-team installer's sign-in, envelope and review helpers
+import sample_team as st
 
 MANIFEST = yaml.safe_load((HERE / "plugin.yaml").read_text())
 # `@kind/id` or `@kind/id#operation` inside a contribution: a record this plugin brings.

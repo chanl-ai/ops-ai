@@ -18,6 +18,7 @@ import { useWorkflows } from '@/hooks/queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import type { EngineRun } from '@/lib/types/engine';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = EngineRun & { onRowClick: (r: EngineRun) => void; rowTestId: string };
 
@@ -109,15 +110,7 @@ export function RunnerRuns() {
           { column: 'status', title: 'Status', options: STATUS_OPTIONS.map((o) => ({ ...o, count: counts[o.value] ?? 0 })) },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={WorkflowIcon}

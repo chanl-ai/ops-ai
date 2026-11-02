@@ -1,0 +1,47 @@
+schemaVersion: 2
+id: filter_a_list
+name: Filter a list
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Items
+- id: keep
+  type: ops.data.filter
+  typeVersion: 1
+  name: Open only
+  parameters:
+    items: $.input.items
+    conditions:
+    - left: open
+      op: eq
+      right: true
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Kept
+  parameters:
+    outcome: kept
+    output: $.nodes.keep.out
+- id: none
+  type: ops.flow.end
+  typeVersion: 1
+  name: None
+  parameters:
+    outcome: none
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Broken
+  parameters:
+    outcome: not_a_list
+    result: failed
+connections:
+- from: {node: start, port: payload}
+  to: {node: keep, port: in}
+- from: {node: keep, port: kept}
+  to: {node: done, port: in}
+- from: {node: keep, port: dropped}
+  to: {node: none, port: in}
+- from: {node: keep, port: error}
+  to: {node: failed, port: in}

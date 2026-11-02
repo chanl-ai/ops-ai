@@ -7,7 +7,7 @@ side (the policy, and OPA counting approvers) is tested there; here the policy i
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -32,7 +32,12 @@ WRITE = 'call request_document {"customerId": "C-1042", "document": "proof of ad
 
 
 def person(
-    sub: str, teams: list[str], *, auth_method: str | None = None, policies: dict[str, Any] | None = None
+    sub: str,
+    teams: list[str],
+    *,
+    auth_method: str | None = None,
+    policies: dict[str, Any] | None = None,
+    role: str = "approver",
 ) -> dict[str, str]:
     """`auth_method="dev"` is a person platform-service signed in with the dev password, as on a dev stack."""
     claims = {
@@ -43,7 +48,7 @@ def person(
         "aud": ["agents"],
         "tenant_id": "acme",
         "team_ids": teams,
-        "roles": dict.fromkeys(teams, "approver"),
+        "roles": dict.fromkeys(teams, role),
         **({"auth_method": auth_method} if auth_method else {}),
         **({"policies": policies} if policies is not None else {}),
     }
@@ -136,10 +141,28 @@ async def drafted(client: AsyncClient, asker: dict[str, str]) -> str:
     return f"/chat/threads/{thread}/messages/{events[0]['messageId']}/widgets/{widget['id']}/actions"
 
 
-async def test_the_asker_approves_their_own_write_until_the_tenant_switches_it_off(production: AsyncClient) -> None:
+async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switches_it_off(
+    production: AsyncClient,
+) -> None:
+    """Roles decide (owner, 2026-11-01): James decides Operations' reviews, so his own write is decided as his at once
+    and the card is no longer waiting; with requesterMayDecide off, Maya decides it."""
     james = person("usr_james", ["team_ops"])
     url = await drafted(production, james)
-    assert (await production.post(url, json={"type": "approve"}, headers=james)).status_code == 200
+    again = await production.post(url, json={"type": "approve"}, headers=james)
+    assert (again.status_code, again.json()["error"]["message"]) == (409, "This approval was already decided."), (
+        again.text
+    )
+    thread = url.split("/")[3]
+    messages: list[dict[str, Any]] = (await production.get(f"/chat/threads/{thread}", headers=james)).json()["data"][
+        "messages"
+    ]
+    calls: list[dict[str, Any]] = [
+        c
+        for m in messages
+        for c in cast(list[dict[str, Any]], m.get("toolCalls") or [])
+        if c["name"] == "request_document"
+    ]
+    assert calls and calls[-1]["status"] == "success", calls
 
     strict = {"requesterMayDecide": False}
     james, maya = person("usr_james", ["team_ops"], policies=strict), person("usr_maya", ["team_ops"], policies=strict)
@@ -170,7 +193,8 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
     """A dev stack signs people in through platform-service with the demo password; they keep their teams, unlike the
     dev header caller, so a Fraud Operations approver does not reach Operations' write, and Operations' does."""
     monkeypatch.setattr(hitl_facade, "policy_of", policy())
-    url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev"))
+    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev", role="builder"))
     omar = person("usr_omar", ["team_fraud"], auth_method="dev")
     assert (await dev_platform.post(url, json={"type": "approve"}, headers=omar)).status_code == 404
     maya = person("usr_maya", ["team_ops"], auth_method="dev")
@@ -181,8 +205,10 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
 async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> None:
     dana = {"X-Dev-User": "dana@harborpine.example"}
     async for c in _client(Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED), platform=False):
-        # The operation asks for no step-up and the policy is open: approving needs none.
-        assert (await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)).status_code == 200
+        # The operation asks for no step-up and the policy is open: the dev asker, who passes every role rule, is not
+        # asked, so the card is decided as theirs (owner, 2026-11-01).
+        own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
+        assert own.status_code == 409, own.text
     strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True})
     async for c in _client(strict, platform=False):
         url = await drafted(c, dana)

@@ -53,7 +53,7 @@
     "file": "$.input.fileId",
     "ocr": true,
     "documentType": {
-     "id": "{documentType:garnishment_notice}",
+     "id": "{documentType:legal_notice}",
      "version": 1
     },
     "waitSeconds": 1200,

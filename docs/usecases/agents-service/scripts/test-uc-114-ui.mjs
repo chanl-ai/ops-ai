@@ -53,7 +53,7 @@ await withUiStack(
       return { id: d?.id, status: req.status, review: d?.status, record: d?.agentPublish && { reviewRequired: d.agentPublish.reviewRequired, policy: d.agentPublish.policy, majorChange: d.agentPublish.majorChange }, saved: saved.status };
     };
 
-    // A new draft, published from the agent page; returns the message the page showed (c-139).
+    // A new draft, published from the agent page; returns the message the page showed.
     const publishFromPage = async (page, patch) => {
       const saved = (await call('PATCH', `/v1/agents/${agent.id}`, J, patch)).body?.data;
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -104,7 +104,7 @@ await withUiStack(
       const never = await publish({ instructions: 'Answer briefly. (uc-114 b)' });
       check('under "never" an instructions change publishes at once and records policy never, major', never.status === 201 && never.review === 'approved' && never.record?.policy === 'never' && never.record?.majorChange === true, never);
 
-      // The agent page says what happened (c-139): published at once under Never.
+      // The agent page says what happened: published at once under Never.
       const livePage = await publishFromPage(james.page, { role: 'Answers questions for the operations team (uc-114 page)' });
       check('under "never" the dialog says Publishes immediately with a Publish button (agents-1)', livePage.button === 'Publish' && livePage.immediately, livePage);
       check('publishing from the agent page under "never" says Published, with no review link', livePage.text.startsWith(`Published ${agent.name} v${livePage.version}`) && !/Open review/.test(livePage.text), livePage);

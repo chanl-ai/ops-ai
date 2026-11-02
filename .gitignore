@@ -38,3 +38,15 @@ sdk/python/uv.lock
 
 # make deps-doctor output (constraints and npm overrides for one developer's mirror)
 .mirror/
+
+# The install's plugins folder: plugins an operator drops in, never committed (docs/guide/plugins.md)
+/plugins/*
+!/plugins/README.md
+
+# Example setup writes resolved ids for the local team only
+examples/**/.bindings.json
+examples/**/.ops-profile.json
+
+# Local caches, never source
+.pnpm-store/
+.playwright-mcp/

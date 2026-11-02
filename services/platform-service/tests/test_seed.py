@@ -10,6 +10,7 @@ import pytest
 
 from ops_platform.seed import seed
 from ops_platform.store.seeding import SeedConflictError
+from ops_service_kit.settings import Settings
 
 from .conftest import DEMO_PASSWORD, Platform
 
@@ -91,3 +92,27 @@ async def test_a_seeded_persons_new_address_reaches_a_database_seeded_before_it(
     for person in data["people"]:
         r = await platform.public.post("/v1/auth/sign-in", json={"email": person["email"], "password": DEMO_PASSWORD})
         assert r.status_code == 200, (person["email"], r.text)
+
+
+async def test_a_stack_seeded_as_shipped_gives_each_person_only_their_own_roles(
+    platform: Platform, database_url: str, tmp_path: Path
+) -> None:
+    """The start-up seed with the install's settings (c-615): no one is made admin in every team unless the install
+    asks, so a viewer on a `make up` stack is a viewer and a role test there means something. A person no earlier test
+    seeded, since the seed only adds rows."""
+    data = json.loads(PEOPLE.read_text())
+    data["people"].append(
+        {
+            "id": "usr_c615_viewer",
+            "name": "Vera Lind",
+            "email": "v.lind@harborpine.example",
+            "teams": {"team_ops": "viewer"},
+        }
+    )
+    with_vera = tmp_path / "people.json"
+    with_vera.write_text(json.dumps(data))
+    await seed(database_url, with_vera, everyone_admin=Settings().seed_everyone_admin)
+    r = await platform.public.post(
+        "/v1/auth/sign-in", json={"email": "v.lind@harborpine.example", "password": DEMO_PASSWORD}
+    )
+    assert r.json()["data"]["principal"]["teamIds"] == ["team_ops"], r.json()["data"]["principal"]

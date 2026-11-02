@@ -8,6 +8,8 @@ import { ms } from '@/lib/format';
 import type { ToolCall } from '@/lib/types/chat';
 
 const SPECIALIST_PREFIX = 'agent__';
+// Servers that are the platform itself rather than an app: workflows and the ops cards.
+const INTERNAL_SERVERS = new Set(['workflows', 'Workflows', 'ops']);
 
 const stateOf = (call: ToolCall): ChatToolState => (call.status === 'running' ? 'running' : call.status === 'failed' ? 'failed' : call.gated ? 'gated' : 'success');
 
@@ -43,5 +45,8 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       )}
     </>
   );
-  return <ChatToolCall name={asked ? `Asking ${asked}` : (call.label ?? call.name)} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;
+  // A registry tool's server is its app's name (c-607): the row reads `Get a record · Salesforce`, never the slug.
+  const app = call.server && !INTERNAL_SERVERS.has(call.server) ? call.server : null;
+  const named = call.label ?? call.name;
+  return <ChatToolCall name={asked ? `Asking ${asked}` : app ? `${named} · ${app}` : named} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;
 }

@@ -34,6 +34,7 @@ import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, pct, plural, relativeTime } from '@/lib/format';
 import type { Agent } from '@/lib/types/domain';
 import type { AgentFilters } from '@/lib/types/query';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Agent & { onRowClick: (a: Agent) => void };
 
@@ -204,15 +205,7 @@ export default function AgentsPage() {
                 ]
               : undefined
           }
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={Bot}

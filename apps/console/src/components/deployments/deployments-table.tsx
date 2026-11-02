@@ -27,6 +27,7 @@ import {
   useWorkflows,
 } from '@/hooks/queries';
 import { useSticky } from '@/hooks/use-sticky';
+import { useFlag } from '@/hooks/flag-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { DeployChannel, Deployment } from '@/lib/types/domain';
@@ -35,6 +36,7 @@ import type { DeploymentFilters } from '@/lib/types/query';
 import { CreateDeploymentDialog } from './create-deployment-dialog';
 import { ChannelBadge, CHANNELS, DeploymentStatusBadge, EnvironmentBadge, VersionCell } from './deployment-meta';
 import { DeploymentSheet } from './deployment-sheet';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = Deployment & { onRowClick: (d: Deployment) => void };
 const ALL = { page: 1, pageSize: 100 };
@@ -91,6 +93,7 @@ export function DeploymentsTable({
   onChooseMcp?: () => void;
 }) {
   const router = useRouter();
+  const mcpOn = useFlag('mcp_gateway');
   const list = useListParams<DeploymentFilters>('name');
   const fixed = { ...(workflowId ? { workflowId: [workflowId] } : {}), ...(channel ? { channel: [channel] } : {}) };
   const params = workflowId || channel ? { ...list.params, filters: { ...list.params.filters, ...fixed } } : list.params;
@@ -162,15 +165,7 @@ export function DeploymentsTable({
             { label: 'Move to latest', icon: ArrowUpCircle, variant: 'outline', onClick: (r) => setBulk({ kind: 'latest', rows: r }) },
             { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => setBulk({ kind: 'delete', rows: r }) },
           ]}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={Rocket}
@@ -219,8 +214,8 @@ export function DeploymentsTable({
         workflows={workflows.data?.data ?? []}
         fixedWorkflowId={workflowId}
         initialChannel={createChannel}
-        // Outside the Deployments page (a workflow's Deployments tab) MCP still hands off to the MCP tab.
-        onChooseMcp={onChooseMcp ?? (() => router.push('/channels/mcp'))}
+        // Outside the Deployments page (a workflow's Deployments tab) MCP still hands off to the MCP tab, while the install serves it.
+        onChooseMcp={onChooseMcp ?? (mcpOn ? () => router.push('/channels/mcp') : undefined)}
         isPending={create.isPending}
         onSubmit={async (input) => {
           const d = await create.mutateAsync(input);

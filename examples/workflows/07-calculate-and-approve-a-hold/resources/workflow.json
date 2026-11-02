@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 2,
+  "id": "calculate_account_hold",
+  "name": "Calculate and approve an account hold",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.request",
+      "typeVersion": 1,
+      "name": "Hold request",
+      "parameters": {
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "customer",
+            "amount"
+          ],
+          "properties": {
+            "customer": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "search",
+      "type": "ops.action.tool",
+      "typeVersion": 1,
+      "name": "Find customer",
+      "parameters": {
+        "operation": "search_customers",
+        "input": {
+          "query": "$.input.customer"
+        }
+      }
+    },
+    {
+      "id": "match",
+      "type": "ops.data.match",
+      "typeVersion": 1,
+      "name": "Match",
+      "parameters": {
+        "item": {
+          "name": "$.input.customer"
+        },
+        "candidates": "$.nodes.search.out",
+        "all": [
+          {
+            "left": "name",
+            "op": "equals",
+            "right": "name"
+          }
+        ]
+      }
+    },
+    {
+      "id": "accounts",
+      "type": "ops.action.tool",
+      "typeVersion": 1,
+      "name": "Read accounts",
+      "parameters": {
+        "operation": "list_accounts",
+        "input": {
+          "customer_id": "$.nodes.match.out.match.id"
+        }
+      }
+    },
+    {
+      "id": "fields",
+      "type": "ops.data.set",
+      "typeVersion": 1,
+      "name": "Requested",
+      "parameters": {
+        "values": {
+          "requested": "$.input.amount",
+          "available": "$.nodes.accounts.out.0.balance",
+          "accountId": "$.nodes.accounts.out.0.id"
+        }
+      }
+    },
+    {
+      "id": "cap",
+      "type": "ops.data.compute",
+      "typeVersion": 1,
+      "name": "Lower of",
+      "parameters": {
+        "values": {
+          "requested": "$.input.amount",
+          "available": "$.nodes.accounts.out.0.balance"
+        },
+        "expressions": {
+          "amount": "min(requested, available)"
+        }
+      }
+    },
+    {
+      "id": "ok",
+      "type": "ops.flow.if",
+      "typeVersion": 1,
+      "name": "Something to hold",
+      "parameters": {
+        "conditions": [
+          {
+            "left": "$.nodes.cap.out.amount",
+            "op": "gt",
+            "right": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "review",
+      "type": "ops.flow.humanReview",
+      "typeVersion": 1,
+      "name": "Approve the amount",
+      "parameters": {
+        "title": "Place this hold?",
+        "approves": "hold",
+        "summary": {
+          "customer": "$.input.customer",
+          "amount": "$.nodes.cap.out.amount",
+          "account": "$.nodes.accounts.out.0.id"
+        }
+      }
+    },
+    {
+      "id": "hold",
+      "type": "ops.action.tool",
+      "typeVersion": 1,
+      "name": "Place hold",
+      "parameters": {
+        "operation": "place_hold",
+        "approvedBy": "review",
+        "input": {
+          "account_id": "$.nodes.accounts.out.0.id",
+          "amount": "$.nodes.cap.out.amount",
+          "reason": "Account hold"
+        }
+      }
+    },
+    {
+      "id": "open",
+      "type": "ops.action.openCase",
+      "typeVersion": 1,
+      "name": "Open a hold case",
+      "parameters": {
+        "subject": "$.input.customer",
+        "customerId": "$.nodes.match.out.match.id",
+        "customerName": "$.nodes.match.out.match.name",
+        "fields": {
+          "held": "$.nodes.cap.out.amount",
+          "account": "$.nodes.accounts.out.0.id"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "ops.action.addToCase",
+      "typeVersion": 1,
+      "name": "Record the hold",
+      "parameters": {
+        "caseId": "$.nodes.open.out.caseId",
+        "note": "Held"
+      }
+    },
+    {
+      "id": "held",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Held",
+      "parameters": {
+        "outcome": "held"
+      }
+    },
+    {
+      "id": "none",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Nothing to hold",
+      "parameters": {
+        "outcome": "nothing_to_hold"
+      }
+    },
+    {
+      "id": "missing",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Not found",
+      "parameters": {
+        "outcome": "customer_not_found"
+      }
+    },
+    {
+      "id": "failed",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "hold_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "search",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "search",
+        "port": "ok"
+      },
+      "to": {
+        "node": "match",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "search",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "search",
+        "port": "refused"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "match",
+        "port": "matched"
+      },
+      "to": {
+        "node": "accounts",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "match",
+        "port": "none"
+      },
+      "to": {
+        "node": "missing",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "accounts",
+        "port": "ok"
+      },
+      "to": {
+        "node": "fields",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "accounts",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "accounts",
+        "port": "refused"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "fields",
+        "port": "out"
+      },
+      "to": {
+        "node": "cap",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "cap",
+        "port": "out"
+      },
+      "to": {
+        "node": "ok",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "cap",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "ok",
+        "port": "true"
+      },
+      "to": {
+        "node": "review",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "ok",
+        "port": "false"
+      },
+      "to": {
+        "node": "none",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "review",
+        "port": "approve"
+      },
+      "to": {
+        "node": "hold",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "review",
+        "port": "reject"
+      },
+      "to": {
+        "node": "none",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "hold",
+        "port": "ok"
+      },
+      "to": {
+        "node": "open",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "hold",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "hold",
+        "port": "refused"
+      },
+      "to": {
+        "node": "review",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "open",
+        "port": "opened"
+      },
+      "to": {
+        "node": "note",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "open",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "note",
+        "port": "added"
+      },
+      "to": {
+        "node": "held",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "note",
+        "port": "error"
+      },
+      "to": {
+        "node": "held",
+        "port": "in"
+      }
+    }
+  ]
+}

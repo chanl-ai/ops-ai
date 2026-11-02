@@ -1,4 +1,4 @@
-// uc-139 the console works cases, ui layer: docs/usecases/console/cases-console.md (c-220). Platform sign-in; James
+// uc-139 the console works cases, ui layer: docs/usecases/console/cases-console.md. Platform sign-in; James
 // works Operations' cases. Three cases are opened through the API: one due, one past its resolution deadline, one
 // waiting on the customer (paused). Everything after that is clicked in the console.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -82,7 +82,7 @@ await withUiStack(
       const listed = await runRow.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const runNow = await json(await fetch(`${agents}/v1/runs/${started.runId}`, { headers: J }));
       const shownStatus = listed ? (await runRow.getByTestId('runner-run-status').innerText()).trim().toLowerCase() : '';
-      // One list of the current engine's runs: no engine tabs (c-562).
+      // One list of the current engine's runs: no engine tabs.
       const engineTabs = await page.locator('[data-testid^=runs-kind-]').count();
       if (listed) await runRow.click();
       const opened = listed ? await page.waitForURL(`**/workflows/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false) : false;
@@ -97,7 +97,7 @@ await withUiStack(
       const found = await page.locator('tbody tr').allInnerTexts();
       check('7 the case search goes to the server and finds only the matching case', searchAsked && found.length === 1 && found[0].includes('Disputed wire'), { searchAsked, found: found.map((t) => t.slice(0, 60)) });
 
-      // The Overview's counts are the server's (GET /v1/overview, c-129), not sample data: the three cases above count.
+      // The Overview's counts are the server's (GET /v1/overview), not sample data: the three cases above count.
       const counts = await json(await fetch(`${agents}/v1/overview`, { headers: J }));
       await page.goto(`${consoleUrl}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const casesCard = page.getByTestId('overview-cases');

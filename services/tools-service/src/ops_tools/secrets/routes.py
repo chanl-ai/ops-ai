@@ -6,6 +6,8 @@ need the same credential each hold their own row under the same name."""
 # No `from __future__ import annotations`: the `caller` dependency is a local of secrets_router, and FastAPI resolves
 # string annotations against module globals, where it does not exist.
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -16,16 +18,16 @@ from pydantic.alias_generators import to_camel
 
 from ops_access import Access, policy, require_provisioner
 from ops_identity import Principal
-from ops_policy import Cipher, context_of
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from ..callers import Person, person
 from ..executor import secret_names
 from ..store.modules import ModuleStore
-from ..store.secrets import SecretStore
+from . import SecretResolver
 
 
 class _In(BaseModel):
@@ -157,9 +159,11 @@ def may_write_secret(
 
 
 def secrets_router(
-    store: SecretStore, cipher: Cipher, *, security_team: str | None = None, modules: ModuleStore | None = None
+    secrets: SecretResolver, *, security_team: str | None = None, modules: ModuleStore | None = None
 ) -> APIRouter:
-    """`modules` lists the tenant's tool modules, for which operations read each secret; without it none are named."""
+    """`secrets` sets values through the credential store and reads the metadata of its store. `modules` lists the
+    tenant's tool modules, for which operations read each secret; without it none are named."""
+    store = secrets.store
     caller = person
     team = security_team or Settings().security_team_id
 
@@ -202,6 +206,16 @@ def secrets_router(
                 details={"connectionId": row["connection_id"]},
             )
 
+    @contextmanager
+    def _in(who: Person, owner: str) -> Generator[None]:
+        """The request's transactions in `owner`'s team: the acting team, or the team a Security admin named, after
+        `_team` checked that right. The database shows a transaction its own team's secrets only (c-616 C1)."""
+        if owner == who.team_id:
+            yield
+            return
+        with isolation.scope(who.tenant_id, owner):
+            yield
+
     def _may_write(who: Person, action: str, owner: str, protection: str | None = None) -> None:
         if who.principal is not None:
             may_write_secret(who.principal, action, owner, security_team=team, protection=protection)
@@ -219,14 +233,19 @@ def secrets_router(
         """The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
         name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced."""
         owner = _team(who, team_id)
-        users = await _users(who.tenant_id, owner)
-        if page is None:
-            listed = await store.listed(who.tenant_id, owner)
-            return ok([_meta(x, users) for x in listed if template_id is None or x.get("template_id") == template_id])
-        total = await store.count(who.tenant_id, owner, search, template_id)
-        page, offset = page_window(total, page, page_size)
-        found = await store.page(who.tenant_id, owner, search, offset=offset, limit=page_size, template_id=template_id)
-        return ok(paged([_meta(x, users) for x in found], total, page, page_size))
+        with _in(who, owner):
+            users = await _users(who.tenant_id, owner)
+            if page is None:
+                listed = await store.listed(who.tenant_id, owner)
+                return ok(
+                    [_meta(x, users) for x in listed if template_id is None or x.get("template_id") == template_id]
+                )
+            total = await store.count(who.tenant_id, owner, search, template_id)
+            page, offset = page_window(total, page, page_size)
+            found = await store.page(
+                who.tenant_id, owner, search, offset=offset, limit=page_size, template_id=template_id
+            )
+            return ok(paged([_meta(x, users) for x in found], total, page, page_size))
 
     @r.post("", response_model=Envelope[SecretMeta], status_code=201)
     async def create_secret(body: SecretIn, who: Annotated[Person, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -237,17 +256,17 @@ def secrets_router(
                 code="secret_one_team",
             )
         owner = _team(who, body.team_id)
-        _may_write(who, "create", owner)
-        template = {k: v for k, v in (("template_id", body.template_id), ("protection", body.protection)) if v}
-        if template and who.principal is not None:
-            require_provisioner(who.principal, "secrets_egress")
-        blob = cipher.encrypt(body.value, context=context_of(who.tenant_id, body.name))
-        made = await store.create(
-            who.tenant_id, owner, body.name, blob, actor=who.name, at=datetime.now(UTC), template=template
-        )
-        if not made:
-            raise Conflict(f"A secret named {body.name} already exists. Rotate it to change its value.")
-        return ok(await _one(who, owner, body.name), 201)
+        with _in(who, owner):
+            _may_write(who, "create", owner)
+            template = {k: v for k, v in (("template_id", body.template_id), ("protection", body.protection)) if v}
+            if template and who.principal is not None:
+                require_provisioner(who.principal, "secrets_egress")
+            made = await secrets.create(
+                who.tenant_id, owner, body.name, body.value, actor=who.name, at=datetime.now(UTC), template=template
+            )
+            if not made:
+                raise Conflict(f"A secret named {body.name} already exists. Rotate it to change its value.")
+            return ok(await _one(who, owner, body.name), 201)
 
     @r.post("/{name}/rotate", response_model=Envelope[SecretMeta])
     async def rotate_secret(  # pyright: ignore[reportUnusedFunction]
@@ -255,32 +274,36 @@ def secrets_router(
     ) -> JSONResponse:
         # Setting the value is not an edit of the slot, so a system secret's protection does not apply (c-180).
         owner = _team(who, team_id)
-        row = await _row(who, owner, name)
-        _not_a_connection_part(row)
-        _may_write(who, "edit", owner)
-        blob = cipher.encrypt(body.value, context=context_of(who.tenant_id, name))
-        if await store.rotate(who.tenant_id, owner, name, blob, actor=who.name, at=datetime.now(UTC)) is None:
-            raise NotFound(f"Secret {name}")
-        return ok(await _one(who, owner, name))
+        with _in(who, owner):
+            row = await _row(who, owner, name)
+            _not_a_connection_part(row)
+            _may_write(who, "edit", owner)
+            if (
+                await secrets.rotate(who.tenant_id, owner, name, body.value, actor=who.name, at=datetime.now(UTC))
+                is None
+            ):
+                raise NotFound(f"Secret {name}")
+            return ok(await _one(who, owner, name))
 
     @r.delete("/{name}", status_code=204, response_class=Response)
     async def delete_secret(  # pyright: ignore[reportUnusedFunction]
         name: str, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
     ) -> Response:
         owner = _team(who, team_id)
-        row = await _row(who, owner, name)
-        _not_a_connection_part(row)
-        _may_write(who, "delete", owner, row.get("protection"))
-        # A secret an operation names, staged or published, is not deleted: the next call would fail SECRET_MISSING.
-        if users := (await _users(who.tenant_id, owner)).get(name):
-            ops = ", ".join(u["operation"] for u in users)
-            raise Conflict(
-                f"{name} is read by {ops}. Remove it from those operations first.",
-                code="secret_in_use",
-                details={"operations": [u["operation"] for u in users]},
-            )
-        if not await store.delete(who.tenant_id, owner, name, actor=who.name, at=datetime.now(UTC)):
-            raise NotFound(f"Secret {name}")
-        return Response(status_code=204)
+        with _in(who, owner):
+            row = await _row(who, owner, name)
+            _not_a_connection_part(row)
+            _may_write(who, "delete", owner, row.get("protection"))
+            # A secret an operation names, staged or published, is not deleted: the next call would fail SECRET_MISSING.
+            if users := (await _users(who.tenant_id, owner)).get(name):
+                ops = ", ".join(u["operation"] for u in users)
+                raise Conflict(
+                    f"{name} is read by {ops}. Remove it from those operations first.",
+                    code="secret_in_use",
+                    details={"operations": [u["operation"] for u in users]},
+                )
+            if not await secrets.delete(who.tenant_id, owner, name, actor=who.name, at=datetime.now(UTC)):
+                raise NotFound(f"Secret {name}")
+            return Response(status_code=204)
 
     return r

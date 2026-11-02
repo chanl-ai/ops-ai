@@ -87,6 +87,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_runtime
 GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batches TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batch_rows TO ops_runtime_system;
+GRANT SELECT ON dbo.team_default_agents TO ops_runtime_system;
 GRANT IMPERSONATE ON USER::ops_runtime_system TO ops_agents_runtime;
 GO
 -- tools-service
@@ -95,6 +96,7 @@ GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.gateway_calls TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.gateway_fences TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_modules TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_mocks TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.service_outbox TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connections TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_states TO ops_tools_runtime;
@@ -102,7 +104,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_audit TO ops_tools_runtim
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_hosts TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_ranges TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_audit TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_mocks TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_rate_windows TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_secrets TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.secret_audit TO ops_tools_runtime;
@@ -110,6 +111,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.plugin_app_keys TO ops_tools_runtime
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.plugin_bindings TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_policies TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_checks TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.team_defaults TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_operations TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_versions TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_approvals TO ops_tools_runtime;
@@ -149,6 +151,7 @@ IF USER_ID(N'ops_platform_runtime') IS NULL CREATE USER ops_platform_runtime FOR
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tenants TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_email_failures TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.platform_outbox TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.teams TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.users TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.roles TO ops_platform_runtime;
@@ -201,6 +204,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extractions TO ops_documents_runtime
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extraction_corrections TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_layouts TO ops_documents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_template_copies TO ops_documents_runtime;
 GRANT SELECT ON dbo.alembic_version_documents TO ops_documents_runtime;
 GO
 IF USER_ID(N'ops_documents_system') IS NULL CREATE USER ops_documents_system WITHOUT LOGIN;

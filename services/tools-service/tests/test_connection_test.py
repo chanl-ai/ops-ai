@@ -10,17 +10,17 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
-from ops_policy import AesGcmCipher
 from ops_service_kit.settings import Settings
 from ops_tools.auth.tokens import Tokens
 from ops_tools.modules.seed import load
 from ops_tools.store.connections import SHARED, ConnectionStore
 from ops_tools.store.modules import ModuleStore
 
-from .conftest import build_app, response_checker
+from .conftest import build_app, credentials, response_checker
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
@@ -103,7 +103,7 @@ async def connection(client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
 
 
 def tokens(engine: AsyncEngine) -> Tokens:
-    return Tokens(ConnectionStore(engine), AesGcmCipher(Settings().secrets_key.get_secret_value()), None, None)  # pyright: ignore[reportArgumentType]
+    return Tokens(ConnectionStore(engine), credentials(), None, None)  # pyright: ignore[reportArgumentType]
 
 
 async def press_test(
@@ -167,4 +167,20 @@ async def test_a_connection_with_no_test_address_is_not_tested(
     conn = await connection(client, engine, tenant, {k: v for k, v in SETTINGS.items() if k != "testPath"})
     r = await press_test(client, tenant, conn, PRIYA, account="team")
     assert r.status_code == 400 and r.json()["error"]["code"] == "test_path_missing", r.text
+    assert system.seen == []
+
+
+async def test_an_app_not_signed_in_yet_says_to_sign_in_not_to_type_a_test_address(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str, system: System
+) -> None:
+    # A plugin's test address comes with its sign-in, which names the instance (c-616): nobody types one.
+    conn = await connection(client, engine, tenant, {k: v for k, v in SETTINGS.items() if k != "testPath"})
+    async with engine.begin() as c:
+        await c.execute(
+            sa.text("update connections set plugin_id = 'opsai.desk' where tenant_id = :t and id = :id"),
+            {"t": tenant, "id": conn},
+        )
+    r = await press_test(client, tenant, conn, PRIYA, account="team")
+    error = r.json()["error"]
+    assert r.status_code == 400 and error["code"] == "not_signed_in" and "Sign" in error["message"], r.text
     assert system.seen == []

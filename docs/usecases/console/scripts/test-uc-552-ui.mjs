@@ -1,5 +1,5 @@
 // uc-552 A person works from one chat, with every other page in one collapsible sidebar, ui layer:
-// docs/usecases/console/chat-first.md (c-552). The demo stack (platform sign-in, the fake model, a worker). James starts
+// docs/usecases/console/chat-first.md. The demo stack (platform sign-in, the fake model, a worker). James starts
 // a card dispute that waits for a decision, and it is assigned to Maya; a case is past its deadline. Maya signs in and
 // lands on Chat with hints from her own work, starts a chat from one, finds it under Today in the sidebar, reads the
 // Overview count and widgets from one request, folds the sidebar and a group and finds both remembered, loses her
@@ -101,7 +101,7 @@ await withUiStack(
       });
 
       await step('2 the sidebar holds New chat, Overview, Cases and Human Tasks with her count at the top, then the groups', async () => {
-        // One count (c-562): on Human Tasks, the tasks waiting for her; Overview carries none.
+        // One count: on Human Tasks, the tasks waiting for her; Overview carries none.
         const count = Number(await page.getByTestId('sidebar-count-reviews').innerText());
         const overviewCount = await page.getByTestId('sidebar-overview-count').count();
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;

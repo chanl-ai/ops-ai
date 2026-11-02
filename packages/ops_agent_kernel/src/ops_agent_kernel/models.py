@@ -33,6 +33,11 @@ def build_model(settings: Settings) -> Model:
             "The default alias is served by models-service (OPS_MODELS_URL). To call a provider directly, set "
             "OPS_MODEL_ALIAS to the provider's model name."
         )
+    if (settings.openai_api_type or "").lower() == "azure":
+        # The direct path speaks only to api.openai.com, which would be sent the Azure resource's key.
+        raise NoModelKeyError(
+            "OPENAI_API_TYPE=azure is served through models-service: set OPS_MODELS_URL and OPS_MODELS_KEY."
+        )
     if alias.startswith("claude-"):
         if settings.anthropic_api_key is None:
             raise NoModelKeyError(f"Model {alias} needs ANTHROPIC_API_KEY in the environment.")

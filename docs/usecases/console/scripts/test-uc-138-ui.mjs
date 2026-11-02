@@ -1,5 +1,5 @@
 // uc-138 knowledge, source and file pages follow what the caller may do with each record, ui layer:
-// docs/usecases/console/record-pages-follow-record-flags.md (c-216). Platform sign-in; Priya is Operations' admin, Ravi
+// docs/usecases/console/record-pages-follow-record-flags.md. Platform sign-in; Priya is Operations' admin, Ravi
 // its viewer. Each page's controls must match the record's own canEdit / canDelete as its service answers them.
 import { createHash } from 'node:crypto';
 

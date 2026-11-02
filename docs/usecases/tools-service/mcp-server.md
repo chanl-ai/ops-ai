@@ -15,7 +15,7 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 | PostgreSQL and OPA | `make db-up` |
 | platform-service issuing keys and tokens; tools and agents verifying them | `platform()`, `tools()` and `agents()` with `OPS_AUTH_MODE=platform` |
 | The bank stand-in | `core_bank()`; `GET /accounts/{account_id}` and `POST /accounts/{account_id}/holds` behind its API key |
-| A team_ops key and a team_fraud key | Priya (team_ops admin) and Wanjiru (admin in every team) create them at `POST /v1/api-keys` |
+| A team_ops key and a team_platform key | Priya (team_ops admin) and Wanjiru (admin in every team) create them at `POST /v1/api-keys` |
 
 ## Steps and expected results
 
@@ -25,7 +25,7 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 | 1 | The team_ops key lists tools at `/mcp/test/team_ops` | The read is listed with its input schema and `readOnlyHint`; the write is not |
 | 2 | It calls `uc410_get_account` for `CHQ-2219` | The bank's own account; the call log row says `channel` mcp, the client's name and test |
 | 3 | It calls `uc410_place_hold` by name | Refused (`write needs an approval token`) and logged as an mcp call; the account still has no hold |
-| 4 | The team_fraud key lists and calls at `/mcp/test/team_fraud`, then tries `/mcp/test/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
+| 4 | The team_platform key lists and calls at `/mcp/test/team_platform`, then tries `/mcp/test/team_ops` | Not listed; the call is 403 `team_forbidden`; the other team's URL is 403 `team_forbidden` |
 | 5 | The production URL; no credential; a viewer's token | 403 `production_off`; 401 `unauthorized` with `WWW-Authenticate`; 403 `role_required` |
 
 ## Acceptance layers

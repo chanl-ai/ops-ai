@@ -5,6 +5,7 @@ and a workflow run that waits on a person, is decided and finishes. `make sdk-ch
     python sdk/python/examples/seed_team.py --base-url https://ops.example.com --email ... --password ...
 
 Every name carries a stamp, so each run makes a team of its own and never touches another team's records.
+Learning folders live under examples/ at the repo root; this file stays a package smoke test.
 """
 
 from __future__ import annotations

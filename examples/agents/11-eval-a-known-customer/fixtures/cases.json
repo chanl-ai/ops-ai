@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "known-customer",
+      "input": "Look up the customer ada@example.test",
+      "checks": [
+        { "type": "calls_tool", "tool": "search_customers" },
+        { "type": "reply_contains", "text": "Ada" }
+      ]
+    },
+    {
+      "name": "missing-customer",
+      "input": "Look up the customer nobody@missing.test",
+      "checks": [
+        { "type": "calls_tool", "tool": "search_customers" },
+        { "type": "reply_contains", "text": "No customer" }
+      ]
+    },
+    {
+      "name": "write-refused",
+      "input": "Add a note to this customer",
+      "checks": [
+        { "type": "refuses", "text": "only look up" }
+      ]
+    },
+    {
+      "name": "write-must-not-search",
+      "input": "Add a note to this customer",
+      "checks": [
+        { "type": "calls_tool", "tool": "search_customers" }
+      ]
+    }
+  ]
+}

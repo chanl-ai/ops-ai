@@ -60,7 +60,6 @@ def send(subject: str) -> None:
 sam = headers("s.adeyemi@harborpine.example", "team_security")
 james = headers("j.richardson@harborpine.example", "team_ops")
 ravi = headers("r.menon@harborpine.example", "team_ops")
-omar = headers("o.haddad@harborpine.example", "team_fraud")
 tools = httpx.Client(base_url=TOOLS, timeout=30)
 api = httpx.Client(base_url=AGENTS, timeout=60)
 
@@ -94,7 +93,7 @@ mailbox = connected.json().get("data", {})
 check("3 James connects it with no settings edit or restart", connected.status_code == 201, connected.text[:300])
 mid = mailbox.get("id", "")
 listed = [m["address"] for m in api.get("/v1/channels/mailboxes", headers=james).json()["data"]]
-other = api.get(f"/v1/channels/mailboxes/{mid}", headers=omar)
+other = api.get(f"/v1/channels/mailboxes/{mid}", headers=sam)
 check(
     "4 the team lists it; another team's builder gets 404",
     ADDRESS in listed and other.status_code == 404,

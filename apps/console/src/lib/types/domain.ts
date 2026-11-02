@@ -3,7 +3,7 @@ import type { WidgetPin, WidgetSettings } from './widgets';
 
 export type Risk = 'critical' | 'high' | 'medium' | 'low';
 export type ReviewStatus = 'pending' | 'in_review' | 'approved' | 'rejected' | 'returned';
-export type ReviewKind = 'approval' | 'exception' | 'escalation' | 'policy_override' | 'publish_request' | 'agent_publish' | 'model_validation' | 'skill_publish' | 'template_submission';
+export type ReviewKind = 'approval' | 'exception' | 'escalation' | 'policy_override' | 'publish_request' | 'agent_publish' | 'model_validation' | 'skill_publish' | 'template_submission' | 'connect_account' | 'egress_host';
 export type ReviewDecision = 'approved' | 'rejected' | 'returned';
 export type LifecycleStatus = 'live' | 'draft' | 'paused';
 export type Channel = 'voice' | 'chat' | 'email' | 'api';
@@ -441,6 +441,16 @@ export interface Review {
   agentSlug: string;
   /** Display name of the agent behind `agentSlug`, filled by the API. */
   agentName?: string;
+  /**
+   * A run waiting for a person's own account of an app (kind connect_account, c-616 S12): the app, its connection, whom
+   * it waits for, and whether a team account can stand in.
+   */
+  connect?: { app: string; connectionId?: string | null; person?: string | null; teamAccount: boolean } | null;
+  /**
+   * An app's first address on a host the tenant has not listed (kind egress_host, c-616 S13): the host, the app and
+   * who set the address. The Security team decides; approving lists the host.
+   */
+  egressHost?: { host: string; app: string; requestedBy: string; teamId: string; applyPending: boolean } | null;
   kind: ReviewKind;
   risk: Risk;
   /** Null for a step no model scored (a v2 workflow's review step). */

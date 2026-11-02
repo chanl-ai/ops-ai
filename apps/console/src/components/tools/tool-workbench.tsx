@@ -7,6 +7,7 @@ import { AlertTriangle, KeyRound, Wrench } from 'lucide-react';
 import { PageLayout } from '@/components/page-layout';
 import { AccessBadge } from '@/components/status-badges';
 import { BuilderFieldset, BuilderOnly, ReadOnlyNotice } from '@/components/shared/builder-only';
+import { SignInHeaderNotice } from '@/components/shared/sign-in-header-notice';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section } from '@/components/shared/surface';
@@ -18,66 +19,62 @@ import { TestConsole } from '@/components/tools/test-console';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useRealConnections } from '@/hooks/systems-queries';
 import { cn } from '@/lib/utils';
-import type { HttpOperationInput, ModuleOperation, ModuleTestInput, ModuleTestResult, OperationPatch, RunContextOption } from '@/lib/types/tool-modules';
+import type { ConnectionRef } from '@/lib/types/integrations';
+import type { HttpOperationInput, ModuleOperation, OperationPatch, RunContextOption, ToolRunProps } from '@/lib/types/tool-modules';
 import { SplitView } from '@/components/shared/setting/split-view';
 
 export interface WorkbenchDraft {
   http: HttpOperationInput;
   input: FieldDraft[];
-  stub: string;
   transform: string;
 }
 
-const baseOf = (endpoint: string) => endpoint.replace(/\/+$/, '');
+const baseOf = (base: string) => base.replace(/\/+$/, '');
+/**
+ * The address every operation's path hangs off: the app's base address from its connection (production first, then
+ * test), never the module's own. Before an app is picked there is none, and the address field takes a path.
+ */
+export const baseOfApp = (connection: ConnectionRef | null | undefined): string => {
+  const urls = connection?.baseUrls ?? {};
+  return urls.production ?? urls.test ?? Object.values(urls)[0] ?? '';
+};
 
-export const draftOf = (op: ModuleOperation, endpoint: string): WorkbenchDraft => ({
-  http: { name: op.name, description: op.description, access: op.access, method: op.method ?? 'GET', url: `${baseOf(endpoint)}${op.path ?? ''}`, headers: op.headers.map((h) => ({ ...h })), body: op.body ?? '' },
+export const draftOf = (op: ModuleOperation, base: string): WorkbenchDraft => ({
+  http: { name: op.name, description: op.description, access: op.access, method: op.method ?? 'GET', url: `${baseOf(base)}${op.path ?? ''}`, headers: op.headers.map((h) => ({ ...h })), body: op.body ?? '', bodyEncoding: op.bodyEncoding },
   input: fieldDrafts(op.input),
-  stub: op.stub === undefined ? '' : JSON.stringify(op.stub, null, 2),
   transform: op.responseTransform ?? '',
 });
 
-/** The mock as JSON, or the reason it is not; an empty box is no mock. */
-function parsedStub(text: string): { value?: unknown; error?: string } {
-  if (!text.trim()) return {};
-  try {
-    return { value: JSON.parse(text) };
-  } catch (e) {
-    return { error: `Not valid JSON: ${(e as Error).message}` };
-  }
-}
-
-/** A URL off the module's endpoint: a second system is a second module, so it cannot be staged. */
-export function urlProblem(d: WorkbenchDraft, endpoint: string): string | undefined {
-  const base = baseOf(endpoint);
-  return d.http.url !== base && !d.http.url.startsWith(`${base}/`) ? `Keep the module endpoint, ${base}. A second system is a second module.` : undefined;
+/** A URL off the app's address: another system is another app, so it cannot be saved. */
+export function urlProblem(d: WorkbenchDraft, appBase: string): string | undefined {
+  const base = baseOf(appBase);
+  if (!base) return d.http.url && !d.http.url.startsWith('/') ? 'Start with a path, such as /accounts/{id}; the address comes from the app.' : undefined;
+  return d.http.url !== base && !d.http.url.startsWith(`${base}/`) ? `Keep the app’s address, ${base}. Another address is another app.` : undefined;
 }
 
 /** What the draft changes against the operation, as a staged edit. */
-export function patchOf(op: ModuleOperation, endpoint: string, d: WorkbenchDraft): OperationPatch {
-  const before = draftOf(op, endpoint);
+export function patchOf(op: ModuleOperation, appBase: string, d: WorkbenchDraft): OperationPatch {
+  const before = draftOf(op, appBase);
   const patch: OperationPatch = {};
-  const base = baseOf(endpoint);
+  const base = baseOf(appBase);
   if (d.http.method !== before.http.method) patch.method = d.http.method;
   const path = d.http.url.slice(base.length) || '/';
-  if (!urlProblem(d, endpoint) && path !== (op.path ?? '')) patch.path = path;
+  if (!urlProblem(d, appBase) && path !== (op.path ?? '')) patch.path = path;
   const headers = d.http.headers.filter((h) => h.key.trim()).map((h) => ({ key: h.key.trim(), value: h.value.trim() }));
   if (JSON.stringify(headers) !== JSON.stringify(op.headers)) patch.headers = headers;
   if ((d.http.body ?? '').trim() !== (op.body ?? '')) patch.body = (d.http.body ?? '').trim();
+  if ((d.http.bodyEncoding ?? 'json') !== (op.bodyEncoding ?? 'json')) patch.bodyEncoding = d.http.bodyEncoding;
   if (JSON.stringify(schemaOf(d.input)) !== JSON.stringify(schemaOf(fieldDrafts(op.input)))) patch.input = schemaOf(d.input);
   if (d.transform.trim() !== (op.responseTransform ?? '')) patch.responseTransform = d.transform.trim() || null;
-  const stub = parsedStub(d.stub);
-  // A cleared box is null, which tools-service reads as back to the default mock; undefined would drop the key.
-  if (!stub.error && d.stub.trim() !== before.stub.trim()) patch.stub = stub.value ?? null;
   return patch;
 }
 
-export interface ToolWorkbenchProps {
+export interface ToolWorkbenchProps extends ToolRunProps {
   moduleId: string;
   moduleName: string;
-  endpoint: string;
+  /** The app's base address (baseOfApp): the request's address starts with it. */
+  base: string;
   op: ModuleOperation;
   /** False when the module is not published: only the mock runs. */
   published: boolean;
@@ -89,13 +86,6 @@ export interface ToolWorkbenchProps {
   dirty: boolean;
   /** Run contexts: the workflows approved for the module, each with a sample case. */
   contexts: RunContextOption[];
-  onRun: (input: ModuleTestInput) => void;
-  /** Clears the last result when the run's context or target changes. */
-  onReset: () => void;
-  running: boolean;
-  result?: ModuleTestResult;
-  /** The run itself failed (the service did not answer); the inputs are kept. */
-  runError?: string;
   /** More header actions, before Stage changes (the operation's access and approval policy). */
   extraActions?: React.ReactNode;
   /** The operation's call has a staged change: calls run the published call until the next publish. */
@@ -107,13 +97,12 @@ export interface ToolWorkbenchProps {
 /**
  * One operation on a full page (c-088): its definition on the left (request, inputs, secrets, mock, transform) and a run
  * on the right, with the request sent, the raw response, the transformed output and the gateway's log side by side. A run
- * uses the draft as it stands, so a transform or mock is tried before it is staged; only staging and publishing change
+ * uses the draft as it stands, so a transform is tried before it is staged (Mock answers from the saved mock answers); only staging and publishing change
  * what agents get.
  */
 export function ToolWorkbench(p: ToolWorkbenchProps) {
   const { op, draft: d } = p;
   // With real connections on, an operation keeps an ordered list of mock answers in place of its one mock (c-580).
-  const mockAnswers = useRealConnections();
   const set = (patch: Partial<WorkbenchDraft>) => p.onDraftChange({ ...d, ...patch });
   const [secretValues, setSecretValues] = React.useState<Record<string, string>>({});
   // A value typed for one run leaves the page when the run ends, whether it answered or failed: React writes a controlled
@@ -125,8 +114,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
     if (wasRunning.current && !p.running) setSecretValues({});
     wasRunning.current = p.running;
   }, [p.running]);
-  const stub = parsedStub(d.stub);
-  const urlError = urlProblem(d, p.endpoint);
+  const urlError = urlProblem(d, p.base);
   const unused = unusedInputs({ ...op, input: schemaOf(d.input).filter((f) => f.name) }, d.http);
   return (
     <PageLayout
@@ -149,14 +137,15 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
         <>
           {p.extraActions}
           <BuilderOnly>
-            <LoadingButton isLoading={p.staging} loadingText="Staging…" onClick={p.onStage} disabled={!p.dirty || !!stub.error || !!urlError} data-testid="workbench-stage">
+            <LoadingButton isLoading={p.staging} loadingText="Staging…" onClick={p.onStage} disabled={!p.dirty || !!urlError} data-testid="workbench-stage">
               Stage changes
             </LoadingButton>
           </BuilderOnly>
         </>
       }
     >
-      <ReadOnlyNotice noun="tool modules" />
+      <ReadOnlyNotice noun="tools" />
+      <SignInHeaderNotice header={p.op.signInHeader} />
       <Tabs value={view} onValueChange={(v) => setView(v as 'definition' | 'run')} className="gap-4">
       <TabsList className="w-full lg:hidden" aria-label="Workbench">
         <TabsTrigger value="definition" id="wb-tab-definition" aria-controls="wb-panel-definition">
@@ -198,11 +187,11 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
                     title={<span className="font-mono text-xs">{s.name}</span>}
                     description={
                       !s.set ? (
-                        <Link href="/settings/security/secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
+                        <Link href="/integrations/credentials?tab=secrets" className="text-warning-text underline-offset-4 hover:underline" data-testid={`secret-unset-${s.name}`}>
                           Not set in this module&apos;s team; set it in Settings
                         </Link>
                       ) : (
-                        'Set in this module’s team'
+                        'Set in this team'
                       )
                     }
                     trailing={<Input type="password" aria-label={`${s.name} test value`} placeholder="Test value" value={secretValues[s.name] ?? ''} onChange={(e) => setSecretValues({ ...secretValues, [s.name]: e.target.value })} className="h-8 w-44 font-mono text-xs" autoComplete="off" />}
@@ -211,15 +200,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
               </Rows>
             )}
           </Section>
-          {mockAnswers ? (
-            <MockAnswers moduleId={p.moduleId} opId={op.id} />
-          ) : (
-            <Section title="Mock response" description="Answers a run against the mock, and every write in a test. Staged and reviewed like any edit.">
-              <FormField id="wb-stub" label="Response JSON" error={stub.error}>
-                <Textarea id="wb-stub" rows={8} value={d.stub} onChange={(e) => set({ stub: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": 1520.33}'} aria-invalid={!!stub.error} />
-              </FormField>
-            </Section>
-          )}
+          <MockAnswers moduleId={p.moduleId} opId={op.id} />
           <Section title="Transform" description="A Jinja2 template over the response as data. The run applies it as typed.">
             <FormField id="wb-transform" label="Template" optional error={p.result?.transformError}>
               <Textarea id="wb-transform" rows={5} value={d.transform} onChange={(e) => set({ transform: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": {{ data.balance }}}'} aria-invalid={!!p.result?.transformError} />
@@ -242,7 +223,8 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
               p.onRun({
                 ...input,
                 // A cleared Transform box is null: run with no transform, not the operation's saved one.
-                draft: { responseTransform: d.transform.trim() || null, stub: stub.error ? undefined : stub.value },
+                // Mock answers from the operation's saved mock answers (test, else its example), never from a draft here.
+                draft: { responseTransform: d.transform.trim() || null },
                 secretValues: Object.keys(typed).length ? typed : undefined,
               });
             }}

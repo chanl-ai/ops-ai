@@ -2,9 +2,12 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, publicFormPage } from '@/lib/api';
 import type { HostedFormInput, HostedFormLink, HostedFormPatch } from '@/lib/types/forms';
 import { useTeamQuery } from './team-query';
+
+/** True when the embed app's origin is set, so a signed link has a page that can open it. */
+export const usePublicFormPage = () => publicFormPage;
 
 const key = (workflowId: string) => ['forms', workflowId] as const;
 

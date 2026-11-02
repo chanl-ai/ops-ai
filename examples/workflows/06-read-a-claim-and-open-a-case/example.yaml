@@ -1,0 +1,45 @@
+id: read-a-claim-and-open-a-case
+title: Read a claim document and open a case
+track: workflow
+status: built
+difficulty: guided
+outcome: Extract claim fields, save the read, and open a typed case.
+capabilities:
+- id: ops.ai.extract
+  status: built
+- id: ops.files.setData
+  status: built
+- id: ops.action.openCase
+  status: built
+- id: ops.flow.humanReview
+  status: built
+- id: ops.trigger.email
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/claim.json
+- fixtures/low.json
+- fixtures/unreadable.json
+expected:
+- expected/claim.json
+- expected/low.json
+- expected/unreadable.json
+- expected/opened.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 90
+teaches:
+- extract reads a file into typed fields with confidence
+- Save data on file records the read
+- low confidence waits for a person
+- unreadable ends named
+- openCase opens a typed case

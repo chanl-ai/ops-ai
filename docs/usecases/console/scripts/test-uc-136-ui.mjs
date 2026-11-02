@@ -106,7 +106,7 @@ await withUiStack(
       );
       await james.keyboard.press('Escape');
 
-      // Channels › Chat embed opens the same dialog with an agent picker (Deployments folded into Channels, c-242).
+      // Channels › Chat embed opens the same dialog with an agent picker (Deployments folded into Channels).
       await james.goto(`${consoleUrl}/channels/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('widget-embed-open').click({ timeout: 120_000 });
       const dialog = james.getByRole('dialog', { name: 'Embed on a page' });
@@ -116,7 +116,7 @@ await withUiStack(
       check('2 Channels › Chat embed › Embed on a page picks an agent, creates the embed and shows the same snippet', two.status === 201 && !!two.id && two.id !== one.id && two.pageCode.includes('/embed/v1.js'), two);
 
       // 4. Preview as a person: the embed's real chat, loaded from the embed app in a frame on the console's origin, on a
-      // session minted for James (c-232).
+      // session minted for James.
       await james.goto(`${consoleUrl}/agents/${AGENT}?tab=channels`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const previewMinted = james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/widget-deployments/${one.id}/preview-session`), { timeout: 90_000 }).catch(() => undefined);
       await james.locator(`[data-testid="widget-embed-row"][data-id="${one.id}"]`).getByTestId('widget-preview-open').click({ timeout: 60_000 });
@@ -160,7 +160,7 @@ await withUiStack(
       await browser.close();
     }
   },
-  // The embed app serves the loader and the chat frame the preview loads (c-232).
+  // The embed app serves the loader and the chat frame the preview loads.
   { platform: true, embed: true },
 );
 finish();

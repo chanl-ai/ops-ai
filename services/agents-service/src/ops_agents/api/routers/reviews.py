@@ -18,12 +18,12 @@ from ops_contracts.chat import WireModel
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 
 from ...store.review_assignments import ReviewAssignments
 from ...store.reviews import ReviewStore
 from ...store.service_events import attempts_of
-from .. import hitl_facade, service_events
+from .. import engine_reviews, hitl_facade, service_events
 from ..auth import (
     Principal,
     principal,
@@ -37,7 +37,7 @@ from ..auth import (
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..runs import config, graph_store, pending, resolve
-from ..schemas import Approval, BulkResult, Out, Review, ReviewList
+from ..schemas import Approval, BulkResult, Review, ReviewList
 from ..tool_access import one_read_per_tool, policy_of
 
 router = APIRouter(prefix="/v1/threads", dependencies=[Depends(principal)])
@@ -214,6 +214,13 @@ async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> J
         inputs=body.inputs,
     )
     return ok(review)
+
+
+@console_router.post("/{thread_id}/team-account", response_model=Envelope[Review])
+async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
+    """Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account
+    (c-616 S12), for a person who may use it (connections.run), on an app that has one."""
+    return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
 
 
 class BulkDecisionInput(WireModel):

@@ -6,7 +6,7 @@ docs/usecases/agents-service/levy-on-the-runner.md.
 Own services, no real model: models-service on the fake OpenAI with the notice's extraction rule, kb-service's
 files-service with scanning off, tools-service with the core fake bank on https (docs/usecases/lib/fake_bank_serve.py),
 agents-service, and a workflow worker that reads a levy mailbox of this run's own on the stack's GreenMail over IMAP,
-connected through the API like any team mailbox (c-229). The v2 levy_case and levy_intake definitions (the dev seed,
+connected through the API like any team mailbox. The v2 levy_case and levy_intake definitions (the dev seed,
 services/agents-service/seed/engine_workflows.json) are saved and published as the dev builder of team_ops, watching
 that mailbox."""
 
@@ -101,7 +101,7 @@ def worker(files_url: str, models_url: str, documents_url: str) -> Generator[Non
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,
-        # The Extract from file step reads through documents-service (c-256).
+        # The Extract from file step reads through documents-service.
         "OPS_DOCUMENTS_URL": documents_url,
         "OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}",
         "OPS_ENGINE_POLL_SECONDS": "0.2",
@@ -280,7 +280,7 @@ def main() -> None:
             marcus, priya = case_for(api, "Marcus Bell"), case_for(api, "Priya Natarajan")
             check(
                 "3 Marcus (name and address) and Priya (name and last four) wait for a review; "
-                "Jordan, found by name alone, waits on Find the customer or close as not ours (c-477)",
+                "Jordan, found by name alone, waits on Find the customer or close as not ours",
                 marcus["status"] == "waiting"
                 and priya["status"] == "waiting"
                 and jordan["status"] == "waiting"

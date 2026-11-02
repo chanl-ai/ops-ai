@@ -79,7 +79,7 @@ export function SystemMark({ kind, className, size = 'md' }: { kind: Integration
 
 /** Read-only link to the integration a source, module or mailbox uses, with its status. */
 export function ConnectionChip({ connection, className }: { connection: ConnectionRef | null | undefined; className?: string }) {
-  if (!connection) return <span className={cn('text-xs text-muted-foreground', className)}>Built in, no connection</span>;
+  if (!connection) return <span className={cn('text-xs text-muted-foreground', className)}>Built in</span>;
   const s = STATUS[connection.status];
   return (
     <Link

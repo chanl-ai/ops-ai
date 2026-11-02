@@ -397,6 +397,13 @@ class Clock(TypedDict, closed=True):
     state: Literal["running", "met", "breached", "paused"]
 
 
+class ConnectWait(TypedDict, closed=True):
+    app: str
+    connectionId: NotRequired[str | None]
+    person: NotRequired[str | None]
+    teamAccount: NotRequired[bool]
+
+
 class CopyRef(TypedDict, closed=True):
     id: str
     kind: Literal["agent", "skill", "workflow"]
@@ -443,6 +450,9 @@ class DefinitionCheck(TypedDict, closed=True):
     level: str
     message: str
     node: str | None
+    path: NotRequired[str | None]
+    port: NotRequired[str | None]
+    suggestion: NotRequired[str | None]
 
 
 class DefinitionInput(TypedDict, closed=True):
@@ -540,6 +550,19 @@ class DryRun(TypedDict, closed=True):
     sample: list[dict[str, Any]]
 
 
+class EgressHostRef(TypedDict, closed=True):
+    app: str
+    applyPending: bool
+    host: str
+    requestedBy: str
+    teamId: str
+
+
+class EgressHostReviewInput(TypedDict, closed=True):
+    app: str
+    host: str
+
+
 class EmailLink(TypedDict, closed=True):
     at: str
     direction: Literal["in"]
@@ -557,6 +580,7 @@ class Embed(TypedDict, closed=True):
 
 
 class EngineRunInput(TypedDict, closed=True):
+    afterSeconds: NotRequired[float]
     input: NotRequired[dict[str, Any]]
     mode: NotRequired[Literal["live", "test"]]
     runKey: NotRequired[str | None]
@@ -640,6 +664,27 @@ class ErrorBody(TypedDict, closed=True):
 class ErrorEnvelope(TypedDict, closed=True):
     error: ErrorBody
     success: Literal[False]
+
+
+class EvalCaseContextInput(TypedDict, closed=True):
+    collections: NotRequired[list[str]]
+
+
+class EvalCheckInput(TypedDict, closed=True):
+    text: NotRequired[str | None]
+    tool: NotRequired[str | None]
+    type: str
+
+
+class EvalCheckResult(TypedDict, closed=True):
+    label: str
+    status: Literal["pass", "fail"]
+
+
+class EvalSummary(TypedDict, closed=True):
+    passed: int
+    regressions: int
+    total: int
 
 
 class EventOut(TypedDict, closed=True):
@@ -882,6 +927,22 @@ class Installed(TypedDict, closed=True):
     copies: int
     newerAvailable: bool
     version: int | None
+
+
+class JobArmed(TypedDict, closed=True):
+    armed: NotRequired[bool | None]
+    duplicate: NotRequired[bool | None]
+    key: str
+    runId: NotRequired[str | None]
+    status: NotRequired[str | None]
+    threadId: str
+    timerId: NotRequired[str | None]
+
+
+class JobInput(TypedDict, closed=True):
+    dueAt: NotRequired[str | None]
+    key: NotRequired[str]
+    message: NotRequired[str]
 
 
 class KindRow(TypedDict, closed=True):
@@ -1144,6 +1205,19 @@ class PersonRef(TypedDict, closed=True):
     name: str
 
 
+class PlatformEventIn(TypedDict, closed=True):
+    actor: NotRequired[str | None]
+    key: str
+    name: str
+    payload: NotRequired[dict[str, Any]]
+    teamId: str
+
+
+class PlatformEventOut(TypedDict, closed=True):
+    changed: NotRequired[int]
+    handled: bool
+
+
 class PointerInput(TypedDict, closed=True):
     version: int
 
@@ -1366,6 +1440,17 @@ class RunChild(TypedDict, closed=True):
     outcome: str | None
     runId: str
     status: str
+
+
+class RunFailure(TypedDict, closed=True):
+    attempt: NotRequired[int | None]
+    code: NotRequired[str | None]
+    field: NotRequired[str | None]
+    message: str
+    nodeId: NotRequired[str | None]
+    nodeName: NotRequired[str | None]
+    retryable: NotRequired[bool | None]
+    suggestion: NotRequired[str | None]
 
 
 class RunFile(TypedDict, closed=True):
@@ -1864,6 +1949,12 @@ class ToolModuleReviewRef(TypedDict, closed=True):
     diff: NotRequired[ToolModuleDiff | None]
     moduleId: str
     version: str
+
+
+class ToolUser(TypedDict, closed=True):
+    id: str
+    kind: Literal["agent", "workflow"]
+    name: str
 
 
 class TypeRef(TypedDict, closed=True):
@@ -2536,6 +2627,11 @@ class EnvelopeInstallation(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeJobArmed(TypedDict, closed=True):
+    data: JobArmed
+    success: Literal[True]
+
+
 class EnvelopeMailboxView(TypedDict, closed=True):
     data: MailboxView
     success: Literal[True]
@@ -2553,6 +2649,11 @@ class EnvelopeMigrated(TypedDict, closed=True):
 
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
+    success: Literal[True]
+
+
+class EnvelopePlatformEventOut(TypedDict, closed=True):
+    data: PlatformEventOut
     success: Literal[True]
 
 
@@ -2661,6 +2762,11 @@ class EnvelopeWorkflowTestRun(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeDictStrListToolUser(TypedDict, closed=True):
+    data: dict[str, list[ToolUser]]
+    success: Literal[True]
+
+
 class EnvelopeListFormView(TypedDict, closed=True):
     data: list[FormView]
     success: Literal[True]
@@ -2734,6 +2840,31 @@ class EnvelopeListVersion(TypedDict, closed=True):
 class EnvelopeListWorkflowRef(TypedDict, closed=True):
     data: list[OpsAgentsApiSchemasWorkflowRef]
     success: Literal[True]
+
+
+class EvalCaseInput(TypedDict, closed=True):
+    checks: NotRequired[list[EvalCheckInput]]
+    context: NotRequired[EvalCaseContextInput | None]
+    input: str
+    name: str
+
+
+class EvalCaseOutcome(TypedDict, closed=True):
+    checks: list[EvalCheckResult]
+    latencyMs: int
+    reply: str
+    status: Literal["pass", "fail"]
+
+
+class EvalCaseResult(TypedDict, closed=True):
+    caseName: str
+    draft: EvalCaseOutcome
+    live: NotRequired[EvalCaseOutcome | None]
+    regression: NotRequired[bool]
+
+
+class EvalRunInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput]]
 
 
 class FieldRead(TypedDict, closed=True):
@@ -2893,9 +3024,10 @@ class PublishReview(TypedDict, closed=True):
     decidedAt: NotRequired[str | None]
     decidedBy: NotRequired[str | None]
     decisionReason: NotRequired[str | None]
+    egressHost: NotRequired[EgressHostRef | None]
     evidence: list[Any]
     id: str
-    kind: Literal["agent_publish", "publish_request"]
+    kind: Literal["agent_publish", "publish_request", "egress_host"]
     policy: ReviewPolicy
     proposal: str
     publish: NotRequired[PublishRequestInfo | None]
@@ -3186,6 +3318,14 @@ class Agent(TypedDict, closed=True):
     wrapperWorkflowId: NotRequired[str | None]
 
 
+class AgentEvalRun(TypedDict, closed=True):
+    agentId: str
+    id: str
+    results: list[EvalCaseResult]
+    status: Literal["complete"]
+    summary: EvalSummary
+
+
 class CasePage(TypedDict, closed=True):
     actions: list[DraftedAction]
     assignee: str | None
@@ -3242,6 +3382,11 @@ class DocumentRead(TypedDict, closed=True):
     records: list[ReadRecord]
     schema: list[ReadField]
     sources: NotRequired[list[str]]
+
+
+class EnvelopeAgentEvalRun(TypedDict, closed=True):
+    data: AgentEvalRun
+    success: Literal[True]
 
 
 class EnvelopeAgent(TypedDict, closed=True):
@@ -3439,6 +3584,7 @@ class ThreadReview(TypedDict, closed=True):
     caseId: NotRequired[str | None]
     caseTitle: NotRequired[str | None]
     confidence: float | None
+    connect: NotRequired[ConnectWait | None]
     consequence: NotRequired[str | None]
     createdAt: str
     currency: str | None
@@ -3451,7 +3597,7 @@ class ThreadReview(TypedDict, closed=True):
     error: NotRequired[dict[str, Any] | None]
     evidence: list[Evidence]
     id: str
-    kind: Literal["approval"]
+    kind: Literal["approval", "connect_account"]
     option: NotRequired[str | None]
     options: NotRequired[list[ReviewOption] | None]
     optionsError: NotRequired[str | None]
@@ -3576,6 +3722,7 @@ class RunDetail(TypedDict, closed=True):
     decisions: NotRequired[list[RunDecision]]
     digest: str
     error: str | None
+    failure: NotRequired[RunFailure | None]
     files: NotRequired[list[RunFile]]
     finishedAt: str | None
     id: str

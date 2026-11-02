@@ -1,0 +1,192 @@
+schemaVersion: 2
+id: draft_and_approve_reply
+name: Draft and approve a customer reply
+nodes:
+- id: start
+  type: ops.trigger.email
+  typeVersion: 1
+  name: Complaint
+- id: sort
+  type: ops.ai.classify
+  typeVersion: 1
+  name: Classify
+  parameters:
+    text: "{$.input.body}"
+    categories:
+    - name: complaint
+      description: a fee, charge, or service complaint
+    - name: inquiry
+      description: a question that is not a complaint
+- id: policy
+  type: ops.data.set
+  typeVersion: 1
+  name: Reply policy
+  parameters:
+    values:
+      tone: empathic
+- id: gist
+  type: ops.ai.summarise
+  typeVersion: 1
+  name: Summarise
+  parameters:
+    text: "{$.input.body}"
+- id: draft
+  type: ops.ai.draft
+  typeVersion: 1
+  name: Draft
+  parameters:
+    text: "{$.nodes.gist.out}"
+    instructions: Write a short, empathic reply to the customer.
+- id: review
+  type: ops.flow.humanReview
+  typeVersion: 1
+  name: Approve the draft
+  parameters:
+    title: Send this reply?
+    approves: send
+    onTimeout: expire
+    slaHours: 0.002
+    summary:
+      to: $.input.from
+      subject: $.nodes.draft.out.subject
+      body: $.nodes.draft.out.body
+- id: send
+  type: ops.action.tool
+  typeVersion: 1
+  name: Send reply
+  parameters:
+    operation: send_reply
+    approvedBy: review
+    input:
+      to: $.input.from
+      subject: $.nodes.draft.out.subject
+      body: $.nodes.draft.out.body
+- id: sent
+  type: ops.flow.end
+  typeVersion: 1
+  name: Sent
+  parameters:
+    outcome: replied
+- id: declined
+  type: ops.flow.end
+  typeVersion: 1
+  name: Declined
+  parameters:
+    outcome: declined
+- id: draft_failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Draft failed
+  parameters:
+    outcome: draft_failed
+    result: failed
+- id: send_failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Send failed
+  parameters:
+    outcome: send_failed
+    result: failed
+- id: escalated
+  type: ops.flow.end
+  typeVersion: 1
+  name: Escalated
+  parameters:
+    outcome: escalated
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: sort
+    port: in
+- from:
+    node: sort
+    port: complaint
+  to:
+    node: policy
+    port: in
+- from:
+    node: sort
+    port: inquiry
+  to:
+    node: policy
+    port: in
+- from:
+    node: sort
+    port: otherwise
+  to:
+    node: policy
+    port: in
+- from:
+    node: sort
+    port: error
+  to:
+    node: draft_failed
+    port: in
+- from:
+    node: policy
+    port: out
+  to:
+    node: gist
+    port: in
+- from:
+    node: gist
+    port: ok
+  to:
+    node: draft
+    port: in
+- from:
+    node: gist
+    port: error
+  to:
+    node: draft_failed
+    port: in
+- from:
+    node: draft
+    port: ok
+  to:
+    node: review
+    port: in
+- from:
+    node: draft
+    port: error
+  to:
+    node: draft_failed
+    port: in
+- from:
+    node: review
+    port: approve
+  to:
+    node: send
+    port: in
+- from:
+    node: review
+    port: reject
+  to:
+    node: declined
+    port: in
+- from:
+    node: review
+    port: timeout
+  to:
+    node: escalated
+    port: in
+- from:
+    node: send
+    port: ok
+  to:
+    node: sent
+    port: in
+- from:
+    node: send
+    port: error
+  to:
+    node: send_failed
+    port: in
+- from:
+    node: send
+    port: refused
+  to:
+    node: send_failed
+    port: in

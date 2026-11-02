@@ -1,7 +1,7 @@
 """uc-040 Security decides a tool module review, api layer:
 docs/usecases/tools-service/security-decides-a-module-review.md.
 platform-service issues the people's tokens; tools-service and agents-service verify them (OPS_AUTH_MODE=platform). The
-review is a publish request decided in agents-service's Reviews, as Human Tasks decides it (c-163)."""
+review is a publish request decided in agents-service's Reviews, as Human Tasks decides it."""
 
 from __future__ import annotations
 

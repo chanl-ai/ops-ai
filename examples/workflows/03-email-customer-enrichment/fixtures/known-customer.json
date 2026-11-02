@@ -1,0 +1,5 @@
+{
+  "from": "ada@example.test",
+  "subject": "My card",
+  "body": "Order 44 is late."
+}

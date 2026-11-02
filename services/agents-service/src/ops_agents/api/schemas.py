@@ -283,6 +283,39 @@ class WouldPause(Out):
     step_up: bool
 
 
+class EvalCheckResult(Out):
+    label: str
+    status: Literal["pass", "fail"]
+
+
+class EvalCaseOutcome(Out):
+    status: Literal["pass", "fail"]
+    reply: str
+    checks: list[EvalCheckResult]
+    latency_ms: int
+
+
+class EvalCaseResult(Out):
+    case_name: str
+    draft: EvalCaseOutcome
+    live: EvalCaseOutcome | None = None
+    regression: bool = False
+
+
+class EvalSummary(Out):
+    passed: int
+    total: int
+    regressions: int
+
+
+class AgentEvalRun(Out):
+    id: str
+    agent_id: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    results: list[EvalCaseResult]
+
+
 class AgentTestTurn(Out):
     reply: str
     tool_calls: list[ToolCallView]
@@ -435,6 +468,17 @@ class ToolModuleReviewRef(Out):
     diff: ToolModuleDiff | None = None
 
 
+class EgressHostRef(Out):
+    """An app's address on a host nobody listed (c-616 S13): the host, the app, who set it and their team."""
+
+    host: str
+    app: str
+    requested_by: str
+    team_id: str
+    # The approval did not reach tools-service yet; the next read of the request applies it again.
+    apply_pending: bool
+
+
 class PublishReview(Out):
     """The console's `Review` as a publish request carries it: `agent_publish` or `publish_request`."""
 
@@ -447,7 +491,8 @@ class PublishReview(Out):
     workflow_name: str
     agent_slug: str
     agent_name: str | None
-    kind: Literal["agent_publish", "publish_request"]
+    # egress_host: an app's first address on a host the tenant has not listed, for a Security admin (c-616 S13).
+    kind: Literal["agent_publish", "publish_request", "egress_host"]
     risk: Literal["critical", "high", "medium", "low"]
     confidence: float
     proposal: str
@@ -467,6 +512,7 @@ class PublishReview(Out):
     agent_publish: AgentPublishRequest | None = None
     publish: PublishRequestInfo | None = None
     tool_module: ToolModuleReviewRef | None = None
+    egress_host: EgressHostRef | None = None
     # Who the review is assigned to now (c-074); None while nobody has it.
     assignee: str | None = None
 
@@ -959,6 +1005,17 @@ class TypedTask(Out):
     warnings: list[TaskWarning]
 
 
+class ConnectWait(Out):
+    """What a run waiting for a person's own account of an app needs (c-616 S12): Connect my account, or Run as the
+    team account where the app has one."""
+
+    app: str
+    connection_id: str | None = None
+    # The person whose account the run waits for: the run's starter.
+    person: str | None = None
+    team_account: bool = False
+
+
 class ThreadReview(Out):
     """A paused workflow or agent step as a console `Review`, pending or decided."""
 
@@ -977,7 +1034,10 @@ class ThreadReview(Out):
     # Who the review is assigned to now (c-074); None while nobody has it.
     assignee: str | None = None
     agent_slug: str
-    kind: Literal["approval"]
+    # connect_account: a run waiting for the person it acts for to connect their own account of an app (c-616 S12).
+    kind: Literal["approval", "connect_account"]
+    # The app and the person a connect_account task asks; None on every other review.
+    connect: ConnectWait | None = None
     risk: Literal["critical", "high", "medium", "low"]
     # None for a step no model scored (a v2 workflow's review step).
     confidence: float | None

@@ -20,13 +20,16 @@ await withUiStack(
     const P = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
     const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const N = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
-    // Only a Security admin changes the egress allow-list (c-079), so Sam lists the host.
+    // Only a Security admin changes the egress allow-list, so Sam lists the host.
     const S = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.host, note: 'uc-057' }) });
     await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: S, body: JSON.stringify({ value: stack.bank.range, note: 'uc-057' }) });
     // A published module with one write, granted to a new agent.
     const mid = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Holds ${TAG}`, name: `uc057-${TAG}`, type: 'http' }) }))).id;
-    await fetch(`${tools}/v1/tool-modules/${mid}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: WRITE, description: 'Place a hold', access: 'write', method: 'POST', url: `https://${stack.bank.host}/v1/accounts/{accountId}/holds` }) });
+    const added = await json(await fetch(`${tools}/v1/tool-modules/${mid}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name: WRITE, description: 'Place a hold', access: 'write', method: 'POST', url: `https://${stack.bank.host}/v1/accounts/{accountId}/holds` }) }));
+    // Approvals are off by default (2026-11-01): this use case proves the held write, so the write's own switch goes on.
+    const writeOp = added.operations.find((o) => o.name === WRITE);
+    await fetch(`${tools}/v1/tool-modules/${mid}/operations/${writeOp.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ requiresApproval: true }) });
     await json(await fetch(`${tools}/v1/tool-modules/${mid}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-057' }) }));
     await approveToolReview(mid, N, J);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
@@ -55,26 +58,25 @@ await withUiStack(
       await page.getByLabel('Password').fill('northfield-demo');
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
-      await page.goto(`${consoleUrl}/reviews`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // The list of every Human Task with its columns is /reviews/all; /reviews itself is the queue, one task at a time.
+      await page.goto(`${consoleUrl}/reviews/all`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const row = page.getByRole('row', { name: new RegExp(WRITE) }).first();
       await row.waitFor({ timeout: 120_000 });
       // The source column (`Chat with <agent>`) is hidden by default since lists show five columns; the badge stays.
       check('Reviews shows the hold marked "From chat"', (await row.getByTestId('review-from-chat').count()) === 1);
-      // The quick view, by its link as the list opens it.
+      // The task by its link, decided inline in the Human Tasks queue: its Decision panel holds the approve card,
+      // the deciding team, the conversation link and Approve.
       await page.goto(`${consoleUrl}/reviews?review=${thread}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // The showcase run found the card empty and no word of who decides: it says what approving does, by the
-      // operation's description, and names the team that decides (the thread's, as the write names no approving team).
-      const sheet = page.getByTestId('review-sheet');
-      await sheet.getByTestId('task-decide').waitFor({ timeout: 60_000 });
-      const card = (await sheet.getByTestId('task-decide').innerText()).replace(/\s+/g, ' ');
+      const panel = page.getByTestId('decision-panel');
+      await panel.getByText(/If you approve/).first().waitFor({ timeout: 60_000 });
+      const card = (await panel.getByTestId('decision-body').innerText()).replace(/\s+/g, ' ');
       check('the "If you approve" card says what approving does', /If you approve/.test(card) && card.includes('Place a hold'), card.slice(0, 300));
-      const decides = (await sheet.getByTestId('review-deciding-team').innerText().catch(() => '')).trim();
+      const decides = (await panel.getByTestId('task-deciding-team').innerText().catch(() => '')).trim();
       check('the review names the team that decides it, by name', decides === 'Operations decides', decides);
-      const link = page.getByTestId('review-open-conversation');
+      const link = panel.getByTestId('review-open-conversation');
       check('the review links to its conversation', (await link.getAttribute('href')) === `/chat/${thread}`);
       const decided = page.waitForResponse((r) => r.request().method() === 'POST' && /\/reviews\/[^/]+\/decision$/.test(r.url()), { timeout: 60_000 });
-      // The review opens in a side sheet; its Approve sends the decision.
-      await page.getByRole('dialog').getByRole('button', { name: /^Approve/ }).click();
+      await panel.getByRole('button', { name: /^Approve/ }).last().click();
       const res = await decided;
       check('Maya approves it from Reviews', res.status() === 200, res.status());
       await new Promise((r) => setTimeout(r, 3000));

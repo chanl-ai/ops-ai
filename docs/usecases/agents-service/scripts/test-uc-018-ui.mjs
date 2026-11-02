@@ -34,7 +34,7 @@ await withUiStack(async (consoleUrl) => {
     await dialog.getByTestId('new-agent-submit').click();
     const createRes = await created;
     const agent = (await createRes.json()).data;
-    // A new agent belongs to the team the person works as (c-171): the server takes it from the caller's token and team,
+    // A new agent belongs to the team the person works as: the server takes it from the caller's token and team,
     // never from the body, and the console names it from the person's teams list.
     const ownTeam = (await page.getByRole('button', { name: /^Team: .+\. Switch team$/ }).first().getAttribute('aria-label'))?.replace(/^Team: (.+)\. Switch team$/, '$1');
     const sent = JSON.parse(createRes.request().postData() ?? '{}');
@@ -52,7 +52,7 @@ await withUiStack(async (consoleUrl) => {
 
     // Grant lookup_account from the runtime's catalogue: the picker lists GET /v1/tools and nothing else.
     const catalogue = (await (await fetch(`${agents}/v1/tools`, { headers: TEAM })).json()).data.map((t) => t.id).sort();
-    // The tools picker (EntityPicker, c-135) searches the runtime's catalogue on the server, a page at a time.
+    // The tools picker (EntityPicker) searches the runtime's catalogue on the server, a page at a time.
     const optioned = armed(page.waitForResponse((r) => r.request().method() === 'GET' && r.url().startsWith(`${agents}/v1/tools/options`), { timeout: 60_000 }));
     await page.getByTestId('agent-tools-picker').getByRole('button', { name: 'Grant tools' }).click();
     const served = (await (await optioned)?.json())?.data?.data ?? [];
@@ -64,7 +64,7 @@ await withUiStack(async (consoleUrl) => {
     const workflows = served.filter((o) => o.hint === 'Workflows');
     check('published workflows are offered, hinted as Workflows', workflows.length > 0 && workflows.every((o) => shown.some((t) => t.startsWith(o.label) && t.includes('Workflows'))), { workflows: workflows.map((o) => o.id) });
     await page.getByPlaceholder('Search tools by name or system…').fill('lookup_account');
-    // The draft saves itself a second after the change (c-172): no Save dialog, no note, and the same version.
+    // The draft saves itself a second after the change: no Save dialog, no note, and the same version.
     const patched = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent?.id}`, { timeout: 60_000 }));
     await page.getByRole('option', { name: /^lookup_account\b/ }).first().click({ timeout: 30_000 });
     await page.keyboard.press('Escape');
@@ -85,7 +85,7 @@ await withUiStack(async (consoleUrl) => {
 
     await page.reload({ waitUntil: 'networkidle' });
     check('after the publish the header no longer offers Request publish', (await page.getByTestId('request-agent-publish').count()) === 0);
-    // An edit after publish opens v2 as the draft; the history lists the draft and the published v1 only (c-172).
+    // An edit after publish opens v2 as the draft; the history lists the draft and the published v1 only.
     const reopened = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent?.id}`, { timeout: 60_000 }));
     await page.locator('#ag-role').fill('Checks new payees twice');
     const after = reopened ? (await (await reopened)?.json())?.data : undefined;

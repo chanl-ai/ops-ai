@@ -112,19 +112,20 @@ export interface ModuleOperation {
   /** Exposed through the gateway; hidden operations stay in the manifest but cannot be called. */
   enabled: boolean;
   /** How the gateway runs it; only `http` operations have a call a builder edits. */
-  executor: 'http' | 'mcp' | 'stub' | 'local';
+  executor: 'http' | 'mcp' | 'stub' | 'local' | 'code' | 'plugin';
   method?: HttpMethod;
   /** After the module endpoint; the origin is always the endpoint's. */
   path?: string;
   /** Literal values or `{{NAME}}` secret references; a literal credential is refused on save. */
   headers: { key: string; value: string }[];
-  /** JSON template with `{{arg}}` placeholders. */
+  /** JSON template with `{{arg}}` placeholders; for a form, a JSON object of field to template; for raw, the text. */
   body?: string;
+  /** How `body` is sent (c-591); unset is JSON. */
+  bodyEncoding?: BodyEncoding;
   /** Jinja2 template over the parsed response as `data`; failing at call time returns the raw answer with an error. */
   responseTransform?: string;
-  /** The mock response: what a call against the mock, and every write in the test console, answers. Reviewed like any
-   * edit (c-088). */
-  stub?: unknown;
+  /** A sign-in header (Authorization, X-Api-Key, Cookie) the tool saved before they were refused and still sends; null when none. */
+  signInHeader?: string | null;
   /** This operation's limit, 1000 to 120000; unset uses the module's timeout. */
   timeoutMs?: number;
   input: SchemaField[];
@@ -157,7 +158,7 @@ export interface ModuleOperation {
  * A staged edit. Method, path or body changes are major; headers, transform and timeout minor. `responseTransform` or
  * `timeoutMs` null clears it. Calls keep the published call until the change is published.
  */
-export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description' | 'method' | 'path' | 'headers' | 'body' | 'approvers' | 'stepUp' | 'access' | 'input' | 'stub'>> & {
+export type OperationPatch = Partial<Pick<ModuleOperation, 'enabled' | 'requiresApproval' | 'rateLimitPerMin' | 'binding' | 'amountMax' | 'description' | 'method' | 'path' | 'headers' | 'body' | 'bodyEncoding' | 'approvers' | 'stepUp' | 'access' | 'input'>> & {
   responseTransform?: string | null;
   timeoutMs?: number | null;
 };
@@ -232,7 +233,8 @@ export interface ModuleVersion {
   finding?: string;
 }
 
-export type CredentialKind = 'oauth_client_credentials' | 'mtls' | 'api_key' | 'basic';
+/** A connection's auth kind (tools-service auth/kinds.py); a client certificate is not a kind but rides on any. */
+export type CredentialKind = 'oauth2_client_credentials' | 'oauth2_auth_code' | 'api_key' | 'basic' | 'bearer';
 
 /** A sample run context the test console can act as: the workflow whose approval applies and the case's bound fields. */
 export interface RunContextOption {
@@ -250,7 +252,7 @@ export interface ToolModuleDetail extends ToolModule {
   canDelete?: boolean;
   canPublish?: boolean;
   ownerContacts: string[];
-  auth: { kind: CredentialKind | 'none'; header?: string };
+  auth: { kind: CredentialKind | 'none'; header?: string; certificate?: boolean };
   timeoutMs: number;
   egressHosts: string[];
   dataClassification: 'public' | 'internal' | 'confidential' | 'restricted';
@@ -271,14 +273,15 @@ export interface ModuleActivity {
 export interface ModuleTestInput {
   operation: string;
   contextId: string;
-  /** `stub` returns the operation's schema-valid canned output; `sandbox` calls the system's test environment. */
+  /** `stub` (Mock) answers from the operation's mock and sends nothing; `sandbox` (Real) makes the call, a write
+   * included, on the published module through its connection's test sign-in (c-591). */
   target: 'stub' | 'sandbox';
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */
   simulateApproval?: boolean;
   /** The workbench's unsaved definition, tried without staging it; agents never see it (c-088). */
   /** `responseTransform: null` runs with no transform; left out, the operation's own. */
-  draft?: { responseTransform?: string | null; stub?: unknown };
+  draft?: { responseTransform?: string | null };
   /** Secret values for this run only, never stored; a secret not given here is read from the tenant's secrets. */
   secretValues?: Record<string, string>;
 }
@@ -289,6 +292,17 @@ export interface TestRequest {
   url: string;
   headers: { key: string; value: string }[];
   body?: string;
+}
+
+/** What every tool page layout takes to run a tool and show its answer (the REST tool page and the function workbench). */
+export interface ToolRunProps {
+  onRun: (input: ModuleTestInput) => void;
+  /** Clears the last result when the run's context or target changes. */
+  onReset: () => void;
+  running: boolean;
+  result?: ModuleTestResult;
+  /** The run itself failed (the service did not answer); the inputs are kept. */
+  runError?: string;
 }
 
 export interface ModuleTestResult {
@@ -357,14 +371,18 @@ export interface HttpOperationInput {
   url: string;
   headers: { key: string; value: string }[];
   body?: string;
+  bodyEncoding?: BodyEncoding;
 }
+
+/** How an operation's body is sent: JSON, a form, or raw text with its own Content-Type (c-591). */
+export type BodyEncoding = 'json' | 'form' | 'raw';
 
 export interface ModuleInput {
   name: string;
   displayName: string;
   system: string;
-  type: ModuleType;
-  endpoint: string;
+  /** The app the module calls (group F): its connection gives the address and sign-in; `http.url` is then a path. */
+  connectionId?: string;
   /**
    * Where `operations` were discovered. The service re-reads it and takes each operation's method, path, inputs and
    * headers from there, so only the names and the access class the owner confirmed come from the caller.
@@ -382,7 +400,8 @@ export interface BlankModuleInput {
   displayName: string;
   /** Kebab-case name workflows pin; cannot change once a workflow is approved for the module. */
   name: string;
-  type: ModuleType;
+  /** The app the module calls (group F): its connection's base address and sign-in. Its kind follows its operations. */
+  connectionId?: string;
   description?: string;
 }
 

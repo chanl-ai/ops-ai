@@ -127,3 +127,28 @@ def test_the_async_client_unwraps_and_raises_the_same_way() -> None:
                 await c.tasks.decide("rv_1", "approve")
 
     asyncio.run(run())
+
+
+def test_a_person_token_from_the_profile_or_ops_token_acts_as_that_person(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A workflow is edited by a person, never by an API key (c-535), so a token the profile or OPS_TOKEN holds is who
+    # the call acts as, even beside a key.
+    seen: list[httpx.Request] = []
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        return ok({"id": "ag_1"})
+
+    profile = {"baseUrl": BASE, "team": "team_a", "apiKey": "ok_test", "accessToken": "person_from_profile"}
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"current": "local", "profiles": {"local": profile}}))
+    monkeypatch.setenv("OPS_CONFIG", str(config))
+    monkeypatch.delenv("OPS_API_KEY", raising=False)
+    monkeypatch.delenv("OPS_TOKEN", raising=False)
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    OpsAI(profile="local", http=http).agents.get("ag_1")
+    monkeypatch.setenv("OPS_TOKEN", "person_from_env")
+    OpsAI(profile="local", http=http).agents.get("ag_1")
+    got = [(r.headers.get("authorization"), r.headers.get("x-api-key")) for r in seen]
+    assert got == [("Bearer person_from_profile", None), ("Bearer person_from_env", None)], got

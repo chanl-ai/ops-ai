@@ -32,16 +32,17 @@ await withUiStack(
       };
       check('Policies on platform-service shows every policy as its own card, none on sample data, Re-sign-in off by default and the server’s own effect line on each', shown.cards >= 8 && shown.sample === 0 && shown.off === 'true', shown);
 
-      // Each card is drawn from the server's kind and titled with its title (c-214), so a policy added on the server
+      // Each card is drawn from the server's kind and titled with its title, so a policy added on the server
       // shows with the right control and name and no console change.
       const token = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 's.adeyemi@harborpine.example', password: 'northfield-demo' }) })).json()).data.token;
       const served = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies`, { headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_security' } })).json()).data;
       const drawn = [];
-      for (const pol of served) {
+      // The install's plugins (kind plugins) are switched through the API and have no card on this page.
+      for (const pol of served.filter((x) => x.kind !== 'plugins')) {
         const c = sam.getByTestId(`setting-policy-${pol.key}`);
         const text = await c.innerText();
-        // Publish modes are edited on Publish reviews (c-214); their card's control is the link there.
-        const control = pol.kind === 'publish_modes' ? await c.getByTestId('policy-open-publish-reviews').count() : pol.kind === 'days' || pol.kind === 'hours' ? await c.getByRole('spinbutton').count() : pol.kind === 'floor' ? await c.getByRole('radio', { name: /^80%/ }).count() : await c.getByRole('radio', { name: /^On/ }).count();
+        // Publish modes are edited on Publish reviews; their card's control is the link there.
+        const control = pol.kind === 'publish_modes' ? await c.getByTestId('policy-open-publish-reviews').count() : pol.kind === 'days' || pol.kind === 'hours' ? await c.getByRole('spinbutton').count() : pol.kind === 'floor' ? await c.getByRole('radio', { name: /^80%/ }).count() : pol.kind === 'names' ? await c.getByRole('button', { name: /Add app/ }).count() : await c.getByRole('radio', { name: /^On/ }).count();
         drawn.push({ key: pol.key, kind: pol.kind, titled: !!pol.title && text.includes(pol.title), control });
       }
       check('each card carries the server’s title and the control its kind calls for', drawn.length >= 8 && drawn.every((d) => d.kind && d.titled && d.control >= 1), drawn.filter((d) => !d.titled || d.control < 1));
@@ -68,7 +69,7 @@ await withUiStack(
       await sla.getByRole('button', { name: 'Save' }).click();
       const slaRes = await putSla;
       const slaAfter = (await policy('reviewSlaHours')).value;
-      // Which publishes need a review is edited on Publish reviews only (c-214): its card here links there.
+      // Which publishes need a review is edited on Publish reviews only: its card here links there.
       const modes = sam.getByTestId('setting-policy-publishReview');
       const editors = await modes.getByRole('combobox').count();
       await modes.getByTestId('policy-open-publish-reviews').click();
@@ -97,6 +98,46 @@ await withUiStack(
       await sam.getByTestId('setting-policy-toolWritesNeedApproval').getByRole('button', { name: 'Save' }).click();
       await sam.waitForTimeout(800);
 
+      // A per-team list (appWritesNeedApproval): no app listed by default; the picker searches the team's apps
+      // from GET /v1/systems, says when none matches, and saves the picked app's id under the acting team.
+      const aw = sam.getByTestId('setting-policy-appWritesNeedApproval');
+      await aw.waitFor({ timeout: 60_000 });
+      const awText = (await aw.innerText()).replace(/\s+/g, ' ');
+      const systemsRead = sam.waitForResponse((r) => r.request().method() === 'GET' && /\/v1\/systems$/.test(new URL(r.url()).pathname), { timeout: 30_000 }).catch(() => null);
+      await aw.getByRole('button', { name: /Add app/ }).click();
+      const search = sam.getByPlaceholder('Search apps');
+      await search.waitFor({ timeout: 30_000 });
+      const read = await systemsRead;
+      await search.fill('no such app');
+      const none = await sam.getByText(/No app matches/).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      // The built-in apps stay pickable here, though the Apps grid leaves them out: a mailbox reply is the write teams
+      // most often approve (2026-11-01).
+      await search.fill('');
+      const mailboxes = await sam.getByRole('option', { name: /Mailboxes/ }).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      check('the app picker offers the built-in apps: Mailboxes is there', mailboxes, { mailboxes });
+      // Whichever app the team has first: its name, typed in part, finds it again.
+      const first = sam.getByRole('option').first();
+      await first.waitFor({ timeout: 30_000 });
+      const appName = (await first.innerText()).split('\n')[0].trim();
+      await search.fill(appName.slice(0, 4));
+      const option = sam.getByRole('option', { name: new RegExp(appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
+      await option.waitFor({ timeout: 30_000 });
+      const appId = await option.getAttribute('data-value');
+      await option.click();
+      await sam.keyboard.press('Escape');
+      const putAw = sam.waitForResponse((r) => r.request().method() === 'PUT' && r.url().endsWith('/v1/policies/appWritesNeedApproval'), { timeout: 30_000 }).catch(() => null);
+      await aw.getByRole('button', { name: 'Save' }).click();
+      const awRes = await putAw;
+      const awServer = (await policy('appWritesNeedApproval'))?.value;
+      await sam.reload({ waitUntil: 'domcontentloaded' });
+      const awAfter = (await sam.getByTestId('setting-policy-appWritesNeedApproval').innerText({ timeout: 60_000 })).replace(/\s+/g, ' ');
+      check(
+        'the apps whose writes need approval: none listed by default, searched from the team’s apps, an empty search says so, and the pick saves for the acting team',
+        /Apps whose writes need approval/.test(awText) && /No app listed/.test(awText) && read?.status() === 200 && none && !!appId &&
+          awRes?.status() === 200 && Array.isArray(awServer?.team_security) && awServer.team_security.includes(appId) && awAfter.includes(appName),
+        { awText: awText.slice(0, 200), read: read?.status(), none, appName, appId, status: awRes?.status(), awServer, awAfter: awAfter.slice(0, 200) },
+      );
+
       const james = await signIn(browser, consoleUrl, 'j.richardson@harborpine.example');
       await james.goto(`${consoleUrl}/settings/policies`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       // Every member reads the policies (7faf3ddc); a builder sees the same cards with their controls off and no Save.
@@ -116,7 +157,8 @@ await withUiStack(
       await browser.close();
     }
   },
-  { platform: true },
+  // tools-service serves GET /v1/systems, the apps the approval policy's picker lists.
+  { platform: true, tools: {} },
 );
 
 finish();

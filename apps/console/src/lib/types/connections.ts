@@ -71,12 +71,27 @@ export interface PersonSignedIn {
   expiresAt?: string | null;
 }
 
-/** One of the caller's own sign-ins on a connection of their team (Your connections). */
+/**
+ * One of the caller's own sign-ins on a connection of their team (Your connections); with `every`, also a connection
+ * they can connect themselves and have not (`connected` false, c-595).
+ */
 export interface MyConnection {
   connectionId: string;
   connection: string;
   connectionStatus: ConnectionStatus;
   environment: ConnectionEnvironment;
+  /** How the person signs in: the kind's label, such as "API key". */
+  method: string;
+  authKind: string;
+  /** What the person gives for a key, password or token kind; empty for a sign-in at the system. */
+  personFields: string[];
+  connected: boolean;
+  /** Where the system says how to find the key. */
+  docsUrl?: string | null;
+  /** The system refused the person's key or sign-in: when and what it said; a new one clears it (c-595). */
+  refused?: boolean;
+  refusedAt?: string | null;
+  refusedReason?: string | null;
   account?: string | null;
   scopes: string[];
   since?: string | null;
@@ -98,6 +113,10 @@ export interface AuthKind {
   holdsToken: boolean;
   /** Whether each person may sign in with their own account; a kind without it offers the team's account only. */
   perPerson: boolean;
+  /** The fields each person gives for themselves on a connection each person signs in to (c-595). */
+  personFields?: string[];
+  /** Each field's name, label and whether it is secret, as the service names them. */
+  fields?: { name: string; label: string; secret: boolean; help?: string | null }[];
 }
 
 /**
@@ -105,10 +124,24 @@ export interface AuthKind {
  * starts the sign-in (`/connections/connect?link=…`, single use, 15 minutes). `reason` says why: never connected, a
  * scope missing, or an operation that needs a person.
  */
+/**
+ * Why tools-service refused a call with `CONNECTION_NOT_LINKED` (auth/__init__.py NotLinkedReason): never connected, a
+ * scope missing, an operation that needs a person, a call with nobody behind it, or the system refused the person's
+ * own key or sign-in. Kept equal to the service's list
+ * by services/tools-service/tests/test_person_credentials.py.
+ */
+export const CONNECTION_REQUIRED_REASONS = ['not_connected', 'insufficient_scope', 'needs_person', 'no_person', 'refused'] as const;
+export type ConnectionRequiredReason = (typeof CONNECTION_REQUIRED_REASONS)[number];
+
 export interface ConnectionRequired {
   connectionId: string;
   connection: string;
-  reason: 'not_connected' | 'insufficient_scope' | 'needs_person';
+  reason: ConnectionRequiredReason;
+  /** The environment the refused call ran in, where the person's own key belongs. */
+  environment?: ConnectionEnvironment;
+  /** The connection's kind and what each person gives for it (c-595): a key kind is asked for in a form, not a sign-in. */
+  authKind?: string;
+  personFields?: string[];
   connectUrl?: string;
   expiresAt?: string;
 }

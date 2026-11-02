@@ -21,6 +21,7 @@ function formKind(spec: FormSpec, title?: string): DrawnNode {
       ...(p.enum ? { options: p.enum.map(String) } : {}),
       ...(required.has(name) ? { required: true } : {}),
       ...(p.description ? { placeholder: p.description } : {}),
+      ...(spec.defaults?.[name] !== undefined ? { value: spec.defaults[name] } : {}),
     })),
     submit: { label: 'Submit', reply: 'Submit' },
   };
@@ -32,8 +33,8 @@ function decisionKind(d: Decision): DrawnNode {
     title: d.summary,
     tone: 'warning',
     details: [{ label: 'Action', value: d.action }, ...Object.entries(d.args).map(([label, v]) => ({ label, value: typeof v === 'object' && v !== null ? JSON.stringify(v) : (v as string | number | boolean | null) }))],
-    confirm: { label: 'Approve', reply: 'Approve' },
-    cancel: { label: 'Reject', reply: 'Reject' },
+    confirm: { label: 'Approve', reply: 'Approve', done: 'Approved' },
+    cancel: { label: 'Reject', reply: 'Reject', done: 'Rejected' },
   };
 }
 

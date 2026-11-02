@@ -11,7 +11,7 @@
    "ownerTeam": "Core Banking Platform",
    "ownerContacts": [
     "Daniel Brooks",
-    "Lena Fischer"
+    "James Richardson"
    ],
    "endpoint": "https://corebanking.api.harborpine.internal/v3",
    "auth": "oauth_client_credentials",
@@ -358,7 +358,7 @@
     {
      "version": "3.1.0",
      "daysAgo": 52,
-     "by": "Lena Fischer",
+     "by": "James Richardson",
      "note": "Payoff statements",
      "changes": [
       {
@@ -372,7 +372,7 @@
     {
      "version": "3.2.0",
      "daysAgo": 21,
-     "by": "Lena Fischer",
+     "by": "James Richardson",
      "note": "Address line 2 and postal code format",
      "changes": [
       {
@@ -428,7 +428,7 @@
       "update_address"
      ],
      "expiresIn": 148,
-     "decidedBy": "Lena Fischer",
+     "decidedBy": "James Richardson",
      "justification": "Address changes requested by email to card services",
      "workflowName": "Card services inbox",
      "workflowTeamId": "team_cards"

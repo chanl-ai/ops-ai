@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { notFound, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
 import { goSignIn } from '@/components/connections/sign-in';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOpenConnectLink } from '@/hooks/connections-queries';
 import { ApiError } from '@/lib/api/contract';
-import { personalSignIn } from '@/lib/api';
 
 /**
  * Where a chat's Connect card sends the person (c-558): opens the single-use link made for them and goes on to the
@@ -48,8 +47,6 @@ function ConnectPage() {
   );
 }
 
-/** Not offered until the personal sign-in switch is on (lib/api/index.ts). */
 export default function Page() {
-  if (!personalSignIn) notFound();
   return <ConnectPage />;
 }

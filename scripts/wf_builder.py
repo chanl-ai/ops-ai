@@ -1,7 +1,7 @@
 """What the /wf-builder skill runs (c-535): draw a workflow from what a developer wants, check it with the engine,
 and create it only when they say so, on the profile they name.
 
-    uv run --with-editable sdk/python python scripts/wf_builder.py <command> ...   (the SDK comes from sdk/python)
+    uv run python scripts/wf_builder.py <command> ...   (the SDK comes from sdk/python)
 
     wf_builder.py catalog --profile local
     wf_builder.py create --file goal.json [--create] --profile local
@@ -11,7 +11,8 @@ and create it only when they say so, on the profile they name.
 `create` takes a goal (`{"id", "goal", "example"}`: the seeded example to adapt) or a definition, writes
 `workflows/<id>.json` beside the developer, has the engine validate it, and prints its steps and ports. Nothing is
 created without `--create`; on a profile that is not local (named other than `local`, or not on this machine) the
-workflow id must also be typed back. Every call goes through the Python SDK on the named profile (the ops CLI is not
+workflow id must also be typed back. Creating acts as a person (OPS_TOKEN, or the profile's accessToken); an API key
+reads and validates only. Every call goes through the Python SDK on the named profile (the ops CLI is not
 built yet, c-527): the node catalog is read live from that profile, never from a copy.
 """
 
@@ -28,6 +29,9 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 SEEDS = ROOT / "services" / "agents-service" / "seed" / "engine_workflows.json"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+# A workflow is a person's change: the SDK sends a person's token (OPS_TOKEN, or the profile's accessToken) ahead of
+# an API key, which can read and validate but not create.
+NEEDS_A_PERSON = "Creating a workflow needs a person: set OPS_TOKEN, or the profile's accessToken, to a session token."
 
 
 def profile_of(name: str) -> dict[str, Any]:
@@ -120,7 +124,14 @@ def cmd_create(args: argparse.Namespace) -> int:
     if not may_create(profile_of(args.profile), str(definition["id"])):
         print(f"{definition['id']} was not created: the workflow id was not typed back.", file=sys.stderr)
         return 1
-    ops.raw.agents.workflows_create_definition({"definition": definition})
+    from ops_ai import Forbidden  # noqa: PLC0415 - the developer's SDK install, as in profile_of
+
+    try:
+        ops.raw.agents.workflows_create_definition({"definition": definition})
+    except Forbidden as e:
+        print(f"{definition['id']} was not created: {e}", file=sys.stderr)
+        print(NEEDS_A_PERSON, file=sys.stderr)
+        return 1
     print(f"Created {definition['id']} on profile {args.profile}.")
     return 0
 

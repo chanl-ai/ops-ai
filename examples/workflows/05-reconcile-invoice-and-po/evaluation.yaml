@@ -1,0 +1,10 @@
+cases:
+  - name: match
+    input: fixtures/match.json
+    expected: expected/match.json
+  - name: mismatch
+    input: fixtures/mismatch.json
+    expected: expected/mismatch.json
+  - name: missing
+    input: fixtures/missing.json
+    expected: expected/missing.json

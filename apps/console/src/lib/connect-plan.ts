@@ -14,7 +14,12 @@ export interface EnvironmentOption {
   label: string;
   /** The one environment live runs call. */
   production: boolean;
+  /** Whether a connection holds keys for it; only those get a section. */
+  keys: boolean;
 }
+
+/** The environments a connection holds keys for, in the service's order. */
+export const keyed = (kinds: Kinds): EnvironmentOption[] => kinds.environments.filter((e) => e.keys);
 
 /** A field as `GET /v1/connection-kinds` describes it. */
 export interface KindField {
@@ -30,6 +35,8 @@ export interface KindField {
   requiredWhen?: Record<string, string> | null;
   /** Not required once every named setting holds its value, unless `requiredWhen` matches. */
   optionalWhen?: Record<string, string> | null;
+  /** PEM text, many lines long: a multi-line box and a file to read it from. */
+  pem?: boolean;
 }
 
 const matches = (when: Record<string, string> | null | undefined, settings: Record<string, string>) =>
@@ -73,14 +80,25 @@ export function planFor(kind: Kind): Plan {
 
 /** The environments in the order a dialog shows them: the one asked for first, then the service's order. */
 export function ordered(kinds: Kinds, first?: Environment): EnvironmentOption[] {
-  const all = kinds.environments;
+  const all = keyed(kinds);
   const lead = all.find((e) => e.id === first);
   return lead ? [lead, ...all.filter((e) => e !== lead)] : all;
 }
 
 /** The environment a sign-in or Save starts from: production when it is among `ids`, else the first of them. */
 export function leading(kinds: Kinds, ids: Environment[]): Environment | undefined {
-  return kinds.environments.find((e) => e.production && ids.includes(e.id))?.id ?? kinds.environments.find((e) => ids.includes(e.id))?.id;
+  const all = keyed(kinds);
+  return all.find((e) => e.production && ids.includes(e.id))?.id ?? all.find((e) => ids.includes(e.id))?.id;
+}
+
+/**
+ * The environments Save writes, the one it completes first: that one when it is not on the connection yet, and every
+ * other only when its section was typed in. A section ready on its defaults alone is not turned on beside it.
+ */
+export function toSave(s: DialogState, ready: Environment[], completes: Environment): Environment[] {
+  const typed = ready.filter((e) => s.sections[e]?.status === 'dirty');
+  const first = typed.includes(completes) || !s.saved.includes(completes) || !s.connectionId ? [completes] : [];
+  return [...first, ...typed.filter((e) => e !== completes)];
 }
 
 export interface FieldGroups {
@@ -176,6 +194,10 @@ export interface DialogState {
   /** Whether a call is under way; every button that starts another waits. */
   busy: boolean;
   error: string | null;
+  /** The environments saved on the connection, at its opening or by this dialog: Save saves an unsaved one it completes. */
+  saved: Environment[];
+  /** The environments whose account was signed in through this dialog, so Save does not open a second sign-in. */
+  signedIn: Environment[];
 }
 
 export type Action =
@@ -189,17 +211,21 @@ export type Action =
   | { type: 'tested'; environment: Environment; health: Health | null }
   | { type: 'failed'; environment?: Environment; message: string }
   | { type: 'signing-in' }
-  | { type: 'signed-in' }
+  | { type: 'signed-in'; environment?: Environment }
   | { type: 'done' };
 
-export const initialState = (sections: Record<Environment, EnvDraft>, connectionId: string | null): DialogState => ({
+export const initialState = (sections: Record<Environment, EnvDraft>, connectionId: string | null, saved: Environment[] = []): DialogState => ({
   phase: 'form',
   sections,
   connectionId,
   created: false,
   busy: false,
   error: null,
+  saved,
+  signedIn: [],
 });
+
+const plus = (list: Environment[], env?: Environment) => (env === undefined || list.includes(env) ? list : [...list, env]);
 
 const edit = (s: DialogState, env: Environment, patch: Partial<EnvDraft>): DialogState => ({
   ...s,
@@ -209,7 +235,7 @@ const edit = (s: DialogState, env: Environment, patch: Partial<EnvDraft>): Dialo
 export function reduce(s: DialogState, a: Action): DialogState {
   switch (a.type) {
     case 'reset':
-      return initialState(a.sections, a.connectionId);
+      return { ...initialState(a.sections, a.connectionId, s.saved), created: s.created };
     case 'setting':
       return edit(s, a.environment, { settings: { ...s.sections[a.environment].settings, [a.name]: a.value }, status: 'dirty' });
     case 'secret':
@@ -222,7 +248,7 @@ export function reduce(s: DialogState, a: Action): DialogState {
     case 'saved': {
       // A save is one step of a test or of Save: the dialog stays busy until that ends, so nothing starts beside it.
       const sec = s.sections[a.environment];
-      return edit(s, a.environment, { secrets: {}, secretSet: { ...sec.secretSet, ...a.secretSet } });
+      return { ...edit(s, a.environment, { secrets: {}, secretSet: { ...sec.secretSet, ...a.secretSet } }), saved: plus(s.saved, a.environment) };
     }
     case 'tested':
       return { ...edit(s, a.environment, { health: a.health, status: a.health?.status === 'ok' ? 'working' : 'failed' }), busy: false };
@@ -231,7 +257,7 @@ export function reduce(s: DialogState, a: Action): DialogState {
     case 'signing-in':
       return { ...s, phase: 'signing-in', busy: false };
     case 'signed-in':
-      return { ...s, phase: 'form' };
+      return { ...s, phase: 'form', signedIn: plus(s.signedIn, a.environment) };
     case 'done':
       return { ...s, phase: 'done', busy: false, created: false };
   }
@@ -245,6 +271,8 @@ export interface PluginSpec {
   settings: { name: string; label: string; default?: string | null; secret: boolean; perEnvironment: boolean; locked: boolean }[];
   /** The kind's fields the plugin fixes itself. */
   fixed: string[];
+  /** Whose account the plugin lets calls sign in with: team, person, person_or_team. */
+  signIn?: string[];
 }
 
 const CLIENT_ID: KindField = { name: 'clientId', label: 'Client ID', secret: false, required: true, advanced: false };
@@ -267,11 +295,25 @@ export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: 
 }
 
 /** The `PUT /v1/plugins/{id}/team` body that turns the plugin on for one environment with that section's values. */
-export function turnOnBody(kind: Kind, plugin: PluginSpec, app: App, draft: EnvDraft, team: Record<string, string>, first: boolean): Record<string, unknown> {
+export function turnOnBody(
+  kind: Kind,
+  plugin: PluginSpec,
+  app: App,
+  draft: EnvDraft,
+  team: Record<string, string>,
+  first: boolean,
+  signIn?: string,
+): Record<string, unknown> {
   const own = new Set(plugin.settings.filter((s) => s.perEnvironment).map((s) => s.name));
   const filled = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v.trim() !== ''));
   const settings = filled({ ...team, ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => own.has(k))) });
-  const body: Record<string, unknown> = { enabled: true, environment: draft.environment, settings, ...(first ? { kind: kind.id } : {}) };
+  // The kind and whose account calls use are chosen at the first turn-on, when the team's connection is made.
+  const body: Record<string, unknown> = {
+    enabled: true,
+    environment: draft.environment,
+    settings,
+    ...(first ? { kind: kind.id, ...(signIn ? { signIn } : {}) } : {}),
+  };
   if (kind.signsIn) {
     if (app === 'own')
       Object.assign(body, { clientId: draft.settings.clientId, ...(draft.secrets.clientSecret ? { clientSecret: draft.secrets.clientSecret } : {}) });

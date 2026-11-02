@@ -41,13 +41,14 @@ delete, run, decide, manage). Every check in every service goes through that gri
 |---|---|
 | The six built-in roles, seeded per tenant, and the grid behind them | Built |
 | A page that shows each role's grid and why an action is refused | Built |
+| Example: W2 start refused without the cell, then passed with it | Built ([12-roles-refuse-a-start](../../examples/workflows/12-roles-refuse-a-start/)) |
 | Custom roles built from the grid | Planned |
 
 ## Approvals
 
 | Rule | Status |
 |---|---|
-| Every write to one of your systems needs an approval token, minted only after a person decides | Built |
+| Approvals are off until a team turns them on in Settings › Policies: for every write, for the writes of the Apps it picks, or for one Tool ([Apps](apps.md#approvals)). A write that waits needs an approval token, minted only after a person decides | Built |
 | The token is bound to the tool, the run's step and the hash of the exact input the approver saw; any change to the input voids every approval of it | Built |
 | A token lives 15 minutes; a late resume renews it from the recorded approvals of that exact call for up to 24 hours, so a reviewer is never asked twice | Built |
 | Each operation's policy sets how many distinct people must approve, which team they come from, and whether each needs a fresh sign-in; the same person cannot approve twice | Built |
@@ -96,6 +97,7 @@ flowchart TB
 | Credentials for your systems | Entered once by a Security admin in the console; encrypted with AES-256-GCM under `OPS_SECRETS_KEY`, bound to the tenant and the credential's name; never returned by any API; scrubbed from answers and logs; every create, rotate, delete and use audited; limited to the teams it is shared with | Built |
 | The model provider's key | Saved by an account admin on Settings > Model providers, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment | Built |
 | Storage credentials | Sealed with the same key | Built |
+| Where credential values are kept | Every value above, and each person's own sign-ins and the model provider keys, is written and read through one credential store; each row keeps only its reference. By default (`OPS_CREDENTIAL_STORE=sealed`) the reference is the value sealed into the row, so nothing is held outside the database. Keeping values in your own key vault is a new adapter behind the same store, with no change to tables or callers | Store built; vault adapter planned |
 | Installation keys | One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under `/run/secrets` | Built |
 | A hardware or cloud key manager for these keys | | Planned |
 

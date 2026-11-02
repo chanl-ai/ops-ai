@@ -58,11 +58,11 @@ await withUiStack(
       // The mock console has a skill of the same name, so the check reads the page's own request to agents-service.
       const skillsRead = armed(page.waitForResponse((r) => r.url().startsWith(agents) && /\/v1\/agents\/ag_advisor\/skills$/.test(r.url()), { timeout: 60_000 }));
       await page.goto(`${consoleUrl}/agents/ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // Pinned guardrails are listed under the guardrail picker (c-136), each as a row.
+      // Pinned guardrails are listed under the guardrail picker, each as a row.
       const pin = page.getByTestId('guardrail-pin').filter({ hasText: 'No investment advice' });
       const pinned = await pin.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const enforced = await page.getByText('Enforced', { exact: true }).count();
-      // Redaction and when-unsure are not acted on by any turn, so the page does not offer them (c-068).
+      // Redaction and when-unsure are not acted on by any turn, so the page does not offer them.
       const unenforced = (await page.locator('#g-pii').count()) + (await page.locator('#g-unsure').count());
       check('the agent page shows the pin as enforced and offers no setting the runtime ignores', pinned && enforced === 1 && unenforced === 0, { pinned, enforced, unenforced });
 
@@ -71,8 +71,8 @@ await withUiStack(
       const servedPins = (served?.data?.pins ?? []).map((p) => `${p.skillId} v${p.pinnedVersion}`);
       check('the agent page lists the attached skill, read from agents-service', /Hardship request triage/.test(pins) && servedPins.join() === 'sk_hardship_triage v1', { pins: pins.slice(0, 200), servedPins });
 
-      // Switched off on the page (c-085): saved on a version, published, then not checked at all.
-      // The change saves itself into the draft a second later (c-172), so the wait is armed before it.
+      // Switched off on the page: saved on a version, published, then not checked at all.
+      // The change saves itself into the draft a second later, so the wait is armed before it.
       const savedOff = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/v1\/agents\/ag_advisor$/.test(r.url()), { timeout: 60_000 }));
       await page.getByRole('switch', { name: 'Check No investment advice' }).click();
       const offShown = await page.getByTestId('guardrail-off').isVisible();
@@ -89,7 +89,7 @@ await withUiStack(
       check('the agent page still shows it Off after a reload', await page.getByTestId('guardrail-off').isVisible());
       await page.getByRole('switch', { name: 'Check No investment advice' }).click();
 
-      // Unpinning from the page saves a version without the pin: the picker's chip has Remove (c-136).
+      // Unpinning from the page saves a version without the pin: the picker's chip has Remove.
       const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/v1\/agents\/ag_advisor$/.test(r.url()), { timeout: 60_000 }));
       await page.getByTestId('guardrail-picker').getByRole('button', { name: 'Remove No investment advice' }).click();
       const patch = await (await saved)?.json().catch(() => null);

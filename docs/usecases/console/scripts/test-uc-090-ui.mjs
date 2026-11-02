@@ -36,7 +36,7 @@ await withUiStack(
     await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: SAM, body: JSON.stringify({ value: HOST, note: 'uc-090' }) });
     const id = (await json(await fetch(`${tools}/v1/tool-modules/blank`, { method: 'POST', headers: J, body: JSON.stringify({ displayName: `Rates ${TAG}`, name: `uc090-rates-${TAG}`, type: 'http' }) }))).id;
     const add = (body) => fetch(`${tools}/v1/tool-modules/${id}/operations`, { method: 'POST', headers: J, body: JSON.stringify(body) }).then(json);
-    await add({ name: READ, description: 'A rate', access: 'read', method: 'GET', url: `https://${HOST}/v1/rates/{currency}`, headers: [{ key: 'X-Api-Key', value: `{{${SECRET}}}` }] });
+    await add({ name: READ, description: 'A rate', access: 'read', method: 'GET', url: `https://${HOST}/v1/rates/{currency}`, headers: [{ key: 'X-Partner-Token', value: `{{${SECRET}}}` }] });
     await add({ name: WRITE, description: 'Hold an FX quote', access: 'write', method: 'POST', url: `https://${HOST}/v1/holds`, headers: [] });
     await json(await fetch(`${tools}/v1/tool-modules/${id}/reviews`, { method: 'POST', headers: J, body: JSON.stringify({ note: 'uc-090' }) }));
     await approveToolReview(id, N, J);
@@ -52,13 +52,15 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      // The row opens the operation's workbench (c-088): its input is edited there, and its access, approval and
+      // The row opens the operation's workbench: its input is edited there, and its access, approval and
       // secrets in the policy sheet the workbench opens.
       const sheet = async (op) => {
         await page.goto(`${consoleUrl}/tools/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const row = page.getByRole('row', { name: new RegExp(op) });
         await row.waitFor({ timeout: 120_000 });
         await row.click();
+        // The REST tool page opens a write on Body; the fields are on Inputs.
+        await page.getByRole('tab', { name: 'Inputs' }).click({ timeout: 120_000 });
         await page.getByTestId('input-schema-editor').waitFor({ timeout: 30_000 });
       };
       const policy = async () => {
@@ -86,7 +88,7 @@ await withUiStack(
         await policy();
         const link = page.getByTestId('op-secrets').getByRole('link', { name: `${SECRET} not set` });
         const shown = await link.waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        check('2 the operation sheet names the secret as not set', shown && (await link.getAttribute('href')) === '/settings/security/secrets', { shown, href: shown ? await link.getAttribute('href') : null });
+        check('2 the operation sheet names the secret as not set', shown && (await link.getAttribute('href')) === '/integrations/credentials?tab=secrets', { shown, href: shown ? await link.getAttribute('href') : null });
       });
 
       // 3. A default that is not the field's type is refused, and the reason shows on that field (T002, T005).
@@ -144,16 +146,17 @@ await withUiStack(
         const second = await stage('op-stage');
         const ops = Object.fromEntries((second.body.data?.operations ?? []).map((o) => [o.name, o]));
         const access = second.body.data?.pendingChanges?.find((c) => c.operation === READ && c.kind === 'access_widened');
+        // Approvals are off by default (2026-11-01): a read made a write does not start waiting by itself.
         check(
           '6 step-up on the write and an access change on the read stage as major',
-          first.res?.status() === 200 && first.sent.stepUp === true && second.res?.status() === 200 && second.sent.access === 'write' && ops[WRITE]?.stepUp === true && ops[READ]?.access === 'write' && ops[READ]?.requiresApproval === true && access?.major === true,
+          first.res?.status() === 200 && first.sent.stepUp === true && second.res?.status() === 200 && second.sent.access === 'write' && ops[WRITE]?.stepUp === true && ops[READ]?.access === 'write' && ops[READ]?.requiresApproval === false && access?.major === true,
           { stepUp: first.sent, access: second.sent, change: access },
         );
       });
 
       // 7. Once the secret is set the sheet says so and the list stops warning (T006).
       await step('7 setting the secret clears both warnings', async () => {
-        // The module is Operations', so its secret is Operations' too: the team's builder saves it (secrets per team, c-509).
+        // The module is Operations', so its secret is Operations' too: the team's builder saves it (secrets per team).
         await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: SECRET, value: 'k-uc090' }) });
         await sheet(READ);
         await policy();

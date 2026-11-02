@@ -108,7 +108,7 @@ def wire(client: AsyncClient, listed: list[dict[str, Any]], tools: list[str] = T
 
 
 async def install(client: AsyncClient, body: dict[str, Any] | None = None, *, tid: str = "case-helper") -> Any:
-    return await client.post(f"/v1/templates/{SOURCE}/{tid}/install", json=body or {}, headers=OPS)
+    return await client.post(f"/v1/resources/{SOURCE}:{tid}/copies", json=body or {}, headers=OPS)
 
 
 async def test_the_list_shows_the_teams_templates_and_which_it_holds(client: AsyncClient) -> None:
@@ -124,6 +124,14 @@ async def test_the_list_shows_the_teams_templates_and_which_it_holds(client: Asy
     wire(client, [AGENT | {"version": 3}])
     newer = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))
     assert newer[0]["installed"] == {"copies": 1, "version": 2, "newerAvailable": True, "changed": False}
+
+
+async def test_the_list_keeps_one_plugins_templates_when_asked(client: AsyncClient) -> None:
+    """A plugin update's review shows the version each of that plugin's copies came from (c-609)."""
+    wire(client, [AGENT])
+    mine = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))
+    other = ok(await client.get("/v1/templates", params={"source": "plugin:test.other"}, headers=OPS))
+    assert [t["id"] for t in mine] == ["case-helper"] and other == []
 
 
 async def test_an_installed_agent_is_the_teams_draft_through_the_create_checks(client: AsyncClient) -> None:
@@ -178,7 +186,7 @@ async def test_a_template_not_listed_for_the_team_or_a_version_it_does_not_ship_
 
 async def test_a_viewer_cannot_install(client: AsyncClient) -> None:
     wire(client, [AGENT])
-    r = await client.post(f"/v1/templates/{SOURCE}/case-helper/install", json={}, headers=VIEWER)
+    r = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies", json={}, headers=VIEWER)
     assert r.status_code == 403, r.text
 
 
@@ -208,7 +216,7 @@ async def test_a_session_acting_in_no_team_cannot_install() -> None:
         await stack.enter_async_context(app.router.lifespan_context(app))
         client = await stack.enter_async_context(AsyncClient(transport=ASGITransport(app=app), base_url="http://t"))
         wire(client, [AGENT])
-        r = await client.post(f"/v1/templates/{SOURCE}/case-helper/install", json={}, headers={"X-Team-Id": "team_ops"})
+        r = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies", json={}, headers={"X-Team-Id": "team_ops"})
         assert r.status_code == 400 and r.json()["error"]["code"] == "team_required", r.text
 
 

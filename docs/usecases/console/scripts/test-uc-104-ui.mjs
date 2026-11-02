@@ -59,7 +59,7 @@ await withUiStack(async (consoleUrl) => {
 
     // The agent pins v1 from its Guardrails section; the pin links to the guardrail's page.
     await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    // The guardrail picker (EntityPicker, c-136) pins it; the pinned row then offers its version.
+    // The guardrail picker (EntityPicker) pins it; the pinned row then offers its version.
     await page.getByTestId('guardrail-picker').getByRole('button', { name: 'Pin guardrails' }).click({ timeout: 120_000 });
     await page.getByPlaceholder('Search guardrails…').fill(NAME);
     await page.getByRole('option', { name: new RegExp(NAME) }).click({ timeout: 30_000 });

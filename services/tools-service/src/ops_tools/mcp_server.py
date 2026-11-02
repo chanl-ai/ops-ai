@@ -30,7 +30,7 @@ from ops_service_kit.errors import ApiError, Forbidden, NotFound, ServiceUnavail
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
 
-from .auth.kinds import TEST
+from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls
 from .modules.directory import Directory, Team
 from .registry import ToolRegistry

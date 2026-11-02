@@ -46,12 +46,30 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_create_eval_run": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/eval-runs",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_create_guardrail": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/guardrails",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "agents_create_job": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/jobs",
+        "pathParams": ["agent_id"],
         "query": [],
         "stream": False,
     },
@@ -224,6 +242,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/skills",
         "pathParams": [],
         "query": ["view", "page", "pageSize", "search"],
+        "stream": False,
+    },
+    "agents_list_tool_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/tool-uses",
+        "pathParams": [],
+        "query": ["tools"],
         "stream": False,
     },
     "agents_list_tools": {
@@ -919,6 +946,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_copy_resource": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies",
+        "pathParams": ["resource"],
+        "query": [],
+        "stream": False,
+    },
     "reviews_assign": {
         "body": "json",
         "headers": [],
@@ -1045,6 +1081,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "reviews_open_egress_host_request": {
+        "body": "json",
+        "headers": ["x-service-authorization"],
+        "method": "POST",
+        "path": "/v1/publish-requests/egress-hosts",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "reviews_open_publish_request": {
         "body": "json",
         "headers": ["x-service-authorization"],
@@ -1063,6 +1108,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "reviews_run_as_team_account": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/reviews/{thread_id}/team-account",
+        "pathParams": ["thread_id"],
+        "query": [],
+        "stream": False,
+    },
     "reviews_save_task_type": {
         "body": "json",
         "headers": [],
@@ -1072,22 +1126,13 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "templates_install_template": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/templates/{source}/{template_id}/install",
-        "pathParams": ["source", "template_id"],
-        "query": [],
-        "stream": False,
-    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
         "method": "GET",
         "path": "/v1/templates",
         "pathParams": [],
-        "query": ["kind"],
+        "query": ["kind", "source"],
         "stream": False,
     },
     "threads_approve": {
@@ -1679,6 +1724,10 @@ class Operations:
         "Decide"
         return self._t.call(SERVICE, OPERATIONS["reviews_decide"], {"thread_id": thread_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def reviews_run_as_team_account(self, thread_id: str) -> Any:
+        "Run As Team Account"
+        return self._t.call(SERVICE, OPERATIONS["reviews_run_as_team_account"], {"thread_id": thread_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def cases_list_runs(
         self,
         *,
@@ -1789,6 +1838,14 @@ class Operations:
     def agents_delete_agent(self, agent_id: str) -> Any:
         "Delete Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+        "Create Eval Run"
+        return self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_create_job(self, agent_id: str, body: JobInput) -> JobArmed:
+        "Create Job"
+        return self._t.call(SERVICE, OPERATIONS["agents_create_job"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def channels_agent_live(self, agent_id: str) -> Live:
         "Agent Live"
@@ -2219,6 +2276,19 @@ class Operations:
             body,
         )  # type: ignore[no-any-return]
 
+    def reviews_open_egress_host_request(
+        self, body: EgressHostReviewInput, *, x_service_authorization: str | None = None
+    ) -> PublishReview:
+        "Open Egress Host Request"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_open_egress_host_request"],
+            {},
+            {},
+            {"x-service-authorization": x_service_authorization},
+            body,
+        )  # type: ignore[no-any-return]
+
     def reviews_get_publish_request(self, request_id: str) -> PublishReview:
         "Get Publish Request"
         return self._t.call(
@@ -2230,6 +2300,10 @@ class Operations:
         return self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+        "Copy Resource"
+        return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
 
     def workflows_list_engine_runs(
         self,
@@ -2370,19 +2444,10 @@ class Operations:
         "Team Usage"
         return self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+    def templates_list_templates(self, *, kind: str | None = None, source: str | None = None) -> list[TemplateView]:
         "List Templates"
-        return self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
-
-    def templates_install_template(self, source: str, template_id: str, body: InstallInput) -> Installation:
-        "Install Template"
         return self._t.call(
-            SERVICE,
-            OPERATIONS["templates_install_template"],
-            {"source": source, "template_id": template_id},
-            {},
-            {},
-            body,
+            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
     def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
@@ -2445,6 +2510,10 @@ class Operations:
     def threads_route_version(self, body: RouteWorkflow) -> RoutedVersion:
         "Route Version"
         return self._t.call(SERVICE, OPERATIONS["threads_route_version"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_list_tool_uses(self, *, tools: str | None = None) -> Any:
+        "List Tool Uses"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_tool_uses"], {}, {"tools": tools}, {}, None)  # type: ignore[no-any-return]
 
     def agents_list_tools(self, *, access: list[str] | None = None) -> list[Tool]:
         "List Tools"
@@ -2841,6 +2910,12 @@ class AsyncOperations:
         "Decide"
         return await self._t.call(SERVICE, OPERATIONS["reviews_decide"], {"thread_id": thread_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def reviews_run_as_team_account(self, thread_id: str) -> Any:
+        "Run As Team Account"
+        return await self._t.call(
+            SERVICE, OPERATIONS["reviews_run_as_team_account"], {"thread_id": thread_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def cases_list_runs(
         self,
         *,
@@ -2951,6 +3026,14 @@ class AsyncOperations:
     async def agents_delete_agent(self, agent_id: str) -> Any:
         "Delete Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+        "Create Eval Run"
+        return await self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_create_job(self, agent_id: str, body: JobInput) -> JobArmed:
+        "Create Job"
+        return await self._t.call(SERVICE, OPERATIONS["agents_create_job"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def channels_agent_live(self, agent_id: str) -> Live:
         "Agent Live"
@@ -3395,6 +3478,19 @@ class AsyncOperations:
             body,
         )  # type: ignore[no-any-return]
 
+    async def reviews_open_egress_host_request(
+        self, body: EgressHostReviewInput, *, x_service_authorization: str | None = None
+    ) -> PublishReview:
+        "Open Egress Host Request"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_open_egress_host_request"],
+            {},
+            {},
+            {"x-service-authorization": x_service_authorization},
+            body,
+        )  # type: ignore[no-any-return]
+
     async def reviews_get_publish_request(self, request_id: str) -> PublishReview:
         "Get Publish Request"
         return await self._t.call(
@@ -3406,6 +3502,10 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
+        "Copy Resource"
+        return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def workflows_list_engine_runs(
         self,
@@ -3554,19 +3654,12 @@ class AsyncOperations:
         "Team Usage"
         return await self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+    async def templates_list_templates(
+        self, *, kind: str | None = None, source: str | None = None
+    ) -> list[TemplateView]:
         "List Templates"
-        return await self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
-
-    async def templates_install_template(self, source: str, template_id: str, body: InstallInput) -> Installation:
-        "Install Template"
         return await self._t.call(
-            SERVICE,
-            OPERATIONS["templates_install_template"],
-            {"source": source, "template_id": template_id},
-            {},
-            {},
-            body,
+            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
     async def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
@@ -3629,6 +3722,10 @@ class AsyncOperations:
     async def threads_route_version(self, body: RouteWorkflow) -> RoutedVersion:
         "Route Version"
         return await self._t.call(SERVICE, OPERATIONS["threads_route_version"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_list_tool_uses(self, *, tools: str | None = None) -> Any:
+        "List Tool Uses"
+        return await self._t.call(SERVICE, OPERATIONS["agents_list_tool_uses"], {}, {"tools": tools}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_list_tools(self, *, access: list[str] | None = None) -> list[Tool]:
         "List Tools"

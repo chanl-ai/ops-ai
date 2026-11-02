@@ -18,6 +18,7 @@ import { useVerifyWikiPage, useWikiCollections, useWikiPage, useWikiPages } from
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, relativeTime } from '@/lib/format';
 import type { WikiFilters, WikiPage, WikiView } from '@/lib/types/wiki';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = WikiPage & { onRowClick: (p: WikiPage) => void; rowTestId: string };
 
@@ -109,15 +110,7 @@ export default function WikiPage() {
               { column: 'provenance', title: 'Provenance', options: PROVENANCE_OPTIONS.map((o) => ({ ...o, count: facets.provenance?.[o.value] ?? 0 })) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
+            serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
                 icon={BookOpen}

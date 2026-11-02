@@ -132,7 +132,7 @@ export const INVITED_PASSWORD = "an invited person's password";
 export async function invitePerson(adminEmail: string, email: string, role: string, team = 'team_ops'): Promise<string> {
   const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
   const json = { 'Content-Type': 'application/json' };
-  const signIn = (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: json, body: JSON.stringify({ email: adminEmail, password: 'northfield-demo' }) })).json()) as { data?: { token?: string } };
+  const signIn = (await (await fetch(`${platform}/v1/auth/sign-in`, { method: 'POST', headers: json, body: JSON.stringify({ email: adminEmail, password: DEMO_PASSWORD }) })).json()) as { data?: { token?: string } };
   const headers = { ...json, Authorization: `Bearer ${signIn.data?.token}`, 'X-Team-Id': team };
   const invited = (await (await fetch(`${platform}/v1/settings/members/invite`, { method: 'POST', headers, body: JSON.stringify({ emails: [email], role }) })).json()) as { data?: { invites?: { token?: string }[] } };
   const token = invited.data?.invites?.[0]?.token;
@@ -144,6 +144,23 @@ export async function invitePerson(adminEmail: string, email: string, role: stri
 }
 
 /** Signs `email` in on the console's login page in a fresh browser context and returns the page. */
+/**
+ * A standard dev user's headers (c-614): the role's seeded person (services/platform-service/seed/dev-roles.json: admin,
+ * builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the sign-in
+ * names unless `team` is given. The same map `make api AS=<role>` uses (scripts/api_as.py).
+ */
+export async function asRole(role: string, team?: string): Promise<Record<string, string>> {
+  const seed = join(ROOT, 'services/platform-service/seed');
+  const email = (JSON.parse(readFileSync(join(seed, 'dev-roles.json'), 'utf8')) as Record<string, string>)[role];
+  if (!email || role.startsWith('_')) throw new Error(`asRole: ${role} is not a dev role (dev-roles.json)`);
+  const r = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
+  if (r.status !== 200) throw new Error(`asRole: ${email} could not sign in (${r.status})`);
+  const session = ((await r.json()) as { data: { token: string; principal: { teamId: string | null; teamIds: string[] } } }).data;
+  const token = session.token;
+  const acting = team ?? session.principal.teamId ?? session.principal.teamIds[0];
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(acting ? { 'X-Team-Id': acting } : {}) };
+}
+
 export async function consoleSignIn(browser: import('playwright').Browser, consoleUrl: string, email: string, password: string, errors: string[]): Promise<import('playwright').Page> {
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
   page.on('pageerror', (e) => errors.push(`${email}: ${e.message}`));
@@ -338,7 +355,7 @@ export interface StackOptions {
    * and it adds about 8 s to a run.
    */
   sampleTeam?: boolean;
-  /** Console switches baked into its build, such as `{ NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: '1' }` (c-558). */
+  /** Console variables baked into its build, such as `{ NEXT_PUBLIC_OPS_CACHE: 'off' }`. */
   consoleSwitches?: Record<string, string>;
   /** Also start the embed app (apps/embed) on its own port, its `/v1` and loader routed to the run's agents service. */
   embed?: boolean;
@@ -357,7 +374,8 @@ export interface Stack {
   mailDir?: string;
   /** With `tools.bank`: the bank's host name, the range it answers on, its own address for reading what it
    * received (`${url}/webhooks.json`, the webhook stand-in), and the CA file its certificate for `host` is signed by. */
-  bank?: { host: string; range: string; url: string; ca: string };
+  /** The bank stand-in; with `bank: 'core'`, also its certificate-only host and the CA and client certificate's files (c-580). */
+  bank?: { host: string; range: string; url: string; ca: string; mtlsHost?: string; mtls?: Record<string, string> };
   /** With `tools.mail`: the names tools-service resolves to GreenMail and Mailpit, and the range they answer on. */
   mail?: { imapHost: string; smtpHost: string; range: string };
   /** The embed app's origin when the stack started it: the Ops AI host a bank page loads the loader from. */
@@ -452,7 +470,7 @@ function privateAddress(): string {
   throw new Error('no private IPv4 address: tools-service refuses loopback, so GreenMail and Mailpit cannot be reached');
 }
 
-function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: { settings: Record<string, string>; range: string; host: string }; child: ChildProcess }> {
+function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: { settings: Record<string, string>; range: string; host: string; mtlsHost?: string; mtls?: Record<string, string> }; child: ChildProcess }> {
   const env = { ...stackEnv(process.env), PYTHONPATH: [join(ROOT, 'docs/usecases/lib'), process.env.PYTHONPATH].filter(Boolean).join(':') };
   const child = spawn('uv', ['run', '--quiet', '--directory', join(ROOT, 'services/agents-service'), 'python', join(ROOT, 'docs/usecases/lib/fake_bank_serve.py')], { env: app === 'core' ? { ...env, OPS_FAKE_BANK_APP: 'core' } : env, stdio: ['pipe', 'pipe', 'inherit'], detached: true });
   track(child);
@@ -473,10 +491,14 @@ function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: {
  * send a run's agents to the shared stack's models-service and its fake OpenAI instead of the scripted model; an
  * inherited OPS_PLATFORM_URL makes a run without platform-service build policy readers that fail closed. A run that
  * wants either passes it in `extra`. */
+/** The install's model endpoint settings models-service reads (ops_models.connection_settings). */
+const MODEL_ENDPOINT_ENV = ['OPENAI_API_TYPE', 'OPENAI_API_BASE', 'OPENAI_BASE_URL', 'OPENAI_API_VERSION', 'OPENAI_API_REGION'];
+
 export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const inherited = { ...base };
   // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
-  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE']) delete inherited[key];
+  // So does the shell's model endpoint (OPENAI_API_BASE and the rest, c-605), which would move openai-local off the fake.
+  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
   const env = { ...inherited, ...extra };
   for (const key of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VIRTUAL_ENV']) delete env[key];
   return env;
@@ -625,7 +647,13 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         bankProc = bank.child;
         Object.assign(bankSettings, bank.info.settings);
         const dialled = (JSON.parse(bank.info.settings.OPS_EGRESS_RESOLVE ?? '{}') as Record<string, string>)[bank.info.host];
-        stack.bank = { host: bank.info.host, range: bank.info.range, url: `https://${dialled ?? bank.info.host}`, ca: bank.info.settings.OPS_EGRESS_CA_FILE ?? '' };
+        stack.bank = {
+          host: bank.info.host,
+          range: bank.info.range,
+          url: `https://${dialled ?? bank.info.host}`,
+          ca: bank.info.settings.OPS_EGRESS_CA_FILE ?? '',
+          ...(bank.info.mtlsHost ? { mtlsHost: bank.info.mtlsHost, mtls: bank.info.mtls } : {}),
+        };
       }
       if (options.tools.mail) {
         const here = privateAddress();
@@ -643,6 +671,9 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
         // Workflow approvals name agents-service's workflows (c-039); without this tools-service would ask the dev port.
         OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
+        // The read_file and read_document tools read the team's files through documents-service (c-613).
+        OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
+        OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
         // send_reply sends through the provider settings pick and fails with none (c-187): the dev fake writes each
         // mail to this run's folder.
         OPS_MAIL_PROVIDER: 'fake',
@@ -726,6 +757,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_DATABASE_URL: pgUrl(DB),
       OPS_DOCUMENTS_PORT: String(DOCUMENTS_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
+      // A team's document type templates come from its plugins in tools-service (c-590).
+      OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
       // Extractions run on the run's models-service with documents-service's own dev key (c-235, c-256).

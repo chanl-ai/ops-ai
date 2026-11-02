@@ -38,10 +38,12 @@ from .definition import FALLBACK, MAPPING_PREFIX, TEXT_PATH, NodeInstance, Workf
 from .journal import Journal, StepRow, StepStatus
 from .node_types import CASE_PRIORITIES, DEFAULT_MAX_ITEMS, RETRY_BY_EFFECTS, NodeType, TypeRegistry
 from .ports import (
+    AS_TEAM_ACCOUNT,
     AgentRequest,
     CaseNotFoundError,
     CaseTypeNotFoundError,
     EnginePorts,
+    ReviewPort,
     RunPort,
     RunRefusedError,
     StartedRun,
@@ -189,6 +191,46 @@ async def trigger_payload(call: NodeCall) -> Outcome:
 
 async def data_set(call: NodeCall) -> Outcome:
     return Outcome("out", dict(call.params.get("values") or {}))
+
+
+async def data_transform(call: NodeCall) -> Outcome:
+    """One path expression over the run; a missing path takes the error port.
+
+    The expression is read from the node as written. Resolve would already have
+    turned a found path into the value, so a missing path and a found one would
+    look the same.
+    """
+    expr = str(call.node.parameters.get("expression") or call.params.get("expression") or "")
+    name = str(call.params.get("as") or call.node.parameters.get("as") or "value")
+    if not expr.startswith(MAPPING_PREFIX):
+        return Outcome("error", {"error": f"{expr!r} is not a path", "code": "bad_path"})
+    found = lookup(expr, call.scope)
+    if found is None:
+        return Outcome("error", {"error": f"{expr} read nothing", "code": "bad_path"})
+    return Outcome("out", {name: found})
+
+
+async def data_filter(call: NodeCall) -> Outcome:
+    """Keep or drop items by field predicates. Not a second If: one list in, counts out."""
+    items = call.params.get("items")
+    if not isinstance(items, list):
+        return Outcome("error", {"error": "Filter read no list.", "code": "not_a_list"})
+    conditions = cast(list[Mapping[str, Any]], call.params.get("conditions") or [])
+    combine = call.params.get("combine") or "all"
+    kept: list[Any] = []
+    dropped: list[Any] = []
+    for item in cast(list[Any], items):
+        results: list[bool] = []
+        for raw in conditions:
+            cond: dict[str, Any] = dict(raw)
+            left: Any = cond.get("left")
+            if isinstance(item, Mapping) and isinstance(left, str) and not left.startswith(MAPPING_PREFIX):
+                cond = {**cond, "left": cast(Mapping[str, Any], item).get(left)}
+            results.append(_holds(cond))
+        ok = any(results) if combine == "any" else bool(results) and all(results)
+        (kept if ok else dropped).append(item)
+    out = {"kept": kept, "dropped": dropped, "keptCount": len(kept), "droppedCount": len(dropped)}
+    return Outcome("kept" if kept else "dropped", out)
 
 
 async def data_compute(call: NodeCall) -> Outcome:
@@ -419,6 +461,32 @@ def _error_code(output: Any) -> str | None:
     return str(cast(dict[str, Any], error).get("code")) if isinstance(error, dict) else None
 
 
+# The gateway's refusal for a call acting for a person who has not connected their own account (tools-service
+# auth._not_linked); its details name the event their connecting reports, absent when nobody acts behind the call.
+NOT_LINKED = "CONNECTION_NOT_LINKED"
+
+
+def connect_wait(output: Any) -> dict[str, Any] | None:
+    """The event and key to wait on when `output` is a refusal a person answers by connecting; None otherwise."""
+    if _error_code(output) != NOT_LINKED:
+        return None
+    details: Any = cast(dict[str, Any], cast(dict[str, Any], output)["error"]).get("details")
+    if not isinstance(details, dict):
+        return None
+    d = cast(dict[str, Any], details)
+    event: Any = d.get("connectedEvent")
+    if not isinstance(event, dict) or not cast(dict[str, Any], event).get("key"):
+        return None
+    named = cast(dict[str, Any], event)
+    return {
+        "name": str(named.get("name")),
+        "key": str(named["key"]),
+        "app": d.get("connection"),
+        "connectionId": d.get("connectionId"),
+        "teamAccount": bool(d.get("teamAccount")),
+    }
+
+
 def _step(key: str) -> str:
     """`run:node:iteration` of a tool key `run:node:iteration:attempt`: the step a review approved, any attempt."""
     return key.rsplit(":", 1)[0]
@@ -442,13 +510,38 @@ async def gateway_call(call: NodeCall) -> Outcome:
             token = await call.ports.tools.mint(call.run_id, bound, dict(approval)) if approval else None
         else:
             token = None
-    result: ToolResult = await call.ports.tools.call(
-        str(call.params["operation"]),
-        arguments,
-        call.key,
-        call.generation,
-        str(token) if token else None,
-    )
+
+    async def send() -> ToolResult:
+        return await call.ports.tools.call(
+            str(call.params["operation"]), arguments, call.key, call.generation, str(token) if token else None
+        )
+
+    result = await send()
+    if (wait := connect_wait(result.output)) is not None:
+        # The call acts for a person who has not connected their own account of the app (c-616 S12): the run waits,
+        # with no time limit, until their connecting reports the event the gateway named, then sends the same call
+        # again under its key. On the resumed pass the first send already succeeds, so this is reached again only
+        # when the call is still refused after they connected, and then the step fails with the gateway's reason.
+        app = str(wait.get("app") or "the app")
+        woke = park_external(
+            call,
+            event=wait["name"],
+            key=wait["key"],
+            title=f"Connect your {app} account to continue",
+            timeout_seconds=0,
+            app=app,
+            connectionId=wait.get("connectionId"),
+            teamAccount=wait.get("teamAccount"),
+        )
+        if woke.get("teamAccount"):
+            # Run as the team account (decided in Human Tasks by someone who may use it): sent acting for nobody.
+            held = AS_TEAM_ACCOUNT.set(True)
+            try:
+                result = await send()
+            finally:
+                AS_TEAM_ACCOUNT.reset(held)
+        else:
+            result = await send()
     if result.ok:
         return Outcome("ok", result.output)
     if result.pending:
@@ -513,8 +606,16 @@ async def review_open(call: NodeCall) -> Outcome:
                 declared["inputs"] = list(cast(list[Any], o.get("inputs") or []))
             listed.append(declared)
         payload["options"] = listed
-    payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
-    decision: Any = interrupt(payload)
+    # A plain approval of one write needs no one when the run's starter may approve it themselves (c-616); a step with
+    # options or a task type is a person's choice, so it always pauses.
+    plain = bool(payload.get("call")) and "options" not in payload and "taskType" not in payload
+    own = await call.ports.reviews.own_decision(call.run_id, call.node.id, payload) if plain else None
+    decision: Any
+    if own is not None:
+        decision = own
+    else:
+        payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
+        decision = interrupt(payload)
     chosen = dict(cast(dict[str, Any], decision)) if isinstance(decision, dict) else {"decision": decision}
     port = str(chosen.get("option") or DEFAULT_OPTIONS.get(str(chosen.get("decision")), chosen.get("decision")))
     if port not in options:
@@ -817,13 +918,17 @@ def _collected(
     return {"workflowId": workflow, "count": total, "children": rows, "counts": counts}
 
 
-def park_external(call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float) -> dict[str, Any]:
+def park_external(
+    call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float, **shown: Any
+) -> dict[str, Any]:
     """Parks the step on work another service finishes (c-525): the pass ends and no worker is held. The run is woken
     by whichever comes first: the service event `event` carrying correlation key `key`, a signed callback to the
-    step's resume URL, or the time limit. Returns how it was woken: `{"event": payload}`, `{"callback": body}` or
-    `{"timeout": True}`; the step runs again in the same attempt and reads it."""
+    step's resume URL, or the time limit (none when 0). Returns how it was woken: `{"event": payload}`,
+    `{"callback": body}` or `{"timeout": True}`; the step runs again in the same attempt and reads it. `shown`: what
+    the run page says about the wait, beside its title."""
     resumed = interrupt(
         {
+            **shown,
             "kind": "external",
             "node": call.node.id,
             "iteration": call.iteration,
@@ -1008,17 +1113,122 @@ async def flow_wait_for(call: NodeCall) -> Outcome:
     return Outcome("ok", cast(dict[str, Any], answer) if isinstance(answer, dict) else {"value": answer})
 
 
+async def ai_knowledge(call: NodeCall) -> Outcome:
+    """Retrieve from the same knowledge port the cite-handbook agent uses."""
+    if call.ports.knowledge is None:
+        return Outcome("notFound", {"passages": [], "error": "no knowledge port", "code": "unavailable"})
+    query = str(call.params.get("query") or "")
+    kb_ids = [str(x) for x in cast(list[Any], call.params.get("kbIds") or [])]
+    limit = int(call.params.get("limit") or 3)
+    try:
+        found = await call.ports.knowledge.search(query, kb_ids, k=limit)
+    except Exception as e:  # the port names why it cannot answer; the step leaves by notFound
+        return Outcome("notFound", {"passages": [], "error": str(e), "code": "unavailable"})
+    passages = [
+        {
+            "documentId": p.document_id,
+            "title": p.title,
+            "section": p.section,
+            "text": p.text,
+            "kbId": p.kb_id,
+        }
+        for p in found
+    ]
+    if not passages:
+        return Outcome("notFound", {"passages": [], "error": "no passage", "code": "not_found"})
+    return Outcome("found", {"passages": passages})
+
+
+async def action_send(call: NodeCall) -> Outcome:
+    """Reply on the channel that started the run, through send_reply."""
+    payload: Mapping[str, Any] = {}
+    raw_input: object = call.run_input
+    if isinstance(raw_input, Mapping):
+        payload = cast(Mapping[str, Any], raw_input)
+    to = str(call.params.get("to") or payload.get("from") or payload.get("sender") or "")
+    subject = str(call.params.get("subject") or f"Re: {payload.get('subject') or ''}")
+    body = str(call.params.get("body") or "")
+    if not to:
+        return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
+    arguments = {"to": to, "subject": subject, "body": body}
+    token = None
+    # A run without a review port (a unit run) sends without an own approval.
+    reviews = cast("ReviewPort | None", call.ports.reviews)
+    own = (
+        await reviews.own_decision(
+            call.run_id,
+            call.node.id,
+            {"call": {"tool": "send_reply", "input": arguments, "step": call.key}},
+        )
+        if reviews is not None
+        else None
+    )
+    approval = (own or {}).get("approval")
+    if isinstance(approval, Mapping):
+        token = await call.ports.tools.mint(
+            call.run_id,
+            {"tool": "send_reply", "input": arguments, "step": call.key},
+            dict(cast(Mapping[str, Any], approval)),
+        )
+    result = await call.ports.tools.call(
+        "send_reply", arguments, call.key, call.generation, str(token) if token else None
+    )
+    if result.ok:
+        out: dict[str, Any] = {}
+        raw_output: object = result.output
+        if isinstance(raw_output, dict):
+            out = dict(cast(dict[str, Any], raw_output))
+        out.setdefault("status", "sent")
+        return Outcome("sent", out)
+    return Outcome("error", {"error": str(result.reason or result.output), "code": "send_failed"})
+
+
+async def flow_repeat(call: NodeCall) -> Outcome:
+    """Bounded until: leave by done when the predicate holds, exhausted at the cap, else again."""
+    cap = int(call.params.get("max") or 8)
+    conditions = cast(list[Mapping[str, Any]], call.params.get("conditions") or [])
+    results = [_holds(c) for c in conditions]
+    done = any(results) if call.params.get("combine") == "any" else bool(results) and all(results)
+    count = call.iteration
+    if done:
+        return Outcome("done", {"count": count})
+    if count >= cap:
+        return Outcome("exhausted", {"count": count})
+    return Outcome("again", {"count": count})
+
+
+async def flow_ask(call: NodeCall) -> Outcome:
+    """Interrupt for a reply on a conversation key; a zero deadline times out without pausing."""
+    raw = call.params.get("timeoutSeconds")
+    seconds = float(raw) if raw is not None else 86400.0
+    key = str(call.params.get("key") or call.run_id)
+    prompt = str(call.params.get("prompt") or call.node.name or call.node.id)
+    if seconds <= 0:
+        return Outcome("timedOut", {"reason": "deadline", "key": key})
+    woke = park_external(call, event="ask.replied", key=key, title=prompt, timeout_seconds=seconds)
+    if woke.get("timeout"):
+        return Outcome("timedOut", {"reason": "deadline", "key": key})
+    answer = woke.get("event") if "event" in woke else woke.get("callback", woke)
+    return Outcome("replied", cast(dict[str, Any], answer) if isinstance(answer, dict) else {"value": answer})
+
+
 EXECUTORS: dict[str, Executor] = {
     "flow.wait_for": flow_wait_for,
     "trigger.payload": trigger_payload,
     "data.set": data_set,
+    "data.transform": data_transform,
+    "data.filter": data_filter,
     "data.compute": data_compute,
     "flow.if": flow_if,
     "flow.switch": flow_switch,
     "flow.join": flow_join,
     "flow.wait": flow_wait,
+    "flow.repeat": flow_repeat,
+    "flow.ask": flow_ask,
     "data.combine": data_combine,
     "data.match": data_match,
+    "ai.knowledge": ai_knowledge,
+    "action.send": action_send,
     "gateway.call": gateway_call,
     "review.open": review_open,
     "kernel.turn": kernel_turn,

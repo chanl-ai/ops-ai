@@ -206,15 +206,16 @@ how the platform is secured, how to deploy and run it, and which parts are built
       <li><a href="#overview"><span class="n">1</span>Overview</a></li>
       <li><a href="#system-components"><span class="n">2</span>System components</a></li>
       <li><a href="#how-work-flows"><span class="n">3</span>How work flows</a></li>
-      <li><a href="#data-and-database"><span class="n">4</span>Data and database</a></li>
-      <li><a href="#security-and-governance"><span class="n">5</span>Security and governance</a></li>
-      <li><a href="#models"><span class="n">6</span>Models</a></li>
-      <li><a href="#deployment-options"><span class="n">7</span>Deployment options</a></li>
-      <li><a href="#install"><span class="n">8</span>Install</a></li>
-      <li><a href="#operate"><span class="n">9</span>Operate</a></li>
-      <li><a href="#azure-sql"><span class="n">10</span>Azure SQL</a></li>
-      <li><a href="#whats-built-today"><span class="n">11</span>What's built today</a></li>
-      <li><a href="#support"><span class="n">12</span>Support</a></li>
+      <li><a href="#apps"><span class="n">4</span>Apps</a></li>
+      <li><a href="#data-and-database"><span class="n">5</span>Data and database</a></li>
+      <li><a href="#security-and-governance"><span class="n">6</span>Security and governance</a></li>
+      <li><a href="#models"><span class="n">7</span>Models</a></li>
+      <li><a href="#deployment-options"><span class="n">8</span>Deployment options</a></li>
+      <li><a href="#install"><span class="n">9</span>Install</a></li>
+      <li><a href="#operate"><span class="n">10</span>Operate</a></li>
+      <li><a href="#azure-sql"><span class="n">11</span>Azure SQL</a></li>
+      <li><a href="#whats-built-today"><span class="n">12</span>What's built today</a></li>
+      <li><a href="#support"><span class="n">13</span>Support</a></li>
     </ol>
   </nav>
 
@@ -395,8 +396,117 @@ Each debtor gets a case whatever happens to the others, and an unmatched debtor 
 and a customer summary built from the core system and an agent.</p>
 </section>
 
+<section id="apps" aria-labelledby="apps-h">
+<h2 id="apps-h"><span class="n">4</span>Apps</h2>
+<p>An App is something outside Ops AI that your agents and workflows work with. Each App brings Tools, the actions an agent
+or a workflow step can take with it, and some also bring Resources: agents, skills, workflows and document types your
+team can add as its own copies. An App signs in with an Account: the team&#39;s, or a person&#39;s own.</p>
+<h3 id="apps-the-apps-menu">The Apps menu</h3>
+<p>Open <strong>Apps</strong> in the sidebar. Four tabs sit at the top of every page in the menu.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Tab</th><th>What it holds</th></tr></thead>
+<tbody>
+<tr><td>Apps</td><td>Every App your team can use. Search by name, and narrow the list with <strong>Connected only</strong> or <strong>Available only</strong>. Built in Apps, such as Files and Document types, are always on and tagged <strong>Built in</strong></td></tr>
+<tr><td>Credentials</td><td><strong>App credentials</strong>, the OAuth apps your Apps sign in with, and <strong>Secrets</strong>, the values Tools send, such as API keys</td></tr>
+<tr><td>My accounts</td><td>The Apps you connected with your own Account. Disconnect one here</td></tr>
+<tr><td>Tools</td><td>Every Tool your team can use, and <strong>Tool calls</strong>, the log of every call they made</td></tr>
+</tbody></table></div>
+<p><strong>Add custom app</strong> on the Apps tab adds an App the catalog does not list: its address and the key or sign-in it uses.</p>
+<h3 id="apps-turn-an-app-on">Turn an App on</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>1. Press <strong>Connect</strong> on the App&#39;s card</td><td>A small window opens</td></tr>
+<tr><td>2. Name the Account, or keep the suggested name (the App and your team)</td><td>Steps and Tools pick an Account by this name</td></tr>
+<tr><td>3. Keep <strong>Team account</strong> ticked for an Account anyone in the team can run Tools as, or untick it to connect your own</td><td>Untick it and the Account is yours alone</td></tr>
+<tr><td>4. Keep <strong>App credential</strong> on Ops AI&#39;s app, and press <strong>Connect</strong></td><td>The App&#39;s own sign-in page opens; allow access there</td></tr>
+<tr><td>5. The window closes</td><td>The App&#39;s page opens with the Account listed as <strong>Default</strong> and <strong>Connected</strong></td></tr>
+</tbody></table></div>
+<p>An App is <strong>Connected</strong> only once an Account has signed in or a test has passed; saving settings alone does not count.
+A team admin turns an App on.</p>
+<h3 id="apps-accounts-the-team39s-and-your-own">Accounts: the team&#39;s and your own</h3>
+<p>The App&#39;s page lists its Accounts.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Account</th><th>What it is</th></tr></thead>
+<tbody>
+<tr><td>Team account</td><td>Anyone in the team can run Tools as it. The <strong>Default</strong> Account answers every call that names no other</td></tr>
+<tr><td>Your account</td><td>Your own sign-in. Tools you run, and agents acting for you, use it. Press <strong>Connect my account</strong> to add it</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>Connect another account</strong> adds a second Account of the same App, under its own name, for example a second region.
+A step or a call names it to use it.</li>
+<li><strong>Make my default</strong> makes one Account the one your own calls use when they name none.</li>
+<li>An Account the App stopped accepting reads <strong>Expired</strong> with <strong>Reconnect</strong>. Reconnect opens the App&#39;s sign-in page
+again; nothing is typed into Ops AI.</li>
+<li>On the App&#39;s <strong>Settings</strong>, <strong>Everyone signs in with their own account</strong> decides whether each person connects their own
+Account. Off, every call runs as the team Account.</li>
+</ul>
+<h3 id="apps-app-credentials-and-secrets">App credentials and Secrets</h3>
+<p><strong>Credentials › App credentials</strong> lists the OAuth app each App signs in with: <strong>Ops AI&#39;s app</strong>, or <strong>Your own app</strong> when
+your team registered its own. <strong>Edit</strong> replaces your own app&#39;s client secret; it is sealed when saved and never shown
+again. To bring your own app, open the App&#39;s <strong>Settings › Use your own app</strong>, enter its client ID and secret, and
+register the return address it shows. Changing the app or its permissions makes everyone connect again.</p>
+<p><strong>Credentials › Secrets</strong> lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
+again, and removed from whatever an App answers. A Security admin adds, rotates and deletes Secrets.</p>
+<h3 id="apps-tools">Tools</h3>
+<p>The App&#39;s <strong>Tools</strong> tab lists the Tools it brings by their titles. The Apps menu&#39;s <strong>Tools</strong> tab lists every Tool of the
+team, and <strong>New tool</strong> makes one of your own:</p>
+<ol>
+<li>Name it and pick the App it calls. The App gives the address and the sign-in, so each request is a path on the App,
+such as <code>/accounts/{id}</code>.</li>
+<li>Write the request on the Tool&#39;s page and press <strong>Run</strong> in <strong>Mock</strong>: it answers from the Tool&#39;s mock answers and sends
+nothing.</li>
+<li>Once the Tool is published, <strong>Real</strong> sends the request through the App&#39;s Account and shows exactly what was sent,
+with every key hidden.</li>
+</ol>
+<p>A key typed into a Tool&#39;s own header is refused when you save: the App&#39;s Account signs every call. A viewer can open a
+Tool&#39;s page and run it, but not change it.</p>
+<h3 id="apps-add-resources-to-the-team">Add Resources to the team</h3>
+<p>The App&#39;s <strong>Resources</strong> tab lists the agents, skills, workflows and document types it brings. <strong>Add to team</strong> makes your
+team&#39;s own copy and opens it. A Resource your team has added reads <strong>Added · Open</strong>, which opens that copy. Your copy is
+yours to change; the App&#39;s version stays as it was.</p>
+<h3 id="apps-usage">Usage</h3>
+<p>The App&#39;s <strong>Usage</strong> tab lists this team&#39;s runs of the App&#39;s Tools, newest first. <strong>As</strong> says whom each ran as: a person&#39;s
+email, or <strong>Team account</strong>.</p>
+<h3 id="apps-approvals">Approvals</h3>
+<p>Approvals are off until your team turns them on. With them off, a write runs without waiting for a person. A team turns
+them on in <strong>Settings › Policies</strong>, three ways:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Policy</th><th>What waits</th></tr></thead>
+<tbody>
+<tr><td>Tool writes need approval</td><td>Every write any Tool makes</td></tr>
+<tr><td>Apps whose writes need approval</td><td>Writes from the Apps you pick; search for an App and add it</td></tr>
+<tr><td>A Tool&#39;s own approval switch, on its page under <strong>Access and approval</strong></td><td>Writes of that one Tool</td></tr>
+</tbody></table></div>
+<p>A write that waits becomes a Human Task. A person who decides your team&#39;s reviews is not asked to approve their own
+write, unless your workspace has someone else decide every request.</p>
+<h3 id="apps-a-run-waiting-for-a-person">A run waiting for a person</h3>
+<p>When a workflow acts for a person who has not connected their own Account of an App, the run waits instead of failing.
+<strong>Human Tasks</strong> shows a task, <strong>Connect your <App> account to continue</strong>:</p>
+<ul>
+<li>The person it waits for presses <strong>Connect my account</strong>. Once they have connected, the run goes on by itself.</li>
+<li>Where the App has a team Account, someone allowed to run as it (team admins by default) can press <strong>Run as the team
+account</strong>, and the step goes on as the team Account.</li>
+</ul>
+<h3 id="apps-turn-an-app-off">Turn an App off</h3>
+<p>On the App&#39;s <strong>Settings</strong>, <strong>Turn off</strong> stops the App&#39;s Tools for your team. The window lists every agent and workflow
+that uses its Tools before anything stops. The App&#39;s Accounts and the Resources you added stay; the catalog then offers
+<strong>Connect</strong> for it again.</p>
+<h3 id="apps-who-may-do-what">Who may do what</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Action</th><th>Who</th></tr></thead>
+<tbody>
+<tr><td>Turn an App on or off, connect its team Account, add a custom App</td><td>A team admin</td></tr>
+<tr><td>Connect your own Account, Make my default, Disconnect your own</td><td>Anyone in the team</td></tr>
+<tr><td>Run a waiting run as the team Account</td><td>People allowed to run as the team Account; team admins by default</td></tr>
+<tr><td>Edit an App credential</td><td>A team admin</td></tr>
+<tr><td>Add, rotate or delete a Secret</td><td>A Security admin</td></tr>
+<tr><td>Change the approval policies</td><td>People who manage the team&#39;s reviews</td></tr>
+</tbody></table></div>
+</section>
+
 <section id="data-and-database" aria-labelledby="data-and-database-h">
-<h2 id="data-and-database-h"><span class="n">4</span>Data and database</h2>
+<h2 id="data-and-database-h"><span class="n">5</span>Data and database</h2>
 <p>Ops AI keeps everything in one PostgreSQL database. Each of the seven services owns its own tables, applies its own
 migration history and connects with its own login, which can read and write rows in that service&#39;s tables and nothing
 else. File bytes live outside the database, on a volume or in object storage.</p>
@@ -411,7 +521,7 @@ the keys that pay for each call.</figcaption></figure>
 <thead><tr><th>Service</th><th>What it keeps</th><th>Tables</th></tr></thead>
 <tbody>
 <tr><td>platform</td><td>Your organisation, teams, people, roles and team policies; sessions and API keys; sign-in providers, verified domains and password hashes; the audit log</td><td><code>tenants</code>, <code>teams</code>, <code>users</code>, <code>members</code>, <code>roles</code>, <code>role_permissions</code>, <code>role_assignments</code>, <code>policies</code>, <code>api_keys</code>, <code>sessions</code>, <code>audit_entries</code>, <code>signin_providers</code>, <code>signin_domains</code>, <code>signin_identities</code>, <code>signin_flows</code>, <code>signin_lockouts</code>, <code>signin_email_failures</code>, <code>password_credentials</code>, <code>password_resets</code></td></tr>
-<tr><td>agents</td><td>Agents, workflows, skills, guardrails, widgets and their versions; publish requests; runs, steps and the work queue; chat threads and saved run state; reviews, decisions and timers; cases, case types and task types; mailboxes and channel ledgers; budgets, agent memories and the model call record</td><td><code>registry_*</code> (agents, workflows, skills, guardrails, widgets and their versions, publish requests), <code>engine_definitions</code>, <code>engine_runs</code>, <code>engine_steps</code>, <code>engine_work</code>, <code>graph_threads</code>, <code>graph_runs</code>, <code>graph_versions</code>, <code>thread_events</code>, <code>thread_leases</code>, <code>thread_inbox</code>, <code>thread_budgets</code>, <code>ops_checkpoints</code>, <code>ops_checkpoint_writes</code>, <code>ops_checkpoint_fences</code>, <code>review_decisions</code>, <code>review_approvals</code>, <code>review_assignments</code>, <code>timers</code>, <code>cases</code>, <code>case_events</code>, <code>case_types</code>, <code>case_type_versions</code>, <code>task_types</code>, <code>task_type_versions</code>, <code>task_assists</code>, <code>mailboxes</code>, <code>poll_cursors</code>, <code>channel_messages</code>, <code>channel_cursors</code>, <code>channel_files</code>, <code>deployments</code>, <code>widget_deployments</code>, <code>widget_mint_keys</code>, <code>chat_attachments</code>, <code>chat_search</code>, <code>agent_memories</code>, <code>memory_audit</code>, <code>model_call_records</code>, <code>service_events</code>, <code>trigger_events</code>, <code>team_default_agents</code></td></tr>
+<tr><td>agents</td><td>Agents, workflows, skills, guardrails, widgets and their versions; publish requests; runs, steps and the work queue; chat threads and saved run state; reviews, decisions and timers; cases, case types and task types; mailboxes and channel ledgers; budgets, agent memories and the model call record</td><td><code>registry_*</code> (agents, workflows, skills, guardrails, widgets and their versions, publish requests), <code>engine_definitions</code>, <code>engine_runs</code>, <code>engine_steps</code>, <code>engine_work</code>, <code>graph_threads</code>, <code>graph_runs</code>, <code>graph_versions</code>, <code>thread_events</code>, <code>thread_leases</code>, <code>thread_inbox</code>, <code>thread_budgets</code>, <code>ops_checkpoints</code>, <code>ops_checkpoint_writes</code>, <code>ops_checkpoint_fences</code>, <code>review_decisions</code>, <code>review_approvals</code>, <code>review_assignments</code>, <code>timers</code>, <code>cases</code>, <code>case_events</code>, <code>case_types</code>, <code>case_type_versions</code>, <code>task_types</code>, <code>task_type_versions</code>, <code>task_assists</code>, <code>mailboxes</code>, <code>poll_cursors</code>, <code>channel_messages</code>, <code>channel_cursors</code>, <code>channel_files</code>, <code>deployments</code>, <code>widget_deployments</code>, <code>widget_mint_keys</code>, <code>chat_attachments</code>, <code>chat_search</code>, <code>agent_memories</code>, <code>memory_audit</code>, <code>message_memory_use</code>, <code>model_call_records</code>, <code>service_events</code>, <code>trigger_events</code>, <code>team_default_agents</code></td></tr>
 <tr><td>tools</td><td>Tool modules, their operations and versions; connections and their sign-in tokens; credentials; the outbound allow-list; mock answers for tests; rate windows; sending policies; the call log</td><td><code>tool_modules</code>, <code>module_versions</code>, <code>module_operations</code>, <code>module_approvals</code>, <code>module_egress_hosts</code>, <code>connections</code>, <code>connection_environments</code>, <code>connection_tokens</code>, <code>connection_audit</code>, <code>oauth_states</code>, <code>tool_secrets</code>, <code>secret_audit</code>, <code>egress_hosts</code>, <code>egress_ranges</code>, <code>egress_audit</code>, <code>operation_mocks</code>, <code>operation_rate_windows</code>, <code>send_policies</code>, <code>send_checks</code>, <code>service_outbox</code>, <code>gateway_calls</code>, <code>gateway_fences</code></td></tr>
 <tr><td>models</td><td>Provider connections, aliases and their versions, model keys with budgets and spend, the call log (metadata only)</td><td><code>provider_connections</code>, <code>model_aliases</code>, <code>model_keys</code>, <code>model_key_tenants</code>, <code>model_call_log</code></td></tr>
 <tr><td>kb</td><td>Knowledge bases, their sources, items and versions, searchable chunks, ingestion runs</td><td><code>kb_bases</code>, <code>kb_sources</code>, <code>kb_base_sources</code>, <code>kb_retired_bases</code>, <code>kb_items</code>, <code>kb_item_versions</code>, <code>kb_chunks</code>, <code>kb_changes</code>, <code>kb_runs</code></td></tr>
@@ -428,7 +538,7 @@ do inside a team; they never open another team&#39;s data.</p>
 <tbody>
 <tr><td>Tenant, from the sign-in token</td><td>The tenant always comes from the verified token or API key, never from a request body, header or parameter. A record of another tenant answers 404</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Tenant, in the database, for agents and platform</td><td>Forced row-level security on 33 agents tables (including saved run state) and 18 platform tables: a row is visible only when its <code>tenant_id</code> equals the tenant the transaction set, and a transaction that set none sees nothing. The policies apply to the tables&#39; owner too</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Tenant, in the database, for tools, models, kb, files and documents</td><td>Every store query filters by tenant in the service&#39;s code; database policies for these services are still to come</td><td><span class="b b-part">Partial</span></td></tr>
+<tr><td>Tenant, in the database, for tools, models, kb, files and documents</td><td>Every store query filters by tenant in the service&#39;s code. In tools-service, a connection&#39;s saved sign-ins (tokens and keys, sign-ins in progress, environment settings, connect links) are also held to their tenant and team by database policies, run as <code>ops_tools_tenant</code>; policies for the other tools tables and for models are still to come</td><td><span class="b b-part">Partial</span></td></tr>
 <tr><td>Background loops</td><td>The agents service&#39;s lease sweeper, timer poller and thread inbox loops claim work before they know its tenant through one system role that may read across tenants; each then does the work under the row&#39;s own tenant. No request ever runs as that role</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Team, in the services</td><td>Every read of a team-owned table goes through one team filter in the store layer, so a person sees only the teams they belong to; another team&#39;s record answers 404</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Team, in the database</td><td>A database-level team policy beneath the store filter</td><td><span class="b b-part">In progress</span></td></tr>
@@ -473,7 +583,7 @@ may not update or delete. A tamper-evident hash chain and export to WORM storage
 </section>
 
 <section id="security-and-governance" aria-labelledby="security-and-governance-h">
-<h2 id="security-and-governance-h"><span class="n">5</span>Security and governance</h2>
+<h2 id="security-and-governance-h"><span class="n">6</span>Security and governance</h2>
 <p>Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
 layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
 may go (the gateways and the allow-list), and what is kept as evidence (audit).</p>
@@ -517,7 +627,7 @@ delete, run, decide, manage). Every check in every service goes through that gri
 <div class="table-wrap"><table>
 <thead><tr><th>Rule</th><th>Status</th></tr></thead>
 <tbody>
-<tr><td>Every write to one of your systems needs an approval token, minted only after a person decides</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Approvals are off until a team turns them on in Settings › Policies: for every write, for the writes of the Apps it picks, or for one Tool (<a href="#apps-approvals">Apps</a>). A write that waits needs an approval token, minted only after a person decides</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>The token is bound to the tool, the run&#39;s step and the hash of the exact input the approver saw; any change to the input voids every approval of it</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A token lives 15 minutes; a late resume renews it from the recorded approvals of that exact call for up to 24 hours, so a reviewer is never asked twice</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each operation&#39;s policy sets how many distinct people must approve, which team they come from, and whether each needs a fresh sign-in; the same person cannot approve twice</td><td><span class="b b-ok">Built</span></td></tr>
@@ -533,7 +643,7 @@ credentials and open no connections of their own.</p>
 <thead><tr><th>Control</th><th>What holds</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Registry</td><td>Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module&#39;s major change opens a Security review; calls keep the published shape until the new version is published</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Connections</td><td>How the platform signs in to a system, per test and production: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, client certificate (mutual TLS). Tokens are stored encrypted and refreshed one at a time</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Connections</td><td>How the platform signs in to a system, per test and production: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate&#39;s thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each person signing in to a system with their own account</td><td>A run would use only the token of the person it acts for</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Test and production</td><td>Live runs and chats call production; tests call the test environment, and writes in a test always answer from the operation&#39;s mock</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Outbound allow-list</td><td>HTTPS only, to hosts on your tenant&#39;s list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host</td><td><span class="b b-ok">Built</span></td></tr>
@@ -546,7 +656,7 @@ credentials and open no connections of their own.</p>
 <thead><tr><th>Item</th><th>What holds</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Credentials for your systems</td><td>Entered once by a Security admin in the console; encrypted with AES-256-GCM under <code>OPS_SECRETS_KEY</code>, bound to the tenant and the credential&#39;s name; never returned by any API; scrubbed from answers and logs; every create, rotate, delete and use audited; limited to the teams it is shared with</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>The model provider&#39;s key</td><td>Stored the same way, by name; the AI gateway reads it at call time. Outside development the AI gateway refuses provider keys from its environment</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>The model provider&#39;s key</td><td>Saved by an account admin on Settings &gt; Model providers, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Storage credentials</td><td>Sealed with the same key</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Installation keys</td><td>One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under <code>/run/secrets</code></td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A hardware or cloud key manager for these keys</td><td></td><td><span class="b b-plan">Planned</span></td></tr>
@@ -579,7 +689,7 @@ Details and status are in <a href="#data-and-database-the-audit-trail">Data and 
 </section>
 
 <section id="models" aria-labelledby="models-h">
-<h2 id="models-h"><span class="n">6</span>Models</h2>
+<h2 id="models-h"><span class="n">7</span>Models</h2>
 <p>Every model call in Ops AI, from an agent&#39;s turn, a workflow&#39;s AI step or a document read, goes through one internal
 service: the AI gateway (models-service). It knows which key is calling, what that key may still spend, which model a
 name points at, and how sensitive the data is that the model may receive. Services hold a model key; none holds your
@@ -632,7 +742,7 @@ automated use cases of each release run on it, so no real model call is made in 
 </section>
 
 <section id="deployment-options" aria-labelledby="deployment-options-h">
-<h2 id="deployment-options-h"><span class="n">7</span>Deployment options</h2>
+<h2 id="deployment-options-h"><span class="n">8</span>Deployment options</h2>
 <p>The same images run in every layout. What changes is how they are started, how secrets reach them and where the bytes
 of files are kept. PostgreSQL is always yours, outside the containers.</p>
 <div class="table-wrap"><table>
@@ -682,7 +792,7 @@ workload and watch the work queue and database load (<a href="#operate-what-to-w
 </section>
 
 <section id="install" aria-labelledby="install-h">
-<h2 id="install-h"><span class="n">8</span>Install</h2>
+<h2 id="install-h"><span class="n">9</span>Install</h2>
 <p>One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
 result, and later upgrades, backs up, restores and reports on the same install (<a href="#operate">Operate</a>). It pulls the
 published images by default; a release&#39;s offline image file, or a build from source, serves a machine with no
@@ -733,8 +843,8 @@ image&#39;s <code>generate_keys.py</code>. No secret is printed.</li>
 each service&#39;s schema version before going on. The DBA runs them as the server admin; the schema is owned by
 <code>ops_migrator</code>, and no container gets a login that may change it.</li>
 <li>Starts the database, migrations and services, connects the model, then starts the agents, worker, console and proxy,
-waiting for every health check. A provider key is stored in Secrets through the API as <code>MODEL_PROVIDER_KEY</code>,
-never in <code>ops-ai.env</code>; models-service reads it by that name.</li>
+waiting for every health check. A provider key is saved as the account&#39;s model provider key <code>MODEL_PROVIDER_KEY</code>
+through models-service&#39;s API, never in <code>ops-ai.env</code>; models-service reads it by that name.</li>
 <li>Runs the check: health through the published port, the console&#39;s sign-in page, a sign-in as the first admin, one
 read from every service through the proxy, and agents&#39; health (a model is connected). Then it prints the URL and
 how to sign in.</li>
@@ -756,6 +866,32 @@ that is not running, it reuses <code>ops-ai.env</code> and its keys and starts i
 <p>In <code>dba</code> mode, <code>backup</code>, <code>restore</code> and <code>upgrade</code> need an admin login that may dump the database, given as a file:
 <code>--admin-url-file &lt;file holding postgresql://admin:password@host:5432/db&gt;</code>. A runtime login cannot dump it (row-level
 security); without the file the script stops and says to ask the DBA.</p>
+<h3 id="install-feature-flags">Feature flags</h3>
+<p>A feature that is not yet fully released ships behind a flag, off until the install turns it on. There is no admin
+screen: <code>OPS_FLAGS</code> in <code>ops-ai.env</code> names the flags that are on, separated by commas, and every service reads it at
+start. Change it, then restart the services (<code>./install.sh</code> on a running install applies a changed <code>ops-ai.env</code>).</p>
+<div class="cmd"><pre><code>OPS_FLAGS=mcp_gateway</code></pre></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Flag</th><th>Turns on</th><th>Owner</th></tr></thead>
+<tbody>
+<tr><td><code>mcp_gateway</code></td><td>The address outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, <code>/mcp/{env}/{team}</code>, and the console&#39;s MCP channel. Off, <code>/mcp</code> answers 404 <code>feature_off</code></td><td>an earlier change</td></tr>
+<tr><td><code>tool_search</code></td><td>Agents with more tools than <code>OPS_TOOL_SEARCH_ABOVE</code> search for the one they need</td><td>an earlier change</td></tr>
+<tr><td><code>several_accounts</code></td><td>A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused</td><td>an earlier change</td></tr>
+</tbody></table></div>
+<p>The list above is a copy for reading; the registry is <code>packages/ops_service_kit/src/ops_service_kit/flags.py</code>, and
+<code>docker compose</code>, the Kubernetes overlay (<code>ops-origin</code>) and Fly (<code>[env]</code>) each pass <code>OPS_FLAGS</code> to every service. A name
+the registry does not hold stops every service at start with &quot;unknown flag … in OPS_FLAGS; known flags: …&quot;, so a typo
+never reads as off. The console reads the flags from platform-service&#39;s <code>GET /v1/me</code> and hides a feature whose flag is
+off.</p>
+<p>For developers:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>Add a flag</td><td>One entry in <code>FLAGS</code> and its name in <code>FlagName</code> (<code>flags.py</code>): name, a one-line description, the card that owns the feature, and when to remove it. <code>packages/ops_service_kit/tests/test_flags.py</code> fails an entry with no card or removal note. Regenerate <code>services/platform-service/openapi.json</code> and run <code>make sdk</code>, so the console&#39;s types carry the name</td></tr>
+<tr><td>Read it in a service</td><td><code>settings.feature_flags.on(&quot;&lt;name&gt;&quot;)</code>; a name the registry does not hold raises</td></tr>
+<tr><td>Read it in the console</td><td><code>useFlag(&#39;&lt;name&gt;&#39;)</code>, or <code>flag: &#39;&lt;name&gt;&#39;</code> on a list entry filtered by <code>useFlagged</code> (<code>apps/console/src/hooks/flag-queries.ts</code>); both are off while the answer loads</td></tr>
+<tr><td>Remove it</td><td>The release that fully ships the feature deletes the entry, every check that reads it and this table&#39;s row, so an install never sets a flag to get a shipped feature</td></tr>
+</tbody></table></div>
 <h3 id="install-what-is-proven-and-what-is-not">What is proven and what is not</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Claim</th><th>Evidence</th></tr></thead>
@@ -765,7 +901,7 @@ security); without the file the script stops and says to ask the DBA.</p>
 <tr><td>A rerun and a same-version upgrade change nothing</td><td>steps 5 and 6: <code>ops-ai.env</code> checksum and container ids unchanged</td></tr>
 <tr><td>Backup and restore</td><td>step 7: a table and a file made after the backup are gone after the restore</td></tr>
 <tr><td>A failed upgrade rolls back</td><td>step 8b: a release whose console exits; exit 1, back on the old version, status passes</td></tr>
-<tr><td>DBA mode, provider key through Secrets</td><td>step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with <code>--admin-url-file</code></td></tr>
+<tr><td>DBA mode, provider key through Settings &gt; Model providers</td><td>step 9: PostgreSQL 17 with TLS and an admin that is not a superuser; the three printed commands; backup and restore with <code>--admin-url-file</code></td></tr>
 <tr><td>An upgrade across two releases that changes the schema</td><td><strong>unverified</strong>: 0.1.0 is the first release. The auto path is the migrate job <code>compose.md</code> already proves; the DBA path renders Alembic&#39;s offline SQL from the recorded revisions (<code>deploy/install/install_api.py</code>)</td></tr>
 <tr><td>A Linux server</td><td><strong>unverified</strong>: the proof ran on Docker Desktop for macOS</td></tr>
 </tbody></table></div>
@@ -837,7 +973,7 @@ machine: they name the mirror&#39;s file URLs, so do not commit them.</p>
 </section>
 
 <section id="operate" aria-labelledby="operate-h">
-<h2 id="operate-h"><span class="n">9</span>Operate</h2>
+<h2 id="operate-h"><span class="n">10</span>Operate</h2>
 <p>How to check, upgrade, back up, restore and scale an Ops AI install. The install script&#39;s commands come first; the
 manual commands after them are the fallback, and the ones Kubernetes uses.</p>
 <p>Run the script&#39;s commands from the clone the install ran in; they read its settings from <code>ops-ai.env</code> there. In the
@@ -965,7 +1101,7 @@ own versioning or replication.</p>
 </section>
 
 <section id="azure-sql" aria-labelledby="azure-sql-h">
-<h2 id="azure-sql-h"><span class="n">10</span>Azure SQL</h2>
+<h2 id="azure-sql-h"><span class="n">11</span>Azure SQL</h2>
 <div class="note warn"><p>Ops AI does not run on Azure SQL Database or SQL Server yet. The scripts below are ready for your DBA to review now,
 so the review can run in parallel with the remaining work. Install on PostgreSQL today; Azure Database for
 PostgreSQL Flexible Server is supported.</p>
@@ -1008,7 +1144,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="whats-built-today" aria-labelledby="whats-built-today-h">
-<h2 id="whats-built-today-h"><span class="n">11</span>What's built today</h2>
+<h2 id="whats-built-today-h"><span class="n">12</span>What's built today</h2>
 <h3 id="whats-built-today-agents-and-chat">Agents and chat</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Capability</th><th>Status</th></tr></thead>
@@ -1071,8 +1207,11 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <thead><tr><th>Capability</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, client certificate</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Each person connecting their own account</td><td><span class="b b-plan">Planned</span></td></tr>
+<tr><td>Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app&#39;s signed client assertion in place of a secret, a signed service-account grant, client certificate</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>The Apps menu: the catalog, Connect in a small window, each App&#39;s page with its Accounts, Tools, Resources, Secrets, Usage and Settings, Credentials, My accounts, and Turn off (<a href="#apps">Apps</a>)</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>A run waiting for a person&#39;s own Account is a Human Task: Connect my account, or Run as the team account</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Approvals off by default; a team turns them on for every write, the writes of picked Apps, or one Tool</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>The outbound allow-list, the encrypted credential store, the call log</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Check before sending: a model judges a write against the team&#39;s sending policy</td><td><span class="b b-ok">Built</span></td></tr>
@@ -1120,7 +1259,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="support" aria-labelledby="support-h">
-<h2 id="support-h"><span class="n">12</span>Support</h2>
+<h2 id="support-h"><span class="n">13</span>Support</h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>Detail</th></tr></thead>
 <tbody>

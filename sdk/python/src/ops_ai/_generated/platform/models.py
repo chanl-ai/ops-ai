@@ -95,6 +95,12 @@ class ErrorEnvelope(TypedDict, closed=True):
     success: Literal[False]
 
 
+class FlagOut(TypedDict, closed=True):
+    description: str
+    name: Literal["mcp_gateway", "tool_search", "plugin_updates", "several_accounts"]
+    on: bool
+
+
 class ForgotIn(TypedDict, closed=True):
     email: str
 
@@ -288,7 +294,7 @@ class PersonName(TypedDict, closed=True):
 
 
 class PolicyIn(TypedDict, closed=True):
-    value: bool | int | float | dict[str, Any] | None
+    value: bool | int | float | dict[str, Any] | list[str] | None
 
 
 class PolicyOut(TypedDict, closed=True):
@@ -296,7 +302,7 @@ class PolicyOut(TypedDict, closed=True):
     default: bool | int | float | dict[str, Any] | None
     effect: str
     key: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names"]
     title: str
     value: bool | int | float | dict[str, Any] | None
 
@@ -722,6 +728,7 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
 
 
 class Me(TypedDict, closed=True):
+    flags: list[FlagOut]
     policies: dict[str, Any]
     securityTeamId: str
     teams: list[MeTeam]

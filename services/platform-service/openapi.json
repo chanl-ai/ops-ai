@@ -1618,6 +1618,37 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "FlagOut": {
+        "additionalProperties": false,
+        "description": "One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "enum": [
+              "mcp_gateway",
+              "tool_search",
+              "plugin_updates",
+              "several_accounts"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "on"
+        ],
+        "title": "FlagOut",
+        "type": "object"
+      },
       "ForgotIn": {
         "additionalProperties": false,
         "properties": {
@@ -2336,6 +2367,13 @@
       "Me": {
         "additionalProperties": false,
         "properties": {
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/FlagOut"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
           "policies": {
             "additionalProperties": true,
             "title": "Policies",
@@ -2374,7 +2412,8 @@
           "teams",
           "policies",
           "securityTeamId",
-          "workspace"
+          "workspace",
+          "flags"
         ],
         "title": "Me",
         "type": "object"
@@ -2878,6 +2917,12 @@
                 "type": "object"
               },
               {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -2933,7 +2978,8 @@
               "days",
               "hours",
               "publish_modes",
-              "plugins"
+              "plugins",
+              "names"
             ],
             "title": "Kind",
             "type": "string"

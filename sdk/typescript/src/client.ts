@@ -1,5 +1,6 @@
 /**
- * `OpsAI`: the core nouns by name, `raw` for every other public operation, typed from the services' OpenAPI.
+ * `OpsAI`: the core nouns by name, the Apps area in the screen's words (`apps`, `credentials`, `accounts`, `tools`,
+ * `resources`, `usage`), `raw` for every other public operation, typed from the services' OpenAPI.
  *
  *   const ops = new OpsAI({ apiKey: 'ok_...', baseUrl: 'https://ops.example.com', team: 'team_claims' });
  *   for await (const agent of ops.agents.list()) console.log(agent);
@@ -20,6 +21,9 @@ import { platformOperations } from './generated/platform-operations.js';
 import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
+import { Agents } from './agents.js';
+import { Workflows } from './workflows.js';
+import { Accounts, Apps, Credentials, Resources, Tools, Usage } from './words.js';
 
 type PathOf<O> = O extends { parameters: { path: infer P } } ? P : never;
 type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : never;
@@ -237,16 +241,22 @@ export class OpsAI {
   readonly config: Config;
   readonly raw: Raw;
   readonly teams: Resource;
-  readonly agents: Resource;
-  readonly workflows: Resource;
+  readonly agents: Agents;
+  readonly workflows: Workflows;
   readonly threads: Resource;
   readonly cases: Resource;
-  readonly tools: Resource;
+  readonly tools: Tools;
   readonly connections: Resource;
   readonly knowledge: Knowledge;
   readonly files: Files;
   readonly runs: Runs;
   readonly tasks: Tasks;
+  // The Apps area in the screen's words (c-616).
+  readonly apps: Apps;
+  readonly credentials: Credentials;
+  readonly accounts: Accounts;
+  readonly resources: Resources;
+  readonly usage: Usage;
 
   /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM. */
   constructor(options: Partial<Config> = {}) {
@@ -258,16 +268,21 @@ export class OpsAI {
     const t = new Transport(this.config);
     this.raw = new Raw(t);
     this.teams = new Resource(t, NOUNS.teams);
-    this.agents = new Resource(t, NOUNS.agents);
-    this.workflows = new Resource(t, NOUNS.workflows);
     this.threads = new Resource(t, NOUNS.threads);
     this.cases = new Resource(t, NOUNS.cases);
-    this.tools = new Resource(t, NOUNS.tools);
+    this.apps = new Apps(this.raw);
+    this.tools = new Tools(this.raw, this.apps, new Resource(t, NOUNS.tools));
+    this.credentials = new Credentials(this.raw, this.apps);
+    this.accounts = new Accounts(this.raw);
+    this.resources = new Resources(this.raw);
+    this.usage = new Usage(this.raw);
     this.connections = new Resource(t, NOUNS.connections);
     this.knowledge = new Knowledge(t, this.raw);
     this.files = new Files(t, this.raw);
     this.runs = new Runs(t, this.raw);
     this.tasks = new Tasks(t, this.raw);
+    this.agents = new Agents(this.raw);
+    this.workflows = new Workflows(this.raw, this.runs);
   }
 
   /** A client acting as a person. A session carries the teams the person was in when it was made. */

@@ -58,7 +58,7 @@ await withUiStack(
       check('the comparison cites the Retail Product Sheet with its page', compared && /Retail Product Sheet/.test(where) && /p\.\s?4/.test(where), { compared, where: where.slice(0, 200) });
       await page.keyboard.press('Escape');
 
-      // US2's table: the model returns the comparison as rows through the structured-result tool (c-055 T021).
+      // US2's table: the model returns the comparison as rows through the structured-result tool (an earlier change T021).
       const table = await widget('rows').filter({ hasText: /Money Market/ }).count();
       check('the comparison also shows as a table widget', table === 1, { table });
 

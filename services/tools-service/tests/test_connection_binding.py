@@ -1,5 +1,6 @@
-"""A connection's credential goes to its own system only (c-330): a module whose address is another host, even one on
-the allow-list, gets no credential and nothing is sent; the same module on the connection's address carries it."""
+"""A connection's credential goes to its own system only (c-330), and a custom app's base address is its connection's
+(c-616): a connection on a host the module was never reviewed for sends nothing, and the module calls the connection's
+own address with its credential."""
 
 from __future__ import annotations
 
@@ -44,19 +45,19 @@ async def _call(g: Gateway, step: str) -> dict[str, Any]:
     return res.json()["data"]
 
 
-async def test_a_module_on_another_host_gets_no_credential(gateway: Gateway, engine: AsyncEngine) -> None:  # noqa: F811
+async def test_a_connection_moved_to_another_host_sends_nothing(gateway: Gateway, engine: AsyncEngine) -> None:  # noqa: F811
     g = gateway
-    # elsewhere.test stands for any other host the tenant allows; the module calls bank.test.
+    # elsewhere.test stands for any host the module's reviewed egress hosts do not name (they name bank.test).
     await _connect(g, engine, "https://elsewhere.test")
     before = len(g.received)
     refused = await _call(g, "b1")
-    assert refused["ok"] is False and refused["output"]["error"]["code"] == "CONNECTION_HOST_MISMATCH", refused
-    assert len(g.received) == before, "a request left with another system's credential"
+    assert refused["ok"] is False and refused["output"]["error"]["code"] == "EGRESS_DENIED", refused
+    assert len(g.received) == before, "a request left for a host the module was not reviewed for"
 
 
-async def test_the_connections_own_host_gets_its_credential(gateway: Gateway, engine: AsyncEngine) -> None:  # noqa: F811
+async def test_the_connections_own_address_gets_its_credential(gateway: Gateway, engine: AsyncEngine) -> None:  # noqa: F811
     g = gateway
-    await _connect(g, engine, "https://bank.test")
+    await _connect(g, engine, "https://bank.test/v1")
     sent = await _call(g, "b2")
     assert sent["ok"], sent
     assert g.received[-1]["headers"].get("x-api-key") == "k-1"

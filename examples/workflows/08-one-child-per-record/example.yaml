@@ -1,0 +1,46 @@
+id: one-child-per-record
+title: Trigger child workflows
+track: workflow
+status: built
+difficulty: advanced
+outcome: Extract several records and trigger one child workflow per record.
+capabilities:
+- id: ops.action.workflow
+  status: built
+- id: ops.ai.extract
+  status: built
+- id: ops.files.setData
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+- resources/child.yaml
+- resources/child.json
+fixtures:
+- fixtures/records.json
+- fixtures/partial.json
+- fixtures/unreadable.json
+expected:
+- expected/records.json
+- expected/partial.json
+- expected/unreadable.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 90
+teaches:
+- extract many=true reads one file into a list of records
+- Start workflow forEach wait starts one child per record
+- a failed child is listed and siblings still finish
+- unreadable extract ends fanout_failed
+gaps:
+- max-items and parent timeout need no new engine setting here
+- normalize_support_request has no failed End, so this folder's child uses those start fields plus failName

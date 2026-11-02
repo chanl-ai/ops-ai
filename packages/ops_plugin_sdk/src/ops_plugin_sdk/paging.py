@@ -21,13 +21,34 @@ from .manifest import Paging, Tool
 QUERY_VAR = re.compile(r"\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}")
 
 
-def at(data: Any, path: str) -> Any:
-    """The value at a dotted path of an answer, or None."""
-    node: Any = data
-    for part in path.split("."):
-        if not isinstance(node, dict):
+PATH_STEP = re.compile(r"\.?([^.\[\]]+)|\[(\d+)\]")
+
+
+def steps(path: str) -> list[str | int] | None:
+    """A path's steps: `urls.custom_domain`, `[0].id`, `.accounts[0].base_uri`; None when it does not parse."""
+    out: list[str | int] = []
+    at_ = 0
+    while at_ < len(path):
+        m = PATH_STEP.match(path, at_)
+        if m is None or (m.group(1) is not None and out and not m.group(0).startswith(".")):
             return None
-        node = cast(dict[str, Any], node).get(part)
+        out.append(m.group(1) if m.group(1) is not None else int(m.group(2)))
+        at_ = m.end()
+    return out or None
+
+
+def at(data: Any, path: str) -> Any:
+    """The value at a path of an answer, keys and list indexes (`.accounts[0].base_uri`), or None."""
+    node: Any = data
+    for step in steps(path) or [None]:
+        if isinstance(step, int):
+            if not isinstance(node, list) or step >= len(cast(list[Any], node)):
+                return None
+            node = cast(list[Any], node)[step]
+        elif isinstance(node, dict) and step is not None:
+            node = cast(dict[str, Any], node).get(step)
+        else:
+            return None
     return node
 
 

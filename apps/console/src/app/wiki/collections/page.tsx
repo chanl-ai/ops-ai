@@ -14,6 +14,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { useWikiCollectionsPage } from '@/hooks/wiki-queries';
 import { count } from '@/lib/format';
 import type { WikiCollection } from '@/lib/types/wiki';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 const columns: ColumnDef<WikiCollection>[] = [
   {
@@ -57,15 +58,7 @@ export default function WikiCollectionsPage() {
           searchColumn="name"
           searchPlaceholder="Search collections…"
           onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           hideViewSwitcher
           emptyState={<ListEmpty icon={Library} noun="collections" filtered={list.isFiltered} description="Collections appear when the first pages are synced or written." />}
         />

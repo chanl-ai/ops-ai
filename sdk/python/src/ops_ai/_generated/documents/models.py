@@ -38,6 +38,15 @@ class ClassifyIn(TypedDict, closed=True):
     ocr: NotRequired[bool]
 
 
+class CopyRef(TypedDict, closed=True):
+    id: str
+    kind: Literal["document_type"]
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
 class CorrectionIn(TypedDict, closed=True):
     record: NotRequired[int | None]
     value: Any
@@ -165,6 +174,24 @@ class Health(TypedDict):
     status: str
 
 
+class InstallInput(TypedDict, closed=True):
+    name: NotRequired[str | None]
+    version: NotRequired[int | None]
+
+
+class Installation(TypedDict, closed=True):
+    copy: CopyRef
+    created: bool
+    needs: list[dict[str, str]]
+
+
+class Installed(TypedDict, closed=True):
+    changed: NotRequired[bool]
+    copies: int
+    newerAvailable: bool
+    version: int | None
+
+
 class LayoutCell(TypedDict, closed=True):
     box: list[float] | None
     col: int
@@ -238,6 +265,17 @@ class TemplateOffer(TypedDict, closed=True):
     fingerprint: str
 
 
+class TemplatePlugin(TypedDict, closed=True):
+    id: str
+    title: str
+    version: str
+
+
+class TemplateRequires(TypedDict, closed=True):
+    bind: list[dict[str, str]]
+    tools: list[str]
+
+
 class TemplateSuggestIn(TypedDict, closed=True):
     extractionIds: list[str]
 
@@ -245,6 +283,17 @@ class TemplateSuggestIn(TypedDict, closed=True):
 class TemplateSuggestion(TypedDict, closed=True):
     checks: list[dict[str, Any]]
     template: dict[str, Any]
+
+
+class TemplateView(TypedDict, closed=True):
+    id: str
+    installed: Installed
+    kind: Literal["document_type"]
+    plugin: TemplatePlugin
+    requires: TemplateRequires
+    source: str
+    title: str
+    version: int
 
 
 class TestEstimate(TypedDict, closed=True):
@@ -302,6 +351,11 @@ class EnvelopeDocumentType(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeInstallation(TypedDict, closed=True):
+    data: Installation
+    success: Literal[True]
+
+
 class EnvelopePurged(TypedDict, closed=True):
     data: Purged
     success: Literal[True]
@@ -329,6 +383,11 @@ class EnvelopeTestRun(TypedDict, closed=True):
 
 class EnvelopeListTemplateOffer(TypedDict, closed=True):
     data: list[TemplateOffer]
+    success: Literal[True]
+
+
+class EnvelopeListTemplateView(TypedDict, closed=True):
+    data: list[TemplateView]
     success: Literal[True]
 
 

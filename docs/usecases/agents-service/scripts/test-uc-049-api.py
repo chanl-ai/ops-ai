@@ -11,7 +11,6 @@ from typing import Any
 from fake_bank_https import HOST, fake_bank
 from usecase_harness import (
     AGENTS_PORT,
-    TEAM,
     TOOLS_PORT,
     agents,
     approve_tool_review,
@@ -22,6 +21,10 @@ from usecase_harness import (
     sse,
     tools,
 )
+
+# The fixture knowledge bases' team (seed_fixture_knowledge.py, the dev default): a chat sees only its own team's
+# bases, so the chat runs in Operations.
+TEAM = {"X-Team-Id": "team_ops"}
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 MAYA, PRIYA = {"X-Dev-User": "Maya Okafor"}, {"X-Dev-User": "Priya Shah"}
@@ -49,7 +52,9 @@ def published_module(gw: Any) -> str:
         },
     )
     op_id = next(o["id"] for o in data(added)["operations"] if o["name"] == WRITE)
-    patched = gw.patch(f"/v1/tool-modules/{mid}/operations/{op_id}", json={"approvers": 2})
+    # Approvals are off by default (2026-11-01): this use case proves the approval path, so the write's own
+    # switch goes on with its two-approver policy.
+    patched = gw.patch(f"/v1/tool-modules/{mid}/operations/{op_id}", json={"approvers": 2, "requiresApproval": True})
     check("the operation's policy is set to two approvers", patched.status_code == 200, patched.text[:200])
     data(gw.post(f"/v1/tool-modules/{mid}/reviews", json={"note": "uc-049"}))
     approve_tool_review(gw, mid, SECURITY)

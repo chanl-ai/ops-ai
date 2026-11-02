@@ -1,0 +1,30 @@
+id: look-up-a-customer
+title: Look up a customer
+track: agent
+status: built
+difficulty: guided
+outcome: Ask for a customer; the agent calls the read tool.
+capabilities:
+- id: agent.tool.read
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/missing.json
+- fixtures/write.json
+expected:
+- expected/tool.json
+- expected/missing.json
+- expected/refused.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+gaps:
+- ops chat send
+- agent.eval
+- agent.tool.write

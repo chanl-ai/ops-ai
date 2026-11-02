@@ -13,6 +13,7 @@
 !services
 !deploy
 !sdk/typescript
+!sdk/python
 sdk/typescript/dist
 **/node_modules
 **/.next

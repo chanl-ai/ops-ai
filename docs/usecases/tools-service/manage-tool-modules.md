@@ -15,8 +15,8 @@ Status: current. Id: `uc-010`. Service: `tools-service`. Layers: api, ui.
 |---|---|---|
 | 1 | `POST /v1/tool-modules/blank` | 201, a draft |
 | 2 | Add an HTTP operation whose Authorization header holds a literal token | 400 |
-| 3 | Add it again with `{{STATEMENTS_TOKEN}}` as the header value, before its host is on the egress allow-list | 422 |
-| 4 | List the host under `/v1/egress/hosts`, then add the operation again | 200, the module lists the operation |
+| 3 | Add it again with `{{STATEMENTS_TOKEN}}` in an `X-Partner-Token` header (a sign-in header is refused whatever it holds), its host not yet on the egress allow-list | 200: the dev user holds the Security role, so the host is listed in their name (S13); a builder without it waits for Security (`tests/test_held_hosts.py`) |
+| 4 | Read the module | it lists the operation |
 | 5 | `POST .../reviews` | the draft moves to `in_review` |
 | 6 | Change a rate limit on Core banking and publish | the next minor version is published |
 | 7 | Request a workflow approval, then try to decide it on the module | 201 naming its run (`tool_access.requested:<id>`), then 409 `decided_in_reviews`; the decision is uc-053's |

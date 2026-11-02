@@ -1,0 +1,35 @@
+id: route-a-support-message
+title: Route an inbound support message
+track: workflow
+status: built
+difficulty: intro
+outcome: Classify text as billing, technical, cancellation or other.
+capabilities:
+- id: ops.ai.classify
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+resources:
+- resources/workflow.yaml
+- resources/workflow.json
+fixtures:
+- fixtures/billing.json
+- fixtures/unsure.json
+expected:
+- expected/billing.json
+- expected/unsure.json
+- expected/broken.json
+evaluation: evaluation.yaml
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 20
+teaches:
+- AI classify vs a saved agent
+- category ports and the otherwise floor
+- model failure takes the error end

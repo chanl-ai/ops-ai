@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Approvals show fields inside records, row by row",
+  "description": "When a call changes a record that holds other records, an approver now sees each inner field as its own row, in chat and on the run page, instead of one flattened line.",
+  "tag": "fix",
+  "cards": [
+    "c-565"
+  ]
+}

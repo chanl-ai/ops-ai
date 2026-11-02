@@ -65,10 +65,15 @@ class ToolDirectory(Protocol):
 async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGrant]:
     """Grants for the tool names an agent holds that the registry still offers; `workflow:` names are offered by the
     workflow runner, and a name the registry no longer has (hidden, unpublished, drifted) is not handed to the model."""
-    wanted = [n for n in names if not n.startswith("workflow:")]
+    wanted = [n for n in names if not n.startswith(("workflow:", "agent:"))]
     if not wanted:
         return []
     by_name = {o.name: o for o in await directory.operations()}
+    # A name the kept list lacks may be a tool published since it was read (the agent was granted it and published
+    # moments ago, c-616 S7): ask tools-service once more before leaving it out of the turn.
+    if any(n not in by_name for n in wanted) and (forget := getattr(directory, "forget", None)) is not None:
+        forget()
+        by_name = {o.name: o for o in await directory.operations()}
     return [by_name[n].grant() for n in wanted if n in by_name]
 
 
@@ -111,10 +116,17 @@ class ToolsOperations:
         self._cache[key] = (self.clock(), refs)
         return refs
 
+    def forget(self) -> None:
+        """Drops the current tenant and team's kept list, so the next read asks again (a tool offered moments ago)."""
+        self._cache.pop((current_tenant(), current_team()), None)
+
 
 class CatalogTools:
     def __init__(self, catalog: Catalog) -> None:
         self.catalog = catalog
+
+    def forget(self) -> None:
+        """The catalogue is read from files at start, so there is nothing kept to drop."""
 
     async def operations(self) -> list[OperationRef]:
         return [

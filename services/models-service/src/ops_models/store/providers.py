@@ -39,9 +39,20 @@ class Providers:
             await c.execute(t.insert().values(**row))
         return True
 
-    async def rebind(self, provider_id: str, base_url: str, key_ref: str | None) -> None:
+    async def rebind(self, provider_id: str, fields: Mapping[str, Any]) -> None:
+        """Sets where the connection's calls go (base URL, credential name, api-version, region); a moved endpoint has
+        not answered yet, so the observed region is cleared."""
         async with self.db.begin() as c:
-            await c.execute(t.update().where(t.c.id == provider_id).values(base_url=base_url, key_ref=key_ref))
+            await c.execute(t.update().where(t.c.id == provider_id).values(**fields, observed_region=None))
+
+    async def observe(self, provider_id: str, region: str) -> None:
+        """Records the region the provider answered from, when it differs from the one recorded."""
+        async with self.db.begin() as c:
+            await c.execute(
+                t.update()
+                .where(t.c.id == provider_id, sa.or_(t.c.observed_region.is_(None), t.c.observed_region != region))
+                .values(observed_region=region)
+            )
 
     async def ensure(self, row: Mapping[str, Any]) -> None:
         """Adds the connection unless one with its id exists, which is left as it is."""

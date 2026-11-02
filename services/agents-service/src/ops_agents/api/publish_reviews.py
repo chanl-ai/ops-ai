@@ -11,7 +11,7 @@ from ops_agents.graphs.definition import WorkflowDefinition
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
-from . import deployment_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
+from . import deployment_reviews, egress_host_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
 from .agent_registry import go_live, registry, review_view
 from .auth import Principal, require_not_own, require_reviews_decide, review_teams
 from .deps import Runtime
@@ -25,7 +25,7 @@ from .widgets import widgets
 from .workflow_registry import publish as publish_workflow
 from .workflow_registry import registry as workflow_registry
 
-ID_PREFIXES = ("AGP-", "WFP-", "GRP-", "SKP-", "WDP-", "DPR-", "TMP-", "TAR-")
+ID_PREFIXES = ("AGP-", "WFP-", "GRP-", "SKP-", "WDP-", "DPR-", "TMP-", "TAR-", "EGH-")
 # Kinds whose request names who saved the change; that person never decides it.
 SAVED_KINDS = ("agent", "guardrail", "skill", "widget", deployment_reviews.KIND, tool_module_reviews.KIND)
 
@@ -49,6 +49,8 @@ async def view(
         return await tool_module_reviews.view(rt, req)
     if req["kind"] == tool_access_reviews.KIND:
         return await tool_access_reviews.view(rt, req)
+    if req["kind"] == egress_host_reviews.KIND:
+        return await egress_host_reviews.view(rt, req)
     if req["kind"] == "widget":
         v = review_view(req, name=req["body"]["widgetName"], slug=req["subject_id"], sla_hours=await sla_hours(rt))
         v.pop("publish", None)
@@ -137,6 +139,8 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
         return tool_module_reviews.team(rt, req)
     if kind == tool_access_reviews.KIND:
         return tool_access_reviews.team(req)
+    if kind == egress_host_reviews.KIND:
+        return egress_host_reviews.team(rt)
     if kind == engine_lifecycle.KIND:
         row = await engine_lifecycle.definitions(rt).current(subject) or {}
         return str(row.get("team_id") or "") or None
@@ -205,6 +209,8 @@ async def decide(
             # tools-service applies every decision, not only an approval: a no withdraws the version or returns it to
             # draft.
             await tool_module_reviews.apply(rt, req)
+        elif req["kind"] == egress_host_reviews.KIND:
+            await egress_host_reviews.apply(rt, req)
         elif decision == "approved":
             await _publish(rt, req, approver.email)
         return await view(rt, await reg.request(request_id))

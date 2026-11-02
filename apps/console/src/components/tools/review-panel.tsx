@@ -52,7 +52,7 @@ export function ReviewPanel({ major, versions, drift, onRequest, canRequest }: {
           }
         >
           {!current || !d ? (
-            <p className="text-sm text-muted-foreground">Not reviewed. No workflow can be approved for this module until Security approves it.</p>
+            <p className="text-sm text-muted-foreground">Not reviewed. No workflow can be approved for these tools until Security approves them.</p>
           ) : (
             <div className="flex flex-col gap-3">
               <p className={`inline-flex items-center gap-1.5 text-sm font-medium ${d.cls}`}>

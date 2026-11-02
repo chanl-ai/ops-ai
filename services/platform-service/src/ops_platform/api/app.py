@@ -433,6 +433,7 @@ def create_public_app(
                 "policies": await policy_store.values(tenant),
                 "securityTeamId": await team_store.security_team_of(tenant),
                 "workspace": await lifecycle.state(tenant),
+                "flags": settings.feature_flags.resolved(),
             }
         )
 

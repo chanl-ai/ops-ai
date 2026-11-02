@@ -19,7 +19,9 @@ from .manifest import (
     MAX_ITEMS,
     OPERATION_NAME,
     PER_PERSON_KINDS,
+    PLATFORM_AUTHORIZE_PARAMS,
     SDK_MAJOR,
+    SIGN_IN_HEADERS,
     SIGN_IN_KINDS,
     InputField,
     Manifest,
@@ -28,13 +30,18 @@ from .manifest import (
     Tool,
     read,
 )
-from .paging import QUERY_VAR
+from .paging import QUERY_VAR, steps
 from .plugin import MARK
 
 PLACEHOLDER = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 # An enum value is written into a query as it stands, so it may hold nothing that could end a string or add a clause.
 ENUM_VALUE = re.compile(r"^[A-Za-z0-9 _.-]*$")
 MAX_DEPTH = 3
+# tools-service resolves `{{NAME}}` in an operation's path, query and headers from the calling team's secrets
+# (executor.SECRET_REF), so a plugin template may never hold one: it would send the team's secret to the plugin's host.
+SECRET_REF = re.compile(r"\{\{[A-Z][A-Z0-9_]*\}\}")
+HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+OAUTH_KINDS = ("oauth2_client_credentials", "oauth2_auth_code")
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,120 @@ def _query(tool: Tool, request: Request, where: str) -> list[Problem]:
     return out
 
 
+def _host_part(template: str) -> str:
+    """The host a URL template reaches, as written: `api.atlassian.com`, or `{base_url}` for a setting holding it."""
+    rest = template.split("://", 1)[1] if "://" in template else template
+    return rest.split("/", 1)[0].lower()
+
+
+def _settings_text(manifest: Manifest, text: str, where: str, what: str) -> list[Problem]:
+    """A header or sign-in parameter value: fixed text and {setting}, never `{{` and never a secret setting."""
+    if "{{" in text:
+        return [Problem(where, f"{what} holds {{{{, which could name a secret; use fixed text or {{setting}}")]
+    out = _placeholders(manifest, text, where)
+    for name in PLACEHOLDER.findall(text):
+        setting = manifest.settings.get(name)
+        if setting is not None and setting.secret:
+            out.append(Problem(where, f"{what} names {name}, a secret setting; a secret goes only in the sign-in"))
+    return out
+
+
+def _headers(manifest: Manifest, headers: dict[str, str], where: str) -> list[Problem]:
+    refused = set(SIGN_IN_HEADERS)
+    key_name = manifest.connection.api_key.name.lower() if manifest.connection.api_key else None
+    out: list[Problem] = []
+    for name, value in headers.items():
+        at_ = f"{where}.{name}"
+        if not HEADER_NAME.match(name):
+            out.append(Problem(at_, "is not a header name"))
+        elif name.lower() in refused or name.lower() == key_name:
+            out.append(Problem(at_, "carries the sign-in; the connection sends it, never a plugin header"))
+        out += _settings_text(manifest, value, at_, "a header")
+    return out
+
+
+def _request_text(tool: Tool, request: Request, where: str) -> list[Problem]:
+    """A secret reference anywhere a request is built from, and the form body's own rules."""
+    texts = [request.path, request.body or "", *request.query.values(), *(request.form or {}).values()]
+    out = [
+        Problem(where, f"{m} is a secret reference; a plugin's requests carry no secret")
+        for t in texts
+        for m in SECRET_REF.findall(t)
+    ]
+    if request.form is not None:
+        if request.body is not None:
+            out.append(Problem(where, "a request has a JSON body or a form, not both"))
+        if request.method in ("GET", "DELETE"):
+            out.append(Problem(where, f"a {request.method} sends no form"))
+        for field, template in request.form.items():
+            for name in QUERY_VAR.findall(template):
+                if name not in tool.input:
+                    out.append(Problem(where, f"{{{{{name}}}}} in form field {field} names no input"))
+    paging = request.paging
+    for path in (paging.next, paging.items) if paging else ():
+        if path and "[" in path:
+            out.append(Problem(where, f"the paging path {path} may name fields only, not list positions"))
+    return out
+
+
+def _amount(tool: Tool, where: str) -> list[Problem]:
+    if tool.amount_max is None:
+        return []
+    amount = tool.input.get("amount")
+    if amount is None or amount.type not in ("number", "integer"):
+        return [Problem(where, "amount_max needs a number input named amount, which the limit reads")]
+    if tool.request is not None and tool.request.paging is not None:
+        return [Problem(where, "a paged tool cannot have amount_max: its inputs are optional on a next page")]
+    return []
+
+
+def _sign_in_steps(manifest: Manifest) -> list[Problem]:
+    c = manifest.connection
+    out: list[Problem] = []
+    for name, value in c.authorize_params.items():
+        where = f"connection.authorize_params.{name}"
+        if name.lower() in PLATFORM_AUTHORIZE_PARAMS:
+            out.append(Problem(where, "is set by the platform for every sign-in; a plugin cannot replace it"))
+        out += _settings_text(manifest, value, where, "a sign-in parameter")
+    if c.authorize_params and "oauth2_auth_code" not in c.kinds:
+        out.append(Problem("connection.authorize_params", "only a plugin that signs in with an account has these"))
+    if c.client_auth is not None and not set(c.kinds) & set(OAUTH_KINDS):
+        out.append(Problem("connection.client_auth", "only an OAuth plugin sends its client on a token call"))
+    lookup = c.after_sign_in
+    named = [k for k, s in manifest.settings.items() if s.after_sign_in]
+    if lookup is None:
+        out += [Problem(f"settings.{k}", "is filled after sign-in, but the plugin has no after_sign_in") for k in named]
+        return out
+    where = "connection.after_sign_in"
+    setting = manifest.settings.get(lookup.setting)
+    if setting is None or not setting.after_sign_in or setting.from_token or lookup.setting in c.from_token:
+        out.append(Problem(where, f"{lookup.setting} must be a setting marked after_sign_in, and not from_token"))
+    out += [
+        Problem(f"settings.{k}", "is marked after_sign_in, but the lookup fills another")
+        for k in named
+        if k != lookup.setting
+    ]
+    if steps(lookup.read) is None:
+        out.append(Problem(where, f"read {lookup.read} is not a path such as [0].id or .accounts[0].base_uri"))
+    if "{{" in lookup.url:
+        out.append(Problem(where, "the lookup address holds {{, which could name a secret"))
+    out += _placeholders(manifest, lookup.url, where)
+    if lookup.url.startswith("/"):
+        if not c.token_url:
+            out.append(Problem(where, "a lookup path is on the sign-in host, and this plugin has no token_url"))
+        host = _host_part(c.token_url or "")
+    elif lookup.url.startswith("https://") or lookup.url.startswith("{"):
+        host = _host_part(lookup.url)
+    else:
+        out.append(Problem(where, "the lookup address is https, or a path on the sign-in host"))
+        host = ""
+    if host and host not in {_host_part(e) for e in manifest.egress}:
+        out.append(Problem(where, f"the lookup reaches {host}, which is not one of the plugin's egress hosts"))
+    if not c.token_hosts:
+        out.append(Problem("connection.token_hosts", "a lookup after sign-in needs the host suffixes it may name"))
+    return out
+
+
 def _function(root: Path, path: str) -> tuple[Any, str | None]:
     module, _, name = path.partition(":")
     added = str(root.parent)
@@ -151,7 +272,7 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
         out.append(
             Problem(
                 "connection.sign_in",
-                f"{', '.join(personal)} needs a kind that holds each person's own token "
+                f"{', '.join(personal)} needs a kind that holds each person's own credential "
                 f"({', '.join(PER_PERSON_KINDS)}); {', '.join(c.kinds)} signs in as the team only",
             )
         )
@@ -166,6 +287,8 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
     for i, host in enumerate(manifest.egress):
         out += _placeholders(manifest, host, f"egress[{i}]")
     out += _placeholders(manifest, manifest.endpoint, "endpoint")
+    out += _headers(manifest, manifest.headers, "headers")
+    out += _sign_in_steps(manifest)
     seen: set[str] = set()
     for t in manifest.tools:
         where = f"tools.{t.name}"
@@ -180,7 +303,12 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
             out.append(Problem(where, "a get_item tool takes an id"))
         for n, f in t.input.items():
             out += _inputs(n, f, where)
+        out += _headers(manifest, t.headers, f"{where}.headers")
+        out += _amount(t, where)
+        if t.function is not None and t.headers:
+            out.append(Problem(f"{where}.headers", "a Python tool takes the plugin's headers only"))
         if t.request is not None:
+            out += _request_text(t, t.request, where)
             unknown = set(PLACEHOLDER.findall(t.request.path)) - set(t.input) - set(manifest.settings)
             out += [Problem(where, f"{{{n}}} in the path names no input or setting") for n in sorted(unknown)]
             out += _paging(t, t.request, where)

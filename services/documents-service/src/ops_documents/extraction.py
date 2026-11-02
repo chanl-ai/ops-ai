@@ -33,6 +33,7 @@ from ops_documents.files import Files, Who
 from ops_documents.layouts import Layouts
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
+from ops_documents.store.extractions import file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
 from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
@@ -743,16 +744,7 @@ class Extractor:
         if not newest or newest[0].id != row.id:
             return None
         name = await self.types.name(who, str(doc_type.get("id"))) if self.types is not None else None
-        payload: dict[str, Any] = {
-            "fileId": row.file_id,
-            "extractionId": row.id,
-            "documentType": doc_type,
-            "needsReview": answer["needsReview"],
-            "field": key,
-            "record": record,
-        }
-        if name:
-            payload["typeName"] = name
+        payload = file_read(row.file_id, row.id, doc_type, answer, name=name) | {"field": key, "record": record}
         return {
             "tenant_id": who.tenant_id,
             "team_id": who.team,

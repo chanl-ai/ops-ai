@@ -2,22 +2,21 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, personalSignIn } from '@/lib/api';
+import { api } from '@/lib/api';
 import type { ConnectionEnvironment, SignInAccount, SignInSetting } from '@/lib/types/connections';
 import { useTeamQuery } from './team-query';
 
 const KEY = ['connections'] as const;
 
-/** Whether the console offers each person's own sign-in (the NEXT_PUBLIC_OPS_PERSONAL_SIGNIN switch, c-558). */
-export const usePersonalSignIn = (): boolean => personalSignIn;
 const MINE = [...KEY, 'mine'] as const;
 
 // Sign-ins change in another window (the sign-in pop-up) and a screen may open from a saved copy, so a connection's
 // sign-in state is always asked for again when its screen opens.
 export const useConnection = (id: string) => useTeamQuery({ queryKey: [...KEY, id], queryFn: () => api.connections.get(id), enabled: Boolean(id), refetchOnMount: 'always' });
 export const useConnectionKinds = () => useTeamQuery({ queryKey: [...KEY, 'kinds'], queryFn: () => api.connections.kinds(), staleTime: Infinity });
-/** The person's own sign-ins (Your connections). */
-export const useMyConnections = () => useTeamQuery({ queryKey: MINE, queryFn: () => api.connections.mine(), refetchOnMount: 'always' });
+/** The person's own sign-ins (Your connections); `every` adds each connection they can connect themselves and have not. */
+export const useMyConnections = (every = false) =>
+  useTeamQuery({ queryKey: [...MINE, every], queryFn: () => api.connections.mine(every), refetchOnMount: 'always' });
 
 function useConnectionMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
@@ -33,5 +32,10 @@ export const useStartSignIn = (id: string) =>
   useMutation({ mutationFn: (i: { environment: ConnectionEnvironment; account?: SignInAccount }) => api.connections.startSignIn(id, i) });
 export const useOpenConnectLink = () => useMutation({ mutationFn: (link: string) => api.connections.openConnectLink(link) });
 export const useCompleteSignIn = (id: string) => useConnectionMutation((i: { code: string; state: string }) => api.connections.completeSignIn(id, i));
+/** The person's own key, password or token on a connection each person signs in to (c-595). */
+export const useGiveOwn = () =>
+  useConnectionMutation((i: { connectionId: string; environment: ConnectionEnvironment; credentials: Record<string, string> }) =>
+    api.connections.giveOwn(i.connectionId, { environment: i.environment, credentials: i.credentials }),
+  );
 export const useDisconnect = () =>
   useConnectionMutation((i: { connectionId: string; environment: ConnectionEnvironment }) => api.connections.disconnect(i.connectionId, i.environment));

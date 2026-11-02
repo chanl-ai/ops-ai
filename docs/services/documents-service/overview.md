@@ -56,12 +56,15 @@ Subsystems compose through workflows; no service calls another to make something
 
 | Workflow | Started by | Steps |
 |---|---|---|
-| `system_extract` | files-service's `file.read_requested`, when a person asks `POST /v1/files/{id}/read-requests {documentTypeId, version?, typeName?}`; the run is that person's | Read the file (Extract from file), a person checks fields under the floor, Save data on file (`PUT /v1/files/{id}/data`) |
+| `system_extract` | files-service's `file.read_requested`, when a person asks `POST /v1/files/{id}/read-requests {documentTypeId, version?, typeName?}`; the run is that person's. Start run on the definition takes a file upload and runs the same steps | Read the file (Extract from file), a person checks fields under the floor, Save data on file (`PUT /v1/files/{id}/data`) |
 | `file_deleted_purge` | files-service's `file.deleted`, written in the transaction that deletes the file | Purge (`POST /v1/documents/purge`) |
+| `extraction_read_save` | documents-service's `extraction.read`, when a read of a document type ends with fields | Save data on file with the read |
 | `extraction_corrected_save` | documents-service's `extraction.corrected`, written with a person's correction of the file's newest read | Save data on file with the corrected read; a corrected field no longer counts as waiting |
 
-A workflow records what a file was read as with its Save data on file step (`PUT /v1/files/{id}/data`), never the
-Extract from file step itself. The step takes the type's name from the read's `documentType`, which
+Every read of a document type is saved on its file: documents-service reports `extraction.read` when the read
+ends with fields, and `extraction_read_save` saves it with Save data on file, so a builder's workflow with no save step,
+an agent or an API call still shows in Files. files-service never raises the fields to check for the same extraction,
+so this save cannot undo a person's check. A workflow's own Save data on file step records the checked read. The step takes the type's name from the read's `documentType`, which
 documents-service names, so a workflow need not pass one. Each seeded workflow that reads a file of a document type
 (`mail_document`, `levy_intake`, `levy_read_one`, `system_extract`, `attachment_record`) saves the read on its ok and
 review paths; without one Files says "Not read" while the Fields tab shows the read. A read with fields of its own

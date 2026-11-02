@@ -26,9 +26,19 @@ from ..store.engine import DatabaseError, EngineTransactions
 from ..store.events import EventLog
 from ..store.reviews import ReviewStore
 from ..store.tenancy import current_team
-from .auth import Principal, require_not_own, require_reviews_decide, require_step_up, review_teams, workspace_step_up
+from .acting_for import person_of
+from .auth import (
+    Principal,
+    require_not_own,
+    require_reviews_decide,
+    require_step_up,
+    require_team_account_use,
+    review_teams,
+    workspace_step_up,
+)
 from .deps import Runtime
-from .engine_resume import enqueue_resume
+from .engine_resume import enqueue_resume, resumed
+from .engine_runs import first_run
 from .legacy_tasks import NOT_READ, legacy_task
 from .option_inputs import held_calls
 from .review_sla import sla_hours
@@ -45,6 +55,32 @@ BUILD = "_engine_review"
 
 # The default options' decisions, as the console sends them, and the ports they choose.
 DEFAULT_DECISIONS = {"approved": "approve", "rejected": "reject", "approve": "approve", "reject": "reject"}
+
+
+# The event a run waiting for a person's own account of an app waits on (ops_engine compiler.connect_wait; reported by
+# tools-service connections/account_events.py when they connect).
+CONNECTED = "app_account.connected"
+CONNECT_KIND = "connect_account"
+
+
+def connect_wait(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """The app a paused step waits for a person to connect (c-616 S12), from its park; None for any other pause."""
+    if payload.get("kind") != "external" or payload.get("event") != CONNECTED:
+        return None
+    return {
+        "app": str(payload.get("app") or ""),
+        "connectionId": payload.get("connectionId"),
+        "teamAccount": bool(payload.get("teamAccount")),
+    }
+
+
+async def _connect_view(rt: Runtime, run: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
+    """A connect wait as the task shows it: the app, and the person whose account it waits for (the run's starter)."""
+    wait = connect_wait(payload)
+    if wait is None:
+        return None
+    first = await first_run(_runs(rt), run)
+    return wait | {"person": person_of(first.get("created_by"))}
 
 
 def is_engine_id(review_id: str) -> bool:
@@ -425,6 +461,10 @@ async def view(
     draft = payload.get("draft")
     call = calls[0] if calls else {}
     deadline = review_deadline(payload, await sla_hours(rt), datetime.now(UTC))
+    connect = await _connect_view(rt, run, payload)
+    if connect is not None:
+        # A run waiting for a person to connect has no deadline: the time limit never fails a human wait.
+        deadline = deadline | {"minutes": None, "dueAt": None}
     typed = typed_fields(draft, calls)
     # Each call in words (c-289); typed_fields reads the input named amount as the review's amount, so that input is
     # shown as money in the account's currency.
@@ -433,6 +473,7 @@ async def view(
     declared = [cast(dict[str, Any], o) for o in cast(list[Any], payload.get("options") or []) if isinstance(o, dict)]
     labels = {str(o.get("name")): str(o.get("label") or str(o.get("name")).capitalize()) for o in declared}
     said = {id(c): d for c, d in zip(calls, described, strict=True)}
+    inputs_of = {str(o.get("name")): list(cast(list[Any], o.get("inputs") or [])) for o in declared}
 
     def option_view(name: str) -> dict[str, Any]:
         opt_call = next((o.get("call") for o in declared if str(o.get("name")) == name), None)
@@ -442,6 +483,8 @@ async def view(
             "label": labels.get(name, name.capitalize()),
             "consequence": (d["consequence"] or d["sentence"]) if d else None,
             "fields": d["fields"] if d else [],
+            # The inputs an approver may change (the hold's amount); without them the console draws no field for it.
+            "inputs": inputs_of.get(name, []),
         }
 
     out: dict[str, Any] = {
@@ -455,7 +498,8 @@ async def view(
         "runId": str(run["id"]),
         "workflowVersion": run.get("version"),
         "agentSlug": run["workflow_id"],
-        "kind": "approval",
+        "kind": CONNECT_KIND if connect is not None else "approval",
+        "connect": connect,
         "risk": _risk(policies),
         # No model scores a v2 review step: no confidence, not a confidence of zero.
         "confidence": None,
@@ -593,17 +637,19 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for (run, decided), payload in zip(steps, payloads, strict=True):
         policies = [await policy_of(rt, str(c["tool"])) for c in _calls(payload) if c.get("tool")]
+        # A wait for a person to connect their account has no deadline (c-616 S12).
+        timed = decided is None and connect_wait(payload) is None
         row: dict[str, Any] = {
             "id": step_id(run, payload),
             "title": str(payload.get("title") or f"Review {run['workflow_id']}"),
             "workflowId": run["workflow_id"],
             "agentSlug": run["workflow_id"],
-            "kind": "approval",
+            "kind": CONNECT_KIND if connect_wait(payload) is not None else "approval",
             "risk": _risk(policies),
             "status": "pending" if decided is None else _decided_status(decided),
-            "slaMinutes": review_deadline(payload, hours, now)["minutes"] if decided is None else None,
+            "slaMinutes": review_deadline(payload, hours, now)["minutes"] if timed else None,
             # The deadline a list grouped by case orders on (c-460); the place reads the same from its own rows.
-            "dueAt": review_deadline(payload, hours, now)["dueAt"] if decided is None else None,
+            "dueAt": review_deadline(payload, hours, now)["dueAt"] if timed else None,
             "createdAt": run["updated_at"],
             # "" says "looked up, on no case", so expand does not ask again per row.
             "caseId": on_case.get(str(run["id"])) or None,
@@ -787,6 +833,11 @@ async def decide(
             )
         raise Conflict("This run is not waiting for a decision.", code="run_not_waiting")
     paused = cast(dict[str, Any], waiting.get("payload") or {})
+    if connect_wait(paused) is not None:
+        raise Conflict(
+            "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
+            code="connect_wait",
+        )
     edited, inputs = correction(paused, inputs)
     options = _options(paused)
     call: dict[str, Any] | None = None
@@ -952,3 +1003,21 @@ def _check_requirement(name: str, paused: dict[str, Any], confirmed: Any) -> Non
             f"This action waits for {name}, which cannot be checked here.", code="unknown_requirement"
         )
     check(paused, confirmed)
+
+
+async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dict[str, Any]:
+    """Run as the team account (c-616 S12): the step waiting for a person's own account goes on with the app's team
+    account in its place, for someone the roles grid lets use it, on an app that has one. The run is queued; the view
+    of the task is returned as it now stands."""
+    run = await _visible(rt, run_of(review_id))
+    waiting: dict[str, Any] = dict(run.get("waiting") or {})
+    paused = cast(dict[str, Any], waiting.get("payload") or {})
+    wait = connect_wait(paused)
+    if not waiting or wait is None or review_id not in (str(run["id"]), step_id(run, paused)):
+        raise Conflict("This run is not waiting for an account.", code="run_not_waiting")
+    app = wait["app"] or "This app"
+    require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
+    if not wait["teamAccount"]:
+        raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
+    await resumed(rt.db, run, waiting, {"teamAccount": {"by": me.email}}, source="team_account")
+    return await view(rt, await _visible(rt, str(run["id"])))

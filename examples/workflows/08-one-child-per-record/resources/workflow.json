@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 2,
+  "id": "one_child_per_record",
+  "name": "One child workflow per record",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.request",
+      "typeVersion": 1,
+      "name": "Document",
+      "parameters": {
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "string",
+              "format": "file"
+            },
+            "failName": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "read",
+      "type": "ops.ai.extract",
+      "typeVersion": 1,
+      "name": "Extract records",
+      "parameters": {
+        "file": "$.input.file",
+        "many": true,
+        "documentType": {
+          "id": "levy_notice"
+        }
+      }
+    },
+    {
+      "id": "save",
+      "type": "ops.files.setData",
+      "typeVersion": 1,
+      "name": "Save records",
+      "parameters": {
+        "file": "$.input.file",
+        "read": "$.nodes.read.out"
+      }
+    },
+    {
+      "id": "each",
+      "type": "ops.action.workflow",
+      "typeVersion": 1,
+      "name": "Start one child",
+      "parameters": {
+        "workflow": "normalize_one_record",
+        "forEach": "$.nodes.read.out.records",
+        "wait": true,
+        "label": "{$.item.values.name}",
+        "input": {
+          "customerEmail": "ada@example.test",
+          "subject": "$.item.values.name",
+          "message": "$.item.values.address",
+          "failName": "$.input.failName"
+        }
+      }
+    },
+    {
+      "id": "done",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "All started",
+      "parameters": {
+        "outcome": "children_started",
+        "output": "$.nodes.each.out"
+      }
+    },
+    {
+      "id": "failed",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "fanout_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "read",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "read",
+        "port": "ok"
+      },
+      "to": {
+        "node": "save",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "read",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "read",
+        "port": "review"
+      },
+      "to": {
+        "node": "save",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "read",
+        "port": "unreadable"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "save",
+        "port": "ok"
+      },
+      "to": {
+        "node": "each",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "save",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "each",
+        "port": "done"
+      },
+      "to": {
+        "node": "done",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "each",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    }
+  ]
+}

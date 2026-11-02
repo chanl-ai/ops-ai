@@ -1,4 +1,4 @@
-// uc-142 Channels on real data, ui layer: docs/usecases/console/channels-real.md (c-242). Platform sign-in; James works
+// uc-142 Channels on real data, ui layer: docs/usecases/console/channels-real.md. Platform sign-in; James works
 // in Operations. Every number on the page is compared with what agents-service's GET /v1/channels returns.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

@@ -23,6 +23,7 @@ from ops_tools.store.secrets import SecretStore, tool_secrets
 
 from .conftest import Bank, service_headers
 from .fake_upstream import ENDPOINT, HOST
+from .test_calls import on_its_connection
 
 VALUE = "sk-live-7f3c9e1d2b"
 ROTATED = "sk-live-rotated-55a1"
@@ -54,10 +55,10 @@ async def _keyed_module(engine: AsyncEngine, tenant: str) -> None:
 
     m.update(
         status="published",
-        endpoint=ENDPOINT,
         egress_hosts=[HOST],
         operations=[op(1, f"echo_{tenant}", "/echo-headers"), op(2, f"broken_{tenant}", "/broken")],
     )
+    m = await on_its_connection(engine, m, ENDPOINT)
     await ModuleStore(engine).put(m, expected_revision=None)
 
 
@@ -169,7 +170,10 @@ async def test_every_create_rotate_delete_and_use_is_audited(keyed: Bank, engine
 def test_the_dev_key_is_refused_outside_dev() -> None:
     # tools-service seals secrets with it, so its start refuses the public default; a service that seals nothing
     # starts without it.
-    outside_dev = Settings(environment="production", auth_mode="platform", review_key=SecretStr("r" * 40))
+    # The row-sealed store, whatever store this run uses: the memory vault is itself refused outside dev.
+    outside_dev = Settings(
+        environment="production", auth_mode="platform", review_key=SecretStr("r" * 40), credential_store="sealed"
+    )
     with pytest.raises(ValueError, match="secrets_key must be set outside dev"):
         require_keys(outside_dev, "review_key", "secrets_key")
     with pytest.raises(ValueError, match="64 hex"):

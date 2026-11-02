@@ -40,7 +40,7 @@ async def test_a_team_sees_only_its_modules_and_is_told_who_owns_the_rest(api: A
     assert r.status_code == 404, "another team's module answers 404, naming no owner (c-423)"
 
 
-async def test_a_literal_credential_in_a_header_is_refused(api: Api) -> None:
+async def test_a_sign_in_header_is_refused_whatever_it_holds(api: Api) -> None:
     op = {
         "name": "get_statement",
         "description": "Monthly statement",
@@ -49,9 +49,11 @@ async def test_a_literal_credential_in_a_header_is_refused(api: Api) -> None:
         "url": "https://statements.example.com/v1/accounts/{accountId}/statement",
         "headers": [{"key": "Authorization", "value": "Bearer sk_live_abc123"}],
     }
-    r = await api.call("POST", "/mod_document_service/operations", json=op)
-    assert r.status_code == 400 and "literal value" in r.json()["error"]["message"]
-    op["headers"] = [{"key": "Authorization", "value": "{{STATEMENTS_TOKEN}}"}]
+    for value in ("Bearer sk_live_abc123", "{{STATEMENTS_TOKEN}}"):
+        op["headers"] = [{"key": "Authorization", "value": value}]
+        r = await api.call("POST", "/mod_document_service/operations", json=op)
+        assert r.status_code == 400 and "connection" in r.json()["error"]["message"], (value, r.text)
+    op["headers"] = []
     await api.client.post("/v1/egress/hosts", json={"value": "statements.example.com"})
     detail = await _ok(await api.call("POST", "/mod_document_service/operations", json=op))
     added = next(o for o in detail["operations"] if o["name"] == "get_statement")

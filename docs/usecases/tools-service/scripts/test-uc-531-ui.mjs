@@ -1,5 +1,5 @@
 // uc-531 A builder's Python function runs as a workflow step, ui layer: docs/usecases/tools-service/a-builder-adds-a-python-function-tool.md
-// (c-531). The platform stack with tools-service, the code runner and a worker. James makes a code module whose
+//. The platform stack with tools-service, the code runner and a worker. James makes a code module whose
 // function says whether a spend passes a daily limit, Security (Nadia) approves it, and a workflow's tool step calls it.
 // James starts the workflow from its form in the console; the run page shows the step ran and what it returned.
 // Screenshots go to evidenceDir('531', 'uc').

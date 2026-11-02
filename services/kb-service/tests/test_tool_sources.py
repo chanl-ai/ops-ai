@@ -286,11 +286,12 @@ def test_a_daily_source_is_due_once_its_time_has_passed() -> None:
     assert not due({**s, "status": "paused", "last_sync_at": None}, now)
 
 
-def test_with_plugins_off_kb_reaches_no_tool() -> None:
-    # OPS_PLUGINS off until the plugins release: no gateway client, and no tools scope a kb token could claim.
-    off = Settings(plugins=False, tools_url="http://tools.test")
+def test_on_an_install_without_plugins_kb_reaches_no_tool(tmp_path: Path) -> None:
+    # No plugin in the install's plugins folder: no gateway client, and no tools scope a kb token could claim.
+    off = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
     assert _tools_service(off) is None
     assert not {"tools:view", "tools:run"} & set(off.service_scopes["kb"])
-    on = Settings(plugins=True, tools_url="http://tools.test")
+    (tmp_path / "ops_plugin_desk").mkdir()
+    on = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
     assert _tools_service(on) is not None
     assert {"tools:view", "tools:run"} <= set(on.service_scopes["kb"])

@@ -1,0 +1,13 @@
+name: example-verification-checks
+displayName: Example verification checks
+system: Verification
+operations:
+- name: start_check
+  description: Start a verification check and return its correlation id
+  records:
+    Ada Lovelace:
+      id: chk-ada
+      subject: Ada Lovelace
+    Marcus Bell:
+      id: chk-review
+      subject: Marcus Bell

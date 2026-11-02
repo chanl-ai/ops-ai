@@ -1,0 +1,41 @@
+schemaVersion: 2
+id: transform_a_record
+name: Transform a record
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Record
+  parameters:
+    inputSchema:
+      type: object
+      properties:
+        a: {type: number}
+- id: map
+  type: ops.data.transform
+  typeVersion: 1
+  name: Map a to b
+  parameters:
+    expression: $.input.a
+    as: b
+- id: done
+  type: ops.flow.end
+  typeVersion: 1
+  name: Mapped
+  parameters:
+    outcome: mapped
+    output: $.nodes.map.out
+- id: failed
+  type: ops.flow.end
+  typeVersion: 1
+  name: Missing
+  parameters:
+    outcome: missing
+    result: failed
+connections:
+- from: {node: start, port: payload}
+  to: {node: map, port: in}
+- from: {node: map, port: out}
+  to: {node: done, port: in}
+- from: {node: map, port: error}
+  to: {node: failed, port: in}

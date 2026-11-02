@@ -38,7 +38,7 @@ export function CallsPanel({ series, held, failed, rangeLabel }: { series: Conne
           {plural(held, 'call')} held for approval
         </Link>
         <span>·</span>
-        <Link href="/logs/tool-calls" className="underline underline-offset-2">
+        <Link href="/tools/calls" className="underline underline-offset-2">
           {failed} failed
         </Link>
       </CardFooter>

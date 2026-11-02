@@ -14,6 +14,7 @@ from ops_plugin_sdk.loader import Loaded
 from ops_tools.connections.service import ConnectionService
 from ops_tools.plugins.host import PluginHost, module_id_of
 from ops_tools.plugins.switches import InstallSwitches
+from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -70,11 +71,15 @@ async def test_a_sandbox_sign_in_leaves_productions_instance_and_hosts_apart(
         f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "prod-app"}, headers=team_admin(tenant)
     )
     conn_id = str(on.json()["data"]["connectionId"])
+    # A sandbox is signed in to once its environment is set on the connection, which keeps the instance it names.
+    sandbox = {"enabled": True, "environment": "test", "clientId": "uat-app"}
+    assert (await client.put(f"/v1/plugins/{ID}/team", json=sandbox, headers=team_admin(tenant))).status_code == 200
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
         InstallSwitches(Policy({ID: {"enabled": True, "client": {"id": "platform-client-id"}}})),
         [Loaded("desk", desk, None)],
+        ConnectionStore(engine),
     )
     await host.ensure(tenant, datetime.now(UTC))
     await host.on_token(tenant, conn_id, {"instance_url": "https://acme.my.desk.test"}, "production")
@@ -98,3 +103,38 @@ async def test_a_plugin_answers_with_its_card_details(rig: Rig, tenant: str) -> 
         "description": "Cases and their notes in Desk.",
         "docsUrl": "https://desk.test/docs/oauth-app",
     }, desk_view
+
+
+async def test_a_new_connection_never_calls_the_instance_a_removed_one_signed_in_to(
+    engine: AsyncEngine,
+    tenant: str,
+    rig: Rig,  # noqa: F811
+) -> None:
+    """An environment's own settings are kept once, on its connection (c-580). A copy on the team's binding outlived
+    the connection it came from: after Cancel removed one, the next connection called the old instance before anyone
+    signed in to it."""
+    client, _, _ = rig
+    admin = team_admin(tenant)
+    host = PluginHost(
+        ModuleStore(engine),
+        PluginBindings(engine),
+        InstallSwitches(Policy({ID: {"enabled": True}})),
+        [Loaded("desk", desk, None)],
+        ConnectionStore(engine),
+    )
+    await host.ensure(tenant, datetime.now(UTC))
+    first = await client.put(f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    old = str(first.json()["data"]["connectionId"])
+    await host.on_token(tenant, old, {"instance_url": "https://acme.my.desk.test"}, "production")
+    assert (await client.delete(f"/v1/connections/{old}", headers=admin)).status_code in (200, 204)
+    again = await client.put(f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    assert again.status_code == 200 and again.json()["data"]["connectionId"] != old, again.text
+    module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
+    assert module is not None
+    seen = await host.for_call(tenant, TEAM, module, "production")
+    assert "acme.my.desk.test" not in str(seen.get("endpoint")), "the new connection calls the removed one's instance"
+    assert seen.get("plugin_off"), seen.get("plugin_off")
+    # Signed in again, the new connection's own instance is the one a call uses.
+    await host.on_token(tenant, str(again.json()["data"]["connectionId"]), {"instance_url": "https://new.my.desk.test"})
+    seen = await host.for_call(tenant, TEAM, module, "production")
+    assert str(seen["endpoint"]).startswith("https://new.my.desk.test"), seen["endpoint"]

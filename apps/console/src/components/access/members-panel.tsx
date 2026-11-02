@@ -28,6 +28,7 @@ import { useSticky } from '@/hooks/use-sticky';
 import { useTeam } from '@/hooks/use-team';
 import { initials, relativeTime } from '@/lib/format';
 import type { Member, MemberFilters } from '@/lib/types/settings';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 /** A member's team role, and any role they hold in every team (access beyond the team role, and where it comes from). */
 function MemberRoles({ member }: { member: Member }) {
@@ -167,15 +168,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
                 ]
               : undefined
           }
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={<ListEmpty icon={Users} noun="members" filtered={list.isFiltered} createLabel={canManage ? 'Invite' : undefined} onCreate={() => onInviteOpenChange(true)} description="Invite the people who build, review and watch this team’s work." />}
         />
       )}

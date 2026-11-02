@@ -90,7 +90,7 @@ export function OperationPicker({
                         {o.description}
                       </span>
                     </label>
-                    {inModule && <span className="text-xs text-muted-foreground">In this module</span>}
+                    {inModule && <span className="text-xs text-muted-foreground">Already here</span>}
                     <Select value={selected.get(o.name) ?? o.access} onValueChange={(v) => setAccess(o.name, v as ToolAccess)} disabled={!on || inModule}>
                       <SelectTrigger size="sm" className="w-36" aria-label={`Access for ${o.name}`}>
                         <SelectValue />

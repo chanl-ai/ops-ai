@@ -1,5 +1,5 @@
-"""Where the client connects and as whom: arguments first, then OPS_* environment variables, then the profile the ops
-CLI writes (`ops login`). The profile file is `~/.config/ops-ai/config.json`, or $OPS_CONFIG."""
+"""Where the client connects and as whom: arguments first, then OPS_* environment variables, then a saved profile. The
+profile file is `~/.config/ops-ai/config.json`, or $OPS_CONFIG; nothing writes it for you yet."""
 
 from __future__ import annotations
 
@@ -30,7 +30,8 @@ def _profile(name: str | None) -> dict[str, Any]:
 class Config:
     base_url: str
     api_key: str | None = None
-    # A person's session token from `OpsAI.sign_in`, sent as a Bearer token; an API key is the usual credential.
+    # A person's session token (`OpsAI.sign_in`, OPS_TOKEN, or the profile's accessToken), sent as a Bearer token. When
+    # one is given it is who the call acts as, ahead of an API key: some changes (editing a workflow) are a person's.
     access_token: str | None = None
     team: str | None = None
     # A service reached at its own address instead of through the origin, e.g. {"agents": "http://localhost:8700"}.
@@ -54,12 +55,14 @@ class Config:
         saved = _profile(profile or os.environ.get("OPS_PROFILE"))
         url = base_url or os.environ.get("OPS_BASE_URL") or saved.get("baseUrl")
         if not url:
-            raise ValueError("No Ops AI address: pass base_url, set OPS_BASE_URL, or sign in with `ops login`")
+            raise ValueError("No Ops AI address: pass base_url, set OPS_BASE_URL, or save one in the profile file")
+        token = access_token if access_token is not None else (os.environ.get("OPS_TOKEN") or saved.get("accessToken"))
+        chosen_team = team if team is not None else (os.environ.get("OPS_TEAM") or saved.get("team"))
         return cls(
             base_url=url,
             api_key=api_key or os.environ.get("OPS_API_KEY") or saved.get("apiKey"),
-            access_token=access_token,
-            team=team or os.environ.get("OPS_TEAM") or saved.get("team"),
+            access_token=token or None,
+            team=chosen_team or None,
             services={**(saved.get("services") or {}), **(services or {})},
             timeout=timeout if timeout is not None else 30.0,
             max_retries=max_retries if max_retries is not None else 2,

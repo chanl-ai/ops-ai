@@ -65,7 +65,6 @@ export function NodeSettingsForm({
   idPrefix,
   onChange,
   errors,
-  hiddenChoices,
   testIds,
 }: {
   form: NodeForm;
@@ -76,8 +75,6 @@ export function NodeSettingsForm({
   onChange: (next: Params) => void;
   /** The server's check messages by parameter name, each shown under its field. */
   errors?: Record<string, string>;
-  /** Choices a select leaves out, by parameter name: those behind a console switch that is off. */
-  hiddenChoices?: Record<string, string[]>;
   /** A control's test id, by parameter name. */
   testIds?: Record<string, string>;
 }) {
@@ -87,9 +84,7 @@ export function NodeSettingsForm({
     <div className="flex flex-col gap-4" data-testid="node-settings-form">
       {form.order.map((name) => {
         const spec = form.fields[name];
-        const declared = schema.properties?.[name] ?? {};
-        const hide = hiddenChoices?.[name];
-        const field = hide?.length && declared.oneOf ? { ...declared, oneOf: declared.oneOf.filter((o) => o.const === undefined || !hide.includes(String(o.const))) } : declared;
+        const field = schema.properties?.[name] ?? {};
         const id = `${idPrefix}-${name}`;
         return (
           <FormField key={name} id={id} label={spec.label} optional={!required.has(name)} hint={spec.help} error={errors?.[name]}>

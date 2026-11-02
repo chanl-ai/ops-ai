@@ -76,6 +76,8 @@ KB_PORT = int(os.environ.get("OPS_USECASE_KB_PORT", "8793"))
 RUNNER_PORT = int(os.environ.get("OPS_USECASE_RUNNER_PORT", "8795"))
 # The runner does not assign this one yet; unset, a free port, so two runs never share it.
 FILES_PORT = int(os.environ.get("OPS_USECASE_FILES_PORT", "0"))
+# The runner hands each run its own documents port; a free port picked here can be one the runner gave another service.
+DOCUMENTS_PORT = int(os.environ.get("OPS_USECASE_DOCUMENTS_PORT", "0"))
 # The committed fake-OpenAI rules (the levy's and the banker demo's), for fake_openai(DEMO_RULES).
 DEMO_RULES = ROOT / "services" / "models-service" / "seed" / "demo-fake-openai"
 CONSOLE_PORT = int(os.environ.get("OPS_USECASE_CONSOLE_PORT", "3018"))
@@ -185,6 +187,12 @@ def _env() -> dict[str, str]:
         "OPS_PLATFORM_URL",
         "OPS_EGRESS_CA_FILE",
         "OPS_EGRESS_RESOLVE",
+        # The shell's model endpoint: models-service would move openai-local off the run's fake to it.
+        "OPENAI_API_TYPE",
+        "OPENAI_API_BASE",
+        "OPENAI_BASE_URL",
+        "OPENAI_API_VERSION",
+        "OPENAI_API_REGION",
     )
     env = {k: v for k, v in os.environ.items() if k not in dropped}
     env.pop("VIRTUAL_ENV", None)
@@ -244,7 +252,7 @@ def agents(
         env["OPS_MODEL_ALIAS"] = model_alias
     if kb_url:
         env["OPS_KB_URL"] = kb_url
-    # Tool module reviews decided in Reviews are applied in tools-service (c-163), with or without a gateway.
+    # Tool module reviews decided in Reviews are applied in tools-service, with or without a gateway.
     env.setdefault("OPS_TOOLS_URL", f"http://127.0.0.1:{TOOLS_PORT}")
     with ExitStack() as stack:
         if kb_url is None:
@@ -320,13 +328,16 @@ def kb(
     platform_url: str | None = None,
     document_types: bool = False,
     agents_url: str | None = None,
+    documents_env: dict[str, str] | None = None,
 ) -> Generator[Kb]:
     """kb-service on the use-case database, its own migration chain applied, reading its files from a files-service
     (dev auth, scanning off) keeping objects under `files_dir`. Yields a client; its base URL is what agents() takes as
     `kb_url`, and `files_url` is where a seed puts the files it adds to a source. With `models_url` or `document_types`
-    a documents-service starts beside them (c-256), its extractions calling the model at `models_url` and reading the
+    a documents-service starts beside them, its extractions calling the model at `models_url` and reading the
     workspace floor at `platform_url`; `document_types` seeds the demo's document types the levy workflows name. With
-    `agents_url` files-service delivers its service events (file.deleted) there."""
+    `agents_url` files-service delivers its service events (file.deleted) there. `documents_env` starts
+    documents-service too, with those settings (e.g. platform sign-in), for a use case that calls it beside an agents
+    stack: agents() starts kb() and its files-service, so a files-service of the use case's own takes the same port."""
     # The agents chain creates the run's database; files-service and kb-service migrate into it after.
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
@@ -334,9 +345,15 @@ def kb(
         store = stack.enter_context(files(files_dir, scanning="off", platform_auth=False, agents_url=agents_url))
         files_url = str(store.base_url).rstrip("/")
         documents_url = ""
-        if models_url or document_types:
+        if models_url or document_types or documents_env:
             reader = stack.enter_context(
-                documents(files_url, models_url=models_url, platform_url=platform_url, agents_url=agents_url)
+                documents(
+                    files_url,
+                    models_url=models_url,
+                    platform_url=platform_url,
+                    agents_url=agents_url,
+                    env=documents_env,
+                )
             )
             documents_url = str(reader.base_url).rstrip("/")
         if document_types:
@@ -355,7 +372,7 @@ def kb(
         env["OPS_DATABASE_URL"] = pg_url()
         env["OPS_KB_PORT"] = str(KB_PORT)
         env["OPS_FILES_URL"] = files_url
-        # A knowledge base's "used by" comes from agents-service (c-072 T007), on this run's port rather than the
+        # A knowledge base's "used by" comes from agents-service (an earlier change T007), on this run's port rather than the
         # shared stack's.
         env["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
         kb_dir = ROOT / "services" / "kb-service"
@@ -399,12 +416,18 @@ def files(
 
 @contextmanager
 def documents(
-    files_url: str, *, models_url: str | None = None, platform_url: str | None = None, agents_url: str | None = None
+    files_url: str,
+    *,
+    models_url: str | None = None,
+    platform_url: str | None = None,
+    agents_url: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> Generator[httpx.Client]:
-    """documents-service on the use-case database (c-256), its own chain applied after files', reading bytes from
+    """documents-service on the use-case database, its own chain applied after files', reading bytes from
     `files_url` (dev auth). With `models_url` its extractions call that models-service with its own dev key, and with
     `platform_url` they read the workspace floor there."""
-    port = free_port()
+    port = DOCUMENTS_PORT or free_port()
+    extra = env or {}
     env = _env()
     env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_DOCUMENTS_PORT"] = str(port)
@@ -417,6 +440,8 @@ def documents(
     if agents_url:
         # Its service events (extraction.corrected) are delivered there.
         env["OPS_AGENTS_URL"] = agents_url
+    # `env` adds OPS_* values a use case needs, e.g. platform sign-in (OPS_AUTH_MODE) beside agents and tools.
+    env.update(extra)
     svc = ROOT / "services" / "documents-service"
     subprocess.run(["uv", "run", "alembic", "upgrade", "head"], cwd=svc, env=env, check=True, capture_output=True)
     argv = ["uv", "run", "python", "-m", "ops_documents"]
@@ -466,7 +491,7 @@ def fake_openai(folder: Path) -> Generator[str]:
 
 @contextmanager
 def runner() -> Generator[str]:
-    """runner-service (c-531): code tools' Python on WASM, calling back to the use case's tools-service. Pass its URL
+    """runner-service: code tools' Python on WASM, calling back to the use case's tools-service. Pass its URL
     to tools() as OPS_RUNNER_URL. Fetches the pinned Python build into .data/runner first. Yields its base URL."""
     env = _env()
     env["OPS_RUNNER_PORT"] = str(RUNNER_PORT)
@@ -486,9 +511,9 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     env = _env()
     env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
-    # A tool module review opens in agents-service's Reviews (c-163); a stack that publishes modules runs agents too.
+    # A tool module review opens in agents-service's Reviews; a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
-    # send_reply sends through the provider settings pick and fails with none (c-187): the dev fake writes each mail
+    # send_reply sends through the provider settings pick and fails with none: the dev fake writes each mail
     # to a folder of this run's.
     env.setdefault("OPS_MAIL_PROVIDER", "fake")
     env.setdefault("OPS_MAIL_FROM", "ops@harborpine.example")
@@ -518,10 +543,13 @@ def platform(
     settings["OPS_DATABASE_URL"] = pg_url()
     settings["OPS_PLATFORM_PORT"] = str(PLATFORM_PORT)
     settings["OPS_PLATFORM_INTERNAL_PORT"] = str(PLATFORM_INTERNAL_PORT)
-    # The seed's own roles: use cases check what a builder or viewer may not do, so nobody is made Admin everywhere.
-    settings["OPS_SEED_EVERYONE_ADMIN"] = "false"
+    # The seed's own roles, as the install ships them (OPS_SEED_EVERYONE_ADMIN off by default): use cases check
+    # what a builder or viewer may not do, so nobody is made Admin everywhere.
     if token_ttl_s is not None:
         settings["OPS_PLATFORM_TOKEN_TTL_SECONDS"] = str(token_ttl_s)
+    # Its events (a removed member's accounts, an earlier change S14) go to the run's own tools-service, never the shared stack's
+    # that make exports; the relay keeps an event until that service answers.
+    settings["OPS_TOOLS_URL"] = f"http://127.0.0.1:{TOOLS_PORT}"
     settings |= env or {}
     platform_dir = ROOT / "services" / "platform-service"
     subprocess.run(
@@ -550,14 +578,14 @@ def fake_idp() -> Generator[str]:
 
 # The OIDC client secret name the sign-in use cases configure, and its value on their platform-service.
 SIGNIN_SECRET = "uc-oidc"
-# The SAML service provider key pair the sign-in stack's platform-service holds (c-197); a script gives the certificate
+# The SAML service provider key pair the sign-in stack's platform-service holds; a script gives the certificate
 # to the fake identity provider so it can check signed requests and encrypt assertions.
 SAML_SP_KEY, SAML_SP_CERT = self_signed("uc-sp")
 
 
 @contextmanager
 def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
-    """platform-service ready for sign-in providers (c-188): its public and console URLs, one OIDC client secret named
+    """platform-service ready for sign-in providers: its public and console URLs, one OIDC client secret named
     `uc-oidc`, reset mail written to a folder; and the fake identity provider beside it. Yields the platform client,
     a client for the identity provider and the mail folder."""
     mail = Path(tempfile.mkdtemp(prefix="uc-mail-"))
@@ -565,7 +593,7 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
         "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
         "OPS_CONSOLE_URL": f"http://localhost:{CONSOLE_PORT}",
         "OPS_SIGNIN_SECRETS": json.dumps({SIGNIN_SECRET: "uc-oidc-secret"}),
-        # Domains are proven against the fake identity provider's DNS (c-195).
+        # Domains are proven against the fake identity provider's DNS.
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
         "OPS_SAML_SP_CERTIFICATE": SAML_SP_CERT,
@@ -580,7 +608,7 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
 def set_provider(
     api: httpx.Client, idp: httpx.Client, provider_id: str, body: dict[str, Any], headers: dict[str, str]
 ) -> httpx.Response:
-    """Saves a sign-in provider and proves each of its new domains as a bank would (c-195): publishes the claim's TXT
+    """Saves a sign-in provider and proves each of its new domains as a bank would: publishes the claim's TXT
     record at the fake DNS and asks platform-service to verify it, checking each step. Returns the save's response."""
     r = api.put(f"/v1/settings/sign-in/providers/{provider_id}", json=body, headers=headers)
     for c in data(r).get("verification", []) if r.status_code == 200 else []:
@@ -603,12 +631,23 @@ def bearer(session: dict[str, Any], team: str | None = None) -> dict[str, str]:
     return headers | ({"X-Team-Id": team} if team else {})
 
 
-# The password every person a use case invites sets when accepting (c-218).
+def as_role(api: httpx.Client, role: str, team: str | None = None) -> dict[str, str]:
+    """A standard dev user's headers: the role's seeded person (services/platform-service/seed/dev-roles.json:
+    admin, builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the
+    sign-in names unless `team` is given. The same map and rule `make api AS=<role>` uses (scripts/api_as.py)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from api_as import roles, team_of  # noqa: PLC0415 - scripts/ is on the path only from here
+
+    session = signed_in(api, roles()[role])
+    return bearer(session, team or team_of(session.get("principal", {})))
+
+
+# The password every person a use case invites sets when accepting.
 INVITED_PASSWORD = "an invited person's password"
 
 
 def invited(api: httpx.Client, admin: dict[str, str], email: str, role: str, *, name: str = "") -> dict[str, Any]:
-    """A person made the way a bank makes one (c-218): `admin` (headers acting in the team) invites `email` with
+    """A person made the way a bank makes one: `admin` (headers acting in the team) invites `email` with
     `role`, the person accepts the link with a name and a password, and the session that accept opens is returned.
     Each step is checked."""
     r = api.post("/v1/settings/members/invite", json={"emails": [email], "role": role}, headers=admin)
@@ -695,7 +734,7 @@ def sso_round_trip(
 
 def approve_tool_review(gw: httpx.Client, module_id: str, headers: dict[str, str]) -> dict[str, Any]:
     """Approves the module's open review in agents-service's Reviews as `headers` (a Security approver), as Human Tasks
-    would (c-163); Reviews applies it in tools-service. The module is read as `gw` (its own team): the approver acts in
+    would; Reviews applies it in tools-service. The module is read as `gw` (its own team): the approver acts in
     Security, which does not read another team's modules. Returns the module's detail afterwards."""
     module = data(gw.get(f"/v1/tool-modules/{module_id}"))
     waiting = next(v for v in module["versions"] if v["status"] == "in_review")
@@ -736,7 +775,7 @@ def nodes(events: list[dict[str, Any]]) -> list[str]:
     return [e["node"] for e in events if e.get("event") == "node_start"]
 
 
-# ── The banker demo's stack (c-058), as withUiStack's `demo` option builds it, under dev auth ──
+# ── The banker demo's stack, as withUiStack's `demo` option builds it, under dev auth ──
 
 DEMO_JAMES, DEMO_NADIA, DEMO_MAYA = (
     "j.richardson@harborpine.example",

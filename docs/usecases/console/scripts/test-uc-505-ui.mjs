@@ -1,4 +1,4 @@
-// uc-505 Pages wait for the session and team, ui layer: docs/usecases/console/pages-wait-for-the-team.md (c-505). A private
+// uc-505 Pages wait for the session and team, ui layer: docs/usecases/console/pages-wait-for-the-team.md. A private
 // stack with platform sign-in. 1 the tab remembers Security from someone before,
 // James (Operations only) signs in straight to an Operations case: no request fails and the case shows; 2 a case that
 // does not exist says "Not found, or in another team" with a way to switch team; 3 a fresh sign-in loads three list

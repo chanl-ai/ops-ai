@@ -20,9 +20,13 @@ def person(public: httpx.Client, email: str, team: str) -> dict[str, str]:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="uc094-") as tmp, platform() as (public, _), files(Path(tmp), scanning="off") as f:
-        priya = person(public, "p.shah@northfieldbank.com", "team_ops")
-        sam = person(public, "s.adeyemi@northfieldbank.com", "team_security")
+    with (
+        tempfile.TemporaryDirectory(prefix="uc094-") as tmp,
+        platform() as (public, _),
+        files(Path(tmp), scanning="off") as f,
+    ):
+        priya = person(public, "p.shah@harborpine.example", "team_ops")
+        sam = person(public, "s.adeyemi@harborpine.example", "team_security")
         body = {"name": "branch audit.pdf", "size": len(PDF), "mime": "application/pdf", "purpose": "case_attachment"}
         ticket = data(f.post("/v1/files/uploads", json=body, headers=priya))
         file_id = ticket["fileId"]
@@ -34,7 +38,8 @@ def main() -> None:
         owned = data(f.post(f"/v1/files/uploads/{file_id}/complete", headers=priya))
         check("the owning team's admin stores the file", owned["file"]["scan"]["status"] == "clean", owned)
 
-        answers = early + [
+        answers = [
+            *early,
             f.get(f"/v1/files/{file_id}", headers=sam),
             f.post(f"/v1/files/{file_id}/download-url", headers=sam),
             f.get(f"/v1/files/{file_id}/content", headers=sam),
@@ -42,9 +47,17 @@ def main() -> None:
             f.post("/v1/files/legal-hold", json={"ids": [file_id], "hold": True, "reason": "probe"}, headers=sam),
         ]
         codes = [r.status_code for r in answers]
-        check("another team's admin gets 404 on content, complete, get, download link, download and delete", codes[:6] == [404] * 6, codes)
+        check(
+            "another team's admin gets 404 on content, complete, get, download link, download and delete",
+            codes[:6] == [404] * 6,
+            codes,
+        )
         hold = data(answers[6])
-        check("a hold on another team's file is skipped as not found", hold["skipped"] == [{"id": file_id, "reason": "not found"}], hold)
+        check(
+            "a hold on another team's file is skipped as not found",
+            hold["skipped"] == [{"id": file_id, "reason": "not found"}],
+            hold,
+        )
         listed = data(f.get("/v1/files", headers=sam))
         check("the other team's list does not show it", file_id not in [r["id"] for r in listed["data"]], listed)
         posing = f.get(f"/v1/files/{file_id}", headers={**sam, "X-Team-Id": "team_ops"})
@@ -53,7 +66,7 @@ def main() -> None:
         other = f.get(f"/v1/internal/files/{file_id}", params={"team": "team_ops"}, headers=tenant)
         check("a service acting for another tenant gets 404", other.status_code == 404, other.text)
         still = f.get(f"/v1/files/{file_id}", headers=priya)
-        check("the owner still reads it", still.status_code == 200, still.text)
+        check("the maintainers still reads it", still.status_code == 200, still.text)
     finish()
 
 

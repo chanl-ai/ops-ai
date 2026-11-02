@@ -1,4 +1,4 @@
-// uc-233 A workflow runs from a form, with files attached, ui layer: docs/usecases/console/run-with-files.md (c-273).
+// uc-233 A workflow runs from a form, with files attached, ui layer: docs/usecases/console/run-with-files.md.
 // Platform sign-in; James works in Operations, where the seed holds levy_files (a Request trigger taking files).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,7 +79,7 @@ await withUiStack(
         };
         // A field without a schema title is named in words, never by its camelCase key.
         const labels = (await dialog.locator('label').allInnerTexts()).map((t) => t.trim()).filter(Boolean);
-        // c-273's screen evidence: the run form with its Files field at 1280 and 400.
+        // an earlier change's screen evidence: the run form with its Files field at 1280 and 400.
         mkdirSync(evidenceDir('273', 'screens'), { recursive: true });
         // At the review widths once the dialog has settled, then the same input as JSON.
         for (const width of [1280, 400]) {

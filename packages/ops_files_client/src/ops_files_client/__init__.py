@@ -66,6 +66,8 @@ class FileInfo(_In):
     uploaded_by: str
     scan: FileScan
     reference_count: int = 0
+    # public, internal, confidential or restricted (files-service's label); internal when an older service sends none.
+    sensitivity: str = "internal"
 
 
 class StoredFile(_In):
@@ -173,6 +175,17 @@ class FilesClient:
 
     async def get(self, tenant: str, team: str, file_id: str) -> FileInfo:
         return await self._json("GET", f"/v1/files/{file_id}", tenant, team)
+
+    async def find(self, tenant: str, team: str, search: str, *, limit: int = 10) -> list[FileInfo]:
+        """The team's available files whose name matches `search`, newest first, at most `limit`."""
+        try:
+            page: Any = await self._files.request(
+                "GET", "/v1/files", params={"search": search, "pageSize": limit}, tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        rows = cast(list[dict[str, Any]], cast(dict[str, Any], page).get("data") if isinstance(page, dict) else page)
+        return [FileInfo.model_validate(r) for r in rows or []]
 
     async def stream(self, tenant: str, team: str, file_id: str) -> AsyncIterator[bytes]:
         """A clean file's bytes as they arrive; raises `FileNotReady` before the first byte when it is not clean."""

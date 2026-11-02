@@ -1,0 +1,10 @@
+cases:
+  - name: records
+    input: fixtures/records.json
+    expected: expected/records.json
+  - name: partial
+    input: fixtures/partial.json
+    expected: expected/partial.json
+  - name: unreadable
+    input: fixtures/unreadable.json
+    expected: expected/unreadable.json

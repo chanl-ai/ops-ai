@@ -1,0 +1,28 @@
+id: ask-a-person
+title: Ask a person and resume
+track: workflow
+status: built
+difficulty: advanced
+outcome: Time out an ask with a zero deadline.
+capabilities:
+- id: ops.flow.ask
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/ask.json
+expected:
+- expected/timeout.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 30
+teaches:
+- a zero deadline takes timedOut without a third-party channel
+gaps:
+- WhatsApp or SMS ask

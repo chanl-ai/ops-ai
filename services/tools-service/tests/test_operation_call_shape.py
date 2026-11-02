@@ -62,12 +62,12 @@ def _out(r: httpx.Response) -> Any:
     return r.json()["data"]["output"]
 
 
-async def test_an_edited_header_with_a_literal_credential_is_refused_and_nothing_is_staged(g: Gateway) -> None:
-    r = await _patch(g, "get_account", {"headers": [{"key": "Authorization", "value": "Bearer sk_live_abc123"}]})
-    assert r.status_code == 400 and "literal value" in r.json()["error"]["message"]
+async def test_an_edited_sign_in_header_is_refused_whatever_it_holds_and_nothing_is_staged(g: Gateway) -> None:
+    # The module's connection signs every call (c-616): a typed key or a {{NAME}} reference would be a second home.
+    for value in ("Bearer sk_live_abc123", "{{BANK_TOKEN}}"):
+        r = await _patch(g, "get_account", {"headers": [{"key": "Authorization", "value": value}]})
+        assert r.status_code == 400 and "connection" in r.json()["error"]["message"], (value, r.text)
     assert (await g.client.get(BASE)).json()["data"]["pendingChanges"] == []
-    kept = await _patch(g, "get_account", {"headers": [{"key": "Authorization", "value": "{{BANK_TOKEN}}"}]})
-    assert kept.status_code == 200, "a vault reference is kept"
 
 
 async def test_a_url_off_the_module_endpoint_is_refused_on_add_and_on_edit(g: Gateway) -> None:
@@ -138,13 +138,13 @@ async def test_a_transform_cannot_carry_a_secret_out(g: Gateway) -> None:
     assert created.status_code == 201, created.text
     shape = {
         "path": "/echo-headers",
-        "headers": [{"key": "X-Api-Key", "value": f"{{{{BANK_KEY_{g.suffix.upper()}}}}}"}],
-        "responseTransform": '{"key": "{{ data.headers["x-api-key"] }}"}',
+        "headers": [{"key": "X-Partner-Token", "value": f"{{{{BANK_KEY_{g.suffix.upper()}}}}}"}],
+        "responseTransform": '{"key": "{{ data.headers["x-partner-token"] }}"}',
     }
     assert (await _patch(g, "elsewhere", shape)).status_code == 200
     await _publish(g)
     r = await g.call("elsewhere", {"accountId": "CHQ-2219"}, step="s1")
-    assert g.received[-1]["headers"]["x-api-key"] == secret, "the key went to the bank"
+    assert g.received[-1]["headers"]["x-partner-token"] == secret, "the key went to the bank"
     assert secret not in r.text and _out(r) == {"key": "[secret]"}
 
 
@@ -175,19 +175,19 @@ async def test_a_transform_cannot_re_encode_a_secret(g: Gateway) -> None:
     secret = "sk-bank-9a8b7c6d5e4f"
     name = f"ECHO_KEY_{g.suffix.upper()}"
     assert (await g.client.post("/v1/secrets", json={"name": name, "value": secret, "teamId": TEAM})).status_code == 201
-    shape = {"path": "/echo-headers", "headers": [{"key": "X-Api-Key", "value": f"{{{{{name}}}}}"}]}
+    shape = {"path": "/echo-headers", "headers": [{"key": "X-Partner-Token", "value": f"{{{{{name}}}}}"}]}
     assert (await _patch(g, "elsewhere", shape)).status_code == 200
     await _publish(g)
     encodings = (
-        '{{ data.headers["x-api-key"] | reverse }}',
-        '{{ data.headers["x-api-key"] | list | join(" ") }}',
-        '{{ data[data.headers["x-api-key"] | reverse] }}',
+        '{{ data.headers["x-partner-token"] | reverse }}',
+        '{{ data.headers["x-partner-token"] | list | join(" ") }}',
+        '{{ data[data.headers["x-partner-token"] | reverse] }}',
     )
     for n, template in enumerate(encodings):
         assert (await _patch(g, "elsewhere", {"responseTransform": template})).status_code == 200
         await _publish(g)
         r = await g.call("elsewhere", {"accountId": "CHQ-2219"}, step=f"enc{n}")
-        assert g.received[-1]["headers"]["x-api-key"] == secret
+        assert g.received[-1]["headers"]["x-partner-token"] == secret
         for leaked in (secret, secret[::-1], " ".join(secret)):
             assert leaked not in r.text, (template, r.text[:300])
 

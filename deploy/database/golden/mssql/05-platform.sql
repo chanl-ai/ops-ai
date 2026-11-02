@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0026_workspace_owner
+-- platform-service, stamped at 0027_platform_outbox
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -22,6 +22,24 @@ CREATE TABLE signin_email_failures (
 	locked_until VARCHAR(40) NULL, 
 	CONSTRAINT signin_email_failures_pkey PRIMARY KEY (email_hash)
 );
+GO
+CREATE TABLE platform_outbox (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	event_key VARCHAR(200) NOT NULL, 
+	actor VARCHAR(320) NULL, 
+	payload NVARCHAR(max) NOT NULL, 
+	created_at FLOAT NOT NULL, 
+	next_at FLOAT NULL, 
+	sent_at FLOAT NULL, 
+	attempts INTEGER NOT NULL, 
+	last_error VARCHAR(max) NULL, 
+	CONSTRAINT platform_outbox_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_platform_outbox_due ON platform_outbox (sent_at, next_at);
 GO
 CREATE TABLE teams (
 	id VARCHAR(64) NOT NULL, 
@@ -444,5 +462,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0026_workspace_owner');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0027_platform_outbox');
 GO

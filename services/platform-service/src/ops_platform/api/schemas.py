@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from pydantic.alias_generators import to_camel
 
+from ops_service_kit.flags import FlagName
 from ops_service_kit.http import ListResult, Out
 
 
@@ -131,6 +132,14 @@ class WorkspaceStateOut(Out):
     purge_after: str | None
 
 
+class FlagOut(Out):
+    """One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS."""
+
+    name: FlagName
+    description: str
+    on: bool
+
+
 class Me(Out):
     user: MeUser
     tenant_id: str
@@ -142,6 +151,8 @@ class Me(Out):
     # The team that holds the Security team's actions in this deployment.
     security_team_id: str
     workspace: WorkspaceStateOut
+    # Every flag in the registry with whether this install turns it on; the console hides a feature whose flag is off.
+    flags: list[FlagOut]
 
 
 class TeamName(Out):
@@ -660,8 +671,8 @@ class ProviderOut(Out):
 class PolicyIn(In):
     # A bool for a switch, a number from 0 to 1 or null for a floor, whole days or null for a retention; the catalogue
     # checks which the key takes. int before float, so whole days stay whole. A per-team key (publishReview) takes
-    # the acting team's {area: mode}.
-    value: bool | int | float | dict[str, Any] | None
+    # the acting team's {area: mode}; a list policy (appWritesNeedApproval) takes the acting team's names.
+    value: bool | int | float | dict[str, Any] | list[str] | None
 
 
 class PolicyOut(Out):
@@ -671,7 +682,7 @@ class PolicyOut(Out):
     default: bool | int | float | dict[str, Any] | None
     changed_by: str
     effect: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names"]
     title: str
 
 

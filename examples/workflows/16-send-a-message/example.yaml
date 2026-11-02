@@ -1,0 +1,29 @@
+id: send-a-message
+title: Send a message
+track: workflow
+status: built
+difficulty: guided
+outcome: Reply on the channel that started the run.
+capabilities:
+- id: ops.action.send
+  status: built
+- id: ops.trigger.request
+  status: built
+- id: ops.flow.end
+  status: built
+entrypoint: resources/workflow.yaml
+fixtures:
+- fixtures/inbound.json
+expected:
+- expected/sent.json
+surfaces:
+  ui: planned
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 30
+teaches:
+- send_reply is the existing mail path
+- a write has one attempt
+gaps:
+- real Gmail or Outlook

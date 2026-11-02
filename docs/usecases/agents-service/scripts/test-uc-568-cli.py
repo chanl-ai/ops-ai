@@ -3,10 +3,12 @@
 """uc-568 document workflows, cli layer: docs/usecases/agents-service/document-workflows.md, story S5 (steps 21-24).
 
 A developer describes a workflow ("read a levy notice and the bank's account, merge them, and send disagreements to a
-person") and builds it with `scripts/wf_builder.py`, the /wf-builder skill's script, on a fresh team of this run's own
-agents-service (dev auth, the scripted model, no model call) and a workflow worker. The script runs in a temporary
-folder, so the `workflows/<id>.json` it writes never lands in the repository. Two SDK profiles name the same
-agents-service in a temporary OPS_CONFIG: `local`, and `staging`, which the skill must treat as not local."""
+person") and builds it with `scripts/wf_builder.py`, the /wf-builder skill's script, on this run's own agents-service
+(the scripted model, no model call) and a workflow worker. Platform sign-in, as a deployment runs: an API key cannot
+edit a workflow, so James Richardson (builder in team_ops) signs in and the profile carries his session token. The
+script runs in a temporary folder, so the `workflows/<id>.json` it writes never lands in the repository. Two SDK
+profiles name the same agents-service in a temporary OPS_CONFIG: `local`, and `staging`, which the skill must treat as
+not local."""
 
 from __future__ import annotations
 
@@ -20,10 +22,28 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import AGENTS_PORT, ROOT, agents, check, engine_worker, finish, until
+from usecase_harness import (
+    AGENTS_PORT,
+    PLATFORM_INTERNAL_PORT,
+    PLATFORM_PORT,
+    ROOT,
+    agents,
+    bearer,
+    check,
+    engine_worker,
+    finish,
+    platform,
+    signed_in,
+    until,
+)
 
-TEAM = f"team_uc568_{uuid.uuid4().hex[:6]}"
-HEADERS = {"X-Team-Id": TEAM}
+TEAM = "team_ops"
+AUTH = {
+    "OPS_AUTH_MODE": "platform",
+    "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+}
+HEADERS: dict[str, str] = {}
 WID = f"levy_bank_match_{uuid.uuid4().hex[:6]}"
 GOAL = "read a levy notice and the bank's account, merge them, and send disagreements to a person"
 SCRIPT = ROOT / "scripts" / "wf_builder.py"
@@ -35,8 +55,7 @@ def builder(*args: str, profile: str, stdin: str = "") -> subprocess.CompletedPr
     """`scripts/wf_builder.py`, as the skill runs it, from the developer's own folder."""
     env = {**os.environ, "OPS_CONFIG": str(CONFIG)}
     env.pop("VIRTUAL_ENV", None)
-    sdk = str(ROOT / "sdk" / "python")
-    argv = ["uv", "run", "--quiet", "--project", str(ROOT), "--with-editable", sdk, "python", str(SCRIPT), *args]
+    argv = ["uv", "run", "--quiet", "--project", str(ROOT), "python", str(SCRIPT), *args]
     argv += ["--profile", profile]
     return subprocess.run(
         argv, cwd=WORK, env=env, input=stdin, capture_output=True, text=True, check=False, timeout=600
@@ -53,9 +72,16 @@ def definition(api: httpx.Client) -> httpx.Response:
 
 def main() -> None:
     try:
-        with agents() as api, engine_worker("uc568-cli"):
+        with (
+            platform() as (accounts, _),
+            agents(env=AUTH) as api,
+            engine_worker("uc568-cli", {"OPS_PLATFORM_URL": AUTH["OPS_PLATFORM_URL"]}),
+        ):
+            session = signed_in(accounts, "j.richardson@harborpine.example")
+            HEADERS.update(bearer(session, TEAM))
             base = f"http://127.0.0.1:{AGENTS_PORT}"
-            profile = {"baseUrl": base, "team": TEAM, "services": {"agents": base}}
+            # The person's session token, as `ops login` keeps it; no API key, which cannot edit a workflow.
+            profile = {"baseUrl": base, "team": TEAM, "accessToken": session.get("token"), "services": {"agents": base}}
             CONFIG.write_text(json.dumps({"current": "local", "profiles": {"local": profile, "staging": profile}}))
             spec = WORK / "goal.json"
             spec.write_text(json.dumps({"id": WID, "goal": GOAL, "example": "two_source_match"}))

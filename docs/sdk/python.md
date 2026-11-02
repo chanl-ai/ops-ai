@@ -35,7 +35,7 @@ pass `services={"agents": "http://127.0.0.1:8700", ...}` to reach each service o
 
 ```python
 started = ops.runs.start("wf_card_dispute", input={"cardholder": "Jordan Example", "amount": "120.00"})
-run = ops.runs.wait(started["runId"])               # returns when the run ends or stops at a human task
+run = ops.runs.wait(started["runId"])  # returns when the run ends or stops at a human task
 if run.get("taskId"):
     ops.tasks.decide(run["taskId"], "approve", reason="Within the lead's limit.")
     run = ops.runs.wait(started["runId"])
@@ -49,7 +49,7 @@ print(run["status"], run.get("outcome"))
 | Attribute | Verbs |
 |---|---|
 | `agents`, `cases`, `connections`, `knowledge` | `list(**filters)`, `get(id)`, `create(body)` |
-| `workflows`, `tools`, `files` | `list(**filters)`, `get(id)` |
+| `workflows`, `files` | `list(**filters)`, `get(id)` |
 | `threads` | `list`, `get` (the thread's state), `create` |
 | `teams` | `list` |
 | `runs` | `list`, `get`, `start`, `wait`, `stream`, `cancel` |
@@ -58,6 +58,18 @@ print(run["status"], run.get("outcome"))
 | `raw.<service>.<operation>()` | Every other public operation, by its name in the API reference |
 
 `list` walks every page. Each call returns the response's data as a dictionary typed from the API reference.
+
+The Apps area uses the words on the Apps page. An app is named by its id there (`plugin:<id>`, `builtin:<name>`, or a
+custom app's connection id); an account is a connection id.
+
+| Attribute | Verbs |
+|---|---|
+| `apps` | `list(connected=)`, `get(app)`, `turn_on(app, **fields)`, `turn_off(app)`, `users(app)` (who uses its tools), `add_custom(kind, name, base_address=, auth_kind=, secrets=)` |
+| `credentials` | `set(app, client_id=, client_secret=)` (the team's own client), `test(app)` and `finish(app, state=, code=)` (Test with my account) |
+| `accounts` | `connect(account)`, `test(account)`, `make_default(account)`, `mine()`, `set_key(account, key)`, `remove(account)` |
+| `tools` | `list(app)`, `run(app, tool, input, real=)` (Mock reaches nothing; Real is the gateway's call); with no app, `list` and `get` are the tool modules' |
+| `resources` | `list(app)`, `add(resource)` (a copy in the team) |
+| `usage` | `list(**filters)`: this team's tool calls |
 
 ## Errors
 

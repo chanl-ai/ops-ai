@@ -163,6 +163,15 @@ CUSTOMERS["CUS-1003"] = Customer(
     ssnLast4="5555",
     accountIds=["CHQ-1003"],
 )
+CUSTOMERS["CUS-1004"] = Customer(
+    id="CUS-1004",
+    name="Ada Lovelace",
+    email="ada@example.test",
+    segment="retail",
+    address="10 Computing Close, London UK W1 1AA",
+    ssnLast4="1815",
+    accountIds=[],
+)
 ACCOUNTS = {
     "CHQ-2219": Account(
         id="CHQ-2219", customerId="CUS-1001", type="chequing", currency="CAD", balance=2140.55, status="open"

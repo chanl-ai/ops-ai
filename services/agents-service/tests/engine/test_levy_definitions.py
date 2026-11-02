@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
@@ -19,6 +19,7 @@ from ops_engine.compiler import channel, compile_definition
 from ops_engine.definition import parse, validate
 from ops_engine.journal import MemoryJournal
 from ops_engine.ports import Access, EnginePorts, OpenedCase, StartedRun, ToolResult
+from ops_engine.starts import form_values, trigger_node
 
 SEED = {w["id"]: w for w in json.loads((Path(__file__).parents[2] / "seed" / "engine_workflows.json").read_text())}
 
@@ -58,6 +59,9 @@ class Bank:
 
 
 class Reviews:
+    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        return None  # every review here waits for a person
+
     async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
         return f"{run_id}:{node_id}:{iteration}"
 
@@ -154,8 +158,8 @@ class Documents:
             "id": "ext_1",
             "status": "done",
             "outcome": "ok",
-            "documentType": {"id": "levy_notice", "version": 1},
-            "classification": {"typeId": "levy_notice", "confidence": 0.98},
+            "documentType": {"id": "legal_notice", "version": 1},
+            "classification": {"typeId": "legal_notice", "confidence": 0.98},
             "records": [{"values": d} for d in debtors],
         }
 
@@ -180,7 +184,7 @@ async def test_a_levy_notice_read_starts_a_levy_case_per_debtor_instead_of_going
     cfg: Any = {"configurable": {"thread_id": "r1", "run_id": "r1", "lease_generation": 1}}
     await g.ainvoke({"input": {"fileId": "fil_1", "name": "levy_notice.pdf"}}, cfg, durability="sync")
     values = dict((await g.aget_state(cfg)).values)
-    assert values[channel("notices_done")]["out"]["outcome"] == "levy_notice"
+    assert values[channel("notices_done")]["out"]["outcome"] == "legal_notice"
     assert [(w, i["record"]["name"], i["fileId"]) for w, i in runs.started] == [
         ("levy_case", "Marcus Bell", "fil_1"),
         ("levy_case", "Jordan Whitfield", "fil_1"),
@@ -196,7 +200,7 @@ class DoubtfulDocuments(Documents):
 
 
 async def test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor() -> None:
-    """c-313: read:review -> Check the read -> approve -> By kind levy_notice -> a case per debtor named."""
+    """c-313: read:review -> Check the read -> approve -> By kind legal_notice -> a case per debtor named."""
     runs = Runs()
     ports = EnginePorts(tools=Bank(), reviews=Reviews(), documents=DoubtfulDocuments(), runs=runs)  # type: ignore[arg-type]
     one = levy("levy_read_one")
@@ -207,7 +211,7 @@ async def test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_ca
     assert paused.value["node"] == "check" and not runs.started, "the doubtful read waits for a person first"
     await g.ainvoke(Command(resume={"decision": "approved", "by": "maya"}), cfg, durability="sync")
     values = dict((await g.aget_state(cfg)).values)
-    assert values[channel("notices_done")]["out"]["outcome"] == "levy_notice"
+    assert values[channel("notices_done")]["out"]["outcome"] == "legal_notice"
     assert [(w, i["record"]["name"]) for w, i in runs.started] == [
         ("levy_case", "Marcus Bell"),
         ("levy_case", "Jordan Whitfield"),
@@ -251,6 +255,19 @@ async def test_a_notice_started_from_the_form_ends_with_its_cases_and_the_reply_
     end = values[channel("nothing_to_reply")]["out"]
     assert end["outcome"] == "cases_opened" and "did not arrive by email" in end["output"]["message"]
     assert channel("ack") not in values and not mail.sent
+
+
+async def test_a_form_notice_with_a_mailbox_and_no_subject_waits_for_the_reply_with_the_forms_subject() -> None:
+    """c-378: a form start with a mailbox and no subject failed at the acknowledgement, which had no subject to reply
+    with. The start form gives the subject a default, and the reply check skips a run that still has none."""
+    schema = cast(dict[str, Any], (trigger_node(SEED["mail_document"]) or {})["parameters"]["inputSchema"])
+    sent = {"fileId": "fil_1", "from": "registry@court.test", "mailbox": "levies@harborpine.test"}
+    given, missing = form_values(schema, sent)
+    [paused], _, _, _, _, _ = await _notice("md3", given)
+    assert missing == [] and paused.value["node"] == "ack", paused.value
+    assert paused.value["call"]["input"]["subject"] == "We received your document", paused.value["call"]
+    skipped, values, _, mail, _, _ = await _notice("md4", sent | {"subject": ""})
+    assert not skipped and not mail.sent and values[channel("nothing_to_reply")]["out"]["outcome"] == "cases_opened"
 
 
 async def test_an_emailed_notice_still_waits_for_the_acknowledgement_and_replies_from_the_mailbox() -> None:

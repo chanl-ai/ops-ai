@@ -54,6 +54,7 @@ from .engine_host import (
     KillAfterNode,
     RunEvents,
     RunReviews,
+    StarterApprovals,
     ThreadLeases,
     assisted_reviews,
 )
@@ -111,7 +112,15 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         )
         minter = ApprovalMinter(db, settings.review_key.get_secret_value(), settings.review_token_ttl_seconds)
         # One kernel for agent steps and AI steps (c-298): an AI step's call is the agent port's prompt.
-        ports = EnginePorts(tools=GatewayTools(gateway, minter), reviews=RunReviews(), agents=agents, prompts=agents)
+        # A step approving a write its starter may approve is decided as theirs (c-616).
+        starters = StarterApprovals(db, gateway)
+        ports = EnginePorts(
+            tools=GatewayTools(gateway, minter), reviews=RunReviews(starters=starters), agents=agents, prompts=agents
+        )
+        if kb_http is not None:
+            from ops_agents.activities.knowledge import KbService  # noqa: PLC0415
+
+            ports.knowledge = KbService(required_client(settings, kb_http, "kb"))
         # Start workflow steps: children in the parent run's team and mode, under the pass's tenant.
         ports.runs = WorkflowStarts(RunStore(EngineTransactions(db)), DefinitionStore(EngineTransactions(db)))
         # Open case and Add to case steps: the run's team's cases (c-219).
@@ -148,7 +157,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             if agents is not None:
                 # Task assist (c-302) writes a typed task's help as its step pauses, where the team turned it on.
                 policies = PlatformPolicies(service_client(settings, platform_http, "platform"))
-                ports.reviews = assisted_reviews(stack, db, agents, policies)
+                ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
                 # AI steps run only where the run's team allows them, masked unless it turned that off (c-298, c-321).
                 agents.rules = RunTeamRules(db, policies)
         host = WorkerHost(

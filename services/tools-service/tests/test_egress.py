@@ -35,15 +35,19 @@ OP = {
 
 
 async def test_a_module_names_only_listed_hosts(api: Api) -> None:
-    r = await api.call("POST", "/mod_document_service/operations", json=OP)
-    assert r.status_code == 422, r.text
-    assert r.json()["error"]["code"] == "egress_host_not_allowed"
-    assert "statements.example.com" in r.json()["error"]["message"]
     added = await api.client.post("/v1/egress/hosts", json={"value": "Statements.Example.com", "note": "statements"})
     assert added.status_code == 201 and added.json()["data"]["value"] == "statements.example.com"
     r = await api.call("POST", "/mod_document_service/operations", json=OP)
     assert r.status_code == 200, r.text
     assert r.json()["data"]["egressHosts"] == ["statements.example.com"]
+    # A host not yet listed is listed by a caller who holds the Security role (the dev caller holds every role), and
+    # held for Security otherwise (c-616 S13, tests/test_held_hosts.py): a module never names an unlisted one.
+    blank = await api.call("POST", "/blank", json={"displayName": "Receipts", "name": "receipts", "type": "http"})
+    other = {**OP, "name": "get_receipt", "url": "https://receipts.example.com/v1/receipt"}
+    r = await api.call("POST", f"/{blank.json()['data']['id']}/operations", json=other)
+    assert r.status_code == 200, r.text
+    listed = [h["host"] for h in (await api.client.get("/v1/egress")).json()["data"]["hosts"]]
+    assert "receipts.example.com" in listed
 
 
 async def test_a_host_in_use_stays_listed_and_every_change_is_audited(api: Api, engine: Any) -> None:

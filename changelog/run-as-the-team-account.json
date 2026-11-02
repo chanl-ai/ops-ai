@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Human Tasks shows a run waiting for your account",
+  "description": "A workflow waiting for someone's own account of an app now shows in Human Tasks for that person, naming the app. Someone allowed to use the team's account can run it on the team account instead, where the app has one.",
+  "tag": "improved",
+  "cards": [
+    "c-616"
+  ]
+}

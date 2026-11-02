@@ -5,7 +5,7 @@ Two banks answer as `https://api.bank.test`: the Statements API (fake_bank_https
 OPS_FAKE_BANK_APP=core the core-banking system (services/tools-service/scripts/fake_bank: customers, accounts, holds,
 notes, and its sign-in routes), which a levy use case needs, also on https. The core bank also serves the same app as
 `https://mtls.bank.test` on a listener that refuses any handshake without a client certificate its own CA signed
-(c-330); the JSON line names that host, the CA and the client certificate's files."""
+(an earlier change); the JSON line names that host, the CA and the client certificate's files."""
 
 from __future__ import annotations
 

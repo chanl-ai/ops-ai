@@ -1,0 +1,12 @@
+{
+  "files.associations": {
+    "**/examples/**/resources/workflow.yaml": "yaml"
+  },
+  "yaml.schemas": {
+    "examples/workflow.schema.json": [
+      "examples/**/resources/workflow.yaml",
+      "examples/**/resources/workflow.json"
+    ],
+    "examples/example.schema.json": "examples/**/example.yaml"
+  }
+}

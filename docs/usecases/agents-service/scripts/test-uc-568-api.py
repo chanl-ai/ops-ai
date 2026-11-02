@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-568 document workflows, api layer: docs/usecases/agents-service/document-workflows.md (c-535).
+"""uc-568 document workflows, api layer: docs/usecases/agents-service/document-workflows.md.
 
 Own services, no real model: models-service on the fake OpenAI with rules this script writes to a temporary folder (a
 propose read and the read after it), files-service with scanning off delivering its events to this run's
@@ -727,9 +727,11 @@ def batches(api: httpx.Client, files_url: str) -> None:
     check(
         "16 Retry failed rows starts a new run for the 3 failed rows only, and Download as CSV gives the same table",
         retried.status_code in (200, 202) and len(after) == 203 and len(ok_runs) == 197
-        and again.get("failed") == 3 and len(lines) == 200 and len(failed_lines) == 3,
+        and again.get("failed") == 3 and len(lines) == 200 and len(failed_lines) == 3
+        and all(r.get("input") for r in lines),
         {"retry": said(retried), "runs": len(after), "ok runs": len(ok_runs), "csv": said(table) if not lines else
-         len(lines), "failed in csv": len(failed_lines)},
+         len(lines), "failed in csv": len(failed_lines),
+         "lines without input": sum(not r.get("input") for r in lines)},
     )  # fmt: skip
 
 

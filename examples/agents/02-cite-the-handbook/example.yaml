@@ -1,0 +1,27 @@
+id: cite-the-handbook
+title: Cite the handbook
+track: agent
+status: built
+difficulty: intro
+outcome: Ask a question the handbook page answers and see the cited section.
+capabilities:
+- id: agent.knowledge
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+- fixtures/missing.json
+expected:
+- expected/cited.json
+- expected/missing.json
+surfaces:
+  ui: built
+  cli: built
+  python: built
+  typescript: planned
+setupSeconds: 40
+gaps:
+- ops chat send
+- agent.eval

@@ -1,0 +1,46 @@
+"""uc-590, cli layer: docs/usecases/agents-service/plugin-templates.md, story S7 (step 23), group E of an earlier change.
+The sdk layer's stack: platform-service, tools-service with the test plugin, agents-service reading tools-service.
+A team admin lists the app's resources and adds the agent with `ops resources`, signed in as their dev role the way
+`make api` signs in (task L2). No model call."""
+
+from __future__ import annotations
+
+import json
+
+from apps_walk import AUTH, ops_cli, target
+from usecase_harness import ROOT, agents, as_role, check, finish, platform, tools
+
+PLUGIN = "test.templates"
+FOLDER = ROOT / "services/tools-service/tests/plugin_templates/templates_desk"
+PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(FOLDER)])}
+
+
+def main() -> None:
+    with (
+        platform() as (accounts, _),
+        tools({**AUTH, **PLUGINS}) as gw,
+        agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH),
+    ):
+        security, admin = as_role(accounts, "security"), as_role(accounts, "admin", "team_ops")
+        accounts.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=security)
+        on = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=admin)
+        check("set-up: the plugin is on for team_ops", on.status_code == 200, on.text[:200])
+
+        # 23. ops resources list and add, as the team admin.
+        listed_code, listed = ops_cli("admin", "resources", "list", f"plugin:{PLUGIN}")
+        added_code, added = ops_cli("admin", "resources", "add", f"plugin:{PLUGIN}", "case-helper")
+        check(
+            "23 `ops resources list` names the plugin's four resources and `ops resources add` copies the agent",
+            listed_code == 0
+            and isinstance(listed, list)
+            and len(listed) == 4
+            and added_code == 0
+            and isinstance(added, dict)
+            and bool((added.get("copy") or {}).get("recordId")),
+            (target("L2, P1 and S8"), {"list": (listed_code, listed), "add": (added_code, added)}),
+        )
+    finish()
+
+
+if __name__ == "__main__":
+    main()

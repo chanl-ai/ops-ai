@@ -23,25 +23,29 @@ import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSession } from '@/hooks/auth-queries';
 import { useCreateKb, useDeleteKb, useKnowledgeBases, useRefreshKb } from '@/hooks/knowledge-queries';
+import { useFlagged } from '@/hooks/flag-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
+import type { FlagName } from '@/lib/types/flags';
 import type { KbFilters, KbHealth, KnowledgeBaseRow } from '@/lib/types/knowledge';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = KnowledgeBaseRow & { onRowClick: (k: KnowledgeBaseRow) => void };
 const ALL = { page: 1, pageSize: 100 };
-const ACCESS = [
+const ACCESS: { value: 'members' | 'selected' | 'api' | 'mcp' | 'public'; label: string; icon: typeof Users; flag?: FlagName }[] = [
   { value: 'members', label: 'All members', icon: Users },
   { value: 'selected', label: 'Selected members', icon: Users },
   { value: 'api', label: 'API keys', icon: KeyRound },
-  { value: 'mcp', label: 'MCP', icon: Server },
+  // Offered to outside assistants over MCP, so shown only while the install turns that address on (c-611).
+  { value: 'mcp', label: 'MCP', icon: Server, flag: 'mcp_gateway' },
   { value: 'public', label: 'Public link', icon: Globe },
-] as const;
+];
 
-function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; refresh: (k: KnowledgeBaseRow) => void; remove: (k: KnowledgeBaseRow) => void; canBuild: boolean }): ColumnDef<Row>[] {
+function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; refresh: (k: KnowledgeBaseRow) => void; remove: (k: KnowledgeBaseRow) => void; canBuild: boolean; access: typeof ACCESS }): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((r) => r.name),
     idColumn<Row>((r) => r.id),
@@ -138,7 +142,7 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
         const on = { members: a.members.mode === 'all', selected: a.members.mode === 'selected', api: a.anyApiKey, mcp: a.mcp.enabled, public: a.publicLink.enabled };
         return (
           <div className="flex items-center gap-1.5">
-            {ACCESS.filter((x) => on[x.value]).map((x) => (
+            {actions.access.filter((x) => on[x.value]).map((x) => (
               <Tooltip key={x.value}>
                 <TooltipTrigger asChild>
                   <x.icon className="size-3.5 text-muted-foreground" aria-label={x.label} />
@@ -186,6 +190,7 @@ export default function KnowledgeBasesPage() {
   const remove = useDeleteKb();
   const [createOpen, setCreateOpen] = React.useState(false);
   const canBuild = useCanBuild();
+  const access = useFlagged(ACCESS);
   const [deleting, setDeleting] = React.useState<KnowledgeBaseRow | null>(null);
   const deletingShown = useSticky(deleting);
 
@@ -197,8 +202,9 @@ export default function KnowledgeBasesPage() {
         refresh: (k) => refresh.mutate(k.id, { onSuccess: () => toast.success(`Refreshing ${k.name}`), onError: (e) => toast.error(`Couldn’t refresh ${k.name}`, { description: e.message }) }),
         remove: setDeleting,
         canBuild,
+        access,
       }),
-    [open, refresh, canBuild],
+    [open, refresh, canBuild, access],
   );
   const rows: Row[] = React.useMemo(() => (query.data?.data ?? []).map((k) => ({ ...k, onRowClick: (x: KnowledgeBaseRow) => open(x) })), [query.data, open]);
   const facets = query.data?.facets ?? {};
@@ -231,7 +237,7 @@ export default function KnowledgeBasesPage() {
           initialColumnVisibility={{ chunks: false }}
           filters={[
             { column: 'health', title: 'Health', options: (Object.keys(HEALTH_LABEL) as KbHealth[]).map((h) => ({ label: HEALTH_LABEL[h], value: h, count: facets.health?.[h] ?? 0 })) },
-            { column: 'access', title: 'Access', options: ACCESS.map((a) => ({ label: a.label, value: a.value, count: facets.access?.[a.value] ?? 0 })) },
+            { column: 'access', title: 'Access', options: access.map((a) => ({ label: a.label, value: a.value, count: facets.access?.[a.value] ?? 0 })) },
           ]}
           onColumnFiltersChange={list.onColumnFiltersChange}
           renderGridItem={(k) => (
@@ -261,15 +267,7 @@ export default function KnowledgeBasesPage() {
             </div>
           )}
           gridClassName="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={Database}

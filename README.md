@@ -174,8 +174,9 @@ Human Tasks and cases. They are not in the demo yet.
 
 The rest of what that dispute touched, and what a review asks about next:
 
-- **Tools from an OpenAPI document.** Import a core system's API as a tool module; each operation gets a policy,
-  credentials from Secrets, mock answers for test, and a review before it is published.
+- **Apps.** One Apps menu to turn on the Apps your agents use, sign in with the team's Account or your own, and add
+  their Resources ([guide](docs/guide/apps.md)). Import an App's OpenAPI document as Tools; each gets a policy, mock
+  answers for test, and a review before it is published; approvals are off until a team turns them on.
 - **Guardrails and skills.** Pinned to an agent's version and checked before and after each answer; a check fails
   closed.
 - **Knowledge.** Knowledge bases built from uploads or synced sources, served to the agents granted each base.

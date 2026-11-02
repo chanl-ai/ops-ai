@@ -132,7 +132,7 @@ def worker(
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,
-        # The Extract from file step reads through documents-service (c-256).
+        # The Extract from file step reads through documents-service.
         "OPS_DOCUMENTS_URL": documents_url,
         # The extraction floor is platform-service's extractionFloor policy (Govern > Policies).
         "OPS_PLATFORM_URL": platform_url,

@@ -1,0 +1,10 @@
+cases:
+  - name: complaint
+    input: fixtures/complaint.json
+    expected: expected/complaint.json
+  - name: reject
+    input: fixtures/reject.json
+    expected: expected/reject.json
+  - name: timeout
+    input: fixtures/timeout.json
+    expected: expected/timeout.json

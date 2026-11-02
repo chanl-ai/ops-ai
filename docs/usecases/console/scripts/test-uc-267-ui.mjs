@@ -1,5 +1,5 @@
 // uc-267 admins see roles, a person's effective access and why an action is refused, ui layer:
-// docs/usecases/console/access-roles-and-checks.md (c-150). Platform sign-in as Wanjiru Kamau, whom the dev seed makes
+// docs/usecases/console/access-roles-and-checks.md. Platform sign-in as Wanjiru Kamau, whom the dev seed makes
 // an admin of the Platform team and Admin in every team (a workspace admin), so her access is more than her team
 // role says.
 import { join } from 'node:path';

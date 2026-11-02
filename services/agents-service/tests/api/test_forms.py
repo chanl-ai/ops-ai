@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
@@ -160,3 +160,29 @@ async def test_a_submission_past_the_daily_cap_starts_nothing_and_activity_says_
     rows = (await c.get("/v1/activity", params={"kind": "form"}, headers=BUILDER)).json()["data"]["data"]
     refused = [r for r in rows if r["outcome"] == "daily_cap"]
     assert len(refused) == 1 and "daily cap" in (refused[0]["detail"] or ""), rows
+
+
+async def test_the_api_refuses_a_form_with_a_required_field_empty_and_fills_its_defaults(stack: Stack) -> None:  # noqa: F811
+    """c-378: the console refuses a start with a required field empty, so the hosted form and Start run by API refuse
+    it too, naming the field; a field the form gives a default takes it when left empty."""
+    c, _ = stack
+    props: dict[str, Any] = {
+        **cast(dict[str, Any], INPUTS["properties"]),
+        "channel": {"type": "string", "default": "web"},
+    }
+    inputs: dict[str, Any] = {**INPUTS, "properties": props}
+    await live(c, inputs=inputs)
+    form = await shared(c)
+    blank = await c.post(
+        f"/v1/forms/public/{form['slug']}/submit",
+        params={"t": form["token"]},
+        json={"values": {"account": "40 1188 2271", "reason": "  "}},
+    )
+    by_hand = await c.post("/v1/runs/start", json={"workflowId": "payment_plan", "values": {}}, headers=BUILDER)
+    assert (blank.status_code, blank.json()["error"]["code"]) == (422, "invalid_input"), blank.text
+    assert "Why do you need a plan? is required." in blank.text and await runs_of(c) == [], blank.text
+    assert by_hand.status_code == 422 and "Account number, Why do you need a plan? are required." in by_hand.text
+    sent = await send(c, form)
+    [run] = await runs_of(c)
+    got = (await c.get(f"/v1/runs/{run['id']}", headers=BUILDER)).json()["data"]
+    assert sent.status_code == 202 and got["input"] == VALUES | {"channel": "web"}, got

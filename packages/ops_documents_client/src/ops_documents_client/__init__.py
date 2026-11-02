@@ -88,6 +88,26 @@ class DocumentsClient:
             raise _refused(e) from e
         return found
 
+    async def document_types(self, tenant: str, team: str) -> list[dict[str, Any]]:
+        """The team's document types (their newest versions), for finding one by name."""
+        try:
+            listed: dict[str, Any] = await self._documents.request(
+                "GET", "/v1/document-types", tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        return list(listed.get("items") or [])
+
+    async def extraction(self, tenant: str, team: str, extraction_id: str) -> dict[str, Any]:
+        """An extraction as it is now: queued, running, or finished with its answer."""
+        try:
+            found: dict[str, Any] = await self._documents.request(
+                "GET", f"/v1/documents/extractions/{extraction_id}", tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        return found
+
     async def purge(self, tenant: str, team: str, file_id: str) -> dict[str, Any]:
         """Removes what documents-service read from a deleted file: {extractions, samples}; needs `documents:delete`."""
         try:

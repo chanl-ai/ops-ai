@@ -1,4 +1,4 @@
-// uc-398 A crafted PDF runs no script in the viewer, ui layer: docs/usecases/console/pdf-scripts-never-run.md (c-350).
+// uc-398 A crafted PDF runs no script in the viewer, ui layer: docs/usecases/console/pdf-scripts-never-run.md.
 // Platform sign-in as James (Builder of Operations). The PDF is built here so every script it carries is visible.
 import { FILES_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

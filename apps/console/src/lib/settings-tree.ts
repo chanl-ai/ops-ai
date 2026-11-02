@@ -1,6 +1,5 @@
-import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconCpu, IconGavel, IconGitPullRequest, IconKey, IconLock, IconLockPassword, IconLogin, IconPlug, IconServer, IconShieldCheck, IconUserCircle, IconUserShield, IconWebhook, IconWorld, type Icon } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconCpu, IconGavel, IconGitPullRequest, IconKey, IconLock, IconLogin, IconServer, IconShieldCheck, IconUserCircle, IconUserShield, IconWebhook, IconWorld, type Icon } from '@tabler/icons-react';
 
-import { personalSignIn } from './api';
 
 /**
  * The settings tree the owner approved (card c-178; the design is the planning repo docs/plans/ops-ai/settings-design.html):
@@ -35,7 +34,6 @@ export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
   { id: 'sign-in', title: 'Sign-in', href: '/settings/security/sign-in', icon: IconLogin, description: 'Sign-in methods, single sign-on, two-step verification and sessions', group: 'Govern', section: 'Security' },
   { id: 'egress', title: 'Egress', href: '/settings/security/egress', icon: IconWorld, description: 'Hosts and private ranges tool calls may reach', group: 'Govern', section: 'Security' },
-  { id: 'secrets', title: 'Secrets', href: '/settings/security/secrets', icon: IconLockPassword, description: 'Credentials tool calls send, never shown again', group: 'Govern', section: 'Security' },
 ];
 
 export const SETTINGS_GROUPS: SettingsGroup[] = ['Workspace', 'Team', 'Govern'];
@@ -48,7 +46,6 @@ export const PERSONAL_SETTINGS = [
   { id: 'my-account', label: 'My account', href: '/settings/account', icon: IconUserCircle },
   { id: 'my-security', label: 'My security', href: '/settings/account/security', icon: IconUserShield },
   { id: 'my-memory', label: 'My memory', href: '/settings/account/memory', icon: IconBrain },
-  ...(personalSignIn ? [{ id: 'my-connections', label: 'Your connections', href: '/settings/account/connections', icon: IconPlug }] : []),
 ];
 
 /** True on the routes the settings sidebar replaces the app sidebar for. */

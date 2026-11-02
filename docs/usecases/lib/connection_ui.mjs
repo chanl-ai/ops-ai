@@ -1,14 +1,13 @@
-// What the connection ui scripts share (c-553): a connection set up per environment through tools-service, as its api
+// What the connection ui scripts share: a connection set up per environment through tools-service, as its api
 // layer sets one (docs/usecases/tools-service/scripts/connection_calls.py), and Test the team account pressed on the
-// connection's page. The console's connect dialog runs on the mock only, so keys are entered through the API. The page
-// needs the console switch NEXT_PUBLIC_OPS_PERSONAL_SIGNIN (CONNECTION_STACK).
+// connection's page. Keys are entered through the API, as the api layer sets them.
 import { TOOLS_PORT } from '@ops-ai/usecase-runner/harness';
 
 import { as } from './workflow_ui.mjs';
 
 export const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-/** Platform sign-in, tools-service with the core bank stand-in on https, and the connection page switched on. */
-export const CONNECTION_STACK = { platform: true, tools: { bank: 'core' }, consoleSwitches: { NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: '1' } };
+/** Platform sign-in and tools-service with the core bank stand-in on https. */
+export const CONNECTION_STACK = { platform: true, tools: { bank: 'core' } };
 
 async function send(method, path, headers, body) {
   const r = await fetch(`${tools}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -19,6 +18,8 @@ async function send(method, path, headers, body) {
 export async function allowBank(bank) {
   const sam = await as('s.adeyemi@harborpine.example', 'team_security');
   await send('POST', '/v1/egress/hosts', sam, { value: bank.host, note: 'connection use case' });
+  // The core bank's certificate-only listener is a second host on the same address.
+  if (bank.mtlsHost) await send('POST', '/v1/egress/hosts', sam, { value: bank.mtlsHost, note: 'connection use case' });
   await send('POST', '/v1/egress/ranges', sam, { value: bank.range, note: 'connection use case' });
 }
 

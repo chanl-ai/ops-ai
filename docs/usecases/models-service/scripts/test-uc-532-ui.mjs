@@ -1,5 +1,5 @@
 // uc-532 An account admin saves a model provider key on Settings and a model call signs in to the provider with it,
-// ui layer: docs/usecases/models-service/an-account-admin-saves-a-model.md (c-509). The run's own demo stack: platform
+// ui layer: docs/usecases/models-service/an-account-admin-saves-a-model.md. The run's own demo stack: platform
 // sign-in, models-service and the fake OpenAI, which refuses any credential but FAKE_OPENAI_KEY. Sam is the account
 // admin (an admin on the Security team); James is a builder of Operations.
 import { execFileSync } from 'node:child_process';

@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
-from ops_store.team_scope import team_visible
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import ASSISTANT_TEAMS, current_tenant, system_tx, tenant_tx
 
 team_default_agents = sa.Table(
     "team_default_agents",
@@ -59,3 +59,14 @@ class TeamDefaults:
                     )
                     .values(**values)
                 )
+
+    async def on_agents(self, prefix: str) -> list[tuple[str, str, str]]:
+        """Every (tenant, team, agent) whose default agent's id starts with `prefix`, read past row-level security:
+        the start-up catch-up of the teams' Ops Assistants (c-616) starts before it knows a tenant, then works each
+        under its own."""
+        t = team_default_agents
+        async with system_tx(self.engine, ASSISTANT_TEAMS) as c:
+            q = sa.select(t.c.tenant_id, t.c.team_id, t.c.agent_id).where(
+                t.c.agent_id.like(f"{prefix}%"), any_team(t, "the start-up catch-up reads only default agent ids")
+            )
+            return [(str(r.tenant_id), str(r.team_id), str(r.agent_id)) for r in await c.execute(q)]

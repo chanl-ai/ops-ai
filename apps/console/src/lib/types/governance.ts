@@ -37,6 +37,9 @@ export interface ToolCallRow {
   caseId?: string;
   /** `place_wire_hold` for a tool, the model alias for a model call. */
   target: string;
+  /** The tool's title (`Read a record`) and its app's name (`Salesforce`), from tools-service's call log (c-607). */
+  title?: string | null;
+  app?: string | null;
   /** Bank system or module for a tool; the resolved model for a model call. */
   system: string;
   operation: CallOperation;
@@ -66,6 +69,10 @@ export interface ToolCallRow {
   failureSide?: 'ours' | 'upstream';
   /** On a replayed write, the call whose result it returned. */
   replayOf?: string;
+  /** Whom the call acted for (an email), from a verified acting-for token. */
+  actingFor?: string;
+  /** Whose sign-in signed the call in: that person's own, or the team's account; absent when it used no sign-in. */
+  credential?: 'person' | 'team';
 }
 
 export interface CallIdentity<K extends string> {

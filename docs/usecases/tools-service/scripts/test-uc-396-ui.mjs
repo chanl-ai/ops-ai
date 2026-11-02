@@ -3,9 +3,9 @@
 // dialog runs on the mock only). Priya, an Operations admin, opens its connection page, sets it to each person's own
 // account, connects hers through the pop-up, and Test connection works with her account; People connected lists her.
 // The browser reaches the bank stand-in's sign-in host on its own address, as tools-service does by its name map.
-import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { asRole, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { CONNECTION_STACK, allowBank, tools } from '../../lib/connection_ui.mjs';
-import { PASSWORD, PRIYA, as } from '../../lib/workflow_ui.mjs';
+import { PASSWORD, PRIYA } from '../../lib/workflow_ui.mjs';
 
 const RUN = Math.random().toString(36).slice(2, 6);
 const send = async (method, path, headers, body) => {
@@ -16,7 +16,7 @@ const send = async (method, path, headers, body) => {
 await withUiStack(
   async (consoleUrl, stack) => {
     await allowBank(stack.bank);
-    const P = await as(PRIYA);
+    const P = await asRole('admin');
     const server = `https://${stack.bank.host}/mcp/screening`;
     const made = await send('POST', '/v1/connections/mcp', P, { serverUrl: server, name: `uc396 screening ${RUN}` });
     if (made.status !== 201) throw new Error(`adding the MCP server: ${made.status}`);

@@ -85,7 +85,7 @@ with agents(), tools() as gw:
         rows,
     )
 
-    # c-028: the operation's limits hold on real calls. Calls run on the published operations while edits wait for
+    # an earlier change: the operation's limits hold on real calls. Calls run on the published operations while edits wait for
     # review, so both edits go to Security together before anything is called.
     bank = data(gw.get("/v1/tool-modules/mod_core_banking"))
     loan = next(o for o in bank["operations"] if o["name"] == "get_loan_account")

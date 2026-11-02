@@ -251,12 +251,32 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-561 | agents-service | Memory follows a person across a team's agents and they take it back | api | api passing |
 | uc-562 | console | Every list, record and settings page reads well on a phone and on a desktop: no preselected decision, phone lists show the name, search boxes and descriptions read in full, tab strips scroll with a cue, a way back on record pages | ui | passing |
 | uc-563 | platform-service | A developer installs the sample team with one command, and a second run makes nothing | cli | passing |
-| uc-564 | tools-service | A team turns on the Salesforce plugin, and its agents work cases and cite its articles | api, ui, cli | draft |
+| uc-564 | tools-service | A team turns on the Salesforce plugin, and its agents work cases and cite its articles | api, sdk, cli, ui | draft |
 | uc-565 | agents-service | A SQL Server install migrates agents to the head | api | api passing |
-| uc-581 | tools-service | An agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query | api, ui, cli | passing |
+| uc-581 | tools-service | An agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query | api, ui, cli | draft |
 | uc-566 | agents-service | Agents starts and a chat turn saves its checkpoint | api | api failing |
 | uc-567 | agents-service | Every workflow run ends with a clear outcome: a run nothing is working on shows Stuck with the reason and Retry, and an email whose run will not start is set aside with Run again | api,ui | passing |
 | uc-568 | agents-service | Document workflows: a builder reads any document as full text or proposed fields, shares a workflow as a form, runs it once per row of a CSV, and builds a two-source workflow from a description | api, ui, cli | passing |
-| uc-580 | console | A team admin connects every system for real from one grid: the team's systems as cards with search and a category filter, nothing of another team's, and the shipped page while the switch is off | ui | draft |
-| uc-588 | tools-service | A developer's plugin signs in every way a system asks, and its agents call it | api, cli, ui | draft |
+| uc-580 | console | Superseded by uc-607: connecting systems from one grid and one large dialog; its steps moved to uc-607 and its script is removed | ui | superseded |
+| uc-588 | tools-service | A developer's plugin signs in every way a system asks, and its agents call it | api, sdk, cli, ui | draft |
+| uc-607 | console | A team connects apps from one catalog: a catalog of apps, Connect in a small window, an app's page where a person connects their own account and a tool runs with it | api, sdk, cli, ui | draft |
 | uc-583 | tools-service | A team connects a system that allows only certificate sign-in, and its agents call it | api | draft |
+| uc-584 | tools-service | A plugin sends the headers, forms, sign-in steps and limits a system needs | api, cli | draft |
+| uc-609 | tools-service | A team reviews a plugin update before its tools change | api, ui | draft |
+| uc-590 | agents-service | A team installs a plugin's agent, skill, workflow and document type as its own copies, through the checks a person's create goes through | api, sdk, cli, ui | passing |
+| uc-605 | models-service | A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region | api, cli, ui | passing |
+| uc-610 | agents-service | An agent with many tools finds the one it needs by searching, and runs it through the same checks | api | passing |
+| uc-613 | tools-service | An agent reads a team's file and a document's fields by its type, and never another team's | api, ui | api passing |
+| uc-611 | tools-service | A developer builds a REST tool and runs it for real | api, sdk, ui | current |
+| uc-612 | tools-service | An install turns a feature on or off from its config | api, ui | passing |
+| uc-614 | platform-service | A developer calls any API as a standard dev user | api | passing |
+| uc-615 | tools-service | A team admin sets its own app credential and tests it with their account | api, sdk, cli | draft |
+| uc-616 | tools-service | Usage shows only this team's tool calls and whom each ran as | api, sdk | draft |
+| uc-617 | tools-service | An app that fails says why: an expired account, a run waiting for a person's account, an unknown host | api | draft |
+| uc-618 | tools-service | Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key | api | draft |
+| uc-619 | agents-service | A new team's assistant answers from its knowledge and files | api | passing |
+| uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api | draft |
+| uc-621 | agents-service | A builder runs the three foundation Examples | sdk | current |
+| uc-622 | agents-service | A builder asks the first three published agents | sdk | current |
+| uc-623 | agents-service | A builder validates, applies and test-runs the three-node workflow | sdk, cli | current |
+| uc-624 | agents-service | A builder runs the two composition Examples | sdk | current |

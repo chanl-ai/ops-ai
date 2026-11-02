@@ -1,0 +1,6 @@
+{
+  "from": "ada@example.test",
+  "subject": "Claim",
+  "body": "Please read the attached claim.",
+  "file": "claim.txt"
+}

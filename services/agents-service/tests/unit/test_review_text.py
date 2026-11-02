@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from ops_agents.api.review_text import describe_call, question, source_file
+from ops_agents.api.review_text import describe_call, input_rows, question, source_file
 
 HOLD = {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250.0, "reason": "NS-2026-GN-01187"}}
 SCHEMA = {"properties": {"accountId": {"type": "string"}, "amount": {"type": "number"}, "reason": {"type": "string"}}}
@@ -67,6 +67,27 @@ async def test_a_machine_id_is_left_out_and_the_operations_description_says_what
     said = await describe_call(_rt(ops=[op]), call, currency=None, money_key=None)
     assert said["fields"] == [{"label": "Decision", "value": "approved"}]
     assert said["consequence"] == "Grants or refuses the access."
+
+
+ACCOUNTS = [{"id": "CHQ-2219", "balance": 5000.0}]
+HOLD_INPUT = {"document": {"name": "Marcus Bell", "amount": 3250}, "accounts": ACCOUNTS}
+
+
+@pytest.mark.asyncio
+async def test_a_call_carrying_a_list_of_objects_reads_as_rows() -> None:
+    """A tool input that is a list of records (accounts on a hold) used to 500 the run page: object_rows assumed a
+    dict. Chat flattened the same list into one string. Both now expand one row per field."""
+    op = SimpleNamespace(name="compute_levy_hold", input_schema={}, description="Works out the hold.")
+    said = await describe_call(
+        _rt(ops=[op]), {"tool": "compute_levy_hold", "input": HOLD_INPUT}, currency=None, money_key=None
+    )
+    rows = {f["label"]: f["value"] for f in said["fields"]}
+    assert rows["Document · Name"] == "Marcus Bell"
+    assert rows["Accounts · 1 · Id"] == "CHQ-2219"
+    assert rows["Accounts · 1 · Balance"] == "5,000"
+    chat = {f["label"]: f["value"] for f in input_rows(HOLD_INPUT)}
+    assert chat["Accounts · 1 · Id"] == "CHQ-2219"
+    assert "5,000" in chat["Accounts · 1 · Balance"]
 
 
 def test_a_step_with_options_asks_which_one_for_whom() -> None:

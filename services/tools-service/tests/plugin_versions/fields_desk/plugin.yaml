@@ -1,0 +1,56 @@
+# The fields desk at 0.2.0 (c-609): find takes pending too and moves, post_message moves, transfer is gone, close_case is new.
+schema: ops-ai/plugin@2
+id: test.fields
+title: Fields desk
+version: 0.2.0
+sdk: "1"
+connection:
+  kinds: [bearer]
+  sign_in: [team]
+  health_check: { path: "/fields/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+  api_version: { type: string, title: API version, default: "2026-10" }
+egress: ["{base_url}"]
+endpoint: "{base_url}/fields"
+headers: { X-Api-Version: "{api_version}" }
+tools:
+  - name: search
+    title: Search records
+    access: read
+    input: { q: { type: string, required: false } }
+    headers: { ConsistencyLevel: eventual }
+    request: { method: GET, path: /search }
+  - name: find
+    title: Find records by status
+    access: read
+    input: { status: { type: string, enum: [open, closed, pending] } }
+    request: { method: GET, path: /find, query: { state: "{{status}}" } }
+  - name: post_message
+    title: Post a message
+    access: write
+    requires_approval: false
+    input:
+      channel: { type: string }
+      text: { type: string }
+      thread: { type: string, required: false }
+    request:
+      method: POST
+      path: /chat.post
+      form: { channel: "{{channel}}", text: "{{text}}", thread_ts: "{{thread}}" }
+  - name: close_case
+    title: Close a case
+    access: write
+    requires_approval: false
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: POST, path: "/cases/{id}/close" }
+  - name: echo
+    title: Echo what was sent
+    access: read
+    function: fields_desk.tools:echo
+templates:
+  - kind: agent
+    id: desk-helper
+    version: 2
+    path: templates/desk-helper.yaml
+    requires: { tools: [post_message] }

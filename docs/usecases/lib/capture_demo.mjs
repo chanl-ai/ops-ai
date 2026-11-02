@@ -1,4 +1,4 @@
-// Takes the README's screenshots and clips from the sample team that scripts/sample_team.py installs (c-389).
+// Takes the README's screenshots and clips from the sample team that scripts/sample_team.py installs.
 //
 //   node docs/usecases/lib/capture_demo.mjs --origin http://localhost:3016 --env .run/demo.env
 //   node docs/usecases/lib/capture_demo.mjs --origin https://<install> --env <people env> --only chat,cases

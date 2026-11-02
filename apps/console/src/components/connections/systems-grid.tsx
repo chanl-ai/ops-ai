@@ -2,29 +2,30 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Cable, CircleCheck, CircleX, ExternalLink, Plus, Search } from 'lucide-react';
+import { ArrowRight, CircleCheck, Plug, Plus, Search } from 'lucide-react';
 
 import { PageLayout } from '@/components/page-layout';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type SystemCard, useSystems } from '@/hooks/systems-queries';
+import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
+import { AppsTabs } from './apps-tabs';
 import type { ConnectMode } from './connect-system-dialog';
 
 export type { ConnectMode };
 type View = 'all' | 'connected' | 'available';
-const EVERY = 'every';
 
-const connected = (s: SystemCard) => Object.values(s.environments).some((e) => e?.set);
-const failing = (s: SystemCard) => Object.values(s.environments).some((e) => e?.health?.status === 'failed');
+// Connected reads the app's state, as its page does: an account signed in or a key that passed its test, never settings
+// saved alone. A plugin the team turned off (Turn off, group K) offers Connect again; its accounts stay for later.
+const connected = (s: SystemCard) =>
+  s.plugin?.teamOn !== false && (s.state ? s.state === 'connected' || s.state === 'expired' || s.state === 'refused' : Object.values(s.environments).some((e) => e?.set));
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -33,147 +34,142 @@ const initials = (name: string) =>
     .join('')
     .toUpperCase();
 
-/** One environment's state from its last test: Working, Failing, or Not set with no keys. */
-function EnvBadge({ env, system }: { env: string; system: SystemCard }) {
-  const e = system.environments[env];
-  const state = !e?.set ? 'unset' : e.health?.status === 'failed' ? 'failed' : e.health?.status === 'ok' ? 'ok' : 'set';
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        state === 'ok' && 'border-success/40 bg-success/10 text-success-text',
-        state === 'failed' && 'border-destructive/40 bg-destructive/10 text-destructive',
-      )}
-      data-testid={`system-${system.id}-${env}`}
-    >
-      {state === 'ok' && <CircleCheck />}
-      {state === 'failed' && <CircleX />}
-      {e?.label ?? env} · {state === 'ok' ? 'Working' : state === 'failed' ? 'Failing' : state === 'set' ? 'Not tested' : 'Not set'}
-    </Badge>
-  );
-}
+/** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are (c-607); a built-in app's is the
+ * console page that manages it (its knowledge bases, its mailboxes). */
+export const appHref = (s: SystemCard) => s.href ?? `/integrations/apps/${encodeURIComponent(s.id)}`;
 
-function SystemCardView({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
-  const isConnected = connected(system);
+// Only Ops AI's own apps carry a tag; how an app was installed is never named on screen (owner, 11-01: one word, App).
+
+/** One app's card: logo, name, tools and how it signs in, one line, its category. */
+function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
+  const isConnected = system.kind === 'builtin' || connected(system);
   return (
-    <Card className="gap-3 py-4" data-testid={`system-${system.id}`}>
-      <CardHeader className="flex flex-row items-start gap-3 px-4">
+    <Card className="min-h-40 gap-3 py-4 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`}>
+      <CardHeader className="flex flex-row items-center gap-2.5 px-4">
         <Avatar className="size-9 rounded-md">
           {system.logo && <AvatarImage src={system.logo} alt="" />}
           <AvatarFallback className="rounded-md text-xs font-semibold">{initials(system.name)}</AvatarFallback>
         </Avatar>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold">{system.name}</span>
-            {system.kind === 'plugin' && <Badge variant="outline">Plugin</Badge>}
-          </div>
-          <span className="truncate text-xs text-muted-foreground">
-            {system.toolsCount} tools{system.kindLabel ? ` · ${system.kindLabel}` : ''}
-          </span>
+        <div className="min-w-0">
+          <CardTitle className="truncate text-base">{system.name}</CardTitle>
+          <p className="truncate text-xs text-muted-foreground">
+            {plural(system.toolsCount, 'tool')}{system.kindLabel ? ` · ${system.kindLabel}` : ''}
+          </p>
         </div>
-        {system.category && <Badge variant="secondary">{system.category}</Badge>}
+        {system.kind === 'builtin' && (
+          <Badge variant="outline" className="ml-auto shrink-0">
+            Built in
+          </Badge>
+        )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 px-4">
-        {system.description && <p className="line-clamp-2 text-sm text-muted-foreground">{system.description}</p>}
-        <div className="flex flex-wrap gap-1.5">
-          {Object.keys(system.environments).map((env) => (
-            <EnvBadge key={env} env={env} system={system} />
-          ))}
+      <CardContent className="flex flex-1 flex-col gap-3 px-4">
+        {system.description && <CardDescription className="line-clamp-1">{system.description}</CardDescription>}
+        {system.category && system.kind !== 'builtin' && (
+          <div>
+            <Badge variant="secondary">{system.category}</Badge>
+          </div>
+        )}
+        <div className="mt-auto flex items-center justify-between gap-2">
+          {isConnected ? (
+            <>
+              <Badge variant="outline" className="border-success/40 bg-success/10 text-success-text" data-testid={`system-${system.id}-status`}>
+                <CircleCheck />
+                Connected · {plural(system.toolsCount, 'tool')}
+              </Badge>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href={appHref(system)} data-testid={`open-${system.id}`}>
+                  Open
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Only a team admin connects an app; anyone else is told why rather than shown a dead button. */}
+              {system.mayManage ? <span /> : <span className="text-xs text-muted-foreground" data-testid={`connect-${system.id}-why`}>A team admin connects it</span>}
+              <Button size="sm" variant="outline" onClick={() => onConnect(system, 'connect')} disabled={!system.mayManage} title={system.mayManage ? undefined : 'Only a team admin connects apps'} data-testid={`connect-${system.id}`}>
+                Connect
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
-      <CardFooter className="mt-auto flex flex-wrap items-center gap-2 border-t px-4 pt-3">
-        {isConnected && system.connectionId ? (
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/tools/connections/${encodeURIComponent(system.connectionId)}`}>Open</Link>
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => onConnect(system, 'connect')} disabled={!system.mayManage} data-testid={`connect-${system.id}`}>
-            Connect
-          </Button>
-        )}
-        {isConnected && failing(system) && system.mayManage && (
-          <Button size="sm" variant="ghost" onClick={() => onConnect(system, 'edit')}>
-            Fix keys
-          </Button>
-        )}
-        <span className="flex-1" />
-        {system.docsUrl && (
-          <Button size="sm" variant="link" className="h-auto px-0 text-xs text-muted-foreground" asChild>
-            <a href={system.docsUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink />
-              Docs
-            </a>
-          </Button>
-        )}
-      </CardFooter>
     </Card>
   );
 }
 
+/** A filter drawn as a badge that toggles. */
+function FilterBadge({ on, onClick, children, testId }: { on: boolean; onClick: () => void; children: React.ReactNode; testId?: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={on} data-testid={testId}>
+      <Badge variant={on ? 'default' : 'outline'} className={cn('cursor-pointer', !on && 'hover:border-primary/30 hover:bg-primary/10 hover:text-primary')}>
+        {children}
+      </Badge>
+    </button>
+  );
+}
+
 /**
- * Connections as a grid of the team's systems (c-580), read from GET /v1/systems so each card arrives joined: a
- * plugin, a connection or a module, with its details and each environment's health. One search, a category filter and
- * All, Connected, Not connected, so a long list of systems stays easy to scan.
+ * Connections as an apps catalog (c-607), read from GET /v1/systems so each card arrives joined: plugins first,
+ * then the team's own apps. One search, with Connected only and Available only.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
   const systems = useSystems();
   const [view, setView] = React.useState<View>('all');
   const [q, setQ] = React.useState('');
-  const [category, setCategory] = React.useState(EVERY);
-  const all = systems.data ?? [];
-  const categories = [...new Set(all.map((s) => s.category).filter((c): c is string => Boolean(c)))].sort();
+  const all = [...(systems.data ?? [])].sort((a, b) => Number(b.kind === 'plugin') - Number(a.kind === 'plugin'));
   const shown = all.filter(
     (s) =>
       (view === 'all' || (view === 'connected') === Boolean(connected(s))) &&
-      (category === EVERY || s.category === category) &&
       (!q || `${s.name} ${s.description ?? ''} ${s.category ?? ''}`.toLowerCase().includes(q.toLowerCase())),
   );
-  const count = (v: View) => (systems.data ? all.filter((s) => v === 'all' || (v === 'connected') === Boolean(connected(s))).length : undefined);
-  const label = (text: string, n: number | undefined) => (n == null ? text : `${text} · ${n}`);
-  const filtered = Boolean(q) || category !== EVERY || view !== 'all';
+  const filtered = Boolean(q) || view !== 'all';
+  const toggle = (v: View) => setView((cur) => (cur === v ? 'all' : v));
   return (
     <PageLayout
-      icon={Cable}
-      title="Connections"
-      description="Every system the team signs in to, with its keys for test and production."
+      icon={Plug}
+      title="Apps"
+      description="Browse and connect the apps your agents and workflows use."
+      tabs={<AppsTabs />}
       contentClassName="flex flex-col gap-4"
       actions={
-        <Button onClick={onNew} data-testid="connect-system">
-          <Plus />
-          Connect a system
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setView('connected')} data-testid="connected-apps">
+            Connected apps
+            <ArrowRight />
+          </Button>
+          <Button size="sm" onClick={onNew} data-testid="connect-system">
+            <Plus />
+            Add custom app
+          </Button>
+        </div>
       }
     >
-      <div className="flex flex-col gap-3 md:flex-row">
-        <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-          <TabsList aria-label="Which systems">
-            <TabsTrigger value="all">{label('All', count('all'))}</TabsTrigger>
-            <TabsTrigger value="connected">{label('Connected', count('connected'))}</TabsTrigger>
-            <TabsTrigger value="available">{label('Not connected', count('available'))}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:justify-end">
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search systems" className="pl-8" aria-label="Search systems" />
-          </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger aria-label="Category" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={EVERY}>Every category</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search apps" className="pl-9" aria-label="Search apps" />
         </div>
+        {systems.data && (
+          <span className="text-sm text-muted-foreground" data-testid="apps-count">
+            {shown.length} of {all.length}
+          </span>
+        )}
+        {/* One grid as the catalog frame: Connected only and Available only narrow it; search covers the category. */}
+        {systems.data && (
+          <div className="ml-auto flex items-center gap-1.5" data-testid="apps-tags">
+            <FilterBadge on={view === 'connected'} onClick={() => toggle('connected')} testId="filter-connected">
+              Connected only
+            </FilterBadge>
+            <FilterBadge on={view === 'available'} onClick={() => toggle('available')} testId="filter-available">
+              Available only
+            </FilterBadge>
+          </div>
+        )}
       </div>
-      {systems.isError ? (
-        <QueryError what="your systems" error={systems.error} onRetry={() => systems.refetch()} retrying={systems.isFetching} />
+      {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
+      {!systems.data && (systems.isError || systems.failureCount > 0) ? (
+        <QueryError what="your apps" error={systems.error ?? systems.failureReason} onRetry={() => systems.refetch()} retrying={systems.isFetching} />
       ) : systems.isPending ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -182,18 +178,18 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
         </div>
       ) : !shown.length ? (
         <ListEmpty
-          icon={Cable}
-          noun="systems"
+          icon={Plug}
+          noun="apps"
           filtered={filtered && all.length > 0}
-          onClear={() => (setQ(''), setCategory(EVERY), setView('all'))}
-          createLabel="Connect a system"
+          onClear={() => (setQ(''), setView('all'))}
+          createLabel="Add custom app"
           onCreate={onNew}
-          description="Connect a system with its keys, or import its tools first and connect it from there."
+          description="Your platform admin installs apps; you can add your own app now."
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="systems-grid">
           {shown.map((s) => (
-            <SystemCardView key={s.id} system={s} onConnect={onConnect} />
+            <AppCard key={s.id} system={s} onConnect={onConnect} />
           ))}
         </div>
       )}

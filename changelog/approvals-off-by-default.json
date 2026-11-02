@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Approvals are off until your team turns them on",
+  "description": "Tool writes now run without an approval unless your team turns approval on in Policies: for every write, for the apps you list, or for one tool. When approval is on, someone who decides your team's reviews is not asked to approve their own write, unless your workspace has someone else decide every request; anyone else's write waits for them.",
+  "tag": "improved",
+  "cards": [
+    "c-616"
+  ]
+}

@@ -57,12 +57,34 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_create_eval_run": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/eval-runs",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_create_guardrail": {
     "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/guardrails",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "agents_create_job": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/jobs",
+    "pathParams": [
+      "agent_id"
+    ],
     "query": [],
     "stream": false
   },
@@ -279,6 +301,17 @@ export const agentsOperations = {
       "page",
       "pageSize",
       "search"
+    ],
+    "stream": false
+  },
+  "agents_list_tool_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tool-uses",
+    "pathParams": [],
+    "query": [
+      "tools"
     ],
     "stream": false
   },
@@ -1140,6 +1173,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "resources_copy_resource": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies",
+    "pathParams": [
+      "resource"
+    ],
+    "query": [],
+    "stream": false
+  },
   "reviews_assign": {
     "body": "json",
     "headers": [],
@@ -1298,6 +1342,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "reviews_open_egress_host_request": {
+    "body": "json",
+    "headers": [
+      "x-service-authorization"
+    ],
+    "method": "POST",
+    "path": "/v1/publish-requests/egress-hosts",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "reviews_open_publish_request": {
     "body": "json",
     "headers": [
@@ -1320,6 +1375,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "reviews_run_as_team_account": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/reviews/{thread_id}/team-account",
+    "pathParams": [
+      "thread_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "reviews_save_task_type": {
     "body": "json",
     "headers": [],
@@ -1331,18 +1397,6 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
-  "templates_install_template": {
-    "body": "json",
-    "headers": [],
-    "method": "POST",
-    "path": "/v1/templates/{source}/{template_id}/install",
-    "pathParams": [
-      "source",
-      "template_id"
-    ],
-    "query": [],
-    "stream": false
-  },
   "templates_list_templates": {
     "body": null,
     "headers": [],
@@ -1350,7 +1404,8 @@ export const agentsOperations = {
     "path": "/v1/templates",
     "pathParams": [],
     "query": [
-      "kind"
+      "kind",
+      "source"
     ],
     "stream": false
   },

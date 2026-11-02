@@ -132,12 +132,15 @@ def test_only_the_two_loops_reach_past_rls() -> None:
     # store/background.py: the Background page, a central background process's view, reads every team's jobs (c-516).
     # store/batches.py: the batch starter, in the workflow worker, finds every tenant's pending rows and starts each
     # inside its own tenant and team (api/batches.py), as the engine's claim loop does with runs (c-535).
+    # store/team_defaults.py: the start-up catch-up finds every team whose default is its Ops Assistant and brings
+    # each to the declared one inside its own tenant (api/ops_tools.py, c-616).
     assert system_users == {
         "store/graphs.py",
         "store/engine.py",
         "store/memories.py",
         "store/background.py",
         "store/batches.py",
+        "store/team_defaults.py",
     }
     # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}

@@ -23,6 +23,7 @@ from ops_tools.store.modules import ModuleStore
 
 from .conftest import Bank, service_headers
 from .fake_upstream import ENDPOINT, HOST
+from .test_calls import on_its_connection
 
 # Characters that mean something in a URL, so a value put in unencoded would change the request.
 VALUE = "sk/live+7f&3c=9e d"
@@ -56,7 +57,6 @@ async def _module(engine: AsyncEngine, tenant: str) -> None:
 
     m.update(
         status="published",
-        endpoint=ENDPOINT,
         egress_hosts=[HOST],
         operations=[
             op(
@@ -74,6 +74,7 @@ async def _module(engine: AsyncEngine, tenant: str) -> None:
             ),
         ],
     )
+    m = await on_its_connection(engine, m, ENDPOINT)
     await ModuleStore(engine).put(m, expected_revision=None)
 
 

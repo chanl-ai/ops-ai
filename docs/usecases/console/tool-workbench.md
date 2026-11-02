@@ -19,15 +19,15 @@ tries the draft mock and transform and a secret value typed for that run before 
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Tools > the module > the operation's row | the row holds one link to the workbench and no `tabindex` of its own; the operation opens at `/tools/{module}/operations/{name}`, wider than 900px; the module page has no side test console |
-| 2 | Edit the mock response and the transform; Run against the mock | Output is the transformed answer, Raw response the mock; the operation's mock and transform are unchanged and nothing is staged |
-| 2b | Open the Run-as list | "Module owner, no case" with no leading separator |
-| 3 | Type the key as the secret's test value; Test environment; Run | the bank answers (Allowed, 200); the Request tab shows `api_key=[secret]`; the key is in no response the console receives |
+| 1 | Tools > the module > the operation's row | the row holds one link to the tool page and no `tabindex` of its own; the operation opens at `/tools/{module}/operations/{name}`, wider than 900px; the module page has no side console |
+| 2 | A mock answer is set through the API; open More › Transform, type a transform, and Run in Mock | Response is the transformed answer, Raw response the mock answer; the operation's transform is unchanged and nothing is staged |
+| 2b | Retired: Run as a workflow's case belongs to the Function workbench; a REST tool runs as its owner | |
+| 3 | Headers › type the key as the secret's test value; Real; Run | the bank answers (Allowed, 200); Request sent shows `api_key=[secret]`; the key is in no response the console receives |
 | 3b | After the run returns | the typed key is in no input and nowhere in the page's HTML (a controlled input writes its value into the `value` attribute) |
-| 4 | A transform that reads a missing field; Run against the mock | the reason shows under the Transform field and on the result; Output is the raw answer |
-| 5 | Stage changes | the PATCH carries the mock; the module lists "Mock response edited" as a minor unpublished change |
-| 6 | A viewer (Ravi) opens the same operation; a builder (James) opens it too | the viewer sees a View only notice, no Stage changes or Access and approval, and every field disabled; the builder never sees View only, not while the role loads; at 390px the viewer's Run tab is enabled and opens the run panel |
-| 7 | Open the operation at 390px wide, then at 1440px | on the phone Definition and Run are tabs (Definition first) and Run is on screen after one tap; at 1440px both sit side by side and there are no tabs |
+| 4 | A transform that reads a missing field; Mock; Run | the reason shows under the Transform field and on the result; Response is the raw answer |
+| 5 | Save a transform | the PATCH carries it; the module lists an unpublished change for the operation |
+| 6 | A viewer (Ravi) opens the same operation; a builder (James) opens it too | the viewer sees a View only notice, no Save or Access and approval, the App field disabled and Run off with why (viewers may not run tools); the builder never sees View only |
+| 7 | Open the operation at 390px wide | Run sits with the address, above the inputs, and nothing scrolls sideways |
 
 The typed value is not stored, logged or returned: `services/tools-service/tests/test_workbench_runs.py` scans every
 table of the test database and the captured logs for it.

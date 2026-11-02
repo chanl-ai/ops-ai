@@ -115,7 +115,7 @@ def _agents_service(settings: Settings) -> AgentsUsage:
 
 def _tools_service(settings: Settings) -> ToolReader | None:
     """tools-service's gateway, for "tool" sources (c-564): the declared sources and one call per list page or item."""
-    # Plugins are off until their release (OPS_PLUGINS): kb-service then calls no tools route at all.
+    # An install with no plugin (Settings.plugins) has no tool sources: kb-service then calls no tools route at all.
     if not settings.plugins or not settings.tools_url:
         return None
     http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)

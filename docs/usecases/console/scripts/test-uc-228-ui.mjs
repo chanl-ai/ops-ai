@@ -1,4 +1,4 @@
-// uc-228 Starting a run, and reading a run and a case, ui layer: docs/usecases/console/start-run-and-records.md (c-266).
+// uc-228 Starting a run, and reading a run and a case, ui layer: docs/usecases/console/start-run-and-records.md.
 // Platform sign-in; James works in Operations. UC228_SHOTS names a folder to keep each surface's screenshot in, for a
 // side-by-side comparison before and after a refactor.
 import { mkdirSync } from 'node:fs';

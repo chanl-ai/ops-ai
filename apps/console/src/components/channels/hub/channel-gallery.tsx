@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { useFlagged } from '@/hooks/flag-queries';
 import { plural } from '@/lib/format';
 import type { ChannelKindSummary } from '@/lib/types/channels';
 
@@ -12,9 +13,10 @@ import { KINDS } from './kinds';
 
 /** One card per kind, with a state read from its channels (never a bare count) and exactly one action. */
 export function ChannelGallery({ kinds }: { kinds: ChannelKindSummary[] }) {
+  const shown = useFlagged(KINDS);
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="channel-gallery">
-      {KINDS.map((k) => {
+      {shown.map((k) => {
         const s = kinds.find((x) => x.type === k.type);
         const built = s?.built ?? false;
         const Icon = k.icon;

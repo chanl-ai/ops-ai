@@ -27,13 +27,13 @@ Policies stay on their current page until `GET` and `PUT /v1/policies` exist.
 
 | Old route | New route |
 |---|---|
-| `/settings/publish-reviews` | `/settings/policies/publish-reviews` |
 | `/reviews/policies` | `/settings/policies/gates` |
+| `/settings/publish-reviews` | `/settings/policies/publish-reviews` |
 | `/settings/general` | `/settings/team` |
 | `/account/security` | `/settings/account/security` |
 | `/account` | `/settings/account` |
 | `/settings/usage` | `/settings/workspace/usage` |
-| `/settings/secrets` | `/settings/security/secrets` |
+| `/settings/secrets` | `/integrations/credentials` (Secrets tab) |
 | `/settings/egress` | `/settings/security/egress` |
 | `/settings/sign-in` | `/settings/security/sign-in` |
 | `/settings/notifications` | `/settings/team/notifications` |

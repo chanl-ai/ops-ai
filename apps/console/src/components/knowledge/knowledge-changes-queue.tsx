@@ -16,6 +16,7 @@ import { useKnowledgeChange, useKnowledgeChanges } from '@/hooks/knowledge-chang
 import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { useListParams } from '@/hooks/use-list-params';
 import type { ChangeFilters, ChangeView, KnowledgeChange } from '@/lib/types/knowledge-changes';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 /**
  * Proposed knowledge edits. Rendered across all knowledge bases under Reviews, and for one
@@ -92,15 +93,7 @@ export function KnowledgeChangesQueue({ kbId }: { kbId?: string }) {
           { column: 'owner', title: 'Owner', options: withCounts('owner', Object.keys(facets.owner ?? {}).map((o) => ({ label: o, value: o }))) },
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
-        serverPagination={{
-          enabled: true,
-          total: query.data?.pagination.total ?? 0,
-          page: list.pagination.page,
-          pageSize: list.pagination.pageSize,
-          totalPages: query.data?.pagination.totalPages,
-          onPaginationChange: list.setPagination,
-          isLoading: query.isFetching && query.isPlaceholderData,
-        }}
+        serverPagination={serverPagination(list, query)}
         emptyState={
           <ListEmpty
             icon={BookOpenCheck}

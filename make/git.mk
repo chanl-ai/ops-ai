@@ -6,11 +6,31 @@
 #   make whats-mine FILES='a.py'       show what would be committed for these files, against HEAD
 #   make git-rules                     list the rules and check them
 
-.PHONY: commit unstage whats-mine git-rules
+#   make my-hunks FILE=docs/usecases/README.md > mine.patch     then delete the hunks that are not yours
+#   make commit-hunks PATCH=mine.patch MSG='docs(x): add uc-588 row' CARD=c-588
+
+.PHONY: commit unstage whats-mine git-rules my-hunks commit-hunks
+
+my-hunks: ## Print FILE's changes against HEAD as a patch, to keep only your own hunks before commit-hunks
+	@[ -n "$(FILE)" ] || { echo "make my-hunks: name the file, e.g. FILE='docs/usecases/README.md'" >&2; exit 2; }
+	@git diff HEAD -- $(FILE)
+
+commit-hunks: ## Commit only the hunks in PATCH onto HEAD (for shared files), with MSG (and CARD, BODY)
+	@[ -n "$(PATCH)" ] || { echo "make commit-hunks: give the patch, e.g. PATCH=mine.patch"; exit 2; }
+	@[ -n "$(MSG)" ] || { echo "make commit-hunks: give a subject, e.g. MSG='docs(x): add a row'"; exit 2; }
+	@msg=$$(mktemp "$${TMPDIR:-/tmp}/commit-msg.XXXXXX"); \
+	  printf '%s\n' "$(MSG)" > "$$msg"; \
+	  if [ -n "$(BODY)" ]; then printf '\n%s\n' "$(BODY)" >> "$$msg"; fi; \
+	  if [ -n "$(CARD)" ]; then printf '\nCard: %s\n' "$(CARD)" >> "$$msg"; fi; \
+	  bash scripts/commit-patch.sh "$$msg" "$(PATCH)"; rc=$$?; rm -f "$$msg"; exit $$rc
 
 commit: ## Commit only FILES, with MSG (and CARD, BODY), through both hooks, from HEAD plus those files
 	@[ -n "$(FILES)" ] || { echo "make commit: name your files, e.g. FILES='services/x/a.py'"; exit 2; }
 	@[ -n "$(MSG)" ] || { echo "make commit: give a subject, e.g. MSG='fix(tools): fill query placeholders'"; exit 2; }
+	@# The named Python files are linted and formatted as the gate will see them (named paths, so examples/ too), which
+	@# is what refused most commits; NOFIX=1 leaves them as they are. The gate itself is unchanged.
+	@if [ -z "$(NOFIX)" ]; then py=$$(for f in $(FILES); do [ -f "$$f" ] && echo "$$f"; done | grep '\.py$$'); \
+	  if [ -n "$$py" ]; then $(ROOT)/.venv/bin/ruff check --fix --quiet $$py || true; $(ROOT)/.venv/bin/ruff format --quiet $$py; fi; fi
 	@msg=$$(mktemp "$${TMPDIR:-/tmp}/commit-msg.XXXXXX"); \
 	  printf '%s\n' "$(MSG)" > "$$msg"; \
 	  if [ -n "$(BODY)" ]; then printf '\n%s\n' "$(BODY)" >> "$$msg"; fi; \

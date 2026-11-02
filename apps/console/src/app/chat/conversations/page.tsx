@@ -26,6 +26,7 @@ import { useSticky } from '@/hooks/use-sticky';
 import { count, plural, relativeTime } from '@/lib/format';
 import type { ChatFilters, ChatThreadRow } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = ChatThreadRow & { onRowClick: (t: ChatThreadRow) => void; href: string };
 const ALL = { page: 1, pageSize: 100 };
@@ -224,15 +225,7 @@ export default function ConversationsPage() {
             { label: 'Archive', icon: Archive, variant: 'outline', onClick: (r) => setBulk({ kind: 'archive', rows: r }) },
             { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => setBulk({ kind: 'delete', rows: r }) },
           ]}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           emptyState={
             <ListEmpty
               icon={History}

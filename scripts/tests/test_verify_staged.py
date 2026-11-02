@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+LOGIN = "dean" + "grover"
 CONSOLE_RAN = "\N{INFORMATION SOURCE} tests"  # node --test's summary line, printed by the console's verify
 
 
@@ -31,6 +32,12 @@ def gate(tmp_path: Path, changes: dict[str, str]) -> subprocess.CompletedProcess
 
 def at_head(path: str) -> str:
     return subprocess.run(["git", "show", f"HEAD:{path}"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+
+
+def test_a_staged_home_path_or_login_is_refused(tmp_path: Path) -> None:
+    done = gate(tmp_path, {"docs/README.md": at_head("docs/README.md") + f"\nSee `/Users/{LOGIN}/secret`.\n"})
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "scrub_board_paths" in out, out[-2000:]
 
 
 def test_a_docs_only_commit_skips_the_console_but_still_refuses_a_private_path(tmp_path: Path) -> None:

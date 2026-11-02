@@ -49,6 +49,8 @@ kill_timeout = 30
   OPS_FILES_SCANNING = "eicar"
   OPS_MAILBOX_SOURCE = "none"
   OPS_MAIL_PROVIDER = "none"
+  # The features this install turns on, separated by commas (docs/deploy/install.md, Feature flags); unset turns none on.
+  # OPS_FLAGS = "mcp_gateway"
   # tools-service keeps its records under tenant "local" until it resolves tenants from tokens.
   OPS_BOOTSTRAP_TENANT_ID = "local"
 

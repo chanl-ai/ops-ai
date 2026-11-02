@@ -1,11 +1,10 @@
 // uc-558 People connect their own Salesforce account, ui layer: docs/usecases/tools-service/per-person-sign-in.md
-// (c-558). The demo stack with the console switch NEXT_PUBLIC_OPS_PERSONAL_SIGNIN on and a fake Salesforce (docs/usecases/lib/fake_salesforce.py:
+//. The demo stack and a fake Salesforce (docs/usecases/lib/fake_salesforce.py:
 // a real OAuth server and an API that records whose token edited a case). James asks in chat to move a case; the call
 // is refused with a Connect card, he signs in through the pop-up as handler@kestrel.example, and the chat goes on:
-// Salesforce records exactly one edit, his. Your connections lists the sign-in and Disconnect removes it. Priya, an
-// admin, sets the connection's sign-in on its page, connects her own account there and presses Test connection. The
-// card and Your connections are checked again at 375 px. Last, a light stack with the switch off, the default, shows
-// none of it. Screenshots go to evidenceDir('558', 'uc').
+// Salesforce records exactly one edit, his. My accounts (Apps menu) lists the sign-in and Disconnect removes it. Priya,
+// an admin, connects her own account on the app's page. The card and My accounts are checked again at 375 px.
+// Screenshots go to evidenceDir('558', 'uc').
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
@@ -206,7 +205,7 @@ try {
         await step('14 Your connections, from the person menu, lists his Salesforce account', async () => {
           await page.getByTestId('nav-user').click();
           await page.getByTestId('nav-connections').click();
-          await page.waitForURL(/\/settings\/account\/connections$/, { timeout: 60_000 });
+          await page.waitForURL(/\/integrations\/my-accounts$/, { timeout: 60_000 });
           const row = page.getByTestId('my-connections');
           await row.waitFor({ timeout: 60_000 });
           const text = (await row.textContent()) ?? '';
@@ -231,10 +230,11 @@ try {
         }, page);
 
         await step('16 Disconnect removes his sign-in, and the system is asked to end it', async () => {
+          // The old address opens My accounts; the row stays, offering Connect, as the app still lets him connect his own.
           await page.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId(`disconnect-${conn.id}`).click();
           await page.getByTestId('delete-my-connection-confirm-btn').click();
-          await page.getByTestId('my-connections-empty').waitFor({ timeout: 60_000 });
+          await page.getByTestId(`connect-${conn.id}`).waitFor({ timeout: 60_000 });
           const left = (await call(tools, 'GET', '/v1/me/connections', james)).data ?? null;
           check('16 Disconnect removes his sign-in, and the system is asked to end it', Array.isArray(left) && left.length === 0, left);
         }, page);
@@ -243,29 +243,44 @@ try {
         const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, ignoreHTTPSErrors: true });
         await adminContext.route(`https://${LOGIN_HOST}/**`, toFake);
         const admin = await signIn('p.shah@harborpine.example', adminContext);
-        await step('17 Priya sets each person with the team account as backup on the connection page', async () => {
+        await step('17 Priya reads Everyone signs in on the app’s Settings, turns it off to the team account and back on', async () => {
+          // Who signs in sits on the app page's Settings in the final Apps frames; the old address opens the page.
           await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await admin.getByTestId('sign-in-setting').waitFor({ timeout: 90_000 });
-          const offered = await admin.locator('[data-testid=sign-in-setting] [role=radio]').count();
-          const first = await admin.locator('#sign-in-person').getAttribute('data-state');
-          await admin.locator('label[for=sign-in-backup]').click();
-          await admin.getByTestId('sign-in-save').click();
+          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          await admin.getByTestId('app-tab-settings').click();
+          const everyone = admin.getByTestId('app-everyone');
+          await everyone.waitFor({ timeout: 90_000 });
+          const first = await everyone.getAttribute('data-state');
           const read = async () => (await call(tools, 'GET', `/v1/connections/${conn.id}`, priya)).data ?? {};
-          let after = await read();
-          for (let i = 0; i < 20 && after.signIn !== 'person_or_team'; i++) await admin.waitForTimeout(500), (after = await read());
-          check('17 Priya sets each person with the team account as backup on the connection page', offered === 3 && first === 'checked' && after.signIn === 'person_or_team' && after.teamBackup === true, { offered, first, signIn: after.signIn, teamBackup: after.teamBackup });
+          const until = async (want) => {
+            let now = await read();
+            for (let i = 0; i < 20 && now.signIn !== want; i++) await admin.waitForTimeout(500), (now = await read());
+            return now;
+          };
+          await everyone.click();
+          const off = await until('team');
+          await admin.getByTestId('app-everyone').click();
+          const on = await until('person');
+          check('17 Priya reads Everyone signs in on the app’s Settings, turns it off to the team account and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person', { first, off: off.signIn, on: on.signIn });
         }, admin);
 
-        await step('18 she connects her own account from the page and Test connection answers 200, kept on the connection', async () => {
-          const [popup] = await Promise.all([admin.waitForEvent('popup'), admin.getByTestId('connect-own').click()]);
+        await step('18 she connects her own account on the app’s page, which the old connection address opens', async () => {
+          await admin.goto(`${consoleUrl}/tools/connections/${conn.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await admin.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          const button = admin.getByTestId('app-connect-me');
+          await button.waitFor({ timeout: 90_000 }).catch(async (e) => {
+            // What the page shows instead, so a red run says why.
+            console.log('app page:', admin.url(), ((await admin.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 600));
+            throw e;
+          });
+          const [popup] = await Promise.all([admin.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await throughPopup(popup, 'lead@kestrel.example');
-          await admin.getByTestId('test-own').click();
-          const health = admin.getByTestId('health');
-          await health.waitFor({ timeout: 60_000 });
-          const text = (await health.textContent()) ?? '';
-          await admin.screenshot({ path: join(SHOTS, 'connection-sign-in-1280.png') });
-          const kept = (await call(tools, 'GET', `/v1/connections/${conn.id}`, priya)).data?.health ?? {};
-          check('18 she connects her own account from the page and Test connection answers 200, kept on the connection', (await health.getAttribute('data-status')) === 'ok' && /200/.test(text) && kept.status === 'ok' && kept.account === 'own', { text, kept });
+          const me = admin.getByTestId('app-me');
+          await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
+          const text = ((await me.innerText()) ?? '').replace(/\s+/g, ' ');
+          await admin.screenshot({ path: join(SHOTS, 'app-own-account-1280.png') });
+          const mine = (await call(tools, 'GET', '/v1/me/connections', priya)).data ?? [];
+          check('18 she connects her own account on the app’s page, which the old connection address opens', /Connected as lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
         }, admin);
 
         check('no page errors', errors.length === 0, errors.slice(0, 3));
@@ -273,36 +288,10 @@ try {
         await browser.close();
       }
     },
-    { demo: true, fakeModelRules: RULES, tools: { env: sf.info.settings }, consoleSwitches: { NEXT_PUBLIC_OPS_PERSONAL_SIGNIN: '1' } },
+    { demo: true, fakeModelRules: RULES, tools: { env: sf.info.settings } },
   );
 } finally {
   await stopSalesforce();
 }
 
-// With the switch off, as every release before Salesforce's ships: nothing of this card shows in the console.
-await withUiStack(
-  async (consoleUrl) => {
-    const browser = await chromium.launch();
-    try {
-      const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
-      await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByLabel('Work email').fill('j.richardson@harborpine.example');
-      await page.getByLabel('Password').fill(PASSWORD);
-      await page.getByTestId('login-submit').click();
-      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
-      await page.getByTestId('nav-user').click();
-      await page.getByTestId('nav-account').waitFor({ timeout: 30_000 });
-      const menu = await page.getByTestId('nav-connections').count();
-      await page.keyboard.press('Escape');
-      await page.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.waitForTimeout(3000);
-      const shown = await page.locator('[data-testid^=my-connections]').count();
-      const text = (await page.locator('body').textContent()) ?? '';
-      check('19 off by default: no Your connections in the person menu, and its page is not found', menu === 0 && shown === 0 && /404|could not be found|not found/i.test(text), { menu, shown, text: text.slice(0, 160) });
-    } finally {
-      await browser.close();
-    }
-  },
-  { platform: true },
-);
 finish();

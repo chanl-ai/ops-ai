@@ -40,7 +40,7 @@ RULES = DOCS / "tests" / "fixtures" / "fake-model"
 OPS = {"X-Team-Id": "team_ops"}
 # The forms a template is suggested for: five reads of the master make the offer and the draft.
 FORMS = {"supplier_invoice": "INV", "bank_statement": "STMT"}
-# A scan that takes the model path, for the page image gates (c-295), and the alias documents-service reads with.
+# A scan that takes the model path, for the page image gates, and the alias documents-service reads with.
 SCAN = ("restraining", "TEST001_scan.pdf")
 MODELS_ADMIN = service_headers("models")
 
@@ -204,7 +204,7 @@ def main() -> None:
 
 
 def examples(documents: httpx.Client, reads: dict[str, dict[str, Any]]) -> None:
-    """Check 7 (c-297): a correction of a typed read becomes an example of its type, listed for the team with the line
+    """Check 7: a correction of a typed read becomes an example of its type, listed for the team with the line
     its value was printed on, and removed it is gone; a value its cited line does not show teaches nothing."""
     first = reads["INVA01.pdf"]
     field = f"/v1/documents/extractions/{first['id']}/fields/invoice_no"
@@ -245,7 +245,7 @@ def page_images(
     documents: httpx.Client,
     kinds: dict[str, Any],
 ) -> None:
-    """Check 6 (c-295): a scan's page goes to the model only when its type version, the team's pageImages policy and the
+    """Check 6: a scan's page goes to the model only when its type version, the team's pageImages policy and the
     model alias all allow it, and every call that carried one is on the read and in models-service's call log."""
     type_id, (definition, folder) = next((k, v) for k, v in kinds.items() if v[1].name == SCAN[0])
     fid = upload(files, folder, SCAN[1])

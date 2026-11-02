@@ -22,13 +22,11 @@ from ops_identity.fastapi import current_principal
 from ops_models.__main__ import dev_provider_keys
 from ops_models.app import create_models_app
 from ops_models.store import provider_keys
-from ops_policy import AesGcmCipher
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 
 from .conftest import SERVICE, Models
-
-CIPHER = AesGcmCipher("cd" * 32)
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -56,7 +54,7 @@ def _people(tenant: str) -> Any:
         if authorization:
             return await current_principal(request, authorization=authorization)
         team = x_team_id or "team_security"
-        return Principal(
+        p = Principal(
             kind="person",
             sub="usr_nadia",
             email="nadia@harborpine.example",
@@ -68,6 +66,10 @@ def _people(tenant: str) -> Any:
             scopes=[],
             auth_method="session",
         )
+        # As the real dependency does: the request acts in the person's tenant and team, which the database holds
+        # provider keys to (c-616 C3).
+        isolation.enter_caller(p, dev=False)
+        return p
 
     return as_person
 
@@ -96,7 +98,7 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     seen: list[str | None] = []
     tenant, key_name = f"t_{uuid4().hex[:8]}", f"OPENAI_{uuid4().hex[:6].upper()}"
     fallback = {key_name: in_settings} if in_settings else {}
-    app = create_models_app(models.engine, upstream=_provider(seen), cipher=CIPHER, provider_secrets=fallback)
+    app = create_models_app(models.engine, upstream=_provider(seen), provider_secrets=fallback)
     app.dependency_overrides[current_principal] = _people(tenant)
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)

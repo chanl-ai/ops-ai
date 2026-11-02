@@ -75,7 +75,8 @@ async def test_a_reviewer_reaches_a_review_only_acting_in_the_threads_team(
     found (c-429, c-509)."""
     monkeypatch.setattr(hitl_facade, "policy_of", policy())
     c = dev_platform
-    url = await drafted(c, person("usr_james", ["team_ops"]))
+    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    url = await drafted(c, person("usr_james", ["team_ops"], role="builder"))
     thread = url.split("/chat/threads/")[1].split("/")[0]
     in_fraud = {**person("usr_nadia", ["team_ops", "team_fraud"]), "X-Team-Id": "team_fraud"}
     assert (await c.get(f"/reviews/{thread}", headers=in_fraud)).status_code == 404

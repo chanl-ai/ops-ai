@@ -29,12 +29,16 @@ Each status in this guide is read from the code of the release it ships with. **
 1. [Overview](overview.md): what Ops AI does, for whom, and the platform in one picture
 2. [System components](system-components.md): every container, its port, what it stores and what it calls
 3. [How work flows](how-work-flows.md): a chat turn with an approval, a workflow with a human task, and an email that becomes a case
-4. [Data and database](data-and-database.md): the entities, what each service stores, tenants and teams, files, retention and audit
-5. [Security and governance](security-and-governance.md): sign-in, roles, approvals, the tool gateway, secrets, masking and audit
-6. [Models](models.md): the AI gateway, aliases, budgets, data sensitivity and the test model
-7. [Deployment options](deployment-options.md): one VM with Docker Compose, Kubernetes, tenancy, the network and sizing
-8. [Install](install.md): the install script
-9. [Operate](operate.md): health, logs, upgrade and roll back, back up and restore, scaling
-10. [Azure SQL](azure-sql.md): what is ready for review and what is still to come
-11. [What's built today](whats-built-today.md): built, partial or planned, capability by capability
-12. [Support](support.md): who to contact
+4. [Build with Ops AI](build-with-ops-ai.md): the developer ladder, the two bridges, and the Example folders
+5. [Workflows](workflows.md): author, validate, publish and test-run a workflow from the SDK or CLI
+6. [Agents](agents.md): author, publish and chat with an agent from the SDK or CLI
+7. [Apps](apps.md): the Apps menu: turning an App on, team and personal Accounts, App credentials, Tools, Resources, approvals, a run waiting for a person, and turning an App off
+8. [Data and database](data-and-database.md): the entities, what each service stores, tenants and teams, files, retention and audit
+9. [Security and governance](security-and-governance.md): sign-in, roles, approvals, the tool gateway, secrets, masking and audit
+10. [Models](models.md): the AI gateway, aliases, budgets, data sensitivity and the test model
+11. [Deployment options](deployment-options.md): one VM with Docker Compose, Kubernetes, tenancy, the network and sizing
+12. [Install](install.md): the install script
+13. [Operate](operate.md): health, logs, upgrade and roll back, back up and restore, scaling
+14. [Azure SQL](azure-sql.md): what is ready for review and what is still to come
+15. [What's built today](whats-built-today.md): built, partial or planned, capability by capability
+16. [Support](support.md): who to contact

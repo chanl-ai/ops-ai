@@ -72,6 +72,8 @@ export const KIND_LABEL: Record<ReviewKind, string> = {
   model_validation: 'Model validation',
   skill_publish: 'Skill publish',
   template_submission: 'Template submission',
+  connect_account: 'Connect your account',
+  egress_host: 'New host',
 };
 
 const ACCESS: Record<GrantAccess, { label: string; cls: string }> = {

@@ -1,17 +1,17 @@
 # Building a plugin
 
-Status: current on main behind the `OPS_PLUGINS` switch, which is off until the plugins release; what is not built
-yet is listed at the end. Design: the planning repo `docs/plans/ops-ai/plugin-architecture.html`.
+Status: current. Plugins load from the install's plugins folder, with no switch. What is not built yet is listed at
+the end.
 
 A plugin brings one outside system to Ops AI as a single installable package: how a team signs in to it, the tools
 agents may call on it, the knowledge it can feed into a knowledge base, and agent templates that use those tools. It is
-a Python package holding a `plugin.yaml` manifest. Most plugins are only that file: tools-service runs each tool from
+a Python package holding a manifest file. Most plugins are only that file: the tools service runs each tool from
 its request template, so no plugin code runs for them. A tool's paging, and a query built from a model's values, are
 data too. Python is used only where the manifest cannot say what a tool does, such as making several requests or
-reading a binary answer. The worked example is
-Salesforce, in the built-in plugins repository at `plugins/salesforce/`; every path below is relative to that folder
-unless it says otherwise. The repository is private at <https://github.com/chanl-ai/ops-ai-plugins>, cloned beside
-ops-ai. Changes to it go on a branch and through a pull request.
+reading a binary answer. The worked example is Salesforce in the built-in plugins repository; every path below is
+relative to that folder unless it says otherwise. Changes to that repository go on a branch and through a pull request.
+
+The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/salesforce/`.
 
 ## What a plugin holds
 
@@ -31,14 +31,17 @@ ops-ai. Changes to it go on a branch and through a pull request.
 | `id`, `title`, `version`, `sdk` | `id` is reverse-domain (`opsai.salesforce`); the part after the last dot prefixes every tool name (`salesforce_query`) |
 | `connection.kinds` | Sign-in kinds the system accepts: `oauth2_auth_code`, `oauth2_client_credentials`, `oauth2_jwt_bearer`, `api_key`, `basic`, `bearer` or `none` |
 | `connection.authorize_url`, `token_url`, `revoke_url`, `scopes` | The OAuth app's addresses and scopes; `{setting}` placeholders are filled from settings |
-| `connection.sign_in` | Who signs in: `team`, `person` or `person_or_team`; `person` needs a kind that holds each person's token (`oauth2_auth_code`), and validate refuses it otherwise |
+| `connection.sign_in` | Who signs in: `team`, `person` or `person_or_team`; `person` needs a kind that holds each person's own credential (`api_key`, `basic`, `bearer` or `oauth2_auth_code`), and validate refuses it on a plugin whose kinds are only `none`, `oauth2_client_credentials` or `oauth2_jwt_bearer` |
 | `connection.api_key` | For `api_key`: `{placement: header \| query, name}`, how the system takes its key; validate refuses an `api_key` plugin without it |
-| `connection.from_token`, `token_hosts` | Settings read from the token answer (Salesforce's `instance_url`), and the host suffixes such a value must end in |
+| `connection.from_token`, `token_hosts` | Settings read from the token answer, and the host suffixes such a value must end in |
+| `connection.after_sign_in` | One lookup after sign-in that fills a setting (Salesforce's instance from UserInfo); see Headers, forms and sign-in steps |
+| `connection.client_auth`, `authorize_params` | How the OAuth client is sent on the token call, and extra parameters on the sign-in address |
 | `connection.health_check` | The path Test connection calls |
-| `settings` | Values a team sets. `default`, `lockable` (the platform admin can fix it for every team) and `from_token` (only the sign-in sets it) |
+| `settings` | Values a team sets. `default`, `lockable` (the platform admin can fix it for every team), and `from_token` or `after_sign_in` (only the sign-in sets it) |
+| `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
-| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, then either `request` (method, path, `query`, body, `paging`) and an optional Jinja `transform`, or `function` |
+| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
 | `knowledge_sources` | A source's `list` and `get` tools and its `schedule` |
 | `templates` | Each template's kind, id, file, and the tools and bindings it needs |
 
@@ -97,6 +100,30 @@ is the worked example:
     paging: { rule: link, next: nextRecordsUrl }
 ```
 
+## Headers, forms and sign-in steps
+
+Six fields cover what a system asks for beyond a path and a query. Each is data, checked by `ops plugin validate`
+and run by tools-service.
+
+| Field | What it does | Example | What validate refuses, and why |
+|---|---|---|---|
+| `headers` (plugin), `tools[].headers` | Sent on each request: the plugin's first, then the tool's, then the connection's sign-in, which wins over a name they share. Fixed text or `{setting}`; a header whose setting is unset is left out | Graph's `ConsistencyLevel: eventual`, `Sforce-Query-Options: batchSize={query_batch_size}` | `Authorization`, `Proxy-Authorization`, `Cookie`, `Host` or the API key's name in any case, `{{`, or a secret setting: a header never carries a credential. Headers on a Python tool: it takes the plugin's |
+| `request.form` | A form-encoded body in place of `body`; each field fixed text or `{{input}}`, a field whose input is not given left out | Slack's `chat.postMessage`, Stripe's creates | A form with `body`, a form on GET or DELETE, a field naming no input |
+| `connection.authorize_params` | Added to the sign-in address; fixed text or `{setting}` | Atlassian's `audience: api.atlassian.com`, `prompt: consent` | A name the platform sets (`state`, `client_id`, `redirect_uri`, `code_challenge`, `scope`, `response_type`, `login_hint`, `resource`): tools-service drops those on every connection anyway |
+| `connection.client_auth` | How the OAuth client is sent on the token call: `body`, `basic` or `private_key_jwt` | Zoom takes only `basic` | On a plugin with no OAuth kind |
+| `connection.after_sign_in` | One GET with the token just issued, whose value at `read` fills `setting`. `url` is https, or a path on the sign-in host (the origin of `token_url`) | Salesforce: `{url: /services/oauth2/userinfo, read: urls.custom_domain, setting: instance_url}`; Atlassian: `read: "[0].id"` of accessible-resources | A host outside `egress`, a setting not marked `after_sign_in`, an unreadable path, no `token_hosts` |
+| `tools[].amount_max` | The most the tool's `amount` input may be; a call over it, or without an amount, is refused before it leaves | A core-banking transfer | No number input named `amount`, or a paged tool |
+
+Every request template also refuses a secret reference (`{{NAME}}` in capitals): tools-service resolves those from the
+calling team's secrets, so one in a plugin would send the team's secret to the plugin's host. A team setting that a
+header renders and that holds `{{` or a line break turns the plugin's calls off for that team, naming the setting.
+
+The lookup follows no redirect, and fails the sign-in, storing no token, when it answers anything but 200, names no
+value, names an address outside `token_hosts`, or names a plain value with anything but letters, digits, `.`, `_`, `-`
+and `:`. The team admin's own sign-in sets or replaces the value; a person's own sign-in sets it only when none is held,
+and one that reaches a different site is refused as "signed in to another site", so one person cannot point the team's
+calls at another tenant. That rule is `settle_at_sign_in` in tools-service's `plugins/host.py`, the one place it lives.
+
 ## Writing a Python tool
 
 A function receives a `Context` and its inputs as keyword arguments, and returns what the tool answers. Every
@@ -143,17 +170,29 @@ Fake(client, token))`, where `client` is an `httpx.Client` bound to a fake of th
 
 | How | When |
 |---|---|
-| A built-in from `ops-ai-plugins`, pinned per release | A plugin shipped with an install |
-| Add it to the environment tools-service runs in (`uv add`) | A plugin a customer brings |
-| List its folder in `OPS_PLUGIN_PATHS` (a JSON list) | A plugin under development, without packaging |
+| Put its folder in the install's plugins folder (`plugins/` in the repo, `OPS_PLUGINS_DIR` in Docker and Kubernetes) | Every plugin an install runs, built-in or brought by a customer |
+| Add it to the environment tools-service runs in (`uv add`) | A packaged plugin on a developer's stack |
+| List its folder in `OPS_PLUGIN_PATHS` (a JSON list) | A plugin under development, without copying it |
 
-tools-service loads every plugin when it starts. A plugin that fails validation is listed under `failed` at
+`ops plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
+names it when it is not `./plugins`), replacing an earlier copy whole; a plugin that fails validation is not copied.
+`ops plugin remove <id>` deletes it. Restart tools-service and kb-service after either.
+
+```
+uv run ops plugin install ../ops-ai-plugins/plugins/salesforce
+uv run ops plugin remove opsai.salesforce
+```
+
+Compose mounts the checkout's `plugins/` read-only at `/plugins` in tools and kb (`OPS_PLUGINS_HOST_DIR` names another
+host folder), so `ops plugin install --into <that folder>` then a restart of both is the whole install.
+
+tools-service and kb-service load every plugin when they start. A plugin that fails validation is listed under `failed` at
 `GET /v1/plugins` with its error, and every other plugin still loads.
 
 ## Turn a plugin on
 
-Plugins run only where `OPS_PLUGINS=true` is set for tools-service and kb-service. Off, nothing is loaded, the plugin
-routes answer 404 and kb-service refuses a plugin source (`tools_unavailable`). With it on, a plugin is still off until two people turn it on.
+An install with no plugin loads nothing: the plugin routes answer 404 and kb-service refuses a plugin source
+(`tools_unavailable`). A plugin that loaded is still off until two people turn it on.
 There is no Plugins page yet; both switches are API calls.
 
 | Who | Call | What it does |
@@ -195,13 +234,40 @@ retried with a secret. RS256 (RSA keys) and ES256 (P-256 keys) are the algorithm
 
 A team that gives `clientId` and `clientSecret` signs in with its own OAuth app; one that gives neither uses the
 platform's. `signIn` is `team` (one team account), `person` (each person connects their own account, from the chat card
-or Your connections, and calls act as them) or `person_or_team` (each person, with the team account as backup). A plugin
+or My accounts, and calls act as them) or `person_or_team` (each person, with the team account as backup). A plugin
 lists which of these it allows. One team's app, connection or token never serves another team, and one person's token
 never serves anyone else.
+
+On a connection each person signs in to, a key, password or token kind asks each person for their own: the
+team gives the address and how the key is sent, and no key of its own. A person gives theirs with
+`PUT /v1/me/connections/{id}/credentials` and `{environment, credentials: {key}}` (`{username, password}` for `basic`,
+`{token}` for `bearer`), from the chat card that asks for it or from My accounts; it is sealed in their own row and
+never answered back. `GET /v1/me/connections?every=true` lists every connection of the team a person can connect, with
+`connected`, the method and the fields to give. A call acting for a person with no key is refused
+`CONNECTION_NOT_LINKED` naming `authKind` and `personFields`, so the console asks for the key in place; a call with
+nobody behind it is refused with reason `no_person`. A wrong key fails that person's call with the system's 401 and
+leaves everyone else's working; Disconnect removes it.
 
 After that, builders grant the plugin's tools to agents as any other tool, and a knowledge base adds a source with
 `POST /v1/sources` and `{type: "tool", config: {plugin: "opsai.salesforce", source: "articles"}}`. Nobody can edit,
 publish or delete the plugin's tool module; a new plugin version replaces it.
+
+## Plugin updates
+
+Behind the `plugin_updates` install flag (`OPS_FLAGS`), off by default; off, a plugin's tools are written once and
+every team calls the installed manifest. On, each team runs the plugin version it took:
+
+| What | How |
+|---|---|
+| The team's version | Its binding records the version, a digest of the tool declarations (the plugin-wide headers and each tool's manifest entry) and the declarations. A team takes the installed version when it turns the plugin on |
+| An upgrade | The operator installs the new package and restarts tools-service. The account's tool row follows it, keeping each tool's id and a dropped tool as a switched-off row. Nothing changes for a team until it takes the update |
+| Calls and lists | Built from the team's version: a changed tool keeps its request and inputs, a dropped one still answers and stays listed, a new one is neither listed nor callable. A Python tool always runs the installed package's function |
+| The review | `GET /v1/plugins/{id}/team/update`: both versions, and each new, changed and removed tool with its inputs added, removed and changed. agents-service's `GET /v1/tool-uses?tools=` names the team's agents and workflows that use each one |
+| Taking it | `POST /v1/plugins/{id}/team/update` with the installed digest the review was read at; another upgrade since then answers 409 `update_changed`. Keeping the current version is not taking it |
+
+Not versioned per team: the sign-in (addresses, scopes, the lookup after sign-in), the endpoint and the egress hosts,
+which are the installed version's. uc-609 (`make usecase-test UC=uc-609`) runs an upgrade from 0.1.0 to 0.2.0 across a
+restart.
 
 ## Proof
 
@@ -209,11 +275,15 @@ Use cases uc-564 and uc-581 run all of this against a fake Salesforce on main: `
 `make usecase-test UC=uc-581`, then `make usecase-report UC=<id>` for their stories. uc-581 runs the seven query tools,
 paging, the checks on query values, the sync's restart and the tools picker's titles. uc-588
 (`make usecase-test UC=uc-588`) turns on one test plugin per sign-in kind from `services/tools-service/tests/plugin_kinds`
-against `docs/usecases/lib/fake_multi_auth.py`, a person's own sign-in from chat, and a client certificate;
+against `docs/usecases/lib/fake_multi_auth.py`, a person's own sign-in from chat, each person's own API key (steps
+20-22), and a client certificate;
 `docs/usecases/tools-service/scripts/evidence-uc-588-stripe.py` runs the bearer kind against Stripe in test mode.
 uc-583 (`make usecase-test UC=uc-583`) turns on Entra, Google and DocuSign style plugins from
 `services/tools-service/tests/plugin_signed` against `docs/usecases/lib/fake_token_endpoint.py`, which checks each
-assertion as Entra does.
+assertion as Entra does. uc-584 (`make usecase-test UC=uc-584`) runs the six fields of Headers, forms and sign-in steps
+from `services/tools-service/tests/plugin_fields` against `fake_multi_auth.py`, and Salesforce's UserInfo lookup against
+the fake Salesforce; `docs/usecases/tools-service/scripts/evidence-uc-584-stripe.py` sends a header, a form and an amount
+limit to Stripe in test mode.
 
 ## Not built yet
 
@@ -225,7 +295,5 @@ assertion as Entra does.
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |
 | Plugins running out of process | Python tools run inside tools-service |
 | Inbound webhooks a plugin declares | Designed in an earlier change's spec; built in an earlier change |
-| Headers, form bodies, extra sign-in parameters, a lookup after sign-in and amount limits in the manifest | Planned as their own card, after paging |
 | One rate window per connection, Retry-After, and recorded fakes with standard cases | Planned |
 | A signed client assertion and the JWT grant, and knowledge items over 25 MB | Planned; a client certificate on the TLS handshake works today |
-| Each person giving their own key, password or token | Planned; each person signs in only with `oauth2_auth_code` today |

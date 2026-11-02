@@ -6,7 +6,6 @@ are not served.
 
 from __future__ import annotations
 
-import time
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -14,26 +13,22 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import require_provisioner
-from ops_agent_kernel.events import TurnFinished
-from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.layout import required_tools
-from ops_agent_kernel.types import ToolGrant, TurnRequest, TurnResult
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
-from ops_agents.activities.tool_directory import ToolsUnavailable, grants_for
-from ops_agents.activities.tools import fill
-from ops_agents.graphs.common import needs_step_up
+from ops_agents.activities.tool_directory import ToolsUnavailable
+from ops_agents.app.evals import parse_cases, run_eval
 from ops_contracts.chat import WireModel
-from ops_service_kit.errors import ApiError, Conflict, ServiceUnavailable, Unprocessable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult
-from ops_service_kit.ids import new_id
+from ops_service_kit.ids import new_id, now_iso
 
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import (
     GUARDRAILS,
     agent_review_body,
     agent_view,
-    definition_of,
     go_live,
+    refuse_new_turns,
     registry,
     require_newest_draft,
     review_view,
@@ -41,6 +36,7 @@ from ..agent_registry import (
     tasks_24h,
     version_state,
 )
+from ..agent_test import one_test_turn
 from ..auth import Principal, caller, caller_in, caller_of, principal, require_builder
 from ..child_runs import engine_workflows, refusal
 from ..deps import Runtime, runtime
@@ -51,8 +47,10 @@ from ..model_aliases import chat_aliases
 from ..publish_policy import Decision, decide
 from ..review_sla import sla_hours
 from ..rights import rights
+from ..runs import graph_store
 from ..schemas import (
     Agent,
+    AgentEvalRun,
     AgentRun,
     AgentTestTurn,
     AgentVersion,
@@ -63,6 +61,7 @@ from ..schemas import (
 )
 from ..skills import check_pins_hold
 from ..team_names import team_name
+from ..timers import arm_job
 from ..widgets import published as published_widget
 from ..workflow_registry import registry as workflow_registry
 from .tool_catalog import known_tools
@@ -155,6 +154,46 @@ class TestInput(WireModel):
     message: str = Field(min_length=1)
 
 
+class EvalCheckInput(WireModel):
+    type: str
+    tool: str | None = None
+    text: str | None = None
+
+
+class EvalCaseContextInput(WireModel):
+    collections: list[str] = Field(default_factory=list[str])
+
+
+class EvalCaseInput(WireModel):
+    name: str
+    input: str
+    context: EvalCaseContextInput | None = None
+    checks: list[EvalCheckInput] = Field(default_factory=list[EvalCheckInput])
+
+
+class EvalRunInput(WireModel):
+    # Empty is 422 from the use case, not Pydantic 400.
+    cases: list[EvalCaseInput] = Field(default_factory=list[EvalCaseInput])
+
+
+class JobInput(WireModel):
+    message: str = "Review held wires."
+    due_at: str | None = None
+    key: str = "job"
+
+
+class JobArmed(WireModel):
+    """What arming a job answers: the thread, the key, and whichever of the timer or the started run applies."""
+
+    thread_id: str
+    key: str
+    duplicate: bool | None = None
+    timer_id: str | None = None
+    armed: bool | None = None
+    status: str | None = None
+    run_id: str | None = None
+
+
 SORTS = {"name", "updatedAt", "tasks24h", "version", "teamId", "availability"}
 
 
@@ -172,7 +211,7 @@ def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
     nothing is reported stale then."""
     if offered is None:
         return []
-    return [t for t in tool_ids if not t.startswith("workflow:") and t not in offered]
+    return [t for t in tool_ids if not t.startswith(("workflow:", "agent:")) and t not in offered]
 
 
 def _agent_nodes(definition: dict[str, Any]) -> list[dict[str, Any]]:
@@ -256,15 +295,31 @@ async def _checked_tools(rt: Runtime, tool_ids: list[str], granted: list[str]) -
     """The grants to save: a newly added id the directory does not offer is refused; one already granted that is no
     longer offered (stale) is dropped, so a stale grant never blocks saving the rest (c-048 T010)."""
     known = {t["id"] for t in await known_tools(rt)}
-    # A workflow grant already held is kept while its workflow is paused or unpublished (it is simply not offered
-    # until it is live again); a new one must be a workflow the directory offers now.
-    offered = [t for t in tool_ids if t in known or (t.startswith("workflow:") and t in granted)]
+    # A plugin turned on moments ago is not in the list kept for 30 s: ask tools-service once more before refusing.
+    if any(t not in known and t not in granted and not t.startswith(("workflow:", "agent:")) for t in tool_ids):
+        known = {t["id"] for t in await known_tools(rt, fresh=True)}
+    # A workflow or agent grant already held is kept while its target is paused or unpublished (it is simply not
+    # offered until it is live again); a new one must be a published workflow or agent the directory offers now.
+    offered = [t for t in tool_ids if t in known or (t.startswith(("workflow:", "agent:")) and t in granted)]
     unknown = [t for t in tool_ids if t not in offered and t not in granted]
     for t in unknown:
         if t.startswith("workflow:") and (why := await refusal(rt, t.removeprefix("workflow:"))) is not None:
             raise ValidationFailed(f"{why.message} An agent cannot be granted it.", code=why.code)
-    if unknown:
-        raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")
+        if t.startswith("agent:"):
+            aid = t.removeprefix("agent:")
+            try:
+                row = await registry(rt).row(aid)
+            except NotFound as exc:
+                raise ValidationFailed(f"Unknown tools: {t}.", code="unknown_tool") from exc
+            if row.get("published_version") is None:
+                raise ValidationFailed(
+                    f"Agent {aid} is not published, so it cannot be granted.",
+                    code="not_published",
+                )
+            offered.append(t)
+    leftover = [t for t in unknown if t not in offered]
+    if leftover:
+        raise ValidationFailed(f"Unknown tools: {', '.join(leftover)}.", code="unknown_tool")
     return offered
 
 
@@ -333,6 +388,11 @@ async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> 
 
 @router.post("", response_model=Envelope[Agent], status_code=201)
 async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
+    if not me.team_id:
+        # A dev session naming no team acts across teams; an agent belongs to exactly one (c-602).
+        raise ValidationFailed(
+            "Choose a team with the X-Team-Id header; an agent belongs to one team.", code="team_required"
+        )
     require_builder(me, area="agents", team_id=me.team_id, action="create", what="an agent")
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
@@ -573,8 +633,17 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
         **agent_review_body(agent_id, spec, row, v, note=body.note, by=me.email),
         **decision.record(),
     }
+    # Asking for the newest draft replaces a request still waiting on an older version (a seed change, a colleague's),
+    # so the version that goes live is the one holding the newest grants (c-616 S7).
     req = await reg.open_request(
-        "agent", agent_id, body.version, note=body.note, by=me.email, body=review_body, approved=approved
+        "agent",
+        agent_id,
+        body.version,
+        note=body.note,
+        by=me.email,
+        body=review_body,
+        approved=approved,
+        replaces_older=True,
     )
     if approved:
         await reg.publish(agent_id, body.version, by=req["decided_by"], review_id=req["id"])
@@ -600,112 +669,60 @@ async def set_paused(rt: Rt, me: Me, agent_id: str, body: PausedInput) -> JSONRe
     return ok(await _view(rt, agent_id))
 
 
-def model_refusal(result: TurnResult) -> ApiError | None:
-    """A turn the model endpoint refused answers with that refusal: 429 for a rate limit or budget, 403 for an alias
-    not cleared for the data, 404 for an alias models-service no longer serves; anything else it refused is 503."""
-    if result.error_status is None:
-        return None
-    error = ApiError(result.error or "The model call was refused.", code=result.error_code or "model_refused")
-    error.status = result.error_status if result.error_status in (403, 404, 429) else 503
-    return error
-
-
-# Enough of a cited passage to recognise it in the test panel; the full text is in the knowledge base.
-QUOTE_CHARS = 280
-
-
-def _held(rt: Runtime, grant: ToolGrant) -> dict[str, Any]:
-    """A tool the tested agent holds: whether a call pauses for a review (the kernel gates every grant that is not
-    read-only or a workflow) and, from its approval template, at which gate and for whom."""
-    tool = rt.catalog.tool(grant.name)
-    tpl = tool.approval if tool else None
-    out: dict[str, Any] = {"name": grant.name, "access": grant.access, "pauses": grant.gated}
-    if grant.gated:
-        out |= {"gate": tpl.gate if tpl else "Approval", "reviewers": tpl.reviewers if tpl else "a reviewer"}
-    return out
-
-
 @router.post("/{agent_id}/test", response_model=Envelope[AgentTestTurn])
 async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResponse:
     """One kernel turn on the newest version, draft or not, with no thread kept: the single-turn harness API scripts
     and use cases drive. A write tool stops at its gate, so the reply says where production would pause instead of
     acting. The console tests on a real thread instead (POST /chat/threads with test: true, c-284 and c-285); this
     route goes once the use cases that call it move there (follow-up to c-285)."""
-    if rt.ports is None:
-        raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
-    reg = registry(rt)
     row = await changeable(rt, me, agent_id, "test")
-    defn = definition_of(agent_id, int(row["version"]), (await reg.version(agent_id, int(row["version"])))["spec"])
-    req = TurnRequest(
-        turn_id=new_id("turn"),
-        run_id=new_id("run"),
-        settings=rt.catalog.settings_for(defn, rt.settings.model_alias),
-        tools=await grants_for(rt.directory(), list(defn.tools)),
-        transcript=[],
-        user_turn=body.message,
-        kb_ids=defn.default_kb_ids,
+    return ok(await one_test_turn(rt, agent_id, body.message, row=row))
+
+
+@router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
+async def create_eval_run(rt: Rt, me: Me, agent_id: str, body: EvalRunInput) -> JSONResponse:
+    """Score a dataset of cases on the newest version through the same one-turn test path. live is null and
+    regression is false until a compare subject ships. Empty cases and an unknown check type are 422."""
+    row = await changeable(rt, me, agent_id, "test")
+    cases = parse_cases([item.model_dump(by_alias=True) for item in body.cases])
+
+    async def turn(message: str, collections: tuple[str, ...]) -> dict[str, Any]:
+        return await one_test_turn(rt, agent_id, message, row=row, collections=collections or None)
+
+    return ok(await run_eval(agent_id, cases, turn))
+
+
+@router.post("/{agent_id}/jobs", response_model=Envelope[JobArmed], response_model_exclude_none=True)
+async def create_job(rt: Rt, me: Me, agent_id: str, body: JobInput) -> JSONResponse:
+    """Arm one due tick on the existing timer clock. A repeated key is one run."""
+    await changeable(rt, me, agent_id, "run")
+    await refuse_new_turns(rt, agent_id)
+    delay = 0.0
+    if body.due_at:
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        try:
+            due = datetime.fromisoformat(body.due_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValidationFailed(f"{body.due_at!r} is not a date.", code="not_a_date") from exc
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=UTC)
+        delay = (due - datetime.now(UTC)).total_seconds()
+    store = graph_store(rt)
+    thread_id = new_id("gth")
+    row, created = await store.find_or_create_thread(
+        thread_id,
+        f"agent:{agent_id}",
+        {
+            "ownerEmail": me.email,
+            "startedBy": me.email,
+            "schedule": {"agentId": agent_id, "message": body.message, "key": body.key},
+        },
+        me.team_id,
+        now_iso(),
+        external_key=f"job:{agent_id}:{body.key}",
     )
-    started = time.perf_counter()
-    result: TurnResult | None = None
-    async for event in run_turn(req, rt.ports):
-        if isinstance(event, TurnFinished):
-            result = event.result
-    assert result is not None
-    if (refused := model_refusal(result)) is not None:
-        raise refused
-    # Named as kb-service names them, never from the agents seed; while it is down, by id.
-    try:
-        kb_names = {k.id: k.name for k in await rt.kbs().bases()} if req.kb_ids or result.citations else {}
-    except ApiError:
-        kb_names = {}
-    out: dict[str, Any] = {
-        "reply": result.text,
-        "toolCalls": [
-            {
-                "name": c.tool,
-                "input": str(c.input),
-                "output": "" if c.output is None else str(c.output),
-                "status": c.status,
-                "access": c.access,
-            }
-            for c in result.tool_calls
-        ],
-        "citations": [
-            {
-                "source": c.passage.title,
-                "section": c.passage.section,
-                "kbId": c.passage.kb_id,
-                "kbName": kb_names.get(c.passage.kb_id, c.passage.kb_id),
-                "page": c.passage.page,
-                "quote": c.passage.text[:QUOTE_CHARS],
-            }
-            for c in result.citations
-        ],
-        "tookMs": round((time.perf_counter() - started) * 1000),
-        "model": req.settings.model_alias,
-        "knowledgeBases": [{"id": k, "name": kb_names.get(k, k)} for k in req.kb_ids],
-        "tools": [_held(rt, g) for g in req.tools],
-        "skills": result.skills,
-        "guardrails": [{"name": g.get("name"), "version": g.get("version")} for g in result.guardrails_checked],
-        "searched": bool(req.kb_ids),
-    }
-    fired = result.guardrail if result.stop_reason == "guardrail" else None
-    if fired is not None and fired.get("when") in ("before", "after"):
-        out["blockedBy"] = {"name": fired["name"], "topic": fired["topic"], "when": fired["when"]}
-        if fired["when"] == "before":
-            # Refused on the question: the kernel searches and loads only after that check, and the model never ran.
-            out |= {"searched": False, "skills": []}
-    if result.interrupt is not None:
-        # Built as the agent graph's approval node builds the review a real run opens, so the panel shows that review.
-        call = result.interrupt.pending_call
-        tool = rt.catalog.tool(call.tool)
-        tpl = tool.approval if tool else None
-        values = {k: str(v) for k, v in call.input.items()}
-        out["wouldPause"] = {
-            "gate": tpl.gate if tpl else result.interrupt.needed,
-            "reviewers": tpl.reviewers if tpl else "a reviewer",
-            "tool": call.tool,
-            "action": fill(tpl.action, values) if tpl else result.interrupt.needed,
-            "stepUp": await needs_step_up(rt.graph_deps, call.tool) if rt.graph_deps else False,
-        }
-    return ok(out)
+    if not created:
+        return ok({"threadId": row["id"], "duplicate": True, "key": body.key})
+    armed = await arm_job(rt, row["id"], delay=delay, key=body.key)
+    return ok({"threadId": row["id"], "key": body.key, **armed}, status=201)

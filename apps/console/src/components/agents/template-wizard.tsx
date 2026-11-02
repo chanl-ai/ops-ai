@@ -343,7 +343,7 @@ export function TemplateWizard({
                   {unavailable.length > 0 && (
                     <p className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning-text" role="status">
                       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                      {unavailable.join(', ')} {unavailable.length === 1 ? 'is' : 'are'} not available to your team. Request access from the tool owner in Tools &amp; MCP, then grant it on the agent page.
+                      {unavailable.join(', ')} {unavailable.length === 1 ? 'is' : 'are'} not available to your team. Request access from the tool owner in Tools, then grant it on the agent page.
                     </p>
                   )}
                   <div className="max-h-56 divide-y overflow-y-auto rounded-md border">

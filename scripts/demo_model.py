@@ -8,6 +8,10 @@ with a dev service token, the way an operator would, and changes nothing in any 
   MODEL=fake   rebinds `openai-local` to the fake OpenAI (OPS_MODELS_FAKE_OPENAI_URL, else :8746) and adds a version of
                ALIAS on the model id the alias is named after, which the fake's rules answer
 
+When OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set `openai-local` (c-605), MODEL=<id> names the model, or the
+deployment on Azure, and only adds the alias version; the connection is left as the settings set it, and MODEL=fake is
+refused.
+
 Every alias version is immutable, so each switch adds one (asking for what the alias already serves changes nothing);
 agents pick up the newest on their next turn. ALIAS names another alias (default `default`); `ALIAS=guardrail-check
 MODEL=gpt-5-mini` gives the guardrail checks their own model, creating the alias when it does not exist yet. No key is
@@ -25,12 +29,12 @@ import httpx
 
 from ops_identity import mint_service_token
 from ops_identity.service_keys import dev_service_signer
+from ops_models.connection_settings import ModelConnectionSettings
+from ops_models.seed import install_connection
 
 MODELS = os.environ.get("OPS_MODELS_URL") or f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
 FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or "http://127.0.0.1:8746/v1"
-# OPENAI_BASE_URL: another OpenAI-compatible address, such as an Azure OpenAI resource's /openai/v1 (make setup
-# writes it).
-OPENAI = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+OPENAI = "https://api.openai.com/v1"
 PROVIDER = "openai-local"
 KEY_REF = "openai"
 # USD per million tokens (input, output) from OpenAI's price list, so the call log meters what the demo spends. An id
@@ -75,14 +79,25 @@ def main() -> int:
         print(__doc__)
         return 2
     to_fake = model == "fake"
-    if not to_fake:
-        usable(model)
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
         before = next((p for p in data(m.get("/v1/models/providers")) if p["id"] == PROVIDER), None)
         if before is None:
             raise SystemExit(f"demo-model: models-service at {MODELS} has no provider connection {PROVIDER}")
-        base_url, key_ref, model_id = (FAKE, None, alias) if to_fake else (OPENAI, KEY_REF, model)
+        # OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set: the dev seed points the connection at that endpoint
+        # on every start, so it is left as it is and only the alias moves (onto a deployment, on Azure).
+        settled = install_connection(ModelConnectionSettings()) is not None
+        if settled and to_fake:
+            raise SystemExit(
+                f"demo-model: {PROVIDER} follows OPENAI_API_TYPE / OPENAI_API_BASE; unset them and restart "
+                "models-service to use the fake"
+            )
+        if settled:
+            base_url, key_ref, model_id = before["baseUrl"], before["keyRef"], model
+        else:
+            base_url, key_ref, model_id = (FAKE, None, alias) if to_fake else (OPENAI, KEY_REF, model)
+            if not to_fake:
+                usable(model)
         found = m.get(f"/v1/models/aliases/{alias}/versions")
         created = found.status_code == 404 and not to_fake
         if found.status_code == 404 and to_fake:
@@ -105,7 +120,8 @@ def main() -> int:
             # make up runs this on every start; a version per start would bury the ones a person made.
             print(f"alias {alias}: already v{current['version']} {model_id} on {base_url}")
             return 0
-        data(m.put(f"/v1/models/providers/{PROVIDER}", json={"baseUrl": base_url, "keyRef": key_ref}))
+        if not settled:
+            data(m.put(f"/v1/models/providers/{PROVIDER}", json={"baseUrl": base_url, "keyRef": key_ref}))
         if created:
             print(f"agents use {model_id} for {alias} on their next turn")
             return 0

@@ -29,11 +29,10 @@ NOT_YET_MARKED = {
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
     # tools-service
-    "connections",
     "send_policies",
     "send_checks",
-    "tool_secrets",
-    "secret_audit",
+    # the call log: Usage reads it by the acting team passed in (c-616); the database lock on it is c-414's
+    "gateway_calls",
     # files-service and documents-service: their `team` column
     # platform-service: identity and administration, read by team and role through platform's own routes
     "members",

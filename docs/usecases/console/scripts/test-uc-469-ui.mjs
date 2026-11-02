@@ -1,7 +1,7 @@
-// uc-469 Staff start, follow and finish their work in chat, ui layer: docs/usecases/console/chat-home.md (c-469). The
+// uc-469 Staff start, follow and finish their work in chat, ui layer: docs/usecases/console/chat-home.md. The
 // demo stack (platform sign-in, the fake model's rules, the core fake bank, a worker). James starts a card dispute,
 // which waits for a provisional credit decision. Maya, an approver, signs in and lands on Chat's home beside the open
-// sidebar (c-552), asks "What needs me today?", approves the task from its card (signing in again when the task asks for it),
+// sidebar, asks "What needs me today?", approves the task from its card (signing in again when the task asks for it),
 // and sees the run move on in its run card; a reload shows the task decided, with no buttons. Screenshots go to
 // evidenceDir('469', 'uc').
 import { mkdirSync, readFileSync } from 'node:fs';

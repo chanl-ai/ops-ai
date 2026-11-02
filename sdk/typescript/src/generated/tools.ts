@@ -41,6 +41,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/app-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List App Credentials
+         * @description The team's app credentials, for the Credentials page under Apps (c-616 C0): each app's type, permissions,
+         *     accounts and the last Test with my account. Team admins only; no secret.
+         */
+        get: operations["connections_list_app_credentials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get App
+         * @description One app's page (c-607): its card, account, the caller's own sign-in, tools, skills and latest runs.
+         */
+        get: operations["connections_get_app"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/connection-kinds": {
         parameters: {
             query?: never;
@@ -141,6 +182,26 @@ export interface paths {
         patch: operations["connections_change_connection"];
         trace?: never;
     };
+    "/v1/connections/{connection_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pin Default
+         * @description Makes this account the caller's default of its app (c-608): their calls that name no account use it.
+         */
+        put: operations["connections_pin_default"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/connections/{connection_id}/environments/{environment}": {
         parameters: {
             query?: never;
@@ -233,6 +294,28 @@ export interface paths {
          *     result as the connection's `health` (c-558). A failed test answers 200 with the failure in `health`.
          */
         post: operations["connections_test_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connections/{connection_id}/test-credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Credential
+         * @description An admin's Test with my account of the app credential: signs in through the environment's app (the team's
+         *     own or Ops AI's) and answers whether it worked and as whom, keeping no token. Only an admin, as only an admin
+         *     sets app credentials.
+         */
+        post: operations["connections_check_credential"];
         delete?: never;
         options?: never;
         head?: never;
@@ -413,7 +496,8 @@ export interface paths {
         };
         /**
          * My Connections
-         * @description The caller's own sign-ins on their team's connections (c-558): Your connections in the person menu.
+         * @description The caller's own sign-ins on their team's connections (c-558): Your connections in the person menu. With
+         *     `every`, also each connection of the team they can connect themselves and have not (c-595).
          */
         get: operations["connections_my_connections"];
         put?: never;
@@ -440,6 +524,27 @@ export interface paths {
          *     connection names a revocation address, so their next call asks them to connect again.
          */
         delete: operations["connections_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/connections/{connection_id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give Own Credentials
+         * @description The caller's own key, password or token on a connection each person signs in to (c-595), replacing any they
+         *     gave before; answers their row in Your connections, never the values.
+         */
+        put: operations["connections_give_own_credentials"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -487,6 +592,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/plugins/{plugin_id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Account
+         * @description Another named account of an app the team has connected (c-608, with several_accounts on): a second org or a
+         *     second account of the same system, made with the first's contract. The first stays the default.
+         */
+        post: operations["plugins_add_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/plugins/{plugin_id}/app-secret": {
         parameters: {
             query?: never;
@@ -525,6 +651,52 @@ export interface paths {
          * @description Turns the plugin on or off for the team and saves the team's settings: a team admin's alone.
          */
         put: operations["plugins_set_team_plugin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/plugins/{plugin_id}/team/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plugin Update
+         * @description What taking the installed plugin version would change for the team: each new, changed and removed tool.
+         */
+        get: operations["plugins_plugin_update"];
+        put?: never;
+        /**
+         * Take Plugin Update
+         * @description Takes the installed version for the team, from its next call. The digest is the one the review was read
+         *     at, so a review another upgrade has replaced since is refused rather than taken unseen.
+         */
+        post: operations["plugins_take_plugin_update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/plugins/{plugin_id}/team/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * App Users
+         * @description The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app
+         *     off stops. A team admin's, as turning it off is.
+         */
+        get: operations["plugins_app_users"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -621,7 +793,8 @@ export interface paths {
         };
         /**
          * List Systems
-         * @description The team's systems, one card each, joined for the Connections grid (c-580).
+         * @description The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
+         *     the built-in apps, for the approval policy's app picker (owner, 2026-11-01).
          */
         get: operations["connections_list_systems"];
         put?: never;
@@ -888,7 +1061,8 @@ export interface paths {
         };
         /**
          * List Mocks
-         * @description The operation's mock answers in the order a test call checks them.
+         * @description The operation's mock answers in the order a test call checks them, or (`environment=example`) its example
+         *     answer.
          */
         get: operations["tool_modules_list_mocks"];
         put?: never;
@@ -937,6 +1111,27 @@ export interface paths {
         head?: never;
         /** Update Operation */
         patch: operations["tool_modules_update_operation"];
+        trace?: never;
+    };
+    "/v1/tool-modules/{module_id}/operations/{operation}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Tool
+         * @description The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and
+         *     Real as the gateway's call, so the two never decide differently.
+         */
+        post: operations["tool_modules_run_tool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/tool-modules/{module_id}/pending-changes": {
@@ -1043,6 +1238,44 @@ export interface components {
             /** Output */
             output?: unknown;
         };
+        /**
+         * AccountIn
+         * @description Another account of an app the team has connected (c-608): its name, and the same turn-on contract as the
+         *     first account's (the environment, the kind, whose account calls use, the app and the credentials).
+         */
+        AccountIn: {
+            /** Accountname */
+            accountName?: string | null;
+            /** Clientid */
+            clientId?: string | null;
+            /** Clientsecret */
+            clientSecret?: string | null;
+            /** Credentials */
+            credentials?: {
+                [key: string]: string;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Environment
+             * @default production
+             * @enum {string}
+             */
+            environment: "test" | "production";
+            /** Kind */
+            kind?: string | null;
+            /** Name */
+            name: string;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Signin */
+            signIn?: string | null;
+        };
         /** ActivityDay */
         ActivityDay: {
             /** Count */
@@ -1061,10 +1294,142 @@ export interface components {
             /** Ranges */
             ranges: components["schemas"]["ListedRange"][];
         };
+        /**
+         * AppAccount
+         * @description One of the team's accounts of the app (c-608): the default is the one calls use unless they name another.
+         */
+        AppAccount: {
+            /** Account */
+            account?: string | null;
+            /** Default */
+            default: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Mine
+             * @default false
+             */
+            mine: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "not_signed_in" | "expired" | "refused" | "revoked";
+            /** Statereason */
+            stateReason?: string | null;
+            /** Status */
+            status: string;
+            /** Statusdetail */
+            statusDetail?: string | null;
+        };
+        /**
+         * AppCredential
+         * @description How one of the team's apps signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its secret.
+         */
+        AppCredential: {
+            /** Accounts */
+            accounts: number;
+            /** App */
+            app: string;
+            /** Appname */
+            appName: string;
+            /** Created */
+            created: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "not_tested" | "failing";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own";
+        };
+        /**
+         * AppMe
+         * @description The caller's own sign-in on the app's account: Connect my account, or Connected as.
+         */
+        AppMe: {
+            /** Account */
+            account?: string | null;
+            /** Connected */
+            connected: boolean;
+        };
+        /**
+         * AppPage
+         * @description One app's page (c-607), joined here: its card, its account's connection, the caller's own sign-in, how many
+         *     people signed in, its tools, the plugin's skills and the latest runs of its tools.
+         */
+        AppPage: {
+            /** Accounts */
+            accounts?: components["schemas"]["AppAccount"][];
+            card: components["schemas"]["SystemCard"];
+            connection?: components["schemas"]["ConnectionDetail"] | null;
+            me: components["schemas"]["AppMe"];
+            /** Peoplecount */
+            peopleCount: number;
+            /** Skills */
+            skills: components["schemas"]["AppSkill"][];
+            /** Tools */
+            tools: components["schemas"]["AppTool"][];
+            /** Usage */
+            usage: components["schemas"]["ToolCallRow"][];
+        };
         /** AppSecretIn */
         AppSecretIn: {
             /** Clientsecret */
             clientSecret: string;
+        };
+        /** AppSkill */
+        AppSkill: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+        };
+        /** AppTool */
+        AppTool: {
+            /** Access */
+            access: string;
+            /** Name */
+            name: string;
+            /** Title */
+            title: string;
+        };
+        /** AppUser */
+        AppUser: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Tools */
+            tools: string[];
+        };
+        /**
+         * AppUsers
+         * @description Who uses an app's tools in the team, read before turning it off (c-616).
+         */
+        AppUsers: {
+            /** Agents */
+            agents: components["schemas"]["AppUser"][];
+            /** Workflows */
+            workflows: components["schemas"]["AppUser"][];
         };
         /** ApprovalRequestIn */
         ApprovalRequestIn: {
@@ -1094,6 +1459,8 @@ export interface components {
             label: string;
             /** Perperson */
             perPerson: boolean;
+            /** Personfields */
+            personFields: string[];
             /** Signsin */
             signsIn: boolean;
         };
@@ -1136,6 +1503,8 @@ export interface components {
         };
         /** BlankModuleIn */
         BlankModuleIn: {
+            /** Connectionid */
+            connectionId?: string | null;
             /** Description */
             description?: string | null;
             /** Displayname */
@@ -1146,11 +1515,8 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Templateid */
             templateId?: string | null;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "mcp" | "openapi" | "http" | "code";
+            /** Type */
+            type?: ("mcp" | "openapi" | "http" | "code") | null;
         };
         /** BoundInput */
         BoundInput: {
@@ -1221,6 +1587,19 @@ export interface components {
             /** View */
             view?: unknown;
         };
+        /**
+         * CallRunAs
+         * @description Whom a call ran as: a person (by the email their acting-for token named) or the team account.
+         */
+        CallRunAs: {
+            /** Email */
+            email?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "person" | "team";
+        };
         /** Change */
         Change: {
             /** Changed */
@@ -1232,6 +1611,27 @@ export interface components {
             kind: "host" | "range";
             /** Value */
             value: string;
+        };
+        /** CheckedCredential */
+        CheckedCredential: {
+            /** Account */
+            account?: string | null;
+            /** At */
+            at: string;
+            /** By */
+            by: string;
+            /**
+             * Environment
+             * @enum {string}
+             */
+            environment: "test" | "production";
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "failed";
         };
         /** CodeCallIn */
         CodeCallIn: {
@@ -1358,6 +1758,8 @@ export interface components {
         };
         /** ConnectionDetail */
         ConnectionDetail: {
+            /** Accountname */
+            accountName?: string | null;
             /** Activity */
             activity: components["schemas"]["ConnectionEvent"][];
             /** Authkind */
@@ -1387,6 +1789,8 @@ export interface components {
             name: string;
             /** People */
             people?: components["schemas"]["PersonSignedIn"][];
+            /** Pluginid */
+            pluginId?: string | null;
             /** Redirecturi */
             redirectUri?: string | null;
             /** Revision */
@@ -1420,6 +1824,8 @@ export interface components {
         ConnectionEnvironment: {
             certificate?: components["schemas"]["SigningCertificate"] | null;
             health?: components["schemas"]["ConnectionHealth"] | null;
+            /** Platformapp */
+            platformApp?: string | null;
             /** Secrets */
             secrets: {
                 [key: string]: components["schemas"]["SecretPart"];
@@ -1537,6 +1943,10 @@ export interface components {
         };
         /** ConnectionRef */
         ConnectionRef: {
+            /** Baseurls */
+            baseUrls?: {
+                [key: string]: string;
+            };
             /** Expiresat */
             expiresAt?: string | null;
             /** Id */
@@ -1553,6 +1963,8 @@ export interface components {
         };
         /** ConnectionRow */
         ConnectionRow: {
+            /** Accountname */
+            accountName?: string | null;
             /** Authkind */
             authKind: string;
             /** Availableto */
@@ -1574,6 +1986,8 @@ export interface components {
             mayManage: boolean;
             /** Name */
             name: string;
+            /** Pluginid */
+            pluginId?: string | null;
             /** Revision */
             revision: number;
             /**
@@ -1614,6 +2028,27 @@ export interface components {
              * @enum {string}
              */
             environment: "test" | "production";
+        };
+        /** CredentialCheck */
+        CredentialCheck: {
+            health: components["schemas"]["CheckedCredential"];
+        };
+        /**
+         * CredentialCheckIn
+         * @description Test with my account (c-616): `environment` starts it; the `state` and `code` the sign-in page was handed back
+         *     finish it, on the same route.
+         */
+        CredentialCheckIn: {
+            /** Code */
+            code?: string | null;
+            /**
+             * Environment
+             * @default production
+             * @enum {string}
+             */
+            environment: "test" | "production";
+            /** State */
+            state?: string | null;
         };
         /** DecisionIn */
         DecisionIn: {
@@ -1722,6 +2157,24 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AppPage] */
+        Envelope_AppPage_: {
+            data: components["schemas"]["AppPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppUsers] */
+        Envelope_AppUsers_: {
+            data: components["schemas"]["AppUsers"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[BulkResult] */
         Envelope_BulkResult_: {
             data: components["schemas"]["BulkResult"];
@@ -1803,6 +2256,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[HeldHost] */
+        Envelope_HeldHost_: {
+            data: components["schemas"]["HeldHost"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[HostList] */
         Envelope_HostList_: {
             data: components["schemas"]["HostList"];
@@ -1866,6 +2328,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[MyConnection] */
+        Envelope_MyConnection_: {
+            data: components["schemas"]["MyConnection"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[PageOut] */
         Envelope_PageOut_: {
             data: components["schemas"]["PageOut"];
@@ -1875,9 +2346,27 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[PlatformEventOut] */
+        Envelope_PlatformEventOut_: {
+            data: components["schemas"]["PlatformEventOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[PluginList] */
         Envelope_PluginList_: {
             data: components["schemas"]["PluginList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[PluginUpdateView] */
+        Envelope_PluginUpdateView_: {
+            data: components["schemas"]["PluginUpdateView"];
             /**
              * Success
              * @constant
@@ -1956,9 +2445,28 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ToolRunResult] */
+        Envelope_ToolRunResult_: {
+            data: components["schemas"]["ToolRunResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Union[SendPolicyView, NoneType]] */
         Envelope_Union_SendPolicyView__NoneType__: {
             data: components["schemas"]["SendPolicyView"] | null;
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[Union[SignInStart, CredentialCheck]] */
+        Envelope_Union_SignInStart__CredentialCheck__: {
+            /** Data */
+            data: components["schemas"]["SignInStart"] | components["schemas"]["CredentialCheck"];
             /**
              * Success
              * @constant
@@ -1978,6 +2486,16 @@ export interface components {
         /** Envelope[WaitOut] */
         Envelope_WaitOut_: {
             data: components["schemas"]["WaitOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[AppCredential]] */
+        Envelope_list_AppCredential__: {
+            /** Data */
+            data: components["schemas"]["AppCredential"][];
             /**
              * Success
              * @constant
@@ -2051,6 +2569,8 @@ export interface components {
         EnvironmentOption: {
             /** Id */
             id: string;
+            /** Keys */
+            keys: boolean;
             /** Label */
             label: string;
             /** Production */
@@ -2174,6 +2694,34 @@ export interface components {
             /** Value */
             value: string;
         };
+        /** HeldHost */
+        HeldHost: {
+            /**
+             * Heldfor
+             * @constant
+             */
+            heldFor: "security";
+            /** Host */
+            host: string;
+            /** Runkey */
+            runKey: string;
+        };
+        /** HeldHostDecisionIn */
+        HeldHostDecisionIn: {
+            /** By */
+            by?: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approved" | "rejected" | "returned";
+            /** Host */
+            host: string;
+            /** Reason */
+            reason?: string | null;
+            /** Requestid */
+            requestId: string;
+        };
         /**
          * HostList
          * @description GET /v1/egress/hosts: one page of the listed hosts.
@@ -2198,6 +2746,8 @@ export interface components {
             access: "read" | "write";
             /** Body */
             body?: string | null;
+            /** Bodyencoding */
+            bodyEncoding?: ("json" | "form" | "raw") | null;
             /** Description */
             description: string;
             /** Headers */
@@ -2222,6 +2772,15 @@ export interface components {
             /** Operations */
             operations: components["schemas"]["DiscoveredOperationIn"][];
             source: components["schemas"]["ModuleSourceIn"];
+        };
+        /** InputChanges */
+        InputChanges: {
+            /** Added */
+            added: string[];
+            /** Changed */
+            changed: string[];
+            /** Removed */
+            removed: string[];
         };
         /** InvalidField */
         InvalidField: {
@@ -2248,6 +2807,11 @@ export interface components {
             optionalWhen?: {
                 [key: string]: string;
             } | null;
+            /**
+             * Pem
+             * @default false
+             */
+            pem: boolean;
             /** Required */
             required: boolean;
             /** Requiredwhen */
@@ -2386,9 +2950,9 @@ export interface components {
             /**
              * Environment
              * @default test
-             * @constant
+             * @enum {string}
              */
-            environment: "test";
+            environment: "test" | "example";
             /** Headers */
             headers?: {
                 [key: string]: string;
@@ -2494,13 +3058,12 @@ export interface components {
         };
         /** ModuleAuth */
         ModuleAuth: {
+            /** Certificate */
+            certificate?: boolean | null;
             /** Header */
             header?: string | null;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "oauth_client_credentials" | "oauth_authorization_code" | "mtls" | "api_key" | "basic" | "bearer" | "none";
+            /** Kind */
+            kind: string;
         };
         /** ModuleDetailsPatchIn */
         ModuleDetailsPatchIn: {
@@ -2511,7 +3074,7 @@ export interface components {
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Signin */
-            signIn?: ("team" | "person" | "either") | null;
+            signIn?: ("team" | "person" | "person_or_team" | "either") | null;
             /** Templateid */
             templateId?: string | null;
         };
@@ -2521,7 +3084,10 @@ export interface components {
             connectionId?: string | null;
             /** Displayname */
             displayName: string;
-            /** Endpoint */
+            /**
+             * Endpoint
+             * @default
+             */
             endpoint: string;
             function?: components["schemas"]["CodeOperationIn"] | null;
             http?: components["schemas"]["HttpOperationIn"] | null;
@@ -2533,20 +3099,20 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /**
              * Signin
-             * @default either
+             * @default person_or_team
              * @enum {string}
              */
-            signIn: "team" | "person" | "either";
+            signIn: "team" | "person" | "person_or_team" | "either";
             source?: components["schemas"]["ModuleSourceIn"] | null;
-            /** System */
+            /**
+             * System
+             * @default
+             */
             system: string;
             /** Templateid */
             templateId?: string | null;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "mcp" | "openapi" | "http" | "code";
+            /** Type */
+            type?: ("mcp" | "openapi" | "http" | "code") | null;
             /**
              * Uniquename
              * @default false
@@ -2579,12 +3145,14 @@ export interface components {
             /** Approvedworkflows */
             approvedWorkflows: number;
             /** Approverteam */
-            approverTeam: string;
+            approverTeam: string | null;
             /** Approvers */
             approvers: number;
             binding: components["schemas"]["SubjectBinding"] | null;
             /** Body */
             body?: string | null;
+            /** Bodyencoding */
+            bodyEncoding?: ("json" | "form" | "raw") | null;
             /** Calls24H */
             calls24h: number;
             code?: components["schemas"]["CodeSettings"] | null;
@@ -2598,7 +3166,7 @@ export interface components {
              * Executor
              * @enum {string}
              */
-            executor: "http" | "mcp" | "stub" | "local" | "code";
+            executor: "http" | "mcp" | "stub" | "local" | "code" | "plugin";
             /** Headers */
             headers?: components["schemas"]["OperationHeader"][];
             /** Id */
@@ -2632,6 +3200,8 @@ export interface components {
             scopes?: string[];
             /** Secrets */
             secrets?: components["schemas"]["SecretNeed"][];
+            /** Signinheader */
+            signInHeader?: string | null;
             /** Stepup */
             stepUp: boolean;
             /** Stub */
@@ -2689,6 +3259,12 @@ export interface components {
             /** Contextid */
             contextId: string;
             draft?: components["schemas"]["TestDraftIn"] | null;
+            /**
+             * Environment
+             * @default test
+             * @enum {string}
+             */
+            environment: "test" | "production";
             /** Input */
             input: {
                 [key: string]: unknown;
@@ -2818,12 +3394,18 @@ export interface components {
         MyConnection: {
             /** Account */
             account?: string | null;
+            /** Authkind */
+            authKind: string;
+            /** Connected */
+            connected: boolean;
             /** Connection */
             connection: string;
             /** Connectionid */
             connectionId: string;
             /** Connectionstatus */
             connectionStatus: string;
+            /** Docsurl */
+            docsUrl?: string | null;
             /**
              * Environment
              * @enum {string}
@@ -2831,6 +3413,19 @@ export interface components {
             environment: "test" | "production";
             /** Expiresat */
             expiresAt?: string | null;
+            /** Method */
+            method: string;
+            /** Personfields */
+            personFields: string[];
+            /**
+             * Refused
+             * @default false
+             */
+            refused: boolean;
+            /** Refusedat */
+            refusedAt?: string | null;
+            /** Refusedreason */
+            refusedReason?: string | null;
             /** Scopes */
             scopes: string[];
             /** Since */
@@ -2904,6 +3499,8 @@ export interface components {
             binding?: components["schemas"]["SubjectBindingIn"] | null;
             /** Body */
             body?: string | null;
+            /** Bodyencoding */
+            bodyEncoding?: ("json" | "form" | "raw") | null;
             code?: components["schemas"]["CodeSettingsIn"] | null;
             /** Description */
             description?: string | null;
@@ -2972,6 +3569,22 @@ export interface components {
             version: string;
         };
         /**
+         * PersonCredentialsIn
+         * @description A person's own key, password or token on a connection each person signs in to (c-595): the kind's person
+         *     fields, each a value of at most 2,000 characters.
+         */
+        PersonCredentialsIn: {
+            /** Credentials */
+            credentials: {
+                [key: string]: string;
+            };
+            /**
+             * Environment
+             * @enum {string}
+             */
+            environment: "test" | "production";
+        };
+        /**
          * PersonSignedIn
          * @description One person's own sign-in on a connection: admins see everyone's, a person their own.
          */
@@ -3002,6 +3615,31 @@ export interface components {
             clientId: string | null;
             /** Secretset */
             secretSet: boolean;
+        };
+        /** PlatformEventIn */
+        PlatformEventIn: {
+            /** Actor */
+            actor?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Teamid */
+            teamId: string;
+        };
+        /** PlatformEventOut */
+        PlatformEventOut: {
+            /**
+             * Changed
+             * @default 0
+             */
+            changed: number;
+            /** Handled */
+            handled: boolean;
         };
         /**
          * PluginDisplay
@@ -3081,6 +3719,23 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * PluginUpdateView
+         * @description What taking the installed version would change for the team (c-609): empty `tools` when it runs it already.
+         */
+        PluginUpdateView: {
+            /** Available */
+            available: boolean;
+            /** Digest */
+            digest: string | null;
+            /** Headerschanged */
+            headersChanged: boolean;
+            installed: components["schemas"]["VersionRef"];
+            /** Tools */
+            tools: components["schemas"]["ToolChange"][];
+            /** Version */
+            version: string | null;
+        };
         /** PluginView */
         PluginView: {
             /** Connectionid */
@@ -3101,10 +3756,17 @@ export interface components {
             };
             /** Teamon */
             teamOn: boolean;
+            /** Teamversion */
+            teamVersion?: string | null;
             /** Title */
             title: string;
             /** Tools */
             tools: string[];
+            /**
+             * Updateavailable
+             * @default false
+             */
+            updateAvailable: boolean;
             /** Version */
             version: string;
         };
@@ -3177,6 +3839,8 @@ export interface components {
          * @description Where the call comes from. Who calls is not here: it is the verified service token's subject (I13).
          */
         RunContext: {
+            /** Account */
+            account?: string | null;
             /** Act */
             act?: string | null;
             /** Environment */
@@ -3472,13 +4136,15 @@ export interface components {
             environments: {
                 [key: string]: components["schemas"]["SystemEnvironment"];
             };
+            /** Href */
+            href?: string | null;
             /** Id */
             id: string;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "plugin" | "connection" | "module";
+            kind: "plugin" | "connection" | "module" | "builtin";
             /** Kindlabel */
             kindLabel?: string | null;
             /** Logo */
@@ -3492,6 +4158,8 @@ export interface components {
             plugin?: components["schemas"]["SystemPlugin"] | null;
             /** Pluginid */
             pluginId?: string | null;
+            /** State */
+            state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;
             /** Status */
             status?: string | null;
             /** Toolscount */
@@ -3524,8 +4192,15 @@ export interface components {
             /** Teamon */
             teamOn: boolean;
         };
+        /** TakeUpdateIn */
+        TakeUpdateIn: {
+            /** Digest */
+            digest: string;
+        };
         /** TeamPluginIn */
         TeamPluginIn: {
+            /** Accountname */
+            accountName?: string | null;
             /** Clientid */
             clientId?: string | null;
             /** Clientsecret */
@@ -3633,6 +4308,8 @@ export interface components {
             agentName: string;
             /** Agentslug */
             agentSlug: string;
+            /** App */
+            app?: string | null;
             approval: components["schemas"]["CallApproval"];
             /** Approvaltokenid */
             approvalTokenId?: string | null;
@@ -3641,7 +4318,7 @@ export interface components {
             /** Caseid */
             caseId?: string | null;
             /** Channel */
-            channel?: ("api" | "mcp") | null;
+            channel?: ("api" | "mcp" | "console") | null;
             /** Clientname */
             clientName?: string | null;
             /** Connectionid */
@@ -3687,6 +4364,7 @@ export interface components {
             record?: string | null;
             /** Replayof */
             replayOf?: string | null;
+            runAs?: components["schemas"]["CallRunAs"] | null;
             /** Runid */
             runId: string;
             /**
@@ -3701,10 +4379,34 @@ export interface components {
             system: string;
             /** Target */
             target: string;
+            /** Title */
+            title?: string | null;
             /** Workflowid */
             workflowId: string;
             /** Workflowname */
             workflowName: string;
+        };
+        /**
+         * ToolChange
+         * @description One tool an update adds, changes or removes, by its operation name (c-609).
+         */
+        ToolChange: {
+            /** Access */
+            access: string;
+            /**
+             * Change
+             * @enum {string}
+             */
+            change: "new" | "changed" | "removed";
+            /** Changed */
+            changed: string[];
+            inputs: components["schemas"]["InputChanges"];
+            /** Name */
+            name: string;
+            /** Python */
+            python: boolean;
+            /** Title */
+            title: string;
         };
         /**
          * ToolGrant
@@ -3819,10 +4521,10 @@ export interface components {
             reachable: boolean;
             /**
              * Signin
-             * @default either
+             * @default person_or_team
              * @enum {string}
              */
-            signIn: "team" | "person" | "either";
+            signIn: "team" | "person" | "person_or_team";
             /**
              * Status
              * @enum {string}
@@ -3920,10 +4622,10 @@ export interface components {
             runContexts: components["schemas"]["RunContextOption"][];
             /**
              * Signin
-             * @default either
+             * @default person_or_team
              * @enum {string}
              */
-            signIn: "team" | "person" | "either";
+            signIn: "team" | "person" | "person_or_team";
             /**
              * Status
              * @enum {string}
@@ -3954,6 +4656,73 @@ export interface components {
             /** Workflows */
             workflows: components["schemas"]["ModuleRef"][];
         };
+        /**
+         * ToolRunIn
+         * @description One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway
+         *     call, with every check, in the environment picked.
+         */
+        ToolRunIn: {
+            /**
+             * Environment
+             * @default test
+             * @enum {string}
+             */
+            environment: "test" | "production";
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "mock" | "real";
+        };
+        /** ToolRunResult */
+        ToolRunResult: {
+            /** Bound */
+            bound: components["schemas"]["BoundInput"][];
+            /** Callid */
+            callId: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "allow" | "deny" | "invalid";
+            /** Denymessage */
+            denyMessage?: string | null;
+            /** Denyreason */
+            denyReason?: string | null;
+            /** Invalid */
+            invalid?: components["schemas"]["InvalidField"][] | null;
+            /** Latencyms */
+            latencyMs: number;
+            /** Log */
+            log?: components["schemas"]["TestLogLine"][];
+            /** Masked */
+            masked: string[];
+            /** Mockid */
+            mockId?: string | null;
+            /** Mocked */
+            mocked: boolean;
+            /** Output */
+            output: unknown;
+            /** Rawresponse */
+            rawResponse?: unknown;
+            /** Reachedhost */
+            reachedHost?: string | null;
+            request?: components["schemas"]["TestRequestOut"] | null;
+            /** Status */
+            status: number;
+            /** Stubbed */
+            stubbed?: boolean | null;
+            /** Testapprovaltoken */
+            testApprovalToken?: string | null;
+            /** Transformerror */
+            transformError?: string | null;
+            /** Wouldpause */
+            wouldPause: boolean;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -3966,6 +4735,13 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VersionRef */
+        VersionRef: {
+            /** Digest */
+            digest: string;
+            /** Version */
+            version: string;
         };
         /** WaitIn */
         WaitIn: {
@@ -4033,6 +4809,246 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackgroundHealthOut"];
+                };
+            };
+        };
+    };
+    connections_list_app_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AppCredential__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    connections_get_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
@@ -4869,6 +5885,109 @@ export interface operations {
             };
         };
     };
+    connections_pin_default: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ConnectionDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     connections_set_environment: {
         parameters: {
             query?: never;
@@ -5320,6 +6439,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ConnectionDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    connections_check_credential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Union_SignInStart__CredentialCheck__"];
                 };
             };
             /** @description Invalid request */
@@ -6506,7 +7732,9 @@ export interface operations {
     };
     connections_my_connections: {
         parameters: {
-            query?: never;
+            query?: {
+                every?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6624,6 +7852,113 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    connections_give_own_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonCredentialsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MyConnection_"];
+                };
             };
             /** @description Invalid request */
             400: {
@@ -6845,6 +8180,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PluginList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_add_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ConnectionDetail_"];
                 };
             };
             /** @description Invalid request */
@@ -7216,6 +8676,373 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PluginView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_plugin_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PluginUpdateView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_take_plugin_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PluginUpdateView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_app_users: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppUsers_"];
                 };
             };
             /** @description Invalid request */
@@ -7987,7 +9814,9 @@ export interface operations {
     };
     connections_list_systems: {
         parameters: {
-            query?: never;
+            query?: {
+                include?: "builtin" | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8256,6 +10085,15 @@ export interface operations {
                     "application/json": components["schemas"]["Envelope_ToolModuleDetail_"];
                 };
             };
+            /** @description The host is not listed; a Security admin was asked */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_HeldHost_"];
+                };
+            };
             /** @description Invalid request */
             400: {
                 headers: {
@@ -8377,6 +10215,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ToolModuleDetail_"];
+                };
+            };
+            /** @description The host is not listed; a Security admin was asked */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_HeldHost_"];
                 };
             };
             /** @description Invalid request */
@@ -9986,6 +11833,15 @@ export interface operations {
                     "application/json": components["schemas"]["Envelope_ToolModuleDetail_"];
                 };
             };
+            /** @description The host is not listed; a Security admin was asked */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_HeldHost_"];
+                };
+            };
             /** @description Invalid request */
             400: {
                 headers: {
@@ -10214,7 +12070,9 @@ export interface operations {
     };
     tool_modules_list_mocks: {
         parameters: {
-            query?: never;
+            query?: {
+                environment?: "test" | "example";
+            };
             header?: never;
             path: {
                 module_id: string;
@@ -10731,6 +12589,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ToolModuleDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    tool_modules_run_tool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+                operation: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ToolRunResult_"];
                 };
             };
             /** @description Invalid request */

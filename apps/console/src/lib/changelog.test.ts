@@ -22,12 +22,12 @@ test('entries read newest first', () => {
 
 test('an entry for a feature behind a release switch shows only while that switch is on, and an unknown switch hides it', () => {
   const source = JSON.stringify([
-    { ...entry('plugins', '2026-10-30'), switch: 'NEXT_PUBLIC_OPS_PLUGINS' },
-    { ...entry('typo', '2026-10-30'), switch: 'NEXT_PUBLIC_OPS_PLUGINZ' },
+    { ...entry('beta', '2026-10-30'), switch: 'NEXT_PUBLIC_OPS_EXAMPLE' },
+    { ...entry('typo', '2026-10-30'), switch: 'NEXT_PUBLIC_OPS_EXAMPLZ' },
     entry('everyone', '2026-10-30'),
   ]);
-  assert.deepEqual(parseChangelog(source, { NEXT_PUBLIC_OPS_PLUGINS: false }).map((e) => e.id), ['everyone']);
-  assert.deepEqual(parseChangelog(source, { NEXT_PUBLIC_OPS_PLUGINS: true }).map((e) => e.id).sort(), ['everyone', 'plugins']);
-  // The console's own switches, read from its environment: with none set, as on a release that has not turned them on.
+  assert.deepEqual(parseChangelog(source, { NEXT_PUBLIC_OPS_EXAMPLE: false }).map((e) => e.id), ['everyone']);
+  assert.deepEqual(parseChangelog(source, { NEXT_PUBLIC_OPS_EXAMPLE: true }).map((e) => e.id).sort(), ['beta', 'everyone']);
+  // The console's own list, which is empty: a shipped feature has no switch, so an entry naming one never shows.
   assert.deepEqual(parseChangelog(source).map((e) => e.id), ['everyone']);
 });

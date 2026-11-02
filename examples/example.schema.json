@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opsai.chanl.ai/examples/example.schema.json",
+  "title": "Ops AI Example",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "track", "status", "difficulty", "outcome", "capabilities", "entrypoint"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "track": {
+      "type": "string",
+      "enum": ["chat", "knowledge", "tool", "agent", "workflow", "composition", "plugin"]
+    },
+    "status": { "type": "string", "enum": ["built", "partial", "planned"] },
+    "difficulty": { "type": "string", "enum": ["intro", "guided", "advanced"] },
+    "outcome": { "type": "string", "minLength": 1 },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["built", "partial", "planned"] }
+        }
+      }
+    },
+    "entrypoint": { "type": "string" },
+    "resources": { "type": "array", "items": { "type": "string" } },
+    "setupSeconds": { "type": "integer", "minimum": 0 },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "enum": ["built", "partial", "planned"] }
+    },
+    "fixtures": { "type": "array", "items": { "type": "string" } },
+    "expected": { "type": "array", "items": { "type": "string" } },
+    "evaluation": { "type": "string" },
+    "gaps": { "type": "array", "items": { "type": "string" } },
+    "teaches": { "type": "array", "items": { "type": "string" } }
+  }
+}

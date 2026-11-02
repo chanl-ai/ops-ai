@@ -1,5 +1,5 @@
 // uc-151 a builder sets up Email received on the canvas, ui layer: docs/usecases/agents-service/email-starts-a-workflow.md
-// (c-187). withUiStack signed in through platform-service as James, with one team mailbox in the agents service's
+//. withUiStack signed in through platform-service as James, with one team mailbox in the agents service's
 // settings. A draft whose trigger is Email received is saved through the API; James opens its trigger in the canvas,
 // picks the mailbox the server offers, sets the folder and filters, and saves a version that keeps them.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

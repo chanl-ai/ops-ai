@@ -70,7 +70,7 @@ await withUiStack(
         switched,
       );
 
-      // A team admin is offered the audit log; a builder is not (c-144).
+      // A team admin is offered the audit log; a builder is not.
       const admin = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
       await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await admin.getByLabel('Email').fill('p.shah@harborpine.example');

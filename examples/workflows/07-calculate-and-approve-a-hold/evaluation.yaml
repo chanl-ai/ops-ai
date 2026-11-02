@@ -1,0 +1,10 @@
+cases:
+  - name: hold
+    input: fixtures/hold.json
+    expected: expected/hold.json
+  - name: missing
+    input: fixtures/missing.json
+    expected: expected/missing.json
+  - name: failed
+    input: fixtures/failed.json
+    expected: expected/failed.json

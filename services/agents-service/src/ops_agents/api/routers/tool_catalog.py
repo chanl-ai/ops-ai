@@ -29,9 +29,13 @@ router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
 
-async def known_tools(rt: Runtime) -> list[dict[str, Any]]:
+async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any]]:
     """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
-    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants."""
+    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `fresh` asks
+    tools-service again past the 30 s list, for a grant naming a tool the kept list lacks (c-607)."""
+    # Only a directory that keeps a list has one to drop; a fixed catalogue or a test's list has none.
+    if fresh and (forget := getattr(rt.directory(), "forget", None)) is not None:
+        forget()
     rows: list[dict[str, Any]] = []
     for op in await rt.directory().operations():
         # A reviewer card template, where the fixture catalogue has one; registry operations get the generic card.
@@ -78,6 +82,22 @@ async def known_tools(rt: Runtime) -> list[dict[str, Any]]:
                 "access": "workflow",
                 "inputSchema": EMAIL_SCHEMA,
                 # The workflow's own review steps are its gate, not an approval of the call.
+                "requiresApproval": False,
+                "approval": None,
+            }
+        )
+    from ..agent_calls import QUESTION_SCHEMA  # noqa: PLC0415 - keep the catalog import cycle out of the module top
+
+    for a in rt.catalog.agents:
+        rows.append(
+            {
+                "id": f"agent:{a.id}",
+                "name": a.name,
+                "server": "Agents",
+                "moduleId": None,
+                "description": f"Ask {a.name}, the {a.role}.",
+                "access": "read",
+                "inputSchema": QUESTION_SCHEMA,
                 "requiresApproval": False,
                 "approval": None,
             }

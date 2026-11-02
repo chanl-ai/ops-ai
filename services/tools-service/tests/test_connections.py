@@ -281,13 +281,29 @@ async def test_each_team_holding_a_seeded_module_signs_in_with_its_own_connectio
     engine: AsyncEngine, seed: dict[str, Any], tenant: str
 ) -> None:
     """c-509: the seed's connections all belonged to its all-scope team, so once a connection serves only its own team,
-    every other team's seeded module lost its sign-in, and Operations could not use the seeded core banking one."""
+    every other team's seeded module lost its sign-in. A seeded connection is made only where a module uses it (owner,
+    10-31): Operations held twenty cards no tool used."""
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC))
     store, conns = ModuleStore(engine), ConnectionStore(engine)
-    core = await conns.get(tenant, "int_core_banking")
-    assert core is not None and core["team_id"] == "team_ops", core
+    used = {(m["connection_id"], m["team_id"]) for m in await store.all(tenant) if m["connection_id"]}
+    teams = ["team_ops", *(str(t["id"]) for t in seed.get("teams", []))]
+    seeded = [c for c in await conns.page(tenant, teams, "", 0, 500) if c["created_by"] == "seed"]
+    assert seeded and all((c["id"], c["team_id"]) in used for c in seeded), [c["id"] for c in seeded]
     with_connection = [m for m in await store.all(tenant) if m["connection_id"]]
     assert with_connection, "the seed binds modules to its connections"
     for m in with_connection:
         conn = await conns.get(tenant, m["connection_id"])
         assert conn is not None and conn["team_id"] == m["team_id"], (m["id"], m["team_id"], conn and conn["team_id"])
+
+
+async def test_a_connection_made_each_person_with_the_team_as_backup_has_the_backup_on(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    """The console's and a plugin's create send only `signIn`; made as person_or_team with the backup off, a workflow
+    run with nobody behind it was refused CONNECTION_NOT_LINKED though the team account was signed in."""
+    body = {"name": "Case desk", "authKind": "oauth2_auth_code", "signIn": "person_or_team"}
+    made = await client.post("/v1/connections", json=body, headers=admin(tenant))
+    assert made.status_code == 201, made.text
+    assert made.json()["data"]["signIn"] == "person_or_team" and made.json()["data"]["teamBackup"] is True, made.text
+    team_only = await client.post("/v1/connections", json={**body, "signIn": "team"}, headers=admin(tenant))
+    assert team_only.json()["data"]["teamBackup"] is False, team_only.text

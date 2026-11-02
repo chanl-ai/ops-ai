@@ -743,6 +743,11 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
                         if isinstance(w, ApprovalWidget) and w.state in ("pending", "awaiting_second"):
                             w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
                         yield _frame(out)
+            # Roles decide approvals (owner, 2026-11-01): a person who may decide this write themselves is not
+            # asked. It is decided as theirs through the path the Approve button takes, so the token, the record and
+            # the four-eyes rule are the same; a write that needs a step-up still asks them. The thread read after
+            # the reply shows the decided card and the resumed answer.
+            await _decide_own_write(rt, me, thread_id, assistant)
         if cut:
             # Told in the reply, and kept in the log so a reload says the same.
             note = f"\n\n_Only part of {', '.join(cut)} was read; ask about a specific page or section for the rest._"
@@ -766,6 +771,18 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 
     # `sep="\n"`: the console splits frames on a blank line made of "\n\n", not "\r\n\r\n".
     return EventSourceResponse(stream(), sep="\n", ping=15)
+
+
+async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:
+    """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up (c-616)."""
+    waiting = [w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending"]
+    if not waiting or any(w.step_up for w in waiting) or not await hitl_facade.can_decide(rt, me, thread_id):
+        return
+    try:
+        await hitl_facade.decide(rt, me, thread_id, decision="approved", reason=None, step_up_token=None)
+    except ApiError:
+        # A step-up the workspace asks for, or a run still holding the thread: the card stays for them to decide.
+        return
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")

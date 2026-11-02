@@ -86,7 +86,7 @@ await withUiStack(
       const after = await page.getByRole('button', { name: /^Citation / }).count();
       check('an uncovered question says it is not in the knowledge base and cites nothing', honest && after === before, { honest, before, after });
 
-      // US3's rate table: returned as rows through the structured-result tool (c-055 T021).
+      // US3's rate table: returned as rows through the structured-result tool (an earlier change T021).
       const rates = await page.locator('[data-testid="widget"][data-shape="rows"]').count();
       check('the rate table shows as a rows widget', rates >= 1, { rates });
 

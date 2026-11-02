@@ -2,12 +2,14 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Info, KeyRound, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Cpu, Info, KeyRound, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { ConnectProviderDialog } from '@/components/models/connect-provider-dialog';
+import { PROVIDER_TYPES } from '@/components/models/provider-meta';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -16,11 +18,14 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCan } from '@/hooks/me-queries';
+import { useCreateProviderConnection, useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useProviderKeys, useRemoveProviderKey, useSaveProviderKey } from '@/hooks/provider-key-queries';
 import { relativeTime } from '@/lib/format';
+import type { ProviderConnection } from '@/lib/types/models';
 import type { ProviderKey } from '@/lib/types/provider-keys';
 
 // The rule models-service holds a key name to: what a provider connection's key reference gives (OPENAI, openai).
@@ -78,6 +83,60 @@ function KeyDialog({ open, onOpenChange, replacing }: { open: boolean; onOpenCha
   );
 }
 
+/** The region a connection names and, once called, the one Azure answered from. A mismatch is shown, not refused (owner, 2026-10-31). */
+function Region({ c }: { c: ProviderConnection }) {
+  if (!c.region) return <span className="text-sm text-muted-foreground">Not applicable</span>;
+  const seen = c.observedRegion;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5 text-sm">
+      {c.region}
+      {!seen ? (
+        <Badge variant="outline">Not called yet</Badge>
+      ) : c.regionMismatch ? (
+        <Badge variant="destructive" data-testid="region-mismatch">
+          {c.regionMismatch.charAt(0).toUpperCase() + c.regionMismatch.slice(1)}
+        </Badge>
+      ) : (
+        <Badge variant="outline">Answered from {seen}</Badge>
+      )}
+    </span>
+  );
+}
+
+const connectionColumns: ColumnDef<ProviderConnection>[] = [
+  {
+    accessorKey: 'name',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+    cell: ({ row }) => <span className="text-sm font-medium">{row.original.name}</span>,
+    enableHiding: false,
+  },
+  {
+    accessorKey: 'type',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+    cell: ({ row }) => (
+      <span className="flex items-center gap-1.5 text-sm whitespace-nowrap">
+        {PROVIDER_TYPES[row.original.type]?.label ?? row.original.type}
+        {row.original.apiVersion && <code className="font-mono text-xs text-muted-foreground">{row.original.apiVersion}</code>}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'baseUrl',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Endpoint" />,
+    cell: ({ row }) => <code className="font-mono text-xs break-all">{row.original.baseUrl ?? 'None'}</code>,
+  },
+  {
+    accessorKey: 'region',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Region" />,
+    cell: ({ row }) => <Region c={row.original} />,
+  },
+  {
+    accessorKey: 'keyRef',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Signs in with" />,
+    cell: ({ row }) => (row.original.keyRef ? <code className="font-mono text-sm">{row.original.keyRef}</code> : <span className="text-sm text-muted-foreground">No key</span>),
+  },
+];
+
 function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey) => void): ColumnDef<ProviderKey>[] {
   return [
     {
@@ -126,6 +185,9 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
 export default function ModelProvidersPage() {
   const admin = useCan('settings', 'manage') === true;
   const keys = useProviderKeys(admin);
+  const connections = useProviderConnections(admin);
+  const connect = useCreateProviderConnection();
+  const [connecting, setConnecting] = React.useState(false);
   const remove = useRemoveProviderKey();
   const [editing, setEditing] = React.useState<{ replacing: string | null } | null>(null);
   const [removing, setRemoving] = React.useState<string | null>(null);
@@ -134,7 +196,7 @@ export default function ModelProvidersPage() {
   return (
     <SettingsPageLayout
       section="Model providers"
-      description="The keys the account’s AI models sign in to their providers with. No team sees a key, and a value is never shown after saving."
+      description="Where the account’s AI models are called, and the keys they sign in with. No team sees a key, and a value is never shown after saving."
       actions={
         admin && (
           <Button onClick={() => setEditing({ replacing: null })} data-testid="provider-key-add">
@@ -148,24 +210,58 @@ export default function ModelProvidersPage() {
           <Info />
           <AlertDescription>Only an account admin (an admin on the Security team) sees and changes model provider keys.</AlertDescription>
         </Alert>
-      ) : keys.isPending ? (
+      ) : connections.isPending || keys.isPending ? (
         <PageSkeleton statCards={0} tableRows={2} />
       ) : keys.isError && !keys.data ? (
         <QueryError what="model provider keys" onRetry={() => keys.refetch()} retrying={keys.isFetching} error={keys.error} testId="provider-keys-error" />
       ) : (
-        <div data-testid="provider-keys">
-          <DataTableWithViews
-            columns={cols}
-            data={keys.data ?? []}
-            getRowId={(k) => k.name}
-            searchColumn="name"
-            searchPlaceholder="Search key names…"
-            hideViewSwitcher
-            emptyState={<ListEmpty icon={KeyRound} noun="model provider keys" filtered={false} createLabel="Add key" onCreate={() => setEditing({ replacing: null })} description="Add the key your model provider gave you, named the way its connection refers to it." />}
-          />
+        <div className="flex flex-col gap-8">
+          <section className="flex flex-col gap-3" data-testid="provider-connections">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-medium">Connections</h2>
+              <Button size="sm" variant="outline" onClick={() => setConnecting(true)} data-testid="provider-connect">
+                <Plus className="size-4" /> Connect a provider
+              </Button>
+            </div>
+            {connections.isError && !connections.data ? (
+              <QueryError what="provider connections" onRetry={() => connections.refetch()} retrying={connections.isFetching} error={connections.error} testId="provider-connections-error" />
+            ) : (
+              <DataTableWithViews
+                columns={connectionColumns}
+                data={connections.data ?? []}
+                getRowId={(c) => c.id}
+                searchColumn="name"
+                searchPlaceholder="Search connections…"
+                hideViewSwitcher
+                emptyState={<ListEmpty icon={Cpu} noun="provider connections" filtered={false} createLabel="Connect a provider" onCreate={() => setConnecting(true)} description="Connect the endpoint your model calls go to, such as an Azure OpenAI resource." />}
+              />
+            )}
+          </section>
+          <section className="flex flex-col gap-3" data-testid="provider-keys">
+            <h2 className="text-sm font-medium">Keys</h2>
+            <DataTableWithViews
+              columns={cols}
+              data={keys.data ?? []}
+              getRowId={(k) => k.name}
+              searchColumn="name"
+              searchPlaceholder="Search key names…"
+              hideViewSwitcher
+              emptyState={<ListEmpty icon={KeyRound} noun="model provider keys" filtered={false} createLabel="Add key" onCreate={() => setEditing({ replacing: null })} description="Add the key your model provider gave you, named the way its connection refers to it." />}
+            />
+          </section>
         </div>
       )}
       <KeyDialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)} replacing={editing?.replacing ?? null} />
+      <ConnectProviderDialog
+        open={connecting}
+        onOpenChange={setConnecting}
+        keys={(keys.data ?? []).map((k) => k.name)}
+        saving={connect.isPending}
+        onSave={async (input) => {
+          await connect.mutateAsync(input);
+          toast.success(`Connected ${input.name}`, { description: 'Point an alias at it to use it.' });
+        }}
+      />
       <DeleteDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}

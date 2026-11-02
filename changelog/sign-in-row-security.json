@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-30",
+  "title": "Saved sign-ins are walled off by the database",
+  "description": "The tokens, keys and sign-ins a person or a team saves on a connection are now held to that connection's team by the database itself, as other team records are, so another team's request can never read or change them even if a service forgets a filter. A developer session that names no team can no longer save a workflow or an agent that no team owns.",
+  "tag": "improved",
+  "cards": [
+    "c-602"
+  ]
+}

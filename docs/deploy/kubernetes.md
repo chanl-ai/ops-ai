@@ -107,3 +107,4 @@ cluster and the database at the end (`KEEP=1` leaves them).
 | More than one replica, autoscaling, disruption budgets | One replica each; the services are stateless apart from files and kb |
 | The embed app | No image yet |
 | A cloud cluster | Proven on kind only |
+| Plugins | The settings point tools and kb at `/plugins`; the base mounts nothing there, so a cluster loads no plugin until its overlay adds a volume holding the plugins folder at `/plugins` in both (`docs/guide/plugins.md`) |

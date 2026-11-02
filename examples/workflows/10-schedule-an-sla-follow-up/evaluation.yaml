@@ -1,0 +1,10 @@
+cases:
+  - name: future
+    input: fixtures/future.json
+    expected: expected/future.json
+  - name: past
+    input: fixtures/past.json
+    expected: expected/past.json
+  - name: invalid
+    input: fixtures/invalid.json
+    expected: expected/invalid.json

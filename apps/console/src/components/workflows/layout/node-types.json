@@ -263,6 +263,84 @@
     "version": 1
   },
   {
+    "description": "Replies on the channel that started the run, through the existing send_reply path. One attempt.",
+    "effects": "write",
+    "executor": "action.send",
+    "extraOutputs": [],
+    "group": "action",
+    "id": "ops.action.send",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Send a message",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Sent",
+        "name": "sent"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "body": {
+          "description": "The message body: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "subject": {
+          "description": "Subject; empty uses Re: the inbound subject: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        },
+        "to": {
+          "description": "Recipient; empty uses the inbound from/sender: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        5.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "body": {
+          "help": "The message body",
+          "label": "Body",
+          "widget": "textarea"
+        },
+        "subject": {
+          "help": "Empty uses Re: the inbound subject",
+          "label": "Subject",
+          "widget": "mapping"
+        },
+        "to": {
+          "help": "Empty uses the inbound sender",
+          "label": "To",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "to",
+        "subject",
+        "body"
+      ]
+    },
+    "version": 1
+  },
+  {
     "description": "Calls a registry operation through the tool gateway with mapped inputs. Its effects are the operation's access class at run time; an operation the registry does not know counts as a write.",
     "effects": "write",
     "executor": "gateway.call",
@@ -1437,6 +1515,94 @@
     "version": 1
   },
   {
+    "description": "Searches the team's knowledge bases the same way a citing agent does. Citations leave by found.",
+    "effects": "read",
+    "executor": "ai.knowledge",
+    "extraOutputs": [],
+    "group": "ai",
+    "id": "ops.ai.knowledge",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Retrieve from knowledge",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Found",
+        "name": "found"
+      },
+      {
+        "connection": "main",
+        "label": "Notfound",
+        "name": "notFound"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "kbIds": {
+          "description": "Knowledge bases to search",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "default": 3,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "query": {
+          "description": "The question: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        5.0,
+        30.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "kbIds": {
+          "help": "Empty searches none",
+          "label": "Knowledge bases",
+          "source": "knowledge",
+          "widget": "source"
+        },
+        "limit": {
+          "help": "Most passages to return",
+          "label": "Limit",
+          "widget": "number"
+        },
+        "query": {
+          "help": "The question to retrieve for",
+          "label": "Question",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "query",
+        "kbIds",
+        "limit"
+      ]
+    },
+    "version": 1
+  },
+  {
     "description": "Summarises the text, keeping names, amounts and dates as written. No saved agent, no tools.",
     "effects": "model",
     "executor": "ai.prompt",
@@ -1807,6 +1973,146 @@
     "version": 1
   },
   {
+    "description": "Keeps or drops items of a list by field predicates. Not a second If.",
+    "effects": "none",
+    "executor": "data.filter",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.filter",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Filter",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Kept",
+        "name": "kept"
+      },
+      {
+        "connection": "main",
+        "label": "Dropped",
+        "name": "dropped"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "combine": {
+          "default": "all",
+          "enum": [
+            "all",
+            "any"
+          ]
+        },
+        "conditions": {
+          "items": {
+            "properties": {
+              "left": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "contains",
+                  "exists",
+                  "empty"
+                ]
+              },
+              "right": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              }
+            },
+            "required": [
+              "left",
+              "op"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "items": {
+          "description": "The list to filter: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "required": [
+        "items",
+        "conditions"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "combine": {
+          "label": "Combine",
+          "widget": "select"
+        },
+        "conditions": {
+          "help": "Compared against each item's fields",
+          "item": {
+            "fields": {
+              "left": {
+                "label": "Field",
+                "widget": "text"
+              },
+              "op": {
+                "label": "Is",
+                "widget": "select"
+              },
+              "right": {
+                "label": "Compared with",
+                "widget": "mapping"
+              }
+            },
+            "order": [
+              "left",
+              "op",
+              "right"
+            ]
+          },
+          "label": "Keep when",
+          "widget": "list"
+        },
+        "items": {
+          "help": "A list from the input or an earlier step",
+          "label": "List",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "items",
+        "conditions",
+        "combine"
+      ]
+    },
+    "version": 1
+  },
+  {
     "description": "Finds the candidates that match a record by rules on their fields: every All rule and, when any are given, at least one Any rule. Text is compared without case or extra spaces, an empty value never matches, and Overlaps needs one value inside the other at the minimum length.",
     "effects": "none",
     "executor": "data.match",
@@ -2089,6 +2395,81 @@
     "version": 1
   },
   {
+    "description": "Reads one path from the run and writes it under a name. A missing path takes the error port.",
+    "effects": "none",
+    "executor": "data.transform",
+    "extraOutputs": [],
+    "group": "data",
+    "id": "ops.data.transform",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Transform",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Out",
+        "name": "out"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "as": {
+          "default": "value",
+          "description": "The output field the value is written as",
+          "type": "string"
+        },
+        "expression": {
+          "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expression"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "as": {
+          "help": "The output field name",
+          "label": "As",
+          "widget": "text"
+        },
+        "expression": {
+          "help": "A path such as $.input.a",
+          "label": "Expression",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "expression",
+        "as"
+      ]
+    },
+    "version": 1
+  },
+  {
     "description": "Removes the extractions and document type samples documents-service holds for a file that was deleted. Repeating it removes nothing more.",
     "effects": "write",
     "executor": "documents.purge",
@@ -2241,6 +2622,88 @@
         "read",
         "typeName",
         "checked"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Pauses for a reply on a conversation key, then resumes. A zero deadline times out.",
+    "effects": "human",
+    "executor": "flow.ask",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.ask",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Ask",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Replied",
+        "name": "replied"
+      },
+      {
+        "connection": "main",
+        "label": "Timedout",
+        "name": "timedOut"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "key": {
+          "description": "Conversation key the reply is posted on",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "What the person is asked",
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "description": "0 times out without pausing",
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 1,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "key": {
+          "help": "The conversation key the reply is posted on",
+          "label": "Key",
+          "widget": "text"
+        },
+        "prompt": {
+          "help": "What the person is asked",
+          "label": "Prompt",
+          "widget": "textarea"
+        },
+        "timeoutSeconds": {
+          "help": "0 times out without pausing",
+          "label": "Timeout seconds",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "prompt",
+        "key",
+        "timeoutSeconds"
       ]
     },
     "version": 1
@@ -2785,6 +3248,148 @@
     "version": 1
   },
   {
+    "description": "Leaves by again until a predicate holds or the cap is hit, so a loop cannot spin.",
+    "effects": "none",
+    "executor": "flow.repeat",
+    "extraOutputs": [],
+    "group": "flow",
+    "id": "ops.flow.repeat",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Repeat",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Again",
+        "name": "again"
+      },
+      {
+        "connection": "main",
+        "label": "Done",
+        "name": "done"
+      },
+      {
+        "connection": "main",
+        "label": "Exhausted",
+        "name": "exhausted"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "combine": {
+          "default": "all",
+          "enum": [
+            "all",
+            "any"
+          ]
+        },
+        "conditions": {
+          "items": {
+            "properties": {
+              "left": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "contains",
+                  "exists",
+                  "empty"
+                ]
+              },
+              "right": {
+                "description": "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+              }
+            },
+            "required": [
+              "left",
+              "op"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "max": {
+          "default": 8,
+          "description": "Most times again may fire",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "conditions"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "combine": {
+          "label": "Combine",
+          "widget": "select"
+        },
+        "conditions": {
+          "help": "Compared in order; Done when all (or any) hold",
+          "item": {
+            "fields": {
+              "left": {
+                "label": "Value",
+                "widget": "mapping"
+              },
+              "op": {
+                "label": "Is",
+                "widget": "select"
+              },
+              "right": {
+                "label": "Compared with",
+                "widget": "mapping"
+              }
+            },
+            "order": [
+              "left",
+              "op",
+              "right"
+            ]
+          },
+          "label": "Done when",
+          "widget": "list"
+        },
+        "max": {
+          "help": "Most times the loop may run again",
+          "label": "Cap",
+          "widget": "number"
+        }
+      },
+      "order": [
+        "conditions",
+        "combine",
+        "max"
+      ]
+    },
+    "version": 1
+  },
+  {
     "description": "Several named ways out, each a set of rules over earlier steps' output; the first way whose rules hold wins, and otherwise takes the rest. No model and no code.",
     "effects": "none",
     "executor": "flow.switch",
@@ -3254,7 +3859,7 @@
     "version": 1
   },
   {
-    "description": "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's input is the event's payload. Only a system workflow, which the platform maintains, is started by one.",
+    "description": "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's input is the event's payload. Only a system workflow, which the platform maintains, is started by one. An input schema, when set, is also the form Start run shows.",
     "effects": "none",
     "executor": "trigger.payload",
     "extraOutputs": [],
@@ -3278,6 +3883,10 @@
           "description": "The event's name, such as file.deleted",
           "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
           "type": "string"
+        },
+        "inputSchema": {
+          "description": "JSON Schema Start run shows; empty means only the event starts the workflow",
+          "type": "object"
         }
       },
       "required": [
@@ -3300,10 +3909,16 @@
           "label": "Event",
           "placeholder": "file.deleted",
           "widget": "text"
+        },
+        "inputSchema": {
+          "help": "JSON Schema Start run shows; empty means only the event starts it",
+          "label": "Input schema",
+          "widget": "json"
         }
       },
       "order": [
-        "event"
+        "event",
+        "inputSchema"
       ]
     },
     "version": 1
@@ -3364,6 +3979,66 @@
       "order": [
         "inputSchema",
         "onlyFromWorkflows"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Starts a run when the platform clock reaches the due time. The same key fires once.",
+    "effects": "none",
+    "executor": "trigger.payload",
+    "extraOutputs": [],
+    "group": "trigger",
+    "id": "ops.trigger.schedule",
+    "inputs": [],
+    "label": "Schedule",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Payload",
+        "name": "payload"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "inputSchema": {
+          "description": "JSON Schema the payload must match",
+          "type": "object"
+        },
+        "key": {
+          "description": "Idempotency key; a second tick with it starts no run",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        0.0,
+        0.0
+      ]
+    },
+    "timeoutSeconds": 30.0,
+    "ui": {
+      "fields": {
+        "inputSchema": {
+          "help": "JSON Schema the payload must match; empty accepts any object",
+          "label": "Input schema",
+          "widget": "json"
+        },
+        "key": {
+          "help": "A second fire with this key starts no run",
+          "label": "Key",
+          "widget": "text"
+        }
+      },
+      "order": [
+        "key",
+        "inputSchema"
       ]
     },
     "version": 1

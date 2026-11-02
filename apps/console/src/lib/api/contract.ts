@@ -13,6 +13,7 @@ import type { SignInPolicyApi } from './sign-in-contract';
 import type { InvitesApi } from './invites-contract';
 import type { AccountApi } from './account-contract';
 import type { WorkspacePoliciesApi } from './workspace-policies-contract';
+import type { ProviderConnectionsApi } from './provider-connections-contract';
 import type { ProviderKeysApi } from './provider-keys-contract';
 import type { SignInProvidersApi } from './sign-in-providers-contract';
 import type { WorkspaceTeamsApi } from './workspace-teams-contract';
@@ -198,6 +199,8 @@ export interface OpsApi {
   signInProviders: SignInProvidersApi;
   /** The account's model provider keys (models-service); values never come back. */
   providerKeys: ProviderKeysApi;
+  /** The account's model provider connections (models-service): type, endpoint, region and key name. */
+  providerConnections: ProviderConnectionsApi;
   evals: EvalsApi;
   modelRisk: ModelRiskApi;
   toolModules: ToolModulesApi;

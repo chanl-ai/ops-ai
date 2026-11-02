@@ -23,9 +23,11 @@ done
 if git -C "$root" diff --cached --quiet "$base"; then echo "commit-paths: nothing to commit in $*" >&2; exit 1; fi
 git -C "$root" diff --cached --stat "$base" | tail -1
 # The hooks are the tracked ones, so a commit is checked by the gate in the tree, not by whatever was installed once.
-"$root/.githooks/pre-commit"
+# The message check (subject length, changelog entry) runs first: it takes a moment and does not depend on the gate, so
+# a commit it will refuse is refused before the minutes the gate takes, not after them.
 cp "$msg_in" "$work/message"
 (cd "$root" && "$root/.githooks/commit-msg" "$work/message")
+"$root/.githooks/pre-commit"
 tree=$(git -C "$root" write-tree)
 unset GIT_INDEX_FILE
 commit=$(git -C "$root" commit-tree "$tree" -p "$base" -F "$work/message")

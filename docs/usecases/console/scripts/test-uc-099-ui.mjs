@@ -1,6 +1,6 @@
 // uc-099 a viewer sees the team's records read-only, ui layer: docs/usecases/console/viewer-sees-read-only-pages.md.
 // Signed in through platform-service as Ravi (viewer on team_ops) and, as the control, James (builder on team_ops).
-// The console reads what can() grants each person from GET /v1/me/permissions (c-186) and shows create, edit, publish,
+// The console reads what can() grants each person from GET /v1/me/permissions and shows create, edit, publish,
 // pause and delete only to someone it lets edit the team's records.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
@@ -59,7 +59,7 @@ await withUiStack(
       await ravi.goto(`${consoleUrl}/agents/${agentId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const notice = await ravi.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const raviAgent = { notice, save: await ravi.getByTestId('agent-save-status').count(), more: await ravi.getByRole('button', { name: 'More actions' }).count(), nameDisabled: await ravi.locator('#ag-name').isDisabled().catch(() => null) };
-      // The notice says why: which role changes agents here and who holds it (GET /v1/access/holders, c-186).
+      // The notice says why: which role changes agents here and who holds it (GET /v1/access/holders).
       const why = await ravi.getByTestId('read-only-why').filter({ hasText: 'ask' }).first().textContent({ timeout: 30_000 }).catch(() => '');
       check('the View only notice names the role that edits agents and who on the team holds it', /Builder/.test(why ?? '') && /James Richardson/.test(why ?? ''), why);
       check('a viewer opens an agent read-only: a View only notice, no save or actions, the fields disabled', raviAgent.notice && raviAgent.save === 0 && raviAgent.more === 0 && raviAgent.nameDisabled === true, raviAgent);

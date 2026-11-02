@@ -1,4 +1,4 @@
-"""Certificates for the bank stand-in's certificate-only listener (c-330): a CA of its own, a server certificate for
+"""Certificates for the bank stand-in's certificate-only listener: a CA of its own, a server certificate for
 `mtls.bank.test` and a client certificate the listener accepts, all signed by that CA.
 
 The CA is not the one tools-service trusts for `api.bank.test` (OPS_EGRESS_CA_FILE): a connection names it as its

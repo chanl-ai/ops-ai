@@ -68,7 +68,10 @@ async def test_each_operation_carries_a_json_schema_for_its_input(api: Api) -> N
 async def test_another_tenants_operations_are_not_listed(api: Api) -> None:
     assert await grantable(api)
     # A tenant nobody seeded holds the platform's own tools alone (ensure_platform_tools), none of the seeded tenant's.
-    assert {t["name"] for t in await grantable(api, "tenant_nobody_seeded")} == {
+    # The file and knowledge tools are built-ins every tenant is written, so they are left out of the
+    # comparison: built-ins become per-team declared defaults with provisioning (PV1), and this test is about leakage.
+    built_in = {"read_file", "read_document", "search_knowledge"}
+    assert {t["name"] for t in await grantable(api, "tenant_nobody_seeded")} - built_in == {
         "send_reply",
         "open_case",
         "send_acknowledgement",

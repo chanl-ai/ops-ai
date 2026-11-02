@@ -306,11 +306,6 @@ export function ReviewDetailBody({
         <Section title="Decision">
           <DecidedBy review={review} />
           {review.decisionReason && <p className="rounded-lg border bg-muted/40 p-3 text-sm">{review.decisionReason}</p>}
-          {review.stepUpRef && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="review-step-up">
-              <ShieldCheck className="size-3.5 text-success-text" /> Approved with step-up · <code className="font-mono">{review.stepUpRef}</code>
-            </p>
-          )}
         </Section>
       )}
 
@@ -337,13 +332,23 @@ export function ReviewDetailBody({
 const DECIDED: Record<string, string> = { approved: 'Approved', rejected: 'Rejected', returned: 'Returned' };
 
 /** Who decided a review and when, from the API; nothing for a decision recorded before it named the decider. */
+// Carries the step-up fingerprint too, so a decided task shows it whichever body draws it (a task view or the detail).
 export function DecidedBy({ review }: { review: Review }) {
-  if (!review.decidedBy) return null;
+  if (!review.decidedBy && !review.stepUpRef) return null;
   return (
-    <p className="mb-2 text-sm" data-testid="review-decided-by">
-      {DECIDED[review.status] ?? 'Decided'} by <span className="font-medium">{review.decidedBy}</span>
-      {review.decidedAt && <span className="text-muted-foreground"> · {dateTime(review.decidedAt)}</span>}
-    </p>
+    <>
+      {review.decidedBy && (
+        <p className="mb-2 text-sm" data-testid="review-decided-by">
+          {DECIDED[review.status] ?? 'Decided'} by <span className="font-medium">{review.decidedBy}</span>
+          {review.decidedAt && <span className="text-muted-foreground"> · {dateTime(review.decidedAt)}</span>}
+        </p>
+      )}
+      {review.stepUpRef && (
+        <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="review-step-up">
+          <ShieldCheck className="size-3.5 text-success-text" /> Approved with step-up · <code className="font-mono">{review.stepUpRef}</code>
+        </p>
+      )}
+    </>
   );
 }
 
@@ -403,6 +408,8 @@ export function ReviewDecisionForm({
     (review.kind === 'agent_publish' && (mine(review.agentPublish?.requestedBy) || mine(review.agentPublish?.savedBy)));
   const isPublish = review.kind === 'publish_request' || review.kind === 'agent_publish' || review.kind === 'skill_publish' || review.kind === 'template_submission';
   const isTemplate = review.kind === 'template_submission';
+  // A host request is allowed or refused; a refusal's reason is what the person who set the address reads.
+  const isHost = review.kind === 'egress_host';
   // The page footer is one row until an action needs a reason (or one is being typed); the sheet always shows the box.
   const showReason = layout === 'sheet' || missing || !!reason || reasonToApprove;
   const platformOnly = isTemplate && !platformTeam;
@@ -464,14 +471,14 @@ export function ReviewDecisionForm({
           </p>
         )}
         {/* A workflow's own step has no agent or requester to return it to: it is approved or rejected. */}
-        {(isPublish || !review.runId) && (
+        {(isPublish || !review.runId) && !isHost && (
           <Button variant="ghost" size="sm" disabled={!!pending} onClick={() => submit('returned')}>
             {isTemplate ? 'Return to submitter' : isPublish ? 'Return to requester' : 'Return to agent'}
           </Button>
         )}
         <div className={cn('ml-auto flex gap-2', layout === 'footer' && 'max-sm:w-full max-sm:*:flex-1')}>
-          <LoadingButton variant="outline" size="sm" isLoading={pending === 'rejected'} disabled={!!pending} onClick={() => submit('rejected')}>
-            Reject
+          <LoadingButton variant="outline" size="sm" isLoading={pending === 'rejected'} disabled={!!pending} onClick={() => submit('rejected')} data-testid="review-reject">
+            {isHost ? 'Refuse' : 'Reject'}
           </LoadingButton>
           <LoadingButton size="sm" isLoading={pending === 'approved'} disabled={!!pending || alreadyApproved || ownPublish || blocked || !!approveBlocked} onClick={() => submit('approved')} data-testid="review-approve">
             {approveBlocked ? `Approve · ${approveBlocked}` : blocked ? 'Blocked by evals' : ownPublish ? (isTemplate ? 'Another platform member approves' : 'Another publisher approves') : alreadyApproved ? 'Waiting on second approver' : needsSecond ? 'Approve · 1 of 2' : isTemplate ? 'Approve and publish template' : isPublish ? 'Approve and publish' : 'Approve'}

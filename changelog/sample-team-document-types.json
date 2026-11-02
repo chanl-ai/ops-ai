@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Sample team installs when a document type is shared",
+  "description": "When another team already holds a document type the sample team needs, it now gets its own copy under the team's prefix, and the workflows that read that type follow it. Reading a file with a seeded workflow is covered by a test.",
+  "tag": "fix",
+  "cards": [
+    "c-542"
+  ]
+}

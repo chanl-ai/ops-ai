@@ -1,0 +1,4 @@
+cases:
+  - name: valid
+    input: fixtures/valid.json
+    expected: expected/accepted.json

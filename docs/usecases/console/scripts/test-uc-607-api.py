@@ -1,0 +1,85 @@
+"""uc-607, api layer: docs/usecases/console/connect-apps.md, stories S9-S10 (steps 20-23), group A of an earlier change.
+
+The Apps stack of docs/usecases/lib/apps_walk.py: platform-service with the seed's own roles, tools-service with the
+nine test plugins on for the install, and the fake system. The steps call the routes named after the screen's words
+(`GET /v1/systems`, `GET /v1/apps/{id}`, `PUT /v1/plugins/{id}/team`, kept as they are); a check whose behaviour is not
+built names the task it waits on. No model call."""
+
+from __future__ import annotations
+
+from apps_walk import app_path, apps_stack, target
+from usecase_harness import check, data, finish
+
+APP = "plugin:test.header-key"
+
+
+def ids(rows: object) -> list[str]:
+    return [str(r["id"]) for r in rows] if isinstance(rows, list) else []
+
+
+with apps_stack() as w:
+    # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu (owner, 11-01).
+    listed = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+    kinds = [r.get("kind") for r in data(listed) or []] if listed.status_code == 200 else []
+    check(
+        "20 GET /v1/systems lists the team's apps in one call, the test plugins among them and no built-in app",
+        listed.status_code == 200 and APP in ids(data(listed)) and "builtin" not in kinds,
+        (listed.status_code, kinds),
+    )
+
+    # 21. A key saved at turn-on is not a sign-in: the app reads Connected only once its test has passed.
+    def status() -> str | None:
+        r = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+        # The card's state says Connected (an earlier change S1); its status is the account record's own word.
+        return next((c.get("state") for c in data(r) or [] if c.get("id") == APP), None)
+
+    account = w.turn_on("admin", "test.header-key", credentials={"key": w.m["secrets"]["key"]})
+    before = status()
+    health = w.test("admin", APP, account)
+    after = status()
+    check(
+        "21 the app turned on with a key is not connected before its test passes, and connected after",
+        account != "con_missing" and before != "connected" and health.get("status") == "ok" and after == "connected",
+        (target("S1 and D2"), {"before": before, "health": health, "after": after}),
+    )
+
+    # 22. A viewer sees the apps but may not turn one on.
+    seen = w.kept(w.gw.get(app_path(APP), headers=w.who["viewer"]))
+    refused = w.kept(w.gw.put("/v1/plugins/test.query-key/team", json={"enabled": True}, headers=w.who["viewer"]))
+    check(
+        "22 the viewer reads the app (200) and is refused turning one on (403)",
+        seen.status_code == 200 and refused.status_code == 403,
+        {"read": seen.status_code, "turn on": (refused.status_code, refused.text[:200])},
+    )
+
+    # 23. The app's page reads Connected · team account.
+    page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
+    accounts = page.get("accounts") or []
+    first = accounts[0] if accounts else {}
+    check(
+        "23 the app's page lists the team account first, as the default, in state connected",
+        first.get("id") == account and first.get("default") is True and first.get("state") == "connected",
+        (target("D2"), accounts),
+    )
+
+    # 28. A custom tool's own connection holds its address and is reached from the tool, not listed in Apps.
+    tool = {
+        "name": "uc607_read_rate", "description": "Reads a rate.", "access": "read", "method": "GET",
+        "url": "https://rates.uc607.test/v1/rates/{currency}",
+    }  # fmt: skip
+    body = {"name": "uc607-rates", "displayName": "uc607 rates", "system": "uc607 rates", "http": tool}
+    made = w.kept(w.gw.post("/v1/tool-modules", json=body, headers=w.who["admin"]))
+    own = str(((data(made) or {}).get("connection") or {}).get("id") or "") if made.status_code == 201 else ""
+    after = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+    shown = [(r.get("id"), r.get("kind")) for r in data(after) or []]
+    pages = [w.kept(w.gw.get(app_path(a), headers=w.who["admin"])).status_code for a in (own, "builtin:files")]
+    check(
+        "28 the tool's own connection and the built-in apps are not listed, and both pages still answer",
+        bool(own)
+        and own not in ids(data(after))
+        and not [k for _, k in shown if k in ("builtin", "module")]
+        and pages == [200, 200],
+        {"made": made.status_code, "own": own, "shown": shown, "pages": pages},
+    )
+
+finish()

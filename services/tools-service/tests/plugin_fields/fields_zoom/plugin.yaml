@@ -1,0 +1,23 @@
+# A service account whose token call takes the client only as basic auth, as Zoom's does.
+schema: ops-ai/plugin@2
+id: test.fields-zoom
+title: Meetings desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [oauth2_client_credentials]
+  token_url: "{login_url}/token"
+  client_auth: basic
+  sign_in: [team]
+  health_check: { path: "/cc/me" }
+settings:
+  base_url: { type: string, title: System address, default: "https://api.multi.test" }
+  login_url: { type: string, title: Sign-in address, default: "https://login.multi.test/salesforce" }
+egress: ["{base_url}"]
+endpoint: "{base_url}/cc"
+tools:
+  - name: get_record
+    title: Read a record
+    access: read
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: GET, path: "/records/{id}" }

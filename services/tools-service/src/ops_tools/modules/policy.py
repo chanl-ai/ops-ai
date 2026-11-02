@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ops_access import BY_KEY, publish_mode, team_on, team_writes_need_approval
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_access import BY_KEY, Access, publish_mode, team_names, team_on, team_writes_need_approval
+from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
@@ -55,6 +55,35 @@ class WriteApprovals:
             return team_writes_need_approval(dict(data.get("value") or {}), team_id)
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
             return True
+
+    async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
+        """The apps whose writes `team_id` has wait (appWritesNeedApproval, c-616), by the ids the Apps page shows. None
+        when the policy cannot be read, which the gateway counts as every app, so a failed read never lets a write
+        through unapproved."""
+        try:
+            data = await self.platform.get("/v1/policies/appWritesNeedApproval", tenant=tenant_id)
+            return team_names(data.get("value"), team_id)
+        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
+            return None
+
+
+def approves_own_writes(access: Access, p: Principal) -> bool:
+    """Whether the caller is their own approver (owner, 2026-11-01): a person holding reviews.decide in the team they
+    act in, as one who decides the team's reviews, while the requesterMayDecide policy lets an asker decide (off, the
+    four-eyes rule, someone else decides). A service or an API key never is."""
+    return p.kind == "person" and access.may(p, "reviews", "decide", requested_by=(p.email,))
+
+
+def app_ids(module: dict[str, Any]) -> set[str]:
+    """The ids a module's app goes by on the Apps page: its plugin's card, its connection, or the module itself."""
+    template = str(module.get("template_id") or "")
+    ids = {f"module:{module['id']}"}
+    if template.startswith("plugin:"):
+        # A plugin's module holds its plugin in the template slot, `plugin:<id>`, the same id as its app card.
+        ids.add(template)
+    if module.get("connection_id"):
+        ids.add(str(module["connection_id"]))
+    return ids
 
 
 class CheckBeforeSend:

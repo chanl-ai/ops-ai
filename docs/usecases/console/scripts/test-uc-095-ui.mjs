@@ -37,7 +37,7 @@ await withUiStack(
       // Step 1: the agent page's Widgets section. Hold review's button (the scripted stack's fixture library) asks for
       // lookup_account, which this agent does not hold yet, so the widget cannot be chosen until the tool is granted.
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // The widget picker (EntityPicker, c-136) offers Hold review disabled, naming the tool it needs.
+      // The widget picker (EntityPicker) offers Hold review disabled, naming the tool it needs.
       await page.getByTestId('agent-widget-pins').getByRole('button', { name: 'Choose widgets' }).click({ timeout: 120_000 });
       await page.getByPlaceholder('Search widgets…').fill('Hold review');
       const option = page.getByRole('option', { name: /Hold review/ });

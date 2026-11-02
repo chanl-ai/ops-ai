@@ -1,0 +1,5 @@
+{
+  "model": "gpt-huge",
+  "toolsOff": ["place_hold"],
+  "knowledgeBaseIds": ["kb_not_granted"]
+}

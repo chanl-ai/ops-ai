@@ -4,6 +4,7 @@ import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
 import type { OptionsPage, OptionsParams, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
 import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
@@ -39,6 +40,20 @@ export const workflowOptions = workflowsWhere('workflow-options');
 export const startableWorkflowOptions = workflowsWhere('workflow-options:startable', { startable: ['true'] });
 /** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
 export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });
+/**
+ * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/systems.
+ * That route lists every card at once and takes no search, so the search narrows the one list it returns.
+ */
+export const appOptions: OptionSource = {
+  key: 'app-options',
+  fetch: async ({ search, ids }) => {
+    // The built-in apps stay pickable here (a mailbox reply is the write teams most often approve), off the Apps grid.
+    const cards = await sdk((ops) => ops.raw.tools.connections_list_systems({ query: { include: 'builtin' } }));
+    const words = (search ?? '').trim().toLowerCase();
+    const rows = ids?.length ? cards.filter((c) => ids.includes(c.id)) : cards.filter((c) => !words || `${c.name} ${c.category ?? ''}`.toLowerCase().includes(words));
+    return { data: rows.map((c) => ({ id: c.id, label: c.name, hint: c.category ?? null })), nextCursor: null };
+  },
+};
 export const guardrailOptions: OptionSource = { key: 'guardrail-options', fetch: (p) => api.guardrails.options(p) };
 /** Widgets, disabled with the reason when a button needs a tool outside `granted` (the draft's tools). */
 export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `widget-options:${[...granted].sort().join(',')}`, fetch: (p) => api.widgets.options(p, granted) });

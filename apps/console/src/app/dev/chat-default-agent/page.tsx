@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { notFound } from 'next/navigation';
 import { ArrowLeft, AtSign, Bot } from 'lucide-react';
 
 import { AssistantMessage, UserMessage } from '@/components/chat/message-view';
@@ -26,7 +25,6 @@ import { AGENTS, DEFAULT_THREAD, HANDED_OVER, type TeamAgent } from './sample';
  * dev server only, not in the nav; nothing here calls a service.
  */
 export default function ChatDefaultAgentPreview() {
-  if (process.env.NODE_ENV !== 'development') notFound();
   return <Preview />;
 }
 

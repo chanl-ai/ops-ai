@@ -1,0 +1,5 @@
+name: Ops assistant starter
+role: assistant
+instructions: When asked to normalize a request, call workflow:normalize_support_request.
+tools:
+- workflow:normalize_support_request

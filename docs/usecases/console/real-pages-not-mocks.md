@@ -5,16 +5,16 @@ Status: current. Id: `uc-517`. Service: `console` on agents-service and tools-se
 The console served development-only copies of its pages under `/preview/` beside the real ones, so what the maintainers
 reviewed could drift from what shipped. The copies are deleted. The pieces they drew that the real pages lacked are
 built: an agent's ID to copy, and adding an allowed host in place from a tool whose request goes to an unlisted one,
-with the Egress page's own form. Only `/preview/human-tasks` stays, until the maintainers picks its layout.
+with the Egress page's own form. Human Tasks shipped as a real page, so no preview route is left.
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
 | 1 | James opens an agent | Its Settings tab shows the Agent ID with a copy button |
-| 2 | James starts Import operations, HTTP, and types a request to `statements.uc517.example` | "statements.uc517.example is not an allowed host"; a Security admin can add it; no Add button |
+| 2 | James starts Import operations, HTTP, and types a request to `statements.uc517.example` | "statements.uc517.example is not an allowed host"; saving asks a Security admin to allow it; no Add button |
 | 3 | Sam, a Security admin, does the same and presses Add allowed host | The Egress form opens with the host filled in; adding it clears the notice, the import stays on its step, and the host is on the allowlist |
-| 4 | Anyone opens a former preview route | 404 for home, case-story, start-run, deployments, access, channels, settings and workflow-layout; human-tasks still opens |
+| 4 | Anyone opens a former preview route | 404 for home, case-story, start-run, deployments, access, channels, settings, workflow-layout and human-tasks |
 | 5 | Through all of it | No page error |
 
 ## Acceptance layers

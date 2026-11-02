@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { AppsTabs } from '@/components/connections/apps-tabs';
 import { PageLayout } from '@/components/page-layout';
 import { SelectedList, toastBulk } from '@/components/shared/bulk';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -25,7 +26,7 @@ import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddModuleDialog } from '@/components/tools/add-module-dialog';
 import { NewModuleDialog } from '@/components/tools/new-module-dialog';
 import { WorkflowToolsTable } from '@/components/tools/workflow-tools-table';
-import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, MODULE_TYPE, ModuleMark, ModuleTypeBadge, pctText } from '@/components/tools/module-meta';
+import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, ModuleMark, ownerText, pctText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useTools } from '@/hooks/queries';
@@ -34,16 +35,17 @@ import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural } from '@/lib/format';
 import type { ModuleFilters, ModuleView, ToolModule } from '@/lib/types/tool-modules';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = ToolModule & { onRowClick: (m: ToolModule) => void; href: string };
 
 const VIEW_EMPTY: Record<ModuleView, string> = {
-  all: 'Connect a system once; workflows then request the operations they need.',
-  needs_approval: 'Every module has a decided security review and no open requests.',
+  all: 'Connect an app once; workflows then request the operations they need.',
+  needs_approval: 'Every tool set has a decided security review and no open requests.',
   expiring: 'No workflow approval expires in the next 30 days.',
-  expired: 'No module has only expired approvals.',
-  failing: 'Every module is reachable and under a 2% error rate.',
-  security_review: 'No module has a security review waiting on Security.',
+  expired: 'No tool set has only expired approvals.',
+  failing: 'Every tool set is reachable and under a 2% error rate.',
+  security_review: 'No tool set has a security review waiting on Security.',
 };
 
 function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDef<Row>[] {
@@ -54,31 +56,30 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
       // Holds every searched field so the table's own filter keeps the rows the server matched.
       id: 'displayName',
       accessorFn: (m) => `${m.displayName} ${m.name} ${m.system} ${m.description} ${m.ownerTeam}`,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Module" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />,
       cell: ({ row }) => (
-        <div className="flex w-56 max-w-56 items-center gap-3" title={`${row.original.displayName} · ${row.original.system} · Owner ${row.original.ownerTeam}`}>
+        <div className="flex w-56 max-w-56 items-center gap-3" title={`${row.original.displayName} · ${row.original.system} · ${ownerText(row.original.ownerTeam)}`}>
           <ModuleMark name={row.original.displayName} />
           <div className="min-w-0">
             <div className="truncate font-medium">{row.original.displayName}</div>
             {/* On the name, not in Approval: Approval is not among the default columns, and a module whose secret is
                 not set fails every call that reads it. */}
             {row.original.unsetSecrets ? (
-              <Link href="/settings/security/secrets" className="block truncate text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${row.original.id}`}>
+              <Link href="/integrations/credentials?tab=secrets" className="block truncate text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${row.original.id}`}>
                 {plural(row.original.unsetSecrets, 'secret')} not set
               </Link>
             ) : (
-              <div className="truncate text-xs text-muted-foreground">Owner {row.original.ownerTeam}</div>
+              <div className="truncate text-xs text-muted-foreground">{ownerText(row.original.ownerTeam)}</div>
             )}
           </div>
         </div>
       ),
       enableHiding: false,
     },
-    { accessorKey: 'type', header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />, cell: ({ row }) => <ModuleTypeBadge type={row.original.type} />, filterFn: facetFilterFn },
     {
       id: 'connection',
       accessorFn: (m) => m.connection?.name ?? '',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Connection" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
       cell: ({ row }) => (
         <StopRowClick align="start">
           <ConnectionChip connection={row.original.connection} className="max-w-56" />
@@ -206,33 +207,42 @@ export default function ToolsPage() {
       switcher
       icon={Wrench}
       title="Tools"
-      description="Systems connected through the data gateway, the operations each exposes, and which workflows may call them"
+      description="Every tool your team can use, by the app it calls, and which workflows may call them"
+      tabs={<AppsTabs />}
       actions={
-        canBuild && (
         <div className="flex items-center gap-2">
+          {/* Every call these tools made, under Tools since the Apps menu (c-617). */}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/tools/calls" data-testid="tool-calls-link">
+              Tool calls <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          {canBuild && (
+          <>
           <Button variant="outline" onClick={() => setAdding(true)} data-testid="import-operations">
             <Download className="size-4" /> Import operations
           </Button>
           <Button onClick={() => setCreatingBlank(true)} data-testid="new-module">
-            <Plus className="size-4" /> New module
+            <Plus className="size-4" /> New tool
           </Button>
+          </>
+          )}
         </div>
-        )
       }
     >
       {query.isPending ? (
         <PageSkeleton statCards={4} tableRows={8} />
       ) : query.isError && !query.data ? (
-        <QueryError what="modules" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
+        <QueryError what="the tools" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
       ) : (
         <div className="flex flex-col gap-4">
           <StatCardGrid columns={3}>
-            <StatCard label="Modules" value={stats?.modules} icon={Boxes} footer={{ text: `${plural(stats?.operations ?? 0, 'operation')}`, subtext: 'Across every module you can see' }} />
+            <StatCard label="Tools" value={stats?.operations} icon={Boxes} footer={{ text: `${plural(stats?.modules ?? 0, 'set')} of tools`, subtext: 'Everything you can see' }} />
             <StatCard label="Calls · 24h" value={stats ? count(stats.calls24h) : undefined} icon={Activity} footer={{ text: `${pctText(stats?.errorRate ?? 0)} failed`, subtext: 'Through the data gateway' }} />
             <StatCard label="Expiring soon" value={stats?.expiringModules} icon={CalendarClock} footer={{ text: `${plural(stats?.expiringApprovals ?? 0, 'approval')} within 30 days`, subtext: `${plural(counts?.expired ?? 0, 'module')} already expired` }} />
           </StatCardGrid>
           <SavedViewTabs
-            ariaLabel="Module views"
+            ariaLabel="Tool views"
             presets={[
               { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Boxes },
               { id: 'needs_approval', label: `Needs approval · ${counts?.needs_approval ?? 0}`, icon: ShieldAlert },
@@ -261,11 +271,10 @@ export default function ToolsPage() {
             columns={cols}
             data={rows}
             getRowId={(r) => r.id}
-            initialColumnVisibility={{ type: false, version: false, calls24h: false }}
+            initialColumnVisibility={{ version: false, calls24h: false }}
             searchColumn="displayName"
-            searchPlaceholder="Search modules or systems…"
+            searchPlaceholder="Search tools…"
             filters={[
-              { column: 'type', title: 'Type', options: (['mcp', 'openapi', 'http', 'code'] as const).map((t) => ({ label: MODULE_TYPE[t].label, value: t, count: facets.type?.[t] ?? 0 })) },
               { column: 'access', title: 'Access', options: [{ label: 'Read', value: 'read' }, { label: 'Write', value: 'write' }].map((o) => ({ ...o, count: facets.access?.[o.value] ?? 0 })) },
               { column: 'approvalState', title: 'Approval', options: (['draft', 'approved', 'needs_approval', 'expiring', 'expired'] as const).map((s) => ({ label: APPROVAL_STATE_LABEL[s], value: s, count: facets.approvalState?.[s] ?? 0 })) },
             ]}
@@ -273,16 +282,8 @@ export default function ToolsPage() {
             selectionResetKey={resetKey}
             filterResetKey={filterResetKey}
             bulkActions={canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => setBulk(rs) }] : undefined}
-            serverPagination={{
-              enabled: true,
-              total: query.data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: query.data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
-            emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'modules' : 'modules in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' && canBuild ? 'Add module' : undefined} onCreate={view === 'all' && canBuild ? () => setAdding(true) : undefined} />}
+            serverPagination={serverPagination(list, query)}
+            emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'tools' : 'tools in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' && canBuild ? 'Import operations' : undefined} onCreate={view === 'all' && canBuild ? () => setAdding(true) : undefined} />}
           />
           )}
         </div>
@@ -315,7 +316,7 @@ export default function ToolsPage() {
       <DeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        entityType="module"
+        entityType="tools"
         entityName={deleting?.displayName}
         requireNameConfirmation={!!deleting?.operationCount}
         description={deleting ? `Its ${plural(deleting.operationCount, 'operation')} are removed from every agent that holds them.${deleting.workflows.length ? ` ${plural(deleting.workflows.length, 'workflow')} still ${deleting.workflows.length === 1 ? 'holds an approval' : 'hold approvals'}; revoke ${deleting.workflows.length === 1 ? 'it' : 'them'} first.` : ''}` : undefined}
@@ -334,9 +335,9 @@ export default function ToolsPage() {
       <DeleteDialog
         open={!!bulk}
         onOpenChange={(o) => !o && setBulk(null)}
-        entityType="module"
+        entityType="tools"
         count={bulkNames.length}
-        description="Modules a workflow still holds an approval for are skipped; revoke those approvals first."
+        description="Tools a workflow still holds an approval for are skipped; revoke those approvals first."
         isLoading={bulkRemove.isPending}
         onConfirm={async () => {
           const res = await bulkRemove.mutateAsync(bulk!.map((m) => m.id));

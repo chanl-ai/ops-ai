@@ -26,14 +26,16 @@ def publish(gw: httpx.Client, module: dict[str, Any]) -> dict[str, Any]:
     return approve_tool_review(gw, module["id"], SECURITY)
 
 
-def create(gw: httpx.Client, name: str, source: dict[str, Any], operations: list[dict[str, Any]]) -> httpx.Response:
+def create(
+    gw: httpx.Client, name: str, source: dict[str, Any], operations: list[dict[str, Any]], connection: str | None
+) -> httpx.Response:
     body = {
         "name": name,
         "displayName": name,
         "system": name,
         "type": source["kind"],
         "endpoint": "",
-        "connectionId": "int_core_banking",
+        "connectionId": connection,
         "operations": operations,
         "source": source,
     }
@@ -50,6 +52,9 @@ def call(gw: httpx.Client, tool: str, args: dict[str, Any]) -> httpx.Response:
 
 with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     clean(gw, bank.range)
+    # The modules' own connection, holding the bank's address; the spec's key header signs the calls.
+    made_conn = gw.post("/v1/connections", json={"name": "uc012 statements", "authKind": "none"})
+    conn = data(made_conn)["id"]
     spec = {"kind": "openapi", "specUrl": f"https://{HOST}/v1/openapi.json"}
     unlisted = gw.post("/v1/tool-modules/discover", json=spec)
     check("a document on a host off the allow-list is refused (400)", unlisted.status_code == 400, unlisted.text[:200])
@@ -79,7 +84,7 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
         "group": "x",
         "input": [],
     }
-    made = create(gw, "uc012-statements", spec, [forged])
+    made = create(gw, "uc012-statements", spec, [forged], conn)
     module = data(made) if made.status_code == 201 else {}
     op = (module.get("operations") or [{}])[0]
     check(
@@ -110,6 +115,8 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
             "uc012-case-desk",
             mcp,
             [{"name": "lookup_case", "description": "", "access": "read", "group": "tools", "input": []}],
+            # Another system, so its own connection: one connection holds one address.
+            None,
         )
     )
     publish(gw, case_desk)

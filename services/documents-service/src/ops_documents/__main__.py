@@ -20,6 +20,7 @@ from ops_documents.files import Files
 from ops_documents.layouts import Layouts
 from ops_documents.store import LayoutsStore, engine_for
 from ops_documents.store.event_relay import keep_relaying
+from ops_documents.tools_client import plugin_templates
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
@@ -49,6 +50,7 @@ def build(settings: Settings) -> FastAPI:
         extractor=extractor,
         document_types=types,
         auth=Auth.from_settings(settings, audience="documents"),
+        plugin_templates=plugin_templates(settings),
         background=background,
     )
 

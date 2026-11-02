@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-31",
+  "title": "Run your agents on your own Azure OpenAI resource",
+  "description": "An account admin can connect an Azure OpenAI resource on Settings > Model providers with its endpoint, API version, region and key, or set it at install with OPENAI_API_TYPE=azure, OPENAI_API_BASE, OPENAI_API_VERSION, OPENAI_API_REGION and OPENAI_API_KEY. A call answered from another region than the one you named is flagged on the connection and in the call log.",
+  "tag": "new",
+  "cards": [
+    "c-605"
+  ]
+}

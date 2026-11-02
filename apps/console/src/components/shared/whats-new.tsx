@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChangelog } from '@/hooks/use-changelog';
-import type { ChangelogEntry } from '@/lib/changelog';
+import { type ChangelogEntry, isMajor } from '@/lib/changelog';
 import { dateOnly } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,22 @@ function WhatsNewMark() {
   );
 }
 
+/** How many of the newest major changes show before the rest are folded away. */
+const MAJOR_SHOWN = 8;
+
+function EntryRow({ entry: e }: { entry: ChangelogEntry }) {
+  return (
+    <li className="flex flex-col gap-1.5" data-testid="whats-new-entry">
+      <div className="flex items-center gap-2">
+        <Badge variant={TAG[e.tag].variant}>{TAG[e.tag].label}</Badge>
+        <span className="text-xs text-muted-foreground tabular-nums">{dateOnly(e.date)}</span>
+      </div>
+      <p className="text-sm font-medium leading-tight">{e.title}</p>
+      {e.description && <p className="text-xs leading-relaxed text-muted-foreground">{e.description}</p>}
+    </li>
+  );
+}
+
 /**
  * What's new (c-510): chanl-eval's floating What's New button, bottom-right on every console page, its popover opening
  * upward with a Coming next tab for the roadmap and the build's version in its header. A dot marks an entry this
@@ -38,6 +54,9 @@ export function WhatsNew() {
   const { entries, roadmap, unseen, markSeen, version, feedbackOn } = useChangelog();
   const [open, setOpen] = React.useState(false);
   const [pulsing, setPulsing] = React.useState(false);
+  const [showMinor, setShowMinor] = React.useState(false);
+  const major = entries.filter(isMajor).slice(0, MAJOR_SHOWN);
+  const minor = entries.filter((e) => !major.includes(e));
   // chanl-eval's attention pulse: once after three seconds, then every eighteen, never while the popover is open.
   React.useEffect(() => {
     if (open) return;
@@ -54,7 +73,7 @@ export function WhatsNew() {
   }, [open]);
   return (
     // Above the dev Feedback button (16px from the corner) when it shares the corner, so neither covers the other.
-    <div className={cn('fixed right-4 z-50', feedbackOn ? 'bottom-16' : 'bottom-4')}>
+    <div className={cn('fixed right-4 z-50', feedbackOn ? 'bottom-14' : 'bottom-4')}>
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -88,16 +107,23 @@ export function WhatsNew() {
                   {entries.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">Nothing new yet.</li>
                   ) : (
-                    entries.map((e) => (
-                      <li key={e.id} className="flex flex-col gap-1.5" data-testid="whats-new-entry">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={TAG[e.tag].variant}>{TAG[e.tag].label}</Badge>
-                          <span className="text-xs text-muted-foreground tabular-nums">{dateOnly(e.date)}</span>
-                        </div>
-                        <p className="text-sm font-medium leading-tight">{e.title}</p>
-                        {e.description && <p className="text-xs leading-relaxed text-muted-foreground">{e.description}</p>}
-                      </li>
-                    ))
+                    <>
+                      {major.map((e) => <EntryRow key={e.id} entry={e} />)}
+                      {minor.length > 0 && (
+                        <li className="flex flex-col gap-4">
+                          <button
+                            type="button"
+                            className="self-start text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                            aria-expanded={showMinor}
+                            onClick={() => setShowMinor((v) => !v)}
+                            data-testid="whats-new-minor-toggle"
+                          >
+                            {showMinor ? 'Hide earlier and smaller changes' : `Earlier and smaller changes (${minor.length})`}
+                          </button>
+                          {showMinor && <ol className="flex flex-col gap-4">{minor.map((e) => <EntryRow key={e.id} entry={e} />)}</ol>}
+                        </li>
+                      )}
+                    </>
                   )}
                 </ol>
               </ScrollArea>

@@ -1,4 +1,5 @@
-"""`OpsAI` and `AsyncOpsAI`: the core nouns by name, `raw` for every other public operation.
+"""`OpsAI` and `AsyncOpsAI`: the core nouns by name, the Apps area in the screen's words (`apps`, `credentials`,
+`accounts`, `tools`, `resources`, `usage`), `raw` for every other public operation.
 
 from ops_ai import OpsAI
 
@@ -22,6 +23,7 @@ from typing import Any
 
 import httpx
 
+from ._agents import Agents, AsyncAgents
 from ._config import Config
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
 from ._generated.agents.operations import Operations as AgentsOps
@@ -36,6 +38,21 @@ from ._generated.platform.operations import Operations as PlatformOps
 from ._generated.tools.operations import AsyncOperations as AsyncToolsOps
 from ._generated.tools.operations import Operations as ToolsOps
 from ._transport import AsyncTransport, Transport, _headers, _result, page_items
+from ._words import (
+    Accounts,
+    Apps,
+    AsyncAccounts,
+    AsyncApps,
+    AsyncCredentials,
+    AsyncResources,
+    AsyncTools,
+    AsyncUsage,
+    Credentials,
+    Resources,
+    Tools,
+    Usage,
+)
+from ._workflows import AsyncWorkflows, Workflows
 
 # A run is over in these states; `waiting` means it stopped at a step that waits on a person or another system.
 TERMINAL = ("succeeded", "failed", "cancelled")
@@ -278,23 +295,31 @@ class OpsAI:
         self.config = Config.resolve(**config)
         self._t = Transport(self.config, http)
         self.raw = Raw(self._t)
-        self.teams, self.agents, self.workflows, self.threads, self.cases, self.tools, self.connections = (
-            Resource(self.raw, NOUNS[n])
-            for n in ("teams", "agents", "workflows", "threads", "cases", "tools", "connections")
+        self.teams, self.threads, self.cases, self.connections = (
+            Resource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases", "connections")
         )
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
         self.runs = Runs(self.raw, NOUNS["runs"])
         self.tasks = Tasks(self.raw, NOUNS["tasks"])
+        self.agents = Agents(self.raw)
+        self.workflows = Workflows(self.raw, self.runs)
+        # The Apps area in the screen's words (c-616).
+        self.apps = Apps(self.raw)
+        self.credentials = Credentials(self.raw, self.apps)
+        self.accounts = Accounts(self.raw)
+        self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
+        self.resources = Resources(self.raw)
+        self.usage = Usage(self.raw)
 
     @classmethod
     def sign_in(cls, email: str, password: str, **config: Any) -> OpsAI:
         """A client acting as a person, from their email and password. A session carries the teams the person was in
         when it was made, so sign in again after joining a team."""
-        anonymous = cls(**config)
+        anonymous = cls(**{**config, "access_token": "", "team": config.get("team") or ""})
         session = anonymous.raw.platform.auth_sign_in({"email": email, "password": password})
         anonymous.close()
-        return cls(**{**config, "access_token": session["token"]})
+        return cls(**{**config, "access_token": session["token"], "team": config.get("team") or ""})
 
     def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> Any:
         return self.files.upload(name, content, mime=mime, purpose=purpose, transport=self._t)
@@ -323,14 +348,21 @@ class AsyncOpsAI:
         self.config = Config.resolve(**config)
         self._t = AsyncTransport(self.config, http)
         self.raw = AsyncRaw(self._t)
-        self.teams, self.agents, self.workflows, self.threads, self.cases, self.tools, self.connections = (
-            AsyncResource(self.raw, NOUNS[n])
-            for n in ("teams", "agents", "workflows", "threads", "cases", "tools", "connections")
+        self.teams, self.threads, self.cases, self.connections = (
+            AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases", "connections")
         )
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])
         self.runs = AsyncRuns(self.raw, NOUNS["runs"])
         self.tasks = AsyncTasks(self.raw, NOUNS["tasks"])
+        self.agents = AsyncAgents(self.raw)
+        self.workflows = AsyncWorkflows(self.raw, self.runs)
+        self.apps = AsyncApps(self.raw)
+        self.credentials = AsyncCredentials(self.raw, self.apps)
+        self.accounts = AsyncAccounts(self.raw)
+        self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
+        self.resources = AsyncResources(self.raw)
+        self.usage = AsyncUsage(self.raw)
 
     @classmethod
     async def sign_in(cls, email: str, password: str, **config: Any) -> AsyncOpsAI:

@@ -28,6 +28,7 @@ import { useListParams } from '@/hooks/use-list-params';
 import { shortDate } from '@/lib/format';
 import type { EgressKind, ListedHost, ListedRange } from '@/lib/types/egress';
 import { useCan } from '@/hooks/me-queries';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 
 const added = (by: string, at: string) => (
@@ -144,15 +145,7 @@ export default function EgressPage() {
                 searchColumn="host"
                 searchPlaceholder="Search hosts or notes…"
                 onColumnFiltersChange={hostList.onColumnFiltersChange}
-                serverPagination={{
-                  enabled: true,
-                  total: hostPage.data?.pagination.total ?? 0,
-                  page: hostList.pagination.page,
-                  pageSize: hostList.pagination.pageSize,
-                  totalPages: hostPage.data?.pagination.totalPages,
-                  onPaginationChange: hostList.setPagination,
-                  isLoading: hostPage.isFetching && hostPage.isPlaceholderData,
-                }}
+                serverPagination={serverPagination(hostList, hostPage)}
                 filterResetKey={hostFilterResetKey}
                 hideViewSwitcher
                 emptyState={<ListEmpty icon={Globe} noun="hosts" filtered={hostList.isFiltered} onClear={() => setHostFilterResetKey((k) => k + 1)} createLabel={canEdit ? 'Add host' : undefined} onCreate={() => setAdding('host')} description="Until a host is listed, no tool call or discovery leaves the bank." />}

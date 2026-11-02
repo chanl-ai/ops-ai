@@ -7,7 +7,7 @@ const TAG = Math.random().toString(36).slice(2, 6);
 const HOST = `payments-${TAG}.bank.example`;
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
-const PAGES = ['/tools', '/access', '/logs/tool-calls', '/agents', '/workflows', '/reviews'];
+const PAGES = ['/tools', '/access', '/tools/calls', '/agents', '/workflows', '/reviews'];
 
 await withUiStack(
   async (consoleUrl) => {
@@ -24,7 +24,7 @@ await withUiStack(
     const moduleId = made.data.id;
     for (const [name, access, method] of [[`get_payment_${TAG}`, 'read', 'GET'], [`create_payment_${TAG}`, 'write', 'POST']])
       await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name, description: '', access, method, url: `https://${HOST}/v1/payments` }) }));
-    // The write's approval policy asks for two approvers (c-048 T005).
+    // The write's approval policy asks for two approvers (an earlier change T005).
     const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
     const write = detail.operations.find((o) => o.access === 'write');
     await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/operations/${write.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ approvers: 2 }) }));

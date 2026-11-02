@@ -1,6 +1,7 @@
 """Provider connections a completion is forwarded to. `scripted` answers deterministically with no network, for tests
-and use cases; `openai-compatible` forwards to the connection's base URL with the credential its `key_ref` names.
-`anthropic` connections can be registered but are not served in this slice.
+and use cases; `openai-compatible` forwards to the connection's base URL with the credential its `key_ref` names;
+`azure-openai` forwards to an Azure OpenAI resource in Azure's own header and paths. `anthropic` connections can be
+registered but are not served in this slice.
 
 Both shapes carry tools: the request's `tools` reach the provider and its `tool_calls` come back, whole or as stream
 deltas, in OpenAI's chunk shape.
@@ -13,8 +14,11 @@ import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import quote
 
 import httpx
+
+from .connection_settings import AZURE_OPENAI_V1
 
 
 @dataclass(frozen=True)
@@ -116,6 +120,8 @@ def _chunk(delta: dict[str, Any], finish_reason: str | None = None) -> dict[str,
 
 
 class OpenAICompatibleProvider:
+    """OpenAI's chat completions at `{base_url}/chat/completions`, the key as a bearer token."""
+
     def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -125,18 +131,27 @@ class OpenAICompatibleProvider:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
+    def _url(self, model_id: str) -> str:
+        return f"{self.base_url}/chat/completions"
+
+    def _answered(self, r: httpx.Response) -> None:
+        """Raises when the answer is refused. Never quotes the body: a provider's 401 can echo part of the key."""
+        if r.status_code >= 400:
+            raise ProviderError(f"provider answered {r.status_code}")
+
+    def _keep(self, chunk: dict[str, Any]) -> dict[str, Any] | None:
+        """The chunk as callers get it, or None to drop it."""
+        return chunk
+
     async def complete(self, model_id: str, body: dict[str, Any]) -> Completion:
         try:
             r = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                json={**body, "model": model_id, "stream": False},
-                headers=self._headers,
+                self._url(model_id), json={**body, "model": model_id, "stream": False}, headers=self._headers
             )
         except httpx.HTTPError as e:
             # An unreachable endpoint is the provider's failure (502), not this service's (500).
             raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
-        if r.status_code >= 400:
-            raise ProviderError(f"provider answered {r.status_code}")
+        self._answered(r)
         data: dict[str, Any] = r.json()
         usage: dict[str, Any] = data.get("usage") or {}
         choices: list[dict[str, Any]] = data.get("choices") or [{}]
@@ -152,11 +167,8 @@ class OpenAICompatibleProvider:
         # include_usage puts the totals on a last chunk with no choices; metering needs them.
         sent = {**body, "model": model_id, "stream": True, "stream_options": {"include_usage": True}}
         try:
-            async with self.client.stream(
-                "POST", f"{self.base_url}/chat/completions", json=sent, headers=self._headers
-            ) as r:
-                if r.status_code >= 400:
-                    raise ProviderError(f"provider answered {r.status_code}")
+            async with self.client.stream("POST", self._url(model_id), json=sent, headers=self._headers) as r:
+                self._answered(r)
                 async for line in r.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -167,9 +179,75 @@ class OpenAICompatibleProvider:
                     if u := chunk.get("usage"):
                         usage.input_tokens = int(u.get("prompt_tokens", 0))
                         usage.output_tokens = int(u.get("completion_tokens", 0))
-                    yield chunk
+                    if (kept := self._keep(chunk)) is not None:
+                        yield kept
         except httpx.HTTPError as e:
             raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
+
+
+# Azure's annotations, which no OpenAI client reads: dropped so callers see OpenAI's shape.
+_AZURE_ANNOTATIONS = ("prompt_filter_results", "content_filter_results", "content_filter_offsets")
+
+
+def region_key(region: str) -> str:
+    """A region as both spellings compare: `Sweden Central` (Azure's header) and `swedencentral` (its id)."""
+    return re.sub(r"[^a-z0-9]", "", region.lower())
+
+
+def region_mismatch(observed: str | None, expected: str | None) -> str | None:
+    """`answered from <observed>, expected <expected>` when Azure answered from another region than the connection
+    names; None when they agree or either is unknown. The one rule the call log and the connection list both show."""
+    if observed and expected and region_key(observed) != region_key(expected):
+        return f"answered from {observed}, expected {expected}"
+    return None
+
+
+class AzureOpenAIProvider(OpenAICompatibleProvider):
+    """Azure OpenAI: the key in the `api-key` header (Azure's deployment path refuses a bearer token), and
+    `{endpoint}/openai/v1/chat/completions` with the deployment as `model` when `api_version` is `v1`, else
+    `{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=<version>`. The alias's model id is the
+    deployment. Every answer's `x-ms-region` header is recorded as `observed_region`; one that is not `region` is named
+    by `region_mismatch` and the call goes through (owner, 2026-10-31: warn only until a real resource confirms the
+    header)."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        api_version: str,
+        region: str | None,
+        api_key: str | None,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        super().__init__(endpoint, api_key, client)
+        self.api_version = api_version
+        self.region = region
+        self.observed_region: str | None = None
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        return {"api-key": self.api_key} if self.api_key else {}
+
+    def _url(self, model_id: str) -> str:
+        if self.api_version == AZURE_OPENAI_V1:
+            return f"{self.base_url}/openai/v1/chat/completions"
+        deployment = quote(model_id, safe="")
+        return f"{self.base_url}/openai/deployments/{deployment}/chat/completions?api-version={self.api_version}"
+
+    def _answered(self, r: httpx.Response) -> None:
+        self.observed_region = r.headers.get("x-ms-region") or self.observed_region
+        super()._answered(r)
+
+    @property
+    def region_mismatch(self) -> str | None:
+        """`answered from <region>, expected <region>` when Azure answered from another region; None otherwise."""
+        return region_mismatch(self.observed_region, self.region)
+
+    def _keep(self, chunk: dict[str, Any]) -> dict[str, Any] | None:
+        raw: list[dict[str, Any]] = chunk.get("choices") or []
+        choices = [{k: v for k, v in c.items() if k not in _AZURE_ANNOTATIONS} for c in raw if "delta" in c]
+        if not choices and not chunk.get("usage"):
+            return None
+        return {**{k: v for k, v in chunk.items() if k not in _AZURE_ANNOTATIONS}, "choices": choices}
 
 
 def provider_for(
@@ -178,8 +256,11 @@ def provider_for(
     kind = connection["type"]
     if kind == "scripted":
         return ScriptedProvider()
+    key_ref = connection.get("key_ref")
+    api_key = secrets.get(str(key_ref)) if key_ref else None
     if kind == "openai-compatible":
-        key_ref = connection.get("key_ref")
-        api_key = secrets.get(str(key_ref)) if key_ref else None
         return OpenAICompatibleProvider(str(connection["base_url"]), api_key, client)
+    if kind == "azure-openai":
+        version, region = str(connection["api_version"]), connection.get("region")
+        return AzureOpenAIProvider(str(connection["base_url"]), version, region, api_key, client)
     raise ProviderError(f"provider type {kind} is not served yet")

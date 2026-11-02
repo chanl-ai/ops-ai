@@ -51,6 +51,10 @@ async def test_each_broken_node_gets_its_own_check(client: AsyncClient) -> None:
     assert ("orphan", "unreachable") in found
     # End nodes have no out port, so none of the four ends is reported as leading nowhere.
     assert not [c for c in body["checks"] if c["code"] == "unconnected_port" and c["node"] != "review"]
+    ghost = next(c for c in body["checks"] if c["node"] == "ghost")
+    assert ghost["path"] == "nodes.ghost" and ghost["suggestion"]
+    port = next(c for c in body["checks"] if c["code"] == "unknown_port")
+    assert port["port"] == "maybe"
     refused = await client.post("/v1/workflows/definitions", json={"definition": d})
     assert refused.status_code == 422
     assert refused.json()["error"]["details"]["checks"]

@@ -1,5 +1,5 @@
 // uc-122 a builder edits steps in a side sheet and adds them from a tabbed panel, ui layer:
-// docs/usecases/console/edit-steps-in-a-sheet.md (c-165). withUiStack's demo stack, signed in through platform-service as
+// docs/usecases/console/edit-steps-in-a-sheet.md. withUiStack's demo stack, signed in through platform-service as
 // James. A ten-step wire review is saved as a draft through the API, then edited in the canvas. Each step is checked on its own.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 

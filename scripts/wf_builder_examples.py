@@ -29,8 +29,11 @@ def render(seeds: Path) -> str:
         "Status: current. Generated from `services/agents-service/seed/engine_workflows.json` by",
         "`scripts/wf_builder_examples.py`; change the seeds, then run it. `make docs-verify` fails on a stale page.",
         "",
-        "Each example is a seeded workflow a dev stack starts with. Name one as `example` in a goal file and",
-        "`scripts/wf_builder.py create` adapts it.",
+        "This page is generated seed topology: workflows a local stack starts with. Those seeds are the product",
+        "demo, not the developer Examples. Copy a folder from `examples/workflows/` and pass it to",
+        "`ops workflows validate|apply|run`. Name a seed as `example` in a goal file and",
+        "`scripts/wf_builder.py create`",
+        "adapts it until that skill uses the generic folder commands.",
     ]
     for item in items:
         nodes = {str(n["id"]): n for n in item.get("nodes") or []}

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "id": "purge_after_file_deleted",
+  "name": "Purge derived data after a file deletion",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.event",
+      "typeVersion": 1,
+      "name": "File deleted",
+      "parameters": {
+        "event": "file.deleted"
+      }
+    },
+    {
+      "id": "purge",
+      "type": "ops.documents.purge",
+      "typeVersion": 1,
+      "name": "Purge derived data",
+      "parameters": {
+        "file": "$.input.fileId"
+      }
+    },
+    {
+      "id": "done",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Purged",
+      "parameters": {
+        "outcome": "purged"
+      }
+    },
+    {
+      "id": "failed",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "purge_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "purge",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "purge",
+        "port": "ok"
+      },
+      "to": {
+        "node": "done",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "purge",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    }
+  ]
+}

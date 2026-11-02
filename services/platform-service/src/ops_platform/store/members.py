@@ -19,14 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.outbox import add as add_event
 
 from .audit import record
 from .roles import mirror_membership
-from .tables import api_keys, audit_entries, members, sessions, teams, users
+from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
 
 ADMIN = "admin"
+# Reported when a member is removed from a team (event_relay.py): tools-service deletes their own accounts on its apps.
+MEMBER_REMOVED = "member.removed"
 
 
 @dataclass(frozen=True)
@@ -310,6 +313,18 @@ class TeamStore:
                             api_keys.c.disabled_at.is_(None),
                         )
                         .values(disabled_at=at)
+                    )
+                    # Their own accounts on the team's apps are tools-service's to delete: reported in this transaction,
+                    # so the removal and the news of it commit together, and relayed until heard.
+                    await add_event(
+                        c,
+                        platform_outbox,
+                        tenant_id=actor.tenant_id,
+                        team_id=actor.team_id,
+                        name=MEMBER_REMOVED,
+                        key=f"{member_id}:{at}",
+                        payload={"personId": str(user_id)},
+                        actor=actor.user_id,
                     )
                 await _audit(c, actor, "member.remove", member_id, {"email": row["email"]})
                 bulk.updated.append(member_id)

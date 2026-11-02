@@ -11,7 +11,7 @@
    "ownerTeam": "Core Banking Platform",
    "ownerContacts": [
     "Daniel Brooks",
-    "Lena Fischer"
+    "James Richardson"
    ],
    "endpoint": "https://corebanking.api.harborpine.internal/v3",
    "auth": "oauth_client_credentials",
@@ -358,7 +358,7 @@
     {
      "version": "3.1.0",
      "daysAgo": 52,
-     "by": "Lena Fischer",
+     "by": "James Richardson",
      "note": "Payoff statements",
      "changes": [
       {
@@ -372,7 +372,7 @@
     {
      "version": "3.2.0",
      "daysAgo": 21,
-     "by": "Lena Fischer",
+     "by": "James Richardson",
      "note": "Address line 2 and postal code format",
      "changes": [
       {
@@ -428,7 +428,7 @@
       "update_address"
      ],
      "expiresIn": 148,
-     "decidedBy": "Lena Fischer",
+     "decidedBy": "James Richardson",
      "justification": "Address changes requested by email to card services",
      "workflowName": "Card services inbox",
      "workflowTeamId": "team_cards"
@@ -1896,134 +1896,6 @@
      "workflowTeamId": "team_retail"
     }
    ]
-  },
-  {
-   "id": "mod_knowledge",
-   "name": "knowledge-search",
-   "displayName": "Knowledge search",
-   "system": "Data Hub",
-   "description": "Searches the knowledge bases in Data Hub with citations. Served by the platform.",
-   "type": "mcp",
-   "ownerTeam": "Platform",
-   "ownerContacts": [
-    "James Richardson"
-   ],
-   "endpoint": "https://data-gateway.harborpine.internal/knowledge/mcp",
-   "auth": "none",
-   "timeoutMs": 4000,
-   "egressHosts": [],
-   "dataClassification": "internal",
-   "reviewer": "Nadia Petrov",
-   "findings": [
-    "Results filtered by the caller’s knowledge base grants"
-   ],
-   "operations": [
-    {
-     "name": "search_knowledge",
-     "input": [
-      {
-       "name": "query",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "collections",
-       "type": "array",
-       "required": false
-      }
-     ],
-     "binding": null,
-     "rate": 600,
-     "stub": {
-      "results": [
-       {
-        "title": "Wire Fraud Playbook §4.2",
-        "score": 0.82
-       }
-      ]
-     }
-    }
-   ],
-   "versions": [
-    {
-     "version": "1.3.0",
-     "daysAgo": 30,
-     "by": "James Richardson",
-     "note": "Collection filter",
-     "changes": [
-      {
-       "operation": "search_knowledge",
-       "kind": "schema_changed",
-       "detail": "Adds optional collections",
-       "major": false
-      }
-     ],
-     "pinnedBy": [
-      "wf_wire",
-      "wf_mortgage",
-      "wf_dispute",
-      "wf_kyb",
-      "wf_branch_chat"
-     ]
-    }
-   ],
-   "approvals": [
-    {
-     "workflowId": "wf_wire",
-     "operations": [
-      "search_knowledge"
-     ],
-     "expiresIn": 365,
-     "decidedBy": "James Richardson",
-     "justification": "Cite bank knowledge",
-     "workflowName": "Outbound wire review",
-     "workflowTeamId": "team_fraud"
-    },
-    {
-     "workflowId": "wf_mortgage",
-     "operations": [
-      "search_knowledge"
-     ],
-     "expiresIn": 365,
-     "decidedBy": "James Richardson",
-     "justification": "Cite bank knowledge",
-     "workflowName": "Mortgage pre-approval",
-     "workflowTeamId": "team_lending"
-    },
-    {
-     "workflowId": "wf_dispute",
-     "operations": [
-      "search_knowledge"
-     ],
-     "expiresIn": 365,
-     "decidedBy": "James Richardson",
-     "justification": "Cite bank knowledge",
-     "workflowName": "Card dispute resolution",
-     "workflowTeamId": "team_cards"
-    },
-    {
-     "workflowId": "wf_kyb",
-     "operations": [
-      "search_knowledge"
-     ],
-     "expiresIn": 365,
-     "decidedBy": "James Richardson",
-     "justification": "Cite bank knowledge",
-     "workflowName": "Business account onboarding",
-     "workflowTeamId": "team_onboarding"
-    },
-    {
-     "workflowId": "wf_branch_chat",
-     "operations": [
-      "search_knowledge"
-     ],
-     "expiresIn": 365,
-     "decidedBy": "James Richardson",
-     "justification": "Cite bank knowledge",
-     "workflowName": "Branch chat",
-     "workflowTeamId": "team_retail"
-    }
-   ]
   }
  ],
  "tools": [
@@ -2079,12 +1951,6 @@
    "approvers": 2
   },
   {
-   "name": "search_knowledge",
-   "description": "Semantic search with citations",
-   "access": "read",
-   "enabled": true
-  },
-  {
    "name": "book_appointment",
    "description": "Book a branch or advisor appointment",
    "access": "write",
@@ -2130,46 +1996,6 @@
    "inModules": true
   },
   {
-   "id": "int_confluence",
-   "name": "Confluence · harborpine.atlassian.net",
-   "kind": "confluence",
-   "base": "revoked",
-   "expiresIn": 35,
-   "authMethod": "oauth_consent",
-   "catalogId": "cat_confluence",
-   "inModules": false
-  },
-  {
-   "id": "int_github",
-   "name": "GitHub app · harborpine-bank",
-   "kind": "github",
-   "base": "healthy",
-   "expiresIn": 300,
-   "authMethod": "service_principal",
-   "catalogId": "cat_github",
-   "inModules": false
-  },
-  {
-   "id": "int_notion",
-   "name": "Notion · Harbor & Pine Product",
-   "kind": "notion",
-   "base": "healthy",
-   "expiresIn": 18,
-   "authMethod": "oauth_consent",
-   "catalogId": "cat_notion",
-   "inModules": false
-  },
-  {
-   "id": "int_zendesk",
-   "name": "Zendesk · help centre",
-   "kind": "zendesk",
-   "base": "healthy",
-   "expiresIn": 120,
-   "authMethod": "oauth_consent",
-   "catalogId": "cat_zendesk",
-   "inModules": false
-  },
-  {
    "id": "int_m365_mail",
    "name": "Microsoft 365 · outbound mail app",
    "kind": "m365",
@@ -2178,26 +2004,6 @@
    "authMethod": "service_principal",
    "catalogId": "cat_m365",
    "inModules": true
-  },
-  {
-   "id": "int_m365_cards",
-   "name": "Microsoft 365 · cardservices@",
-   "kind": "m365",
-   "base": "healthy",
-   "expiresIn": 64,
-   "authMethod": "oauth_consent",
-   "catalogId": "cat_m365",
-   "inModules": false
-  },
-  {
-   "id": "int_m365_lending",
-   "name": "Microsoft 365 · lendingservicing@",
-   "kind": "m365",
-   "base": "needs_reconnect",
-   "expiresIn": -1,
-   "authMethod": "oauth_consent",
-   "catalogId": "cat_m365",
-   "inModules": false
   },
   {
    "id": "int_core_banking",
@@ -2288,26 +2094,6 @@
    "authMethod": "service_principal",
    "catalogId": "cat_loan_origination",
    "inModules": true
-  },
-  {
-   "id": "int_aws_storage",
-   "name": "Amazon S3 · ops files",
-   "kind": "aws_s3",
-   "base": "healthy",
-   "expiresIn": 330,
-   "authMethod": "service_principal",
-   "catalogId": "cat_aws_s3",
-   "inModules": false
-  },
-  {
-   "id": "int_azure_storage",
-   "name": "Azure Blob · dev files",
-   "kind": "azure_blob",
-   "base": "healthy",
-   "expiresIn": 300,
-   "authMethod": "service_principal",
-   "catalogId": "cat_azure_blob",
-   "inModules": false
   },
   {
    "id": "int_branch_scheduler",

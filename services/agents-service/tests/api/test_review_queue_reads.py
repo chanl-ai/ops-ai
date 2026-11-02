@@ -21,7 +21,8 @@ async def test_the_queue_reads_only_threads_that_can_hold_a_review(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    james = person("usr_james", ["team_ops"])
+    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    james = person("usr_james", ["team_ops"], role="builder")
     for _ in range(4):
         res = await dev_platform.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=james)
         thread = res.json()["data"]["id"]

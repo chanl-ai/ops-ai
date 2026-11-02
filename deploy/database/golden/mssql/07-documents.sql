@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0013
+-- documents-service, stamped at documents_0014
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -167,6 +167,24 @@ CREATE TABLE documents_layouts (
 	CONSTRAINT documents_layouts_pkey PRIMARY KEY (tenant_id, file_digest, engine, ocr)
 );
 GO
+CREATE TABLE documents_template_copies (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	record_id VARCHAR(200) NOT NULL, 
+	source VARCHAR(200) NOT NULL, 
+	template_id VARCHAR(200) NOT NULL, 
+	version INTEGER NOT NULL, 
+	digest VARCHAR(64) NULL, 
+	installed_by VARCHAR(320) NOT NULL, 
+	installed_at VARCHAR(32) NOT NULL, 
+	removed_at VARCHAR(32) NULL, 
+	CONSTRAINT documents_template_copies_pkey PRIMARY KEY (id)
+);
+GO
+CREATE UNIQUE INDEX uq_documents_template_copies_live ON documents_template_copies (tenant_id, team, source, template_id, version) WHERE removed_at IS NULL;
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
 CREATE FUNCTION ops_security.documents_tenant_read (@tenant_id VARCHAR(64))
@@ -239,10 +257,16 @@ CREATE SECURITY POLICY ops_security.documents_layouts_tenant
     ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_layouts AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.documents_template_copies_isolation
+    ADD FILTER PREDICATE ops_security.documents_team_read(tenant_id, team) ON dbo.documents_template_copies,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.documents_template_copies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.documents_template_copies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_documents (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0013');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0014');
 GO

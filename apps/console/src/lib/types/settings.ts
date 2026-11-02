@@ -1,6 +1,7 @@
 /** Team settings: members, notification routing, webhooks, API keys and usage. Scoped to the current team. */
 
 import type { BulkResult } from './domain';
+import type { FeatureFlag } from './flags';
 
 export type MemberRole = 'admin' | 'builder' | 'approver' | 'viewer';
 
@@ -11,6 +12,8 @@ export interface Me {
   /** The workspace's own name (platform-service), for the header. */
   tenantName?: string;
   teams: { id: string; name: string; role: MemberRole }[];
+  /** Every feature flag with whether the install config turns it on (c-611); read through hooks/flag-queries. */
+  flags?: FeatureFlag[];
 }
 
 /** One action the person may take, as `can()` decides it (platform-service GET /v1/me/permissions, c-186). */

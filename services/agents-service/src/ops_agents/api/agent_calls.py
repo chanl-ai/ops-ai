@@ -51,35 +51,45 @@ class AgentCalls:
             return []  # not inside a graph run, so there is no turn to offer specialists to
         return await self.offers_in(agent_id, thread_id)
 
+    def _grant(self, a: Any) -> ToolGrant:
+        return ToolGrant(
+            name=f"{AGENT_TOOL_PREFIX}{a.id}",
+            server="agents",
+            description=f"Ask {a.name}, the {a.role}. It answers from its own knowledge and tools.",
+            access="read",
+            input_schema=QUESTION_SCHEMA,
+        )
+
     async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
-        """The specialists `agent_id` may ask on a turn of `thread_id`, for the turn's person."""
-        person = TURN_PERSON.get()
-        if person is None:
-            return []
+        """Specialists `agent_id` may ask: its `agent:<id>` grants, and every specialist when it is the team's default
+        and the turn has a person. A specialist's own turn asks no one."""
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
         if thread is None or cast(dict[str, Any], thread["meta"] or {}).get("calledBy"):
-            return []  # a specialist's own turn asks no one
-        if await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) != agent_id:
             return []
+        person = TURN_PERSON.get()
         out: list[ToolGrant] = []
-        for a in self.rt.catalog.agents:
-            if a.id == agent_id:
+        seen: set[str] = set()
+        caller = self.rt.catalog.agent(agent_id)
+        granted = [
+            str(t).removeprefix("agent:")
+            for t in (caller.tools if caller is not None else [])
+            if str(t).startswith("agent:")
+        ]
+        if person is not None and await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) == agent_id:
+            granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
+        for sid in granted:
+            if sid == agent_id or sid in seen:
                 continue
-            if team := await agent_team(self.rt, a.id):
+            a = self.rt.catalog.agent(sid)
+            if a is None:
+                continue
+            if person is not None and (team := await agent_team(self.rt, a.id)):
                 try:
                     can(caller_of(person), "chat", "run", team=team, what=a.name)
                 except Forbidden:
-                    continue  # the person may not chat with it, so the default agent may not ask it for them
-            out.append(
-                ToolGrant(
-                    name=f"{AGENT_TOOL_PREFIX}{a.id}",
-                    server="agents",
-                    description=f"Ask {a.name}, the {a.role}. It answers from its own knowledge and tools.",
-                    # Asking changes nothing; the specialist's own write tools still wait for approval in its turn.
-                    access="read",
-                    input_schema=QUESTION_SCHEMA,
-                )
-            )
+                    continue
+            seen.add(sid)
+            out.append(self._grant(a))
         return out
 
     async def run(
@@ -90,20 +100,23 @@ class AgentCalls:
         assert parent is not None, "a tool runs inside its parent's run"
         parent_meta = cast(dict[str, Any], parent["meta"] or {})
         caller = str(parent_meta.get("agentId") or "")
+        if not caller and str(parent.get("graph") or "").startswith("agent:"):
+            caller = str(parent["graph"]).removeprefix("agent:")
         # Checked again here, not only when offered: a model may name a tool it was never given.
         if f"{AGENT_TOOL_PREFIX}{agent}" not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
             message = "That agent cannot be asked on this turn."
             return ToolOutcome(ok=False, output={"error": message, "code": "specialist_not_offered"})
         person = TURN_PERSON.get()
         callee = self.rt.catalog.agent(agent)
-        assert person is not None and callee is not None, "offered above"
+        assert callee is not None, "offered above"
+        started_for = person.email if person is not None else str(parent_meta.get("ownerEmail") or "")
         meta = {
             "calledBy": caller,
             "calledByName": parent_meta.get("agentName"),
             "agentId": callee.id,
             "agentName": callee.name,
             "agentVersion": callee.version,
-            "startedFor": person.email,
+            "startedFor": started_for,
             "parentThreadId": parent_thread_id,
             "parentRunId": parent_run_id,
         }
@@ -122,7 +135,7 @@ class AgentCalls:
                 "agent_id": callee.id,
                 "message": str(arguments.get("question") or ""),
                 "history": [],
-                "requested_by": person.email,
+                "requested_by": started_for,
             }
             run_id = "run_" + hashlib.sha256(key.encode()).hexdigest()[:16]
             await run_child(self.rt, thread_id, graph_input, run_id=run_id)

@@ -13,7 +13,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from ops_agent_kernel.types import Access, AgentSettings, Guardrail, PromptFragment, Skill, ToolGrant, WidgetTemplate
+from ops_agent_kernel.types import (
+    TOOL_SEARCH_ABOVE,
+    Access,
+    AgentSettings,
+    Guardrail,
+    PromptFragment,
+    Skill,
+    ToolGrant,
+    WidgetTemplate,
+)
 from ops_contracts.chat import EffectiveSettings
 
 from .agent_limits import AgentLimits
@@ -177,6 +186,9 @@ class Catalog(_Model):
     knowledge_bases: list[KnowledgeBase]
     # Published widget templates an agent version may pin (c-082 P1: seeded from widgets.json).
     widgets: list[WidgetPinRule] = []
+    # The deployment's tool search (c-610): above this many tools an agent searches for them; None, the install flag
+    # tool_search is off and every tool is offered.
+    tool_search_above: int | None = None
     # Agents taken out of service (paused, unpublished): kept so a turn already under way, or an approval decided
     # after the pause, finishes on the definition it started with. No new turn starts on them.
     _retired: dict[str, AgentDefinition] = PrivateAttr(default_factory=dict[str, AgentDefinition])
@@ -241,6 +253,7 @@ class Catalog(_Model):
             temperature=effective.temperature if effective else None,
             max_tool_calls=agent.max_tool_calls,
             max_steps=agent.max_model_calls,
+            tool_search_above=self.tool_search_above,
             redact_pii=agent.redact_pii,
             guardrails=[
                 Guardrail(
@@ -286,8 +299,15 @@ class Catalog(_Model):
         return [t.grant() for name in agent.tools if (t := self.tool(name))]
 
 
-def load_catalog(seed_dir: Path | None, agents_file: Path | None = None) -> Catalog:
-    """With no seed directory (outside dev, unless one is named) the catalogue is empty."""
+def load_catalog(
+    seed_dir: Path | None,
+    agents_file: Path | None = None,
+    *,
+    tool_search: bool = False,
+    tool_search_above: int | None = None,
+) -> Catalog:
+    """With no seed directory (outside dev, unless one is named) the catalogue is empty. `tool_search` is the install
+    flag and `tool_search_above` its threshold, None for the kernel's default."""
 
     def read(name: str, empty: Any) -> Any:
         return json.loads((seed_dir / name).read_text()) if seed_dir else empty
@@ -302,4 +322,7 @@ def load_catalog(seed_dir: Path | None, agents_file: Path | None = None) -> Cata
         widgets=json.loads((seed_dir / "widgets.json").read_text())
         if seed_dir and (seed_dir / "widgets.json").exists()
         else [],
+        tool_search_above=(TOOL_SEARCH_ABOVE if tool_search_above is None else tool_search_above)
+        if tool_search
+        else None,
     )

@@ -7,7 +7,7 @@ production, so they are not module versions and need no Security review."""
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -35,7 +35,8 @@ class _Wire(BaseModel):
 
 class MockIn(_Wire):
     name: str = Field(min_length=1, max_length=200)
-    environment: Literal["test"] = "test"
+    # test: answers test-environment calls; example: the operation's example answer (c-616), one per operation.
+    environment: Literal["test", "example"] = "test"
     # Input field to the value it must equal; empty matches every call (use it as the default).
     match: dict[str, Any] = Field(default_factory=dict[str, Any])
     status: int = Field(default=200, ge=100, le=599)
@@ -131,11 +132,15 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
 
     @r.get("/{module_id}/operations/{op_id}/mocks", response_model=Envelope[MockList])
     async def list_mocks(  # pyright: ignore[reportUnusedFunction]
-        module_id: str, op_id: str, who: Annotated[Caller, Depends(caller)]
+        module_id: str,
+        op_id: str,
+        who: Annotated[Caller, Depends(caller)],
+        environment: Annotated[Literal["test", "example"], Query()] = "test",
     ) -> JSONResponse:
-        """The operation's mock answers in the order a test call checks them."""
-        _, op = await _operation(who, module_id, op_id)
-        rows = await mocks.listed(who.tenant_id, str(op["name"]), "test")
+        """The operation's mock answers in the order a test call checks them, or (`environment=example`) its example
+        answer."""
+        m, op = await _operation(who, module_id, op_id)
+        rows = await mocks.listed(who.tenant_id, str(m["id"]), str(op["name"]), environment)
         return ok({"operation": op["name"], "data": [_view(x) for x in rows]})
 
     @r.post("/{module_id}/operations/{op_id}/mocks", response_model=Envelope[MockAnswer], status_code=201)
@@ -180,7 +185,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
         m, op = await _operation(who, module_id, op_id)
         _may_edit(who, m)
         found = await mocks.get(who.tenant_id, mock_id)
-        if found is None or found["operation"] != op["name"]:
+        if found is None or (found["module_id"], found["operation"]) != (m["id"], op["name"]):
             raise NotFound(f"Mock {mock_id}")
         given = body.model_dump(exclude_unset=True)
         _checked(given, op)
@@ -196,7 +201,11 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
         m, op = await _operation(who, module_id, op_id)
         _may_edit(who, m)
         found = await mocks.get(who.tenant_id, mock_id)
-        if found is None or found["operation"] != op["name"] or not await mocks.delete(who.tenant_id, mock_id):
+        if (
+            found is None
+            or (found["module_id"], found["operation"]) != (m["id"], op["name"])
+            or not await mocks.delete(who.tenant_id, mock_id)
+        ):
             raise NotFound(f"Mock {mock_id}")
         return Response(status_code=204)
 

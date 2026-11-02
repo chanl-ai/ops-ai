@@ -1,0 +1,24 @@
+id: agent-starts-workflow
+title: An agent starts a workflow
+track: composition
+status: built
+difficulty: guided
+outcome: Chat calls the three-node workflow as a tool and returns its output.
+capabilities:
+- id: agent.workflow-tool
+  status: built
+- id: bridge.agent-to-workflow
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/message.json
+expected:
+- expected/started.json
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 40

@@ -66,7 +66,10 @@ use case or test; Partial names what runs and what does not; Planned means desig
 |---|---|
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
 | Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
-| Each person connecting their own account | Planned |
+| Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them | Built |
+| The Apps menu: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Resources, Secrets, Usage and Settings, Credentials, My accounts, and Turn off ([Apps](apps.md)) | Built |
+| A run waiting for a person's own Account is a Human Task: Connect my account, or Run as the team account | Built |
+| Approvals off by default; a team turns them on for every write, the writes of picked Apps, or one Tool | Built |
 | Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits | Built |
 | The outbound allow-list, the encrypted credential store, the call log | Built |
 | Check before sending: a model judges a write against the team's sending policy | Built |

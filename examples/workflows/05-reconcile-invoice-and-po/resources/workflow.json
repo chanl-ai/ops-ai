@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 2,
+  "id": "reconcile_invoice_po",
+  "name": "Reconcile an invoice with a purchase order",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.request",
+      "typeVersion": 1,
+      "name": "Invoice and PO",
+      "parameters": {
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "invoiceId",
+            "poId"
+          ],
+          "properties": {
+            "invoiceId": {
+              "type": "string"
+            },
+            "poId": {
+              "type": "string"
+            },
+            "caseId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "invoice",
+      "type": "ops.action.tool",
+      "typeVersion": 1,
+      "name": "Read invoice",
+      "parameters": {
+        "operation": "get_invoice",
+        "input": {
+          "id": "$.input.invoiceId"
+        }
+      }
+    },
+    {
+      "id": "po",
+      "type": "ops.action.tool",
+      "typeVersion": 1,
+      "name": "Read PO",
+      "parameters": {
+        "operation": "get_purchase_order",
+        "input": {
+          "id": "$.input.poId"
+        }
+      }
+    },
+    {
+      "id": "wait",
+      "type": "ops.flow.join",
+      "typeVersion": 1,
+      "name": "Both records"
+    },
+    {
+      "id": "found",
+      "type": "ops.flow.if",
+      "typeVersion": 1,
+      "name": "Both reads",
+      "parameters": {
+        "conditions": [
+          {
+            "left": "$.nodes.invoice.out.invoiceId",
+            "op": "exists"
+          },
+          {
+            "left": "$.nodes.po.out.poId",
+            "op": "exists"
+          }
+        ]
+      }
+    },
+    {
+      "id": "merge",
+      "type": "ops.data.combine",
+      "typeVersion": 1,
+      "name": "Merge",
+      "parameters": {
+        "sources": [
+          {
+            "name": "invoice",
+            "values": "$.nodes.invoice.out"
+          },
+          {
+            "name": "po",
+            "values": "$.nodes.po.out"
+          }
+        ],
+        "fields": [
+          {
+            "field": "amount",
+            "type": "money"
+          },
+          {
+            "field": "currency",
+            "type": "text"
+          },
+          {
+            "field": "vendor",
+            "type": "text"
+          },
+          {
+            "field": "poNumber",
+            "type": "text"
+          }
+        ],
+        "onDisagreement": "port"
+      }
+    },
+    {
+      "id": "review",
+      "type": "ops.flow.humanReview",
+      "typeVersion": 1,
+      "name": "Resolve mismatch",
+      "parameters": {
+        "title": "Invoice and PO disagree",
+        "summary": {
+          "disagreements": "$.nodes.merge.out.conflicts",
+          "taken": "$.nodes.merge.out.values"
+        }
+      }
+    },
+    {
+      "id": "note",
+      "type": "ops.action.addToCase",
+      "typeVersion": 1,
+      "name": "Record on the case",
+      "parameters": {
+        "caseId": "$.input.caseId",
+        "note": "Invoice and PO reconciled"
+      }
+    },
+    {
+      "id": "matched",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Matched",
+      "parameters": {
+        "outcome": "matched"
+      }
+    },
+    {
+      "id": "resolved",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Resolved",
+      "parameters": {
+        "outcome": "resolved"
+      }
+    },
+    {
+      "id": "failed",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "lookup_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "invoice",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "po",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "invoice",
+        "port": "ok"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "po",
+        "port": "ok"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "invoice",
+        "port": "error"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "po",
+        "port": "error"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "invoice",
+        "port": "refused"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "po",
+        "port": "refused"
+      },
+      "to": {
+        "node": "wait",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "wait",
+        "port": "out"
+      },
+      "to": {
+        "node": "found",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "found",
+        "port": "true"
+      },
+      "to": {
+        "node": "merge",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "found",
+        "port": "false"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "merge",
+        "port": "out"
+      },
+      "to": {
+        "node": "matched",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "merge",
+        "port": "disagree"
+      },
+      "to": {
+        "node": "review",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "review",
+        "port": "approve"
+      },
+      "to": {
+        "node": "note",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "review",
+        "port": "reject"
+      },
+      "to": {
+        "node": "resolved",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "note",
+        "port": "added"
+      },
+      "to": {
+        "node": "resolved",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "note",
+        "port": "error"
+      },
+      "to": {
+        "node": "failed",
+        "port": "in"
+      }
+    }
+  ]
+}

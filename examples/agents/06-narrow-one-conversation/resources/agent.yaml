@@ -1,0 +1,11 @@
+name: Desk override
+role: Narrow one conversation within published limits
+instructions: Stay inside the thread overrides. Look up a customer only when
+  search_customers is offered. Cite the handbook when it answers. Do not write.
+model: fake
+knowledge:
+  - account-opening
+tools:
+  - search_customers
+memory:
+  enabled: false

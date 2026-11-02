@@ -29,6 +29,7 @@ import { useGuardrailsPage } from '@/hooks/queries';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import type { Guardrail } from '@/lib/types/domain';
+import { serverPagination } from '@/components/shared/server-pagination';
 
 /** Where the newest version stands: a draft to publish, waiting in Reviews, or published. */
 function versionState(g: Guardrail): { label: string; variant: 'secondary' | 'outline' } {
@@ -240,15 +241,7 @@ export default function GuardrailsPage() {
           searchColumn="name"
           searchPlaceholder="Search names or owners…"
           onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={{
-            enabled: true,
-            total: query.data?.pagination.total ?? 0,
-            page: list.pagination.page,
-            pageSize: list.pagination.pageSize,
-            totalPages: query.data?.pagination.totalPages,
-            onPaginationChange: list.setPagination,
-            isLoading: query.isFetching && query.isPlaceholderData,
-          }}
+          serverPagination={serverPagination(list, query)}
           filterResetKey={filterResetKey}
           hideViewSwitcher
           emptyState={<ListEmpty icon={ShieldBan} noun="guardrails" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} createLabel={canBuild ? 'New guardrail' : undefined} onCreate={() => setCreating(true)} description="Create one, publish it, then pin it on an agent's Guardrails section." />}

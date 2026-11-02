@@ -8,15 +8,17 @@ import { toast } from 'sonner';
 
 import { CommandPalette, type PaletteAction, type PalettePage, SearchButton } from '@/components/header/command-palette';
 import { useConnectUrl } from '@/hooks/connect-queries';
+import { useFlagged } from '@/hooks/flag-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
 import { NAV } from '@/lib/nav';
+import type { FlagName } from '@/lib/types/flags';
 import type { SearchHit } from '@/lib/types/search';
 
-/** Sub-pages that are not in the sidebar but are worth jumping to. */
-const EXTRA_PAGES: PalettePage[] = [
+/** Sub-pages that are not in the sidebar but are worth jumping to; one with a `flag` shows only while the install turns it on. */
+const EXTRA_PAGES: (PalettePage & { flag?: FlagName })[] = [
   // Connecting an assistant is the MCP channel of Deployments, so the page entry opens that tab.
-  { title: 'Connect your assistant', href: '/channels/mcp', section: 'Agents · Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect' },
+  { title: 'Connect your assistant', href: '/channels/mcp', section: 'Agents · Channels', icon: Link2, keywords: 'MCP URL Claude Cursor Copilot ChatGPT connect', flag: 'mcp_gateway' },
   { title: 'Gate policies', href: '/settings/policies/gates', section: 'Human Tasks', icon: IconShieldCheck },
 ];
 
@@ -34,6 +36,7 @@ export function HeaderSearch() {
   const visit = useVisitSearchHit();
   const { teams, teamId, switchTeam } = useTeam();
   const connectUrl = useConnectUrl();
+  const extraPages = useFlagged(EXTRA_PAGES);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -58,13 +61,14 @@ export function HeaderSearch() {
   const navPages: PalettePage[] = NAV.flatMap((g) =>
     g.items.flatMap((i) => [{ title: i.title, href: i.url, section: g.label, icon: i.icon }, ...(i.children ?? []).map((c) => ({ title: c.title, href: c.url, section: `${g.label} · ${i.title}`, icon: i.icon }))]),
   );
-  const pages: PalettePage[] = [...navPages, ...EXTRA_PAGES.filter((e) => !navPages.some((p) => p.href === e.href))];
+  const pages: PalettePage[] = [...navPages, ...extraPages.filter((e) => !navPages.some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };
-  const actions: PaletteAction[] = [
+  const listed: (PaletteAction & { flag?: FlagName })[] = [
     ...(pathname.startsWith('/chat') ? [newChat] : []),
     {
       id: 'copy-mcp-url',
       label: 'Copy MCP URL',
+      flag: 'mcp_gateway',
       icon: Link2,
       keywords: 'connect assistant claude cursor copilot chatgpt mcp url',
       run: async () => {
@@ -87,6 +91,7 @@ export function HeaderSearch() {
     ...(pathname.startsWith('/chat') ? [] : [newChat]),
     { id: 'switch-team', label: 'Switch team', icon: Users, keywords: 'team change', opens: 'teams' },
   ];
+  const actions: PaletteAction[] = useFlagged(listed);
 
   return (
     <>

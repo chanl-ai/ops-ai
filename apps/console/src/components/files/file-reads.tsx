@@ -13,7 +13,6 @@ import { ConfidenceBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useCorrectFields } from '@/hooks/extraction-queries';
-import { useDocumentReads } from '@/hooks/use-switches';
 import { plural } from '@/lib/format';
 import type { DocumentRead } from '@/lib/types/domain';
 import type { Extraction } from '@/lib/types/extractions';
@@ -60,7 +59,6 @@ export function FileFields({ latest, fileName, onExtract, canExtract, canEdit = 
   const [editing, setEditing] = React.useState(false);
   const [edits, setEdits] = React.useState<ReadEdits>({});
   const save = useCorrectFields(latest?.fileId ?? '');
-  const reads = useDocumentReads();
   if (!latest)
     return (
       <EmptyState
@@ -72,7 +70,7 @@ export function FileFields({ latest, fileName, onExtract, canExtract, canEdit = 
     );
   if (latest.status === 'unreadable') return <EmptyState icon={FileSearch} title="No text could be read" description="The file has no text layer the reader could use. Scanned pages need OCR, which arrives with page images." />;
   // A proposed read names its own fields: they are edited and saved as a document type here, before any correction.
-  if (reads && latest.status === 'done' && latest.proposal) return <ProposedRead key={latest.id} read={latest} proposal={latest.proposal} fileName={fileName} />;
+  if (latest.status === 'done' && latest.proposal) return <ProposedRead key={latest.id} read={latest} proposal={latest.proposal} fileName={fileName} />;
   if (latest.status === 'done' && !latest.schema?.length) return <NoFieldsRead onExtract={onExtract} canExtract={canExtract} />;
   const read = asDocumentRead(latest, fileName, editing);
   const changed = editing && hasCorrections(read, edits);

@@ -65,11 +65,11 @@ await withUiStack(
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
       await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // Grants no longer offered are listed under the tools picker (c-135), each with Remove.
+      // Grants no longer offered are listed under the tools picker, each with Remove.
       const stale = page.getByTestId('stale-grants');
       const shown = await stale.waitFor({ timeout: 120_000 }).then(() => true, () => false);
       check('the tools section lists the grant under "No longer offered"', shown && (await stale.getByText(tool.id).count()) === 1);
-      // The removal saves itself into the draft a second later (c-172), so the wait is armed before it.
+      // The removal saves itself into the draft a second later, so the wait is armed before it.
       const patched = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`), { timeout: 60_000 });
       await stale.getByRole('button', { name: `Remove ${tool.id}` }).click();
       check('Remove takes it off the list', (await page.getByTestId('stale-grants').count()) === 0);

@@ -13,6 +13,7 @@ import {
   planFor,
   pluginGroups,
   reduce,
+  toSave,
   turnOnBody,
   type Kind,
   type Kinds,
@@ -24,8 +25,8 @@ const kind = (id: string, extra: Partial<Kind> = {}): Kind => ({ id, label: id, 
 const KINDS: Kinds = {
   kinds: [],
   environments: [
-    { id: 'test', label: 'Test', production: false },
-    { id: 'production', label: 'Production', production: true },
+    { id: 'test', label: 'Test', production: false, keys: true },
+    { id: 'production', label: 'Production', production: true, keys: true },
   ],
   common: [field('baseUrl', { required: true }), field('testPath', { default: '/health' })],
   certificate: [field('clientCertificate', { secret: true })],
@@ -99,9 +100,10 @@ test('environments are the service list: a team-named one gets a section, and th
   const team: Kinds = {
     ...KINDS,
     environments: [
-      { id: 'mock', label: 'Mock', production: false },
-      { id: 'uat', label: 'UAT', production: false },
-      { id: 'live', label: 'Live', production: true },
+      { id: 'dev', label: 'Dev', production: false, keys: false },
+      { id: 'mock', label: 'Mock', production: false, keys: true },
+      { id: 'uat', label: 'UAT', production: false, keys: true },
+      { id: 'live', label: 'Live', production: true, keys: true },
     ],
   };
   assert.deepEqual(
@@ -187,4 +189,31 @@ test('a plugin that signs in sends the team app only when its own is chosen, and
   });
   const platform = turnOnBody(oauth, plugin, 'platform', s.sections.test, {}, false);
   assert.equal('clientId' in platform, false, 'the platform app was chosen, yet the team client ID went out');
+});
+
+test('Save on the platform app turns on and signs in for the same environment, and leaves an untouched sandbox off', () => {
+  const oauth = kind('oauth2_auth_code', { signsIn: true });
+  const plugin: PluginSpec = {
+    settings: [{ name: 'login_url', label: 'Sign-in address', default: 'https://login.example', secret: false, perEnvironment: true, locked: false }],
+    fixed: [],
+  };
+  const groups = pluginGroups(oauth, KINDS, plugin, 'platform');
+  let s = initialState({ test: draftFor('test', groups), production: draftFor('production', groups) }, null);
+  // Both are ready on their defaults alone; production is the one Save completes.
+  const ready = ['test', 'production'].filter((e) => complete(s.sections[e], groups));
+  const env = leading(KINDS, ready) ?? 'test';
+  assert.equal(env, 'production');
+  assert.deepEqual(toSave(s, ready, env), ['production'], 'Save turned on an environment it then did not sign in for');
+  // A typed sandbox is saved beside it; once production is on the connection and untouched, it is not written again.
+  s = reduce(s, { type: 'setting', environment: 'test', name: 'login_url', value: 'https://test.login.example' });
+  assert.deepEqual(toSave(s, ready, env), ['production', 'test']);
+  s = reduce(reduce(s, { type: 'created', connectionId: 'con_1' }), { type: 'saved', environment: 'production', secretSet: {} });
+  assert.deepEqual(toSave(s, ready, env), ['test']);
+});
+
+test('an account signed in through the dialog is remembered, so Save opens no second sign-in for it', () => {
+  let s = initialState({ production: draftFor('production', { main: [], more: [] }) }, 'con_1', ['production']);
+  assert.deepEqual(s.signedIn, []);
+  s = reduce(reduce(s, { type: 'signing-in' }), { type: 'signed-in', environment: 'production' });
+  assert.deepEqual(s.signedIn, ['production']);
 });

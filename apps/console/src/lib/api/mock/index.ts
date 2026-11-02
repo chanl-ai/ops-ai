@@ -34,6 +34,7 @@ import { createInvitesMock } from './invites';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
+import { createMockProviderConnections } from './provider-connections';
 import { createMockProviderKeys } from './provider-keys';
 import { createMockSignInProviders } from './sign-in-providers';
 import { createMockWorkspaceTeams } from './workspace-teams';
@@ -1153,6 +1154,7 @@ export function createMockApi(): OpsApi {
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),
     providerKeys: createMockProviderKeys(),
+    providerConnections: createMockProviderConnections(),
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
     secrets: createSecretsMock({ me: F.CURRENT_USER.name, users: toolModules.secretUsers }),

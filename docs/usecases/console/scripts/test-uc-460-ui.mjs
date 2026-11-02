@@ -1,5 +1,5 @@
 // uc-460 A reviewer decides a Human Task beside a fixed decision panel, ui layer: docs/usecases/console/human-tasks-queue.md
-// (c-460). The demo stack with a worker. James starts three card disputes: Marcus Bell's and Jordan Whitfield's end up
+//. The demo stack with a worker. James starts three card disputes: Marcus Bell's and Jordan Whitfield's end up
 // on one case (Jordan's run is added to Marcus's case), Priya Natarajan's on its own and offered as options. By deadline alone
 // Priya's task would sit between the other two; grouped by case it comes last. Maya, an approver, decides in the queue.
 // Screenshots go to evidenceDir('460', 'uc').

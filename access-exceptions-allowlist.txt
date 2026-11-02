@@ -66,6 +66,7 @@ packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSe
 packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 open
 packages/ops_access/src/ops_access/policies.py policy-default taskAssist={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedApproval={} 1 open
+packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedApproval={} 1 E23
 # 409 codes, each classified once (`* conflict <code> 0 state`): the record is in the wrong state, so the refusal is not
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.
@@ -79,6 +80,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
 * conflict conflict 0 state
+* conflict connect_wait 0 state
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
 * conflict credential_in_use 0 state
@@ -101,6 +103,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict name_taken 0 state
 * conflict no_default_agent 0 state
 * conflict no_sla_waiting 0 state
+* conflict no_team_account 0 state
 * conflict node_missing 0 state
 * conflict not_a_draft 0 state
 * conflict not_an_account_admin 0 state
@@ -142,6 +145,7 @@ packages/ops_access/src/ops_access/policies.py policy-default toolWritesNeedAppr
 * conflict target_in_use 0 state
 * conflict team_archived 0 state
 * conflict team_name_taken 0 state
+* conflict update_changed 0 state
 * conflict widget_paused 0 state
 * conflict widget_retired 0 state
 * conflict widget_taken 0 state

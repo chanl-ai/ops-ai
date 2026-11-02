@@ -170,6 +170,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reviews/{thread_id}/team-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run As Team Account
+         * @description Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account
+         *     (c-616 S12), for a person who may use it (connections.run), on an app that has one.
+         */
+        post: operations["reviews_run_as_team_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -264,6 +285,47 @@ export interface paths {
          * @description Saves the patched spec as a new draft version; what is live does not change until it is published.
          */
         patch: operations["agents_update_agent"];
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/eval-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Eval Run
+         * @description Score a dataset of cases on the newest version through the same one-turn test path. live is null and
+         *     regression is false until a compare subject ships. Empty cases and an unknown check type are 422.
+         */
+        post: operations["agents_create_eval_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Job
+         * @description Arm one due tick on the existing timer clock. A repeated key is one run.
+         */
+        post: operations["agents_create_job"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/agents/{agent_id}/live": {
@@ -595,7 +657,8 @@ export interface paths {
         };
         /**
          * Batch Results
-         * @description Every row as the page shows it, one line each: row, status, outcome, run, error and output.
+         * @description Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
+         *     output are JSON, so a value holding a comma or a quote reads back as it was.
          */
         get: operations["batches_batch_results"];
         put?: never;
@@ -1478,6 +1541,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/publish-requests/egress-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Egress Host Request
+         * @description A host held for Security (c-616 S13), opened by tools-service for the person setting an app's address: their
+         *     credentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the
+         *     host. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal.
+         */
+        post: operations["reviews_open_egress_host_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/publish-requests/{request_id}": {
         parameters: {
             query?: never;
@@ -1506,6 +1591,28 @@ export interface paths {
         put?: never;
         /** Decide Publish Request */
         post: operations["reviews_decide_publish_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/{resource}/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Resource
+         * @description Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds
+         *     of this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),
+         *     `template_version_not_found` for a version they do not ship.
+         */
+        post: operations["resources_copy_resource"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1962,33 +2069,12 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it.
+         * @description The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`
+         *     keeps one plugin's (a plugin update's review shows the version each copy came from, c-609).
          */
         get: operations["templates_list_templates"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/templates/{source}/{template_id}/install": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Install Template
-         * @description Makes the team's own copy of the template: 201 with it, or 200 with the copy the team already holds of this
-         *     version. 404 `template_not_found` when the team's plugins bring no such template (its plugin off for the team),
-         *     `template_version_not_found` for a version they do not ship.
-         */
-        post: operations["templates_install_template"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2203,6 +2289,26 @@ export interface paths {
          * @description Every open case of a version, in the acting team: a reviewer or admin of that team (c-122).
          */
         post: operations["threads_route_version"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tool-uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tool Uses
+         * @description `tools` is a comma-separated list of tool names (operation names); each comes back with its users.
+         */
+        get: operations["agents_list_tool_uses"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3086,6 +3192,21 @@ export interface components {
             evals: boolean;
             /** Guardrails */
             guardrails: ("redactPii" | "maxToolCallsPerTurn" | "maxModelCallsPerTurn" | "maxModelCallsPerConversation" | "maxCostPerConversation" | "whenUnsure" | "blockedTopics")[];
+        };
+        /** AgentEvalRun */
+        AgentEvalRun: {
+            /** Agentid */
+            agentId: string;
+            /** Id */
+            id: string;
+            /** Results */
+            results: components["schemas"]["EvalCaseResult"][];
+            /**
+             * Status
+             * @constant
+             */
+            status: "complete";
+            summary: components["schemas"]["EvalSummary"];
         };
         /** AgentInput */
         AgentInput: {
@@ -4307,6 +4428,24 @@ export interface components {
              */
             state: "running" | "met" | "breached" | "paused";
         };
+        /**
+         * ConnectWait
+         * @description What a run waiting for a person's own account of an app needs (c-616 S12): Connect my account, or Run as the
+         *     team account where the app has one.
+         */
+        ConnectWait: {
+            /** App */
+            app: string;
+            /** Connectionid */
+            connectionId?: string | null;
+            /** Person */
+            person?: string | null;
+            /**
+             * Teamaccount
+             * @default false
+             */
+            teamAccount: boolean;
+        };
         /** CopyRef */
         CopyRef: {
             /** Id */
@@ -4392,6 +4531,12 @@ export interface components {
             message: string;
             /** Node */
             node: string | null;
+            /** Path */
+            path?: string | null;
+            /** Port */
+            port?: string | null;
+            /** Suggestion */
+            suggestion?: string | null;
         };
         /**
          * DefinitionInput
@@ -4657,6 +4802,29 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * EgressHostRef
+         * @description An app's address on a host nobody listed (c-616 S13): the host, the app, who set it and their team.
+         */
+        EgressHostRef: {
+            /** App */
+            app: string;
+            /** Applypending */
+            applyPending: boolean;
+            /** Host */
+            host: string;
+            /** Requestedby */
+            requestedBy: string;
+            /** Teamid */
+            teamId: string;
+        };
+        /** EgressHostReviewInput */
+        EgressHostReviewInput: {
+            /** App */
+            app: string;
+            /** Host */
+            host: string;
+        };
         /** EmailLink */
         EmailLink: {
             /** At */
@@ -4691,6 +4859,11 @@ export interface components {
         };
         /** EngineRunInput */
         EngineRunInput: {
+            /**
+             * Afterseconds
+             * @default 0
+             */
+            afterSeconds: number;
             /** Input */
             input?: {
                 [key: string]: unknown;
@@ -4726,6 +4899,15 @@ export interface components {
             port: string | null;
             /** Status */
             status: string;
+        };
+        /** Envelope[AgentEvalRun] */
+        Envelope_AgentEvalRun_: {
+            data: components["schemas"]["AgentEvalRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
         };
         /** Envelope[AgentSkills] */
         Envelope_AgentSkills_: {
@@ -5006,6 +5188,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[JobArmed] */
+        Envelope_JobArmed_: {
+            data: components["schemas"]["JobArmed"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[ActivityRow]] */
         Envelope_ListResult_ActivityRow__: {
             data: components["schemas"]["ListResult_ActivityRow_"];
@@ -5136,6 +5327,15 @@ export interface components {
         /** Envelope[OverviewCounts] */
         Envelope_OverviewCounts_: {
             data: components["schemas"]["OverviewCounts"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[PlatformEventOut] */
+        Envelope_PlatformEventOut_: {
+            data: components["schemas"]["PlatformEventOut"];
             /**
              * Success
              * @constant
@@ -5497,6 +5697,18 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[dict[str, list[ToolUser]]] */
+        Envelope_dict_str__list_ToolUser___: {
+            /** Data */
+            data: {
+                [key: string]: components["schemas"]["ToolUser"][];
+            };
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[AgentRun]] */
         Envelope_list_AgentRun__: {
             /** Data */
@@ -5718,6 +5930,80 @@ export interface components {
              * @constant
              */
             success: false;
+        };
+        /** EvalCaseContextInput */
+        EvalCaseContextInput: {
+            /** Collections */
+            collections?: string[];
+        };
+        /** EvalCaseInput */
+        EvalCaseInput: {
+            /** Checks */
+            checks?: components["schemas"]["EvalCheckInput"][];
+            context?: components["schemas"]["EvalCaseContextInput"] | null;
+            /** Input */
+            input: string;
+            /** Name */
+            name: string;
+        };
+        /** EvalCaseOutcome */
+        EvalCaseOutcome: {
+            /** Checks */
+            checks: components["schemas"]["EvalCheckResult"][];
+            /** Latencyms */
+            latencyMs: number;
+            /** Reply */
+            reply: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail";
+        };
+        /** EvalCaseResult */
+        EvalCaseResult: {
+            /** Casename */
+            caseName: string;
+            draft: components["schemas"]["EvalCaseOutcome"];
+            live?: components["schemas"]["EvalCaseOutcome"] | null;
+            /**
+             * Regression
+             * @default false
+             */
+            regression: boolean;
+        };
+        /** EvalCheckInput */
+        EvalCheckInput: {
+            /** Text */
+            text?: string | null;
+            /** Tool */
+            tool?: string | null;
+            /** Type */
+            type: string;
+        };
+        /** EvalCheckResult */
+        EvalCheckResult: {
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pass" | "fail";
+        };
+        /** EvalRunInput */
+        EvalRunInput: {
+            /** Cases */
+            cases?: components["schemas"]["EvalCaseInput"][];
+        };
+        /** EvalSummary */
+        EvalSummary: {
+            /** Passed */
+            passed: number;
+            /** Regressions */
+            regressions: number;
+            /** Total */
+            total: number;
         };
         /** EventOut */
         EventOut: {
@@ -6295,6 +6581,41 @@ export interface components {
             newerAvailable: boolean;
             /** Version */
             version: number | null;
+        };
+        /**
+         * JobArmed
+         * @description What arming a job answers: the thread, the key, and whichever of the timer or the started run applies.
+         */
+        JobArmed: {
+            /** Armed */
+            armed?: boolean | null;
+            /** Duplicate */
+            duplicate?: boolean | null;
+            /** Key */
+            key: string;
+            /** Runid */
+            runId?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Threadid */
+            threadId: string;
+            /** Timerid */
+            timerId?: string | null;
+        };
+        /** JobInput */
+        JobInput: {
+            /** Dueat */
+            dueAt?: string | null;
+            /**
+             * Key
+             * @default job
+             */
+            key: string;
+            /**
+             * Message
+             * @default Review held wires.
+             */
+            message: string;
         };
         /** KindRow */
         KindRow: {
@@ -6974,6 +7295,31 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PlatformEventIn */
+        PlatformEventIn: {
+            /** Actor */
+            actor?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Teamid */
+            teamId: string;
+        };
+        /** PlatformEventOut */
+        PlatformEventOut: {
+            /**
+             * Changed
+             * @default 0
+             */
+            changed: number;
+            /** Handled */
+            handled: boolean;
+        };
         /** PointerInput */
         PointerInput: {
             /** Version */
@@ -7088,6 +7434,7 @@ export interface components {
             decidedBy?: string | null;
             /** Decisionreason */
             decisionReason?: string | null;
+            egressHost?: components["schemas"]["EgressHostRef"] | null;
             /** Evidence */
             evidence: unknown[];
             /** Id */
@@ -7096,7 +7443,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent_publish" | "publish_request";
+            kind: "agent_publish" | "publish_request" | "egress_host";
             policy: components["schemas"]["ReviewPolicy"];
             /** Proposal */
             proposal: string;
@@ -7517,6 +7864,7 @@ export interface components {
             digest: string;
             /** Error */
             error: string | null;
+            failure?: components["schemas"]["RunFailure"] | null;
             /** Files */
             files?: components["schemas"]["RunFile"][];
             /** Finishedat */
@@ -7551,6 +7899,28 @@ export interface components {
             workflowId: string;
             /** Workflowname */
             workflowName?: string | null;
+        };
+        /**
+         * RunFailure
+         * @description The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.
+         */
+        RunFailure: {
+            /** Attempt */
+            attempt?: number | null;
+            /** Code */
+            code?: string | null;
+            /** Field */
+            field?: string | null;
+            /** Message */
+            message: string;
+            /** Nodeid */
+            nodeId?: string | null;
+            /** Nodename */
+            nodeName?: string | null;
+            /** Retryable */
+            retryable?: boolean | null;
+            /** Suggestion */
+            suggestion?: string | null;
         };
         /** RunFile */
         RunFile: {
@@ -8738,6 +9108,7 @@ export interface components {
             caseTitle?: string | null;
             /** Confidence */
             confidence: number | null;
+            connect?: components["schemas"]["ConnectWait"] | null;
             /** Consequence */
             consequence?: string | null;
             /** Createdat */
@@ -8765,9 +9136,9 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "approval";
+            kind: "approval" | "connect_account";
             /** Option */
             option?: string | null;
             /** Options */
@@ -8989,6 +9360,18 @@ export interface components {
             moduleId: string;
             /** Version */
             version: string;
+        };
+        /** ToolUser */
+        ToolUser: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "workflow";
+            /** Name */
+            name: string;
         };
         /** TypeRef */
         TypeRef: {
@@ -10653,6 +11036,109 @@ export interface operations {
             };
         };
     };
+    reviews_run_as_team_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Union_ThreadReview__PublishReview__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     cases_list_runs: {
         parameters: {
             query?: {
@@ -11416,6 +11902,220 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Agent_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_create_eval_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalRunInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentEvalRun_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_create_job: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_JobArmed_"];
                 };
             };
             /** @description Invalid request */
@@ -19160,6 +19860,122 @@ export interface operations {
             };
         };
     };
+    reviews_open_egress_host_request: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-service-authorization"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EgressHostReviewInput"];
+            };
+        };
+        responses: {
+            /** @description The request already open, or refused, for it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     reviews_get_publish_request: {
         parameters: {
             query?: never;
@@ -19285,6 +20101,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PublishReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resources_copy_resource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallInput"];
+            };
+        };
+        responses: {
+            /** @description The team already holds a copy of this version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Installation_"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Installation_"];
                 };
             };
             /** @description Invalid request */
@@ -22007,6 +22939,7 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: ("agent" | "skill" | "workflow") | null;
+                source?: string | null;
             };
             header?: never;
             path?: never;
@@ -22021,123 +22954,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_TemplateView__"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not signed in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not allowed */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Conflicts with the current state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Refused by a rule */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Over a budget or rate limit */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Degraded: no model, or the graph runtime did not start */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
-    templates_install_template: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source: string;
-                template_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InstallInput"];
-            };
-        };
-        responses: {
-            /** @description The team already holds a copy of this version */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_Installation_"];
-                };
-            };
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_Installation_"];
                 };
             };
             /** @description Invalid request */
@@ -23520,6 +24336,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RoutedVersion_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_list_tool_uses: {
+        parameters: {
+            query: {
+                tools: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_str__list_ToolUser___"];
                 };
             };
             /** @description Invalid request */

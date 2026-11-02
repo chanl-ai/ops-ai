@@ -7,13 +7,13 @@ import { toast } from 'sonner';
 import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
 import { EnvSection } from '@/components/connections/env-section';
 import { PluginConnectForm } from '@/components/connections/plugin-connect-form';
+import type { SignIn } from '@/components/connections/who-signs-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -35,6 +35,7 @@ import {
   environmentBody,
   fieldsFor,
   initialState,
+  keyed,
   leading,
   ordered,
   planFor,
@@ -45,32 +46,11 @@ import {
   type Kinds,
   type SavedEnvironment,
 } from '@/lib/connect-plan';
-import { cn } from '@/lib/utils';
 
 export type ConnectTarget =
   { kind: 'connection'; connectionId: string } | { kind: 'module'; moduleId: string; name: string } | { kind: 'plugin'; card: SystemCard } | { kind: 'new' };
 
 export type ConnectMode = 'connect' | 'edit' | 'reconnect';
-
-type SignIn = 'team' | 'person' | 'person_or_team';
-
-const WHO: { value: SignIn; label: string; hint: string }[] = [
-  {
-    value: 'team',
-    label: 'Team account',
-    hint: 'Every call signs in as one account the team connects.',
-  },
-  {
-    value: 'person',
-    label: 'Each person’s own account',
-    hint: 'Calls act as the person who asked. Anyone who has not connected is asked.',
-  },
-  {
-    value: 'person_or_team',
-    label: 'Each person, team account as backup',
-    hint: 'Runs with nobody behind them use the team account.',
-  },
-];
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
@@ -101,22 +81,22 @@ export function ConnectSystemDialog({
   const loading = kinds.isPending || (existingId != null && detail.isPending);
   const failed = kinds.isError ? kinds : detail.isError ? detail : null;
 
+  // The one Connect window (c-617): one environment at a time, small; who signs in and the other environment are on
+  // the app page's Settings, so nothing here repeats them.
   const title = existingId
-    ? (detail.data?.name ?? 'Connection')
+    ? `${mode === 'reconnect' ? 'Reconnect' : 'Connect'} ${detail.data?.name ?? 'the app'}`
     : target.kind === 'module'
       ? `Connect ${target.name}`
       : target.kind === 'plugin'
         ? `Connect ${target.card.name}`
-        : 'Connect a system';
+        : 'Add custom app';
   const description =
-    mode === 'edit'
-      ? 'Change the keys for test or production. A saved key stays unless you type a new one.'
-      : 'Enter the keys for test and production. Each is tested before it is called working.';
+    mode === 'edit' ? 'A saved key stays unless you type a new one. It is tested before it is called working.' : 'It is tested before it is called working.';
   if (failed || loading || !kinds.data) {
     return (
-      <DialogShell open={open} onOpenChange={onOpenChange} size="lg" title={title} description={description} data-testid="connect-dialog">
+      <DialogShell open={open} onOpenChange={onOpenChange} size="sm" title={title} description={description} data-testid="connect-dialog">
         {failed ? (
-          <QueryError what="what this system needs" error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} />
+          <QueryError what="what this app needs" error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} />
         ) : (
           <div className="flex flex-col gap-3" data-testid="connect-loading">
             <Skeleton className="h-9 w-full" />
@@ -127,7 +107,7 @@ export function ConnectSystemDialog({
     );
   }
   if (target.kind === 'plugin') {
-    return <PluginConnectForm open={open} card={target.card} kinds={kinds.data as Kinds} first={environment} onClose={() => onOpenChange(false)} />;
+    return <PluginConnectForm open={open} card={target.card} kinds={kinds.data as Kinds} first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id} onClose={() => onOpenChange(false)} />;
   }
   return (
     <ConnectForm
@@ -139,7 +119,7 @@ export function ConnectSystemDialog({
       target={target}
       kinds={kinds.data as Kinds}
       detail={detail.data ?? null}
-      first={environment}
+      first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id}
       onClose={() => onOpenChange(false)}
       onConnected={onConnected}
     />
@@ -149,7 +129,7 @@ export function ConnectSystemDialog({
 function sectionsFor(kind: Kind, kinds: Kinds, detail: ConnectionDetail | null): Record<Environment, EnvDraft> {
   const groups = fieldsFor(kind, kinds);
   const saved = (env: Environment) => (detail?.environments as Record<string, SavedEnvironment> | undefined)?.[env] ?? null;
-  return Object.fromEntries(kinds.environments.map((e) => [e.id, draftFor(e.id, groups, saved(e.id))]));
+  return Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groups, saved(e.id))]));
 }
 
 function ConnectForm({
@@ -174,16 +154,22 @@ function ConnectForm({
   onConnected?: (c: ConnectionDetail) => void;
 }) {
   const [name, setName] = React.useState(target.kind === 'module' ? target.name : '');
-  const [category, setCategory] = React.useState('');
   const [kindId, setKindId] = React.useState(detail?.authKind ?? kinds.kinds.find((k) => k.id === 'api_key')?.id ?? kinds.kinds[0]?.id ?? 'none');
   const kind = kinds.kinds.find((k) => k.id === kindId) ?? kinds.kinds[0];
   const plan = planFor(kind);
   const groups = fieldsFor(kind, kinds);
-  const [who, setWho] = React.useState<SignIn>((detail?.signIn as SignIn | undefined) ?? 'team');
+  // Who signs in is set on the app page's Settings; a new app starts with the team account.
+  const who: SignIn = (detail?.signIn as SignIn | undefined) ?? 'team';
   const [state, dispatch] = React.useReducer(reduce, initialState(sectionsFor(kind, kinds, detail), detail?.id ?? null));
   const revision = React.useRef(detail?.revision ?? 0);
   const latest = React.useRef<ConnectionDetail | null>(detail);
-  const opened = React.useRef<Window | null>(null);
+  const opened = React.useRef<{ window: Window | null; environment: Environment } | null>(null);
+  const connected = React.useRef(onConnected);
+  const close = React.useRef(onClose);
+  React.useEffect(() => {
+    connected.current = onConnected;
+    close.current = onClose;
+  }, [onConnected, onClose]);
 
   const create = useCreateConnection();
   const bind = useBindModule();
@@ -211,10 +197,15 @@ function ConnectForm({
 
   React.useEffect(() => {
     const onMessage = (e: MessageEvent<ConnectedMessage>) => {
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || e.source !== opened.current) return;
+      const waiting = opened.current;
+      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || !waiting || e.source !== waiting.window) return;
       opened.current = null;
-      dispatch({ type: 'signed-in' });
+      dispatch({ type: 'signed-in', environment: waiting.environment });
       toast.success(`${e.data.connection} is connected with the team account`);
+      // Save opened this window, so the account signing in is the last step: the dialog closes.
+      dispatch({ type: 'done' });
+      if (latest.current) connected.current?.(latest.current);
+      close.current();
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -227,7 +218,6 @@ function ConnectForm({
       await create.mutateAsync({
         name: name.trim(),
         authKind: kind.id,
-        category: category.trim() || undefined,
         signIn: kind.perPerson ? who : 'team',
       }),
     );
@@ -275,7 +265,8 @@ function ConnectForm({
     }
   };
 
-  const envs = ordered(kinds, first);
+  // One environment: the one asked for, else the leading one (production when the install has it).
+  const envs = ordered(kinds, first).slice(0, 1);
   const ready = envs.map((e) => e.id).filter((id) => complete(state.sections[id], groups));
   const canSave = plan.kind === 'none' || ready.length > 0;
   const named = Boolean(state.connectionId) || Boolean(name.trim());
@@ -299,13 +290,13 @@ function ConnectForm({
           }),
         );
       }
-      if (plan.kind === 'account') {
+      if (plan.kind === 'account' && !state.signedIn.includes(env)) {
         const start = await signIn.mutateAsync({
           connectionId: id,
           environment: env,
           account: 'team',
         });
-        opened.current = openSignIn(start, id);
+        opened.current = { window: openSignIn(start, id), environment: env };
         dispatch({ type: 'signing-in' });
         return;
       }
@@ -328,7 +319,7 @@ function ConnectForm({
           });
         await remove.mutateAsync(state.connectionId);
       } catch (e) {
-        toast.error('Couldn’t remove the new connection', {
+        toast.error('Couldn’t remove the new app', {
           description: message(e),
         });
       }
@@ -340,7 +331,7 @@ function ConnectForm({
     <DialogShell
       open={open}
       onOpenChange={(o) => !o && void cancel()}
-      size="lg"
+      size="sm"
       title={title}
       description={description}
       data-testid="connect-dialog"
@@ -356,15 +347,15 @@ function ConnectForm({
             disabled={!named || !canSave || state.busy}
             data-testid="connect-submit"
           >
-            {plan.kind === 'account' ? 'Save and connect the team account' : 'Save'}
+            {plan.kind === 'account' ? 'Connect' : 'Save'}
           </LoadingButton>
         </>
       }
     >
       <div className="flex min-w-0 flex-col gap-5">
         {!detail && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="system-name" label="System name">
+          <div className="grid gap-4">
+            <FormField id="system-name" label="App name">
               <Input id="system-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Claims core" disabled={Boolean(state.connectionId)} />
             </FormField>
             <FormField id="system-kind" label="How it signs in">
@@ -381,44 +372,11 @@ function ConnectForm({
                 </SelectContent>
               </Select>
             </FormField>
-            <FormField id="system-category" label="Category" optional className="sm:col-span-2">
-              <Input
-                id="system-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Core insurance"
-                disabled={Boolean(state.connectionId)}
-              />
-            </FormField>
           </div>
         )}
 
-        {kind.perPerson && (
-          <RadioGroup
-            value={who}
-            onValueChange={(v) => setWho(v as SignIn)}
-            className="grid gap-2 md:grid-cols-3"
-            aria-label="Whose account calls use"
-            data-testid="connect-who"
-          >
-            {WHO.map((o) => (
-              <label
-                key={o.value}
-                htmlFor={`who-${o.value}`}
-                className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', who === o.value && 'border-primary bg-primary/5')}
-              >
-                <RadioGroupItem value={o.value} id={`who-${o.value}`} className="mt-0.5" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{o.label}</span>
-                  <span className="block text-xs text-muted-foreground">{o.hint}</span>
-                </span>
-              </label>
-            ))}
-          </RadioGroup>
-        )}
-
         {plan.kind === 'none' ? (
-          <p className="text-sm text-muted-foreground">{kind.label}: nothing to enter. Calls go to the system’s address with no sign-in.</p>
+          <p className="text-sm text-muted-foreground">{kind.label}: nothing to enter. Calls go to the app’s address with no sign-in.</p>
         ) : (
           envs.map(({ id: env, label }) => (
             <EnvSection

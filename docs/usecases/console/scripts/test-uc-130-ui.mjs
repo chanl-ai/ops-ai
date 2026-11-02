@@ -60,7 +60,7 @@ await withUiStack(
       // Step 3: James retires the first embed; its page is refused from then on.
       await first.getByTestId('widget-retire').click();
       const dialog = james.getByRole('dialog');
-      // Retiring is the channel API's own call (c-245).
+      // Retiring is the channel API's own call.
       const saved = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/channels/${one.id}/retire`), { timeout: 60_000 }));
       await dialog.getByRole('button', { name: 'Retire' }).click();
       const status = (await saved)?.status();

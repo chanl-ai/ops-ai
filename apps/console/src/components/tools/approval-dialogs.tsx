@@ -61,7 +61,7 @@ export function RequestApprovalDialog({
       onOpenChange={onOpenChange}
       size="md"
       title="Request approval"
-      description={`The module’s owner team decides. The approval covers major version ${major}; a new major needs a new approval.`}
+      description={`The owner team decides. The approval covers major version ${major}; a new major needs a new approval.`}
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>

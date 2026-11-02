@@ -196,6 +196,38 @@ def bearer(authorization: Annotated[str | None, Header()] = None) -> dict[str, s
     return {"environment": BEARERS[given]}
 
 
+# Customers made through the Stripe-shaped write below, in the order made (c-591).
+CUSTOMERS: list[dict[str, Any]] = []
+
+
+@router.post("/auth/bearer/customers")
+async def bearer_customer(request: Request, authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
+    """A Stripe-shaped write behind a bearer key (c-591): it takes a form body only, as Stripe does, and answers with
+    the customer made, so a use case shows a REST tool's form body and its key reach the system."""
+    if _bearer(authorization) not in BEARERS:
+        raise HTTPException(401, "wrong bearer token")
+    if request.headers.get("content-type", "").split(";")[0] != "application/x-www-form-urlencoded":
+        raise HTTPException(400, "send the customer as a form body")
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode()).items()}
+    meta = {k[len("metadata[") : -1]: v for k, v in form.items() if k.startswith("metadata[") and k.endswith("]")}
+    customer = {
+        "id": f"cus_{len(CUSTOMERS) + 1:04d}",
+        "object": "customer",
+        "email": form.get("email"),
+        "metadata": meta,
+    }
+    CUSTOMERS.append(customer)
+    return customer
+
+
+@router.get("/auth/bearer/customers/search")
+def bearer_customer_search(email: str, authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
+    """The customers made with this email: a query placeholder's value arrives filled in."""
+    if _bearer(authorization) not in BEARERS:
+        raise HTTPException(401, "wrong bearer token")
+    return {"object": "search_result", "data": [c for c in CUSTOMERS if c["email"] == email]}
+
+
 def _issued(authorization: str | None) -> dict[str, Any]:
     held = ACCESS.get(_bearer(authorization))
     if held is None or held["expires"] < time.time():

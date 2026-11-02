@@ -1,0 +1,104 @@
+schemaVersion: 2
+id: schedule_sla_follow_up
+name: Schedule an SLA follow-up
+nodes:
+- id: start
+  type: ops.trigger.request
+  typeVersion: 1
+  name: Follow up
+  parameters:
+    inputSchema:
+      type: object
+      required:
+      - dueOn
+      properties:
+        dueOn:
+          type: string
+          description: An ISO date or date and time, not natural language
+- id: when
+  type: ops.data.compute
+  typeVersion: 1
+  name: Deadline
+  parameters:
+    values:
+      dueOn: $.input.dueOn
+    expressions:
+      dueOn: dueOn
+      deadline: business_days(dueOn, 0)
+- id: wait
+  type: ops.flow.wait
+  typeVersion: 1
+  name: Wait until
+  parameters:
+    mode: until
+    until: $.nodes.when.out.dueOn
+- id: review
+  type: ops.flow.humanReview
+  typeVersion: 1
+  name: Follow up
+  parameters:
+    title: SLA follow-up
+    summary:
+      dueOn: $.nodes.when.out.dueOn
+      deadline: $.nodes.when.out.deadline
+- id: ok
+  type: ops.flow.end
+  typeVersion: 1
+  name: Closed
+  parameters:
+    outcome: closed
+- id: late
+  type: ops.flow.end
+  typeVersion: 1
+  name: Escalated
+  parameters:
+    outcome: escalated
+- id: bad
+  type: ops.flow.end
+  typeVersion: 1
+  name: Not a date
+  parameters:
+    outcome: not_a_date
+connections:
+- from:
+    node: start
+    port: payload
+  to:
+    node: when
+    port: in
+- from:
+    node: when
+    port: out
+  to:
+    node: wait
+    port: in
+- from:
+    node: when
+    port: error
+  to:
+    node: bad
+    port: in
+- from:
+    node: wait
+    port: out
+  to:
+    node: review
+    port: in
+- from:
+    node: wait
+    port: error
+  to:
+    node: bad
+    port: in
+- from:
+    node: review
+    port: approve
+  to:
+    node: ok
+    port: in
+- from:
+    node: review
+    port: reject
+  to:
+    node: late
+    port: in

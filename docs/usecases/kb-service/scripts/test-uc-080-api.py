@@ -14,7 +14,10 @@ from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
-from usecase_harness import KB_PORT, TEAM, agents, check, data, finish, kb, put_in_files, sse
+from usecase_harness import KB_PORT, agents, check, data, finish, kb, put_in_files, sse
+
+# The team kb-service's dev caller makes the base in (team_ops): a chat sees only its own team's bases.
+TEAM = {"X-Team-Id": "team_ops"}
 
 RUN = int(time.time())
 OWNER = "maya@harborpine.example"

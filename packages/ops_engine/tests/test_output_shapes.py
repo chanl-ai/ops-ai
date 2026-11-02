@@ -72,6 +72,13 @@ class Cases:
         return None
 
 
+class Know:
+    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+        from ops_agent_kernel.types import Passage  # noqa: PLC0415
+
+        return [Passage("d1", "Handbook", "owners", "1", "Two owners.", "kb", None)]
+
+
 def node(type_id: str, **params: Any) -> NodeInstance:
     return NodeInstance.model_validate({"id": "n", "type": type_id, "typeVersion": 1, "parameters": params})
 
@@ -189,6 +196,25 @@ CASES: list[tuple[str, Callable[[], Awaitable[tuple[Outcome, Any]]]]] = [
     ("ops.flow.wait", case(node("ops.flow.wait", mode="until", until="next week"), ports())),
     ("ops.flow.end", case(node("ops.flow.end", outcome="done", output={"a": 1}), ports())),
     ("ops.flow.end", case(node("ops.flow.end", outcome="failed", result="failed"), ports())),
+    ("ops.data.transform", case(node("ops.data.transform", expression="$.input.a", **{"as": "b"}), ports(), {"a": 1})),
+    (
+        "ops.data.filter",
+        case(
+            node("ops.data.filter", items=[{"n": 2}, {"n": 1}], conditions=[{"left": "n", "op": "gt", "right": 1}]),
+            ports(),
+        ),
+    ),
+    (
+        "ops.ai.knowledge",
+        case(node("ops.ai.knowledge", query="owners", kbIds=["kb"], limit=1), ports(knowledge=Know())),
+    ),
+    ("ops.action.send", case(node("ops.action.send", body="Thanks"), ports(), {"from": "a@b.test", "subject": "Hi"})),
+    (
+        "ops.flow.repeat",
+        case(node("ops.flow.repeat", conditions=[{"left": 1, "op": "eq", "right": 1}], **{"max": 2}), ports()),
+    ),
+    ("ops.flow.ask", case(node("ops.flow.ask", prompt="?", timeoutSeconds=0), ports())),
+    ("ops.trigger.schedule", case(node("ops.trigger.schedule", key="once"), ports(), {"tick": True})),
 ]
 
 

@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { RetrievalSettings, Source } from '@/lib/types/knowledge';
 import type { AnswerShape, QueryMode, RewriteMode } from '@/lib/types/knowledge-retrieval';
+import { useFlag } from '@/hooks/flag-queries';
 import { cn } from '@/lib/utils';
 
 import { FilterBuilder } from './filter-builder';
@@ -70,6 +71,8 @@ export function RetrievalForm({
   disabled?: boolean;
 }) {
   const rail = variant === 'rail';
+  // Outside assistants query over MCP only while the install serves that address (c-611).
+  const callers = useFlag('mcp_gateway') ? 'the API and MCP' : 'the API';
   const id = (x: string) => `${idPrefix}-${x}`;
   const table = v.searchMode === 'table_lookup';
 
@@ -268,7 +271,7 @@ export function RetrievalForm({
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor={id('include-chunks')} className="flex items-center gap-1.5">
-                  Include source chunks in the response <Tip text="Affects API and MCP payload size." />
+                  Include source chunks in the response <Tip text={`Affects ${callers} payload size.`} />
                 </Label>
                 <Switch id={id('include-chunks')} checked={v.includeChunks} onCheckedChange={(x) => onChange({ includeChunks: x })} disabled={disabled} />
               </div>
@@ -336,7 +339,7 @@ export function RetrievalForm({
       <Section title="Search" description="How a question becomes passages">
         {search}
       </Section>
-      <Section title="Filters" description="Applied before ranking to every query from agents, workflows, the API and MCP, unless the call overrides them">
+      <Section title="Filters" description={`Applied before ranking to every query from agents, workflows, ${callers}, unless the call overrides them`}>
         {filters}
       </Section>
       <Section title="Answer" description="Whether and how the passages become an answer">

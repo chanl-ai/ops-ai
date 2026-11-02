@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "id": "normalize_one_record",
+  "name": "Normalize one extracted record",
+  "description": "Map one extracted record onto support-request fields and end accepted, or failed when failName matches the subject.",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "ops.trigger.request",
+      "typeVersion": 1,
+      "name": "One record",
+      "parameters": {
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "customerEmail",
+            "subject",
+            "message"
+          ],
+          "properties": {
+            "customerEmail": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "failName": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "check",
+      "type": "ops.flow.if",
+      "typeVersion": 1,
+      "name": "Fail this record",
+      "parameters": {
+        "conditions": [
+          {
+            "left": "$.input.failName",
+            "op": "eq",
+            "right": "$.input.subject"
+          }
+        ]
+      }
+    },
+    {
+      "id": "done",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Accepted",
+      "parameters": {
+        "outcome": "accepted"
+      }
+    },
+    {
+      "id": "rejected",
+      "type": "ops.flow.end",
+      "typeVersion": 1,
+      "name": "Failed",
+      "parameters": {
+        "outcome": "child_failed",
+        "result": "failed"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": {
+        "node": "start",
+        "port": "payload"
+      },
+      "to": {
+        "node": "check",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "check",
+        "port": "false"
+      },
+      "to": {
+        "node": "done",
+        "port": "in"
+      }
+    },
+    {
+      "from": {
+        "node": "check",
+        "port": "true"
+      },
+      "to": {
+        "node": "rejected",
+        "port": "in"
+      }
+    }
+  ]
+}

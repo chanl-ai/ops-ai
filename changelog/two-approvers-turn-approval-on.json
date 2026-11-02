@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Asking for two approvers turns a tool's approval on",
+  "description": "Choosing two approvers for a tool now also turns its approval on, so its writes wait for both people.",
+  "tag": "fix",
+  "cards": [
+    "c-616"
+  ]
+}

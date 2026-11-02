@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from ops_access import Scope, can, policy
+from ops_access.check import DEFAULT as ACCESS
 from ops_identity import CurrentCaller, CurrentPrincipal, CurrentService
 from ops_identity import Principal as Caller
 from ops_policy import STEP_UP_TTL_S, HmacSigner, TokenError, header_of, verify, verify_step_up
@@ -269,11 +270,25 @@ def require_runs_start(me: Principal, *, team_id: str | None, what: str) -> None
     can(caller_of(me), "workflows", "run", team=team_id or None, what=what)
 
 
+def require_team_account_use(me: Principal, *, team_id: str, what: str) -> None:
+    """connections.run: a person who may use the team's own account of an app, as Run as the team account does in place
+    of their own (c-616 S12); admins hold it by default."""
+    can(caller_of(me), "connections", "run", team=team_id, what=what)
+
+
 def started_by(me: Principal) -> str:
     """What a run or thread records as who started it: `key:<id>` for an API key (c-246), so each key's traffic is
     counted and its runs are its own; a person's email otherwise."""
     key = me.identity.key_id if me.is_key and me.identity is not None else None
     return f"key:{key}" if key else me.email
+
+
+def approves_own_writes(me: Principal) -> bool:
+    """Whether `me` is their own approver in the team they act in (owner, 2026-11-01): reviews.decide there, while the
+    requesterMayDecide policy lets an asker decide. An API key never is: a key acts for nobody who could approve."""
+    if me.is_key:
+        return False
+    return ACCESS.may(caller_of(me), "reviews", "decide", team=me.team_id, requested_by=(me.email,))
 
 
 def require_key_reaches(me: Principal, kind: Literal["agent", "workflow"], target_id: str) -> int | None:

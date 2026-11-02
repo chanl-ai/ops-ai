@@ -8,23 +8,23 @@ from pathlib import Path
 import uvicorn
 
 from ops_identity import Auth
-from ops_policy import AesGcmCipher
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_store.database import Database, open_database
 from ops_store.schema_version import require_current_schema
 
 from .app import create_models_app
-from .seed import seed
+from .connection_settings import ModelConnectionSettings
+from .seed import install_connection, seed
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 
-async def _seed(engine: Database, fake_openai_url: str | None) -> None:
+async def _seed(engine: Database, settings: Settings, connection: ModelConnectionSettings) -> None:
     """Seeds on this short-lived loop, then empties the pool: its connections belong to this loop, and uvicorn serves
     on another, where reusing one fails with "attached to a different loop"."""
-    await seed(engine, fake_openai_url)
+    await seed(engine, settings.models_fake_openai_url, install_connection(connection))
     await engine.dispose()
 
 
@@ -43,18 +43,19 @@ def dev_provider_keys(settings: Settings) -> dict[str, str]:
 
 def main() -> None:
     settings = Settings()
+    # The install's model connection: a value that cannot work stops models-service here, naming the variable.
+    connection = ModelConnectionSettings()
     # Provider keys are sealed with it: the public dev default would let anyone with the database read them.
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging()
     engine = open_database(settings.database_url)
     if settings.environment == "dev":
-        asyncio.run(_seed(engine, settings.models_fake_openai_url))
+        asyncio.run(_seed(engine, settings, connection))
     app = create_models_app(
         engine,
         auth=Auth.from_settings(settings, audience="models"),
         provider_secrets=dev_provider_keys(settings),
-        cipher=AesGcmCipher(settings.secrets_key.get_secret_value()),
         keys_tenant=settings.model_keys_tenant,
         security_team=settings.security_team_id,
         overlap_seconds=settings.model_key_overlap_seconds,

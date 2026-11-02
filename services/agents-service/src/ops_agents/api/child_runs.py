@@ -183,6 +183,15 @@ async def engine_workflows(rt: Runtime) -> list[dict[str, Any]]:
         return []
 
 
+async def team_workflows(rt: Runtime) -> list[dict[str, Any]]:
+    """Every v2 workflow the selected team holds, each described by its newest version, whatever its stage; none on a
+    database without the runner's tables."""
+    try:
+        return await DefinitionStore(EngineTransactions(rt.db)).summaries(team=current_team())
+    except (DatabaseError, NoTenantError):
+        return []
+
+
 async def engine_workflow(rt: Runtime, workflow: str) -> dict[str, Any] | None:
     try:
         return await DefinitionStore(EngineTransactions(rt.db)).live(workflow, team=current_team())

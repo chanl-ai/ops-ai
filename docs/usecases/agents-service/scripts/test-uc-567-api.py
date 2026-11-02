@@ -1,4 +1,4 @@
-"""uc-567 every workflow run ends with a clear outcome, api layer: docs/usecases/agents-service/run-outcomes.md (c-561).
+"""uc-567 every workflow run ends with a clear outcome, api layer: docs/usecases/agents-service/run-outcomes.md.
 agents-service on the scripted model with tools-service as its gateway, the core bank fake behind it, files-service for
 email attachments, and GreenMail for the mailbox; workers are `python -m ops_agents.api.worker` processes this script
 starts, stops and lets die. No model call is made.
@@ -207,7 +207,7 @@ def bank_module(gw: httpx.Client, host: str) -> str:
     )
     note = next(o for o in made["operations"] if o["name"] == "add_customer_note")
     data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{note['id']}", json={"requiresApproval": False}))
-    # A test call for CUS-1002 answers as a system that took the note and never replied (c-332's mock answers).
+    # A test call for CUS-1002 answers as a system that took the note and never replied (an earlier change's mock answers).
     mock = {"name": "Never answers", "match": {"customer_id": "CUS-1002"}, "timeout": True}
     data(gw.post(f"/v1/tool-modules/{made['id']}/operations/{note['id']}/mocks", json=mock))
     data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-567"}))

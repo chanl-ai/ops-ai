@@ -1,0 +1,22 @@
+id: start-customer-hold
+title: Start customer hold from chat
+track: agent
+status: built
+difficulty: advanced
+outcome: Specialist chat starts the hold workflow as a governed tool.
+capabilities:
+- id: agent.workflow-tool
+  status: built
+entrypoint: resources/agent.yaml
+resources:
+- resources/agent.yaml
+fixtures:
+- fixtures/question.json
+expected:
+- expected/started.json
+surfaces:
+  ui: built
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 45

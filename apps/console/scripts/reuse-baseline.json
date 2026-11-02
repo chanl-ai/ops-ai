@@ -22,7 +22,6 @@
     "src/components/document-types/tests-panel.tsx",
     "src/components/evals/eval-results.tsx",
     "src/components/evals/import-eval-cases-dialog.tsx",
-    "src/components/integrations/integration-panels.tsx",
     "src/components/knowledge/document-sheet.tsx",
     "src/components/knowledge/kb-overview.tsx",
     "src/components/knowledge/query-result.tsx",

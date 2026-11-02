@@ -65,6 +65,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | documents-service | `ops_documents.store.document_types` | none: no repository class | | `document_type_examples`, `document_type_samples`, `document_type_tests`, `document_type_versions`, `document_types` |
 | documents-service | `ops_documents.store.extractions` | none: no repository class | | `documents_outbox`, `extraction_corrections`, `extractions` |
 | documents-service | `ops_documents.store.layouts` | none: no repository class | | `documents_layouts` |
+| documents-service | `ops_documents.store.template_copies` | none: no repository class | | `documents_template_copies` |
 | files-service | `ops_files.store.files` | `FilesStore` | TRANSACTION | `file_blobs`, `file_idempotency`, `file_legal_holds`, `file_references`, `file_versions`, `files`, `files_outbox` |
 | files-service | `ops_files.store.read_requests` | none: no repository class | | `file_read_requests` |
 | files-service | `ops_files.store.settings` | none: no repository class | | `storage_credentials`, `storage_settings`, `storage_settings_audit` |
@@ -85,19 +86,20 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.policies` | `PolicyStore` | TRANSACTION | none |
 | platform-service | `ops_platform.store.roles` | `RoleStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.signin` | `SignInStore` | CAS, RLS, TRANSACTION | none |
-| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `password_credentials`, `password_resets`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_identities`, `signin_lockouts`, `signin_providers`, `teams`, `tenants`, `users` |
+| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_identities`, `signin_lockouts`, `signin_providers`, `teams`, `tenants`, `users` |
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
 | tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `connect_links`, `connection_audit`, `connection_environments`, `connection_tokens`, `connections`, `oauth_states` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |
-| tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | `operation_mocks` |
-| tools-service | `ops_tools.store.modules` | `ModuleStore` | CAS, TRANSACTION | `module_approvals`, `module_egress_hosts`, `module_operations`, `module_versions`, `service_outbox`, `tool_modules` |
+| tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | none |
+| tools-service | `ops_tools.store.modules` | `ModuleStore` | CAS, TRANSACTION | `module_approvals`, `module_egress_hosts`, `module_operations`, `module_versions`, `operation_mocks`, `service_outbox`, `tool_modules` |
 | tools-service | `ops_tools.store.plugin_app_keys` | `PluginAppKeys` | CAS | `plugin_app_keys` |
 | tools-service | `ops_tools.store.plugin_bindings` | `PluginBindings` | CAS | `plugin_bindings` |
 | tools-service | `ops_tools.store.rate_windows` | `RateWindows` | CAS | `operation_rate_windows` |
 | tools-service | `ops_tools.store.secrets` | `SecretStore` | TRANSACTION | `secret_audit`, `tool_secrets` |
 | tools-service | `ops_tools.store.send_policies` | `SendPolicies` | CAS | `send_checks`, `send_policies` |
+| tools-service | `ops_tools.store.team_defaults` | `TeamDefaults` | CAS | `team_defaults` |
 
 <!-- store-inventory:end -->
 
@@ -147,8 +149,8 @@ The columns those chains added that change a guarantee:
 | `task_assists` | agents-service | What task assist wrote for a typed task when its review step paused: one row per `(tenant_id, step_id)`, the step id `run:node:iteration`; a second write for the step is refused, so the first assist stays | 0064, 0068 |
 | `gateway_calls` | tools-service | Call log: tool, access, input hash, thread, step, `sub`, `act`, decision, reasons, approvers, outcome, effect, output; the environment (test or production) and connection a call used; `channel`, the route that took the call (`api`, POST /v1/calls, or `mcp`), and `client_name`, the name an MCP client gives itself, a claim shown as one; both null on older rows | 0006; tools 0028, 0030 |
 | `module_operations` | tools-service | A tool module's operations: access (read or write), executor, method, path, headers, body and response templates, input and masked output, rate limit, amount cap, the write approval policy (approvers, their team, step-up), the declared output shape, and `response_schema`, the JSON Schema of the first success response an OpenAPI import gives, so a workflow step shows its output fields before it runs; `needs_person`, only a person's own sign-in signs its calls, beside `tool_modules.sign_in`, the sign-in its module supports, and `scopes`, the ones a person's own sign-in must hold to call it | tools 0002, 0011, 0012, 0014, 0031, 0039, 0040 |
-| `connections`, `connection_environments` | tools-service | How the platform signs in to one system: auth kind, owning team, available-to teams, status, revision; per environment the plain settings (the system address its credentials are bound to, token and sign-in addresses, client id) and the `tool_secrets` names of its secret parts; whose account a call signs in with, the team backup, and the last Test connection's result | tools 0028, 0037, 0038 |
-| `connection_tokens`, `oauth_states` | tools-service | Encrypted access and refresh tokens per connection, environment and person, stored against the rotation they replaced; sign-ins in progress by state hash with the encrypted PKCE verifier, used once, and the scopes each asked for, which a token answer that names none granted | tools 0028, 0040 |
+| `connections`, `connection_environments` | tools-service | How the platform signs in to one system: auth kind, owning team, status, revision; per environment the plain settings (the system address its credentials are bound to, token and sign-in addresses, client id) and the `tool_secrets` names of its secret parts; whose account a call signs in with, the team backup, and the last Test connection's result. An environment row carries its connection's team and the database's team policy | tools 0028, 0037, 0038, 0044 |
+| `connection_tokens`, `oauth_states` | tools-service | Encrypted access and refresh tokens per connection, environment and person, stored against the rotation they replaced; sign-ins in progress by state hash with the encrypted PKCE verifier, used once, and the scopes each asked for, which a token answer that names none granted. Each row carries its connection's team, and the database's team policy hides it from every other team's transaction. A person's row may instead hold their own key, password or token, sealed, and records when the system refused it and why, so their next call asks for a new one | tools 0028, 0040, 0044, 0045 |
 | `connection_audit` | tools-service | Each connection change, secret set, sign-in, sign-out and failed refresh: names only | tools 0028 |
 | `operation_mocks` | tools-service | An operation's mock answers per environment, in order, one default | tools 0029 |
 | `gateway_fences` | tools-service | Highest lease generation seen per thread | 0008 |

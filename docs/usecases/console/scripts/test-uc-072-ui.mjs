@@ -75,7 +75,8 @@ await withUiStack(
       // The decided review records the step-up it was approved under (a fingerprint, never the token), and the review
       // detail in Reviews says so.
       const decided = ((await (await fetch(`${agents}/reviews?page=1&pageSize=50&view=resolved`, { headers: M })).json()).data?.data ?? []).find((r) => r.origin?.kind === 'chat' && r.origin.threadId === thread);
-      await page.goto(`${consoleUrl}/reviews?review=${decided?.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      // A decided task opens from the Human Tasks table at /reviews/all; /reviews is the queue of open ones.
+      await page.goto(`${consoleUrl}/reviews/all?review=${decided?.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const stepUpLine = page.getByTestId('review-step-up');
       const shown = await stepUpLine.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const text = shown ? await stepUpLine.innerText() : '';

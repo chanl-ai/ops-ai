@@ -1,0 +1,29 @@
+id: roles-refuse-a-start
+title: Roles refuse a start
+track: workflow
+status: built
+difficulty: guided
+outcome: A signed-in person without the needed cell is refused; the same start succeeds for a person who has it.
+capabilities:
+- id: roles.cell
+  status: built
+entrypoint: ../02-route-a-support-message/resources/workflow.yaml
+resources:
+- ../02-route-a-support-message/resources/workflow.yaml
+fixtures:
+- fixtures/start.json
+expected:
+- expected/refused.json
+- expected/started.json
+surfaces:
+  ui: planned
+  cli: planned
+  python: built
+  typescript: planned
+setupSeconds: 20
+teaches:
+- A missing roles-grid cell is 403 role_required
+- The same action passes when can() allows the cell
+- Earlier folders used a person who could already run
+gaps:
+- ops workflows decide

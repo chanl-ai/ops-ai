@@ -259,6 +259,29 @@ async def test_the_atm_limit_presents_the_limits_as_rows_from_the_passage_then_c
     assert not bare.tool_calls and "[1]" not in (bare.text or "")
 
 
+async def test_r4_read_tool_rules_look_up_ada_and_refuse_a_write() -> None:
+    mod = fake()
+    s = demo_script(mod)
+    offered = [{"type": "function", "function": {"name": "search_customers"}}]
+    first = await mod.answer(
+        s, "default", {"messages": [user("Look up the customer ada@example.test")], "tools": offered}
+    )
+    assert first.tool_calls and first.tool_calls[0]["function"]["name"] == "search_customers"
+    after = [user("Look up the customer ada@example.test"), *called("search_customers")]
+    after[-1]["content"] = '[{"email": "ada@example.test", "name": "Ada Lovelace"}]'
+    done = await mod.answer(s, "default", {"messages": after, "tools": offered})
+    assert "ada@example.test" in (done.text or "")
+    missing = await mod.answer(
+        s, "default", {"messages": [user("Look up the customer nobody@missing.test")], "tools": offered}
+    )
+    assert missing.tool_calls and missing.tool_calls[0]["function"]["name"] == "search_customers"
+    none = [user("Look up the customer nobody@missing.test"), *called("search_customers")]
+    none_done = await mod.answer(s, "default", {"messages": none, "tools": offered})
+    assert "No customer matches" in (none_done.text or "")
+    refused = await mod.answer(s, "default", {"messages": [user("Add a note to this customer")], "tools": offered})
+    assert not refused.tool_calls and "do not write" in (refused.text or "")
+
+
 async def test_a_wrong_key_is_refused_and_the_right_key_or_none_is_answered() -> None:
     mod = fake()
     app = mod.create_app(script(mod), "sk-stub")
@@ -269,3 +292,25 @@ async def test_a_wrong_key_is_refused_and_the_right_key_or_none_is_answered() ->
         none = await c.post("/v1/chat/completions", json=body)
     assert wrong.status_code == 401 and wrong.json()["error"]["code"] == "invalid_api_key"
     assert right.status_code == 200 and none.status_code == 200
+
+
+async def test_a_follow_up_acts_on_what_an_earlier_message_asked() -> None:
+    """A chat that stopped for a sign-in goes on with "I connected X. Please go ahead.", which names no record: without
+    `before` the rule could only name a fixed one, so a demo on another record read the wrong one."""
+    mod = fake()
+    rule = {
+        "when": "Please go ahead",
+        "before": r"status of case (?P<num>\d+)",
+        "tool": "get_customer",
+        "arguments": {"customer_id": "{num}"},
+    }
+    s = mod.Script([mod.Rule(**rule)], ["default"])
+    msgs = [
+        user("What is the status of case 00044818?"),
+        *called("get_customer"),
+        user("I connected X. Please go ahead."),
+    ]
+    went = await mod.answer(s, "default", {"messages": msgs, "tools": TOOLS})
+    assert went.tool_calls and json.loads(went.tool_calls[0]["function"]["arguments"]) == {"customer_id": "00044818"}
+    alone = await mod.answer(s, "default", {"messages": [user("I connected X. Please go ahead.")], "tools": TOOLS})
+    assert not alone.tool_calls

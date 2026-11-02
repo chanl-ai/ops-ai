@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-01",
+  "title": "Real runs on a tool page follow the same rules as agents",
+  "description": "Running a tool for real from its page now goes through the same checks as an agent's call: approvals, limits, allowed hosts and your team's account. It uses the environment you pick, test or production, and shows up in tool call history.",
+  "tag": "improved",
+  "cards": [
+    "c-616"
+  ]
+}
