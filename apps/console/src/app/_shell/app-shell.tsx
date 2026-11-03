@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Clock, CloudOff, Users } from 'lucide-react';
+import { Clock, CloudOff, Loader2, Users } from 'lucide-react';
 import { onlineManager, useQueryClient } from '@tanstack/react-query';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -31,7 +31,15 @@ import { inSettings, LIVE_TREE } from '@/lib/settings-tree';
 import { HeaderNotifications } from './header-notifications';
 import { HeaderSearch } from './header-search';
 
-const Loading = () => (
+/** The sign-in window's pages open in a small window of their own: while the session loads they show a spinner. */
+const inSignInWindow = (pathname: string) => pathname.startsWith('/connections/');
+const WindowLoading = () => (
+  <div className="flex min-h-svh items-center justify-center bg-background" data-testid="sign-in-window-loading">
+    <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Loading" />
+  </div>
+);
+
+const PageLoading = () => (
   <div className="px-6 py-6 lg:px-8">
     <PageSkeleton statCards={4} tableRows={6} />
   </div>
@@ -42,6 +50,10 @@ const Loading = () => (
  * session gets a sign-in-again screen, and a workspace that requires two-step verification sends an unenrolled
  * session to /mfa/setup before any page loads.
  */
+function Loading() {
+  return inSignInWindow(usePathname()) ? <WindowLoading /> : <PageLoading />;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // The c-131 embed mock draws a bank intranet page and the iframe chat bare, as the embed app will; only on a
@@ -105,6 +117,13 @@ function Guarded({ children }: { children: React.ReactNode }) {
   // An ended session reads no teams; the page it had stays mounted under the dialog.
   if (!expired && !teamsPending && !teamsError && teams.length === 0) return <NoTeam />;
   if (!expired && !teamReady) return <Loading />;
+  // The sign-in window's pages draw only their card: they open in a small window of their own, or a phone's tab.
+  if (inSignInWindow(pathname))
+    return (
+      <main className="min-h-svh bg-background">
+        <ClientGate fallback={<Loading />}>{children}</ClientGate>
+      </main>
+    );
   return (
     <SidebarProvider defaultOpen={sidebarWasOpen} style={{ '--header-height': 'calc(var(--spacing) * 14)', '--sidebar-width': '14rem' } as React.CSSProperties}>
       {/* Inside settings the app sidebar is replaced by the settings sidebar. */}

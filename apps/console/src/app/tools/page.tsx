@@ -1,353 +1,168 @@
 'use client';
 
-import Link from 'next/link';
-
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, Download, CalendarX, Clock, Plus, Route, ShieldAlert, Trash2, Wrench } from 'lucide-react';
-import { toast } from 'sonner';
+import { ArrowRight, Wrench } from 'lucide-react';
 
+import { AppsTabs } from '@/components/connections/apps-tabs';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { PageLayout } from '@/components/page-layout';
-import { SelectedList, toastBulk } from '@/components/shared/bulk';
-import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
-import { idColumn } from '@/components/shared/id-column';
-import { selectColumn } from '@/components/shared/select-column';
-import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { ConnectionChip } from '@/components/integrations/integration-meta';
-import { AddModuleDialog } from '@/components/tools/add-module-dialog';
-import { NewModuleDialog } from '@/components/tools/new-module-dialog';
-import { WorkflowToolsTable } from '@/components/tools/workflow-tools-table';
-import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, ModuleMark, ownerText, pctText } from '@/components/tools/module-meta';
-import { Button } from '@/components/ui/button';
-import { useCanBuild } from '@/hooks/me-queries';
-import { useTools } from '@/hooks/queries';
-import { useBulkDeleteModules, useCreateBlankModule, useCreateModule, useDeleteModule, useDiscoverModule, useToolModules } from '@/hooks/tool-module-queries';
-import { useSticky } from '@/hooks/use-sticky';
-import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { count, plural } from '@/lib/format';
-import type { ModuleFilters, ModuleView, ToolModule } from '@/lib/types/tool-modules';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { AccessBadge } from '@/components/status-badges';
+import { ToolSetActions } from '@/components/tools/tool-set-actions';
+import { ToolsTabs } from '@/components/tools/tools-tabs';
+import { toolHref, UsedByCell } from '@/components/tools/used-by';
+import { Badge } from '@/components/ui/badge';
+import { useToolDirectory } from '@/hooks/queries';
+import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
+import type { ToolKind, ToolRow, ToolRowFilters, ToolStatus } from '@/lib/types/tool-directory';
 
-type Row = ToolModule & { onRowClick: (m: ToolModule) => void; href: string };
-
-const VIEW_EMPTY: Record<ModuleView, string> = {
-  all: 'Connect an app once; workflows then request the operations they need.',
-  needs_approval: 'Every tool set has a decided security review and no open requests.',
-  expiring: 'No workflow approval expires in the next 30 days.',
-  expired: 'No tool set has only expired approvals.',
-  failing: 'Every tool set is reachable and under a 2% error rate.',
-  security_review: 'No tool set has a security review waiting on Security.',
+const KIND: Record<ToolKind, string> = { app: 'App tool', custom: 'Custom tool', workflow: 'Workflow', agent: 'Agent' };
+const STATUS: Record<ToolStatus, { label: string; className: string }> = {
+  ready: { label: 'Ready', className: 'border-success/40 bg-success/10 text-success-text' },
+  needs_approval: { label: 'Needs approval', className: 'border-warning/40 bg-warning/10 text-warning-text' },
+  app_not_connected: { label: 'App not connected', className: 'border-warning/40 bg-warning/10 text-warning-text' },
+  needs_your_sign_in: { label: 'Needs your sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text' },
 };
 
-function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDef<Row>[] {
-  return [
-    selectColumn<Row>((m) => m.displayName),
-    idColumn<Row>((m) => m.id),
-    {
-      // Holds every searched field so the table's own filter keeps the rows the server matched.
-      id: 'displayName',
-      accessorFn: (m) => `${m.displayName} ${m.name} ${m.system} ${m.description} ${m.ownerTeam}`,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />,
-      cell: ({ row }) => (
-        <div className="flex w-56 max-w-56 items-center gap-3" title={`${row.original.displayName} · ${row.original.system} · ${ownerText(row.original.ownerTeam)}`}>
-          <ModuleMark name={row.original.displayName} />
-          <div className="min-w-0">
-            <div className="truncate font-medium">{row.original.displayName}</div>
-            {/* On the name, not in Approval: Approval is not among the default columns, and a module whose secret is
-                not set fails every call that reads it. */}
-            {row.original.unsetSecrets ? (
-              <Link href="/integrations/credentials?tab=secrets" className="block truncate text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${row.original.id}`}>
-                {plural(row.original.unsetSecrets, 'secret')} not set
-              </Link>
-            ) : (
-              <div className="truncate text-xs text-muted-foreground">{ownerText(row.original.ownerTeam)}</div>
-            )}
-          </div>
-        </div>
-      ),
-      enableHiding: false,
-    },
-    {
-      id: 'connection',
-      accessorFn: (m) => m.connection?.name ?? '',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
-      cell: ({ row }) => (
-        <StopRowClick align="start">
-          <ConnectionChip connection={row.original.connection} className="max-w-56" />
-        </StopRowClick>
-      ),
-    },
-    {
-      accessorKey: 'version',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Version" />,
-      cell: ({ row }) => (
-        <span className="font-mono text-xs whitespace-nowrap">
-          v{row.original.version}
-          {row.original.status === 'in_review' && <span className="ml-1 font-sans text-muted-foreground">in review</span>}
-        </span>
-      ),
-    },
-    { accessorKey: 'operationCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Operations" />, cell: ({ row }) => <span className="tabular-nums">{row.original.operationCount}</span> },
-    {
-      id: 'access',
-      accessorFn: (m) => m.accessClasses.join(' '),
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />,
-      cell: ({ row }) => <AccessClasses access={row.original.accessClasses} />,
-      filterFn: (r, id, value: string[]) => !value?.length || value.some((v) => String(r.getValue(id)).split(' ').includes(v)),
-    },
-    {
-      accessorKey: 'approvalState',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Approval" />,
-      cell: ({ row }) => {
-        const m = row.original;
-        return (
-          <div className="flex max-w-44 flex-col items-start gap-0.5">
-            <ApprovalStateBadge state={m.approvalState} />
-            {m.drift ? (
-              <span className="text-xs text-warning-text">Server tools changed</span>
-            ) : m.status !== 'published' ? (
-              <span className="text-xs text-muted-foreground">{m.status === 'draft' ? 'Security review not requested' : 'Security review open'}</span>
-            ) : m.pendingApprovals ? (
-              <span className="text-xs text-warning-text">{plural(m.pendingApprovals, 'request')} waiting</span>
-            ) : (
-              m.nextExpiry && <ExpiryText at={m.nextExpiry} />
-            )}
-          </div>
-        );
-      },
-      filterFn: facetFilterFn,
-    },
-    {
-      id: 'workflows',
-      accessorFn: (m) => m.workflows.length,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Workflows" />,
-      cell: ({ row }) => {
-        const w = row.original.workflows;
-        if (!w.length) return <span className="text-xs text-muted-foreground">None</span>;
-        return (
-          <span className="block max-w-40 truncate text-sm" title={w.map((x) => x.name).join(', ')}>
-            {w[0].name}
-            {w.length > 1 && <span className="text-muted-foreground"> +{w.length - 1}</span>}
-          </span>
-        );
-      },
-    },
-    { accessorKey: 'calls24h', header: ({ column }) => <DataTableColumnHeader column={column} title="Calls · 24h" />, cell: ({ row }) => <span className="tabular-nums">{count(row.original.calls24h)}</span> },
-    {
-      accessorKey: 'errorRate',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Errors" />,
-      cell: ({ row }) =>
-        !row.original.reachable ? (
-          <span className="text-xs font-medium text-destructive">Unreachable</span>
-        ) : row.original.calls24h ? (
-          <span className={`tabular-nums ${errorTone(row.original.errorRate)}`}>{pctText(row.original.errorRate)}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">No calls</span>
-        ),
-    },
-    {
-      id: 'actions',
-      meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
-      cell: ({ row }) => (
-        <StopRowClick>
-          <DataTableRowActions
-            row={row}
-            actions={[
-              { label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) },
-              ...(canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: { original: Row }) => onDelete(r.original) }] : []),
-            ]}
-          />
-        </StopRowClick>
-      ),
-      enableHiding: false,
-    },
-  ];
-}
+type Row = ToolRow & { onRowClick: (t: ToolRow) => void; href?: string };
 
+const columns: ColumnDef<Row>[] = [
+  {
+    // Holds every searched field so the table's own filter keeps the rows the server matched.
+    id: 'name',
+    accessorFn: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Tool" />,
+    cell: ({ row }) => (
+      <div className="flex max-w-72 min-w-44 flex-col" data-testid={`tool-row-${row.original.name}`}>
+        <span className="truncate font-medium">{row.original.title ?? row.original.name}</span>
+        {row.original.title && <code className="truncate font-mono text-xs text-muted-foreground">{row.original.name}</code>}
+      </div>
+    ),
+    enableHiding: false,
+  },
+  {
+    id: 'app',
+    accessorFn: (t) => t.app?.name ?? '',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
+    cell: ({ row }) =>
+      row.original.app ? (
+        <StopRowClick align="start">
+          <Link href={`/integrations/apps/${encodeURIComponent(row.original.app.id)}`} className="text-sm underline-offset-4 hover:underline">
+            {row.original.app.name}
+          </Link>
+        </StopRowClick>
+      ) : (
+        <span className="text-xs text-muted-foreground">Built in</span>
+      ),
+  },
+  { accessorKey: 'kind', header: ({ column }) => <DataTableColumnHeader column={column} title="Kind" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{KIND[row.original.kind]}</span>, filterFn: facetFilterFn },
+  { accessorKey: 'access', header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />, cell: ({ row }) => <AccessBadge access={row.original.access} /> },
+  {
+    accessorKey: 'status',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => (
+      <Badge variant="outline" className={STATUS[row.original.status].className}>
+        {STATUS[row.original.status].label}
+      </Badge>
+    ),
+    filterFn: facetFilterFn,
+  },
+  {
+    id: 'usedBy',
+    accessorFn: (t) => t.usedBy.agents.length + t.usedBy.workflows.length,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Used by" />,
+    cell: ({ row }) => (
+      <StopRowClick align="start">
+        <UsedByCell usedBy={row.original.usedBy} testId={`used-by-${row.original.name}`} />
+      </StopRowClick>
+    ),
+  },
+  {
+    id: 'actions',
+    meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
+    cell: ({ row }) =>
+      row.original.href ? (
+        <StopRowClick>
+          <DataTableRowActions row={row} actions={[{ label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) }]} />
+        </StopRowClick>
+      ) : null,
+    enableHiding: false,
+  },
+];
+
+/** Every tool the team can use, one row each: its app, kind, access, status and who uses it, read joined from the API. */
 export default function ToolsPage() {
   const router = useRouter();
-  // `workflows` lists workflow tools from the tools API; every other view is a module view.
-  const [view, setView] = React.useState<ModuleView | 'workflows'>('all');
-  const workflowTools = useTools({ page: 1, pageSize: 100, filters: { type: ['workflow'] } });
-  const list = useListParams<ModuleFilters>('displayName');
-  const query = useToolModules({ ...list.params, view: view === 'workflows' ? 'all' : view });
-  const discover = useDiscoverModule();
-  const create = useCreateModule();
-  const createBlank = useCreateBlankModule();
-  const [creatingBlank, setCreatingBlank] = React.useState(false);
-  const remove = useDeleteModule();
-  const bulkRemove = useBulkDeleteModules();
-  const [adding, setAdding] = React.useState(false);
-  const [deleting, setDeleting] = React.useState<ToolModule | null>(null);
-  const [bulk, setBulk] = React.useState<ToolModule[] | null>(null);
-  const shownBulk = useSticky(bulk);
-  const [resetKey, setResetKey] = React.useState(0);
+  const list = useListParams<ToolRowFilters>('name');
+  const query = useToolDirectory(list.params);
   const [filterResetKey, setFilterResetKey] = React.useState(0);
-
-  const modules = query.data?.data ?? [];
-  const stats = query.data?.stats;
-  const counts = query.data?.viewCounts;
+  const tools = query.data?.data ?? [];
   const facets = query.data?.facets ?? {};
-  const canBuild = useCanBuild();
-  const cols = React.useMemo(() => columns(setDeleting, canBuild), [canBuild]);
-  const rows: Row[] = React.useMemo(() => modules.map((m) => ({ ...m, onRowClick: (x: ToolModule) => router.push(`/tools/${x.id}`), href: `/tools/${m.id}` })), [modules, router]);
-  const bulkNames = (shownBulk ?? []).map((m) => m.displayName);
-
+  const rows: Row[] = React.useMemo(
+    () =>
+      tools.map((t) => {
+        const href = toolHref(t) ?? undefined;
+        return { ...t, href, onRowClick: () => href && router.push(href) };
+      }),
+    [tools, router],
+  );
+  const withCounts = <K extends string>(column: string, labels: Record<K, string>) =>
+    (Object.keys(labels) as K[]).map((value) => ({ label: labels[value], value, count: facets[column]?.[value] ?? 0 }));
   return (
     <PageLayout
       switcher
       icon={Wrench}
       title="Tools"
-      description="Every tool your team can use, by the app it calls, and which workflows may call them"
+      description="Every tool your team can use, the app it calls and who uses it"
       tabs={<AppsTabs />}
       actions={
         <div className="flex items-center gap-2">
-          {/* Every call these tools made, under Tools since the Apps menu (c-617). */}
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/tools/calls" data-testid="tool-calls-link">
-              Tool calls <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-          {canBuild && (
-          <>
-          <Button variant="outline" onClick={() => setAdding(true)} data-testid="import-operations">
-            <Download className="size-4" /> Import operations
-          </Button>
-          <Button onClick={() => setCreatingBlank(true)} data-testid="new-module">
-            <Plus className="size-4" /> New tool
-          </Button>
-          </>
-          )}
+          <ToolSetActions />
         </div>
       }
     >
-      {query.isPending ? (
-        <PageSkeleton statCards={4} tableRows={8} />
-      ) : query.isError && !query.data ? (
-        <QueryError what="the tools" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <StatCardGrid columns={3}>
-            <StatCard label="Tools" value={stats?.operations} icon={Boxes} footer={{ text: `${plural(stats?.modules ?? 0, 'set')} of tools`, subtext: 'Everything you can see' }} />
-            <StatCard label="Calls · 24h" value={stats ? count(stats.calls24h) : undefined} icon={Activity} footer={{ text: `${pctText(stats?.errorRate ?? 0)} failed`, subtext: 'Through the data gateway' }} />
-            <StatCard label="Expiring soon" value={stats?.expiringModules} icon={CalendarClock} footer={{ text: `${plural(stats?.expiringApprovals ?? 0, 'approval')} within 30 days`, subtext: `${plural(counts?.expired ?? 0, 'module')} already expired` }} />
-          </StatCardGrid>
-          <SavedViewTabs
-            ariaLabel="Tool views"
-            presets={[
-              { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Boxes },
-              { id: 'needs_approval', label: `Needs approval · ${counts?.needs_approval ?? 0}`, icon: ShieldAlert },
-              { id: 'expiring', label: `Expiring soon · ${counts?.expiring ?? 0}`, icon: Clock },
-              { id: 'expired', label: `Expired · ${counts?.expired ?? 0}`, icon: CalendarX },
-              { id: 'failing', label: `Failing · ${counts?.failing ?? 0}`, icon: AlertTriangle },
-              { id: 'workflows', label: `Workflows · ${workflowTools.data?.pagination.total ?? 0}`, icon: Route },
-            ]}
-            savedViews={[]}
-            activePresetId={view}
-            activeSavedViewId={null}
-            onSelectPreset={(id) => {
-              setView(id as ModuleView | 'workflows');
-              list.reset();
-              setResetKey((k) => k + 1);
-            }}
-            onSelectSavedView={() => undefined}
-            onSaveView={() => undefined}
-            onDeleteView={() => undefined}
-            canSave={false}
-          />
-          {view === 'workflows' ? (
-            <WorkflowToolsTable tools={workflowTools.data?.data ?? []} total={workflowTools.data?.pagination.total ?? 0} />
-          ) : (
+      <div className="flex flex-col gap-4">
+        <ToolsTabs />
+        {query.isPending ? (
+          <PageSkeleton statCards={0} tableRows={8} />
+        ) : query.isError && !query.data ? (
+          <QueryError what="the tools" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
+        ) : (
           <DataTableWithViews
-            columns={cols}
+            columns={columns}
             data={rows}
             getRowId={(r) => r.id}
-            initialColumnVisibility={{ version: false, calls24h: false }}
-            searchColumn="displayName"
-            searchPlaceholder="Search tools…"
+            // Who uses each tool is the column the page exists for; it shows whatever else the width leaves out.
+            initialColumnVisibility={{ usedBy: true }}
+            searchColumn="name"
+            searchPlaceholder="Search tools or apps…"
             filters={[
-              { column: 'access', title: 'Access', options: [{ label: 'Read', value: 'read' }, { label: 'Write', value: 'write' }].map((o) => ({ ...o, count: facets.access?.[o.value] ?? 0 })) },
-              { column: 'approvalState', title: 'Approval', options: (['draft', 'approved', 'needs_approval', 'expiring', 'expired'] as const).map((s) => ({ label: APPROVAL_STATE_LABEL[s], value: s, count: facets.approvalState?.[s] ?? 0 })) },
+              { column: 'kind', title: 'Kind', options: withCounts('kind', KIND) },
+              { column: 'status', title: 'Status', options: withCounts('status', Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<ToolStatus, string>) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
-            selectionResetKey={resetKey}
             filterResetKey={filterResetKey}
-            bulkActions={canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => setBulk(rs) }] : undefined}
             serverPagination={serverPagination(list, query)}
-            emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'tools' : 'tools in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' && canBuild ? 'Import operations' : undefined} onCreate={view === 'all' && canBuild ? () => setAdding(true) : undefined} />}
+            emptyState={
+              <ListEmpty
+                icon={Wrench}
+                noun="tools"
+                filtered={list.isFiltered}
+                onClear={() => setFilterResetKey((k) => k + 1)}
+                description="Connect an app to get its tools, or build your own under Custom tools."
+              />
+            }
           />
-          )}
-        </div>
-      )}
-
-      <AddModuleDialog
-        open={adding}
-        onOpenChange={setAdding}
-        onDiscover={(s) => discover.mutateAsync(s)}
-        discovering={discover.isPending}
-        creating={create.isPending}
-        onCreate={async (input) => {
-          const m = await create.mutateAsync(input);
-          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Rename it, add its credential header and request a security review on its page.' });
-          setAdding(false);
-          router.push(`/tools/${m.id}`);
-        }}
-      />
-      <NewModuleDialog
-        open={creatingBlank}
-        onOpenChange={setCreatingBlank}
-        creating={createBlank.isPending}
-        onCreate={async (input) => {
-          const m = await createBlank.mutateAsync(input);
-          toast.success(`Saved ${m.displayName} as a draft`, { description: 'Add operations here.' });
-          setCreatingBlank(false);
-          router.push(`/tools/${m.id}`);
-        }}
-      />
-      <DeleteDialog
-        open={!!deleting}
-        onOpenChange={(o) => !o && setDeleting(null)}
-        entityType="tools"
-        entityName={deleting?.displayName}
-        requireNameConfirmation={!!deleting?.operationCount}
-        description={deleting ? `Its ${plural(deleting.operationCount, 'operation')} are removed from every agent that holds them.${deleting.workflows.length ? ` ${plural(deleting.workflows.length, 'workflow')} still ${deleting.workflows.length === 1 ? 'holds an approval' : 'hold approvals'}; revoke ${deleting.workflows.length === 1 ? 'it' : 'them'} first.` : ''}` : undefined}
-        isLoading={remove.isPending}
-        onConfirm={async () => {
-          if (!deleting) return;
-          try {
-            await remove.mutateAsync(deleting.id);
-            toast.success(`Deleted ${deleting.displayName}`);
-            setDeleting(null);
-          } catch (e) {
-            toast.error(`Couldn’t delete ${deleting.displayName}`, { description: (e as Error).message });
-          }
-        }}
-      />
-      <DeleteDialog
-        open={!!bulk}
-        onOpenChange={(o) => !o && setBulk(null)}
-        entityType="tools"
-        count={bulkNames.length}
-        description="Tools a workflow still holds an approval for are skipped; revoke those approvals first."
-        isLoading={bulkRemove.isPending}
-        onConfirm={async () => {
-          const res = await bulkRemove.mutateAsync(bulk!.map((m) => m.id));
-          toastBulk(res, 'Deleted', 'module', (id) => shownBulk?.find((m) => m.id === id)?.displayName ?? id);
-          setBulk(null);
-          setResetKey((k) => k + 1);
-        }}
-      >
-        <SelectedList names={bulkNames} />
-      </DeleteDialog>
+        )}
+      </div>
     </PageLayout>
   );
 }

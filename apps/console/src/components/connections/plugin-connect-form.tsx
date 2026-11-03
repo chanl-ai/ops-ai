@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import { EnvSection } from '@/components/connections/env-section';
 import { WhoSignsIn, type SignIn } from '@/components/connections/who-signs-in';
-import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
+import { useSignInWindow, type SignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -70,16 +70,18 @@ export function PluginConnectForm({
   const offeredWho = plugin.signIn ?? ['team'];
   const [who, setWho] = React.useState<SignIn>((offeredWho[0] as SignIn | undefined) ?? 'team');
   const asksWho = kind.perPerson && offeredWho.length > 1 && !card.connectionId;
-  const groups = pluginGroups(kind, kinds, plugin, app);
+  const savedEnv = (env: Environment) => Boolean(card.environments[env]?.set);
+  const groupsFor = (env: Environment, k: Kind, a: App) => pluginGroups(k, kinds, plugin, a, savedEnv(env));
   const teamFields = plugin.settings.filter((s) => !s.perEnvironment && !s.locked);
-  const [team, setTeam] = React.useState<Record<string, string>>(() => Object.fromEntries(teamFields.map((s) => [s.name, s.default ?? ''])));
-  const sectionsOf = (g: FieldGroups) => Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, g)]));
+  // The team's settings of a connection already made start blank: a blank one keeps the saved value.
+  const [team, setTeam] = React.useState<Record<string, string>>(() => Object.fromEntries(teamFields.map((s) => [s.name, card.connectionId ? '' : (s.default ?? '')])));
+  const sectionsOf = (k: Kind, a: App) => Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groupsFor(e.id, k, a))]));
   const setOnConnection = keyed(kinds)
     .map((e) => e.id)
     .filter((id) => card.environments[id]?.set);
-  const [state, dispatch] = React.useReducer(reduce, initialState(sectionsOf(groups), card.connectionId ?? null, setOnConnection));
+  const [state, dispatch] = React.useReducer(reduce, initialState(sectionsOf(kind, app), card.connectionId ?? null, setOnConnection));
   // The sign-in window open, the environment it signs in, and whether Save opened it, so the dialog closes once it works.
-  const opened = React.useRef<{ window: Window | null; environment: Environment; closes: boolean } | null>(null);
+  const opened = React.useRef<{ environment: Environment; closes: boolean } | null>(null);
   const turnedOn = React.useRef(plugin.teamOn);
 
   const name = card.name;
@@ -94,10 +96,11 @@ export function PluginConnectForm({
 
   // One environment in the Connect window (c-617); the other is set up from the app page's Settings.
   const envs = ordered(kinds, first).slice(0, 1);
+  const groups = groupsFor(envs[0].id, kind, app);
   const ready = envs.map((e) => e.id).filter((id) => complete(state.sections[id], groups));
 
   const reshape = (nextKind: Kind, nextApp: App) =>
-    dispatch({ type: 'reset', sections: sectionsOf(pluginGroups(nextKind, kinds, plugin, nextApp)), connectionId: state.connectionId });
+    dispatch({ type: 'reset', sections: sectionsOf(nextKind, nextApp), connectionId: state.connectionId });
 
   const runTest = React.useCallback(
     async (connectionId: string, env: Environment): Promise<boolean> => {
@@ -110,25 +113,29 @@ export function PluginConnectForm({
     [test],
   );
 
-  React.useEffect(() => {
-    const onMessage = (e: MessageEvent<ConnectedMessage>) => {
+  const signInWindow = useSignInWindow({
+    onFailed: (why) => {
       const waiting = opened.current;
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || !waiting || e.source !== waiting.window) return;
+      opened.current = null;
+      if (waiting) dispatch({ type: 'failed', environment: waiting.environment, message: why });
+    },
+    onConnected: (m) => {
+      const waiting = opened.current;
+      if (!waiting) return;
       opened.current = null;
       dispatch({ type: 'signed-in', environment: waiting.environment });
+      if (waiting.closes) {
+        // Save closes once access is allowed; the test runs after, and a failure shows on the account's row.
+        dispatch({ type: 'done' });
+        toast.success(`${name} is on for the team`);
+        void test.mutateAsync({ connectionId: m.connectionId, environment: waiting.environment }).catch(() => undefined);
+        close.current();
+        return;
+      }
       dispatch({ type: 'start', environment: waiting.environment, status: 'testing' });
-      runTest(e.data.connectionId, waiting.environment)
-        .then((ok) => {
-          if (!ok || !waiting.closes) return;
-          dispatch({ type: 'done' });
-          toast.success(`${name} is on for the team`);
-          close.current();
-        })
-        .catch((err) => dispatch({ type: 'failed', environment: waiting.environment, message: message(err) }));
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [runTest, name]);
+      runTest(m.connectionId, waiting.environment).catch((err) => dispatch({ type: 'failed', environment: waiting.environment, message: message(err) }));
+    },
+  });
 
   /** Turns the plugin on for one environment with its section's values; the answer names its connection. */
   const turnOn = async (env: Environment): Promise<string> => {
@@ -147,21 +154,26 @@ export function PluginConnectForm({
     return id;
   };
 
-  const startSignIn = async (id: string, env: Environment, closes = false) => {
+  const startSignIn = async (w: SignInWindow, id: string, env: Environment, closes = false) => {
     const start = await signIn.mutateAsync({ connectionId: id, environment: env, account: 'team' });
-    opened.current = { window: openSignIn(start, id), environment: env, closes };
+    opened.current = { environment: env, closes };
+    w.go(start, id);
     dispatch({ type: 'signing-in' });
   };
 
   const sectionTest = async (env: Environment) => {
     if (state.busy) return;
+    // A sign-in window opens in the click, before any call, so a pop-up blocker lets it through.
+    const w = kind.signsIn ? signInWindow.open(card.name, card.logo) : null;
+    if (kind.signsIn && !w) return;
     dispatch({ type: 'start', environment: env, status: 'testing' });
     try {
       const id = await turnOn(env);
-      if (kind.signsIn) await startSignIn(id, env);
+      if (w) await startSignIn(w, id, env);
       else await runTest(id, env);
 
     } catch (e) {
+      w?.fail(message(e));
       dispatch({ type: 'failed', environment: env, message: message(e) });
     }
   };
@@ -170,24 +182,31 @@ export function PluginConnectForm({
     if (state.busy) return;
     // Save completes one environment, production when it is ready, and signs in for that same one.
     const env = leading(kinds, ready) ?? envs[0].id;
-    const saving = toSave(state, ready, env);
+    // A team setting typed on an app already made is saved with the environment being completed.
+    const teamTyped = Boolean(card.connectionId) && Object.values(team).some((v) => v.trim() !== '');
+    const saving = teamTyped ? [...new Set([env, ...toSave(state, ready, env)])] : toSave(state, ready, env);
+    // A signed-in environment saved with nothing typed keeps its sign-in; an account signed in through this dialog
+    // already does too. Anything else signs in again, as its app or address may have changed.
+    const signs = kind.signsIn && !state.signedIn.includes(env) && (saving.length > 0 || !state.saved.includes(env));
+    const w = signs ? signInWindow.open(card.name, card.logo) : null;
+    if (signs && !w) return;
     dispatch({ type: 'start', environment: env, status: 'saving' });
     try {
       let id = state.connectionId ?? '';
       for (const e of saving) id = await turnOn(e);
-      // An account signed in through this dialog already: Save does not open a second window for it.
-      if (kind.signsIn && !state.signedIn.includes(env)) return void (await startSignIn(id, env, true));
+      if (w) return void (await startSignIn(w, id, env, true));
       dispatch({ type: 'done' });
       toast.success(`${card.name} is on for the team`);
       onClose();
     } catch (e) {
+      w?.fail(message(e));
       dispatch({ type: 'failed', environment: env, message: message(e) });
     }
   };
 
   /** Cancel removes what this dialog made: the connection, then the team's switch, which forgets the removed connection. */
   const cancel = async () => {
-    opened.current?.window?.close();
+    signInWindow.close();
     opened.current = null;
     if (state.created && state.connectionId) {
       try {
@@ -251,7 +270,7 @@ export function PluginConnectForm({
             </FormField>
           )}
           {teamFields.map((s) => (
-            <FormField key={s.name} id={`plugin-${s.name}`} label={s.label} optional={Boolean(s.default)}>
+            <FormField key={s.name} id={`plugin-${s.name}`} label={s.label} optional={Boolean(s.default) || Boolean(card.connectionId)} hint={card.connectionId ? 'Blank keeps the saved value.' : undefined}>
               <Input id={`plugin-${s.name}`} value={team[s.name] ?? ''} onChange={(e) => setTeam((t) => ({ ...t, [s.name]: e.target.value }))} />
             </FormField>
           ))}

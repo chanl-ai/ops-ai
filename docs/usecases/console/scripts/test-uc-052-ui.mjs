@@ -48,7 +48,7 @@ await withUiStack(
       }
       check('no page offers or shows a "Moves money" class', seen.length === 0, seen);
 
-      await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('button', { name: /^Access/ }).first().click({ timeout: 60_000 });
       const filter = (await page.getByRole('option').allInnerTexts()).map((t) => t.replace(/\s*\d+\s*$/, '').trim());
       await page.keyboard.press('Escape');

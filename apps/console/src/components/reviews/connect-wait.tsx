@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { openSignIn } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { useSession } from '@/hooks/auth-queries';
 import { useCan } from '@/hooks/me-queries';
@@ -23,6 +23,10 @@ export function ConnectWait({ review }: { review: Review }) {
   const { session } = useSession();
   const start = useStartSignIn();
   const mayRunAsTeam = useCan('connections', 'run') !== false;
+  const signIn = useSignInWindow({
+    onConnected: () => void qc.invalidateQueries({ queryKey: ['reviews'] }),
+    onFailed: (why) => toast.error('Couldn’t connect your account', { description: why }),
+  });
   const asTeam = useMutation({
     mutationFn: () => sdk((ops) => ops.raw.agents.reviews_run_as_team_account({ path: { thread_id: review.id } })),
     onSuccess: () => {
@@ -34,12 +38,17 @@ export function ConnectWait({ review }: { review: Review }) {
   if (!c) return null;
   // Only the person it waits for can connect their own account; anyone else sees whom it waits for.
   const mine = !!c.person && c.person === session?.user.email;
-  const connect = () =>
-    c.connectionId &&
+  const connect = () => {
+    if (!c.connectionId) return;
+    const id = c.connectionId;
+    // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
+    const w = signIn.open(c.app);
+    if (!w) return;
     start.mutate(
-      { connectionId: c.connectionId, environment: 'production', account: 'self' },
-      { onSuccess: (s) => void openSignIn(s, c.connectionId!), onError: (e) => toast.error('Couldn’t start the sign-in', { description: e.message }) },
+      { connectionId: id, environment: 'production', account: 'self' },
+      { onSuccess: (s) => w.go(s, id), onError: (e) => w.fail(e.message) },
     );
+  };
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="connect-wait">
       <p className="text-xs text-muted-foreground">

@@ -18,6 +18,12 @@ export const useConnectionKinds = () => useTeamQuery({ queryKey: [...KEY, 'kinds
 export const useMyConnections = (every = false) =>
   useTeamQuery({ queryKey: [...MINE, every], queryFn: () => api.connections.mine(every), refetchOnMount: 'always' });
 
+/** Reads the person's connections again, after a sign-in window says they connected. */
+export function useRefreshMine() {
+  const qc = useQueryClient();
+  return () => void qc.invalidateQueries({ queryKey: MINE });
+}
+
 function useConnectionMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });

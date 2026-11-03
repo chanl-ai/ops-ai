@@ -8,12 +8,14 @@ import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { AppsTabs } from '@/components/connections/apps-tabs';
-import { ConnectSmallDialog, connectsSmall } from '@/components/connections/connect-small-dialog';
+import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
+import { testFailure } from '@/components/connections/systems-grid';
 import { ConnectSystemDialog, type ConnectMode } from '@/components/connections/connect-system-dialog';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { ListEmpty } from '@/components/shared/query-states';
-import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { PageLayout } from '@/components/page-layout';
 import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -103,7 +105,7 @@ function EnvState({ env }: { env?: Env }) {
 
 /**
  * One app's page (c-607): who you are signed in as and one button to connect your own
- * account, the team's account, then Tools, Skills, Sign-in and secrets, Usage and Settings. Everything comes from one
+ * account, the team's account, then Tools, Skills, Sign-in and secrets, Logs and Settings. Everything comes from one
  * answer, GET /v1/apps/{id}.
  */
 export function AppPageView({ appId }: { appId: string }) {
@@ -112,7 +114,6 @@ export function AppPageView({ appId }: { appId: string }) {
   const kinds = useConnectionKinds();
   const start = useStartSignIn();
   const signOut = useSignOutMine();
-  const opened = React.useRef<Window | null>(null);
   const [dialog, setDialog] = React.useState<{ mode: ConnectMode; environment?: string } | null>(null);
   // The Connect window, opened from the Not connected state: the small one when the app signs in through Ops AI's app.
   const [connecting, setConnecting] = React.useState(false);
@@ -121,16 +122,18 @@ export function AppPageView({ appId }: { appId: string }) {
   // Several named accounts of one app (c-608) are behind the several_accounts install flag; off, one account.
   const several = useFlag('several_accounts');
 
-  React.useEffect(() => {
-    const onMessage = (e: MessageEvent<ConnectedMessage>) => {
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || e.source !== opened.current) return;
-      opened.current = null;
-      toast.success(e.data.account ? `Connected as ${e.data.account}` : `${e.data.connection} is connected`);
+  const test = useTestEnvironment();
+  const signInWindow = useSignInWindow({
+    onConnected: (m) => {
+      toast.success(m.account ? `Connected as ${m.account}` : `${m.connection} is connected`);
       void app.refetch();
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [app]);
+      // Connected once access is allowed; the first test runs after, and a failure shows on the account's row.
+      const asked = signedInAs.current;
+      if (asked?.account === 'team') test.mutate({ connectionId: m.connectionId, environment: asked.environment }, { onSettled: () => void app.refetch() });
+    },
+    onFailed: (why) => toast.error('The sign-in did not finish', { description: why }),
+  });
+  const signedInAs = React.useRef<{ account: 'self' | 'team'; environment: string } | null>(null);
 
   if (app.isPending || kinds.isPending) return <RecordSkeleton />;
   if (app.isError) return <QueryError what="this app" error={app.error} onRetry={() => app.refetch()} retrying={app.isFetching} />;
@@ -146,6 +149,8 @@ export function AppPageView({ appId }: { appId: string }) {
   const connected = card.state ? card.state === 'connected' || card.state === 'expired' || card.state === 'refused' : set.length > 0;
   // People connect their own account only where the connection lets them; a team-only one shows its account alone.
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
+  // The team account signed in, but the test call after it failed: shown on its row with Reconnect.
+  const failure = testFailure(card);
 
   type Account = NonNullable<AppData['accounts']>[number];
   // The page's answer lists the team's accounts, the default first; an older answer without them shows the one.
@@ -155,19 +160,18 @@ export function AppPageView({ appId }: { appId: string }) {
       ? [{ id: conn.id, name: conn.name, default: true, state: conn.status === 'needs_reconnect' ? 'expired' : 'connected', status: conn.status, statusDetail: conn.statusDetail, mine: data.me.connected, account: data.me.account, pinned: false }]
       : [];
 
-  const signIn = (account: 'self' | 'team', connectionId = conn?.id) =>
-    connectionId &&
-    start.mutate(
-      { connectionId, environment, account },
-      {
-        onSuccess: (s) => void (opened.current = openSignIn(s, connectionId)),
-        onError: (e) => toast.error('Couldn’t start the sign-in', { description: e.message }),
-      },
-    );
+  const signIn = (account: 'self' | 'team', connectionId = conn?.id) => {
+    if (!connectionId) return;
+    // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
+    const w = signInWindow.open(card.name, card.logo);
+    if (!w) return;
+    signedInAs.current = { account, environment };
+    start.mutate({ connectionId, environment, account }, { onSuccess: (s) => w.go(s, connectionId), onError: (e) => w.fail(e.message) });
+  };
 
   // The person's own account is a row of Accounts (the final Apps design): Connected as them, or Not signed in.
   const me = { connected: data.me.connected, account: data.me.account, email: session?.user.email };
-  const tabs: [string, string][] = [['tools', 'Tools'], ['resources', 'Resources'], ['secrets', 'Secrets'], ['usage', 'Usage'], ['settings', 'Settings']];
+  const tabs: [string, string][] = [['tools', 'Tools'], ['resources', 'Resources'], ['secrets', 'Secrets'], ['logs', 'Logs'], ['settings', 'Settings']];
 
   return (
     <PageLayout
@@ -235,11 +239,21 @@ export function AppPageView({ appId }: { appId: string }) {
                     <span className="text-xs text-muted-foreground">Team account</span>
                   </span>
                 }
-                description={a.mine ? `Connected as ${a.account ?? 'you'}` : (a.statusDetail ?? undefined)}
+                description={
+                  a.default && failure ? (
+                    <span className="text-warning-text" data-testid="app-test-failed">
+                      Signed in, but a test call failed: {failure}
+                    </span>
+                  ) : a.mine ? (
+                    `Connected as ${a.account ?? 'you'}`
+                  ) : (
+                    (a.statusDetail ?? undefined)
+                  )
+                }
                 trailing={
-                  conn.mayManage && (a.state === 'expired' || a.state === 'refused' || a.status === 'needs_reconnect') && a.default ? (
+                  conn.mayManage && (a.state === 'expired' || a.state === 'refused' || a.status === 'needs_reconnect' || (a.default && failure)) ? (
                     // Reconnect is the team account signing in again on the app's own page; nothing is typed.
-                    <Button size="sm" onClick={() => signIn('team', a.id)} data-testid="app-reconnect">
+                    <Button size="sm" onClick={() => signIn('team', a.id)} data-testid={a.default ? 'app-reconnect' : `account-reconnect-${a.name}`}>
                       <RefreshCw />
                       Reconnect
                     </Button>
@@ -323,8 +337,11 @@ export function AppPageView({ appId }: { appId: string }) {
         <TabsContent value="secrets">
           <SecretsTab conn={conn} envs={envs} onReconnect={() => setDialog({ mode: 'edit' })} />
         </TabsContent>
-        <TabsContent value="usage">
-          <UsageTab app={data} />
+        <TabsContent value="logs">
+          {/* The same call log as Tool calls, fixed to this app's tools. */}
+          <div className="flex flex-col gap-2" data-testid="app-logs">
+            <ToolCallsView fixed={{ moduleId: card.moduleIds }} totals={false} emptyText={`No call of ${card.name}’s tools yet.`} />
+          </div>
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab app={data} kinds={all} onSetUp={(e) => setDialog({ mode: 'edit', environment: e })} />
@@ -340,22 +357,23 @@ export function AppPageView({ appId }: { appId: string }) {
           onOpenChange={(o) => !o && (setDialog(null), void app.refetch())}
         />
       )}
-      {another && card.pluginId && (
+      {another && card.pluginId && all && connectsInWindow(card, all) ? (
+        <ConnectWindow card={card} kinds={all} another open onOpenChange={(o) => !o && (setAnother(false), void app.refetch())} />
+      ) : another && card.pluginId ? (
         <AnotherAccountDialog
           app={card.name}
           pluginId={card.pluginId}
           signInOptions={card.plugin?.signIn ?? []}
           onClose={() => setAnother(false)}
-          onMade={(id) => {
+          onMade={() => {
             setAnother(false);
             void app.refetch();
-            if (kind?.signsIn) signIn('team', id);
           }}
         />
-      )}
+      ) : null}
       {connecting &&
-        (all && connectsSmall(card, all) ? (
-          <ConnectSmallDialog card={card} kinds={all} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
+        (all && connectsInWindow(card, all) ? (
+          <ConnectWindow card={card} kinds={all} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
         ) : (
           <ConnectSystemDialog
             target={card.kind === 'plugin' && card.plugin ? { kind: 'plugin', card } : conn ? { kind: 'connection', connectionId: conn.id } : { kind: 'module', moduleId: card.moduleIds[0] ?? '', name: card.name }}
@@ -369,7 +387,6 @@ export function AppPageView({ appId }: { appId: string }) {
 }
 
 type AppTool = AppData['tools'][number];
-type AppRun = AppData['usage'][number];
 
 const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
   {
@@ -518,60 +535,6 @@ function SecretsTab({ conn, envs, onReconnect }: { conn: AppData['connection']; 
         </div>
       )}
     </Section>
-  );
-}
-
-const RUN_COLUMNS: ColumnDef<AppRun>[] = [
-  {
-    id: 'tool',
-    accessorFn: (r) => r.title ?? r.target,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Tool" />,
-    cell: ({ row }) => <span className="font-medium">{row.original.title ?? row.original.target}</span>,
-  },
-  {
-    // Whose account the call ran as (the call log's runAs): a person's own, or the team account.
-    id: 'as',
-    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : 'Team account'),
-    header: ({ column }) => <DataTableColumnHeader column={column} title="As" />,
-    cell: ({ row }) =>
-      row.original.runAs?.kind === 'person' ? (
-        <span>{row.original.runAs.email}</span>
-      ) : (
-        <Badge variant="secondary">Team account</Badge>
-      ),
-  },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant="outline" className={row.original.status === 'ok' ? OK : 'border-destructive/40 bg-destructive/10 text-destructive'}>
-        {row.original.status === 'ok' ? 'Succeeded' : 'Failed'}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'latencyMs',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Duration" />,
-    cell: ({ row }) => `${row.original.latencyMs} ms`,
-  },
-  {
-    accessorKey: 'at',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="When" />,
-    cell: ({ row }) => relativeTime(row.original.at),
-  },
-];
-
-function UsageTab({ app }: { app: AppData }) {
-  return (
-    <div className="flex flex-col gap-2" data-testid="app-usage">
-      <p className="text-sm text-muted-foreground">This team’s runs of {app.card.name}’s tools, newest first, each with whom it ran as.</p>
-      <DataTableWithViews
-        columns={RUN_COLUMNS}
-        data={app.usage}
-        getRowId={(r) => r.id}
-        emptyState={<ListEmpty icon={KeyRound} noun="runs" filtered={false} description="No runs yet." />}
-      />
-    </div>
   );
 }
 

@@ -61,6 +61,7 @@ import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
 import { pageOptions } from '../options';
 import { bulk, field, id, list, notFound, respond } from './runtime';
+import type { ToolRow } from '@/lib/types/tool-directory';
 import * as F from './fixtures';
 import { countGates, countSteps, SEED_GRAPHS, templateGraph } from './graphs';
 import { runsFor, startedRun, testTurnFor, versionsFor } from './history';
@@ -94,6 +95,17 @@ export function createMockApi(): OpsApi {
   const teamWorkflows = () => workflows.filter((w) => inTeam(w.owner));
   // A workflow tool is an exposure every team's agents may be granted, like an MCP exposure is for every team's staff.
   const toolInTeam = (t: Tool) => !!t.workflow || inTeam(agents.filter((a) => t.grantedAgentIds.includes(a.id)).map((a) => a.owner));
+  const toolRow = (t: Tool): ToolRow => ({
+    id: t.workflow ? `workflow:${t.workflow.workflowId}` : t.name,
+    name: t.name,
+    title: null,
+    app: t.workflow ? null : { id: `app:${t.system.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: t.system },
+    kind: t.workflow ? 'workflow' : t.type === 'http' && t.moduleId ? 'app' : 'custom',
+    access: t.workflow ? 'workflow' : t.access,
+    status: t.enabled ? 'ready' : 'needs_approval',
+    usedBy: { agents: teamAgents().filter((a) => t.grantedAgentIds.includes(a.id)).map((a) => ({ id: a.id, name: a.name })), workflows: [] },
+    moduleId: t.moduleId ?? null,
+  });
   // Integrations own every connection; sources, modules and mailboxes hold its id and read its status through these.
   // Assigned below once the dependants' stores exist; only called at request time.
   let integrations: ReturnType<typeof createIntegrationsMock> | undefined;
@@ -1222,6 +1234,17 @@ export function createMockApi(): OpsApi {
     prompts: prompts.api,
 
     tools: {
+      // The directory the API joins: each tool's app, kind, status and the team's agents granted it.
+      directory: (p) =>
+        respond((m) =>
+          list(
+            tools.filter(toolInTeam).map(toolRow),
+            p,
+            { text: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`, value: (t, k) => (k === 'app' ? (t.app?.id ?? '') : field(t, k)), facetKeys: ['app', 'kind', 'status'] },
+            m,
+          ),
+        ),
+      one: (tid) => respond(() => toolRow(tools.find((t) => t.name === tid || t.id === tid) ?? notFound('Tool'))),
       list: (p) =>
         respond((m) => {
           const scoped = tools.filter(toolInTeam);

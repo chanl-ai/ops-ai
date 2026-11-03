@@ -14,9 +14,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppsTabs } from '@/components/connections/apps-tabs';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
-import { openSignIn } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { useConnectionKinds, useDisconnect, useMyConnections, useStartSignIn } from '@/hooks/connections-queries';
+import { useConnectionKinds, useDisconnect, useMyConnections, useRefreshMine, useStartSignIn } from '@/hooks/connections-queries';
 import { useTeam } from '@/hooks/use-team';
 import { shortDate } from '@/lib/format';
 import type { MyConnection } from '@/lib/types/connections';
@@ -32,12 +32,19 @@ function useNoun(c: MyConnection): string {
 /** An OAuth connection the person has not connected: their own sign-in opens in a window, as from the chat. */
 function ConnectButton({ c, label = 'Connect' }: { c: MyConnection; label?: string }) {
   const start = useStartSignIn(c.connectionId);
+  const refresh = useRefreshMine();
+  const signIn = useSignInWindow({
+    onConnected: () => (toast.success(`${c.connection} is connected`), refresh()),
+    onFailed: (why) => toast.error(`Couldn’t connect ${c.connection}`, { description: why }),
+  });
   return (
     <Button
       size="sm"
-      onClick={async () => {
-        const begun = await start.mutateAsync({ environment: c.environment });
-        openSignIn(begun, c.connectionId);
+      onClick={() => {
+        // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
+        const w = signIn.open(c.connection);
+        if (!w) return;
+        start.mutate({ environment: c.environment }, { onSuccess: (s) => w.go(s, c.connectionId), onError: (e) => w.fail(e.message) });
       }}
       disabled={start.isPending}
       data-testid={`connect-${c.connectionId}`}

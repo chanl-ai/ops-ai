@@ -34,7 +34,7 @@ export function createGovernanceHttp(get: Get, send: Send, qs: (p: ListParams & 
 
 /**
  * The tool-call log on tools-service's own `GET /v1/executions`: every gateway call, newest first, filtered by the
- * thread it ran for (`runId`). The route serves rows and pages, not the log's stats or facets, and has no read of one
+ * thread it ran for (`runId`), one tool (`tool`) or an app's tool sets (`moduleId`). The route serves rows and pages, not the log's stats or facets, and has no read of one
  * call's payloads yet, so opening a row reports that instead of a sheet.
  */
 export function createExecutionsHttp(get: Get): GovernanceApi['toolCalls'] {
@@ -43,6 +43,10 @@ export function createExecutionsHttp(get: Get): GovernanceApi['toolCalls'] {
       const q = new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize) });
       const thread = p.filters?.runId?.[0];
       if (thread) q.set('thread', thread);
+      const tool = p.filters?.tool?.[0];
+      if (tool) q.set('tool', tool);
+      // The route takes one tool set; an app with several sends each, for the route to take them all once it does.
+      for (const m of p.filters?.moduleId ?? []) q.append('moduleId', m);
       return get(`/executions?${q}`);
     },
     get: () => Promise.reject(new ApiError('tools-service does not serve one call’s request and response yet.', 501)),

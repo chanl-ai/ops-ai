@@ -284,11 +284,18 @@ const CLIENT_SECRET: KindField = { name: 'clientSecret', label: 'Client secret',
  * any other kind asks for its own fields, which the plugin keeps as the connection's credentials. The system's address
  * and test address come from the plugin, so they are never asked.
  */
-export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: App): FieldGroups {
+export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: App, saved = false): FieldGroups {
+  // An environment already set keeps its saved values, which the connection does not send back: its fields start blank
+  // and a blank one is left out of the save, so saving without retyping never resets a value to its default.
   const perEnv: KindField[] = plugin.settings
     .filter((s) => s.perEnvironment && !s.locked)
-    .map((s) => ({ name: s.name, label: s.label, secret: s.secret, required: !s.default, advanced: false, default: s.default }));
-  if (kind.signsIn) return { main: [...(app === 'own' ? [CLIENT_ID, CLIENT_SECRET] : []), ...perEnv], more: [] };
+    .map((s) =>
+      saved
+        ? { name: s.name, label: s.label, secret: s.secret, required: false, advanced: false, default: null, help: 'Blank keeps the saved value.' }
+        : { name: s.name, label: s.label, secret: s.secret, required: !s.default, advanced: false, default: s.default },
+    );
+  const client = saved ? [CLIENT_ID, CLIENT_SECRET].map((f) => ({ ...f, required: false, help: 'Blank keeps the saved value.' })) : [CLIENT_ID, CLIENT_SECRET];
+  if (kind.signsIn) return { main: [...(app === 'own' ? client : []), ...perEnv], more: [] };
   // A field the plugin fixes (how its key is sent) is never asked: what a team typed would replace it.
   const asked = kind.fields.filter((f) => !plugin.fixed.includes(f.name));
   return { main: [...asked.filter((f) => !f.advanced), ...perEnv], more: [...asked.filter((f) => f.advanced), ...kinds.certificate] };

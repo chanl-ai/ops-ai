@@ -82,7 +82,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
           return {
             ...list(rows, p, {
               text: (c) => `${c.target} ${c.system} ${c.workflowName} ${c.agentName} ${c.runId} ${c.caseId ?? ''} ${c.record ?? ''}`,
-              value: (c, k) => (k === 'approval' ? c.approval.kind : field(c, k)),
+              value: (c, k) => (k === 'approval' ? c.approval.kind : k === 'tool' ? c.target : field(c, k)),
               facetKeys: ['gateway', 'operation', 'approval', 'status', 'workflowId'],
             }, m),
             stats: {

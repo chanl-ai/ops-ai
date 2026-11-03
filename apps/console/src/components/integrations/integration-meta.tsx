@@ -83,9 +83,9 @@ export function ConnectionChip({ connection, className }: { connection: Connecti
   const s = STATUS[connection.status];
   return (
     <Link
-      href={`/integrations/${connection.id}`}
+      href={`/integrations/apps/${encodeURIComponent(connection.id)}`}
       className={cn('inline-flex max-w-full items-center gap-1.5 rounded-md border bg-card py-0.5 pr-2 pl-0.5 text-xs hover:bg-muted', className)}
-      title={`${connection.name} · ${s.label}. Managed in Integrations.`}
+      title={`${connection.name} · ${s.label}. Opens the app’s page.`}
       data-testid="connection-chip"
     >
       <SystemMark kind={connection.kind} size="sm" />

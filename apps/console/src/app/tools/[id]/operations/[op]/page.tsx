@@ -11,9 +11,12 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { OperationSheet } from '@/components/tools/operation-sheet';
+import { ToolTabs } from '@/components/tools/tool-tabs';
+import { UsedBySection } from '@/components/tools/used-by';
 import { RestTool } from '@/components/tools/rest-tool';
 import { baseOfApp, draftOf, patchOf, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Button } from '@/components/ui/button';
+import { useToolRow } from '@/hooks/queries';
 import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useSetModuleConnection, useTestModule, useToolModule, useUpdateOperation } from '@/hooks/tool-module-queries';
 import { ApiError } from '@/lib/api/contract';
@@ -26,6 +29,8 @@ export default function OperationWorkbenchPage() {
   const params = useParams<{ id: string; op: string }>();
   const name = decodeURIComponent(params.op);
   const mod = useToolModule(params.id);
+  // Who uses this tool, joined by the API: the agents granted it and the workflows that call it.
+  const usedBy = useToolRow(name);
   const test = useTestModule();
   const update = useUpdateOperation();
   const [policyOpen, setPolicyOpen] = React.useState(false);
@@ -94,6 +99,8 @@ export default function OperationWorkbenchPage() {
     <>
       {op.executor === 'http' ? (
         <RestTool
+          tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
+          aside={<UsedBySection row={usedBy} />}
           moduleId={m.id}
           moduleName={m.displayName}
           base={base}
@@ -122,6 +129,8 @@ export default function OperationWorkbenchPage() {
         />
       ) : (
       <ToolWorkbench
+        tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
+        aside={<UsedBySection row={usedBy} />}
         moduleId={m.id}
         moduleName={m.displayName}
         base={base}

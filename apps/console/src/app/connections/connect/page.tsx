@@ -5,18 +5,24 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
-import { goSignIn } from '@/components/connections/sign-in';
+import { goSignIn, READY_MESSAGE, START_MESSAGE, STOP_MESSAGE, type WindowMessage } from '@/components/connections/sign-in';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOpenConnectLink } from '@/hooks/connections-queries';
 import { ApiError } from '@/lib/api/contract';
 
+const Starting = ({ app, logo }: { app?: string | null; logo?: string | null }) => (
+  <SignInCard testId="connect-starting" app={app} logo={logo} title={app ? `Connecting to ${app}` : 'Connecting your account'} description="You sign in on the app’s own page next.">
+    <Skeleton className="h-4 w-3/4" />
+    <Skeleton className="h-4 w-1/2" />
+  </SignInCard>
+);
+
 /**
  * Where a chat's Connect card sends the person (c-558): opens the single-use link made for them and goes on to the
  * system's own sign-in. Errors keep them here: another person's link, an expired or used one.
  */
-function ConnectPage() {
-  const link = useSearchParams().get('link') ?? '';
+function LinkConnect({ link }: { link: string }) {
   const open = useOpenConnectLink();
   const started = React.useRef(false);
   React.useEffect(() => {
@@ -39,14 +45,42 @@ function ConnectPage() {
     return (
       <SignInCard testId="connect-failed" title="The sign-in could not start" description={open.error.message} footer={<Button onClick={() => window.location.reload()}>Try again</Button>} />
     );
-  return (
-    <SignInCard testId="connect-starting" title="Connecting your account" description="You sign in as yourself, on the system's own page.">
-      <Skeleton className="h-4 w-3/4" />
-      <Skeleton className="h-4 w-1/2" />
-    </SignInCard>
-  );
+  return <Starting />;
+}
+
+/**
+ * The window a Connect button opens on the click: it shows which app it connects while the console starts the
+ * sign-in, then goes on to the app's page; a start that failed shows here and in the window that opened it.
+ */
+function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
+  const [failed, setFailed] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const opener = window.opener as Window | null;
+    const onMessage = (e: MessageEvent<WindowMessage>) => {
+      if (e.origin !== window.location.origin || e.source !== opener) return;
+      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.connectionId);
+      else if (e.data?.type === STOP_MESSAGE) setFailed(e.data.message);
+    };
+    window.addEventListener('message', onMessage);
+    opener?.postMessage({ type: READY_MESSAGE }, window.location.origin);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+  if (failed)
+    return (
+      <SignInCard testId="connect-failed" app={app} logo={logo} title="Connection failed" description={failed} footer={<Button variant="outline" onClick={() => window.close()} data-testid="connect-close">Close</Button>} />
+    );
+  return <Starting app={app} logo={logo} />;
+}
+
+function ConnectPage() {
+  const params = useSearchParams();
+  const link = params.get('link') ?? '';
+  const app = params.get('app');
+  if (app && !link) return <OpenedConnect app={app} logo={params.get('logo')} />;
+  return <LinkConnect link={link} />;
 }
 
 export default function Page() {
   return <ConnectPage />;
 }
+

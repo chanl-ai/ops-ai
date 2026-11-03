@@ -54,6 +54,8 @@ export interface ToolCallRow {
   cost?: number;
   /** Who the call runs as (`sub`): a user for chat and approvals, a workflow identity for workflow steps, a process principal for mailbox runs. Filled by the tools-service executions log. */
   subject?: CallIdentity<'user' | 'workflow' | 'process' | 'service'>;
+  /** Whose account of the app the call signed in with: a person's own (by email) or the team account. */
+  runAs?: { kind: 'person' | 'team'; email?: string | null } | null;
   /** Who acts on the subject's behalf (`act`), e.g. the agent; absent when the subject acts directly. */
   actor?: CallIdentity<'user' | 'agent' | 'workflow' | 'service'>;
   /** The step (idempotency key) within the run. */
@@ -95,7 +97,18 @@ export interface ToolCallDetail extends ToolCallRow {
 }
 
 /** `runId` is the thread the calls ran for; the Cases run sheet links here with it. */
-export type ToolCallFilters = { gateway?: string[]; operation?: string[]; approval?: string[]; status?: string[]; workflowId?: string[]; runId?: string[] };
+export type ToolCallFilters = {
+  gateway?: string[];
+  operation?: string[];
+  approval?: string[];
+  status?: string[];
+  workflowId?: string[];
+  runId?: string[];
+  /** One tool's calls (its operation name), as its page's Logs tab lists them. */
+  tool?: string[];
+  /** The calls of an app's tool sets, as the app page's Logs tab lists them. */
+  moduleId?: string[];
+};
 
 export interface ToolCallStats {
   failed: number;

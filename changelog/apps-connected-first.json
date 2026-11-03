@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Apps lists your connected apps first",
+  "description": "Apps shows the apps your team has connected above the ones it can connect, each card with its state (Connected, Needs sign-in, Signed in but test failed, Not installed) and one action. A category filter narrows the list, and clicking anywhere on a card opens the app's page.",
+  "tag": "improved"
+}
