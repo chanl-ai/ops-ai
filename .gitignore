@@ -19,11 +19,8 @@ __pycache__/
 .run/
 .data/
 
-# codeloop store lives in .codeloop/ and is tracked; only its runtime state is ignored
-.codeloop/state/
-/.codeloop/cards.json
-/.codeloop/state
-/.codeloop/skills.index.yaml
+# A lane worktree's own settings (name, number, card, ports), written by scripts/lane.sh.
+/.lane
 
 # Generated DBA scripts (make db-ddl, db-upgrade-sql, db-release); a release attaches them.
 /dist/

@@ -43,6 +43,36 @@ clone.
 Before calling a console change done, open every changed route in a browser and check it renders
 without console errors, including the `?mock=slow`, `?mock=error` and `?mock=empty` states.
 
+## Branches and pull requests
+
+`main` is the trunk. It changes only through a pull request that CI has passed. Merging deploys staging; a tag
+promotes a release.
+
+| Step | Command |
+|---|---|
+| Start a change | `git switch -c <type>/<scope>-<change> origin/main`, for example `fix/tools-own-account-run` |
+| Commit | `git commit` on your branch, as often as you like; the pre-commit hook runs the checks the staged files need |
+| Open the PR | `git push -u origin HEAD`, then `gh pr create`; one change per PR, small enough to review in one sitting |
+| Keep up with main | `git rebase origin/main` (or merge it) on your own branch |
+
+One branch is one concern. A name says what changed, never who asked or which ticket. `git stash`, `git push --force`
+and pushes straight to `main` are refused by the hooks.
+
+### Working on several changes at once: lanes
+
+Instead of a second clone, make a lane: a git worktree of this repo beside it, with its own branch, ports and
+database. Lanes share one `.git` and the dependency caches, so a new lane is ready in about a minute.
+
+| Command | What it does |
+|---|---|
+| `make lane NAME=backend N=1` | `../ops-ai-lane-backend` on a fresh branch from `origin/main`, every port +1000, its own database |
+| `make lanes` | Lists the main checkout and every lane: branch, stack up or down, last commit, PR |
+| `make lane-next BRANCH=fix/x` | Inside a lane: start the next change from `origin/main`, migrating the lane's database. Refuses while work is uncommitted or unpushed |
+| `make lane-rm NAME=backend` | Removes a lane whose work is pushed |
+
+Every `make` target run inside a lane (`make up`, `make api`, `make usecase-test`) acts on that lane's own stack. The
+main checkout keeps its stack on the usual ports (console :3016).
+
 ## Commit messages
 
 Conventional commits: `type(scope): subject`.

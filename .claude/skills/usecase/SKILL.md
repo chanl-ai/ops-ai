@@ -44,7 +44,7 @@ broken, with the step that failed; the detailed checks stay underneath as the ev
 
 ## Rules
 
-1. Scripted model only: the runner removes model keys, and a real model call needs the owner's approved count in
+1. Scripted model only: the runner removes model keys, and a real model call needs the maintainers' approved count in
    `APPROVED_REAL_CALLS=<n>`.
 2. A story works only when its proving step passed and none of its steps failed. A script that stops early leaves the
    rest broken at the step that never ran.

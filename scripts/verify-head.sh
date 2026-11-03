@@ -47,7 +47,10 @@ git -C "$root" archive "$head" | tar -x -C "$tmp"
 cp "$root/.env" "$tmp/.env" 2>/dev/null || true
 cd "$tmp"
 pnpm install --offline --silent >/dev/null 2>&1 || pnpm install --prefer-offline --silent >/dev/null
-uv sync --frozen --quiet  # the export has no .venv; the lock as committed, as make install does
+uv sync --frozen --all-packages --all-groups --quiet  # the export has no .venv; the lock as committed, every member
+# The pools below run side by side in this one environment. If each `uv run` also synced, one pool rewrote packages
+# while another imported them (cryptography failed to load mid-run), so everything is installed once, above.
+export UV_NO_SYNC=1
 db="${OPS_TEST_DATABASE_URL_HEAD:-postgresql+asyncpg://ops:ops@localhost:$pg_port/$db_name}"
 echo "verify-head: export of $head ready in ${SECONDS}s"
 if [ -n "${VERIFY_RUN:-}" ]; then

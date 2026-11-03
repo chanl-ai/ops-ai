@@ -10,8 +10,6 @@ are in `apps/console/CLAUDE.md`, and the design docs start at `docs/README.md`.
 
 ## Four rules every change follows
 
-The owner set these, and a review refuses a change that breaks one, even when a card or brief asks for it.
-
 | Rule | What it means here |
 |---|---|
 | One of each thing (DRY) | One API per resource, one component per pattern, one helper per rule, one source per fact. Before writing something, find the existing one and use or extend it. |
@@ -19,7 +17,6 @@ The owner set these, and a review refuses a change that breaks one, even when a 
 | Use cases are configuration | Ops AI must serve thousands of use cases like the levy example. A use case is workflows, document types, agents, tools and settings a builder configures, never a code path, a screen or a field written for one use case. Screens and nodes are generic and read what to show from the step's settings and data; levy is one worked example among several in tests and docs. |
 | Design in layers | Inside a service: domain, then app, then adapters, then api, each depending only inward. Across the product: services, then API, then SDK, then console and CLI as thin peers. Subsystems never call each other to act; workflows compose them (`docs/architecture/service-map.md`). Anything that may later live outside us (a vault, models, search) sits behind a port with ours as one adapter. |
 
-Every spec has a short "Layers and reuse" section: each change's layer and the existing piece it reuses.
 
 ## Service map
 

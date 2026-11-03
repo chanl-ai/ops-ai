@@ -1,5 +1,8 @@
 #!/bin/sh
 # Blocks commits that break the console's standards (apps/console/CLAUDE.md). Fix the code; do not bypass with --no-verify.
-# The gates run on the commit's own content (scripts/verify-staged.sh), so another builder's unfinished file never blocks it.
+# The gates run on the commit's own content (scripts/verify-staged.sh), so an unrelated unfinished file never blocks it.
 cd "$(git rev-parse --show-toplevel)" || exit 1
+# A local extra check runs first when one is installed (.git/hooks/pre-commit.local).
+d=$(git rev-parse --git-common-dir)
+if [ -x "$d/hooks/pre-commit.local" ]; then "$d/hooks/pre-commit.local" || exit 1; fi
 scripts/verify-staged.sh || { echo "pre-commit: pnpm verify failed on the staged content (see apps/console/CLAUDE.md)"; exit 1; }

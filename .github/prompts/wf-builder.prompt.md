@@ -14,7 +14,7 @@ Make targets: python3 scripts/wf_builder.py, python3 scripts/wf_builder_examples
 
 A developer says what the workflow is for. The skill picks the seeded example closest to it, adapts the steps, writes
 `workflows/<id>.json` beside the developer, has the engine on the named profile check it, and shows the steps and
-every way out of each step. Nothing is created until the developer says so. The ops CLI is not built yet (c-527), so
+every way out of each step. Nothing is created until the developer says so. The ops CLI is not built yet, so
 `scripts/wf_builder.py` calls the Python SDK on the profile the developer names. Every command below runs as
 `uv run python scripts/wf_builder.py ...` from the repository root, which brings in the SDK;
 `python3 scripts/wf_builder.py` is short for that here.

@@ -1,5 +1,5 @@
-# Git for the shared tree, in commands a person can read. Several builders edit one working tree, so these touch only
-# the files named; the raw git commands that would touch everyone's work are refused by scripts/git-rules.py.
+# Git in commands a person can read: commit named files with the checks, and lanes (worktrees) for parallel work.
+# scripts/git-rules.py refuses only what loses work or skips review (stash, hard reset, clean, --no-verify, pushes to main).
 #
 #   make commit FILES='a.py b.md' MSG='fix(tools): fill query placeholders' CARD=c-586 [BODY='why; what ran']
 #   make unstage FILES='a.py'          take files out of the shared index, keeping every line in the working tree
@@ -48,3 +48,22 @@ whats-mine: ## Show what `make commit FILES=…` would commit, against HEAD
 git-rules: ## Print the git rules for the shared tree and check them
 	@python3 -c "import importlib.util as u; s=u.spec_from_file_location('r','scripts/git-rules.py'); m=u.module_from_spec(s); s.loader.exec_module(m); [print('-', w, '\n  instead:', i) for _, w, i in m.RULES]"
 	@python3 scripts/git-rules.py --self-test
+
+# Lanes: worktrees beside this checkout, one per area, each on its own branch, ports and database (scripts/lane.sh).
+#   make lane NAME=backend N=1       ../ops-ai-lane-backend on a fresh branch from origin/main, ports +1000
+#   make lanes                       every lane: number, branch, stack up or down, last commit, PR
+#   make lane-next BRANCH=feat/api-own-account-run [BASE=feat/x]   inside a lane: start the next card
+#   make lane-rm NAME=backend        remove a lane whose work is pushed
+.PHONY: lane lanes lane-next lane-rm
+
+lane: ## Make a lane worktree NAME on ports +N×1000 (N 1-5)
+	@bash scripts/lane.sh add "$(NAME)" "$(N)" $(BASE)
+
+lanes: ## List the main checkout and every lane: branch, stack, last commit, PR
+	@bash scripts/lane.sh list
+
+lane-next: ## Inside a lane: start the next card on BRANCH from origin/main (or BASE), migrating the lane's database
+	@bash scripts/lane.sh next "$(BRANCH)" $(BASE)
+
+lane-rm: ## Remove lane NAME once its work is pushed
+	@bash scripts/lane.sh remove "$(NAME)"
