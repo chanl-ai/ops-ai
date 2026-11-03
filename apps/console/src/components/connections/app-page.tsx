@@ -247,9 +247,8 @@ export function AppPageView({ appId }: { appId: string }) {
                     <span className="text-warning-text" data-testid={a.default ? 'app-test-failed' : `account-test-failed-${a.name}`}>
                       Signed in, but a test call failed: {testFailed(a)}
                     </span>
-                  ) : a.mine ? (
-                    `Connected as ${a.account ?? 'you'}`
                   ) : (
+                    // The team account's own state; the person's own sign-in is their row below, never this one.
                     (a.statusDetail ?? undefined)
                   )
                 }
@@ -297,12 +296,12 @@ export function AppPageView({ appId }: { appId: string }) {
                 leading={<Logo name={card.name} logo={card.logo} />}
                 title={
                   <span className="flex flex-wrap items-center gap-2" data-testid="app-me">
-                    {me.connected ? `Connected as ${me.account ?? 'you'}` : (me.email ?? 'Your account')}
+                    {me.email ?? 'Your account'}
                     <AccountState status={me.connected ? 'connected' : 'unsigned'} />
                     <span className="text-xs text-muted-foreground">Your account</span>
                   </span>
                 }
-                description={me.connected ? undefined : 'Connect my account to use it'}
+                description={<span data-testid="app-me-state">{me.connected ? `Connected as ${me.account ?? me.email ?? 'you'}` : 'Connect my account to use it'}</span>}
                 trailing={
                   me.connected ? (
                     <LoadingButton
@@ -418,7 +417,7 @@ function ToolsTab({ app }: { app: AppData }) {
   return (
     <div className="flex flex-col gap-2" data-testid="app-tools">
       <div>
-        <h3 className="text-sm font-semibold">Installed tools</h3>
+        <h3 className="text-sm font-semibold">Tools</h3>
         <p className="text-sm text-muted-foreground">
           {plural(app.tools.length, 'tool')}, shared by every team that connects {app.card.name}.
         </p>

@@ -257,7 +257,11 @@ class Authenticator:
             raise AuthFailed("CONNECTION_REVOKED", f"{name} is revoked; reconnect it before tools use it.")
         setting = conn["environments"].get(env)
         if setting is None:
-            raise AuthFailed("CONNECTION_NOT_SET", f"{name} is not set for {env}; set it before tools use it there.")
+            raise AuthFailed(
+                "CONNECTION_NOT_SET",
+                f"{name} has no {env} account yet, so this call cannot sign in there. "
+                "A team admin connects one under the app's Settings, Environments.",
+            )
         # A credential goes to its own system only: the module's address must be the connection's, scheme, host and
         # port, before any secret is read; another allow-listed host gets nothing.
         plain: dict[str, Any] = dict(setting["settings"] or {})

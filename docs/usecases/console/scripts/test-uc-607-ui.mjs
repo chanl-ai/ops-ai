@@ -346,7 +346,7 @@ try {
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await allow(popup, 'james.person');
           // The person's own row is always drawn; it reads Connected as them once the page refetches after the sign-in.
-          const me = james.getByTestId('app-me');
+          const me = james.getByTestId('app-me-state');
           await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
           const said = (await me.innerText()).replace(/\s+/g, ' ');
           await shoot(james, 'app-connected-as');

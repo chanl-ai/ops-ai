@@ -62,17 +62,19 @@ export function ToolCallSheet({
           <Section title="Call" flush bodyClassName="px-4">
             <KeyValues
               rows={[
-                ...(c.subject ? ([['Runs as', `${c.subject.name} · ${c.subject.kind}`]] as [string, ReactNode][]) : []),
-                ...(c.actor ? ([['Acting for them', `${c.actor.name} · ${c.actor.kind}`]] as [string, ReactNode][]) : []),
+                // Whose account of the app the call signed in with, worded as the As column on the list.
+                ...(c.runAs?.kind === 'person' || c.runAs?.kind === 'team'
+                  ? ([['As', c.runAs.kind === 'person' ? (c.runAs.email ?? 'A person’s own account') : 'Team account']] as [string, ReactNode][])
+                  : []),
                 ['Workflow', <Link key="w" href={`/workflows/${c.workflowId}`} className="underline-offset-4 hover:underline">{c.workflowName}</Link>],
                 ['Agent', c.agentName],
                 ['Run', <Link key="r" href={`/workflows/${c.workflowId}?tab=runs`} className="font-mono text-xs underline-offset-4 hover:underline">{c.runId}</Link>],
                 ...(c.caseId ? ([['Case', <Link key="c" href={`/cases/${c.caseId}`} className="font-mono text-xs underline-offset-4 hover:underline">{c.caseId}</Link>]] as [string, ReactNode][]) : []),
-                ['Identity', call ? <code key="i" className="font-mono text-xs">{call.identity}</code> : undefined],
+                ...(call?.identity ? ([['Identity', <code key="i" className="font-mono text-xs">{call.identity}</code>]] as [string, ReactNode][]) : []),
                 ...(c.step ? ([['Step', <code key="s" className="font-mono text-xs">{c.step}</code>]] as [string, ReactNode][]) : []),
                 ['Latency', ms(c.latencyMs)],
                 ...(c.tokens ? ([['Tokens', `${count(c.tokens.input)} in · ${count(c.tokens.output)} out`], ['Cost', c.cost != null ? cad(c.cost) : undefined]] as [string, ReactNode][]) : []),
-                ['Request id', call ? <code key="q" className="font-mono text-xs">{call.requestId}</code> : undefined],
+                ...(call?.requestId ? ([['Request id', <code key="q" className="font-mono text-xs">{call.requestId}</code>]] as [string, ReactNode][]) : []),
               ]}
             />
           </Section>

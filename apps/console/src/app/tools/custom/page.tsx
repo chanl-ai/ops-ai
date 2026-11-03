@@ -236,7 +236,7 @@ export default function CustomToolsPage() {
           <StatCardGrid columns={3}>
             <StatCard label="Tools" value={stats?.operations} icon={Boxes} footer={{ text: `${plural(stats?.modules ?? 0, 'set')} of tools`, subtext: 'Everything you can see' }} />
             <StatCard label="Calls · 24h" value={stats ? count(stats.calls24h) : undefined} icon={Activity} footer={{ text: `${pctText(stats?.errorRate ?? 0)} failed`, subtext: 'Through the data gateway' }} />
-            <StatCard label="Expiring soon" value={stats?.expiringModules} icon={CalendarClock} footer={{ text: `${plural(stats?.expiringApprovals ?? 0, 'approval')} within 30 days`, subtext: `${plural(counts?.expired ?? 0, 'module')} already expired` }} />
+            <StatCard label="Expiring soon" value={stats?.expiringModules} icon={CalendarClock} footer={{ text: `${plural(stats?.expiringApprovals ?? 0, 'approval')} within 30 days`, subtext: `${plural(counts?.expired ?? 0, 'app')} already expired` }} />
           </StatCardGrid>
           <SavedViewTabs
             ariaLabel="Tool views"
