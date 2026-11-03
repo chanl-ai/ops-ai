@@ -22,8 +22,9 @@ from ops_service_kit import openapi
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.settings import Settings
 from ops_tools.app import create_gateway_app
+from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Tokens
-from ops_tools.connections.routes import connections_router
+from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress_routes import egress_router
 from ops_tools.expression_routes import expressions_router
@@ -35,7 +36,7 @@ from ops_tools.modules.service import ModuleService
 from ops_tools.opa import OpaClient
 from ops_tools.platform_events import member_removed_handlers
 from ops_tools.plugins.host import PluginHost
-from ops_tools.plugins.routes import plugins_router
+from ops_tools.plugins.routes import PluginAccounts, plugins_router
 from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
@@ -49,7 +50,6 @@ from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 from ops_tools.store.send_policies import SendPolicies
-from ops_tools.systems import Systems, systems_router
 from ops_tools.tools import LocalToolRunner
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +77,7 @@ def document() -> dict[str, Any]:
         egress=None,
         console_url=None,
     )
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {})
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url)),
         registry=ToolRegistry(catalog),
@@ -92,14 +93,10 @@ def document() -> dict[str, Any]:
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
-            connections_router(connection_service, directory),
-            plugins_router(
-                PluginHost(ModuleStore(engine), PluginBindings(engine), {}),
-                connection_service,
-                directory,
-            ),
-            plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), {})),
-            systems_router(Systems(connection_service, ModuleStore(engine)), directory),
+            accounts_router(connection_service, directory),
+            plugins_router(PluginAccounts(host, connection_service), directory),
+            plugin_templates_router(host),
+            apps_router(Apps(connection_service, ModuleStore(engine), host), directory),
             platform_events_router(member_removed_handlers(connection_service.store, credentials)),
         ),
     )

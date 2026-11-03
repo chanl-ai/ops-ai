@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
-from .connections.records import slot_for
+from .connections.records import account_for
 from .defaults import ensure_defaults
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
@@ -101,7 +101,7 @@ class ToolRegistry:
     ) -> None:
         """Serves every tenant: each lookup names the tenant of the caller it is for. The Platform tools module the
         registry writes for a tenant that has none belongs to no team (c-433). `connections` is read for the
-        environment a module's call signs in with."""
+        account a module's call signs in with."""
         self.catalog = catalog
         self.modules = modules
         self.connections = connections
@@ -303,9 +303,10 @@ class ToolRegistry:
         account: str | None = None,
         person: str | None = None,
     ) -> Resolved | None:
-        """`run` is the kind of run the call is made in (test or production). The module comes back with the
-        environment its call signs in with (`environment`, from connections.records.slot_for), which picks its address,
-        instance and hosts; a listing or an access check, which shows the same tools either way, takes production's.
+        """`run` is the kind of run the call is made in (test or production). The module comes back with the account
+        its call signs in with (`connection_id`, from connections.records.account_for, and whether it is a `sandbox`),
+        which picks its address, instance and hosts; a listing or an access check, which shows the same tools either
+        way, takes production's.
         `account` names one of the team's accounts of the plugin's app for the call (c-608); none uses `person`'s
         default account, else the team's."""
         if self.modules is None:
@@ -339,5 +340,10 @@ class ToolRegistry:
                 if self.connections is not None and module.get("connection_id")
                 else None
             )
-            module = {**module, "environment": slot_for((conn or {}).get("environments") or {}, run) or run}
+            if conn is not None and self.connections is not None:
+                # A test run takes the app's sandbox account when the team has one (records.account_for).
+                found = await self.connections.accounts(tenant_id, str(conn["team_id"]), str(conn["app_id"]))
+                conn = account_for(conn, found, run) or conn
+                module = {**module, "connection_id": conn["id"]}
+            module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
         return Resolved(op["access"], op["executor"], module, op)

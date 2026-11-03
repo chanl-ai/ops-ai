@@ -1,13 +1,13 @@
 """The MCP adapter (c-356): an outside assistant (Claude Code, Cursor) lists and runs a team's tools at
-`/mcp/{env}/{team}` over streamable HTTP, through the same `GatewayCalls.call` as POST /v1/calls.
+`/mcp/{team}` over streamable HTTP, through the same `GatewayCalls.call` as POST /v1/calls.
 
 The adapter only translates. It resolves the caller from the Bearer key or token with ops_identity, checks the URL's
 team is the caller's and that the caller holds `tools:run` there, and hands the request to the official SDK's
 stateless server; tools/list reads the registry and tools/call is one gateway call. Nothing is decided or executed
 here: the registry, the schema, OPA, the rate window, the executor and the call log are the gateway's.
 
-Slice 1 lists the team's read operations only and answers on the test URL only; a write called by name reaches the
-gateway, which refuses it without a person's approval. Production answers 403 until a team turns it on (slice 8).
+Slice 1 lists the team's read operations only. Every call is a test run, so it uses an app's sandbox account when the
+team has one, and a write called by name reaches the gateway, which refuses it without a person's approval.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from starlette.types import Receive, Scope, Send
 
 from ops_access import can
 from ops_identity import Auth, Principal
-from ops_service_kit.errors import ApiError, Forbidden, NotFound, ServiceUnavailable
+from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable
 from ops_service_kit.http import error_body
 from ops_service_kit.ids import new_id
 
@@ -37,7 +37,7 @@ from .registry import ToolRegistry
 from .store.modules import Aggregate
 
 PRODUCTION = "production"
-_PATH = re.compile(r"^(?:/mcp)?/(?P<env>[^/]+)/(?P<team>[^/]+)/?$")
+_PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)/?$")
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 
 
@@ -47,7 +47,6 @@ class McpCaller:
 
     principal: Principal
     team: Team
-    environment: str
 
 
 class McpAdapter:
@@ -77,22 +76,18 @@ class McpAdapter:
         found = _PATH.match(scope["path"])
         try:
             if found is None:
-                raise NotFound("MCP URL; use /mcp/test/{team}")
-            env, team_id = found["env"], found["team"]
+                raise NotFound("MCP URL; use /mcp/{team}")
+            team_id = found["team"]
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
             # 401 without a credential, 403 team_forbidden when the key or token belongs to another team.
             principal = await self.auth.identity.bearer(headers.get("authorization"), team_id)
-            if env == PRODUCTION:
-                raise Forbidden("Production is not open over MCP for this team.", code="production_off")
-            if env != TEST:
-                raise NotFound(f"MCP environment {env}; use test")
             can(principal, "tools", "run", team=team_id, what="this team's tools")
         except ApiError as e:
             await _refuse(send, e)
             return
         # An id the seed does not know is nobody's team, so it sees no module (never the all-scope fallback).
         team = self.directory.team_by_id(team_id) or Team(team_id, team_id, (), "owned")
-        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team, env)
+        scope.setdefault("state", {})["mcp_caller"] = McpCaller(principal, team)
         if self.manager is None:
             await _refuse(send, ServiceUnavailable("The MCP server is starting or stopping."))
             return
@@ -126,7 +121,8 @@ class McpAdapter:
             input=dict(params.arguments or {}),
             # Every MCP call is its own: a read is not deduplicated, and a write never runs here without a person.
             key=new_id("mcp"),
-            run_context={"environment": who.environment},
+            # A test run: it takes the app's sandbox account when the team has one, and its writes wait for a person.
+            run_context={"environment": TEST},
         )
         outcome = await self.calls.call(
             who.principal, request, channel=MCP, client_name=_client_name(ctx), sees=self._sees(who.team)

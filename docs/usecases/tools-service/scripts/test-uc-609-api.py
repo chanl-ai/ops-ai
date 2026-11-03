@@ -70,7 +70,7 @@ def reached(fake: Any) -> str:
 
 
 def review(gw: httpx.Client, who: dict[str, str]) -> dict[str, Any]:
-    return dict(data(gw.get(f"/v1/plugins/{ID}/team/update", headers=who)) or {})
+    return dict(data(gw.get(f"/v1/apps/plugin:{ID}/update", headers=who)) or {})
 
 
 with ExitStack() as stack:
@@ -91,7 +91,7 @@ with ExitStack() as stack:
         gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-609"}, headers=sam)
         on = [
             gw.put(
-                f"/v1/plugins/{ID}/team",
+                f"/v1/apps/plugin:{ID}/team",
                 json={"enabled": True, "credentials": {"token": SECRETS["token"]}},
                 headers=who,
             )
@@ -186,9 +186,9 @@ with ExitStack() as stack:
         )
 
         # 7. A review another upgrade replaced is refused; the take records 0.2.0.
-        stale = gw.post(f"/v1/plugins/{ID}/team/update", json={"digest": "0" * 64}, headers=priya)
+        stale = gw.post(f"/v1/apps/plugin:{ID}/update", json={"digest": "0" * 64}, headers=priya)
         taken = gw.post(
-            f"/v1/plugins/{ID}/team/update", json={"digest": (r.get("installed") or {}).get("digest")}, headers=priya
+            f"/v1/apps/plugin:{ID}/update", json={"digest": (r.get("installed") or {}).get("digest")}, headers=priya
         )
         check(
             "7 a stale review is refused with update_changed, and taking the update records 0.2.0 with nothing waiting",

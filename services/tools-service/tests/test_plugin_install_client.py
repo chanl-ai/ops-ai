@@ -22,13 +22,11 @@ from ops_tools.connections.service import ConnectionService
 from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
-from ops_tools.plugins.routes import plugins_router
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
-from ops_tools.systems import Systems, systems_router
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
@@ -54,18 +52,16 @@ def _rig(install: dict[str, PluginClient]):
                 audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes
             ),
         )
-        app = build_app(engine, seed, tenant, auth=auth, install_clients=install)
         vault = credentials()
         store = ConnectionStore(engine, install)
+        host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, [Loaded("desk", desk, None)], store)
+        app = build_app(engine, seed, tenant, auth=auth, install_clients=install, plugins=host)
         directory = Directory.from_seed(seed, datetime.now(UTC))
         connections = ConnectionService(
             store, SecretResolver(SecretStore(engine), vault),
             vault, Tokens(store, vault, None, None), directory, egress=None,
             console_url=CONSOLE_URL,
         )  # fmt: skip
-        host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, [Loaded("desk", desk, None)], store)
-        app.include_router(plugins_router(host, connections, directory))
-        app.include_router(systems_router(Systems(connections, ModuleStore(engine), host), directory))
         hooks = {"response": [response_checker(app)]}
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks
@@ -81,7 +77,7 @@ bare = _rig({})
 
 
 async def _card(client: httpx.AsyncClient, tenant: str) -> dict[str, Any]:
-    got = await client.get("/v1/systems", headers=team_admin(tenant))
+    got = await client.get("/v1/apps", headers=team_admin(tenant))
     assert got.status_code == 200, got.text
     return next(c for c in got.json()["data"] if c["kind"] == "plugin")
 
@@ -90,17 +86,13 @@ async def test_an_install_client_signs_a_team_in_with_no_fields_and_no_admin_ste
     client, connections, _ = installed
     card = await _card(client, tenant)
     assert card["managedClient"] is True and card["plugin"]["platformApp"] is True, card
-    listed = await client.get("/v1/plugins", headers=team_admin(tenant))
-    view = next(p for p in listed.json()["data"]["plugins"] if p["id"] == ID)
-    assert view["platformApp"] == {"clientId": "install-client-id", "secretSet": True}
-    on = await client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=team_admin(tenant))
+    on = await client.put(f"/v1/apps/plugin:{ID}/team", json={"enabled": True}, headers=team_admin(tenant))
     assert on.status_code == 200, on.text
     conn = await connections.store.get(tenant, on.json()["data"]["connectionId"])
     assert conn is not None
-    env = dict(conn["environments"]["production"])
-    assert env["settings"]["clientId"] == "install-client-id" and env["platform_app"] == ID
-    assert not env.get("secrets"), "the install's secret is never copied into a team"
-    proof = await connections._client_proof(_caller(tenant), conn, env, "sign-in Desk")  # pyright: ignore[reportPrivateUsage]
+    assert conn["settings"]["clientId"] == "install-client-id" and conn["platform_app"] == ID
+    assert not conn.get("secrets"), "the install's secret is never copied into a team"
+    proof = await connections._client_proof(_caller(tenant), conn, "sign-in Desk")  # pyright: ignore[reportPrivateUsage]
     assert proof.secret == "install-secret-5d1e"
 
 

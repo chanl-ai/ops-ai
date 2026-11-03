@@ -89,12 +89,12 @@ with ExitStack() as stack:
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-581"}, headers=sam)
     login = sf["authorize_url"].rsplit("/", 1)[0]
     team_on = {"enabled": True, "settings": {"login_url": login}, "clientId": "ops-ai-acme", "clientSecret": "s3"}
-    turned = gw.put(f"/v1/plugins/{PLUGIN}/team", json=team_on, headers=priya)
+    turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     connection_id = str((data(turned) or {}).get("connectionId") or "con_missing")
-    started = gw.post(f"/v1/connections/{connection_id}/sign-in", json={"environment": "production"}, headers=priya)
+    started = gw.post(f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in", json={}, headers=priya)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "acme.integration")
     done = gw.post(
-        f"/v1/connections/{connection_id}/sign-in/complete",
+        f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )

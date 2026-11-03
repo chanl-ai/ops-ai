@@ -2,7 +2,8 @@
 `usage`, each a few methods over the generated operations, which call the services' routes as they are.
 
 An app is named by its id on the Apps page: `plugin:<plugin id>` for an app a plugin brings, `builtin:<name>` for one
-of ours, or a custom app's connection id. An account is a connection id (the team account, or another named one)."""
+of ours, or a custom app's id. An app's accounts are the team account and any other named one, a sandbox among them (the
+account a test run uses); an account method left without `account` acts on the app's default account."""
 
 from __future__ import annotations
 
@@ -26,16 +27,6 @@ def _connected(card: dict[str, Any]) -> bool:
     # A built-in app is always there; any other reads connected only once its team account signed in or its test
     # passed, which the card's `state` says (c-616); `status` is the account's display status.
     return card.get("kind") == "builtin" or card.get("state") == "connected"
-
-
-def _environment(page: dict[str, Any], given: str | None) -> str:
-    """The environment a run uses: the one given, else test when the app's account is set up for it, else production
-    when that is (a plugin's app is turned on for production first). The page lists every environment, set or not."""
-    if given:
-        return given
-    envs = cast(dict[str, dict[str, Any]], (page.get("connection") or {}).get("environments") or {})
-    test, production = ((envs.get(e) or {}).get("set") for e in ("test", "production"))
-    return "production" if production and not test else "test"
 
 
 def _account(page: dict[str, Any]) -> str:
@@ -63,31 +54,43 @@ def _rows(found: Any) -> list[dict[str, Any]]:
     return list(cast(dict[str, Any], found).get("data") or []) if isinstance(found, dict) else list(found)
 
 
+def _keys(
+    made: dict[str, Any], base_address: str, settings: dict[str, Any] | None, secrets: dict[str, str] | None
+) -> dict[str, Any]:
+    """The first account's settings: the base address its tools call, and the key they send."""
+    return {
+        "revision": made["revision"],
+        "settings": {**(settings or {}), "baseUrl": base_address},
+        "secretValues": secrets or {},
+    }
+
+
 class Apps:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
     def list(self, *, connected: bool | None = None) -> list[dict[str, Any]]:
         """The Apps page's cards; `connected` keeps only the connected ones (True) or only the rest (False)."""
-        cards = cast(list[dict[str, Any]], self._raw.tools.connections_list_systems())
+        cards = cast(list[dict[str, Any]], self._raw.tools.apps_list_apps())
         return [c for c in cards if connected is None or _connected(c) == connected]
 
     def get(self, app: str) -> dict[str, Any]:
-        """One app's page: its card, account, the caller's own sign-in, tools, skills and latest calls."""
-        return cast(dict[str, Any], self._raw.tools.connections_get_app(app))
+        """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest calls."""
+        return cast(dict[str, Any], self._raw.tools.apps_get_app(app))
 
     def turn_on(self, app: str, **fields: Any) -> dict[str, Any]:
         """Turns a plugin's app on for the team; `fields` are the turn-on's (accountName, credentials, signIn...)."""
-        return cast(
-            dict[str, Any], self._raw.tools.plugins_set_team_plugin(plugin_of(app), {"enabled": True, **fields})
-        )
+        plugin_of(app)
+        return cast(dict[str, Any], self._raw.tools.apps_set_team_app(app, {"enabled": True, **fields}))
 
     def turn_off(self, app: str) -> dict[str, Any]:
-        return cast(dict[str, Any], self._raw.tools.plugins_set_team_plugin(plugin_of(app), {"enabled": False}))
+        plugin_of(app)
+        return cast(dict[str, Any], self._raw.tools.apps_set_team_app(app, {"enabled": False}))
 
     def users(self, app: str) -> dict[str, Any]:
         """The team's agents and workflows that use the app's tools: what turning it off stops."""
-        return cast(dict[str, Any], self._raw.tools.plugins_app_users(plugin_of(app)))
+        plugin_of(app)
+        return cast(dict[str, Any], self._raw.tools.apps_app_users(app))
 
     def add_custom(
         self,
@@ -98,20 +101,14 @@ class Apps:
         base_address: str,
         settings: dict[str, Any] | None = None,
         secrets: dict[str, str] | None = None,
-        environment: str = "test",
     ) -> dict[str, Any]:
-        """A custom app (rest, openapi or mcp): its connection, holding the base address and the key its tools use."""
+        """A custom app (rest, openapi or mcp) as its first account, holding the base address and the key its tools
+        use."""
         if kind == "mcp":
-            return cast(dict[str, Any], self._raw.tools.connections_connect_mcp({"name": name, "url": base_address}))
-        made = cast(
-            dict[str, Any], self._raw.tools.connections_create_connection({"name": name, "authKind": auth_kind})
-        )
-        body = {
-            "revision": made["revision"],
-            "settings": {**(settings or {}), "baseUrl": base_address},
-            "secretValues": secrets or {},
-        }
-        return cast(dict[str, Any], self._raw.tools.connections_set_environment(made["id"], environment, body))
+            return cast(dict[str, Any], self._raw.tools.apps_add_app({"name": name, "serverUrl": base_address}))
+        made = cast(dict[str, Any], self._raw.tools.apps_add_app({"name": name, "authKind": auth_kind}))
+        body = _keys(made, base_address, settings, secrets)
+        return cast(dict[str, Any], self._raw.tools.apps_change_account(made["id"], made["id"], body))
 
 
 class Credentials:
@@ -122,7 +119,7 @@ class Credentials:
 
     def list(self) -> list[dict[str, Any]]:
         """Each app's credential: Ops AI's app or the team's own client, its permissions, accounts and last test."""
-        return cast(list[dict[str, Any]], self._raw.tools.connections_list_app_credentials())
+        return cast(list[dict[str, Any]], self._raw.tools.apps_list_app_credentials())
 
     def create(
         self,
@@ -131,65 +128,76 @@ class Credentials:
         client_id: str,
         client_secret: str,
         scopes: list[str] | None = None,
-        environment: str = "production",
+        account: str | None = None,
     ) -> dict[str, Any]:
         """Adds the team's own client to an app the team set up: its client id, secret and permissions (all when left
-        out). The answer is the credential's row; it never carries the secret."""
-        body: dict[str, Any] = {
-            "app": app, "clientId": client_id, "clientSecret": client_secret, "environment": environment
-        }  # fmt: skip
+        out), on the app's default account or `account`. The answer is the credential's row; it never carries the
+        secret."""
+        body: dict[str, Any] = {"app": app, "clientId": client_id, "clientSecret": client_secret}
         if scopes is not None:
             body["scopes"] = scopes
-        return cast(dict[str, Any], self._raw.tools.connections_create_app_credential(body))
+        if account is not None:
+            body["account"] = account
+        return cast(dict[str, Any], self._raw.tools.apps_create_app_credential(body))
 
     def set(
-        self, app: str, *, client_id: str, client_secret: str | None = None, environment: str = "production"
+        self, app: str, *, client_id: str, client_secret: str | None = None, account: str | None = None
     ) -> dict[str, Any]:
         """The team's own client on the app's account; the secret goes in once and no answer carries it."""
-        account = _account(self._apps.get(app))
-        detail = cast(dict[str, Any], self._raw.tools.connections_get_connection(account))
+        account = account or _account(self._apps.get(app))
+        detail = cast(dict[str, Any], self._raw.tools.apps_get_account(app, account))
         body: dict[str, Any] = {"revision": detail["revision"], "settings": {"clientId": client_id}}
         if client_secret:
             body["secretValues"] = {"clientSecret": client_secret}
-        return cast(dict[str, Any], self._raw.tools.connections_set_environment(account, environment, body))
+        return cast(dict[str, Any], self._raw.tools.apps_change_account(app, account, body))
 
-    def test(self, app: str, *, environment: str = "production") -> dict[str, Any]:
+    def test(self, app: str, *, account: str | None = None) -> dict[str, Any]:
         """Test with my account: where to send the browser; `finish` hands back what the sign-in page was given."""
-        body = {"environment": environment}
-        return cast(dict[str, Any], self._raw.tools.connections_check_credential(_account(self._apps.get(app)), body))
+        account = account or _account(self._apps.get(app))
+        return cast(dict[str, Any], self._raw.tools.apps_check_credential(app, account, {}))
 
-    def finish(self, app: str, *, state: str, code: str) -> dict[str, Any]:
+    def finish(self, app: str, *, state: str, code: str, account: str | None = None) -> dict[str, Any]:
+        account = account or _account(self._apps.get(app))
         body = {"state": state, "code": code}
-        return cast(dict[str, Any], self._raw.tools.connections_check_credential(_account(self._apps.get(app)), body))
+        return cast(dict[str, Any], self._raw.tools.apps_check_credential(app, account, body))
 
 
 class Accounts:
-    def __init__(self, raw: Any) -> None:
-        self._raw = raw
+    def __init__(self, raw: Any, apps: Apps) -> None:
+        self._raw, self._apps = raw, apps
 
-    def connect(self, account: str, *, environment: str = "production", team: bool = False) -> dict[str, Any]:
+    def _default(self, app: str, account: str | None) -> str:
+        return account or _account(self._apps.get(app))
+
+    def add(self, app: str, name: str, *, sandbox: bool = False, **fields: Any) -> dict[str, Any]:
+        """Another account of an app the team has: a sandbox, which test runs use, or another named one; `fields` are
+        a plugin account's turn-on fields (credentials, clientId...)."""
+        body = {"name": name, "sandbox": sandbox, **fields}
+        return cast(dict[str, Any], self._raw.tools.apps_add_account(app, body))
+
+    def connect(self, app: str, *, account: str | None = None, team: bool = False) -> dict[str, Any]:
         """Where to send the browser to sign in: the caller's own account, or (`team`) the team account."""
-        body = {"environment": environment, "account": "team" if team else "self"}
-        return cast(dict[str, Any], self._raw.tools.connections_start_sign_in(account, body))
+        body = {"account": "team" if team else "self"}
+        return cast(dict[str, Any], self._raw.tools.apps_start_sign_in(app, self._default(app, account), body))
 
-    def test(self, account: str, *, environment: str = "production", team: bool = False) -> dict[str, Any]:
-        body = {"environment": environment, "account": "team" if team else "self"}
-        return cast(dict[str, Any], self._raw.tools.connections_test_connection(account, body))
+    def test(self, app: str, *, account: str | None = None, team: bool = False) -> dict[str, Any]:
+        body = {"account": "team" if team else "self"}
+        return cast(dict[str, Any], self._raw.tools.apps_test_account(app, self._default(app, account), body))
 
-    def make_default(self, account: str) -> dict[str, Any]:
-        return cast(dict[str, Any], self._raw.tools.connections_pin_default(account))
+    def make_default(self, app: str, account: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.tools.apps_pin_default(app, account))
 
     def mine(self) -> list[dict[str, Any]]:
         """The caller's own accounts on every app."""
-        return cast(list[dict[str, Any]], self._raw.tools.connections_my_connections())
+        return cast(list[dict[str, Any]], self._raw.tools.apps_my_accounts())
 
-    def set_key(self, account: str, key: str, *, environment: str = "production") -> dict[str, Any]:
-        """The caller's own key on an app each person signs in to."""
-        body = {"environment": environment, "credentials": {"key": key}}
-        return cast(dict[str, Any], self._raw.tools.connections_give_own_credentials(account, body))
+    def set_key(self, account: str, key: str) -> dict[str, Any]:
+        """The caller's own key on an account each person signs in to."""
+        body = {"credentials": {"key": key}}
+        return cast(dict[str, Any], self._raw.tools.apps_give_own_credentials(account, body))
 
-    def remove(self, account: str, *, environment: str | None = None) -> Any:
-        return self._raw.tools.connections_disconnect(account, environment=environment)
+    def remove(self, account: str) -> Any:
+        return self._raw.tools.apps_disconnect(account)
 
 
 class Tools:
@@ -219,8 +227,10 @@ class Tools:
         page = self._apps.get(app)
         ids = [str(i) for i in page["card"].get("moduleIds") or []]
         module = ids[0] if len(ids) == 1 else _found(tool, [self._raw.tools.tool_modules_get_module(i) for i in ids])
-        mode = "real" if real else "mock"
-        body = {"mode": mode, "input": input or {}, "environment": _environment(page, environment)}
+        body: dict[str, Any] = {"mode": "real" if real else "mock", "input": input or {}}
+        if environment is not None:
+            # Left out, a Real run is a test run: the app's sandbox account when it has one.
+            body["environment"] = environment
         return cast(dict[str, Any], self._raw.tools.tool_modules_run_tool(module, tool, body))
 
 
@@ -255,21 +265,23 @@ class AsyncApps:
         self._raw = raw
 
     async def list(self, *, connected: bool | None = None) -> list[dict[str, Any]]:
-        cards = cast(list[dict[str, Any]], await self._raw.tools.connections_list_systems())
+        cards = cast(list[dict[str, Any]], await self._raw.tools.apps_list_apps())
         return [c for c in cards if connected is None or _connected(c) == connected]
 
     async def get(self, app: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._raw.tools.connections_get_app(app))
+        return cast(dict[str, Any], await self._raw.tools.apps_get_app(app))
 
     async def turn_on(self, app: str, **fields: Any) -> dict[str, Any]:
-        body = {"enabled": True, **fields}
-        return cast(dict[str, Any], await self._raw.tools.plugins_set_team_plugin(plugin_of(app), body))
+        plugin_of(app)
+        return cast(dict[str, Any], await self._raw.tools.apps_set_team_app(app, {"enabled": True, **fields}))
 
     async def turn_off(self, app: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._raw.tools.plugins_set_team_plugin(plugin_of(app), {"enabled": False}))
+        plugin_of(app)
+        return cast(dict[str, Any], await self._raw.tools.apps_set_team_app(app, {"enabled": False}))
 
     async def users(self, app: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._raw.tools.plugins_app_users(plugin_of(app)))
+        plugin_of(app)
+        return cast(dict[str, Any], await self._raw.tools.apps_app_users(app))
 
     async def add_custom(
         self,
@@ -280,20 +292,12 @@ class AsyncApps:
         base_address: str,
         settings: dict[str, Any] | None = None,
         secrets: dict[str, str] | None = None,
-        environment: str = "test",
     ) -> dict[str, Any]:
         if kind == "mcp":
-            body = {"name": name, "url": base_address}
-            return cast(dict[str, Any], await self._raw.tools.connections_connect_mcp(body))
-        made = cast(
-            dict[str, Any], await self._raw.tools.connections_create_connection({"name": name, "authKind": auth_kind})
-        )
-        env = {
-            "revision": made["revision"],
-            "settings": {**(settings or {}), "baseUrl": base_address},
-            "secretValues": secrets or {},
-        }
-        return cast(dict[str, Any], await self._raw.tools.connections_set_environment(made["id"], environment, env))
+            return cast(dict[str, Any], await self._raw.tools.apps_add_app({"name": name, "serverUrl": base_address}))
+        made = cast(dict[str, Any], await self._raw.tools.apps_add_app({"name": name, "authKind": auth_kind}))
+        body = _keys(made, base_address, settings, secrets)
+        return cast(dict[str, Any], await self._raw.tools.apps_change_account(made["id"], made["id"], body))
 
 
 class AsyncCredentials:
@@ -301,55 +305,61 @@ class AsyncCredentials:
         self._raw, self._apps = raw, apps
 
     async def list(self) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], await self._raw.tools.connections_list_app_credentials())
+        return cast(list[dict[str, Any]], await self._raw.tools.apps_list_app_credentials())
 
     async def set(
-        self, app: str, *, client_id: str, client_secret: str | None = None, environment: str = "production"
+        self, app: str, *, client_id: str, client_secret: str | None = None, account: str | None = None
     ) -> dict[str, Any]:
-        account = _account(await self._apps.get(app))
-        detail = cast(dict[str, Any], await self._raw.tools.connections_get_connection(account))
+        account = account or _account(await self._apps.get(app))
+        detail = cast(dict[str, Any], await self._raw.tools.apps_get_account(app, account))
         body: dict[str, Any] = {"revision": detail["revision"], "settings": {"clientId": client_id}}
         if client_secret:
             body["secretValues"] = {"clientSecret": client_secret}
-        return cast(dict[str, Any], await self._raw.tools.connections_set_environment(account, environment, body))
+        return cast(dict[str, Any], await self._raw.tools.apps_change_account(app, account, body))
 
-    async def test(self, app: str, *, environment: str = "production") -> dict[str, Any]:
-        account = _account(await self._apps.get(app))
-        return cast(
-            dict[str, Any], await self._raw.tools.connections_check_credential(account, {"environment": environment})
-        )
+    async def test(self, app: str, *, account: str | None = None) -> dict[str, Any]:
+        account = account or _account(await self._apps.get(app))
+        return cast(dict[str, Any], await self._raw.tools.apps_check_credential(app, account, {}))
 
-    async def finish(self, app: str, *, state: str, code: str) -> dict[str, Any]:
-        account = _account(await self._apps.get(app))
-        return cast(
-            dict[str, Any], await self._raw.tools.connections_check_credential(account, {"state": state, "code": code})
-        )
+    async def finish(self, app: str, *, state: str, code: str, account: str | None = None) -> dict[str, Any]:
+        account = account or _account(await self._apps.get(app))
+        body = {"state": state, "code": code}
+        return cast(dict[str, Any], await self._raw.tools.apps_check_credential(app, account, body))
 
 
 class AsyncAccounts:
-    def __init__(self, raw: Any) -> None:
-        self._raw = raw
+    def __init__(self, raw: Any, apps: AsyncApps) -> None:
+        self._raw, self._apps = raw, apps
 
-    async def connect(self, account: str, *, environment: str = "production", team: bool = False) -> dict[str, Any]:
-        body = {"environment": environment, "account": "team" if team else "self"}
-        return cast(dict[str, Any], await self._raw.tools.connections_start_sign_in(account, body))
+    async def _default(self, app: str, account: str | None) -> str:
+        return account or _account(await self._apps.get(app))
 
-    async def test(self, account: str, *, environment: str = "production", team: bool = False) -> dict[str, Any]:
-        body = {"environment": environment, "account": "team" if team else "self"}
-        return cast(dict[str, Any], await self._raw.tools.connections_test_connection(account, body))
+    async def add(self, app: str, name: str, *, sandbox: bool = False, **fields: Any) -> dict[str, Any]:
+        body = {"name": name, "sandbox": sandbox, **fields}
+        return cast(dict[str, Any], await self._raw.tools.apps_add_account(app, body))
 
-    async def make_default(self, account: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._raw.tools.connections_pin_default(account))
+    async def connect(self, app: str, *, account: str | None = None, team: bool = False) -> dict[str, Any]:
+        body = {"account": "team" if team else "self"}
+        found = await self._default(app, account)
+        return cast(dict[str, Any], await self._raw.tools.apps_start_sign_in(app, found, body))
+
+    async def test(self, app: str, *, account: str | None = None, team: bool = False) -> dict[str, Any]:
+        body = {"account": "team" if team else "self"}
+        found = await self._default(app, account)
+        return cast(dict[str, Any], await self._raw.tools.apps_test_account(app, found, body))
+
+    async def make_default(self, app: str, account: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.apps_pin_default(app, account))
 
     async def mine(self) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], await self._raw.tools.connections_my_connections())
+        return cast(list[dict[str, Any]], await self._raw.tools.apps_my_accounts())
 
-    async def set_key(self, account: str, key: str, *, environment: str = "production") -> dict[str, Any]:
-        body = {"environment": environment, "credentials": {"key": key}}
-        return cast(dict[str, Any], await self._raw.tools.connections_give_own_credentials(account, body))
+    async def set_key(self, account: str, key: str) -> dict[str, Any]:
+        body = {"credentials": {"key": key}}
+        return cast(dict[str, Any], await self._raw.tools.apps_give_own_credentials(account, body))
 
-    async def remove(self, account: str, *, environment: str | None = None) -> Any:
-        return await self._raw.tools.connections_disconnect(account, environment=environment)
+    async def remove(self, account: str) -> Any:
+        return await self._raw.tools.apps_disconnect(account)
 
 
 class AsyncTools:
@@ -379,11 +389,9 @@ class AsyncTools:
             module = ids[0]
         else:
             module = _found(tool, [await self._raw.tools.tool_modules_get_module(i) for i in ids])
-        body = {
-            "mode": "real" if real else "mock",
-            "input": input or {},
-            "environment": _environment(page, environment),
-        }
+        body: dict[str, Any] = {"mode": "real" if real else "mock", "input": input or {}}
+        if environment is not None:
+            body["environment"] = environment
         return cast(dict[str, Any], await self._raw.tools.tool_modules_run_tool(module, tool, body))
 
 

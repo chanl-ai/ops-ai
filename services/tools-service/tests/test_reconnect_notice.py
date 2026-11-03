@@ -41,6 +41,8 @@ async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admin
     assert "invalid_client" in error["message"] and "not-the-secret" not in str(refused.output)
     assert error["details"] == {
         "connectionId": connection_id,
+        # The account's app, under which the console's Reconnect opens it.
+        "appId": "plugin:test.client",
         "app": "Client desk",
         "account": "team",
         "state": "refused",
@@ -70,9 +72,7 @@ async def test_an_ended_team_sign_in_reads_expired_not_never_signed_in(rig: Rig,
     assert on.status_code == 200, on.text
     connection_id = str(on.json()["data"]["connectionId"])
     # A sign-in that gave no refresh token, whose token ended a minute ago.
-    await rig.auth.tokens.store_answer(
-        tenant, connection_id, "production", {"access_token": "at-ended", "expires_in": -60}, SHARED
-    )
+    await rig.auth.tokens.store_answer(tenant, connection_id, {"access_token": "at-ended", "expires_in": -60}, SHARED)
     failed = await call_as_team(rig, tenant, "test.person")
     error = failed.output["error"]
     assert "Person desk needs reconnecting" in error["message"], error

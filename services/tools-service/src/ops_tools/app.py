@@ -30,7 +30,7 @@ from ops_store.background import report as background_report
 from .auth import Authenticator
 from .code_runs import CodeExecutor, resolve_handles, run_acting_for, run_caller, run_claims
 from .egress import EgressPolicy, egress_client
-from .environments import ConnectionEnvironment
+from .environments import RunKind
 from .executor import Executor, HttpExecutor
 from .gateway_calls import API, WRITES, CallRequest, GatewayCalls, Outcome, Refused
 from .held_hosts import install_held_hosts
@@ -62,9 +62,9 @@ class RunContext(_Wire):
     thread: str | None = None
     step: str | None = None
     act: str | None = None
-    # Which of a connection's environments the call uses (c-330): live runs send production, everything else test.
-    # Absent is test, so a caller that does not say never reaches a production credential.
-    environment: ConnectionEnvironment | None = None
+    # The kind of run the call is made in (c-330): live runs send production, everything else test. Absent is test,
+    # so a caller that does not say never reaches a live account's write unseen.
+    environment: RunKind | None = None
     # One of the team's accounts of the tool's app, by name (c-608, with several_accounts on); none uses the default.
     account: str | None = Field(default=None, min_length=1, max_length=200)
 

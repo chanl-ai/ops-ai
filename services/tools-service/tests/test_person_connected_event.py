@@ -1,7 +1,7 @@
 """A run waiting for a person's own account goes on once they connect (c-616 S12), tools-service's half, by failure
 mode: the refusal does not say which event and key mean "this person connected", so a run cannot wait for it; and a
 person who connects, by an OAuth sign-in or by giving their key, reports nothing, so a waiting run never wakes. The
-event's key is the one the refusal named, so the run wakes for its person and environment only."""
+event's key is the one the refusal named, so the run wakes for its person only."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ async def test_a_person_without_their_account_is_told_the_event_that_means_they_
     conn = await keys._connection(store, tenant, "basic")  # pyright: ignore[reportPrivateUsage]
     with pytest.raises(AuthFailed) as e:
         await keys._call(auth, tenant, conn, keys.JAMES)  # pyright: ignore[reportPrivateUsage]
-    assert e.value.details["connectedEvent"] == {"name": CONNECTED, "key": f"{conn}:test:{keys.JAMES.sub}"}
+    assert e.value.details["connectedEvent"] == {"name": CONNECTED, "key": f"{conn}:{keys.JAMES.sub}"}
     assert e.value.details["teamAccount"] is False, "a connection each person signs in to has no team account"
 
 
@@ -49,8 +49,8 @@ async def test_giving_your_key_reports_that_you_connected_under_the_refusals_key
     given = await keys._give(client, tenant, conn, keys.JAMES_P, key="key-james")  # pyright: ignore[reportPrivateUsage]
     assert given.status_code == 200, given.text
     [event] = await connected(engine, tenant)
-    assert (event["event_key"], event["team_id"]) == (f"{conn}:test:{keys.JAMES.sub}", keys.TEAM), event
-    assert event["payload"] == {"connectionId": conn, "app": "Ledger", "environment": "test"}, event
+    assert (event["event_key"], event["team_id"]) == (f"{conn}:{keys.JAMES.sub}", keys.TEAM), event
+    assert event["payload"] == {"connectionId": conn, "app": "Ledger"}, event
     assert "key-james" not in str(event)
 
 
@@ -61,7 +61,7 @@ async def test_an_oauth_sign_in_of_your_own_reports_that_you_connected(
 ) -> None:
     conn = await oauth.personal_connection(client, tenant)
     await oauth.sign_in(client, tenant, conn, oauth.JAMES_P, "james")
-    assert [e["event_key"] for e in await connected(engine, tenant)] == [f"{conn}:test:usr_james"]
+    assert [e["event_key"] for e in await connected(engine, tenant)] == [f"{conn}:usr_james"]
 
 
 async def test_a_connection_the_team_backs_says_its_team_account_may_stand_in(engine: AsyncEngine, tenant: str) -> None:

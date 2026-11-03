@@ -464,19 +464,17 @@ erDiagram
     string connection_id "set on a connection's secret part"
   }
   tool_modules }o--o| connections : "signs in through"
-  connections ||--o{ connection_environments : "per environment"
   connections ||--o{ connection_tokens : holds
   module_operations ||--o{ operation_mocks : "answers in test"
   connections {
     string id PK
+    string app_id "plugin:<id>, or a custom app's first account"
+    bool sandbox "the account a test run uses"
     string auth_kind
     string team_id
-    int revision
-  }
-  connection_environments {
-    string environment PK "test, production"
     json settings "baseUrl binds every credential"
     json secrets "field to tool_secrets name"
+    int revision
   }
   operation_mocks {
     string operation
@@ -493,8 +491,8 @@ erDiagram
 | `module_operations, module_versions` | Its operations and their versions, each with an approval policy. An operation imported from OpenAPI keeps the JSON Schema of its first success response, so a workflow step shows its output fields before it runs | built |
 | `security_reviews, module_approvals` | The security team's review and approvals before publish | built |
 | `module_egress_hosts, egress_hosts, egress_ranges, egress_audit` | The hosts and address ranges a module may reach, and each check made | built |
-| `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the environment and connection it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
-| `connections, connection_environments, connection_audit` | How the platform signs in to one system, per test and production, its credentials bound to the system's address; secret parts are rows of `tool_secrets` | built |
+| `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the kind of run (test or live) and the account it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
+| `connections, app_credentials, connection_audit` | An app's accounts, one row each: how the platform signs in to one system, its credentials bound to the system's address, and whether it is a sandbox account (which test runs use); a team's own OAuth client, kept once; secret parts are rows of `tool_secrets` | built |
 | `connection_tokens, oauth_states` | Encrypted OAuth tokens, stored against the rotation they replaced, and sign-ins in progress | built |
 | `operation_mocks` | An operation's mock answers in test, which a test call gets before anything is sent | built |
 | `tool_secrets, secret_audit` | Encrypted credentials and every read of them. Each secret also lists the teams whose modules may read it; none means every team | built |

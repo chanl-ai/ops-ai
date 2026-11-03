@@ -7,6 +7,7 @@ does not list; and a caller forges a next-page address that the team's token is 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from shutil import copytree, ignore_patterns
 from typing import Any
@@ -43,13 +44,23 @@ ID = "test.desk"
 
 def host(engine: AsyncEngine, store: ModuleStore, locked: dict[str, Any] | None = None) -> PluginHost:
     """The desk plugin installed, with the settings the install fixes for it (`locked`, plugin_locked)."""
-    return PluginHost(store, PluginBindings(engine), {ID: locked or {}}, [Loaded("desk", desk, None)])
+    return PluginHost(
+        store, PluginBindings(engine), {ID: locked or {}}, [Loaded("desk", desk, None)], ConnectionStore(engine)
+    )
 
 
 async def bind(engine: AsyncEngine, tenant: str, team: str, instance: str, conn: str, *, on: bool = True) -> None:
-    await PluginBindings(engine).put(
-        tenant, team, ID, enabled=on, connection_id=conn, settings={"instance_url": instance}, by="test"
-    )
+    """The team's binding naming `conn` as its default account. An account of that id that does not exist yet is made
+    as the plugin's, in the team, holding `instance` as its own instance (the settings an account keeps, c-580)."""
+    await PluginBindings(engine).put(tenant, team, ID, enabled=on, connection_id=conn, settings={}, by="test")
+    store, now = ConnectionStore(engine), datetime.now(UTC)
+    row = {
+        "tenant_id": tenant, "id": conn, "app_id": f"plugin:{ID}", "team_id": team, "name": "Desk",
+        "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
+        "created_by": "test", "created_at": now, "updated_by": "test", "updated_at": now,
+    }  # fmt: skip
+    if await store.create(row, actor="test", at=now) and instance:
+        await store.set_plugin_settings(tenant, conn, {"instance_url": instance})
 
 
 async def test_each_team_calls_with_its_own_connection_instance_and_hosts(
@@ -120,7 +131,7 @@ async def test_a_plugins_tools_are_not_grantable_once_plugins_are_switched_off(
 
 async def test_a_locked_field_wins_over_the_team(engine: AsyncEngine, store: ModuleStore, tenant: str) -> None:
     h = host(engine, store, {"api_version": "9"})
-    merged = await h.settings(tenant, desk, {"api_version": "2", "instance_url": "https://a.my.desk.test"})
+    merged = h.settings(desk, {"api_version": "2"}, {"instance_url": "https://a.my.desk.test"})
     assert merged["api_version"] == "9"
 
 
@@ -134,7 +145,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     extra = await h.on_token(tenant, "con_a", {"access_token": "x", "instance_url": "https://alpha.my.desk.test/"})
     assert extra == {"baseUrl": "https://alpha.my.desk.test", "testPath": "/api/v1/limits"}
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
-    # The instance is the connection environment's own (c-580, test_plugin_environments.py); no copy on the binding.
+    # The instance is the account's own (c-580, test_plugin_environments.py); no copy on the binding.
     assert b is not None
     assert "instance_url" not in b["settings"], b["settings"]
 
@@ -234,7 +245,7 @@ async def test_a_python_tool_signs_in_as_the_person_it_acts_for(
     connections, tokens, auth = rig(engine)
     conn = await connection(connections, tenant, "person")
     for who, token in ((SHARED, "at-team"), (JAMES.sub, "at-james"), (MAYA.sub, "at-maya")):
-        await tokens.store_answer(tenant, conn, "test", {"access_token": token, "expires_in": 3600}, who)
+        await tokens.store_answer(tenant, conn, {"access_token": token, "expires_in": 3600}, who)
     heard: list[str | None] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
@@ -268,7 +279,9 @@ async def test_another_teams_connection_never_serves_a_teams_call(
     # because for the call the plugin's module belongs to the calling team and a connection serves only its own team.
     connections, tokens, auth = rig(engine)
     team_a_conn = await connection(connections, tenant, "team")
-    await tokens.store_answer(tenant, team_a_conn, "test", {"access_token": "at-team-a", "expires_in": 3600})
+    await tokens.store_answer(tenant, team_a_conn, {"access_token": "at-team-a", "expires_in": 3600})
+    # Team A's account is signed in to its instance, so only the team boundary can stop team B's call.
+    await connections.set_plugin_settings(tenant, team_a_conn, {"instance_url": "https://crm.bank.test"})
     await bind(engine, tenant, "team_b", "https://crm.bank.test", team_a_conn)
     heard: list[str | None] = []
 
@@ -280,6 +293,7 @@ async def test_another_teams_connection_never_serves_a_teams_call(
     h = host(engine, store)
     ex = PluginExecutor(h, HttpExecutor(client, AllowAll(), None, auth), b"k" * 32)  # type: ignore[arg-type]
     m = await h.for_call(tenant, "team_b", {**module_for(tenant), "team_id": None}, "test")
+    assert m.get("endpoint") and m["connection_id"] == team_a_conn, m
     lee = ActingForPerson(sub="usr_lee", email="lee@bank.example", name="Lee", team_id="team_b")
     out = await ex.run(m, {"name": "desk_list_things"}, {}, actor="t", environment="test", acting_for=lee)
     assert not out.ok and heard == [], (out, heard)
@@ -288,7 +302,7 @@ async def test_another_teams_connection_never_serves_a_teams_call(
 async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
     engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:
-    # Everyone signs in with their own account, and this environment has no instance yet (c-616 live walk): the plugin
+    # Everyone signs in with their own account, and this account has no instance yet (c-616 live walk): the plugin
     # is on. The call asks this person to sign in. It does not say the plugin is off or that a team admin goes first.
     connections = ConnectionStore(engine)
     conn = await connection(connections, tenant, "person")
@@ -305,14 +319,14 @@ async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
 async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections_origin(
     local_catalog: Any, engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:
-    # The connection's environment holds the instance's origin (what sign-in saves for Test connection); a plugin's
+    # The account holds the instance's origin (what sign-in saves for Test connection); a plugin's
     # tool still reaches the address its manifest renders under it, through the gateway's executor.
     connections, tokens, auth = rig(engine)
     conn = await connection(connections, tenant, "team")
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
+    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600}, SHARED)
     await bind(engine, tenant, TEAM, "https://crm.bank.test", conn)
-    # The instance the test environment signed in to, kept on that environment as a sign-in keeps it (c-580).
-    await connections.set_plugin_settings(tenant, conn, "test", {"instance_url": "https://crm.bank.test"})
+    # The instance the account signed in to, kept on the account as a sign-in keeps it (c-580).
+    await connections.set_plugin_settings(tenant, conn, {"instance_url": "https://crm.bank.test"})
     h = host(engine, store)
     h.connections = connections
     resolved = await ToolRegistry(local_catalog, store, h).resolve(
@@ -342,9 +356,9 @@ async def test_a_declarative_plugin_tool_reaches_its_own_host_with_nothing_liste
     an app's call to a host neither it nor the tenant lists is still refused."""
     connections, tokens, auth = rig(engine)
     conn = await connection(connections, tenant, "team")
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
+    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600}, SHARED)
     await bind(engine, tenant, TEAM, "https://crm.bank.test", conn)
-    await connections.set_plugin_settings(tenant, conn, "test", {"instance_url": "https://crm.bank.test"})
+    await connections.set_plugin_settings(tenant, conn, {"instance_url": "https://crm.bank.test"})
     h = host(engine, store)
     h.connections = connections
     resolved = await ToolRegistry(local_catalog, store, h).resolve(

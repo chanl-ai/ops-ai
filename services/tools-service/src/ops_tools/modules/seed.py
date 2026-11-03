@@ -18,7 +18,6 @@ from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from ..connections.records import auth_of, connection_base, seed_rows
-from ..environments import CONNECTION_ENVIRONMENTS, TEST
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
@@ -199,15 +198,15 @@ TOOL_ORIGIN = "tool"
 
 def open_connection(
     *, tenant_id: str, team_id: str, connection_id: str, name: str, base: str, me: str, at: datetime
-) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    """The connection a custom module with none of its own keeps its address on (c-616), and its settings per
-    environment: no sign-in, the address in every environment, none until a first tool names one."""
-    row = {
+) -> dict[str, Any]:
+    """The account a custom module with none of its own keeps its address on (c-616): no sign-in, the address its
+    calls go to, none until a first tool names one."""
+    return {
         "tenant_id": tenant_id, "id": connection_id, "team_id": team_id, "name": name.strip(), "auth_kind": "none",
-        "sign_in": "team", "status": "healthy", "status_detail": None, "origin": TOOL_ORIGIN, "revision": 1,
-        "created_by": me, "created_at": at, "updated_by": me, "updated_at": at,
+        "sign_in": "team", "status": "healthy", "status_detail": None, "origin": TOOL_ORIGIN, "app_id": connection_id,
+        "settings": {"baseUrl": base} if base else {}, "secrets": {}, "revision": 1, "created_by": me,
+        "created_at": at, "updated_by": me, "updated_at": at,
     }  # fmt: skip
-    return row, ({e: {"baseUrl": base} for e in CONNECTION_ENVIRONMENTS} if base else {})
 
 
 def blank(
@@ -696,10 +695,8 @@ async def load(
             agg["connection_id"] = made["id"]
             held = await connections.get(tenant_id, str(made["id"]))
             if agg.get("endpoint") and held is not None and not connection_base(held):
-                # The demo's integrations hold no keys; their test environment holds the module's address.
-                await connections.set_base(
-                    tenant_id, str(made["id"]), str(agg["endpoint"]), [TEST], actor="dev seed", at=now
-                )
+                # The demo's integrations hold no keys; the account holds the module's address.
+                await connections.set_base(tenant_id, str(made["id"]), str(agg["endpoint"]), actor="dev seed", at=now)
         built_in = {str(app["module"]) for app in BUILT_IN}
         for agg in mods:
             if agg.get("connection_id") or agg["team_id"] is None or not agg.get("endpoint"):
@@ -708,11 +705,11 @@ async def load(
                 # A built-in app's module under its older name is the platform's, shown as the built-in app.
                 continue
             # Its id is the one tools_0056 gives an existing module's, so a dev database it already ran on keeps one.
-            made, envs = open_connection(
+            made = open_connection(
                 tenant_id=tenant_id, team_id=agg["team_id"], connection_id=f"con_{agg['id']}",
                 name=agg["display_name"], base=str(agg["endpoint"]), me="dev seed", at=now,
             )  # fmt: skip
-            await connections.create(made, actor="dev seed", at=now, environments=envs)
+            await connections.create(made, actor="dev seed", at=now)
             agg["connection_id"] = made["id"]
     # A module may only name listed hosts, so the seed lists the hosts its modules call first.
     egress = EgressStore(store.engine)

@@ -152,7 +152,7 @@ class AppStates(Protocol):
 
 
 class ToolsApps:
-    """The team's apps from tools-service's `GET /v1/systems`, built-in ones included, for the Tools page: which app a
+    """The team's apps from tools-service's `GET /v1/apps`, built-in ones included, for the Tools page: which app a
     tool set belongs to and whether it is connected. Asked for the person who lists the tools (acting for them), so an
     app each person signs in to reads as theirs. `tools` holds connections:view, claimed only on this read."""
 
@@ -168,7 +168,7 @@ class ToolsApps:
         if person and self.people is not None:
             headers[ACTING_FOR_HEADER] = await self.people.token(tenant_id=current_tenant(), email=person, team_id=team)
         try:
-            rows = await self.tools.get("/v1/systems", params={"include": "builtin"}, headers=headers, team=team)
+            rows = await self.tools.get("/v1/apps", params={"include": "builtin"}, headers=headers, team=team)
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ToolsUnavailable("The tools service cannot be reached, so the tools' apps are unknown.") from e
         return cast(list[dict[str, Any]], rows)

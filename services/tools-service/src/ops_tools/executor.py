@@ -40,6 +40,7 @@ from . import mcp, transform
 from .auth import Authenticator, AuthFailed, Prepared
 from .auth.tokens import scope_list
 from .egress import EgressDenied, EgressPolicy, for_tenant
+from .environments import TEST
 from .mocks import MockAnswers
 from .plugins.host import plugin_id_of
 from .registry import Resolved
@@ -305,8 +306,8 @@ def form_fields(templates: dict[str, str], args: dict[str, Any]) -> dict[str, st
     return out
 
 
-# A call to a module whose connection names no address for the run's environment (c-616): nothing is sent.
-NO_ADDRESS = "This tool's app names no address for this environment; set it on the app's connection."
+# A call to a module whose account names no address (c-616): nothing is sent.
+NO_ADDRESS = "This tool's app names no address; set it on the app's account."
 
 
 class _Secrets:
@@ -340,7 +341,7 @@ class _Secrets:
             scopes=scope_list(op.get("scopes")),
         )
         if prepared is not None and trial is not None:
-            trial.note(f"Signed in through the connection ({prepared.environment})")
+            trial.note(f"Signed in through the account {prepared.connection_id}")
         return prepared
 
     async def _resolve(
@@ -430,8 +431,8 @@ class HttpExecutor(_Secrets):
     ) -> ToolOutcome:
         """With `trial` (the test console) the operation's own transform is not applied: the console applies its draft
         to `trial.raw`. `secret_values` are a test's typed values (_Secrets._resolve). `environment` is the run's (test
-        or production), which picks the connection's settings. `on_answer` sees the answer and its headers before the
-        transform, as a plugin's paging reads the next page from them (plugins/executor.py)."""
+        or production): a live run is never signed in with a sandbox account. `on_answer` sees the answer and its
+        headers before the transform, as a plugin's paging reads the next page from them (plugins/executor.py)."""
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
         host = urlsplit(build_request(module, op, args).url).hostname
@@ -721,8 +722,8 @@ class Executor:
     ) -> ToolOutcome:
         """`caller` is the verified caller the gateway decided for: every executor path acts for it alone.
         `environment` is the run's (test or production; test when None), which picks mock answers and the code runner's
-        mode. The environment a call signs in with is the module's own `environment`, set where the registry resolved
-        it. A tool page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors,
+        mode. The account a call signs in with is the module's `connection_id`, chosen where the registry resolved it.
+        A tool page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors,
         which fill the request it shows."""
         op, module = resolved.operation, resolved.module
         if module is not None and module["tenant_id"] != caller.tenant_id:
@@ -744,10 +745,10 @@ class Executor:
             )
         # A plugin's address is rendered from its manifest by the plugin host (instance plus API path); the connection
         # holds only the instance's origin, so only every other module takes its connection's address.
-        signs_in = str(module["environment"])
+        signs_in = environment or TEST
         if resolved.executor in ("http", "mcp") and self.http.auth is not None and plugin_id_of(module) is None:
-            # A module's address is its connection's for the environment it signs in with (c-616), its only home.
-            module = await self.http.auth.addressed(module, signs_in)
+            # A module's address is its account's (c-616), its only home.
+            module = await self.http.auth.addressed(module)
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, str(module["id"]), op["name"], args, environment)
         ):

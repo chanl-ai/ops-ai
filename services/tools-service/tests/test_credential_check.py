@@ -1,6 +1,6 @@
 """An app credential set and checked by a team admin (c-616 P1, group B), by failure mode: saving the team's own client
-drops the environment's addresses or is refused for them; Test with my account keeps a token, so a check replaces the
-team account; it signs in with a client other than the environment's; and someone who may not set app credentials
+drops the account's addresses or is refused for them; Test with my account keeps a token, so a check replaces the
+team account; it signs in with a client other than the account's; and someone who may not set app credentials
 can check them."""
 
 from __future__ import annotations
@@ -28,12 +28,12 @@ async def team_app(client: httpx.AsyncClient, tenant: str) -> str:
     security = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     await client.post("/v1/egress/hosts", json={"value": "login.bank.test"}, headers=security)
     made = await client.post(
-        "/v1/connections", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "team"}, headers=admin(tenant)
+        "/v1/apps", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "team"}, headers=admin(tenant)
     )
     assert made.status_code == 201, made.text
     conn = str(made.json()["data"]["id"])
-    put = await client.put(
-        f"/v1/connections/{conn}/environments/test", json={"revision": 1, "settings": SETTINGS}, headers=admin(tenant)
+    put = await client.patch(
+        f"/v1/apps/{conn}/accounts/{conn}", json={"revision": 1, "settings": SETTINGS}, headers=admin(tenant)
     )
     assert put.status_code == 200, put.text
     return conn
@@ -41,11 +41,11 @@ async def team_app(client: httpx.AsyncClient, tenant: str) -> str:
 
 async def test_the_teams_own_client_is_saved_and_the_addresses_stay(client: httpx.AsyncClient, tenant: str) -> None:
     conn = await team_app(client, tenant)
-    detail = (await client.get(f"/v1/connections/{conn}", headers=admin(tenant))).json()["data"]
+    detail = (await client.get(f"/v1/apps/{conn}/accounts/{conn}", headers=admin(tenant))).json()["data"]
     body = {"revision": detail["revision"], "settings": {"clientId": "own-app"}, "secretValues": {"clientSecret": "s3"}}
-    put = await client.put(f"/v1/connections/{conn}/environments/test", json=body, headers=admin(tenant))
+    put = await client.patch(f"/v1/apps/{conn}/accounts/{conn}", json=body, headers=admin(tenant))
     assert put.status_code == 200, put.text
-    settings = put.json()["data"]["environments"]["test"]["settings"]
+    settings = put.json()["data"]["settings"]
     assert {k: settings.get(k) for k in ("clientId", "authorizeUrl", "tokenUrl", "baseUrl")} == {
         "clientId": "own-app",
         "authorizeUrl": SETTINGS["authorizeUrl"],
@@ -61,8 +61,8 @@ async def test_a_credential_check_signs_in_through_the_app_and_keeps_no_token(
     tenant: str,
 ) -> None:
     conn = await team_app(client, tenant)
-    url = f"/v1/connections/{conn}/test-credential"
-    started = await client.post(url, json={"environment": "test"}, headers=admin(tenant))
+    url = f"/v1/apps/{conn}/accounts/{conn}/test-credential"
+    started = await client.post(url, json={}, headers=admin(tenant))
     assert started.status_code == 200, started.text
     query = parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)
     assert query["client_id"] == ["ops-console"]
@@ -70,11 +70,11 @@ async def test_a_credential_check_signs_in_through_the_app_and_keeps_no_token(
     assert done.status_code == 200, done.text
     assert done.json()["data"]["health"]["status"] == "ok", done.text
     assert system.asked[-1]["code"] == "priya"
-    assert await ConnectionStore(engine).token(tenant, conn, "test", SHARED) is None
+    assert await ConnectionStore(engine).token(tenant, conn, SHARED) is None
 
 
 async def test_a_builder_may_not_check_an_app_credential(client: httpx.AsyncClient, tenant: str) -> None:
     conn = await team_app(client, tenant)
     builder = person(tenant, "James Richardson", {TEAM: "builder"})
-    r = await client.post(f"/v1/connections/{conn}/test-credential", json={"environment": "test"}, headers=builder)
+    r = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test-credential", json={}, headers=builder)
     assert r.status_code == 403, r.text

@@ -89,16 +89,16 @@ async def connection(client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
     for host in ("login.bank.test", "crm.bank.test"):
         await client.post("/v1/egress/hosts", json={"value": host}, headers=security)
     made = await client.post(
-        "/v1/connections", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
+        "/v1/apps", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
     )
     assert made.status_code == 201, made.text
     conn = str(made.json()["data"]["id"])
-    put = await client.put(
-        f"/v1/connections/{conn}/environments/test", json={"revision": 1, "settings": settings}, headers=admin
+    put = await client.patch(
+        f"/v1/apps/{conn}/accounts/{conn}", json={"revision": 1, "settings": settings}, headers=admin
     )
     assert put.status_code == 200, put.text
     for who, token in ((SHARED, "at-team"), ("usr_james", "at-james")):
-        await tokens(engine).store_answer(tenant, conn, "test", {"access_token": token, "expires_in": 3600}, who)
+        await tokens(engine).store_answer(tenant, conn, {"access_token": token, "expires_in": 3600}, who)
     return conn
 
 
@@ -107,11 +107,9 @@ def tokens(engine: AsyncEngine) -> Tokens:
 
 
 async def press_test(
-    client: httpx.AsyncClient, tenant: str, conn: str, who: tuple[str, dict[str, str]], **body: str
+    client: httpx.AsyncClient, tenant: str, conn: str, who: tuple[str, dict[str, str]], app: str = "", **body: str
 ) -> httpx.Response:
-    return await client.post(
-        f"/v1/connections/{conn}/test", json={"environment": "test", **body}, headers=person(tenant, *who)
-    )
+    return await client.post(f"/v1/apps/{app or conn}/accounts/{conn}/test", json=body, headers=person(tenant, *who))
 
 
 async def test_the_test_signs_in_with_the_account_asked_for_and_stores_whose_it_was(
@@ -122,7 +120,7 @@ async def test_the_test_signs_in_with_the_account_asked_for_and_stores_whose_it_
     assert own.status_code == 200, own.text
     health = own.json()["data"]["health"]
     assert system.seen == ["at-james"]
-    assert (health["status"], health["account"], health["environment"]) == ("ok", "own", "test"), health
+    assert (health["status"], health["account"]) == ("ok", "own"), health
     assert isinstance(health["latencyMs"], int) and health["at"] and health["by"]
     refused = await press_test(client, tenant, conn, JAMES, account="team")
     assert refused.status_code == 403, refused.text
@@ -154,7 +152,7 @@ async def test_a_team_sign_in_the_system_refuses_leaves_the_connection_needing_r
 ) -> None:
     conn = await connection(client, engine, tenant, SETTINGS)
     spent = {"access_token": "at-old", "refresh_token": "rt-old", "expires_in": 1}
-    await tokens(engine).store_answer(tenant, conn, "test", spent, SHARED)
+    await tokens(engine).store_answer(tenant, conn, spent, SHARED)
     r = await press_test(client, tenant, conn, PRIYA, account="team")
     assert r.status_code == 200, r.text
     data = r.json()["data"]
@@ -177,10 +175,10 @@ async def test_an_app_not_signed_in_yet_says_to_sign_in_not_to_type_a_test_addre
     conn = await connection(client, engine, tenant, {k: v for k, v in SETTINGS.items() if k != "testPath"})
     async with engine.begin() as c:
         await c.execute(
-            sa.text("update connections set plugin_id = 'opsai.desk' where tenant_id = :t and id = :id"),
+            sa.text("update connections set app_id = 'plugin:opsai.desk' where tenant_id = :t and id = :id"),
             {"t": tenant, "id": conn},
         )
-    r = await press_test(client, tenant, conn, PRIYA, account="team")
+    r = await press_test(client, tenant, conn, PRIYA, app="plugin:opsai.desk", account="team")
     error = r.json()["error"]
     assert r.status_code == 400 and error["code"] == "not_signed_in" and "Sign" in error["message"], r.text
     assert system.seen == []

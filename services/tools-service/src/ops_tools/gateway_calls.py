@@ -21,7 +21,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
 from .auth import SIGNED_WITH
-from .environments import PRODUCTION, TEST
+from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.review_events import SYSTEM_TOOLS
@@ -125,11 +125,11 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         return None
     op, module = resolved.operation, resolved.module
     if module.get("sign_in_needed"):
-        # Each person signs in, and this environment has no instance yet (c-616): the plugin is on. Refused as a
+        # Each person signs in, and the account has no instance yet (c-616): the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
         return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), []
     if module.get("instance_missing"):
-        # The team account has not signed in for this environment. The plugin is on.
+        # The team account has not signed in yet. The plugin is on.
         return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), []
     if module.get("plugin_off"):
         # A plugin off for the install or the team (c-564): refused before approval, so no write waits for a person.
@@ -251,8 +251,8 @@ class GatewayCalls:
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
 
-        # The run the call is made in, live (production) or test; the registry picks the environment its account
-        # signs in with from it (connections.records.slot_for).
+        # The run the call is made in, live (production) or test; the registry picks the account it signs in with
+        # from it (connections.records.account_for).
         run = str(req.run_context.get("environment") or TEST)
         resolved = await self.registry.resolve(
             req.tool,
@@ -283,8 +283,8 @@ class GatewayCalls:
             "created_at": now_iso(),
             "module_id": resolved.module["id"] if resolved and resolved.module else None,
             "approval_token_id": _token_ref(req.approval_token),
-            # The environment the call's account signs in with, which a test run may take from production.
-            "environment": (resolved.module or {}).get("environment", run) if resolved else run,
+            # The run the call was made in; connection_id names the account it signed in with.
+            "environment": run,
             "connection_id": resolved.module.get("connection_id") if resolved and resolved.module else None,
             "channel": channel,
             "client_name": client_name,
@@ -350,9 +350,9 @@ class GatewayCalls:
                 self.app_writes_wait is not None
                 and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
             )
-            # A test run whose app has no test account signs in with the production one (connections.records
-            # slot_for); its writes then wait for a person, so testing never changes live data unseen.
-            or (run == TEST and (module or {}).get("environment") == PRODUCTION)
+            # A test run on an app with no sandbox account signs in with its live one (connections.records
+            # account_for); its writes then wait for a person, so testing never changes live data unseen.
+            or (run == TEST and bool((module or {}).get("connection_id")) and not (module or {}).get("sandbox"))
         )
         # When approval is on, roles decide (owner, 2026-11-01): a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.

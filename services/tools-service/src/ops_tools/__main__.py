@@ -28,11 +28,12 @@ from ops_store.database import open_database
 from ops_store.schema_version import require_current_schema
 
 from .app import create_gateway_app
+from .apps import Apps, apps_router
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
-from .connections.routes import connections_router
+from .connections.routes import accounts_router
 from .connections.service import ConnectionService
 from .defaults import catch_up_at_start
 from .egress import EgressPolicy, NewHosts, OverrideResolver, egress_client, egress_transport
@@ -74,7 +75,6 @@ from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
 from .store.send_policies import SendPolicies
 from .store.team_defaults import TeamDefaults
-from .systems import Systems, systems_router
 from .tools import LocalToolRunner, ToolCaller
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
@@ -143,7 +143,7 @@ def main() -> None:
     credentials = credential_store(settings)
     secrets = SecretResolver(SecretStore(engine), credentials)
     # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
-    # Ops AI's own OAuth client per plugin comes from the install config; the store hands it to an environment on it.
+    # Ops AI's own OAuth client per plugin comes from the install config; the store hands it to an account on it.
     connection_store = ConnectionStore(engine, settings.plugin_clients)
     tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
     # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
@@ -151,8 +151,8 @@ def main() -> None:
     authenticator = Authenticator(connection_store, secrets, tokens, links)
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
 
-    # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is reported on
-    # /v1/plugins and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
+    # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is logged
+    # (plugin_failed) and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
     plugins = PluginHost.when_on(
         settings,
         store,
@@ -217,8 +217,9 @@ def main() -> None:
         http=egress_client(policy, ca_file=ca),
         # A plugin's connection takes its instance from the token answer (c-564).
         on_token=plugins.on_token if plugins else None,
-        plugin_settings=plugins.environment_settings if plugins else None,
+        plugin_settings=plugins.account_settings if plugins else None,
     )
+    apps = Apps(connection_service, store, plugins, modules)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
         registry=ToolRegistry(catalog, store, plugins, connection_store),
@@ -304,18 +305,17 @@ def main() -> None:
             *(
                 [
                     plugins_router(
-                        plugins,
-                        connection_service,
+                        apps.plugin_accounts,
                         directory,
                         users=AgentsToolUsers(client("agents", agents_url, ["agents:view"])),
                     )
                 ]
-                if plugins
+                if apps.plugin_accounts
                 else []
             ),
             *([plugin_templates_router(plugins)] if plugins else []),
-            connections_router(connection_service, directory),
-            systems_router(Systems(connection_service, store, plugins, modules), directory),
+            accounts_router(connection_service, directory),
+            apps_router(apps, directory),
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),

@@ -32,10 +32,11 @@ from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_store import isolation
 from ops_tools.app import create_gateway_app
+from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Authenticator, Tokens
 from ops_tools.auth.discovery import Discovery
 from ops_tools.connections.connect_links import ConnectLinks
-from ops_tools.connections.routes import connections_router
+from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress import EgressPolicy
 from ops_tools.egress_routes import egress_router
@@ -46,6 +47,8 @@ from ops_tools.modules.seed import load
 from ops_tools.modules.service import ModuleService
 from ops_tools.modules.workflows import StaticWorkflows, WorkflowDirectory
 from ops_tools.opa import OpaClient
+from ops_tools.plugins.host import PluginHost
+from ops_tools.plugins.routes import plugins_router
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
@@ -279,13 +282,16 @@ def build_app(
     flags: Flags | None = None,
     new_hosts: Any = None,
     install_clients: Any = None,
+    plugins: PluginHost | None = None,
+    users: Any = None,
 ) -> FastAPI:
     """The gateway app as __main__ builds it, on the tenant's registry. `opa` defaults to an address nothing answers,
     for tests that never reach a decision; `upstream` is what http operations call. `mcp` serves /mcp: its SDK manager
     runs a task group that must be left in the task that entered it, so a test using it enters the lifespan itself,
     never in a fixture whose teardown runs in another task. `flags` default to `mcp_gateway` on when `mcp` is
     asked for. `new_hosts` is the account's egressNewHosts policy (anything with `async mode(tenant)`);
-    `install_clients` the install config's OAuth client per plugin (Ops AI's app)."""
+    `install_clients` the install config's OAuth client per plugin (Ops AI's app). `plugins` mounts the plugin
+    routes and serves plugin calls as __main__ does; `users` answers who uses an app's tools."""
     settings = Settings()
     catalog = load_catalog(AGENTS_FIXTURES)
     directory = Directory.from_seed(seed, datetime.now(UTC))
@@ -308,9 +314,27 @@ def build_app(
         publish_policy=publish_policy,
         auth=authenticator,
     )
+    accounts = ConnectionService(
+        connections,
+        resolver,
+        vault,
+        tokens,
+        directory,
+        egress=policy,
+        console_url=CONSOLE_URL,
+        discovery=Discovery(upstream, policy) if upstream is not None else None,
+        auth=authenticator,
+        http=upstream,
+        on_token=plugins.on_token if plugins else None,
+        plugin_settings=plugins.account_settings if plugins else None,
+    )
+    tokens.plugin_hosts = plugins.connection_hosts if plugins else None
+    apps = Apps(accounts, store, plugins, service)
+    plugin_routes = [plugins_router(apps.plugin_accounts, directory, users=users)] if apps.plugin_accounts else []
     return create_gateway_app(
         opa=OpaClient(opa or httpx.AsyncClient(base_url="http://opa.invalid")),
-        registry=ToolRegistry(catalog, store, None, connections),
+        registry=ToolRegistry(catalog, store, plugins, connections),
+        plugins=plugins,
         log=calls,
         runner=LocalToolRunner(catalog, MemorySender(), cases=cases, decisions=service),
         review_key=REVIEW_KEY,
@@ -322,21 +346,9 @@ def build_app(
             secrets_router(resolver, modules=ModuleStore(engine)),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
-            connections_router(
-                ConnectionService(
-                    connections,
-                    resolver,
-                    vault,
-                    tokens,
-                    directory,
-                    egress=policy,
-                    console_url=CONSOLE_URL,
-                    discovery=Discovery(upstream, policy) if upstream is not None else None,
-                    auth=authenticator,
-                    http=upstream,
-                ),
-                directory,
-            ),
+            accounts_router(accounts, directory),
+            apps_router(apps, directory),
+            *plugin_routes,
         ),
         http_client=upstream,
         egress=policy,

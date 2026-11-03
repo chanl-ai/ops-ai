@@ -32,12 +32,9 @@ from ops_tools.auth import Authenticator
 from ops_tools.auth.kinds import KINDS
 from ops_tools.auth.tokens import Tokens
 from ops_tools.connections.connect_links import ConnectLinks
-from ops_tools.connections.service import ConnectionService
 from ops_tools.executor import HttpExecutor
-from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, module_id_of
-from ops_tools.plugins.routes import plugins_router
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
@@ -128,24 +125,13 @@ async def rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> AsyncIt
     )
     system = System()
     upstream = system.client()
-    app = build_app(engine, seed, tenant, auth=auth, upstream=upstream)
     vault = credentials()
     store = ConnectionStore(engine)
     tokens = Tokens(store, vault, upstream, AllowAll())  # type: ignore[arg-type]
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-    connections = ConnectionService(
-        store,
-        SecretResolver(SecretStore(engine), vault),
-        vault,
-        tokens,
-        directory,
-        egress=None,
-        console_url=CONSOLE_URL,
-    )
     loaded = discover(found=[], folders=[str(p) for p in sorted(KINDS_DIR.glob("kinds_*"))])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store)
-    app.include_router(plugins_router(host, connections, directory))
+    app = build_app(engine, seed, tenant, auth=auth, upstream=upstream, plugins=host)
     resolver = SecretResolver(SecretStore(engine), vault)
     authenticator = Authenticator(store, resolver, tokens, ConnectLinks(store, CONSOLE_URL))
     executor = PluginExecutor(
@@ -168,7 +154,7 @@ def admin(tenant: str) -> dict[str, str]:
 
 
 async def turn_on(rig: Rig, tenant: str, plugin: str, **body: Any) -> httpx.Response:
-    return await rig.client.put(f"/v1/plugins/{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
+    return await rig.client.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
 
 
 async def call_as_team(rig: Rig, tenant: str, plugin: str, tool: str = "get_record") -> ToolOutcome:
@@ -184,10 +170,15 @@ async def call_as_team(rig: Rig, tenant: str, plugin: str, tool: str = "get_reco
     return await rig.executor.run(seen, op, args, actor="test", environment="production", acting_for=None)
 
 
+async def account_url(rig: Rig, tenant: str, connection_id: str) -> str:
+    """The account's address under its app, the plugin's (`plugin:<id>`)."""
+    conn = await rig.store.get(tenant, connection_id)
+    assert conn is not None
+    return f"/v1/apps/{conn['app_id']}/accounts/{connection_id}"
+
+
 async def health_of(rig: Rig, tenant: str, connection_id: str) -> dict[str, Any]:
-    r = await rig.client.post(
-        f"/v1/connections/{connection_id}/test", json={"environment": "production"}, headers=admin(tenant)
-    )
+    r = await rig.client.post(f"{await account_url(rig, tenant, connection_id)}/test", json={}, headers=admin(tenant))
     assert r.status_code == 200, r.text
     return dict(r.json()["data"]["health"])
 
@@ -223,8 +214,8 @@ async def test_each_method_turns_on_with_its_credential_tests_and_signs_the_call
 async def test_a_secret_given_at_the_turn_on_is_never_answered_back(rig: Rig, tenant: str) -> None:
     on = await turn_on(rig, tenant, "test.basic", credentials={"username": USER, "password": PASSWORD})
     connection_id = str(on.json()["data"]["connectionId"])
-    shown = on.text + (await rig.client.get("/v1/plugins", headers=admin(tenant))).text
-    shown += (await rig.client.get(f"/v1/connections/{connection_id}", headers=admin(tenant))).text
+    shown = on.text + (await rig.client.get("/v1/apps", headers=admin(tenant))).text
+    shown += (await rig.client.get(await account_url(rig, tenant, connection_id), headers=admin(tenant))).text
     assert USER in shown and PASSWORD not in shown
 
 
@@ -300,9 +291,9 @@ async def test_a_cancelled_connect_leaves_nothing_and_the_next_turn_on_makes_a_n
     half-made connection was left, and a binding naming a removed connection could never be turned on again)."""
     first = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
     made = str(first.json()["data"]["connectionId"])
-    gone = await rig.client.delete(f"/v1/connections/{made}", headers=admin(tenant))
+    gone = await rig.client.delete(await account_url(rig, tenant, made), headers=admin(tenant))
     assert gone.status_code in (200, 204), gone.text
-    off = await rig.client.put("/v1/plugins/test.bearer/team", json={"enabled": False}, headers=admin(tenant))
+    off = await rig.client.put("/v1/apps/plugin:test.bearer/team", json={"enabled": False}, headers=admin(tenant))
     assert off.status_code == 200 and off.json()["data"]["connectionId"] is None, off.text
     again = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
     assert again.status_code == 200, again.text
@@ -351,7 +342,7 @@ async def test_a_certificate_given_at_the_turn_on_is_presented_and_its_key_never
         KEY_PEM,
         CA,
     )
-    shown = on.text + (await rig.client.get(f"/v1/connections/{connection_id}", headers=admin(tenant))).text
+    shown = on.text + (await rig.client.get(await account_url(rig, tenant, connection_id), headers=admin(tenant))).text
     assert "placeholder-private-key" not in shown
 
 

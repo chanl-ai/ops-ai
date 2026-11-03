@@ -1,4 +1,4 @@
-"""Each app card's one state and its credential (GET /v1/systems), worked out once here, by failure mode: an app the
+"""Each app card's one state and its credential (GET /v1/apps), worked out once here, by failure mode: an app the
 team has not turned on reads as needing a sign-in; a signed-in account whose test failed reads as plain connected; a
 person's own sign-in on an app each person signs in to is ignored; and the card names the wrong credential.
 Rig: test_app_accounts."""
@@ -27,7 +27,7 @@ JAMES = ("James Richardson", {"team_platform": "builder"})
 
 
 async def card(w: World, tenant: str, who: dict[str, str] | None = None) -> dict[str, Any]:
-    r = await w.client.get("/v1/systems", headers=who or admin(tenant))
+    r = await w.client.get("/v1/apps", headers=who or admin(tenant))
     assert r.status_code == 200, r.text
     return next(c for c in r.json()["data"] if c["id"] == APP)
 
@@ -53,7 +53,7 @@ async def test_a_signed_in_account_whose_test_failed_says_why(world: World, tena
     conn = await connected(world, tenant)
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     failed = {"status": "failed", "message": "acme.my.desk.test answered 403.", "at": datetime.now(UTC).isoformat()}
-    await world.store.set_token_test(tenant, conn, "production", "", failed)
+    await world.store.set_token_test(tenant, conn, "", failed)
     assert state(await card(world, tenant)) == ("test_failed", "acme.my.desk.test answered 403.")
 
 
@@ -69,16 +69,15 @@ async def test_on_an_app_each_person_signs_in_to_the_card_is_the_callers_own(wor
     assert (await card(world, tenant))["appState"] == "needs_sign_in"
 
 
-async def test_an_apps_account_shows_its_saved_settings_per_environment(world: World, tenant: str) -> None:  # noqa: F811
+async def test_an_apps_account_shows_its_saved_settings(world: World, tenant: str) -> None:  # noqa: F811
     # The app's Settings edit opens on what is saved, as a call reads it, not on the manifest's defaults.
     conn = await connected(world, tenant)
     await signed(world, tenant, conn, "https://acme.my.desk.test")
-    shown = await world.host.environment_settings(tenant, conn, ["production", "test"])
-    assert shown["production"] == {
+    shown = await world.host.account_settings(tenant, conn)
+    assert shown == {
         "pluginSettings": {"instance_url": "https://acme.my.desk.test", "api_version": "1"},
         "pluginSecrets": {},
     }, shown
-    assert shown["test"]["pluginSettings"] == {"api_version": "1"}, shown
 
 
 def acting_for(tenant: str, sub: str) -> dict[str, str]:

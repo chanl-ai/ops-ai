@@ -4,7 +4,8 @@ One stack per script: platform-service with the dev seed's own roles, tools-serv
 plugins of services/tools-service/tests/plugin_kinds, and the fake system of fake_multi_auth.py. Every test plugin is
 installed, so every team sees it, and the fake's hosts are allowed before a script's first step.
 
-Writes use today's routes (`/v1/plugins`, `/v1/connections`). The page read is `GET /v1/apps/{id}`. A check whose
+Every call goes through the Apps API: an app under `/v1/apps/{app}` and each of its accounts under
+`/v1/apps/{app}/accounts/{id}` (a plugin's app is `plugin:<id>`, a custom app's id is its first account's). A check whose
 behaviour is not built yet names the task it waits on in its detail (`target: waits on D2`), so a failing run says
 which steps are targets.
 """
@@ -65,6 +66,11 @@ def app_path(app: str) -> str:
     return f"/v1/apps/{quote(app, safe=':')}"
 
 
+def account_path(app: str, account: str) -> str:
+    """`/v1/apps/<app>/accounts/<account>`: an account is found only under its own app."""
+    return f"{app_path(app)}/accounts/{quote(account, safe='')}"
+
+
 @dataclass
 class Walk:
     api: httpx.Client
@@ -91,36 +97,26 @@ class Walk:
 
     def turn_on(self, role: str, plugin: str, **body: Any) -> str:
         """Turns `plugin` on for the role's team; returns the team account's id (its connection)."""
-        r = self.kept(self.gw.put(f"/v1/plugins/{plugin}/team", headers=self.who[role], json={"enabled": True, **body}))
+        r = self.kept(
+            self.gw.put(f"/v1/apps/plugin:{plugin}/team", headers=self.who[role], json={"enabled": True, **body})
+        )
         return str((data(r) or {}).get("connectionId") or "con_missing") if r.status_code == 200 else "con_missing"
 
     def test(self, role: str, app: str, account: str, *, as_who: str = "self") -> dict[str, Any]:
         """Test connection on one account of `app`, as the role or (`as_who="team"`) as the team account."""
-        _ = app
         r = self.kept(
-            self.gw.post(
-                f"/v1/connections/{account}/test",
-                headers=self.who[role],
-                json={"environment": "production", "account": as_who},
-            )
+            self.gw.post(f"{account_path(app, account)}/test", headers=self.who[role], json={"account": as_who})
         )
         return dict((data(r) or {}).get("health") or {"status": f"http {r.status_code}", "text": r.text[:200]})
 
     def sign_in(self, role: str, app: str, account: str, user: str) -> int:
         """Plays a person's browser through the fake's sign-in page for their own account on `account`."""
-        _ = app
-        started = self.kept(
-            self.gw.post(
-                f"/v1/connections/{account}/sign-in",
-                headers=self.who[role],
-                json={"environment": "production"},
-            )
-        )
+        started = self.kept(self.gw.post(f"{account_path(app, account)}/sign-in", headers=self.who[role], json={}))
         url = (data(started) or {}).get("authorizeUrl", "") if started.status_code == 200 else ""
         back = self.m["sign_in"](url, user) if url else {}
         done = self.kept(
             self.gw.post(
-                f"/v1/connections/{account}/sign-in/complete",
+                f"{account_path(app, account)}/sign-in/complete",
                 headers=self.who[role],
                 json={"state": back.get("state", ""), "code": back.get("code", "")},
             )

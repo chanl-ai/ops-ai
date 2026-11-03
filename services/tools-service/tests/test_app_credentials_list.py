@@ -47,9 +47,7 @@ async def test_the_teams_own_client_lists_its_app_permissions_accounts_and_statu
 
 
 async def test_an_app_that_signs_in_with_a_key_has_no_app_credential(world: World, tenant: str) -> None:  # noqa: F811
-    made = await world.client.post(
-        "/v1/connections", json={"name": "Ledger", "authKind": "api_key"}, headers=admin(tenant)
-    )
+    made = await world.client.post("/v1/apps", json={"name": "Ledger", "authKind": "api_key"}, headers=admin(tenant))
     assert made.status_code == 201, made.text
     assert await credentials(world, tenant) == []
 
@@ -57,7 +55,7 @@ async def test_an_app_that_signs_in_with_a_key_has_no_app_credential(world: Worl
 async def test_the_status_is_the_last_test_with_my_account(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
     for status, shown in (("failed", "failing"), ("ok", "working")):
-        event = {"action": "credential_checked", "environment": "production", "actor": "Priya Shah"}
+        event = {"action": "credential_checked", "actor": "Priya Shah"}
         detail = {"status": status, "account": None}
         await world.store.note(tenant, conn, {**event, "at": datetime.now(UTC), "detail": detail})
         assert (await credentials(world, tenant))[0]["status"] == shown
@@ -65,7 +63,7 @@ async def test_the_status_is_the_last_test_with_my_account(world: World, tenant:
 
 async def test_an_app_on_ops_ais_app_reads_so_and_no_secret_comes_back(world: World, tenant: str) -> None:  # noqa: F811
     sealed = "platform-app-secret-7f3a"  # the install's (test_plugin_credentials.INSTALL)
-    on = await world.client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=admin(tenant))
+    on = await world.client.put(f"/v1/apps/plugin:{ID}/team", json={"enabled": True}, headers=admin(tenant))
     assert on.status_code == 200, on.text
     r = await world.client.get("/v1/app-credentials", headers=admin(tenant))
     assert [c["type"] for c in await credentials(world, tenant)] == ["ops_ai"], r.text

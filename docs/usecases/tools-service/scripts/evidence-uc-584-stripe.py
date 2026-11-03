@@ -109,7 +109,9 @@ with ExitStack() as stack:
 
     gw.post("/v1/egress/hosts", json={"value": "api.stripe.com", "note": "uc-584 evidence"}, headers=sam)
     on = kept(
-        gw.put("/v1/plugins/evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya)
+        gw.put(
+            "/v1/apps/plugin:evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
+        )
     )
 
     customer = call("stripe_create_customer", {"name": "Harbor test customer", "email": "test@harborpine.example"})
@@ -133,7 +135,7 @@ with ExitStack() as stack:
 
     kept(
         gw.put(
-            "/v1/plugins/evidence.stripe/team",
+            "/v1/apps/plugin:evidence.stripe/team",
             json={"enabled": True, "settings": {"stripe_version": "1999-01-01"}},
             headers=priya,
         )

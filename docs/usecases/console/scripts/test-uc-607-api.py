@@ -1,15 +1,15 @@
 """uc-607, api layer: docs/usecases/console/connect-apps.md, stories S9-S10 (steps 20-23).
 
 The Apps stack of docs/usecases/lib/apps_walk.py: platform-service with the seed's own roles, tools-service with the
-nine test plugins installed, and the fake system. The steps call the routes named after the screen's words
-(`GET /v1/systems`, `GET /v1/apps/{id}`, `PUT /v1/plugins/{id}/team`, kept as they are); a check whose behaviour is not
-built names the task it waits on. No model call."""
+nine test plugins installed, and the fake system. The steps call the Apps API
+(`GET /v1/apps`, `GET /v1/apps/{id}`, `PUT /v1/apps/{id}/team`, each account under `/v1/apps/{id}/accounts/{account}`);
+a check whose behaviour is not built names the task it waits on. No model call."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from apps_walk import app_path, apps_stack, target
+from apps_walk import account_path, app_path, apps_stack, target
 from usecase_harness import check, data, finish, until
 
 APP = "plugin:test.header-key"
@@ -22,17 +22,17 @@ def ids(rows: object) -> list[str]:
 # A person's sign-in returns to the console, so its address is set (step 29).
 with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu.
-    listed = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+    listed = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
     kinds = [r.get("kind") for r in data(listed) or []] if listed.status_code == 200 else []
     check(
-        "20 GET /v1/systems lists the team's apps in one call, the test plugins among them and no built-in app",
+        "20 GET /v1/apps lists the team's apps in one call, the test plugins among them and no built-in app",
         listed.status_code == 200 and APP in ids(data(listed)) and "builtin" not in kinds,
         (listed.status_code, kinds),
     )
 
     # 21. A key saved at turn-on is not a sign-in: the app reads Connected only once its test has passed.
     def status() -> str | None:
-        r = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+        r = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
         # The card's state says Connected; its status is the account record's own word.
         return next((c.get("state") for c in data(r) or [] if c.get("id") == APP), None)
 
@@ -48,7 +48,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
 
     # 22. A viewer sees the apps but may not turn one on.
     seen = w.kept(w.gw.get(app_path(APP), headers=w.who["viewer"]))
-    refused = w.kept(w.gw.put("/v1/plugins/test.query-key/team", json={"enabled": True}, headers=w.who["viewer"]))
+    refused = w.kept(w.gw.put("/v1/apps/plugin:test.query-key/team", json={"enabled": True}, headers=w.who["viewer"]))
     check(
         "22 the viewer reads the app (200) and is refused turning one on (403)",
         seen.status_code == 200 and refused.status_code == 403,
@@ -73,7 +73,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     body = {"name": "uc607-rates", "displayName": "uc607 rates", "system": "uc607 rates", "http": tool}
     made = w.kept(w.gw.post("/v1/tool-modules", json=body, headers=w.who["admin"]))
     own = str(((data(made) or {}).get("connection") or {}).get("id") or "") if made.status_code == 201 else ""
-    after = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
+    after = w.kept(w.gw.get("/v1/apps", headers=w.who["admin"]))
     shown = [(r.get("id"), r.get("kind")) for r in data(after) or []]
     pages = [w.kept(w.gw.get(app_path(a), headers=w.who["admin"])).status_code for a in (own, "builtin:files")]
     check(
@@ -123,14 +123,13 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     )
     w.m["fake"].down = False
 
-    # 32. The app's Settings read what is saved for each environment; the secret ones only say whether they are set.
-    shown = data(w.kept(w.gw.get(f"/v1/connections/{person_app}", headers=w.who["admin"]))) or {}
-    production = (shown.get("environments") or {}).get("production") or {}
+    # 32. The account's Settings read what is saved on it; the secret ones only say whether they are set.
+    shown = data(w.kept(w.gw.get(account_path("plugin:test.person", person_app), headers=w.who["admin"]))) or {}
     check(
-        "32 an app's account shows its saved settings per environment, as a call reads them",
-        (production.get("pluginSettings") or {}).get("base_url") == "https://api.multi.test"
-        and production.get("pluginSecrets") == {},
-        production,
+        "32 an app's account shows its saved settings, as a call reads them",
+        (shown.get("pluginSettings") or {}).get("base_url") == "https://api.multi.test"
+        and shown.get("pluginSecrets") == {},
+        {k: shown.get(k) for k in ("pluginSettings", "pluginSecrets")},
     )
 
 finish()

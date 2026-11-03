@@ -1,4 +1,4 @@
-"""Who uses an app before a team turns it off (c-616 P1, `GET /v1/plugins/{id}/team/users`), by failure mode: the
+"""Who uses an app before a team turns it off (c-616 P1, `GET /v1/apps/{app_id}/used-by`), by failure mode: the
 answer names another app's tools or misses one of this app's; it lists people outside the team's agents and
 workflows; a viewer reads it; and a missing agents-service answer reads as "nobody uses it"."""
 
@@ -11,7 +11,7 @@ from .test_app_accounts import TEAM, World, admin, connected, world  # noqa: F40
 from .test_plugins import ID
 from .test_review_decisions import person
 
-URL = f"/v1/plugins/{ID}/team/users"
+URL = f"/v1/apps/plugin:{ID}/used-by"
 
 
 async def test_the_apps_users_are_its_tools_agents_and_workflows(world: World, tenant: str) -> None:  # noqa: F811

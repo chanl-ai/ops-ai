@@ -1,7 +1,7 @@
 """uc-588, sdk layer: docs/usecases/tools-service/plugin-sign-in-methods.md, story S11 (step 34).
 The Apps stack (docs/usecases/lib/apps_walk.py); the person-key desk is on for person sign-in, and Maya gives, reads
 and removes her own key through the SDK's layer in the screen's words (K1), over today's
-/v1/me/connections routes.
+/v1/me/accounts routes.
 No model call."""
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ with apps_stack() as w:
     gave = attempt(ops, "accounts", "set_key", account, w.m["person_keys"]["maya"])
     health = w.test("approver", APP, account)
     through_sdk = attempt(ops, "accounts", "mine")
-    through_api = data(w.gw.get("/v1/me/connections", headers=w.who["approver"]))
+    through_api = data(w.gw.get("/v1/me/accounts", headers=w.who["approver"]))
     removed = attempt(ops, "accounts", "remove", account)
     after = attempt(ops, "accounts", "mine")
     row = next((r for r in through_sdk or [] if r.get("connectionId") == account), {})

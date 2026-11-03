@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0061_app_credentials
+-- tools-service, stamped at tools_0062_accounts
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -144,8 +144,14 @@ CREATE TABLE connections (
 	category VARCHAR(80) NULL, 
 	description VARCHAR(300) NULL, 
 	docs_url VARCHAR(500) NULL, 
-	plugin_id VARCHAR(120) NULL, 
+	app_id VARCHAR(120) NOT NULL, 
+	sandbox BIT NOT NULL DEFAULT 0, 
 	account_name VARCHAR(200) NULL, 
+	settings NVARCHAR(max) NOT NULL, 
+	secrets NVARCHAR(max) NOT NULL, 
+	platform_app VARCHAR(120) NULL, 
+	credential_id VARCHAR(64) NULL, 
+	plugin_settings NVARCHAR(max) NULL, 
 	origin VARCHAR(16) NULL, 
 	revision INTEGER NOT NULL, 
 	created_by VARCHAR(200) NOT NULL, 
@@ -154,6 +160,8 @@ CREATE TABLE connections (
 	updated_at DATETIMEOFFSET NOT NULL, 
 	CONSTRAINT connections_pkey PRIMARY KEY (tenant_id, id)
 );
+GO
+CREATE INDEX ix_connections_app ON connections (tenant_id, team_id, app_id);
 GO
 CREATE INDEX ix_connections_team ON connections (tenant_id, team_id);
 GO
@@ -175,7 +183,6 @@ CREATE TABLE oauth_states (
 	tenant_id VARCHAR(64) NOT NULL, 
 	state_hash VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
-	environment VARCHAR(16) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	person_id VARCHAR(200) NOT NULL, 
 	verifier_ct VARCHAR(max) NOT NULL, 
@@ -432,27 +439,9 @@ CREATE TABLE module_egress_hosts (
 	CONSTRAINT module_egress_hosts_tenant_id_host_fkey FOREIGN KEY(tenant_id, host) REFERENCES egress_hosts (tenant_id, host) ON DELETE NO ACTION
 );
 GO
-CREATE TABLE connection_environments (
-	tenant_id VARCHAR(64) NOT NULL, 
-	connection_id VARCHAR(64) NOT NULL, 
-	environment VARCHAR(16) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	settings NVARCHAR(max) NOT NULL, 
-	secrets NVARCHAR(max) NOT NULL, 
-	health NVARCHAR(max) NULL, 
-	platform_app VARCHAR(120) NULL, 
-	credential_id VARCHAR(64) NULL, 
-	plugin_settings NVARCHAR(max) NULL, 
-	updated_by VARCHAR(200) NOT NULL, 
-	updated_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT connection_environments_pkey PRIMARY KEY (tenant_id, connection_id, environment), 
-	CONSTRAINT connection_environments_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
-);
-GO
 CREATE TABLE connection_tokens (
 	tenant_id VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
-	environment VARCHAR(16) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	person_id VARCHAR(200) NOT NULL, 
 	access_ct VARCHAR(max) NOT NULL, 
@@ -466,7 +455,7 @@ CREATE TABLE connection_tokens (
 	refused_reason VARCHAR(300) NULL, 
 	pinned BIT NOT NULL DEFAULT 0, 
 	test NVARCHAR(max) NULL, 
-	CONSTRAINT connection_tokens_pkey PRIMARY KEY (tenant_id, connection_id, environment, person_id), 
+	CONSTRAINT connection_tokens_pkey PRIMARY KEY (tenant_id, connection_id, person_id), 
 	CONSTRAINT connection_tokens_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
 GO
@@ -474,7 +463,6 @@ CREATE TABLE connect_links (
 	tenant_id VARCHAR(64) NOT NULL, 
 	token_hash VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
-	environment VARCHAR(16) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	person_id VARCHAR(200) NOT NULL, 
 	email VARCHAR(320) NOT NULL, 
@@ -533,12 +521,6 @@ CREATE SECURITY POLICY ops_security.secret_audit_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.secret_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.connection_environments_isolation
-    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_environments,
-    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_environments AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_environments AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.connection_tokens_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_tokens,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_tokens AFTER INSERT,
@@ -556,5 +538,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0061_app_credentials');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0062_accounts');
 GO

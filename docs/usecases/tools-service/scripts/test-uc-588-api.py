@@ -50,6 +50,7 @@ WRONG = "wrong-secret-0000"
 TENANT: dict[str, str] = {}
 # Every answer the use case reads, searched at the end for any secret it gave.
 SEEN: list[str] = []
+APP_OF: dict[str, str] = {}
 
 
 def kept(r: httpx.Response) -> httpx.Response:
@@ -78,14 +79,22 @@ def error(r: httpx.Response) -> dict[str, Any]:
 
 
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
-    return kept(gw.put(f"/v1/plugins/{plugin}/team", json={"enabled": True, **body}, headers=who))
+    r = kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
+    if r.status_code == 200 and (made := (data(r) or {}).get("connectionId")):
+        APP_OF[str(made)] = f"plugin:{plugin}"
+    return r
 
 
-def health(gw: httpx.Client, who: dict[str, str], connection_id: str, account: str = "self") -> dict[str, Any]:
+def account(connection_id: str) -> str:
+    """A plugin's account lives under its app (`plugin:<id>`), remembered from the turn-on that made it."""
+    return f"/v1/apps/{APP_OF.get(connection_id, 'plugin:missing')}/accounts/{connection_id}"
+
+
+def health(gw: httpx.Client, who: dict[str, str], connection_id: str, who_tests: str = "self") -> dict[str, Any]:
     r = kept(
         gw.post(
-            f"/v1/connections/{connection_id}/test",
-            json={"environment": "production", "account": account},
+            f"{account(connection_id)}/test",
+            json={"account": who_tests},
             headers=who,
         )
     )
@@ -97,10 +106,10 @@ def last(fake: Any, method: str) -> dict[str, Any]:
 
 
 def sign_in_own(gw: httpx.Client, m: dict[str, Any], who: dict[str, str], connection_id: str, user: str) -> int:
-    started = gw.post(f"/v1/connections/{connection_id}/sign-in", json={"environment": "production"}, headers=who)
+    started = gw.post(f"{account(connection_id)}/sign-in", json={}, headers=who)
     back = m["sign_in"]((data(started) or {}).get("authorizeUrl", ""), user) if started.status_code == 200 else {}
     done = gw.post(
-        f"/v1/connections/{connection_id}/sign-in/complete",
+        f"{account(connection_id)}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -126,15 +135,15 @@ with ExitStack() as stack:
     ravi = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
 
     # 1. Every test plugin loads; Security lists the system's hosts.
-    loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
-    ids = sorted(p["id"] for p in loaded.get("plugins", []))
+    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-588"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-588"}, headers=sam))
     check(
         "1 all nine test plugins load, and Security lists the system's hosts",
-        len(ids) == 9 and not loaded.get("failed")
+        len([i for i in ids if i.startswith("test.")]) == 9
         and all(r.status_code in (200, 201, 409) for r in allowed),
-        {"ids": ids, "failed": loaded.get("failed")},
+        {"ids": ids},
     )  # fmt: skip
 
     # 2-6. Each method a team gives once: turned on, Test connection passes, and a run's call reaches the system
@@ -228,7 +237,7 @@ with ExitStack() as stack:
     bad_cc = turn_on(gw, wanjiru, "test.client", clientId="multi-cc", clientSecret=WRONG)
     bad_cc_id = str((data(bad_cc) or {}).get("connectionId") or "con_missing")
     bad_cc_call = call(gw, "client_get_record", team="team_platform", args={"id": "rec-1042"})
-    bad_cc_status = (data(kept(gw.get(f"/v1/connections/{bad_cc_id}", headers=wanjiru))) or {}).get("status")
+    bad_cc_status = (data(kept(gw.get(f"{account(bad_cc_id)}", headers=wanjiru))) or {}).get("status")
     only_ca = {"trustedCa": m["mtls_ca"]}
     no_cert = turn_on(gw, wanjiru, "test.cert", settings={"base_url": m["mtls_base"]}, credentials=only_ca)
     no_cert_id = str((data(no_cert) or {}).get("connectionId") or "con_missing")
@@ -256,12 +265,12 @@ with ExitStack() as stack:
     # 20. Each person connects the API-key desk with their own key: Test connection as each reaches the
     # system as them; a call with nobody behind it uses nobody's key; Your connections lists it by method, no key.
     def give(who: dict[str, str], conn: str, key: str) -> httpx.Response:
-        body = {"environment": "production", "credentials": {"key": key}}
-        return kept(gw.put(f"/v1/me/connections/{conn}/credentials", json=body, headers=who))
+        body = {"credentials": {"key": key}}
+        return kept(gw.put(f"/v1/me/accounts/{conn}/credentials", json=body, headers=who))
 
     keyed_on = turn_on(gw, priya, "test.person-key", signIn="person")
     keyed_id = str((data(keyed_on) or {}).get("connectionId") or "con_missing")
-    offered = data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+    offered = data(kept(gw.get("/v1/me/accounts", params={"every": "true"}, headers=james))) or []
     gave = [
         give(james, keyed_id, PERSON_KEYS["james"]).status_code,
         give(maya, keyed_id, PERSON_KEYS["maya"]).status_code,
@@ -271,7 +280,7 @@ with ExitStack() as stack:
     key_maya = health(gw, maya, keyed_id)
     maya_key_seen = last(fake, "person-key").get("as")
     nobody_key = call(gw, "person_key_get_record", args={"id": "rec-1042"})
-    listed = data(kept(gw.get("/v1/me/connections", headers=james))) or []
+    listed = data(kept(gw.get("/v1/me/accounts", headers=james))) or []
     check(
         "20 two people connect an API-key app with their own keys: each one's test reaches the system as them, a call "
         "with nobody behind it is refused, and Your connections names the method and never the key",
@@ -289,8 +298,8 @@ with ExitStack() as stack:
     give(james, keyed_id, WRONG)
     wrong = health(gw, james, keyed_id)
     still = health(gw, maya, keyed_id)
-    status = (data(kept(gw.get(f"/v1/connections/{keyed_id}", headers=priya))) or {}).get("status")
-    gone = kept(gw.delete(f"/v1/me/connections/{keyed_id}", params={"environment": "production"}, headers=james))
+    status = (data(kept(gw.get(f"{account(keyed_id)}", headers=priya))) or {}).get("status")
+    gone = kept(gw.delete(f"/v1/me/accounts/{keyed_id}", headers=james))
     after = health(gw, james, keyed_id)
     check(
         "21 a wrong key fails James's test with the system's 401 while Maya's passes and the connection stays healthy; "
@@ -307,7 +316,7 @@ with ExitStack() as stack:
     refused_test = health(gw, james, keyed_id)
     marked = [
         r
-        for r in data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+        for r in data(kept(gw.get("/v1/me/accounts", params={"every": "true"}, headers=james))) or []
         if r["connectionId"] == keyed_id
     ]
     sent_before = len([c for c in fake.state()["calls"] if c["method"] == "person-key"])
@@ -317,7 +326,7 @@ with ExitStack() as stack:
     renewed_key = health(gw, james, keyed_id)
     cleared = [
         r
-        for r in data(kept(gw.get("/v1/me/connections", params={"every": "true"}, headers=james))) or []
+        for r in data(kept(gw.get("/v1/me/accounts", params={"every": "true"}, headers=james))) or []
         if r["connectionId"] == keyed_id
     ]
     check(
@@ -348,7 +357,7 @@ with ExitStack() as stack:
 
     # 30. Ravi (viewer) connects his own account from the app page; My accounts lists it as connected as him.
     signed_ravi = sign_in_own(gw, m, ravi, person_id, "ravi.person")
-    mine = [r for r in data(kept(gw.get("/v1/me/connections", headers=ravi))) or [] if r["connectionId"] == person_id]
+    mine = [r for r in data(kept(gw.get("/v1/me/accounts", headers=ravi))) or [] if r["connectionId"] == person_id]
     check(
         "30 Ravi (viewer) connects his own account from the app page, and My accounts reads connected as ravi.person",
         signed_ravi == 200 and [(r["connected"], r.get("account")) for r in mine] == [(True, "ravi.person")],
@@ -360,12 +369,12 @@ with ExitStack() as stack:
     needed = acting("person_get_record", "p.shah@harborpine.example")
     found = re.search(r"link=([\w-]+)", needed.text)
     link = found.group(1) if found else ""
-    opened = kept(gw.post("/v1/connections/connect-links/sign-in", json={"link": link}, headers=priya))
+    opened = kept(gw.post("/v1/connect-links/sign-in", json={"link": link}, headers=priya))
     link_url = (data(opened) or {}).get("authorizeUrl", "") if opened.status_code == 200 else ""
     link_back = m["sign_in"](link_url, "priya.person") if link_url else {}
     kept(
         gw.post(
-            f"/v1/connections/{person_id}/sign-in/complete",
+            f"{account(person_id)}/sign-in/complete",
             json={"state": link_back.get("state", ""), "code": link_back.get("code", "")},
             headers=priya,
         )
@@ -383,8 +392,7 @@ with ExitStack() as stack:
 
     # 13. No answer read above, no call log row and no service log line carries any secret given.
     for who in (priya, wanjiru):
-        SEEN.append(gw.get("/v1/plugins", headers=who).text)
-        SEEN.append(gw.get("/v1/connections", headers=who).text)
+        SEEN.append(gw.get("/v1/apps", headers=who).text)
         SEEN.append(gw.get("/v1/executions", headers=who).text)
     logs = "".join(p.read_text(errors="replace") for p in LOG_DIR.glob(f"tools-{TOOLS_PORT}.log"))
     secrets = [*SECRETS.values(), *CLIENTS.values(), *PERSON_KEYS.values(), WRONG, m["client_key"].split("\n")[1]]

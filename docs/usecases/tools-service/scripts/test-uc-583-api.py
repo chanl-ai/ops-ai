@@ -43,6 +43,7 @@ SIGNED = REPO / "services/tools-service/tests/plugin_signed"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps(sorted(str(p) for p in SIGNED.glob("signed_*")))}
 TENANT: dict[str, str] = {}
 SEEN: list[str] = []
+ACCOUNTS: dict[str, set[str]] = {}
 
 
 def kept(r: httpx.Response) -> httpx.Response:
@@ -71,16 +72,29 @@ def error(r: httpx.Response) -> dict[str, Any]:
 
 
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
-    return kept(gw.put(f"/v1/plugins/{plugin}/team", json={"enabled": True, **body}, headers=who))
+    return kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
+
+
+def account(connection_id: str) -> str:
+    """A plugin's account lives under its app; each test plugin's app here has one account per team."""
+    plugin = next((p for p, ids in ACCOUNTS.items() if connection_id in ids), "missing")
+    return f"/v1/apps/plugin:{plugin}/accounts/{connection_id}"
+
+
+def made(r: httpx.Response, plugin: str) -> str:
+    """The account a turn-on made or kept, remembered under its plugin's app."""
+    found = str((data(r) or {}).get("connectionId") or "con_missing")
+    ACCOUNTS.setdefault(plugin, set()).add(found)
+    return found
 
 
 def health(gw: httpx.Client, who: dict[str, str], connection_id: str) -> dict[str, Any]:
-    r = kept(gw.post(f"/v1/connections/{connection_id}/test", json={"environment": "production"}, headers=who))
+    r = kept(gw.post(f"{account(connection_id)}/test", json={}, headers=who))
     return dict((data(r) or {}).get("health") or {"status": f"http {r.status_code}", "text": r.text[:200]})
 
 
 def connection(gw: httpx.Client, who: dict[str, str], connection_id: str) -> dict[str, Any]:
-    return dict(data(kept(gw.get(f"/v1/connections/{connection_id}", headers=who))) or {})
+    return dict(data(kept(gw.get(account(connection_id), headers=who))) or {})
 
 
 def requests_to(fake: Any, system: str) -> list[dict[str, Any]]:
@@ -123,22 +137,22 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
 
-    loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
-    ids = sorted(p["id"] for p in loaded.get("plugins", []))
+    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-583"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-583"}, headers=sam))
     check(
         "1 the three certificate plugins load, and Security lists the sign-in's hosts",
-        ids == ["test.docusign", "test.entra", "test.google"]
+        {"test.docusign", "test.entra", "test.google"} <= set(ids)
         and all(r.status_code in (200, 201, 409) for r in allowed),
-        {"ids": ids, "failed": loaded.get("failed")},
+        {"ids": ids},
     )  # fmt: skip
 
     # S1. An Entra app proves itself with its certificate: no client secret is sent, and the call runs.
     pair = entra["pair"]
     signed = {"clientAuth": "private_key_jwt", "signingCertificate": pair.cert, "signingKey": pair.key}
     on = turn_on(gw, priya, "test.entra", clientId=entra["client_id"], credentials=signed)
-    entra_id = str((data(on) or {}).get("connectionId") or "con_missing")
+    entra_id = made(on, "test.entra")
     tested = health(gw, priya, entra_id)
     called = call(gw, "entra_get_record")
     asked = requests_to(fake, "entra")
@@ -197,7 +211,7 @@ with ExitStack() as stack:
     wrong_on = turn_on(gw, wanjiru, "test.entra", clientId=entra["client_id"],
                        credentials={"clientAuth": "private_key_jwt", "signingCertificate": other.cert,
                                     "signingKey": other.key})  # fmt: skip
-    wrong_id = str((data(wrong_on) or {}).get("connectionId") or "con_missing")
+    wrong_id = made(wrong_on, "test.entra")
     wrong_call = call(gw, "entra_get_record", team="team_platform")
     wrong_asked = requests_to(fake, "entra")[before:]
     wrong_status = connection(gw, wanjiru, wrong_id).get("status")
@@ -215,13 +229,13 @@ with ExitStack() as stack:
     mixed = turn_on(gw, wanjiru, "test.google", clientId=google["client_id"],
                     credentials={"signingCertificate": entra["pair"].cert, "signingKey": g_pair.key})  # fmt: skip
     read = connection(gw, priya, entra_id)
-    shown = ((read.get("environments") or {}).get("production") or {}).get("certificate") or {}
+    shown = read.get("certificate") or {}
     expiring = make_pair("ops-ai-acme-app", days=-1)
     old_before = len(fake.state()["token_requests"])
     old_on = turn_on(gw, wanjiru, "test.docusign", clientId=docusign["client_id"],
                      credentials={"subject": "user-5c0e2a", "audience": "account-d.docusign.com",
                                   "signingCertificate": expiring.cert, "signingKey": expiring.key})  # fmt: skip
-    old_id = str((data(old_on) or {}).get("connectionId") or "con_missing")
+    old_id = made(old_on, "test.docusign")
     old_call = call(gw, "docusign_get_record", team="team_platform")
     old_read = connection(gw, wanjiru, old_id)
     thumb_hex = base64.urlsafe_b64decode(pair.thumbprint + "=").hex()

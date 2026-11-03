@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 
-from connection_calls import allow_bank, call, clean, connection, module
+from connection_calls import allow_bank, at, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
 
 with ExitStack() as stack:
@@ -21,39 +21,37 @@ with ExitStack() as stack:
         "uc391 basic",
         "basic",
         {
-            "test": {"settings": {"username": "ops-test"}, "secretValues": {"password": "test-pass"}},
-            "production": {"settings": {"username": "ops-prod"}, "secretValues": {"password": "prod-pass"}},
+            "sandbox": {"settings": {"username": "ops-test"}, "secretValues": {"password": "test-pass"}},
+            "live": {"settings": {"username": "ops-prod"}, "secretValues": {"password": "prod-pass"}},
         },
         base_url=BANK_BASE,
     )
-    shown = data(gw.get(f"/v1/connections/{conn['id']}"))
+    sandbox = conn["sandboxAccount"]
+    shown = data(gw.get(at(sandbox)))
     check(
         "1 the username shows, the password is set and never shown",
-        shown["environments"]["test"]["settings"].get("username") == "ops-test"
-        and shown["environments"]["test"]["secrets"]["password"]["set"]
+        shown["settings"].get("username") == "ops-test"
+        and shown["secrets"]["password"]["set"]
         and "test-pass" not in str(shown),
-        shown["environments"]["test"],
+        shown,
     )
     module(gw, "uc391-basic", f"https://{bank['host']}/auth/basic", conn["id"])
     test = call(gw, "uc391_basic", environment="test")
     check(
-        "2 a test call signs in as the test user",
+        "2 a test call signs in as the sandbox account's user",
         test.get("ok") and test["output"] == {"user": "ops-test", "environment": "test"},
         test,
     )
     live = call(gw, "uc391_basic", environment="production")
     check(
-        "2 a live call signs in as the production user",
+        "2 a live call signs in as the live account's user",
         live.get("ok") and live["output"] == {"user": "ops-prod", "environment": "production"},
         live,
     )
-    wrong = gw.put(
-        f"/v1/connections/{conn['id']}/environments/test",
-        json={"revision": 1, "settings": {"username": "ops-test", "baseUrl": BANK_BASE}},
-    )
+    wrong = gw.patch(at(sandbox), json={"revision": 1, "settings": {"username": "ops-test", "baseUrl": BANK_BASE}})
     check("3 a change against an old revision is refused (409)", wrong.status_code == 409, wrong.text[:200])
-    secret_in_settings = gw.put(
-        f"/v1/connections/{conn['id']}/environments/test",
+    secret_in_settings = gw.patch(
+        at(sandbox),
         json={
             "revision": shown["revision"],
             "settings": {"username": "ops-test", "password": "x", "baseUrl": BANK_BASE},
@@ -66,9 +64,9 @@ with ExitStack() as stack:
     )
     rows = data(gw.get("/v1/executions", params={"tool": "uc391_basic", "pageSize": 20}))
     check(
-        "4 each call row names its environment and connection, and no password",
-        sorted(r.get("environment") for r in rows["data"]) == ["production", "test"]
-        and all(r.get("connectionId") == conn["id"] for r in rows["data"])
+        "4 each call row names its run and the account it signed in with, and no password",
+        sorted((r.get("environment"), r.get("connectionId")) for r in rows["data"])
+        == [("production", conn["id"]), ("test", sandbox["id"])]
         and "test-pass" not in str(rows)
         and "prod-pass" not in str(rows),
         rows["data"],

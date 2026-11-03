@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 
-from connection_calls import allow_bank, bank_control, call, clean, connection, module
+from connection_calls import allow_bank, at, bank_control, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
 
 with ExitStack() as stack:
@@ -22,7 +22,7 @@ with ExitStack() as stack:
         gw,
         "uc393 card network",
         "oauth2_client_credentials",
-        {"test": {"settings": settings, "secretValues": {"clientSecret": "cc-secret"}}},
+        {"sandbox": {"settings": settings, "secretValues": {"clientSecret": "cc-secret"}}},
         base_url=BANK_BASE,
     )
     module(gw, "uc393-read", f"{base}/auth/oauth", conn["id"])
@@ -40,11 +40,11 @@ with ExitStack() as stack:
         (first, second),
     )
     check("1 the second read reuses the first token: one token issued", stats["client_credentials"] == 1, stats)
-    shown = data(gw.get(f"/v1/connections/{conn['id']}"))
+    shown = data(gw.get(at(conn)))
     check(
-        "1 the connection shows the token's time and permissions, never the token",
-        shown["environments"]["test"]["signedIn"]["scopes"] == ["accounts.read"] and "at_" not in str(shown),
-        shown["environments"]["test"]["signedIn"],
+        "1 the account shows the token's time and permissions, never the token",
+        shown["signedIn"]["scopes"] == ["accounts.read"] and "at_" not in str(shown),
+        shown["signedIn"],
     )
 
     # 2. The system stops honouring the token: a read is answered 401, the gateway gets a new token and asks once more.
@@ -74,12 +74,12 @@ with ExitStack() as stack:
         gw,
         "uc393 wrong secret",
         "oauth2_client_credentials",
-        {"test": {"settings": settings, "secretValues": {"clientSecret": "not-the-secret"}}},
+        {"sandbox": {"settings": settings, "secretValues": {"clientSecret": "not-the-secret"}}},
         base_url=BANK_BASE,
     )
     module(gw, "uc393-wrong", f"{base}/auth/oauth", wrong["id"])
     failed = call(gw, "uc393_wrong", environment="test")
-    after = data(gw.get(f"/v1/connections/{wrong['id']}"))
+    after = data(gw.get(at(wrong)))
     check(
         "4 a refused secret fails the call AUTH_FAILED on the system's side",
         failed.get("ok") is False
@@ -88,7 +88,7 @@ with ExitStack() as stack:
         failed,
     )
     check(
-        "4 the connection needs attention, says why, and its activity records it",
+        "4 the account needs attention, says why, and its activity records it",
         after["status"] == "needs_reconnect"
         and "invalid_client" in (after["statusDetail"] or "")
         and any(a["action"] == "refresh_failed" for a in after["activity"]),
@@ -101,7 +101,7 @@ with ExitStack() as stack:
         "uc393 unlisted",
         "oauth2_client_credentials",
         {
-            "test": {
+            "sandbox": {
                 "settings": {**settings, "tokenUrl": "https://login.unlisted.test/token"},
                 "secretValues": {"clientSecret": "cc-secret"},
             }

@@ -18,8 +18,8 @@ from ops_documents_client import DocumentsClient
 from ops_files_client.testing import FakeFilesService
 from ops_identity import ServiceClient, dev_service_signer
 from ops_tools.file_tools import TEXT_LIMIT, FileTools
+from ops_tools.modules.seed import BUILT_IN
 from ops_tools.registry import ToolRegistry
-from ops_tools.systems import BUILT_IN
 
 TENANT, OPS, RETAIL = "t_bank", "team_ops", "team_retail"
 LEVY_ID = "dt_levy"

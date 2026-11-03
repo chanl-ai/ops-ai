@@ -55,6 +55,7 @@ async def person_key_connection(engine: AsyncEngine, tenant: str) -> str:
     row: dict[str, Any] = {
         "tenant_id": tenant,
         "id": conn,
+        "app_id": conn,
         "team_id": TEAM,
         "name": "Bank",
         "auth_kind": "api_key",
@@ -69,7 +70,7 @@ async def person_key_connection(engine: AsyncEngine, tenant: str) -> str:
     }
     assert await store.create(row, actor="t", at=now)
     plain = {"baseUrl": ENDPOINT, "name": "X-Api-Key"}
-    await store.change(tenant, conn, 1, {}, actor="t", at=now, environment=("test", plain, {}))
+    await store.change(tenant, conn, 1, {"settings": plain, "secrets": {}}, actor="t", at=now)
     modules = ModuleStore(engine)
     m = await modules.get(tenant, MODULE)
     assert m is not None
@@ -94,7 +95,7 @@ async def test_a_write_refused_for_a_missing_account_runs_under_its_key_once_the
     assert first.json()["data"]["output"]["error"]["code"] == "CONNECTION_NOT_LINKED", first.text
     assert gateway.received == []
     tokens = Tokens(ConnectionStore(engine), credentials(), None, None)  # pyright: ignore[reportArgumentType]
-    await tokens.store_own(tenant, conn, "test", JAMES, {"key": "key-james"})
+    await tokens.store_own(tenant, conn, JAMES, {"key": "key-james"})
     again = await gateway.client.post("/v1/calls", json=body, headers=as_james(tenant))
     assert again.status_code == 200 and again.json()["data"]["ok"], again.text
     assert len(gateway.received) == 1, "the write reached the bank once, with James's own key"

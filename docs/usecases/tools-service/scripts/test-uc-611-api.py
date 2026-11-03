@@ -22,7 +22,7 @@ with ExitStack() as stack:
     clean(gw, "uc611")
     allow_bank(gw, bank)
     conn = connection(
-        gw, "uc611 payments", "bearer", {"test": {"secretValues": {"token": "test-bearer-token"}}}, base_url=base
+        gw, "uc611 payments", "bearer", {"sandbox": {"secretValues": {"token": "test-bearer-token"}}}, base_url=base
     )
     made = gw.post(
         "/v1/tool-modules",

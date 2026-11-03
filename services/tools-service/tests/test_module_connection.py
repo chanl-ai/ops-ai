@@ -86,7 +86,7 @@ async def detail(g: Gateway, module_id: str) -> dict[str, Any]:
 
 
 async def connection(g: Gateway, connection_id: str) -> dict[str, Any]:
-    return (await g.client.get(f"/v1/connections/{connection_id}", headers=TEAM)).json()["data"]
+    return (await g.client.get(f"/v1/apps/{connection_id}/accounts/{connection_id}", headers=TEAM)).json()["data"]
 
 
 async def published(engine: AsyncEngine, g: Gateway, module_id: str) -> None:
@@ -106,7 +106,7 @@ async def test_a_module_made_from_a_full_url_gets_a_connection_holding_its_addre
     made = await gateway.client.post("/v1/tool-modules", json=body, headers=TEAM)
     assert made.status_code == 201, made.text
     module = await detail(gateway, made.json()["data"]["id"])
-    assert module["connection"]["baseUrls"] == {"test": ORIGIN, "production": ORIGIN}, module["connection"]
+    assert module["connection"]["baseUrl"] == ORIGIN, module["connection"]
     assert (await connection(gateway, module["connection"]["id"]))["authKind"] == "none"
     await published(engine, gateway, module["id"])
     out = await run(gateway, module["id"], op["name"], {"accountId": "D"})
@@ -128,7 +128,7 @@ async def test_a_blank_modules_first_tool_makes_the_connection_its_address_lives
     added = await gateway.client.post(f"/v1/tool-modules/{module['id']}/operations", json=op, headers=TEAM)
     assert added.status_code == 200, added.text
     after = await detail(gateway, module["id"])
-    assert after["connection"]["baseUrls"] == {"test": ORIGIN, "production": ORIGIN}, after["connection"]
+    assert after["connection"]["baseUrl"] == ORIGIN, after["connection"]
     await published(engine, gateway, module["id"])
     out = await run(gateway, module["id"], op["name"], {"accountId": "E"})
     assert out["decision"] == "allow", out
@@ -137,7 +137,7 @@ async def test_a_blank_modules_first_tool_makes_the_connection_its_address_lives
 
 def test_an_app_that_needs_no_sign_in_reads_connected_until_revoked() -> None:
     now = datetime.now(UTC)
-    open_app: dict[str, Any] = {"auth_kind": "none", "status": "draft", "environments": {}}
+    open_app: dict[str, Any] = {"auth_kind": "none", "status": "draft"}
     assert account_state(open_app, None, now) == CONNECTED
     assert account_state({**open_app, "status": REVOKED}, None, now) == REVOKED
     assert account_state({**open_app, "auth_kind": "api_key"}, None, now) != CONNECTED
@@ -206,7 +206,7 @@ async def test_tools_0058_moves_each_modules_address_onto_its_connection_and_bac
             await legacy_module(engine, "mod_keyed", "http", "https://keyed.test/v1", connection_id="con_keyed")
             await legacy_module(engine, "mod_demo", "mcp", "https://demo.test/mcp", connection_id="con_demo")
             await legacy_module(engine, "mod_open", "http", "https://open.test", connection_id="con_open")
-            _alembic(target, "upgrade", "head")
+            _alembic(target, "upgrade", "tools_0058_module_address")
             query = "select connection_id, environment, settings from connection_environments order by 1, 2"
             async with engine.connect() as c:
                 envs = [tuple(r) for r in (await c.execute(sa.text(query))).all()]
@@ -252,7 +252,7 @@ async def test_tools_0058_stops_when_one_connection_serves_two_addresses() -> No
             await legacy_module(engine, "mod_a", "http", "https://a.test", connection_id="con_shared")
             await legacy_module(engine, "mod_b", "http", "https://b.test", connection_id="con_shared")
             try:
-                _alembic(target, "upgrade", "head")
+                _alembic(target, "upgrade", "tools_0058_module_address")
             except subprocess.CalledProcessError as e:
                 assert b"different addresses" in e.stderr, e.stderr[-400:]
             else:

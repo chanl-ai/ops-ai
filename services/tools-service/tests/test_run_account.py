@@ -1,6 +1,6 @@
-"""Which account a call signs in with, by failure mode: a test run on an app connected only for production is refused
-for want of a test account (the agent's Test panel could not call a tool after one Connect); a test run's write on the
-production account changes live data with nobody asked; and a live run falls back to a test account."""
+"""Which account a call signs in with, by failure mode: a test run on an app with only its live account is refused
+(the agent's Test panel could not call a tool after one Connect); a test run's write on the live account changes live
+data with nobody asked; a test run ignores the app's sandbox account; and a live run signs in with a sandbox."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id
 from ops_store import isolation
-from ops_tools.connections.records import slot_for
+from ops_tools.connections.records import account_for
 from ops_tools.modules.seed import load, open_connection
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
@@ -29,27 +29,32 @@ ACCOUNT = {"accountId": "CHQ-2219"}
 HOLD = {"accountId": "CHQ-2219", "hours": 24}
 
 
-def test_a_test_run_uses_the_test_account_else_production_and_a_live_run_only_production() -> None:
-    assert slot_for({"test": {}, "production": {}}, "test") == "test"
-    assert slot_for({"production": {}}, "test") == "production"
-    assert slot_for({"test": {}}, "production") is None
-    assert slot_for({}, "test") is None
+def test_a_test_run_uses_the_sandbox_account_else_the_default_and_a_live_run_the_default() -> None:
+    live, sandbox = {"id": "live", "sandbox": False}, {"id": "sbx", "sandbox": True}
+    assert account_for(live, [live, sandbox], "test") == sandbox
+    assert account_for(live, [live], "test") == live
+    assert account_for(live, [live, sandbox], "production") == live
+    assert account_for(None, [], "test") is None
 
 
-async def _module_on(engine: AsyncEngine, tenant: str, suffix: str, environments: tuple[str, ...]) -> None:
+async def _module_on(engine: AsyncEngine, tenant: str, suffix: str, accounts: tuple[str, ...]) -> None:
+    """The module on its app's accounts: `live` its first account, `sandbox` a sandbox one beside it; with only a
+    sandbox, the app's first account is the sandbox."""
     module = bank_module(tenant, suffix)
     # The hold runs without an approval of its own, so only the account it signs in with can make it wait.
     module["operations"] = [
         {**o, "requires_approval": False} if o["name"].startswith("place_hold") else o for o in module["operations"]
     ]
     now = datetime.now(UTC)
-    row, envs = open_connection(
+    row = open_connection(
         tenant_id=tenant, team_id=module["team_id"], connection_id=f"con_{module['id']}",
         name=module["display_name"], base=ENDPOINT, me="test", at=now,
     )  # fmt: skip
-    kept = {e: v for e, v in envs.items() if e in environments}
     with isolation.scope(tenant, module["team_id"]):
-        await ConnectionStore(engine).create(row, actor="test", at=now, environments=kept)
+        await ConnectionStore(engine).create({**row, "sandbox": "live" not in accounts}, actor="test", at=now)
+        if "live" in accounts and "sandbox" in accounts:
+            other = {**row, "id": f"{row['id']}_sbx", "sandbox": True, "account_name": "Sandbox"}
+            await ConnectionStore(engine).create(other, actor="test", at=now)
     await ModuleStore(engine).put({**module, "connection_id": row["id"]}, expected_revision=None)
 
 
@@ -58,11 +63,11 @@ Call = Any
 
 @pytest.fixture
 def gateway_on(engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]):
-    async def made(environments: tuple[str, ...]) -> AsyncIterator[Call]:
+    async def made(accounts: tuple[str, ...]) -> AsyncIterator[Call]:
         await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
         suffix = new_id("x")[2:8].lower()
         await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
-        await _module_on(engine, tenant, suffix, environments)
+        await _module_on(engine, tenant, suffix, accounts)
         bank, _ = fake_bank()
         async with (
             opa_client() as opa,
@@ -91,14 +96,14 @@ def gateway_on(engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_t
     return made
 
 
-async def test_a_test_run_on_an_app_connected_only_for_production_reads_with_that_account(gateway_on: Any) -> None:
-    async for call in gateway_on(("production",)):
+async def test_a_test_run_on_an_app_with_only_its_live_account_reads_with_that_account(gateway_on: Any) -> None:
+    async for call in gateway_on(("live",)):
         r = await call("get_account", ACCOUNT, "test", "r1")
         assert r.status_code == 200 and r.json()["data"]["ok"] is True, r.text
 
 
-async def test_a_test_runs_write_on_the_production_account_waits_for_a_person(gateway_on: Any) -> None:
-    async for call in gateway_on(("production",)):
+async def test_a_test_runs_write_on_the_live_account_waits_for_a_person(gateway_on: Any) -> None:
+    async for call in gateway_on(("live",)):
         held = await call("place_hold", HOLD, "test", "w1")
         assert held.status_code == 403, held.text
         assert held.json()["error"]["details"]["reasons"] == ["write needs an approval token"], held.text
@@ -106,14 +111,14 @@ async def test_a_test_runs_write_on_the_production_account_waits_for_a_person(ga
         assert live.status_code == 200 and live.json()["data"]["ok"] is True, live.text
 
 
-async def test_a_test_runs_write_on_a_test_account_runs(gateway_on: Any) -> None:
-    async for call in gateway_on(("test", "production")):
+async def test_a_test_runs_write_on_the_sandbox_account_runs(gateway_on: Any) -> None:
+    async for call in gateway_on(("live", "sandbox")):
         r = await call("place_hold", HOLD, "test", "w3")
         assert r.status_code == 200 and r.json()["data"]["ok"] is True, r.text
 
 
-async def test_a_live_run_never_signs_in_with_the_test_account(gateway_on: Any) -> None:
-    async for call in gateway_on(("test",)):
+async def test_a_live_run_never_signs_in_with_a_sandbox_account(gateway_on: Any) -> None:
+    async for call in gateway_on(("sandbox",)):
         r = await call("get_account", ACCOUNT, "production", "r2")
         out = r.json()["data"]
         assert out["ok"] is False and out["output"]["error"]["code"] == "CONNECTION_NOT_SET", r.text

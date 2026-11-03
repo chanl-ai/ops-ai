@@ -43,7 +43,7 @@ from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
 from ..connections.records import auth_of, connection_base, module_auth, ref_of, sign_in_of, status_of
 from ..egress import EgressDenied, EgressPolicy, egress_client, for_tenant
-from ..environments import CONNECTION_ENVIRONMENTS, TEST
+from ..environments import TEST
 from ..executor import Trial, masked, secret_names
 from ..held_hosts import HostHeld, refused
 from ..limits import amount_refusal
@@ -1260,14 +1260,14 @@ class ModuleService:
         return True
 
     async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
-        """The connection a custom module with none of its own keeps its address on (c-616): no sign-in, the address
-        in every environment, so a call reads it as it reads any app's. Empty until the first tool names one."""
+        """The account a custom module with none of its own keeps its address on (c-616): no sign-in, so a call reads
+        it as it reads any app's. Empty until the first tool names one."""
         now = self.clock()
-        row, environments = open_connection(
+        row = open_connection(
             tenant_id=who.tenant_id, team_id=team_id or who.team.id, connection_id=new_id("con"), name=name, base=base,
             me=who.name, at=now,
         )  # fmt: skip
-        if not await self.connections.create(row, actor=who.name, at=now, environments=environments):
+        if not await self.connections.create(row, actor=who.name, at=now):
             raise Conflict("Try again; that connection id was just taken.")
         made = await self.connections.get(who.tenant_id, str(row["id"]))
         assert made is not None
@@ -1278,8 +1278,7 @@ class ModuleService:
         where it names none, refused where it names another system (c-616)."""
         held = connection_base(conn)
         if not held:
-            envs = list(cast(dict[str, Any], conn.get("environments") or {})) or [TEST]
-            await self.connections.set_base(who.tenant_id, conn["id"], address, envs, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn["id"], address, actor=who.name, at=self.clock())
         elif held.rstrip("/") != address.rstrip("/"):
             # One connection holds one address: a second system, or another path on the same host, is its own app.
             raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
@@ -1395,9 +1394,7 @@ class ModuleService:
             conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
             m.update(connection_id=conn["id"], auth=module_auth(conn))
         elif not connection_base(conn):
-            await self.connections.set_base(
-                who.tenant_id, conn["id"], origin, CONNECTION_ENVIRONMENTS, actor=who.name, at=self.clock()
-            )
+            await self.connections.set_base(who.tenant_id, conn["id"], origin, actor=who.name, at=self.clock())
         host = urlsplit(origin).hostname
         if host and host not in m["egress_hosts"]:
             m["egress_hosts"] = [*m["egress_hosts"], host]

@@ -116,7 +116,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_operations TO ops_tools_runti
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_versions TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_approvals TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_egress_hosts TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_environments TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_tokens TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connect_links TO ops_tools_runtime;
 GRANT SELECT ON dbo.alembic_version_tools TO ops_tools_runtime;

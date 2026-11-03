@@ -20,22 +20,16 @@ from ops_plugin_sdk.manifest import read
 from ops_service_kit.settings import Settings
 from ops_store.team_scope import acting_as
 from ops_tools.auth import Prepared
-from ops_tools.auth.tokens import Tokens
-from ops_tools.connections.service import ConnectionService
 from ops_tools.executor import HttpExecutor
 from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
-from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
-from ops_tools.plugins.routes import plugins_router
 from ops_tools.registry import ToolRegistry
-from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
-from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import build_app, response_checker
 from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
@@ -72,7 +66,7 @@ TOKEN = "team-token-41c7"
 
 class TeamSignIn:
     async def prepare(self, *_: Any, **__: Any) -> Prepared:
-        return Prepared("con_a", "production", headers={"Authorization": f"Bearer {TOKEN}"}, values=[TOKEN])
+        return Prepared("con_a", headers={"Authorization": f"Bearer {TOKEN}"}, values=[TOKEN])
 
 
 class Upgrade:
@@ -227,25 +221,11 @@ async def routes(
         Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
         ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
     )
-    app = build_app(engine, seed, tenant, auth=auth)
-    vault = credentials()
-    store = ConnectionStore(engine)
-    tokens = Tokens(store, vault, httpx.AsyncClient(), AllowAll())  # type: ignore[arg-type]
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-    connections = ConnectionService(
-        store,
-        SecretResolver(SecretStore(engine), vault),
-        vault,
-        tokens,
-        directory,
-        egress=None,
-        console_url=CONSOLE_URL,
-    )
     loaded = discover(found=[], folders=[str(V1)])
     v1 = loaded[0].plugin
     assert v1 is not None
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store, versions=True)
-    app.include_router(plugins_router(host, connections, directory))
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, ConnectionStore(engine), versions=True)
+    app = build_app(engine, seed, tenant, auth=auth, plugins=host)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://tools",
@@ -269,15 +249,15 @@ async def test_a_team_reviews_an_upgrade_and_takes_it_and_another_team_keeps_its
     c, host, v2 = routes
     for team in ("team_ops", "team_platform"):
         on = await c.put(
-            f"/v1/plugins/{ID}/team",
+            f"/v1/apps/plugin:{ID}/team",
             json={"enabled": True, "credentials": {"token": "t-1"}},
             headers=admin(tenant, team),
         )
         assert on.status_code == 200, on.text
-    current = (await c.get(f"/v1/plugins/{ID}/team/update", headers=admin(tenant))).json()["data"]
+    current = (await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant))).json()["data"]
     assert current["version"] == "0.1.0" and not current["available"] and current["tools"] == [], current
     host.loaded = [Loaded("fields_desk", v2, None)]
-    review = (await c.get(f"/v1/plugins/{ID}/team/update", headers=admin(tenant))).json()["data"]
+    review = (await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant))).json()["data"]
     assert review["available"] and review["installed"]["version"] == "0.2.0", review
     found = {t["name"]: t for t in review["tools"]}
     assert set(found) == {"fields_find", "fields_post_message", "fields_transfer", "fields_close_case"}, found
@@ -285,17 +265,19 @@ async def test_a_team_reviews_an_upgrade_and_takes_it_and_another_team_keeps_its
     assert found["fields_post_message"]["changed"] == ["request"] and found["fields_transfer"]["change"] == "removed"
     assert found["fields_close_case"]["change"] == "new" and found["fields_close_case"]["inputs"]["added"] == ["id"]
     listed = next(
-        p for p in (await c.get("/v1/plugins", headers=admin(tenant))).json()["data"]["plugins"] if p["id"] == ID
+        a["plugin"]
+        for a in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"]
+        if a["id"] == f"plugin:{ID}"
     )
     assert listed["updateAvailable"] and listed["teamVersion"] == "0.1.0" and "fields_transfer" in listed["tools"]
-    stale = await c.post(f"/v1/plugins/{ID}/team/update", json={"digest": "0" * 64}, headers=admin(tenant))
+    stale = await c.post(f"/v1/apps/plugin:{ID}/update", json={"digest": "0" * 64}, headers=admin(tenant))
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "update_changed", stale.text
     taken = await c.post(
-        f"/v1/plugins/{ID}/team/update", json={"digest": review["installed"]["digest"]}, headers=admin(tenant)
+        f"/v1/apps/plugin:{ID}/update", json={"digest": review["installed"]["digest"]}, headers=admin(tenant)
     )
     assert taken.status_code == 200 and taken.json()["data"]["version"] == "0.2.0", taken.text
     assert not taken.json()["data"]["available"] and taken.json()["data"]["tools"] == []
-    other = (await c.get(f"/v1/plugins/{ID}/team/update", headers=admin(tenant, "team_platform"))).json()["data"]
+    other = (await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant, "team_platform"))).json()["data"]
     assert other["version"] == "0.1.0" and other["available"], other
 
 
@@ -304,12 +286,12 @@ async def test_only_a_team_admin_reviews_or_takes_and_the_flag_off_hides_both(
 ) -> None:
     c, host, _ = routes
     await c.put(
-        f"/v1/plugins/{ID}/team", json={"enabled": True, "credentials": {"token": "t-1"}}, headers=admin(tenant)
+        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "credentials": {"token": "t-1"}}, headers=admin(tenant)
     )
     builder = person(tenant, "James Richardson", {"team_ops": "builder"})
-    assert (await c.get(f"/v1/plugins/{ID}/team/update", headers=builder)).status_code == 403
+    assert (await c.get(f"/v1/apps/plugin:{ID}/update", headers=builder)).status_code == 403
     host.versions = False
-    assert (await c.get(f"/v1/plugins/{ID}/team/update", headers=admin(tenant))).status_code == 404
+    assert (await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant))).status_code == 404
 
 
 async def test_a_row_first_written_by_the_new_version_still_holds_the_teams_old_tool(up: Upgrade) -> None:

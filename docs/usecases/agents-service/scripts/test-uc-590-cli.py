@@ -22,7 +22,7 @@ def main() -> None:
         agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH),
     ):
         admin = as_role(accounts, "admin", "team_ops")
-        on = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=admin)
+        on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=admin)
         check("set-up: the plugin is on for team_ops", on.status_code == 200, on.text[:200])
 
         # 23. ops resources list and add, as the team admin.

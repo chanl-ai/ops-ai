@@ -1,15 +1,19 @@
 """What a module shows of its connection, and the seed's integration list as connection records (c-330).
 
 The dev seed's integrations (`seed/tool_modules.json` `connections`) load as connection rows with the same ids, so a
-seeded module keeps its `connectionId`. They carry no environment, so they add nothing to a call: the module's own
+seeded module keeps its `connectionId`. They carry no settings, so they add nothing to a call: the module's own
 headers apply as before until someone sets the connection up.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
+
+from ..environments import PRODUCTION
+
+Row = dict[str, Any]
 
 # A consent this close to its end shows as expiring.
 EXPIRING = timedelta(days=30)
@@ -48,35 +52,26 @@ def status_of(conn: dict[str, Any], now: datetime) -> str:
 CONNECTED, NOT_SIGNED_IN, EXPIRED, REFUSED, REVOKED = "connected", "not_signed_in", "expired", "refused", "revoked"
 
 
-def slots_for(run: str) -> tuple[str, ...]:
-    """The environments a call made in `run` may sign in with, in order. A live run (production) uses only the
-    production account. A test run uses the test account, else the production one, so an app connected once can be
-    tested at once; the gateway holds a test run's write on a production account for a person (gateway_calls)."""
-    return ("production",) if run == "production" else ("test", "production")
+def account_for(chosen: Row | None, accounts: Sequence[Row], run: str) -> Row | None:
+    """The account a call made in `run` signs in with: a test run uses the app's sandbox account when it has one, else
+    `chosen` (the account a live call would use: one a step named, the person's default, or the app's default); a live
+    run uses `chosen`. Every choice of a call's account between sandbox and live is made here. A live run on a sandbox
+    account is refused where it signs in (Authenticator.prepare), and the gateway holds a test run's write on a live
+    account for a person (gateway_calls)."""
+    if run != PRODUCTION:
+        sandbox = next((a for a in accounts if a.get("sandbox")), None)
+        if sandbox is not None:
+            return sandbox
+    return chosen
 
 
-def slot_for(environments: Mapping[str, Any], run: str) -> str | None:
-    """The environment a call made in `run` signs in with on a connection set for `environments`; None when none
-    fits. Every choice of a call's environment is made here."""
-    return next((e for e in slots_for(run) if e in environments), None)
-
-
-def deciding_environment(conn: dict[str, Any]) -> str:
-    """The environment whose sign-in stands for the connection on screens: production once it is set, else test."""
-    return slot_for(conn.get("environments") or {}, "production") or "test"
-
-
-def connection_base(conn: dict[str, Any]) -> str:
-    """The app's base address a new tool's path hangs off: the deciding environment's, else any environment's; empty
-    when none names one. A call reads its own environment's (Authenticator.addressed)."""
-    envs: dict[str, dict[str, Any]] = conn.get("environments") or {}
-    ordered = [envs.get(deciding_environment(conn)) or {}, *envs.values()]
-    found = (str(s["baseUrl"]) for e in ordered if (s := cast(dict[str, Any], e.get("settings") or {})).get("baseUrl"))
-    return next(found, "")
+def connection_base(conn: Row) -> str:
+    """The app's base address a new tool's path hangs off; empty when the account names none."""
+    return str(cast(Row, conn.get("settings") or {}).get("baseUrl") or "")
 
 
 def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: datetime) -> str:
-    """The team account's state from its token in the deciding environment, never from the saved settings: refused
+    """The team account's state from its token, never from the saved settings: refused
     once the system refused it (the row's refused_at, or the connection marked by the gateway), expired once its
     token ended with no refresh token to renew it. With no token, a passing Test connection is what shows a key or
     password works."""
@@ -93,21 +88,18 @@ def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: 
         if expires is not None and expires < now and not team_token.get("refresh_ct"):
             return EXPIRED
         return CONNECTED
-    envs = cast(dict[str, dict[str, Any]], conn.get("environments") or {})
-    env = envs.get(deciding_environment(conn)) or {}
-    health = cast(dict[str, Any], env.get("health") or {})
+    health = cast(Row, conn.get("health") or {})
     if stored == "needs_reconnect":
         return REFUSED
     return CONNECTED if health.get("status") == "ok" and health.get("account") != "own" else NOT_SIGNED_IN
 
 
 def team_test(conn: dict[str, Any], team_token: dict[str, Any] | None) -> dict[str, Any] | None:
-    """The team account's last test in the deciding environment: kept on its token row after a sign-in, else (a key or
-    password, which has no token) the environment's last test made as the team."""
+    """The team account's last test: kept on its token row after a sign-in, else (a key or password, which has no
+    token) the account's last test made as the team."""
     if team_token is not None and team_token.get("test"):
         return cast(dict[str, Any], team_token["test"])
-    envs = cast(dict[str, dict[str, Any]], conn.get("environments") or {})
-    health = cast(dict[str, Any], (envs.get(deciding_environment(conn)) or {}).get("health") or {})
+    health = cast(Row, conn.get("health") or {})
     if health.get("account") != "team" or health.get("status") not in ("ok", "failed"):
         return None
     return {"status": health["status"], "message": health.get("message"), "at": health.get("at")}
@@ -136,18 +128,13 @@ def shown_status(conn: dict[str, Any], state: str, now: datetime) -> str:
 
 
 def ref_of(conn: dict[str, Any], now: datetime) -> dict[str, Any]:
-    envs: dict[str, dict[str, Any]] = conn.get("environments") or {}
     out: dict[str, Any] = {
         "id": conn["id"],
         "name": conn["name"],
         "kind": conn["auth_kind"],
         "status": status_of(conn, now),
-        # Where a module's paths go in each environment (c-616): the connection's base address is their only one.
-        "baseUrls": {
-            env: str(base)
-            for env, row in envs.items()
-            if (base := cast(dict[str, Any], row.get("settings") or {}).get("baseUrl"))
-        },
+        # Where a module's paths go (c-616): the account's base address is their only one.
+        "baseUrl": connection_base(conn) or None,
     }
     if conn.get("expires_at"):
         out["expiresAt"] = conn["expires_at"].isoformat()
@@ -185,6 +172,9 @@ def seed_rows(seed: dict[str, Any], tenant_id: str, team_id: str, now: datetime)
             "status_detail": None,
             "expires_at": now + timedelta(days=c["expiresIn"]) if c.get("expiresIn") is not None else None,
             "catalog_id": c.get("catalogId"),
+            "app_id": c["id"],
+            "settings": {},
+            "secrets": {},
             "revision": 1,
             "created_by": "seed",
             "created_at": now,

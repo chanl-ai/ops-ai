@@ -1,9 +1,11 @@
-"""The team's systems, one card each, for the console's Connections grid (c-580): a plugin the install offers or the
-team turned on, a connection, or a tool module with no connection yet. Each card is joined here (its details, how many
-tools use it, each environment's health) so the console never joins the module, connection and plugin lists itself.
+"""The team's apps, one card each, for the console's Apps grid (c-580), and the `/v1/apps` routes: a plugin the
+install offers, a custom app a builder added, a built-in app, or a tool module with no app yet. Each card is joined here
+(its details, how many tools use it, its account's state) so the console never joins the module, account and plugin
+lists itself.
 
-A module that uses a connection is part of that connection's card, and a plugin's connection is part of the plugin's
-card, so no system shows twice. Every read is the caller's team's, as the connection list's is."""
+An app's accounts are its `connections` rows (`app_id`): a plugin's binding names its default account, and a custom
+app's first account is the app. A module that uses an account is part of that app's card, and a plugin's accounts are
+part of the plugin's card, so no app shows twice. Every read is the caller's team's."""
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
@@ -16,42 +18,29 @@ from pydantic import Field
 
 from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
-from .connections.records import (
-    CONNECTED,
-    account_state,
-    deciding_environment,
-    shown_status,
-    state_reason,
-    team_test,
-)
-from .connections.schemas import AccountTest, ConnectionDetail, ConnectionHealth
+from .connections.records import CONNECTED, account_state, shown_status, state_reason, team_test
+from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
 from .connections.service import ConnectionService, own_key
 from .defaults import ensure_defaults
-from .environments import CONNECTION_ENVIRONMENTS as ENVIRONMENTS
-from .environments import TEST, ConnectionEnvironment, connection_views
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of
 from .modules.service import Caller, ModuleService
-from .plugins.host import PluginHost, fixed_fields, module_id_of, per_environment, plugin_id_of
+from .plugins.host import PluginHost, fixed_fields, module_id_of, per_account, plugin_id_of
+from .plugins.routes import PluginAccounts, TeamPluginIn
 from .plugins.templates import view_of
-from .store.connections import ConnectionStore
+from .store.connections import ConnectionStore, plugin_app, plugin_of
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 
 AccountState = Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
-
-
-class SystemEnvironment(Out):
-    label: str
-    set: bool
-    health: ConnectionHealth | None = None
 
 
 class PluginSetting(Out):
@@ -59,8 +48,8 @@ class PluginSetting(Out):
     label: str
     default: str | None = None
     secret: bool = False
-    # Each environment keeps its own value (a sandbox signs in elsewhere), so the dialog asks for it per environment.
-    per_environment: bool = False
+    # Each account keeps its own value (a sandbox signs in elsewhere), so the dialog asks for it per account.
+    per_account: bool = False
     # Fixed by the install for every team (plugin_locked); shown, never typed.
     locked: bool = False
 
@@ -69,14 +58,21 @@ class SystemPlugin(Out):
     team_on: bool
     # Whether the install has Ops AI's own app for the plugin, so a team may sign in with no app of its own.
     platform_app: bool
-    # The sign-in kinds the plugin offers, the first the default; a team's connection keeps the one it chose first.
+    # The sign-in kinds the plugin offers, the first the default; a team's account keeps the one it chose first.
     kinds: list[str]
     sign_in: list[str]
     scopes: list[str]
     # The settings a team types, in the manifest's order; those read from the token at sign-in are left out.
     settings: list[PluginSetting]
-    # The sign-in kind's fields the plugin fixes itself (how its key is sent), so a team is never asked for them.
+    # The team's settings as a person may read them: a secret one never, even as its reference.
+    values: dict[str, Any] = Field(default_factory=dict[str, Any])
+    # The sign-in kinds' fields the plugin fixes itself (how its key is sent), so a team is never asked for them.
     fixed: list[str]
+    # The plugin's tools the team's version has, by operation name.
+    tools: list[str] = Field(default_factory=list[str])
+    # The version this team runs (c-609, with plugin_updates on), and whether the installed one differs from it.
+    team_version: str | None = None
+    update_available: bool = False
 
 
 AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
@@ -99,14 +95,16 @@ class SystemCard(Out):
     tools_count: int
     auth_kind: str | None = None
     kind_label: str | None = None
+    # The app's default account: the one a live call signs in with unless it names another.
     connection_id: str | None = None
     plugin_id: str | None = None
+    # The app's sandbox account, which test runs use; none when it has none.
+    sandbox_id: str | None = None
     module_ids: list[str]
     status: str | None = None
-    # The team account's state (c-616): connected, not_signed_in, expired, refused or revoked; none for an app the
-    # team has not turned on and a module with no connection.
+    # The default account's state (c-616): connected, not_signed_in, expired, refused or revoked; none for an app the
+    # team has not turned on and a module with no account.
     state: AccountState | None = None
-    environments: dict[str, SystemEnvironment]
     may_manage: bool
     # Whether the install's own OAuth client signs this app in, so a team types no client id or secret.
     managed_client: bool = False
@@ -130,7 +128,8 @@ CHECKED = "credential_checked"
 
 
 class AppCredential(Out):
-    """How one of the team's apps signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its secret."""
+    """How one of the team's accounts signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its
+    secret."""
 
     # The account the credential is set on; the Credentials page opens it.
     id: str
@@ -140,8 +139,9 @@ class AppCredential(Out):
     app: str
     app_name: str
     type: Literal["ops_ai", "own"]
+    sandbox: bool = False
     permissions: list[str]
-    # Accounts signed in through it in the environment that decides the app: the team account and each person's.
+    # Accounts signed in through it: the team account and each person's.
     accounts: int
     status: CredentialStatus
     created: str
@@ -150,13 +150,14 @@ class AppCredential(Out):
 class AppCredentialIn(In):
     """The team's own OAuth app for one of its apps (the New app credential window)."""
 
-    # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the connection's id for a custom app.
+    # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the account's id for a custom app.
     app: str = Field(min_length=1, max_length=200)
     client_id: str = Field(min_length=1, max_length=500)
     client_secret: str = Field(min_length=1, max_length=2000)
     # The permissions to ask for, among the app's own; left out, all of them. A plugin's required ones are always asked.
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
-    environment: ConnectionEnvironment = "production"
+    # The app's account to set it on; left out, the app's default account.
+    account: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class CredentialSecretIn(In):
@@ -183,11 +184,13 @@ class AppMe(Out):
 
 
 class AppAccount(Out):
-    """One of the team's accounts of the app (c-608): the default is the one calls use unless they name another."""
+    """One of the team's accounts of the app (c-608): the default is the one live calls use unless they name another,
+    and a sandbox one is what test runs use."""
 
     id: str
     name: str
     default: bool
+    sandbox: bool
     status: str
     status_detail: str | None = None
     # Connected only after a sign-in or a passing test (c-616), as the card's.
@@ -202,17 +205,18 @@ class AppAccount(Out):
     # The last test, run right after each sign-in: the caller's own on an account each person signs in to, else the
     # team account's. A failed one warns on the row; the account stays connected.
     test: AccountTest | None = None
+    health: ConnectionHealth | None = None
 
 
 class AppPage(Out):
-    """One app's page (c-607), joined here: its card, its account's connection, the caller's own sign-in, how many
-    people signed in, its tools, the plugin's skills and the latest runs of its tools."""
+    """One app's page (c-607), joined here: its card, its default account, the caller's own sign-in, how many people
+    signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools."""
 
     card: SystemCard
-    connection: ConnectionDetail | None = None
+    connection: AccountDetail | None = None
     me: AppMe
     people_count: int
-    # The team's accounts of the app, the default first; one unless several_accounts is on.
+    # The team's accounts of the app, the default first.
     accounts: list[AppAccount] = Field(default_factory=list[AppAccount])
     tools: list[AppTool]
     skills: list[AppSkill]
@@ -226,15 +230,7 @@ def _built_in(app: dict[str, Any], module: dict[str, Any]) -> list[str]:
     return [n for n in held if wanted is None or n in wanted]
 
 
-def _environments(conn: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    envs = cast(dict[str, dict[str, Any]], (conn or {}).get("environments") or {})
-    return {
-        e["id"]: {"label": e["label"], "set": e["id"] in envs, "health": (envs.get(e["id"]) or {}).get("health")}
-        for e in connection_views()
-    }
-
-
-class Systems:
+class Apps:
     def __init__(
         self,
         connections: ConnectionService,
@@ -245,16 +241,18 @@ class Systems:
         self.connections = connections
         self.modules = modules
         self.plugins = plugins
+        # A plugin's turn-on and accounts, when the install has plugins.
+        self.plugin_accounts = PluginAccounts(plugins, connections) if plugins is not None else None
         # The call log, for an app's Usage tab; without it the page lists no runs.
         self.calls = calls
 
     async def states(self, tenant_id: str, conns: list[dict[str, Any]]) -> dict[str, tuple[str, str, str | None]]:
-        """Each connection's (state, status, why) from its team account's token, read in one query (c-616)."""
+        """Each account's (state, status, why) from its team account's token, read in one query (c-616)."""
         tokens = await self.connections.store.team_tokens(tenant_id, [str(c["id"]) for c in conns])
         now = self.connections.clock()
         out: dict[str, tuple[str, str, str | None]] = {}
         for c in conns:
-            token = (tokens.get(str(c["id"])) or {}).get(deciding_environment(c))
+            token = tokens.get(str(c["id"]))
             state = account_state(c, token, now)
             out[str(c["id"])] = (state, shown_status(c, state, now), state_reason(c, token, state))
         return out
@@ -263,8 +261,8 @@ class Systems:
         self, who: Caller, *, listed: bool = False, builtins: bool = True, person: str | None = None
     ) -> list[dict[str, Any]]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
-        added. A built-in app has its own menu, and a connection made to hold a custom tool's address (origin "tool")
-        or a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
+        added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
+        a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply)."""
         if builtins or not listed:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
@@ -276,12 +274,15 @@ class Systems:
         conns = await self.connections.team_rows(who)
         may = self.connections.may_manage(who)
         by_id = {str(c["id"]): c for c in conns}
+        sandboxes: dict[str, str] = {}
+        for c in conns:
+            if c.get("sandbox"):
+                sandboxes.setdefault(str(c["app_id"]), str(c["id"]))
         states = await self.states(who.tenant_id, conns)
         team = who.team.id
         modules = [m for m in await self.modules.all(who.tenant_id) if m.get("team_id") in (team, None)]
         ops = {str(m["id"]): len(m.get("operations") or []) for m in modules}
         cards: list[dict[str, Any]] = []
-        taken: set[str] = set()
         if self.plugins is not None:
             await self.plugins.ensure(who.tenant_id, self.connections.clock())
             bindings = await self.plugins.bindings.of_team(who.tenant_id, team)
@@ -289,26 +290,25 @@ class Systems:
                 m = plugin.manifest
                 b = bindings.get(pid) or {}
                 conn = by_id.get(str(b.get("connection_id") or ""))
-                if conn is not None:
-                    taken.add(str(conn["id"]))
                 platform = self.connections.store.install_client(pid) is not None
                 locked = self.plugins.locked_settings(pid)
-                own = per_environment(m)
+                own = per_account(m)
                 settings = [
                     {
                         "name": k,
                         "label": s.title or k,
                         "default": None if s.default is None else str(s.default),
                         "secret": s.secret,
-                        "perEnvironment": k in own,
+                        "perAccount": k in own,
                         "locked": k in locked,
                     }
                     for k, s in m.settings.items()
                     if not s.at_sign_in
                 ]
+                decl = cast(dict[str, Any] | None, b.get("declarations")) if self.plugins.versions else None
                 cards.append(
                     {
-                        "id": f"plugin:{pid}",
+                        "id": plugin_app(pid),
                         "kind": "plugin",
                         "name": m.title,
                         "logo": m.display.logo,
@@ -320,10 +320,10 @@ class Systems:
                         "kindLabel": BY_ID[m.connection.kinds[0]].label if m.connection.kinds[0] in BY_ID else None,
                         "connectionId": conn["id"] if conn else None,
                         "pluginId": pid,
+                        "sandboxId": sandboxes.get(plugin_app(pid)),
                         "moduleIds": [module_id_of(m)],
                         "status": states[str(conn["id"])][1] if conn else None,
                         "state": states[str(conn["id"])][0] if conn else None,
-                        "environments": _environments(conn),
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
@@ -333,35 +333,45 @@ class Systems:
                             "signIn": list(m.connection.sign_in),
                             "scopes": [sc.label or sc.id for sc in m.connection.scopes],
                             "settings": settings,
+                            "values": self.plugin_accounts.team_values(
+                                plugin, b, dict((conn or {}).get("plugin_settings") or {})
+                            )
+                            if self.plugin_accounts
+                            else {},
                             "fixed": fixed_fields(m),
+                            "tools": [m.operation(t) for t in tools_of(decl)]
+                            if decl
+                            else [m.operation(t.name) for t in m.tools],
+                            "teamVersion": b.get("version") if self.plugins.versions else None,
+                            "updateAvailable": self.plugins.versions
+                            and bool(b.get("digest"))
+                            and b.get("digest") != self.plugins.installed_digest(plugin),
                         },
                     }
                 )
             # A plugin the team turned on that the install no longer holds keeps its card, so the team sees why its
-            # tools stopped instead of finding its account listed as a plain connection.
+            # tools stopped instead of finding its account listed as a custom app.
             for pid, b in sorted(bindings.items()):
                 if pid in self.plugins.plugins or not b.get("enabled"):
                     continue
                 conn = by_id.get(str(b.get("connection_id") or ""))
-                if conn is not None:
-                    taken.add(str(conn["id"]))
                 row = next((md for md in modules if plugin_id_of(md) == pid), None)
                 cards.append(
                     {
-                        "id": f"plugin:{pid}",
+                        "id": plugin_app(pid),
                         "kind": "plugin",
-                        # The connection the plugin made carries its title, which outlives the manifest.
+                        # The account the plugin made carries its title, which outlives the manifest.
                         "name": str(row["display_name"]) if row else str(conn["name"]) if conn else pid,
                         "toolsCount": 0,
                         "connectionId": conn["id"] if conn else None,
                         "pluginId": pid,
                         "moduleIds": [str(row["id"])] if row else [],
-                        "environments": _environments(conn),
                         "mayManage": may,
                     }
                 )
         for conn in conns:
-            if str(conn["id"]) in taken or (listed and conn.get("origin") == TOOL_ORIGIN):
+            # A custom app is its first account; its other accounts and every plugin's are part of their app's card.
+            if conn["app_id"] != conn["id"] or (listed and conn.get("origin") == TOOL_ORIGIN):
                 continue
             used = [str(u["id"]) for u in cast(list[dict[str, Any]], conn.get("used_by") or [])]
             kind = BY_ID.get(str(conn["auth_kind"]))
@@ -377,10 +387,10 @@ class Systems:
                     "authKind": conn["auth_kind"],
                     "kindLabel": kind.label if kind else None,
                     "connectionId": conn["id"],
+                    "sandboxId": sandboxes.get(str(conn["id"])),
                     "moduleIds": used,
                     "status": states[str(conn["id"])][1],
                     "state": states[str(conn["id"])][0],
-                    "environments": _environments(conn),
                     "mayManage": may,
                     "managedClient": False,
                 }
@@ -388,9 +398,9 @@ class Systems:
         built: set[str] = set()
         for app in BUILT_IN:
             # The team's provisioned copy (c-616) when it has one; else the module of the app's older name. A module
-            # bound to a connection is that connection's: it is served by the system, not by the platform.
-            own = [m for m in modules if m.get("template_id") == template_of(app)]
-            named = own or [m for m in modules if m["name"] == app["module"] and not m.get("connection_id")]
+            # bound to an account is that app's: it is served by the system, not by the platform.
+            own_modules = [m for m in modules if m.get("template_id") == template_of(app)]
+            named = own_modules or [m for m in modules if m["name"] == app["module"] and not m.get("connection_id")]
             held = [(m, _built_in(app, m)) for m in named]
             held = [(m, names) for m, names in held if names]
             if not held:
@@ -410,7 +420,6 @@ class Systems:
                     "moduleIds": [str(m["id"]) for m, _ in held],
                     "status": "connected",
                     "state": CONNECTED,
-                    "environments": _environments(None),
                     "mayManage": may,
                     "managedClient": False,
                     "href": app["href"],
@@ -429,7 +438,6 @@ class Systems:
                     "description": m.get("description") or None,
                     "toolsCount": ops.get(str(m["id"]), 0),
                     "moduleIds": [str(m["id"])],
-                    "environments": _environments(None),
                     "mayManage": may,
                     "managedClient": False,
                 }
@@ -440,24 +448,71 @@ class Systems:
     async def _app_states(
         self, who: Caller, cards: list[dict[str, Any]], by_id: dict[str, dict[str, Any]], person: str | None
     ) -> None:
-        """Each card's appState, appStateReason and credential, from the team account's token and the own sign-ins of
-        the caller, or of `person` when a service asks for one (acting for them), read once for every card."""
+        """Each card's appState, appStateReason and credential, from the default account's team token and the own
+        sign-ins of the caller, or of `person` when a service asks for one (acting for them), read once for every
+        card."""
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
         mine = person or own_key(who)
-        own: dict[tuple[str, str], dict[str, Any]] = {}
-        for env in ENVIRONMENTS:
-            for t in await store.own_sign_ins(who.tenant_id, mine, ids, env):
-                own.setdefault((str(t["connection_id"]), env), t)
+        own: dict[str, dict[str, Any]] = {}
+        for t in await store.own_sign_ins(who.tenant_id, mine, ids):
+            own.setdefault(str(t["connection_id"]), t)
         for c in cards:
             conn = by_id.get(str(c.get("connectionId") or ""))
-            env = deciding_environment(conn) if conn else TEST
-            token = (team_tokens.get(str(conn["id"])) or {}).get(env) if conn else None
-            mine_row = own.get((str(conn["id"]), env)) if conn else None
+            token = team_tokens.get(str(conn["id"])) if conn else None
+            mine_row = own.get(str(conn["id"])) if conn else None
             c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row)
             c["credential"] = card_credential(conn)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
+
+    async def card(self, who: Caller, app_id: str) -> dict[str, Any]:
+        found = next((c for c in await self.cards(who) if c["id"] == app_id), None)
+        if found is None:
+            raise NotFound(f"App {app_id}")
+        return found
+
+    async def add_custom(self, who: Caller, i: NewAppIn) -> dict[str, Any]:
+        """A custom app, as its first account: by name, or an MCP server by its address (c-331)."""
+        if i.server_url is not None:
+            return await self.connections.connect_mcp(who, i.model_dump())
+        return await self.connections.create(who, i.model_dump())
+
+    async def add_account(self, who: Caller, app_id: str, i: AccountIn) -> dict[str, Any]:
+        """Another account of one of the team's apps: a plugin's from its definition, a custom app's with the app's
+        sign-in kind and the kind's fields as given."""
+        if plugin_of({"app_id": app_id}) is not None:
+            if self.plugin_accounts is None:
+                raise NotFound(f"App {app_id}")
+            made = await self.plugin_accounts.add_account(who, app_id, i)
+            return await self.connections.detail(who, made)
+        app = await self.connections.account_of(who, app_id, app_id)
+        kind = kind_of(str(app["auth_kind"]))
+        plain = {k: v for k, v in i.credentials.items() if (f := kind.field(k)) is not None and not f.secret}
+        secret = {k: v for k, v in i.credentials.items() if k not in plain}
+        made = await self.connections.create(
+            who,
+            {
+                "name": i.name,
+                "app_id": app_id,
+                "account_name": i.name,
+                "sandbox": i.sandbox,
+                "auth_kind": app["auth_kind"],
+                "sign_in": i.sign_in or app.get("sign_in") or "team",
+                "category": app.get("category"),
+                "description": app.get("description"),
+                "docs_url": app.get("docs_url"),
+            },
+        )
+        if not plain and not secret:
+            return made
+        # The app's address is the account's unless the sandbox names its own.
+        keys = {"baseUrl": dict(app["settings"] or {}).get("baseUrl"), **plain}
+        return await self.connections.change(
+            who,
+            str(made["id"]),
+            {"revision": made["revision"], "settings": {k: v for k, v in keys.items() if v}, "secret_values": secret},
+        )
 
 
 def app_state(
@@ -471,7 +526,7 @@ def app_state(
     # Only a plugin card the install no longer loads is drawn without its manifest's details.
     if card["kind"] == "plugin" and plugin is None:
         return "removed", REMOVED
-    if conn is None or (plugin is not None and not plugin.get("teamOn")) or not conn.get("environments"):
+    if conn is None or (plugin is not None and not plugin.get("teamOn")) or not conn.get("settings"):
         return "not_installed", None
     if (conn.get("sign_in") or "team") == "person":
         if own is None or own.get("refused_at") is not None:
@@ -492,9 +547,8 @@ def card_credential(conn: dict[str, Any] | None) -> dict[str, Any] | None:
     """Whose OAuth app the card's account signs in with, as the Credentials page names it."""
     if conn is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
         return None
-    held = cast(dict[str, dict[str, Any]], conn.get("environments") or {}).get(deciding_environment(conn)) or {}
     name = str(conn.get("account_name") or conn["name"])
-    return {"name": name, "type": "ops_ai" if held.get("platform_app") else "own"}
+    return {"name": name, "type": "ops_ai" if conn.get("platform_app") else "own"}
 
 
 async def credential_row(
@@ -502,13 +556,10 @@ async def credential_row(
 ) -> dict[str, Any]:
     """One app credential as the Credentials page lists it: whose OAuth app, its permissions, the accounts signed in
     through it and the last Test with my account. No secret is read."""
-    env = deciding_environment(conn)
-    envs = cast(dict[str, dict[str, Any]], conn.get("environments") or {})
-    held = envs.get(env) or {}
-    scopes = str(cast(dict[str, Any], held.get("settings") or {}).get("scopes") or "").split()
+    scopes = str(cast(dict[str, Any], conn.get("settings") or {}).get("scopes") or "").split()
     if not scopes and plugin is not None:
         scopes = [sc.id for sc in plugin.manifest.connection.scopes]
-    tokens = [t for t in await store.tokens(conn["tenant_id"], str(conn["id"])) if t["environment"] == env]
+    tokens = await store.tokens(conn["tenant_id"], str(conn["id"]))
     checked = next((a for a in await store.audit(conn["tenant_id"], str(conn["id"])) if a["action"] == CHECKED), None)
     said = str(cast(dict[str, Any], (checked or {}).get("detail") or {}).get("status") or "")
     return {
@@ -516,8 +567,9 @@ async def credential_row(
         "name": str(conn.get("account_name") or conn["name"]),
         "app": app,
         "appName": app_name,
-        "type": "ops_ai" if held.get("platform_app") else "own",
-        "credentialId": held.get("credential_id"),
+        "type": "ops_ai" if conn.get("platform_app") else "own",
+        "sandbox": bool(conn.get("sandbox")),
+        "credentialId": conn.get("credential_id"),
         "permissions": scopes,
         "accounts": len(tokens),
         "status": "working" if said == "ok" else "failing" if said == "failed" else "not_tested",
@@ -525,29 +577,30 @@ async def credential_row(
     }
 
 
-async def add_app_credential(systems: Systems, who: Caller, i: AppCredentialIn) -> dict[str, Any]:
-    """The team's own client on an app the team has set up, in one environment, its secret sealed through the
-    credential port with the connection's other secrets. An app on Ops AI's app moves to the team's own, and a client
-    id saved with no secret yet is completed; one that already holds the team's own client and secret keeps it, as
-    changing it is an edit of the app's settings, never a second credential beside it."""
-    systems.connections.check(who, "manage", what="app credentials")
-    card = next((c for c in await systems.cards(who) if c["id"] == i.app), None)
-    if card is None:
-        raise NotFound(f"App {i.app}")
-    store = systems.connections.store
-    conn = await store.get(who.tenant_id, str(card["connectionId"])) if card.get("connectionId") else None
+def _plugin(apps: Apps, card: dict[str, Any]) -> Plugin | None:
+    return apps.plugins.plugins.get(str(card.get("pluginId"))) if apps.plugins and card.get("pluginId") else None
+
+
+async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dict[str, Any]:
+    """The team's own client on one of an app's accounts, its secret sealed through the credential port with the
+    account's other secrets. An account on Ops AI's app moves to the team's own, and a client id saved with no secret
+    yet is completed; one that already holds the team's own client and secret keeps it, as changing it is an edit of
+    the account's settings, never a second credential beside it."""
+    apps.connections.check(who, "manage", what="app credentials")
+    card = await apps.card(who, i.app)
+    store = apps.connections.store
+    account = i.account or card.get("connectionId")
+    conn = await apps.connections.account_of(who, str(card["id"]), str(account)) if account else None
     if conn is None:
         raise Conflict(
             f"Set {card['name']} up for the team first; its credential comes with it.", code="app_not_set_up"
         )
     if kind_of(str(conn["auth_kind"])).field("clientId") is None:
         raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
-    envs = cast(dict[str, dict[str, Any]], conn.get("environments") or {})
-    held = envs.get(i.environment) or {}
-    stored = cast(dict[str, Any], held.get("settings") or {})
-    if stored.get("clientId") and not held.get("platform_app") and "clientSecret" in (held.get("secrets") or {}):
+    stored = cast(dict[str, Any], conn.get("settings") or {})
+    if stored.get("clientId") and not conn.get("platform_app") and "clientSecret" in (conn.get("secrets") or {}):
         raise Conflict(f"{card['name']} already signs in with the team's own app.", code="credential_exists")
-    plugin = systems.plugins.plugins.get(str(card.get("pluginId"))) if systems.plugins else None
+    plugin = _plugin(apps, card)
     scopes = i.scopes
     if plugin is not None:
         offered = plugin.manifest.connection.scopes
@@ -557,10 +610,9 @@ async def add_app_credential(systems: Systems, who: Caller, i: AppCredentialIn) 
         wanted = set(scopes) if scopes is not None else {sc.id for sc in offered}
         scopes = [sc.id for sc in offered if sc.required or sc.id in wanted]
     settings: dict[str, Any] = {"clientId": i.client_id, **({"scopes": " ".join(scopes)} if scopes is not None else {})}
-    await systems.connections.set_environment(
+    await apps.connections.change(
         who,
         str(conn["id"]),
-        i.environment,
         {"revision": int(conn["revision"]), "settings": settings, "secret_values": {"clientSecret": i.client_secret}},
     )
     fresh = await store.get(who.tenant_id, str(conn["id"]))
@@ -568,60 +620,53 @@ async def add_app_credential(systems: Systems, who: Caller, i: AppCredentialIn) 
     return await credential_row(store, fresh, str(card["id"]), str(card["name"]), plugin)
 
 
-async def replace_credential_secret(systems: Systems, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
+async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
     """A new client secret for the team's own app credential, sealed through the credential port; the client id,
     permissions and every account on it stay. Ops AI's app has no row here, so it is never changed this way."""
-    systems.connections.check(who, "manage", what="app credentials")
-    store = systems.connections.store
-    found = await store.credential_environment(who.tenant_id, credential_id)
-    if found is None:
+    apps.connections.check(who, "manage", what="app credentials")
+    store = apps.connections.store
+    conn = await store.credential_account(who.tenant_id, credential_id)
+    if conn is None:
         raise NotFound(f"App credential {credential_id}")
-    conn, environment = found
-    held = cast(dict[str, dict[str, Any]], conn["environments"])[environment]
-    await systems.connections.set_environment(
+    await apps.connections.change(
         who,
         str(conn["id"]),
-        environment,
         {
             "revision": int(conn["revision"]),
-            "settings": dict(held.get("settings") or {}),
+            "settings": dict(conn.get("settings") or {}),
             "secret_values": {"clientSecret": secret},
         },
     )
-    card = next((c for c in await systems.cards(who) if c.get("connectionId") == conn["id"]), None)
+    card = next((c for c in await apps.cards(who) if c["id"] == conn["app_id"]), None)
     fresh = await store.get(who.tenant_id, str(conn["id"]))
     assert fresh is not None
-    plugin = systems.plugins.plugins.get(str(card.get("pluginId"))) if card and systems.plugins else None
-    app, name = (str(card["id"]), str(card["name"])) if card else (str(conn["id"]), str(conn["name"]))
-    return await credential_row(store, fresh, app, name, plugin)
+    app, name = (str(card["id"]), str(card["name"])) if card else (str(conn["app_id"]), str(conn["name"]))
+    return await credential_row(store, fresh, app, name, _plugin(apps, card) if card else None)
 
 
-async def app_credentials(systems: Systems, who: Caller) -> list[dict[str, Any]]:
-    """Each app the team set up that signs in through an OAuth app, with how (c-616 C0): only a person who manages the
-    team's apps reads them, and no secret is read."""
-    systems.connections.check(who, "manage", what="app credentials")
-    store = systems.connections.store
+async def app_credentials(apps: Apps, who: Caller) -> list[dict[str, Any]]:
+    """Each account of the team's apps that signs in through an OAuth app, with how (c-616 C0): only a person who
+    manages the team's apps reads them, and no secret is read."""
+    apps.connections.check(who, "manage", what="app credentials")
+    store = apps.connections.store
+    cards = {str(c["id"]): c for c in await apps.cards(who)}
     rows: list[dict[str, Any]] = []
-    for card in await systems.cards(who):
-        connection_id = card.get("connectionId")
-        conn = await store.get(who.tenant_id, str(connection_id)) if connection_id else None
-        if conn is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
+    for conn in await apps.connections.team_rows(who):
+        card = cards.get(str(conn["app_id"]))
+        if card is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
             continue
-        plugin = systems.plugins.plugins.get(str(card.get("pluginId"))) if systems.plugins else None
-        rows.append(await credential_row(store, conn, str(card["id"]), str(card["name"]), plugin))
+        rows.append(await credential_row(store, conn, str(card["id"]), str(card["name"]), _plugin(apps, card)))
     return rows
 
 
-async def app_page(systems: Systems, who: Caller, app_id: str) -> dict[str, Any]:
+async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     """An app's page as one answer: a card of the caller's team only, so another team's app is not found."""
-    card = next((c for c in await systems.cards(who) if c["id"] == app_id), None)
-    if card is None:
-        raise NotFound(f"App {app_id}")
-    detail = await systems.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
+    card = await apps.card(who, app_id)
+    detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
     mine = own_key(who)
     signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
     people = (
-        {str(p["person_id"]) for p in await systems.connections.store.people(who.tenant_id, str(card["connectionId"]))}
+        {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
         if card.get("connectionId")
         else set[str]()
     )
@@ -629,7 +674,7 @@ async def app_page(systems: Systems, who: Caller, app_id: str) -> dict[str, Any]
     usage: list[dict[str, Any]] = []
     app = next((a for a in BUILT_IN if f"builtin:{a['id']}" == card["id"]), None)
     for module_id in card["moduleIds"]:
-        module = await systems.modules.get(who.tenant_id, module_id)
+        module = await apps.modules.get(who.tenant_id, module_id)
         if module is None:
             continue
         mine_ops = set(_built_in(app, module)) if app else None
@@ -637,18 +682,15 @@ async def app_page(systems: Systems, who: Caller, app_id: str) -> dict[str, Any]
             name = str(op["name"])
             if mine_ops is not None and name not in mine_ops:
                 continue
-            title = systems.plugins.title_of(module, name) if systems.plugins else None
+            title = apps.plugins.title_of(module, name) if apps.plugins else None
             tools.append({"name": name, "title": title or name, "access": str(op["access"])})
-    if systems.calls is not None and card["moduleIds"]:
-        ran = await systems.calls.executions(
+    if apps.calls is not None and card["moduleIds"]:
+        ran = await apps.calls.executions(
             who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
         )
         usage = list(ran["data"])
-    accounts = await _accounts(systems, who, card, detail)
     skills: list[dict[str, Any]] = []
-    plugin = (
-        systems.plugins.plugins.get(str(card.get("pluginId"))) if systems.plugins and card.get("pluginId") else None
-    )
+    plugin = _plugin(apps, card)
     if plugin is not None:
         skills = [{"kind": t.kind, "id": t.id, "title": view_of(plugin, t)["title"]} for t in plugin.manifest.templates]
     return {
@@ -656,114 +698,119 @@ async def app_page(systems: Systems, who: Caller, app_id: str) -> dict[str, Any]
         "connection": detail,
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
-        "accounts": accounts,
+        "accounts": await _accounts(apps, who, card),
         "tools": tools,
         "skills": skills,
         "usage": usage,
     }
 
 
-async def _accounts(
-    systems: Systems, who: Caller, card: dict[str, Any], detail: dict[str, Any] | None
-) -> list[dict[str, Any]]:
-    """The app's accounts for the page, the default (the binding's) first; with several_accounts off, that one only."""
-    if detail is None:
+async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
+    """The app's accounts for the page, the default (the binding's, or a custom app's first) first."""
+    if card["kind"] not in ("plugin", "connection") or not card.get("connectionId"):
         return []
     default = str(card["connectionId"])
-    store = systems.connections.store
-    stored = [r for r in [await store.get(who.tenant_id, default)] if r is not None]
-    host = systems.plugins
-    if host is not None and host.accounts and card.get("pluginId"):
-        stored += [
-            a
-            for a in await store.accounts(who.tenant_id, who.team.id, str(card["pluginId"]))
-            if str(a["id"]) != default
-        ]
-    states = await systems.states(who.tenant_id, stored)
-    team_tokens = await systems.connections.store.team_tokens(who.tenant_id, [str(a["id"]) for a in stored])
-    rows: list[dict[str, Any]] = [
-        {
-            "id": str(a["id"]),
-            "name": (detail.get("accountName") or detail["name"])
-            if str(a["id"]) == default
-            else a.get("account_name") or a["name"],
-            **_state(a, states[str(a["id"])]),
-            "perPerson": (a.get("sign_in") or "team") != "team",
-            "teamTest": team_test(a, (team_tokens.get(str(a["id"])) or {}).get(deciding_environment(a))),
-        }
-        for a in stored
-    ]
+    store = apps.connections.store
+    found = await store.accounts(who.tenant_id, who.team.id, str(card["id"]))
+    stored = sorted(found, key=lambda a: str(a["id"]) != default)
+    states = await apps.states(who.tenant_id, stored)
+    team_tokens = await store.team_tokens(who.tenant_id, [str(a["id"]) for a in stored])
     mine = own_key(who)
-    signed = {
-        str(t["connection_id"]): t
-        for t in await systems.connections.store.own_sign_ins(
-            who.tenant_id, mine, [r["id"] for r in rows], "production"
-        )
-    }
+    ids = [str(a["id"]) for a in stored]
+    signed = {str(t["connection_id"]): t for t in await store.own_sign_ins(who.tenant_id, mine, ids)}
     out: list[dict[str, Any]] = []
-    for r in rows:
-        per_person, team = r.pop("perPerson"), r.pop("teamTest")
-        own = signed.get(r["id"]) if per_person else None
+    for a in stored:
+        state = states[str(a["id"])]
+        per_person = (a.get("sign_in") or "team") != "team"
+        own = signed.get(str(a["id"])) if per_person else None
         out.append(
             {
-                **r,
-                "default": r["id"] == default,
-                "mine": r["id"] in signed,
-                "account": (signed.get(r["id"]) or {}).get("account"),
-                "pinned": bool((signed.get(r["id"]) or {}).get("pinned")),
+                "id": str(a["id"]),
+                "name": a.get("account_name") or a["name"],
+                "default": str(a["id"]) == default,
+                "sandbox": bool(a.get("sandbox")),
+                "state": state[0],
+                "status": state[1],
+                "statusDetail": a.get("status_detail"),
+                "stateReason": state[2],
+                "mine": str(a["id"]) in signed,
+                "account": (signed.get(str(a["id"])) or {}).get("account"),
+                "pinned": bool((signed.get(str(a["id"])) or {}).get("pinned")),
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
-                "test": own.get("test") if own is not None else team,
+                "test": own.get("test") if own is not None else team_test(a, team_tokens.get(str(a["id"]))),
+                "health": a.get("health"),
             }
         )
     return out
 
 
-def _state(conn: dict[str, Any], state: tuple[str, str, str | None]) -> dict[str, Any]:
-    return {"state": state[0], "status": state[1], "statusDetail": conn.get("status_detail"), "stateReason": state[2]}
-
-
-def systems_router(systems: Systems, directory: Directory) -> APIRouter:
+def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     caller = caller_in(directory)
-    r = APIRouter(tags=["connections"], responses=ERRORS)
+    r = APIRouter(tags=["apps"], responses=ERRORS)
 
-    @r.get("/v1/systems", response_model=Envelope[list[SystemCard]])
-    async def list_systems(  # pyright: ignore[reportUnusedFunction]
+    @r.get("/v1/apps", response_model=Envelope[list[SystemCard]])
+    async def list_apps(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Caller, Depends(caller)],
         acting: ActingPerson,
         include: Annotated[Literal["builtin"] | None, Query()] = None,
     ) -> JSONResponse:
         """The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
-        the built-in apps, for the approval policy's app picker. A service asking for a person
-        (X-Acting-For) reads each card's state as that person's."""
+        the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
+        each card's state as that person's."""
         person = acting.sub if acting else None
-        cards = await systems.cards(who, listed=True, builtins=include == "builtin", person=person)
+        cards = await apps.cards(who, listed=True, builtins=include == "builtin", person=person)
         return ok([SystemCard(**c).model_dump(by_alias=True) for c in cards])
+
+    @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
+    async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
+        or an MCP server by its address, whose sign-in is found from the server (c-331)."""
+        return ok(await apps.add_custom(who, body), 201)
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])
     async def list_app_credentials(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's app credentials, for the Credentials page under Apps (c-616 C0): each app's type, permissions,
-        accounts and the last Test with my account. Team admins only; no secret."""
-        return ok([AppCredential(**c).model_dump(by_alias=True) for c in await app_credentials(systems, who)])
+        """The team's app credentials, for the Credentials page under Apps (c-616 C0): each account's type,
+        permissions, accounts and the last Test with my account. Team admins only; no secret."""
+        return ok([AppCredential(**c).model_dump(by_alias=True) for c in await app_credentials(apps, who)])
 
     @r.post("/v1/app-credentials", response_model=Envelope[AppCredential], status_code=201)
     async def create_app_credential(  # pyright: ignore[reportUnusedFunction]
         body: AppCredentialIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Adds the team's own OAuth app to one of its apps: client id, secret and permissions. Team admins only; the
-        answer is the Credentials page's row, with no secret."""
-        return ok(AppCredential(**await add_app_credential(systems, who, body)).model_dump(by_alias=True), 201)
+        """Adds the team's own OAuth app to one of its apps' accounts: client id, secret and permissions. Team admins
+        only; the answer is the Credentials page's row, with no secret."""
+        return ok(AppCredential(**await add_app_credential(apps, who, body)).model_dump(by_alias=True), 201)
 
     @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredential])
     async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]
         credential_id: str, body: CredentialSecretIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Replaces the client secret of the team's own app credential. Team admins only; the answer has no secret."""
-        row = await replace_credential_secret(systems, who, credential_id, body.client_secret)
+        row = await replace_credential_secret(apps, who, credential_id, body.client_secret)
         return ok(AppCredential(**row).model_dump(by_alias=True))
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One app's page (c-607): its card, account, the caller's own sign-in, tools, skills and latest runs."""
-        return ok(AppPage(**await app_page(systems, who, app_id)).model_dump(by_alias=True))
+        """One app's page (c-607): its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
+        return ok(AppPage(**await app_page(apps, who, app_id)).model_dump(by_alias=True))
+
+    @r.put("/v1/apps/{app_id}/team", response_model=Envelope[SystemCard])
+    async def set_team_app(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, body: TeamPluginIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Turns a plugin's app on or off for the team and saves the team's settings: a team admin's alone. The first
+        turn-on makes the team's default account."""
+        if apps.plugin_accounts is None:
+            raise NotFound(f"App {app_id}")
+        await apps.plugin_accounts.switch(who, app_id, body)
+        return ok(SystemCard(**await apps.card(who, app_id)).model_dump(by_alias=True))
+
+    @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)
+    async def add_account(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Another account of one of the team's apps: a sandbox, which test runs use, or another named account (c-608,
+        with several_accounts on). The first stays the default."""
+        return ok(await apps.add_account(who, app_id, body), 201)
 
     return r

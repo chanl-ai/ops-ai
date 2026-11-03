@@ -76,7 +76,7 @@ def main() -> None:
         OPS.update(bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops"))
         OTHER.update(bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_platform"))
         # 1. Priya turns the plugin on for team_ops; team_platform leaves it off.
-        on = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=OPS)
+        on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=OPS)
         check("1 the plugin is on for team_ops", on.status_code == 200, {"team": said(on)})
 
         # 2. team_ops sees the four templates, none installed; team_platform sees none.

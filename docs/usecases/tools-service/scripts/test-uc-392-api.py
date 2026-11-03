@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 
-from connection_calls import allow_bank, call, clean, connection, module
+from connection_calls import allow_bank, at, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
 
 with ExitStack() as stack:
@@ -21,30 +21,35 @@ with ExitStack() as stack:
         "uc392 bearer",
         "bearer",
         {
-            "test": {"secretValues": {"token": "test-bearer-token"}},
-            "production": {"secretValues": {"token": "prod-bearer-token"}},
+            "sandbox": {"secretValues": {"token": "test-bearer-token"}},
+            "live": {"secretValues": {"token": "prod-bearer-token"}},
         },
         base_url=BANK_BASE,
     )
     module(gw, "uc392-bearer", f"https://{bank['host']}/auth/bearer", conn["id"])
     test = call(gw, "uc392_bearer", environment="test")
-    check("1 a test call carries the test token", test.get("ok") and test["output"] == {"environment": "test"}, test)
+    check(
+        "1 a test call carries the sandbox account's token",
+        test.get("ok") and test["output"] == {"environment": "test"},
+        test,
+    )
     live = call(gw, "uc392_bearer", environment="production")
     check(
-        "1 a live call carries the production token",
+        "1 a live call carries the live account's token",
         live.get("ok") and live["output"] == {"environment": "production"},
         live,
     )
-    replaced = data(gw.get(f"/v1/connections/{conn['id']}"))
-    res = gw.put(
-        f"/v1/connections/{conn['id']}/environments/test",
+    sandbox = conn["sandboxAccount"]
+    replaced = data(gw.get(at(sandbox)))
+    res = gw.patch(
+        at(sandbox),
         json={
             "revision": replaced["revision"],
             "settings": {"baseUrl": BANK_BASE},
             "secretValues": {"token": "not-the-token"},
         },
     )
-    check("2 the test token is replaced (200)", res.status_code == 200, res.text[:200])
+    check("2 the sandbox account's token is replaced (200)", res.status_code == 200, res.text[:200])
     after = call(gw, "uc392_bearer", environment="test", key="after-replace")
     check(
         "2 the next test call carries the new token, which the bank refuses",
@@ -52,9 +57,9 @@ with ExitStack() as stack:
         after,
     )
     meta = data(gw.get("/v1/secrets"))
-    owned = [s for s in meta if s.get("connectionId") == conn["id"]]
+    owned = [s for s in meta if s.get("connectionId") in (conn["id"], sandbox["id"])]
     check(
-        "3 the Secrets list shows the token parts as the connection's, with no value",
+        "3 the Secrets list shows each account's token as its own, with no value",
         len(owned) == 2 and "not-the-token" not in str(meta) and "prod-bearer-token" not in str(meta),
         owned,
     )

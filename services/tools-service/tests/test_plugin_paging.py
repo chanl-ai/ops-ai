@@ -152,7 +152,10 @@ async def test_a_changed_cursor_or_one_from_another_tool_is_refused(rig: Rig) ->
     first = await rig.call("find_cases", {"status": "Escalated"})
     cursor = str(first.output["next_cursor"])
     other = CursorSeal(KEY, rig.tenant, "con_a", "pager_list_view").close(json.dumps({"link": LINK_2}))
-    for bad in (cursor[:-2] + "xx", other):
+    # A character changed mid-cursor: the last ones can be base64 padding bits, which decode to the same bytes.
+    mid = len(cursor) // 2
+    changed = cursor[:mid] + ("A" if cursor[mid] != "A" else "B") + cursor[mid + 1 :]
+    for bad in (changed, other):
         out = await rig.call("find_cases", {"cursor": bad})
         assert not out.ok and out.output["error"]["code"] == "INVALID_INPUT", out
     assert len(rig.seen) == 1

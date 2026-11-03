@@ -1,14 +1,14 @@
-"""How a call signs in: the module's connection, the call's environment, and the strategy its auth kind names.
+"""How a call signs in: the module's account, and the strategy its auth kind names.
 
 The executor asks `Authenticator.prepare` for every operation of a module that has a connection and adds what comes
 back (headers, query values, a client certificate) to the request; the values it resolved join the call's scrub set.
 Strategies are a table keyed by kind (`STRATEGIES`), so no tool or operation carries its own branch, and a kind is a row
 in `kinds.KINDS` plus one entry here.
 
-Which environment a call uses is the run's: live runs use production, everything else uses test (owner,
-2026-10-19). A connection record with no environment set at all is an older integration record (the dev seed's); it
-adds nothing and the operation's own headers apply as before. Once any environment is set, a call in an environment
-that is not set is refused rather than sent without its credential.
+Which account a call uses is chosen where the module is resolved (connections.records.account_for): a test run takes
+the app's sandbox account when it has one. A live run is never signed in with a sandbox account. An account with no
+settings at all is an older integration record (the dev seed's); it adds nothing and the operation's own headers
+apply as before.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from ops_identity import ActingForPerson
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
+from ..environments import PRODUCTION
 from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import SHARED, ConnectionStore
 from .assertion import SigningError, read_certificate
@@ -37,8 +38,6 @@ from .tokens import AuthFailed, ClientProof, Tokens, scope_list
 # The console's CONNECTION_REQUIRED_REASONS is this list (lib/types/connections.ts), held equal by
 # tests/test_person_credentials.py.
 NotLinkedReason = Literal["not_connected", "insufficient_scope", "needs_person", "no_person", "refused"]
-
-# The account's own OAuth app secret for a plugin (c-565): (tenant, plugin id) to the value, or None.
 
 if TYPE_CHECKING:
     from ..connections.connect_links import ConnectLinks
@@ -66,7 +65,6 @@ SIGNED_WITH: ContextVar[str | None] = ContextVar("ops_tools_signed_with", defaul
 @dataclass
 class Prepared:
     connection_id: str
-    environment: str
     headers: dict[str, str] = field(default_factory=dict[str, str])
     params: dict[str, str] = field(default_factory=dict[str, str])
     certificate: ClientCertificate | None = None
@@ -86,7 +84,6 @@ class Prepared:
 class StrategyInput:
     tenant_id: str
     connection_id: str
-    environment: str
     settings: dict[str, Any]
     secrets: dict[str, str]
     tokens: Tokens
@@ -145,7 +142,6 @@ def _token_strategy(grant: str) -> Strategy:
             token = await i.tokens.access(
                 i.tenant_id,
                 i.connection_id,
-                i.environment,
                 i.settings,
                 proof,
                 grant=grant,
@@ -175,7 +171,7 @@ STRATEGIES: dict[str, Strategy] = {
 
 
 def certificate_of(settings: dict[str, Any], secrets: dict[str, str]) -> ClientCertificate | None:
-    """The environment's TLS settings: a client certificate (both its PEM and its private key) and a CA to trust."""
+    """The account's TLS settings: a client certificate (both its PEM and its private key) and a CA to trust."""
     cert, key, ca = settings.get("clientCertificate"), secrets.get("clientKey"), settings.get("trustedCa")
     if not cert or not key:
         cert = key = None
@@ -205,19 +201,18 @@ class Authenticator:
         # Makes the link a call hands back when the person it acts for has not signed in (c-558).
         self.links = links
 
-    async def addressed(self, module: dict[str, Any], environment: str) -> dict[str, Any]:
-        """The module as a call reaches it: its address is its connection's for the run's environment (c-616), the only
-        home an address has. Empty with no connection, or one not set for the environment, and `prepare` says why."""
+    async def addressed(self, module: dict[str, Any]) -> dict[str, Any]:
+        """The module as a call reaches it: its address is its account's (c-616), the only home an address has. Empty
+        with no account, or one naming none, and `prepare` says why."""
         connection_id = module.get("connection_id")
         conn = await self.connections.get(str(module["tenant_id"]), str(connection_id)) if connection_id else None
-        envs: dict[str, dict[str, Any]] = (conn or {}).get("environments") or {}
-        settings: dict[str, Any] = (envs.get(environment) or {}).get("settings") or {}
+        settings: dict[str, Any] = (conn or {}).get("settings") or {}
         return {**module, "endpoint": str(settings.get("baseUrl") or "")}
 
     async def prepare(
         self,
         module: dict[str, Any],
-        environment: str,
+        run: str,
         *,
         tool: str,
         actor: str,
@@ -227,8 +222,9 @@ class Authenticator:
         needs_person: bool = False,
         scopes: Sequence[str] = (),
     ) -> Prepared | None:
-        """What the module's connection adds to a call signed in with `environment`; None for a module with no
-        connection or one whose record has no environment set. Raises AuthFailed when the call cannot be signed in.
+        """What the module's account adds to a call made in `run` (test or production); None for a module with no
+        account or one whose record has no settings. Raises AuthFailed when the call cannot be signed in; a live run on
+        a sandbox account is refused.
         `acting_for` is the verified person the call acts for; on a connection each person signs in to, their own
         sign-in signs the call, and a person who has none gets CONNECTION_NOT_LINKED with a link made for them.
         `team_account` signs with the team's sign-in whatever the setting: an admin's Test connection of it only.
@@ -239,42 +235,40 @@ class Authenticator:
         if not connection_id:
             return None
         tenant_id = str(module["tenant_id"])
-        env = environment
         conn = await self.connections.get(tenant_id, str(connection_id))
         if conn is None:
             raise AuthFailed("CONNECTION_MISSING", "This module's connection no longer exists.")
-        if not conn["environments"]:
+        if not conn["settings"] and not conn["secrets"]:
             return None
         name = conn["name"]
         if not may_use(conn, module.get("team_id")):
             raise AuthFailed("CONNECTION_OUT_OF_SCOPE", f"{name} is not available to this module's team.")
         if conn["status"] == "revoked":
             raise AuthFailed("CONNECTION_REVOKED", f"{name} is revoked; reconnect it before tools use it.")
-        setting = conn["environments"].get(env)
-        if setting is None:
+        if run == PRODUCTION and conn.get("sandbox"):
             raise AuthFailed(
                 "CONNECTION_NOT_SET",
-                f"{name} has no {env} account yet, so this call cannot sign in there. "
-                "A team admin connects one under the app's Settings, Environments.",
+                f"{name} is a sandbox account, which only test runs use. A team admin connects a live account under "
+                "the app's Accounts.",
             )
-        # A credential goes to its own system only: the module's address must be the connection's, scheme, host and
+        # A credential goes to its own system only: the module's address must be the account's, scheme, host and
         # port, before any secret is read; another allow-listed host gets nothing.
-        plain: dict[str, Any] = dict(setting["settings"] or {})
+        plain: dict[str, Any] = dict(conn["settings"] or {})
         base = str(plain.get("baseUrl") or "")
         target = str(module.get("endpoint") or "")
         if not base:
-            raise AuthFailed("CONNECTION_NOT_SET", f"{name} names no system address for {env}.")
+            raise AuthFailed("CONNECTION_NOT_SET", f"{name} names no system address.")
         if origin(target) != origin(base):
             raise AuthFailed(
                 "CONNECTION_HOST_MISMATCH",
                 f"{name} signs in to {urlsplit(base).hostname} only; this module calls {urlsplit(target).hostname}.",
             )
-        names: dict[str, str] = dict(setting["secrets"] or {})
+        names: dict[str, str] = dict(conn["secrets"] or {})
         values = await self._secret_values(tenant_id, str(conn["team_id"]), names, tool=tool, actor=actor)
-        # An environment on Ops AI's app signs in with the install's client secret, never one of a team's.
-        if (app := setting.get("platform_app")) and (installed := self.connections.install_client(str(app))):
+        # An account on Ops AI's app signs in with the install's client secret, never one of a team's.
+        if (app := conn.get("platform_app")) and (installed := self.connections.install_client(str(app))):
             values = {**values, "clientSecret": installed.secret.get_secret_value()}
-        prepared = Prepared(str(connection_id), env, values=list(values.values()))
+        prepared = Prepared(str(connection_id), values=list(values.values()))
         kind = kind_of(str(conn["auth_kind"]))
         # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of
         # the team's (c-595).
@@ -283,46 +277,46 @@ class Authenticator:
             f.label for f in kind.requires(plain, each_person=person != SHARED) if f.secret and f.name not in values
         ]
         if missing:
-            raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)} for {env}.")
+            raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)}.")
         settings = plain
         held_own: dict[str, Any] | None = None
         if person != SHARED and acting_for is not None:
-            held_own = await self.connections.token(tenant_id, str(connection_id), env, person)
+            held_own = await self.connections.token(tenant_id, str(connection_id), person)
             if held_own is not None and held_own.get("refused_at") is not None:
                 # The system refused this key or sign-in before: ask for a new one rather than send it again.
-                raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes), reason="refused")
+                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
         if person != SHARED and kind.person_fields:
-            own = await self.tokens.own(tenant_id, str(connection_id), env, person, row=held_own)
+            own = await self.tokens.own(tenant_id, str(connection_id), person, row=held_own)
             if own is None:
                 assert acting_for is not None
-                raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes))
+                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes))
             secret = {f: v for f, v in own.items() if (k := kind.field(f)) is not None and k.secret}
             settings = {**plain, **{f: v for f, v in own.items() if f not in secret}}
             values = {**values, **secret}
             prepared.values.extend(secret.values())
         if person != SHARED and acting_for is not None and scopes and kind.holds_token:
-            held = await self.connections.token(tenant_id, str(connection_id), env, person)
+            held = await self.connections.token(tenant_id, str(connection_id), person)
             granted = scope_list((held or {}).get("scopes"))
             if held is not None and not set(scopes) <= set(granted):
                 raise await self._not_linked(
-                    conn, env, acting_for, settings, scopes=[*granted, *scopes], reason="insufficient_scope"
+                    conn, acting_for, settings, scopes=[*granted, *scopes], reason="insufficient_scope"
                 )
         given = StrategyInput(
-            tenant_id, str(connection_id), env, settings, values, self.tokens, stale_rotation, person=person
+            tenant_id, str(connection_id), settings, values, self.tokens, stale_rotation, person=person
         )
         try:
             await STRATEGIES[kind.id](given, prepared)
         except AuthFailed as e:
             if person != SHARED and acting_for is not None and e.code == "NOT_SIGNED_IN":
-                raise await self._not_linked(conn, env, acting_for, settings, scopes=list(scopes)) from e
-            if person == SHARED and (stopped := await self._team_account_stopped(conn, env, e, actor)) is not None:
+                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes)) from e
+            if person == SHARED and (stopped := await self._team_account_stopped(conn, e, actor)) is not None:
                 raise stopped from e
             if e.side == "upstream":
                 # The system refused a person's own sign-in: only theirs is spent, everyone else's keeps working. Kept
                 # and marked (c-595), so Your connections says the sign-in expired and offers Reconnect.
                 at = datetime.now(UTC)
-                await self.connections.mark_refused(tenant_id, str(connection_id), env, person, reason=str(e), at=at)
-                event = {"action": "refresh_failed", "environment": env, "actor": actor, "at": at}
+                await self.connections.mark_refused(tenant_id, str(connection_id), person, reason=str(e), at=at)
+                event = {"action": "refresh_failed", "actor": actor, "at": at}
                 await self.connections.note(
                     tenant_id, str(connection_id), {**event, "detail": {"code": e.code, "own": True}}
                 )
@@ -334,15 +328,13 @@ class Authenticator:
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
-    async def _team_account_stopped(
-        self, conn: dict[str, Any], env: str, e: AuthFailed, actor: str
-    ) -> AuthFailed | None:
+    async def _team_account_stopped(self, conn: dict[str, Any], e: AuthFailed, actor: str) -> AuthFailed | None:
         """A team account the system refused, or whose sign-in ended with no refresh token to renew it (c-616 S12): the
         call says which app needs reconnecting and who does it, and the team's admins are told once per breakage
         through the outbox. None for any other failure, such as a team account nobody has signed in to yet, which is
         setup still to do rather than a breakage."""
         tenant_id, connection_id, name = str(conn["tenant_id"]), str(conn["id"]), str(conn["name"])
-        held = await self.connections.token(tenant_id, connection_id, env, SHARED)
+        held = await self.connections.token(tenant_id, connection_id, SHARED)
         at = datetime.now(UTC)
         ended: datetime | None = (held or {}).get("expires_at")
         if e.side == "upstream":
@@ -351,15 +343,17 @@ class Authenticator:
             state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
         else:
             return None
-        notice = needs_reconnect_event(conn, env, state=state, reason=why, since=since, at=at)
+        notice = needs_reconnect_event(conn, state=state, reason=why, since=since, at=at)
         await self.connections.needs_reconnect(tenant_id, connection_id, str(e) if state == REFUSED else None, notice)
         if state == REFUSED:
-            event = {"action": "refresh_failed", "environment": env, "actor": actor, "at": at}
+            event = {"action": "refresh_failed", "actor": actor, "at": at}
             await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
         message = (
             f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
         )
-        details = {"connectionId": connection_id, "app": name, "account": "team", "state": state}
+        details = {
+            "connectionId": connection_id, "appId": str(conn["app_id"]), "app": name, "account": "team", "state": state
+        }  # fmt: skip
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
     @staticmethod
@@ -382,7 +376,12 @@ class Authenticator:
             else f"{name} signs in as each person, and this call acts for nobody."
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
-        details = {"connectionId": str(conn["id"]), "connection": str(name), "reason": reason}
+        details = {
+            "connectionId": str(conn["id"]),
+            "appId": str(conn["app_id"]),
+            "connection": str(name),
+            "reason": reason,
+        }
         raise AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
 
     async def refused(
@@ -394,22 +393,18 @@ class Authenticator:
         tenant_id, connection_id = str(module["tenant_id"]), prepared.connection_id
         assert prepared.person is not None
         at = datetime.now(UTC)
-        await self.connections.mark_refused(
-            tenant_id, connection_id, prepared.environment, prepared.person, reason=reason, at=at
-        )
-        event = {"action": "refresh_failed", "environment": prepared.environment, "actor": acting_for.email, "at": at}
+        await self.connections.mark_refused(tenant_id, connection_id, prepared.person, reason=reason, at=at)
+        event = {"action": "refresh_failed", "actor": acting_for.email, "at": at}
         await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": "REFUSED", "own": True}})
         conn = await self.connections.get(tenant_id, connection_id)
         if conn is None:
             return AuthFailed("CONNECTION_MISSING", "This module's connection no longer exists.")
-        envs = cast(dict[str, dict[str, Any]], conn["environments"])
-        settings = cast(dict[str, Any], (envs.get(prepared.environment) or {}).get("settings") or {})
-        return await self._not_linked(conn, prepared.environment, acting_for, settings, scopes=[], reason="refused")
+        settings = cast(dict[str, Any], conn.get("settings") or {})
+        return await self._not_linked(conn, acting_for, settings, scopes=[], reason="refused")
 
     async def _not_linked(
         self,
         conn: dict[str, Any],
-        env: str,
         person: ActingForPerson,
         settings: dict[str, Any],
         *,
@@ -422,12 +417,14 @@ class Authenticator:
         # The kind and the fields a person gives, so the console asks for a key in place of a sign-in it cannot start.
         details: dict[str, Any] = {
             "connectionId": str(conn["id"]),
+            # The account's app: the console's Connect my account opens the account under it.
+            "appId": str(conn["app_id"]),
             "connection": str(conn["name"]),
             "reason": reason,
             "authKind": kind.id,
             "personFields": list(kind.person_fields),
             # What a run that waits for this person to connect waits on (c-616 S12): their connecting reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn["id"]), env, person.sub)},
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn["id"]), person.sub)},
             # Whether the team account may stand in for the person (`_whose`): a call acting for nobody uses it.
             "teamAccount": str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup")),
         }
@@ -435,7 +432,6 @@ class Authenticator:
             details |= await self.links.make(
                 tenant_id=str(conn["tenant_id"]),
                 connection_id=str(conn["id"]),
-                environment=env,
                 team_id=str(conn["team_id"]),
                 person=person,
                 scopes=[*str(settings.get("scopes") or "").split(), *scopes],

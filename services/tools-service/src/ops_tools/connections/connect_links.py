@@ -1,7 +1,7 @@
 """Connect links (c-558): what a call that needed someone's own sign-in hands back, so that person can give it.
 
 A link carries a random token; only its hash is kept, bound to the person the call acted for, the connection's team,
-the connection and the environment. It opens the person's own sign-in once, within fifteen minutes, and only for them
+and the account. It opens the person's own sign-in once, within fifteen minutes, and only for them
 (`ConnectionService.open_link`), so a link forwarded to someone else or found later starts nothing.
 """
 
@@ -32,7 +32,6 @@ class ConnectLinks:
         *,
         tenant_id: str,
         connection_id: str,
-        environment: str,
         team_id: str,
         person: ActingForPerson,
         scopes: list[str],
@@ -46,7 +45,6 @@ class ConnectLinks:
                 "tenant_id": tenant_id,
                 "token_hash": hashlib.sha256(token.encode()).hexdigest(),
                 "connection_id": connection_id,
-                "environment": environment,
                 "team_id": team_id,
                 "person_id": person.sub,
                 "email": person.email,

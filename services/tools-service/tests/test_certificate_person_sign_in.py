@@ -23,7 +23,7 @@ async def test_a_persons_sign_in_and_disconnect_send_the_signed_assertion(
     security = personal.person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     await client.post("/v1/egress/hosts", json={"value": "login.bank.test"}, headers=security)
     made = await client.post(
-        "/v1/connections", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
+        "/v1/apps", json={"name": "CRM", "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
     )
     conn = str(made.json()["data"]["id"])
     key_pem, cert_pem, cert = pair()
@@ -34,12 +34,10 @@ async def test_a_persons_sign_in_and_disconnect_send_the_signed_assertion(
         "signingCertificate": cert_pem,
     }
     body = {"revision": 1, "settings": settings, "secretValues": {"signingKey": key_pem, "clientSecret": "unused"}}
-    put = await client.put(f"/v1/connections/{conn}/environments/test", json=body, headers=admin)
+    put = await client.patch(f"/v1/apps/{conn}/accounts/{conn}", json=body, headers=admin)
     assert put.status_code == 200, put.text
     await personal.sign_in(client, tenant, conn, personal.JAMES_P, "james")
-    gone = await client.delete(
-        f"/v1/me/connections/{conn}", params={"environment": "test"}, headers=personal.person(tenant, *personal.JAMES_P)
-    )
+    gone = await client.delete(f"/v1/me/accounts/{conn}", headers=personal.person(tenant, *personal.JAMES_P))
     assert gone.status_code == 204, gone.text
     for form in (system.asked[0], system.revoked[0]):
         assert form.get("client_assertion_type") == ASSERTION and "client_secret" not in form, form

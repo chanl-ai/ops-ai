@@ -72,7 +72,13 @@ async def encoded(bank: Bank, engine: AsyncEngine) -> Bank:
 
 
 async def _call(bank: Bank, tool: str, args: dict[str, Any], key: str) -> Any:
-    body = {"tool": tool, "input": args, "key": key, "runContext": {"act": "workflow:dispute_email"}}
+    # A live run: a write in a test run on a live account waits for a person, which is not what these calls are about.
+    body = {
+        "tool": tool,
+        "input": args,
+        "key": key,
+        "runContext": {"act": "workflow:dispute_email", "environment": "production"},
+    }
     return await bank.api.client.post("/v1/calls", json=body, headers=service_headers(bank.api.tenant))
 
 

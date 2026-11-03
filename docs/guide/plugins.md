@@ -250,8 +250,8 @@ tag is refused, so an image built twice from the same commit holds the same plug
 `ref` and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
 yourself: `uv run python deploy/images/bake_plugins.py --into ./plugins`.
 
-tools-service and kb-service load every plugin when they start. A plugin that fails validation is listed under `failed` at
-`GET /v1/plugins` with its error, and every other plugin still loads.
+tools-service and kb-service load every plugin when they start. A plugin that fails validation is left out and logged
+at start as `plugin_failed` with its error, and every other plugin still loads.
 
 ## Turn a plugin on
 
@@ -269,12 +269,13 @@ in `app_credentials`, and the accounts that sign in with it point at that row.
 | Who | Call | What it does |
 |---|---|---|
 | Platform admin | install config `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, then restart tools-service | Fixes a lockable setting for every team; taking the plugin out of the plugins folder stops every team's calls, which then read "no longer installed" |
-| Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
+| Team admin (`connections.manage`) | tools-service `PUT /v1/apps/plugin:opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's default account, whole, for its sign-in kind (below); off again keeps the account and settings |
+| Team admin | `POST /v1/apps/plugin:opsai.salesforce/accounts` with `{name, sandbox: true, ...}` and the same sign-in fields | Adds a sandbox account (a Salesforce sandbox org, for example). Test runs use it; live runs never do. Its sign-in address and the instance its sign-in names are its own |
 | Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |
-| Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |
+| Team admin | `POST /v1/apps/plugin:opsai.salesforce/accounts/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here and kept on that account |
 
-The first turn-on makes the connection in one call, whatever the plugin's kind. `kind` picks one of the plugin's
-`connection.kinds` (the first when left out) and cannot change once the connection exists (`kind_fixed`).
+The first turn-on makes the account in one call, whatever the plugin's kind. `kind` picks one of the plugin's
+`connection.kinds` (the first when left out) and cannot change once the account exists (`kind_fixed`).
 `credentials` holds the kind's own fields: a key is sealed and never answered back, and a later turn-on that sends one
 part replaces only that part. Test connection reads the manifest's `health_check` for every kind.
 
@@ -310,9 +311,9 @@ never serves anyone else.
 
 On a connection each person signs in to, a key, password or token kind asks each person for their own: the
 team gives the address and how the key is sent, and no key of its own. A person gives theirs with
-`PUT /v1/me/connections/{id}/credentials` and `{environment, credentials: {key}}` (`{username, password}` for `basic`,
+`PUT /v1/me/accounts/{id}/credentials` and `{credentials: {key}}` (`{username, password}` for `basic`,
 `{token}` for `bearer`), from the chat card that asks for it or from My accounts; it is sealed in their own row and
-never answered back. `GET /v1/me/connections?every=true` lists every connection of the team a person can connect, with
+never answered back. `GET /v1/me/accounts?every=true` lists every account of the team a person can connect, with
 `connected`, the method and the fields to give. A call acting for a person with no key is refused
 `CONNECTION_NOT_LINKED` naming `authKind` and `personFields`, so the console asks for the key in place; a call with
 nobody behind it is refused with reason `no_person`. A wrong key fails that person's call with the system's 401 and
@@ -332,8 +333,8 @@ every team calls the installed manifest. On, each team runs the plugin version i
 | The team's version | Its binding records the version, a digest of the tool declarations (the plugin-wide headers and each tool's manifest entry) and the declarations. A team takes the installed version when it turns the plugin on |
 | An upgrade | The operator installs the new package and restarts tools-service. The account's tool row follows it, keeping each tool's id and a dropped tool as a switched-off row. Nothing changes for a team until it takes the update |
 | Calls and lists | Built from the team's version: a changed tool keeps its request and inputs, a dropped one still answers and stays listed, a new one is neither listed nor callable. A Python tool always runs the installed package's function |
-| The review | `GET /v1/plugins/{id}/team/update`: both versions, and each new, changed and removed tool with its inputs added, removed and changed. agents-service's `GET /v1/tool-uses?tools=` names the team's agents and workflows that use each one |
-| Taking it | `POST /v1/plugins/{id}/team/update` with the installed digest the review was read at; another upgrade since then answers 409 `update_changed`. Keeping the current version is not taking it |
+| The review | `GET /v1/apps/plugin:{id}/update`: both versions, and each new, changed and removed tool with its inputs added, removed and changed. agents-service's `GET /v1/tool-uses?tools=` names the team's agents and workflows that use each one |
+| Taking it | `POST /v1/apps/plugin:{id}/update` with the installed digest the review was read at; another upgrade since then answers 409 `update_changed`. Keeping the current version is not taking it |
 
 Not versioned per team: the sign-in (addresses, scopes, the lookup after sign-in), the endpoint and the egress hosts,
 which are the installed version's. uc-609 (`make usecase-test UC=uc-609`) runs an upgrade from 0.1.0 to 0.2.0 across a

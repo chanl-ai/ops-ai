@@ -44,6 +44,7 @@ async def _connection(store: ConnectionStore, tenant: str) -> str:
     row = {
         "tenant_id": tenant,
         "id": "con_tok",
+        "app_id": "con_tok",
         "team_id": "team_platform",
         "name": "CRM",
         "auth_kind": "oauth2_auth_code",
@@ -65,19 +66,19 @@ async def test_two_calls_past_the_token_refresh_it_once(engine: AsyncEngine, ten
     vault = credentials()
     tokens = Tokens(store, vault, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
     # A sign-in whose token is already inside the refresh window.
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 5})
+    await tokens.store_answer(tenant, conn, {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 5})
     both = await asyncio.gather(
-        tokens.access(tenant, conn, "test", SETTINGS, None, grant="none"),
-        tokens.access(tenant, conn, "test", SETTINGS, None, grant="none"),
+        tokens.access(tenant, conn, SETTINGS, None, grant="none"),
+        tokens.access(tenant, conn, SETTINGS, None, grant="none"),
     )
     assert [s["grant_type"] for s in seen] == ["refresh_token"], seen
     assert seen[0]["refresh_token"] == "rt-0"
     assert {t.access for t in both} == {"at-1"}
     # The rotated refresh token is the one held now: the next refresh spends rt-1, never rt-0 again.
     stale = both[0].rotation
-    await tokens.access(tenant, conn, "test", SETTINGS, None, grant="none", stale_rotation=stale)
+    await tokens.access(tenant, conn, SETTINGS, None, grant="none", stale_rotation=stale)
     assert [s.get("refresh_token") for s in seen] == ["rt-0", "rt-1"]
-    row = await store.token(tenant, conn, "test")
+    row = await store.token(tenant, conn)
     assert row is not None and "rt-" not in json.dumps({k: str(v) for k, v in row.items()})
 
 
@@ -89,11 +90,11 @@ async def test_a_refresh_after_a_401_replaces_only_the_refused_token(engine: Asy
     vault = credentials()
     tokens = Tokens(store, vault, _system(seen), AnyUrl())  # pyright: ignore[reportArgumentType]
     held = await tokens.store_answer(
-        tenant, conn, "test", {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 3600}
+        tenant, conn, {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 3600}
     )
     refused_with: Any = held.rotation
     both = await asyncio.gather(
-        tokens.access(tenant, conn, "test", SETTINGS, None, grant="none", stale_rotation=refused_with),
-        tokens.access(tenant, conn, "test", SETTINGS, None, grant="none", stale_rotation=refused_with),
+        tokens.access(tenant, conn, SETTINGS, None, grant="none", stale_rotation=refused_with),
+        tokens.access(tenant, conn, SETTINGS, None, grant="none", stale_rotation=refused_with),
     )
     assert len(seen) == 1 and {t.access for t in both} == {"at-1"}

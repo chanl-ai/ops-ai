@@ -10,106 +10,61 @@ from .models import *  # noqa: F403
 
 SERVICE = "tools"
 OPERATIONS: dict[str, Operation] = {
-    "connections_change_connection": {
-        "body": "json",
-        "headers": [],
-        "method": "PATCH",
-        "path": "/v1/connections/{connection_id}",
-        "pathParams": ["connection_id"],
-        "query": [],
-        "stream": False,
-    },
-    "connections_check_credential": {
+    "apps_add_account": {
         "body": "json",
         "headers": [],
         "method": "POST",
-        "path": "/v1/connections/{connection_id}/test-credential",
-        "pathParams": ["connection_id"],
-        "query": [],
-        "stream": False,
-    },
-    "connections_complete_sign_in": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/connections/{connection_id}/sign-in/complete",
-        "pathParams": ["connection_id"],
-        "query": [],
-        "stream": False,
-    },
-    "connections_connect_mcp": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/connections/mcp",
-        "pathParams": [],
-        "query": [],
-        "stream": False,
-    },
-    "connections_create_app_credential": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/app-credentials",
-        "pathParams": [],
-        "query": [],
-        "stream": False,
-    },
-    "connections_create_connection": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/connections",
-        "pathParams": [],
-        "query": [],
-        "stream": False,
-    },
-    "connections_delete_connection": {
-        "body": None,
-        "headers": [],
-        "method": "DELETE",
-        "path": "/v1/connections/{connection_id}",
-        "pathParams": ["connection_id"],
-        "query": [],
-        "stream": False,
-    },
-    "connections_disconnect": {
-        "body": None,
-        "headers": [],
-        "method": "DELETE",
-        "path": "/v1/me/connections/{connection_id}",
-        "pathParams": ["connection_id"],
-        "query": ["environment"],
-        "stream": False,
-    },
-    "connections_get_app": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/apps/{app_id}",
+        "path": "/v1/apps/{app_id}/accounts",
         "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
-    "connections_get_connection": {
+    "apps_add_app": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "apps_app_users": {
         "body": None,
         "headers": [],
         "method": "GET",
-        "path": "/v1/connections/{connection_id}",
-        "pathParams": ["connection_id"],
+        "path": "/v1/apps/{app_id}/used-by",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
-    "connections_give_own_credentials": {
+    "apps_change_account": {
         "body": "json",
         "headers": [],
-        "method": "PUT",
-        "path": "/v1/me/connections/{connection_id}/credentials",
-        "pathParams": ["connection_id"],
+        "method": "PATCH",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}",
+        "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
     },
-    "connections_kinds": {
+    "apps_check_credential": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_complete_sign_in": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_connection_kinds": {
         "body": None,
         "headers": [],
         "method": "GET",
@@ -118,7 +73,70 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "connections_list_app_credentials": {
+    "apps_create_app_credential": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/app-credentials",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "apps_delete_account": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_disconnect": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/me/accounts/{account_id}",
+        "pathParams": ["account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_get_account": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_get_app": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_give_own_credentials": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/me/accounts/{account_id}/credentials",
+        "pathParams": ["account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_knowledge_sources": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/knowledge-sources",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "apps_list_app_credentials": {
         "body": None,
         "headers": [],
         "method": "GET",
@@ -127,52 +145,52 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "connections_list_connections": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/connections",
-        "pathParams": [],
-        "query": ["page", "pageSize", "search"],
-        "stream": False,
-    },
-    "connections_list_systems": {
+    "apps_list_apps": {
         "body": None,
         "headers": ["x-acting-for"],
         "method": "GET",
-        "path": "/v1/systems",
+        "path": "/v1/apps",
         "pathParams": [],
         "query": ["include"],
         "stream": False,
     },
-    "connections_my_connections": {
+    "apps_my_accounts": {
         "body": None,
         "headers": [],
         "method": "GET",
-        "path": "/v1/me/connections",
+        "path": "/v1/me/accounts",
         "pathParams": [],
         "query": ["every"],
         "stream": False,
     },
-    "connections_open_connect_link": {
+    "apps_open_connect_link": {
         "body": "json",
         "headers": [],
         "method": "POST",
-        "path": "/v1/connections/connect-links/sign-in",
+        "path": "/v1/connect-links/sign-in",
         "pathParams": [],
         "query": [],
         "stream": False,
     },
-    "connections_pin_default": {
+    "apps_pin_default": {
         "body": None,
         "headers": [],
         "method": "PUT",
-        "path": "/v1/connections/{connection_id}/default",
-        "pathParams": ["connection_id"],
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/default",
+        "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
     },
-    "connections_set_app_credential_secret": {
+    "apps_plugin_update": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}/update",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_set_app_credential_secret": {
         "body": "json",
         "headers": [],
         "method": "PUT",
@@ -181,39 +199,48 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "connections_set_environment": {
+    "apps_set_team_app": {
         "body": "json",
         "headers": [],
         "method": "PUT",
-        "path": "/v1/connections/{connection_id}/environments/{environment}",
-        "pathParams": ["connection_id", "environment"],
+        "path": "/v1/apps/{app_id}/team",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
-    "connections_sign_out": {
-        "body": "json",
+    "apps_sign_out": {
+        "body": None,
         "headers": [],
         "method": "POST",
-        "path": "/v1/connections/{connection_id}/sign-out",
-        "pathParams": ["connection_id"],
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-out",
+        "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
     },
-    "connections_start_sign_in": {
+    "apps_start_sign_in": {
         "body": "json",
         "headers": [],
         "method": "POST",
-        "path": "/v1/connections/{connection_id}/sign-in",
-        "pathParams": ["connection_id"],
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in",
+        "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
     },
-    "connections_test_connection": {
+    "apps_take_plugin_update": {
         "body": "json",
         "headers": [],
         "method": "POST",
-        "path": "/v1/connections/{connection_id}/test",
-        "pathParams": ["connection_id"],
+        "path": "/v1/apps/{app_id}/update",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_test_account": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/test",
+        "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
     },
@@ -316,33 +343,6 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "plugins_add_account": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/plugins/{plugin_id}/accounts",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_app_users": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/plugins/{plugin_id}/team/users",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_knowledge_sources": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/knowledge-sources",
-        "pathParams": [],
-        "query": [],
-        "stream": False,
-    },
     "plugins_list_plugin_templates": {
         "body": None,
         "headers": [],
@@ -350,42 +350,6 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/plugin-templates",
         "pathParams": [],
         "query": ["kind"],
-        "stream": False,
-    },
-    "plugins_list_plugins": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/plugins",
-        "pathParams": [],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_plugin_update": {
-        "body": None,
-        "headers": [],
-        "method": "GET",
-        "path": "/v1/plugins/{plugin_id}/team/update",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_set_team_plugin": {
-        "body": "json",
-        "headers": [],
-        "method": "PUT",
-        "path": "/v1/plugins/{plugin_id}/team",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_take_plugin_update": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/plugins/{plugin_id}/team/update",
-        "pathParams": ["plugin_id"],
-        "query": [],
         "stream": False,
     },
     "secrets_create_secret": {
@@ -713,117 +677,115 @@ class Operations:
         "Health Background"
         return self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_list_app_credentials(self) -> list[AppCredential]:
+    def apps_list_app_credentials(self) -> list[AppCredential]:
         "List App Credentials"
-        return self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+    def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
         "Create App Credential"
-        return self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def connections_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
+    def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
         "Set App Credential Secret"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def connections_get_app(self, app_id: str) -> AppPage:
+    def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+        "List Apps"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+        )  # type: ignore[no-any-return]
+
+    def apps_add_app(self, body: NewAppIn) -> AccountDetail:
+        "Add App"
+        return self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
-        return self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_kinds(self) -> ConnectionKinds:
-        "Kinds"
-        return self._t.call(SERVICE, OPERATIONS["connections_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+    def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
+        "Add Account"
+        return self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def connections_list_connections(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> ConnectionList:
-        "List Connections"
+    def apps_get_account(self, app_id: str, account_id: str) -> AccountDetail:
+        "Get Account"
         return self._t.call(
-            SERVICE,
-            OPERATIONS["connections_list_connections"],
-            {},
-            {"page": page, "pageSize": page_size, "search": search},
-            {},
-            None,
+            SERVICE, OPERATIONS["apps_get_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    def connections_create_connection(self, body: NewConnectionIn) -> ConnectionDetail:
-        "Create Connection"
-        return self._t.call(SERVICE, OPERATIONS["connections_create_connection"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def connections_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
-        "Open Connect Link"
-        return self._t.call(SERVICE, OPERATIONS["connections_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def connections_connect_mcp(self, body: McpConnectionIn) -> ConnectionDetail:
-        "Connect Mcp"
-        return self._t.call(SERVICE, OPERATIONS["connections_connect_mcp"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def connections_get_connection(self, connection_id: str) -> ConnectionDetail:
-        "Get Connection"
+    def apps_change_account(self, app_id: str, account_id: str, body: AccountPatchIn) -> AccountDetail:
+        "Change Account"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_get_connection"], {"connection_id": connection_id}, {}, {}, None
+            SERVICE, OPERATIONS["apps_change_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def connections_change_connection(self, connection_id: str, body: ConnectionPatchIn) -> ConnectionDetail:
-        "Change Connection"
+    def apps_delete_account(self, app_id: str, account_id: str) -> Any:
+        "Delete Account"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_change_connection"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_delete_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    def connections_delete_connection(self, connection_id: str) -> Any:
-        "Delete Connection"
-        return self._t.call(
-            SERVICE, OPERATIONS["connections_delete_connection"], {"connection_id": connection_id}, {}, {}, None
-        )  # type: ignore[no-any-return]
-
-    def connections_pin_default(self, connection_id: str) -> ConnectionDetail:
+    def apps_pin_default(self, app_id: str, account_id: str) -> AccountDetail:
         "Pin Default"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_pin_default"], {"connection_id": connection_id}, {}, {}, None
+            SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    def connections_set_environment(
-        self, connection_id: str, environment: str, body: EnvironmentIn
-    ) -> ConnectionDetail:
-        "Set Environment"
-        return self._t.call(
-            SERVICE,
-            OPERATIONS["connections_set_environment"],
-            {"connection_id": connection_id, "environment": environment},
-            {},
-            {},
-            body,
-        )  # type: ignore[no-any-return]
-
-    def connections_start_sign_in(self, connection_id: str, body: SignInIn) -> SignInStart:
+    def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
         "Start Sign In"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_start_sign_in"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def connections_complete_sign_in(self, connection_id: str, body: SignInCompleteIn) -> ConnectionDetail:
+    def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
         "Complete Sign In"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_complete_sign_in"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def connections_sign_out(self, connection_id: str, body: SignInIn) -> ConnectionDetail:
+    def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
-        return self._t.call(SERVICE, OPERATIONS["connections_sign_out"], {"connection_id": connection_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def connections_test_connection(self, connection_id: str, body: ConnectionTestIn) -> ConnectionDetail:
-        "Test Connection"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    def connections_check_credential(self, connection_id: str, body: CredentialCheckIn) -> Any:
+    def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:
+        "Test Account"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
         "Check Credential"
         return self._t.call(
-            SERVICE, OPERATIONS["connections_check_credential"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
+        "Set Team App"
+        return self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
+        "Plugin Update"
+        return self._t.call(SERVICE, OPERATIONS["apps_plugin_update"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def apps_take_plugin_update(self, app_id: str, body: TakeUpdateIn) -> PluginUpdateView:
+        "Take Plugin Update"
+        return self._t.call(SERVICE, OPERATIONS["apps_take_plugin_update"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_app_users(self, app_id: str) -> AppUsers:
+        "App Users"
+        return self._t.call(SERVICE, OPERATIONS["apps_app_users"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def apps_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
+        "Open Connect Link"
+        return self._t.call(SERVICE, OPERATIONS["apps_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_connection_kinds(self) -> ConnectionKinds:
+        "Connection Kinds"
+        return self._t.call(SERVICE, OPERATIONS["apps_connection_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def egress_allow_list(self) -> AllowList:
         "Allow List"
@@ -900,58 +862,25 @@ class Operations:
         "Evaluate Formulas"
         return self._t.call(SERVICE, OPERATIONS["expressions_evaluate_formulas"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def plugins_knowledge_sources(self) -> list[KnowledgeSourceView]:
+    def apps_knowledge_sources(self) -> list[KnowledgeSourceView]:
         "Knowledge Sources"
-        return self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_my_connections(self, *, every: bool | None = None) -> list[MyConnection]:
-        "My Connections"
-        return self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
+    def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
+        "My Accounts"
+        return self._t.call(SERVICE, OPERATIONS["apps_my_accounts"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
+    def apps_disconnect(self, account_id: str) -> Any:
         "Disconnect"
-        return self._t.call(
-            SERVICE,
-            OPERATIONS["connections_disconnect"],
-            {"connection_id": connection_id},
-            {"environment": environment},
-            {},
-            None,
-        )  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def connections_give_own_credentials(self, connection_id: str, body: PersonCredentialsIn) -> MyConnection:
+    def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"
-        return self._t.call(
-            SERVICE, OPERATIONS["connections_give_own_credentials"], {"connection_id": connection_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
         return self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
-
-    def plugins_list_plugins(self) -> PluginList:
-        "List Plugins"
-        return self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
-
-    def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
-        "Add Account"
-        return self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
-        "Set Team Plugin"
-        return self._t.call(SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def plugins_plugin_update(self, plugin_id: str) -> PluginUpdateView:
-        "Plugin Update"
-        return self._t.call(SERVICE, OPERATIONS["plugins_plugin_update"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
-
-    def plugins_take_plugin_update(self, plugin_id: str, body: TakeUpdateIn) -> PluginUpdateView:
-        "Take Plugin Update"
-        return self._t.call(SERVICE, OPERATIONS["plugins_take_plugin_update"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def plugins_app_users(self, plugin_id: str) -> AppUsers:
-        "App Users"
-        return self._t.call(SERVICE, OPERATIONS["plugins_app_users"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def secrets_list_secrets(
         self,
@@ -991,19 +920,6 @@ class Operations:
     def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def connections_list_systems(
-        self, *, include: str | None = None, x_acting_for: str | None = None
-    ) -> list[SystemCard]:
-        "List Systems"
-        return self._t.call(
-            SERVICE,
-            OPERATIONS["connections_list_systems"],
-            {},
-            {"include": include},
-            {"x-acting-for": x_acting_for},
-            None,
-        )  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -1222,121 +1138,115 @@ class AsyncOperations:
         "Health Background"
         return await self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_list_app_credentials(self) -> list[AppCredential]:
+    async def apps_list_app_credentials(self) -> list[AppCredential]:
         "List App Credentials"
-        return await self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+    async def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
         "Create App Credential"
-        return await self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def connections_set_app_credential_secret(
-        self, credential_id: str, body: CredentialSecretIn
-    ) -> AppCredential:
+    async def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
         "Set App Credential Secret"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def connections_get_app(self, app_id: str) -> AppPage:
+    async def apps_list_apps(self, *, include: str | None = None, x_acting_for: str | None = None) -> list[SystemCard]:
+        "List Apps"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_list_apps"], {}, {"include": include}, {"x-acting-for": x_acting_for}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_add_app(self, body: NewAppIn) -> AccountDetail:
+        "Add App"
+        return await self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
-        return await self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_kinds(self) -> ConnectionKinds:
-        "Kinds"
-        return await self._t.call(SERVICE, OPERATIONS["connections_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+    async def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
+        "Add Account"
+        return await self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def connections_list_connections(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> ConnectionList:
-        "List Connections"
+    async def apps_get_account(self, app_id: str, account_id: str) -> AccountDetail:
+        "Get Account"
         return await self._t.call(
-            SERVICE,
-            OPERATIONS["connections_list_connections"],
-            {},
-            {"page": page, "pageSize": page_size, "search": search},
-            {},
-            None,
+            SERVICE, OPERATIONS["apps_get_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def connections_create_connection(self, body: NewConnectionIn) -> ConnectionDetail:
-        "Create Connection"
-        return await self._t.call(SERVICE, OPERATIONS["connections_create_connection"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def connections_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
-        "Open Connect Link"
-        return await self._t.call(SERVICE, OPERATIONS["connections_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def connections_connect_mcp(self, body: McpConnectionIn) -> ConnectionDetail:
-        "Connect Mcp"
-        return await self._t.call(SERVICE, OPERATIONS["connections_connect_mcp"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def connections_get_connection(self, connection_id: str) -> ConnectionDetail:
-        "Get Connection"
+    async def apps_change_account(self, app_id: str, account_id: str, body: AccountPatchIn) -> AccountDetail:
+        "Change Account"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_get_connection"], {"connection_id": connection_id}, {}, {}, None
+            SERVICE, OPERATIONS["apps_change_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def connections_change_connection(self, connection_id: str, body: ConnectionPatchIn) -> ConnectionDetail:
-        "Change Connection"
+    async def apps_delete_account(self, app_id: str, account_id: str) -> Any:
+        "Delete Account"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_change_connection"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_delete_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def connections_delete_connection(self, connection_id: str) -> Any:
-        "Delete Connection"
-        return await self._t.call(
-            SERVICE, OPERATIONS["connections_delete_connection"], {"connection_id": connection_id}, {}, {}, None
-        )  # type: ignore[no-any-return]
-
-    async def connections_pin_default(self, connection_id: str) -> ConnectionDetail:
+    async def apps_pin_default(self, app_id: str, account_id: str) -> AccountDetail:
         "Pin Default"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_pin_default"], {"connection_id": connection_id}, {}, {}, None
+            SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def connections_set_environment(
-        self, connection_id: str, environment: str, body: EnvironmentIn
-    ) -> ConnectionDetail:
-        "Set Environment"
-        return await self._t.call(
-            SERVICE,
-            OPERATIONS["connections_set_environment"],
-            {"connection_id": connection_id, "environment": environment},
-            {},
-            {},
-            body,
-        )  # type: ignore[no-any-return]
-
-    async def connections_start_sign_in(self, connection_id: str, body: SignInIn) -> SignInStart:
+    async def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
         "Start Sign In"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_start_sign_in"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def connections_complete_sign_in(self, connection_id: str, body: SignInCompleteIn) -> ConnectionDetail:
+    async def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
         "Complete Sign In"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_complete_sign_in"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def connections_sign_out(self, connection_id: str, body: SignInIn) -> ConnectionDetail:
+    async def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_sign_out"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def connections_test_connection(self, connection_id: str, body: ConnectionTestIn) -> ConnectionDetail:
-        "Test Connection"
+    async def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:
+        "Test Account"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_test_connection"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def connections_check_credential(self, connection_id: str, body: CredentialCheckIn) -> Any:
+    async def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
         "Check Credential"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_check_credential"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
+        "Set Team App"
+        return await self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
+        "Plugin Update"
+        return await self._t.call(SERVICE, OPERATIONS["apps_plugin_update"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def apps_take_plugin_update(self, app_id: str, body: TakeUpdateIn) -> PluginUpdateView:
+        "Take Plugin Update"
+        return await self._t.call(SERVICE, OPERATIONS["apps_take_plugin_update"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_app_users(self, app_id: str) -> AppUsers:
+        "App Users"
+        return await self._t.call(SERVICE, OPERATIONS["apps_app_users"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def apps_open_connect_link(self, body: ConnectLinkIn) -> SignInStart:
+        "Open Connect Link"
+        return await self._t.call(SERVICE, OPERATIONS["apps_open_connect_link"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_connection_kinds(self) -> ConnectionKinds:
+        "Connection Kinds"
+        return await self._t.call(SERVICE, OPERATIONS["apps_connection_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def egress_allow_list(self) -> AllowList:
         "Allow List"
@@ -1413,62 +1323,27 @@ class AsyncOperations:
         "Evaluate Formulas"
         return await self._t.call(SERVICE, OPERATIONS["expressions_evaluate_formulas"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def plugins_knowledge_sources(self) -> list[KnowledgeSourceView]:
+    async def apps_knowledge_sources(self) -> list[KnowledgeSourceView]:
         "Knowledge Sources"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_my_connections(self, *, every: bool | None = None) -> list[MyConnection]:
-        "My Connections"
-        return await self._t.call(SERVICE, OPERATIONS["connections_my_connections"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
+    async def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
+        "My Accounts"
+        return await self._t.call(SERVICE, OPERATIONS["apps_my_accounts"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_disconnect(self, connection_id: str, *, environment: str | None = None) -> Any:
+    async def apps_disconnect(self, account_id: str) -> Any:
         "Disconnect"
-        return await self._t.call(
-            SERVICE,
-            OPERATIONS["connections_disconnect"],
-            {"connection_id": connection_id},
-            {"environment": environment},
-            {},
-            None,
-        )  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def connections_give_own_credentials(self, connection_id: str, body: PersonCredentialsIn) -> MyConnection:
+    async def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"
         return await self._t.call(
-            SERVICE, OPERATIONS["connections_give_own_credentials"], {"connection_id": connection_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
         return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugin_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
-
-    async def plugins_list_plugins(self) -> PluginList:
-        "List Plugins"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_list_plugins"], {}, {}, {}, None)  # type: ignore[no-any-return]
-
-    async def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
-        "Add Account"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
-        "Set Team Plugin"
-        return await self._t.call(
-            SERVICE, OPERATIONS["plugins_set_team_plugin"], {"plugin_id": plugin_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
-    async def plugins_plugin_update(self, plugin_id: str) -> PluginUpdateView:
-        "Plugin Update"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_plugin_update"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
-
-    async def plugins_take_plugin_update(self, plugin_id: str, body: TakeUpdateIn) -> PluginUpdateView:
-        "Take Plugin Update"
-        return await self._t.call(
-            SERVICE, OPERATIONS["plugins_take_plugin_update"], {"plugin_id": plugin_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
-    async def plugins_app_users(self, plugin_id: str) -> AppUsers:
-        "App Users"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_app_users"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def secrets_list_secrets(
         self,
@@ -1512,19 +1387,6 @@ class AsyncOperations:
     async def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def connections_list_systems(
-        self, *, include: str | None = None, x_acting_for: str | None = None
-    ) -> list[SystemCard]:
-        "List Systems"
-        return await self._t.call(
-            SERVICE,
-            OPERATIONS["connections_list_systems"],
-            {},
-            {"include": include},
-            {"x-acting-for": x_acting_for},
-            None,
-        )  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,

@@ -52,7 +52,7 @@ async def move(engine: AsyncEngine, g: Gateway, *, dry_run: bool = False) -> lis
 
 
 async def connection(g: Gateway, connection_id: str) -> dict[str, Any]:
-    return (await g.client.get(f"/v1/connections/{connection_id}", headers=TEAM)).json()["data"]
+    return (await g.client.get(f"/v1/apps/{connection_id}/accounts/{connection_id}", headers=TEAM)).json()["data"]
 
 
 async def test_an_api_key_header_moves_and_the_call_sends_it_once_from_the_connection(

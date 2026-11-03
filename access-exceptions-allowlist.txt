@@ -39,7 +39,6 @@ services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06
 services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06
 services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16
 services/tools-service/src/ops_tools/gateway_calls.py refusal system_workflow_only 1 E06
-services/tools-service/src/ops_tools/mcp_server.py refusal production_off 1 E40
 services/tools-service/src/ops_tools/callers.py lock dev-caller 1 E09
 services/tools-service/src/ops_tools/limits.py refusal amount_over_limit 1 E16
 services/tools-service/src/ops_tools/mailboxes.py refusal egress_denied 2 E16

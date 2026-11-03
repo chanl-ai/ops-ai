@@ -16,7 +16,7 @@ same transaction that spent the old one.
 | S2 | The person who started the sign-in finishes it once; anyone else, or a second time, is refused | api | 2-3 | 3 |
 | S3 | Calls run on the account's token and each refresh is stored with the rotated refresh token | api | 4 | 4 |
 | S4 | After sign-out calls are refused again, and the activity records both | api | 5 | 5 |
-| S5 | An admin signs the team account in once from the connection page, and Test the team account works | ui | 6-7 | 7 |
+| S5 | An admin signs the team account in once from its row on the app page, and Test on the Keys row works | ui | 6-7 | 7 |
 
 ## Preconditions
 
@@ -36,8 +36,8 @@ same transaction that spent the old one.
 | 3 | Another person hands the code back; then the person who started; then again | `sign_in_expired`; 200 with "signed in as svc-lending@bank.test" and no token shown; `sign_in_expired` |
 | 4 | Two calls | Both run on the account's token; each refreshed it and both refreshes were accepted |
 | 5 | Sign out, call | `NOT_SIGNED_IN`; the activity records the sign-in and the sign-out |
-| 6 | In the console as an Operations admin, open the connection's page and sign the team account in through the pop-up | The pop-up signs in and closes |
-| 7 | Press Test the team account | Working, 200 |
+| 6 | In the console as an Operations admin, open the app's page and press Sign in on the team account's row | The pop-up signs in and closes |
+| 7 | Press Test on Settings › Keys | Working, 200 |
 
 Step 6 uses the page's Connect the team account button, shown on a kind that signs in when the team's account is
 used (`apps/console/src/app/tools/connections/[id]/page.tsx`).
@@ -47,7 +47,7 @@ used (`apps/console/src/app/tools/connections/[id]/page.tsx`).
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-394-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-394 LAYER=api` (2026-10-19) |
-| ui | `tools-service/scripts/test-uc-394-ui.mjs` | passing (2026-10-30) |
+| ui | `tools-service/scripts/test-uc-394-ui.mjs` | passing, `make usecase-test UC=uc-394 LAYER=ui` (2026-11-03) |
 
 ## Non-vacuous check
 

@@ -64,7 +64,7 @@ with ExitStack() as stack:
     clean(gw, "uc397")
     allow_bank(gw, bank)
     key = {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": "dev-bank-key"}}
-    conn = connection(gw, "uc397 core banking", "api_key", {"test": key, "production": key}, base_url=BANK_BASE)
+    conn = connection(gw, "uc397 core banking", "api_key", {"sandbox": key, "live": key}, base_url=BANK_BASE)
     made = module(gw, "uc397-get-account", f"https://{bank['host']}/accounts/{{account_id}}", conn["id"])
     op = made["operations"][0]
     base = f"/v1/tool-modules/{made['id']}/operations/{op['id']}/mocks"

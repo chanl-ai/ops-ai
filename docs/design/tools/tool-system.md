@@ -1,7 +1,9 @@
 # Tool system design
 
 Status: proposed design. Parts are built; the "Slices and state" table says which. The tools-service
-[overview](../../services/tools-service/overview.md) is the authority on what runs today.
+[overview](../../services/tools-service/overview.md) is the authority on what runs today. Superseded in one part: an
+app's account is one row with a sandbox flag instead of Test and Production settings, and its routes are under
+`/v1/apps`; the per-environment connection tables below are the earlier design.
 
 ## The problem
 

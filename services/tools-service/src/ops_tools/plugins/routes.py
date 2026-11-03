@@ -1,9 +1,10 @@
-"""`/v1/plugins` and `/v1/knowledge-sources` (c-564): what a team sees of the installed plugins and turns on.
+"""A plugin's app for a team (c-564): its turn-on and accounts (`PluginAccounts`, which the Apps routes call), and the
+routes only a plugin's app has: who uses it, its update, and the knowledge sources it offers.
 
-A team admin (connections.manage in the team) turns a plugin on or off for the team, gives its settings and the OAuth
-app the team signs in with; the first turn-on makes the team's connection from the plugin's connection definition.
-The install switch is not here: it is platform-service's `plugins` policy, the platform admin's alone. Turning a
-plugin off keeps its connection, settings and sign-ins, so turning it on again needs nothing more."""
+A team admin (connections.manage in the team) turns a plugin on or off for the team and gives its settings and the
+OAuth app the team signs in with; the first turn-on makes the team's default account from the plugin's connection
+definition. An installed plugin is available to every team; turning it off keeps its accounts, settings and sign-ins,
+so turning it on again needs nothing more."""
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
@@ -17,22 +18,19 @@ from pydantic.alias_generators import to_camel
 
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
-from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
-from ..connections.schemas import ConnectionDetail
+from ..connections.schemas import CREDENTIAL_MAX, AccountIn
 from ..connections.service import ConnectionService, connection_rights
-from ..environments import ConnectionEnvironment
 from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from .host import PluginHost, fixed_fields, per_environment, readable, render, sign_in_fixed
-
-# A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
-CREDENTIAL_MAX = 16_000
+from ..store.connections import PLUGIN_APP
+from .host import PluginHost, fixed_fields, per_account, readable, render, sign_in_fixed
 
 
 class _Wire(BaseModel):
@@ -46,10 +44,8 @@ class TeamPluginIn(_Wire):
     client_id: str | None = Field(default=None, max_length=500)
     client_secret: str | None = Field(default=None, max_length=2000)
     sign_in: str | None = None
-    # Which environment the app and the sign-in address settings are for (c-580): a sandbox has its own of both.
-    environment: ConnectionEnvironment = "production"
-    # Which of the plugin's sign-in kinds the team's connection uses, the first it lists when left out (c-588). It is
-    # chosen at the first turn-on only: a connection's kind never changes.
+    # Which of the plugin's sign-in kinds the team's account uses, the first it lists when left out (c-588). It is
+    # chosen at the first turn-on only: an account's kind never changes.
     kind: str | None = Field(default=None, max_length=50)
     # The kind's own fields and the client certificate's (auth/kinds.py), secret parts included: an API key, a username
     # and password, a token, a certificate and its private key. A secret part is sealed and never answered back; one
@@ -58,8 +54,10 @@ class TeamPluginIn(_Wire):
         default_factory=dict[str, str], max_length=20
     )
     # The team account's name, from the Connect window (c-616); taken at the first turn-on, the app's title when left
-    # out. A later rename goes through PATCH /v1/connections/{id}.
+    # out. A later rename goes through the account's PATCH.
     account_name: str | None = Field(default=None, min_length=1, max_length=200)
+    # Whether the first account is a sandbox, which only test runs use.
+    sandbox: bool = False
 
     @model_validator(mode="after")
     def _app_in_credentials(self) -> "TeamPluginIn":
@@ -70,56 +68,6 @@ class TeamPluginIn(_Wire):
         if self.client_secret is None and (secret := self.credentials.pop("clientSecret", None)):
             self.client_secret = secret
         return self
-
-
-class AccountIn(TeamPluginIn):
-    """Another account of an app the team has connected (c-608): its name, and the same turn-on contract as the
-    first account's (the environment, the kind, whose account calls use, the app and the credentials)."""
-
-    enabled: bool = True
-    name: str = Field(min_length=1, max_length=200)
-
-
-class FeatureOff(ApiError):
-    """A route of a feature the install has not turned on (c-611): answered as if it were not there."""
-
-    status = 404
-    code = "feature_off"
-
-
-class PlatformApp(_Wire):
-    """Ops AI's own OAuth app for a plugin, from the install config: its client id, and whether the install holds its
-    secret. The secret itself is never shown."""
-
-    client_id: str | None
-    secret_set: bool
-
-
-class PluginDisplay(_Wire):
-    """The manifest's card details (c-580): a logo, a category, one line, and where to read how to set up its app."""
-
-    logo: str | None = None
-    category: str | None = None
-    description: str | None = None
-    docs_url: str | None = None
-
-
-class PluginView(_Wire):
-    id: str
-    title: str
-    version: str
-    team_on: bool
-    connection_id: str | None
-    settings: dict[str, Any]
-    locked: list[str]
-    tools: list[str]
-    knowledge_sources: list[str]
-    platform_app: PlatformApp
-    display: PluginDisplay = Field(default_factory=PluginDisplay)
-    # The version this team runs (c-609, with plugin_updates on), and whether the installed one differs from it;
-    # `version` is the installed package's.
-    team_version: str | None = None
-    update_available: bool = False
 
 
 class InputChanges(_Wire):
@@ -177,16 +125,6 @@ class TakeUpdateIn(_Wire):
     digest: str = Field(min_length=64, max_length=64)
 
 
-class FailedPlugin(_Wire):
-    name: str
-    error: str
-
-
-class PluginList(_Wire):
-    plugins: list[PluginView]
-    failed: list[FailedPlugin]
-
-
 class KnowledgeSourceView(_Wire):
     plugin: str
     source: str
@@ -201,63 +139,329 @@ class KnowledgeSourceView(_Wire):
     connection_status: str | None
 
 
-def _shown(plugin: Plugin, settings: dict[str, Any]) -> dict[str, Any]:
-    """Settings as a person may read them: a secret field never, even as its reference."""
-    return readable(plugin.manifest, settings)[0]
-
-
 def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """A save's settings as the team's and the environment's own (the sign-in address, c-580): the team's stay on the
-    binding, the environment's go on the connection's environment, kept there once."""
-    own = per_environment(plugin.manifest)
+    """A save's settings as the team's and the account's own (the sign-in address, c-580): the team's stay on the
+    binding, the account's go on the account, kept there once."""
+    own = per_account(plugin.manifest)
     return {k: v for k, v in given.items() if k not in own}, {k: v for k, v in given.items() if k in own}
 
 
+class PluginAccounts:
+    """A plugin's app for one team: turning it on, its accounts, and the sign-in settings each account takes from the
+    plugin's connection definition."""
+
+    def __init__(self, host: PluginHost, connections: ConnectionService) -> None:
+        self.host = host
+        self.connections = connections
+
+    def plugin(self, app_id: str) -> Plugin:
+        """The plugin an app id (`plugin:<id>`) names; NotFound for any other app."""
+        plugin = self.host.plugins.get(app_id.removeprefix(PLUGIN_APP)) if app_id.startswith(PLUGIN_APP) else None
+        if plugin is None:
+            raise NotFound(f"App {app_id}")
+        return plugin
+
+    def _ops_client_id(self, plugin_id: str) -> str | None:
+        """The client id of Ops AI's own app for the plugin, from the install config; None when the install set none."""
+        found = self.connections.store.install_client(plugin_id)
+        return found.id if found else None
+
+    def manages(self, who: Caller) -> None:
+        """Refuses a caller who may not manage the team's plugins."""
+        if who.principal is not None:
+            connection_rights(who.principal, "manage", security_team=self.connections.security_team, what="plugins")
+
+    def _team_settings(self, plugin: Plugin, held: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
+        """The binding's settings after a save: the team's only; an account's own are the account's (c-580), so a copy
+        left from before (a removed account's instance) never reaches a call."""
+        mine = per_account(plugin.manifest)
+        return {k: v for k, v in held.items() if k != "environments" and k not in mine} | given
+
+    def _checked_settings(self, plugin: Plugin, given: dict[str, Any]) -> None:
+        m = plugin.manifest
+        locked = self.host.locked_settings(m.id)
+        for k in given:
+            setting = m.settings.get(k)
+            if setting is None:
+                raise ValidationFailed(f"{k} is not a setting of {m.title}.", details={"field": k})
+            if k in locked:
+                raise ValidationFailed(f"{k} is set by the platform admin for every team.", code="setting_locked")
+            if setting.at_sign_in:
+                raise ValidationFailed(f"{k} is read from the sign-in, not typed.", code="setting_from_token")
+
+    async def switch(self, who: Caller, app_id: str, body: TeamPluginIn) -> None:
+        """Turns the plugin on or off for the team and saves the team's settings: a team admin's alone. The first
+        turn-on makes the team's default account; a later one with sign-in details sets them on it."""
+        self.manages(who)
+        plugin = self.plugin(app_id)
+        m = plugin.manifest
+        self._checked_settings(plugin, body.settings)
+        before = await self.host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
+        team, own = _split(plugin, body.settings)
+        settings = self._team_settings(plugin, dict(before.get("settings") or {}), team)
+        connection_id = before.get("connection_id")
+        store = self.connections.store
+        if connection_id is not None and await store.get(who.tenant_id, str(connection_id)) is None:
+            # Removed, as the connect dialog's Cancel removes the one it made (c-580): the next turn-on makes another.
+            connection_id = None
+        if body.enabled and connection_id is None:
+            connection_id = await self.connect(
+                who, plugin, settings, own, body, account_name=body.account_name, sandbox=body.sandbox
+            )
+        elif body.enabled and (body.client_id or body.client_secret or body.credentials or body.kind or own):
+            await self.keys(who, plugin, str(connection_id), settings, body, own=own)
+        await self.host.bindings.put(
+            who.tenant_id,
+            who.team.id,
+            m.id,
+            enabled=body.enabled,
+            connection_id=connection_id,
+            settings=settings,
+            by=who.name,
+        )
+        if self.host.versions and not before.get("version"):
+            # A team turning a plugin on takes the installed version (c-609); a later upgrade waits for its review.
+            await self.host.take_installed(who.tenant_id, who.team.id, plugin)
+
+    async def add_account(self, who: Caller, app_id: str, body: AccountIn) -> str:
+        """Another account of a plugin's app the team has connected: a sandbox (always), or a second org of the same
+        system with several_accounts on, made with the first's contract. The first stays the default."""
+        self.manages(who)
+        plugin = self.plugin(app_id)
+        m = plugin.manifest
+        if not body.sandbox and not self.host.accounts:
+            raise ValidationFailed(
+                "This install keeps one live account per app; add a sandbox account instead.", code="one_account"
+            )
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
+        if b is None or not b["enabled"] or not b.get("connection_id"):
+            raise ValidationFailed(f"Connect {m.title} first; another account comes after it.", code="no_first_account")
+        name = body.name.strip()
+        if not name:
+            raise ValidationFailed("Name the account.", details={"field": "name"})
+        if await self.host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
+            raise Conflict(f"{m.title} already has an account named {name}.")
+        self._checked_settings(plugin, body.settings)
+        team, own = _split(plugin, body.settings)
+        if team:
+            raise ValidationFailed(
+                f"{', '.join(sorted(team))} is the team's setting of {m.title}, not one account's.",
+                code="setting_not_per_account",
+            )
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        given = TeamPluginIn(
+            enabled=True,
+            client_id=body.client_id,
+            client_secret=body.client_secret,
+            sign_in=body.sign_in,
+            kind=body.kind,
+            credentials=dict(body.credentials),
+        )
+        return await self.connect(who, plugin, settings, own, given, account_name=name, sandbox=body.sandbox)
+
+    def _kind(self, plugin: Plugin, body: TeamPluginIn) -> Kind:
+        """The sign-in kind the team chose, one the plugin offers; the first it lists when none is named."""
+        offered = plugin.manifest.connection.kinds
+        chosen = body.kind or offered[0]
+        if chosen not in offered:
+            raise ValidationFailed(
+                f"{plugin.manifest.title} signs in with {', '.join(offered)}.",
+                code="kind_not_offered",
+                details={"field": "kind"},
+            )
+        return kind_of(chosen)
+
+    def _credentials(self, plugin: Plugin, kind: Kind, given: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
+        """The credentials split into plain settings and secret parts, each a field of the kind or of the client
+        certificate; any other name is refused rather than dropped, so a typo never leaves an account unsigned. A
+        field the plugin sets itself (its addresses, its permissions) is refused too: it would replace the plugin's."""
+        plain: dict[str, str] = {}
+        secret: dict[str, str] = {}
+        fixed = {"baseUrl", "testPath", *fixed_fields(plugin.manifest)}
+        for k, v in given.items():
+            f = kind.field(k)
+            if f is not None and k in fixed:
+                raise ValidationFailed(
+                    f"{k} is set by {plugin.manifest.title} itself, not typed.",
+                    code="setting_fixed",
+                    details={"field": f"credentials.{k}"},
+                )
+            if f is None:
+                raise ValidationFailed(
+                    f"{k} is not part of signing in with {kind.label}.", details={"field": f"credentials.{k}"}
+                )
+            (secret if f.secret else plain)[k] = v
+        return plain, secret
+
+    async def connect(
+        self,
+        who: Caller,
+        plugin: Plugin,
+        settings: dict[str, Any],
+        own: dict[str, Any],
+        body: TeamPluginIn,
+        *,
+        account_name: str | None = None,
+        sandbox: bool = False,
+    ) -> str:
+        """An account of the plugin's app, from the plugin's definition, made whole in one call for every kind (c-588):
+        its address, its test path, how its key is sent, the credentials the team gave, and for a kind that holds a
+        token the OAuth app and its addresses. An instance the token names comes later, at sign-in."""
+        m = plugin.manifest
+        c = m.connection
+        kind = self._kind(plugin, body)
+        sign_in = body.sign_in or c.sign_in[0]
+        if sign_in not in c.sign_in:
+            raise ValidationFailed(f"{m.title} signs in with {', '.join(c.sign_in)}.", code="sign_in_not_offered")
+        plain, secret = self._credentials(plugin, kind, body.credentials)
+        # A token kind's client secret comes from the team's own app or the platform's, checked when it is used.
+        # On an account each person signs in to, their own key, password or token is theirs to give (c-595).
+        each_person = sign_in == "person" and kind.per_person
+        missing = [
+            f.label
+            # The plugin's own clientAuth counts, so one that signs an assertion asks for the signing pair (c-584).
+            for f in kind.requires({**plain, **sign_in_fixed(plugin.manifest)}, each_person=each_person)
+            if f.secret and f.name not in secret and not (kind.holds_token and f.name == "clientSecret")
+        ]
+        if kind.holds_token and not body.client_id and self._ops_client_id(m.id) is None:
+            raise ValidationFailed(
+                f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
+                code="client_missing",
+            )
+        if missing:
+            raise ValidationFailed(f"{m.title} needs {', '.join(missing)} to sign in with {kind.label}.")
+        # The same create contract as a custom app's account (c-595, cross-card review): the row carries the system's
+        # card details from the manifest, so a plugin's account and one made by hand hold the same columns.
+        shown = m.display
+        made = await self.connections.create(
+            who,
+            {
+                "name": account_name or m.title,
+                # The app's account (c-608): the plugin it belongs to, and its name, the app's title for the first.
+                "plugin_id": m.id,
+                "account_name": account_name or m.title,
+                "sandbox": sandbox,
+                "auth_kind": kind.id,
+                "sign_in": sign_in if kind.per_person else "team",
+                "category": shown.category,
+                "description": shown.description,
+                "docs_url": shown.docs_url,
+            },
+        )
+        try:
+            await self.keys(who, plugin, str(made["id"]), settings, body, own=own)
+        except ValidationFailed:
+            # An account the team cannot use is not left behind for the next turn-on to trip over.
+            await self.connections.delete(who, str(made["id"]))
+            raise
+        return str(made["id"])
+
+    async def keys(
+        self,
+        who: Caller,
+        plugin: Plugin,
+        connection_id: str,
+        settings: dict[str, Any],
+        body: TeamPluginIn,
+        *,
+        own: dict[str, Any],
+    ) -> None:
+        """The plugin's account's sign-in settings: the system's address (the endpoint's origin, or the sign-in host's
+        until the token names the instance), the health check as Test connection's path, how an API key is sent, the
+        team's credentials over what the account already holds, and for a kind that holds a token the OAuth app (the
+        team's own first, else the platform's, set up once by an account admin, c-565) and its addresses, rendered with
+        the account's settings (c-580)."""
+        m = plugin.manifest
+        c = m.connection
+        conn = await self.connections.store.get(who.tenant_id, connection_id)
+        kind = kind_of(str(conn["auth_kind"])) if conn else self._kind(plugin, body)
+        if body.kind and body.kind != kind.id:
+            raise ValidationFailed(
+                f"{m.title}'s account signs in with {kind.label}; its kind is chosen once, when it is made.",
+                code="kind_fixed",
+                details={"field": "kind"},
+            )
+        plain, secret = self._credentials(plugin, kind, body.credentials)
+        # The account's own settings, those given over those it holds.
+        mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
+        merged = self.host.settings(plugin, settings, mine)
+        before = cast(dict[str, Any], (conn or {}).get("settings") or {})
+        keys: dict[str, Any] = dict(before)
+        endpoint = render(m.endpoint, merged)
+        platform_id: str | None = None
+        if kind.holds_token:
+            # A later turn-on that names no app keeps the team's own; else the platform's.
+            keep_own = not body.client_id and not body.client_secret and bool(before.get("clientId"))
+            keep_own = keep_own and not (conn or {}).get("platform_app")
+            if not body.client_id and not keep_own:
+                platform_id = self._ops_client_id(m.id)
+            client_id = body.client_id or (before.get("clientId") if keep_own else platform_id)
+            if not client_id:
+                raise ValidationFailed(
+                    f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
+                    code="client_missing",
+                )
+            # Ops AI's app is named by the account (platform_app), never copied into it.
+            keys |= ({} if platform_id is not None else {"clientId": client_id}) | {
+                "scopes": " ".join(s.id for s in c.scopes)
+            }
+            for key, template in (
+                ("authorizeUrl", c.authorize_url),
+                ("tokenUrl", c.token_url),
+                ("revokeUrl", c.revoke_url),
+            ):
+                if template and kind.field(key) is not None:
+                    value = render(template, merged)
+                    if value is None:
+                        raise ValidationFailed(f"Set {m.title}'s settings its sign-in addresses need first.")
+                    keys[key] = value
+            if c.client_auth and kind.field("clientAuth") is not None:
+                keys["clientAuth"] = c.client_auth
+            if c.authorize_params and kind.field("authorizeParams") is not None:
+                params = {k: render(v, merged) for k, v in c.authorize_params.items()}
+                if any(v is None for v in params.values()):
+                    raise ValidationFailed(f"Set {m.title}'s settings its sign-in parameters need first.")
+                keys["authorizeParams"] = urlencode(params)
+        # Credentials go to the system's address only: the endpoint's origin, or before the token names the instance,
+        # the sign-in host's, which the sign-in replaces (host.on_token).
+        base = endpoint or render(c.authorize_url or "", merged)
+        if not base:
+            raise ValidationFailed(f"Set {m.title}'s settings its address needs first.")
+        parts = urlsplit(base)
+        keys["baseUrl"] = f"{parts.scheme}://{parts.netloc}"
+        check = c.health_check
+        path = render(check.path, merged) if check and endpoint else None
+        if path:
+            keys["testPath"] = path
+        if kind.id == "api_key" and c.api_key is not None:
+            keys |= {"placement": c.api_key.placement, "name": c.api_key.name}
+        keys |= plain
+        if platform_id is not None:
+            await self.connections.use_platform_app(who, connection_id, m.id, keys, plugin_settings=mine)
+            return
+        values = {**secret, **({"clientSecret": body.client_secret} if body.client_secret else {})}
+        await self.connections.change(
+            who,
+            connection_id,
+            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": values},
+            plugin_settings=mine,
+        )
+
+    def team_values(self, plugin: Plugin, b: dict[str, Any], own: dict[str, Any]) -> dict[str, Any]:
+        """The team's settings of the plugin as a person may read them: a secret field never, even as its reference."""
+        return readable(plugin.manifest, self.host.settings(plugin, dict(b.get("settings") or {}), own))[0]
+
+
 def plugins_router(
-    host: PluginHost,
-    connections: ConnectionService,
+    accounts: PluginAccounts,
     directory: Directory,
     *,
     users: ToolUsers | None = None,
 ) -> APIRouter:
     """`users` answers who uses an app's tools (agents-service); without it that route answers 503, never "nobody"."""
     caller = caller_in(directory)
-    r = APIRouter(tags=["plugins"], responses=ERRORS)
-
-    def _ops_client_id(plugin_id: str) -> str | None:
-        """The client id of Ops AI's own app for the plugin, from the install config; None when the install set none."""
-        found = connections.store.install_client(plugin_id)
-        return found.id if found else None
-
-    def _plugin(plugin_id: str) -> Plugin:
-        plugin = host.plugins.get(plugin_id)
-        if plugin is None:
-            raise NotFound(f"Plugin {plugin_id}")
-        return plugin
-
-    async def _view(who: Caller, plugin: Plugin) -> dict[str, Any]:
-        m = plugin.manifest
-        b = await host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
-        own = (await host.own_settings(who.tenant_id, b.get("connection_id"))).get("production")
-        settings = await host.settings(who.tenant_id, plugin, dict(b.get("settings") or {}), "production", own)
-        return PluginView(
-            id=m.id,
-            title=m.title,
-            version=m.version,
-            team_on=bool(b.get("enabled")),
-            connection_id=b.get("connection_id"),
-            settings=_shown(plugin, settings),
-            locked=sorted(host.locked_settings(m.id)),
-            tools=[m.operation(t) for t in _team_tools(plugin, b)],
-            knowledge_sources=[s.name for s in m.knowledge_sources],
-            platform_app=PlatformApp(
-                client_id=_ops_client_id(m.id),
-                secret_set=_ops_client_id(m.id) is not None,
-            ),
-            display=PluginDisplay(**m.display.model_dump()),
-            team_version=b.get("version") if host.versions else None,
-            update_available=host.versions and bool(b.get("digest")) and b.get("digest") != _installed(plugin)[1],
-        ).model_dump(by_alias=True)
+    host = accounts.host
+    r = APIRouter(tags=["apps"], responses=ERRORS)
 
     def _installed(plugin: Plugin) -> tuple[dict[str, Any], str]:
         decl = declarations(plugin.manifest)
@@ -269,13 +473,12 @@ def plugins_router(
             return list(tools_of(cast(dict[str, Any], b["declarations"])))
         return [t.name for t in plugin.manifest.tools]
 
-    async def _update(who: Caller, plugin_id: str) -> tuple[Plugin, dict[str, Any]]:
+    async def _update(who: Caller, app_id: str) -> tuple[Plugin, dict[str, Any]]:
         """The plugin and the team's binding, for a team admin, with plugin_updates on (404 otherwise)."""
         if not host.versions:
             raise NotFound("Plugin updates are off for this install")
-        if who.principal is not None:
-            connection_rights(who.principal, "manage", security_team=connections.security_team, what="plugins")
-        plugin = _plugin(plugin_id)
+        accounts.manages(who)
+        plugin = accounts.plugin(app_id)
         b = await host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id)
         if b is None:
             raise NotFound(f"{plugin.manifest.title} is not turned on for this team")
@@ -296,79 +499,12 @@ def plugins_router(
             tools=[ToolChange.model_validate(t) for t in tools],
         ).model_dump(by_alias=True)
 
-    @r.get("/v1/plugins", response_model=Envelope[PluginList])
-    async def list_plugins(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The installed plugins as this team sees them, and the ones that failed to load with why."""
-        return ok(
-            PluginList(
-                plugins=[PluginView(**await _view(who, p)) for p in host.plugins.values()],
-                failed=[FailedPlugin(name=i.name, error=i.error or "") for i in host.loaded if not i.ok],
-            ).model_dump(by_alias=True)
-        )
-
-    @r.put("/v1/plugins/{plugin_id}/team", response_model=Envelope[PluginView])
-    async def set_team_plugin(  # pyright: ignore[reportUnusedFunction]
-        plugin_id: str, body: TeamPluginIn, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """Turns the plugin on or off for the team and saves the team's settings: a team admin's alone."""
-        if who.principal is not None:
-            connection_rights(who.principal, "manage", security_team=connections.security_team, what="plugins")
-        plugin = _plugin(plugin_id)
-        m = plugin.manifest
-        locked = host.locked_settings(m.id)
-        for k in body.settings:
-            setting = m.settings.get(k)
-            if setting is None:
-                raise ValidationFailed(f"{k} is not a setting of {m.title}.", details={"field": k})
-            if k in locked:
-                raise ValidationFailed(f"{k} is set by the platform admin for every team.", code="setting_locked")
-            if setting.at_sign_in:
-                raise ValidationFailed(f"{k} is read from the sign-in, not typed.", code="setting_from_token")
-        before = await host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
-        team, own = _split(plugin, body.settings)
-        # The binding keeps the team's settings only: an environment's own are its connection's (c-580), so a copy
-        # left from before (a removed connection's instance) never reaches a call.
-        mine = per_environment(m)
-        held = dict(before.get("settings") or {})
-        settings = {k: v for k, v in held.items() if k != "environments" and k not in mine} | team
-        connection_id = before.get("connection_id")
-        if connection_id is not None and await connections.store.get(who.tenant_id, str(connection_id)) is None:
-            # Removed, as the connect dialog's Cancel removes the one it made (c-580): the next turn-on makes another.
-            connection_id = None
-        if body.enabled and connection_id is None:
-            connection_id = await _connect(who, plugin, settings, own, body, account_name=body.account_name)
-        elif body.enabled and (
-            body.client_id
-            or body.client_secret
-            or body.credentials
-            or body.kind
-            or own
-            or body.environment not in await _set(who, connection_id)
-        ):
-            # The connection exists (c-580): this PUT sets the named environment's app on it, a sandbox beside
-            # production, instead of being dropped as it was when only the first turn-on built the connection.
-            await _environment(who, plugin, str(connection_id), settings, body, own=own)
-        await host.bindings.put(
-            who.tenant_id,
-            who.team.id,
-            m.id,
-            enabled=body.enabled,
-            connection_id=connection_id,
-            settings=settings,
-            by=who.name,
-        )
-        if host.versions and not before.get("version"):
-            # A team turning a plugin on takes the installed version (c-609); a later upgrade waits for its review.
-            await host.take_installed(who.tenant_id, who.team.id, plugin)
-        return ok(await _view(who, plugin))
-
-    @r.get("/v1/plugins/{plugin_id}/team/users", response_model=Envelope[AppUsers])
-    async def app_users(plugin_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    @r.get("/v1/apps/{app_id}/used-by", response_model=Envelope[AppUsers])
+    async def app_users(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app
         off stops. A team admin's, as turning it off is."""
-        if who.principal is not None:
-            connection_rights(who.principal, "manage", security_team=connections.security_team, what="plugins")
-        plugin = _plugin(plugin_id)
+        accounts.manages(who)
+        plugin = accounts.plugin(app_id)
         if users is None:
             raise ServiceUnavailable("This service cannot ask who uses a tool.", code="tool_users_unavailable")
         b = await host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
@@ -385,238 +521,19 @@ def plugins_router(
             ).model_dump(by_alias=True)
         )
 
-    @r.post("/v1/plugins/{plugin_id}/accounts", response_model=Envelope[ConnectionDetail], status_code=201)
-    async def add_account(  # pyright: ignore[reportUnusedFunction]
-        plugin_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """Another named account of an app the team has connected (c-608, with several_accounts on): a second org or a
-        second account of the same system, made with the first's contract. The first stays the default."""
-        if not host.accounts:
-            raise FeatureOff("Several accounts of one app are not turned on for this install.")
-        if who.principal is not None:
-            connection_rights(who.principal, "manage", security_team=connections.security_team, what="plugins")
-        plugin = _plugin(plugin_id)
-        m = plugin.manifest
-        b = await host.bindings.get(who.tenant_id, who.team.id, m.id)
-        if b is None or not b["enabled"] or not b.get("connection_id"):
-            raise ValidationFailed(f"Connect {m.title} first; another account comes after it.", code="no_first_account")
-        name = body.name.strip()
-        if not name:
-            raise ValidationFailed("Name the account.", details={"field": "name"})
-        if await host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
-            raise Conflict(f"{m.title} already has an account named {name}.")
-        team, own = _split(plugin, body.settings)
-        mine = per_environment(m)
-        held = dict(b.get("settings") or {})
-        settings = {k: v for k, v in held.items() if k != "environments" and k not in mine} | team
-        made = await _connect(who, plugin, settings, own, body, account_name=name)
-        return ok(await connections.detail(who, made), 201)
-
-    def _kind(plugin: Plugin, body: TeamPluginIn) -> Kind:
-        """The sign-in kind the team chose, one the plugin offers; the first it lists when none is named."""
-        offered = plugin.manifest.connection.kinds
-        chosen = body.kind or offered[0]
-        if chosen not in offered:
-            raise ValidationFailed(
-                f"{plugin.manifest.title} signs in with {', '.join(offered)}.",
-                code="kind_not_offered",
-                details={"field": "kind"},
-            )
-        return kind_of(chosen)
-
-    def _credentials(plugin: Plugin, kind: Kind, given: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
-        """The credentials split into plain settings and secret parts, each a field of the kind or of the client
-        certificate; any other name is refused rather than dropped, so a typo never leaves a connection unsigned. A
-        field the plugin sets itself (its addresses, its permissions) is refused too: it would replace the plugin's."""
-        plain: dict[str, str] = {}
-        secret: dict[str, str] = {}
-        fixed = {"baseUrl", "testPath", *fixed_fields(plugin.manifest)}
-        for k, v in given.items():
-            f = kind.field(k)
-            if f is not None and k in fixed:
-                raise ValidationFailed(
-                    f"{k} is set by {plugin.manifest.title} itself, not typed.",
-                    code="setting_fixed",
-                    details={"field": f"credentials.{k}"},
-                )
-            if f is None:
-                raise ValidationFailed(
-                    f"{k} is not part of signing in with {kind.label}.", details={"field": f"credentials.{k}"}
-                )
-            (secret if f.secret else plain)[k] = v
-        return plain, secret
-
-    async def _connect(
-        who: Caller,
-        plugin: Plugin,
-        settings: dict[str, Any],
-        own: dict[str, Any],
-        body: TeamPluginIn,
-        *,
-        account_name: str | None = None,
-    ) -> str:
-        """The team's connection, from the plugin's definition, made whole in one call for every kind (c-588): its
-        address, its test path, how its key is sent, the credentials the team gave, and for a kind that holds a token
-        the OAuth app and its addresses. An instance the token names comes later, at sign-in."""
-        m = plugin.manifest
-        c = m.connection
-        kind = _kind(plugin, body)
-        sign_in = body.sign_in or c.sign_in[0]
-        if sign_in not in c.sign_in:
-            raise ValidationFailed(f"{m.title} signs in with {', '.join(c.sign_in)}.", code="sign_in_not_offered")
-        plain, secret = _credentials(plugin, kind, body.credentials)
-        # A token kind's client secret comes from the team's own app or the platform's, checked when it is used.
-        # On a connection each person signs in to, their own key, password or token is theirs to give (c-595).
-        each_person = sign_in == "person" and kind.per_person
-        missing = [
-            f.label
-            # The plugin's own clientAuth counts, so one that signs an assertion asks for the signing pair (c-584).
-            for f in kind.requires({**plain, **sign_in_fixed(plugin.manifest)}, each_person=each_person)
-            if f.secret and f.name not in secret and not (kind.holds_token and f.name == "clientSecret")
-        ]
-        if kind.holds_token and not body.client_id and _ops_client_id(m.id) is None:
-            raise ValidationFailed(
-                f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
-                code="client_missing",
-            )
-        if missing:
-            raise ValidationFailed(f"{m.title} needs {', '.join(missing)} to sign in with {kind.label}.")
-        # The same create contract as a connection made by name (c-595, cross-card review): the row carries the
-        # system's card details from the manifest, so a plugin's connection and one made by hand hold the same columns.
-        shown = m.display
-        made = await connections.create(
-            who,
-            {
-                "name": account_name or m.title,
-                # The app's account (c-608): the plugin it belongs to, and its name, the app's title for the first.
-                "plugin_id": m.id,
-                "account_name": account_name or m.title,
-                "auth_kind": kind.id,
-                "sign_in": sign_in if kind.per_person else "team",
-                "category": shown.category,
-                "description": shown.description,
-                "docs_url": shown.docs_url,
-            },
-        )
-        try:
-            await _environment(who, plugin, str(made["id"]), settings, body, own=own)
-        except ValidationFailed:
-            # A connection the team cannot use is not left behind for the next turn-on to trip over.
-            await connections.delete(who, str(made["id"]))
-            raise
-        return str(made["id"])
-
-    async def _set(who: Caller, connection_id: Any) -> set[str]:
-        conn = await connections.store.get(who.tenant_id, str(connection_id))
-        return set(conn["environments"]) if conn else set()
-
-    async def _environment(
-        who: Caller,
-        plugin: Plugin,
-        connection_id: str,
-        settings: dict[str, Any],
-        body: TeamPluginIn,
-        *,
-        own: dict[str, Any],
-    ) -> None:
-        """One environment of the plugin's connection: the system's address (the endpoint's origin, or the sign-in
-        host's until the token names the instance), the health check as Test connection's path, how an API key is
-        sent, the team's credentials over what the environment already holds, and for a kind that holds a token the
-        OAuth app (the team's own first, else the platform's, set up once by an account admin, c-565) and its
-        addresses, rendered with that environment's settings (c-580)."""
-        m = plugin.manifest
-        c = m.connection
-        environment = body.environment
-        conn = await connections.store.get(who.tenant_id, connection_id)
-        kind = kind_of(str(conn["auth_kind"])) if conn else _kind(plugin, body)
-        if body.kind and body.kind != kind.id:
-            raise ValidationFailed(
-                f"{m.title}'s connection signs in with {kind.label}; its kind is chosen once, when it is made.",
-                code="kind_fixed",
-                details={"field": "kind"},
-            )
-        plain, secret = _credentials(plugin, kind, body.credentials)
-        envs = cast(dict[str, dict[str, Any]], (conn or {}).get("environments") or {})
-        held = dict(envs.get(environment) or {})
-        # The environment's own settings, those given over those it holds, kept on its row of the connection.
-        mine = {**dict(held.get("plugin_settings") or {}), **own}
-        merged = await host.settings(who.tenant_id, plugin, settings, environment, mine)
-        before = cast(dict[str, Any], held.get("settings") or {})
-        env: dict[str, Any] = dict(before)
-        endpoint = render(m.endpoint, merged)
-        platform_id: str | None = None
-        if kind.holds_token:
-            # A later turn-on that names no app keeps the team's own; else the platform's.
-            keep_own = not body.client_id and not body.client_secret and bool(before.get("clientId"))
-            keep_own = keep_own and not held.get("platform_app")
-            if not body.client_id and not keep_own:
-                platform_id = _ops_client_id(m.id)
-            client_id = body.client_id or (before.get("clientId") if keep_own else platform_id)
-            if not client_id:
-                raise ValidationFailed(
-                    f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
-                    code="client_missing",
-                )
-            # Ops AI's app is named by the environment (platform_app), never copied into it.
-            env |= ({} if platform_id is not None else {"clientId": client_id}) | {
-                "scopes": " ".join(s.id for s in c.scopes)
-            }
-            for key, template in (
-                ("authorizeUrl", c.authorize_url),
-                ("tokenUrl", c.token_url),
-                ("revokeUrl", c.revoke_url),
-            ):
-                if template and kind.field(key) is not None:
-                    value = render(template, merged)
-                    if value is None:
-                        raise ValidationFailed(f"Set {m.title}'s settings its sign-in addresses need first.")
-                    env[key] = value
-            if c.client_auth and kind.field("clientAuth") is not None:
-                env["clientAuth"] = c.client_auth
-            if c.authorize_params and kind.field("authorizeParams") is not None:
-                params = {k: render(v, merged) for k, v in c.authorize_params.items()}
-                if any(v is None for v in params.values()):
-                    raise ValidationFailed(f"Set {m.title}'s settings its sign-in parameters need first.")
-                env["authorizeParams"] = urlencode(params)
-        # Credentials go to the system's address only: the endpoint's origin, or before the token names the instance,
-        # the sign-in host's, which the sign-in replaces (host.on_token).
-        base = endpoint or render(c.authorize_url or "", merged)
-        if not base:
-            raise ValidationFailed(f"Set {m.title}'s settings its address needs first.")
-        parts = urlsplit(base)
-        env["baseUrl"] = f"{parts.scheme}://{parts.netloc}"
-        check = c.health_check
-        path = render(check.path, merged) if check and endpoint else None
-        if path:
-            env["testPath"] = path
-        if kind.id == "api_key" and c.api_key is not None:
-            env |= {"placement": c.api_key.placement, "name": c.api_key.name}
-        env |= plain
-        if platform_id is not None:
-            await connections.use_platform_app(who, connection_id, environment, m.id, env, plugin_settings=mine)
-            return
-        values = {**secret, **({"clientSecret": body.client_secret} if body.client_secret else {})}
-        await connections.set_environment(
-            who,
-            connection_id,
-            environment,
-            {"revision": int(conn["revision"]) if conn else 1, "settings": env, "secret_values": values},
-            plugin_settings=mine,
-        )
-
-    @r.get("/v1/plugins/{plugin_id}/team/update", response_model=Envelope[PluginUpdateView])
-    async def plugin_update(plugin_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    @r.get("/v1/apps/{app_id}/update", response_model=Envelope[PluginUpdateView])
+    async def plugin_update(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What taking the installed plugin version would change for the team: each new, changed and removed tool."""
-        plugin, b = await _update(who, plugin_id)
+        plugin, b = await _update(who, app_id)
         return ok(_review(plugin, b))
 
-    @r.post("/v1/plugins/{plugin_id}/team/update", response_model=Envelope[PluginUpdateView])
+    @r.post("/v1/apps/{app_id}/update", response_model=Envelope[PluginUpdateView])
     async def take_plugin_update(  # pyright: ignore[reportUnusedFunction]
-        plugin_id: str, body: TakeUpdateIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, body: TakeUpdateIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Takes the installed version for the team, from its next call. The digest is the one the review was read
         at, so a review another upgrade has replaced since is refused rather than taken unseen."""
-        plugin, _ = await _update(who, plugin_id)
+        plugin, _ = await _update(who, app_id)
         if body.digest != _installed(plugin)[1]:
             raise Conflict(
                 f"{plugin.manifest.title} changed again since this review; read the update again.",
@@ -628,7 +545,7 @@ def plugins_router(
 
     @r.get("/v1/knowledge-sources", response_model=Envelope[list[KnowledgeSourceView]])
     async def knowledge_sources(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The knowledge sources a team can create from its plugins that are on, with the connection each would read
+        """The knowledge sources a team can create from its plugins that are on, with the account each would read
         through: kb-service lists them and syncs by calling the two tools named here."""
         out: list[dict[str, Any]] = []
         for plugin in host.plugins.values():
@@ -638,7 +555,7 @@ def plugins_router(
             b = await host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
             conn = None
             if b.get("connection_id"):
-                conn = await connections.store.get(who.tenant_id, str(b["connection_id"]))
+                conn = await accounts.connections.store.get(who.tenant_id, str(b["connection_id"]))
             for s in m.knowledge_sources:
                 out.append(
                     KnowledgeSourceView(

@@ -77,11 +77,11 @@ with ExitStack() as stack:
 
     gw.post("/v1/egress/hosts", json={"value": "api.stripe.com", "note": "uc-588 evidence"}, headers=sam)
     on = gw.put(
-        "/v1/plugins/evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
+        "/v1/apps/plugin:evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
     )
     seen.append(on.text)
     connection_id = str((data(on) or {}).get("connectionId") or "con_missing")
-    tested = gw.post(f"/v1/connections/{connection_id}/test", json={"environment": "production"}, headers=priya)
+    tested = gw.post(f"/v1/apps/{connection_id}/accounts/{connection_id}/test", json={}, headers=priya)
     seen.append(tested.text)
     health = (data(tested) or {}).get("health") or {}
     headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")

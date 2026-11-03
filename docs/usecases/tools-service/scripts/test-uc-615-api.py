@@ -7,16 +7,15 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from apps_walk import apps_stack, target
+from apps_walk import account_path, apps_stack, target
 from usecase_harness import check, data, finish
 
 APP = "plugin:test.person"
 
 
-def production(w: Any, account: str) -> dict[str, Any]:
-    """The team account's production environment as its detail answers it, with the connection's revision."""
-    detail = data(w.kept(w.gw.get(f"/v1/connections/{account}", headers=w.who["admin"]))) or {}
-    return {**((detail.get("environments") or {}).get("production") or {}), "revision": detail.get("revision")}
+def team_account(w: Any, account: str) -> dict[str, Any]:
+    """The app's team account as its detail answers it."""
+    return dict(data(w.kept(w.gw.get(account_path(APP, account), headers=w.who["admin"]))) or {})
 
 
 with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
@@ -25,18 +24,18 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
 
     # 1. Turned on with no app of its own, the app signs in with Ops AI's app.
     account = w.turn_on("admin", "test.person", signIn="team")
-    first = production(w, account)
+    first = team_account(w, account)
     check(
         "1 the app turned on with no credential of the team's signs in with Ops AI's app",
         account != "con_missing" and first.get("platformApp") == "test.person",
         first,
     )
 
-    # 2. The team's own client id and secret, on the environment; read back with no secret.
-    env = f"/v1/connections/{account}/environments/production"
+    # 2. The team's own client id and secret, on the account; read back with no secret.
+    path = account_path(APP, account)
     own = {"settings": {"clientId": "multi-app"}, "secretValues": {"clientSecret": secret}}
-    saved = w.kept(w.gw.put(env, json={"revision": first.get("revision"), **own}, headers=admin))
-    read = production(w, account)
+    saved = w.kept(w.gw.patch(path, json={"revision": first.get("revision"), **own}, headers=admin))
+    read = team_account(w, account)
     check(
         "2 the team's own app credential is saved: Ops AI's app is no longer used, the client is multi-app, and no "
         "answer carries the secret",
@@ -44,12 +43,12 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
         and not read.get("platformApp")
         and (read.get("settings") or {}).get("clientId") == "multi-app"
         and not any(secret in t for t in w.seen),
-        (target("P1: the environment route takes the team's own client"), saved.status_code, saved.text[:200], read),
+        (target("P1: the account route takes the team's own client"), saved.status_code, saved.text[:200], read),
     )
 
     # 3. Test with my account: a sign-in through the team's app, answered back on the same route.
-    test = f"/v1/connections/{account}/test-credential"
-    started = w.kept(w.gw.post(test, json={"environment": "production"}, headers=admin))
+    test = f"{path}/test-credential"
+    started = w.kept(w.gw.post(test, json={}, headers=admin))
     url = str((data(started) or {}).get("authorizeUrl") or "") if started.status_code == 200 else ""
     client = parse_qs(urlsplit(url).query).get("client_id", [""])[0]
     back = w.m["sign_in"](url, "harbor.ops") if url else {}
@@ -62,7 +61,9 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
     )
 
     # 4. Only an admin sets an app credential.
-    refused = w.kept(w.gw.put(env, json={"revision": production(w, account).get("revision"), **own}, headers=builder))
+    refused = w.kept(
+        w.gw.patch(path, json={"revision": team_account(w, account).get("revision"), **own}, headers=builder)
+    )
     check("4 the builder is refused setting the app credential (403)", refused.status_code == 403, refused.text[:200])
 
     # 5. Secrets holds values tools reference; no sign-in shows there.

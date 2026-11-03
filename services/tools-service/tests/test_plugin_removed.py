@@ -15,20 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
 from ops_service_kit.settings import Settings
-from ops_tools.auth.tokens import Tokens
-from ops_tools.connections.service import ConnectionService
-from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost, module_id_of
-from ops_tools.plugins.routes import plugins_router
-from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
-from ops_tools.store.secrets import SecretStore
-from ops_tools.systems import Systems, systems_router
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import build_app, response_checker
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import team_admin
 from .test_plugins import ID
@@ -47,18 +40,9 @@ async def rig(
         Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
         ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
     )
-    app = build_app(engine, seed, tenant, auth=auth)
-    vault = credentials()
     store = ConnectionStore(engine)
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-    connections = ConnectionService(
-        store, SecretResolver(SecretStore(engine), vault),
-        vault, Tokens(store, vault, None, None), directory, egress=None,
-        console_url=CONSOLE_URL,
-    )  # fmt: skip
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, [Loaded("desk", desk, None)], store)
-    app.include_router(plugins_router(host, connections, directory))
-    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host), directory))
+    app = build_app(engine, seed, tenant, auth=auth, plugins=host)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks
@@ -69,12 +53,12 @@ async def rig(
 async def test_a_removed_plugin_keeps_its_card_and_says_it_is_no_longer_installed(rig: Rig, tenant: str) -> None:
     client, host = rig
     on = await client.put(
-        f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "app"}, headers=team_admin(tenant)
+        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=team_admin(tenant)
     )
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]
     host.loaded = []  # the install's plugins folder no longer holds it
-    got = await client.get("/v1/systems", headers=team_admin(tenant))
+    got = await client.get("/v1/apps", headers=team_admin(tenant))
     cards = got.json()["data"]
     card = next(c for c in cards if c["id"] == f"plugin:{ID}")
     assert card["appState"] == "removed" and "no longer installed" in card["appStateReason"], card

@@ -1,18 +1,15 @@
-"""The `/v1/connections` contract. Secret values go in on `secretValues` and never come out: an environment says which
-secret parts are set, by whom and when."""
+"""The accounts contract under `/v1/apps` and `/v1/me/accounts`. Secret values go in on `secretValues` or
+`credentials` and never come out: an account says which secret parts are set, by whom and when."""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
-from ops_service_kit.http import ListResult, Out
+from ops_service_kit.http import Out
 
-from ..environments import ConnectionEnvironment as Environment
-
-Team = str
 # Whose account a call signs in with (c-558): the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
 SignIn = Literal["team", "person", "person_or_team"]
@@ -22,68 +19,87 @@ class _In(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
-class NewConnectionIn(_In):
-    name: str = Field(min_length=1, max_length=200)
-    auth_kind: str = Field(min_length=1, max_length=40)
+# A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
+CREDENTIAL_MAX = 16_000
+
+
+class NewAppIn(_In):
+    """A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
+    whose sign-in is found from the server (c-331)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    auth_kind: str | None = Field(default=None, min_length=1, max_length=40)
     sign_in: SignIn = "team"
     # What the console's card shows for a system connected by name (c-580); the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
-    # Accepted and ignored for one release, then removed (c-509): another team holds its own connection.
-    available_to: list[Team] | None = Field(default=None, deprecated=True)
+    # An MCP server's address; its sign-in is found from the server's 401 and metadata.
+    server_url: str | None = Field(default=None, min_length=8, max_length=2000)
+    # The server's registered client, when its sign-in needs one ("Use the bank's registered client").
+    client_id: str | None = Field(default=None, max_length=500)
+    client_secret: str | None = Field(default=None, max_length=4000)
+    sandbox: bool = False
+
+    @model_validator(mode="after")
+    def _named_or_addressed(self) -> NewAppIn:
+        if self.server_url is None and (self.name is None or self.auth_kind is None):
+            raise ValueError("Name the app and its sign-in kind, or give an MCP server's address.")
+        return self
 
 
-class ConnectionPatchIn(_In):
+class AccountIn(_In):
+    """Another account of an app the team has (c-608): a sandbox, or a second org of the same system. On a plugin's
+    app it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);
+    on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`."""
+
+    name: str = Field(min_length=1, max_length=200)
+    sandbox: bool = False
+    # A plugin's settings this account keeps its own, such as a sandbox's sign-in address.
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    client_id: str | None = Field(default=None, max_length=500)
+    client_secret: str | None = Field(default=None, max_length=2000)
+    sign_in: str | None = None
+    kind: str | None = Field(default=None, max_length=50)
+    # The kind's own fields and the client certificate's (auth/kinds.py), secret parts included. A secret part is
+    # sealed and never answered back.
+    credentials: dict[str, Annotated[str, Field(max_length=CREDENTIAL_MAX)]] = Field(
+        default_factory=dict[str, str], max_length=20
+    )
+
+
+class AccountPatchIn(_In):
     revision: int = Field(ge=1)
     name: str | None = Field(default=None, max_length=200)
     sign_in: SignIn | None = None
     team_backup: bool | None = None
+    # The account a test run of the app uses; a live run never signs in with it.
+    sandbox: bool | None = None
     # What the console's card shows for a system connected by name (c-580); the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
-    # Accepted and ignored for one release, then removed (c-509).
-    available_to: list[Team] | None = Field(default=None, deprecated=True)
-
-
-class EnvironmentIn(_In):
-    revision: int = Field(ge=1)
     # The kind's plain settings and the client certificate's (GET /v1/connection-kinds lists them).
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, Any] | None = None
     # Secret parts by field name; one left out keeps its stored value.
     secret_values: dict[str, str] = Field(default_factory=dict[str, str])
 
 
-class McpConnectionIn(_In):
-    """An MCP server by its address; its sign-in is found from the server (c-331)."""
-
-    server_url: str = Field(min_length=8, max_length=2000)
-    name: str | None = Field(default=None, max_length=200)
-    environment: Environment = "test"
-    # The bank's registered client, when the server's sign-in needs one ("Use the bank's registered client").
-    client_id: str | None = Field(default=None, max_length=500)
-    client_secret: str | None = Field(default=None, max_length=4000)
-
-
 class SignInIn(_In):
-    environment: Environment
-    # On a connection each person signs in to: `self` (the default) signs in the caller's own account, `team` the
+    # On an account each person signs in to: `self` (the default) signs in the caller's own account, `team` the
     # team's backup account, which needs connections.manage.
     account: Literal["self", "team"] = "self"
 
 
 class PersonCredentialsIn(_In):
-    """A person's own key, password or token on a connection each person signs in to (c-595): the kind's person
+    """A person's own key, password or token on an account each person signs in to (c-595): the kind's person
     fields, each a value of at most 2,000 characters."""
 
-    environment: Environment
     credentials: dict[str, str] = Field(max_length=4)
 
 
-class ConnectionTestIn(_In):
-    environment: Environment
-    # `self` tests with the caller's own sign-in on a connection each person signs in to; `team` with the team's,
+class AccountTestIn(_In):
+    # `self` tests with the caller's own sign-in on an account each person signs in to; `team` with the team's,
     # which needs connections.manage.
     account: Literal["self", "team"] = "self"
 
@@ -100,10 +116,9 @@ class SignInCompleteIn(_In):
 
 
 class CredentialCheckIn(_In):
-    """Test with my account (c-616): `environment` starts it; the `state` and `code` the sign-in page was handed back
+    """Test with my account (c-616): an empty body starts it; the `state` and `code` the sign-in page was handed back
     finish it, on the same route."""
 
-    environment: Environment = "production"
     state: str | None = Field(default=None, min_length=16, max_length=200)
     code: str | None = Field(default=None, min_length=1, max_length=2000)
 
@@ -113,7 +128,6 @@ class CheckedCredential(Out):
     # Who signed in, when the system's answer says; for display only.
     account: str | None = None
     message: str | None = None
-    environment: Environment
     at: str
     by: str
 
@@ -151,21 +165,9 @@ class AuthKind(Out):
     person_fields: list[str]
 
 
-class EnvironmentOption(Out):
-    id: str
-    label: str
-    # The one environment live runs call; every other run calls a non-production one.
-    production: bool
-    # Whether a connection holds keys for it; the console draws a key section for each that does.
-    keys: bool
-
-
 class ConnectionKinds(Out):
     kinds: list[AuthKind]
-    # The environments a connection is set for, in order (c-580): the console draws one section per entry, so a new
-    # environment is data here, not console code.
-    environments: list[EnvironmentOption]
-    # Fields every environment has whatever its kind: the system's address its credentials are bound to.
+    # Fields every account has whatever its kind: the system's address its credentials are bound to.
     common: list[KindField]
     certificate: list[KindField]
     # The return address to register with a system's sign-in, the same for every connection (c-580); none while the
@@ -195,7 +197,6 @@ class ConnectionHealth(Out):
     """The last Test connection: a read of the system's test address, signed in with `account`'s sign-in."""
 
     status: Literal["ok", "failed"]
-    environment: Environment
     account: Literal["own", "team"]
     at: str
     by: str
@@ -213,25 +214,8 @@ class SigningCertificate(Out):
     expires_soon: bool
 
 
-class ConnectionEnvironment(Out):
-    set: bool
-    settings: dict[str, str]
-    secrets: dict[str, SecretPart]
-    signed_in: SignedIn | None = None
-    # The signing certificate's view, never its key (c-583); null when the PEM held does not read.
-    certificate: SigningCertificate | None = None
-    # This environment's last Test connection (c-580); the connection's `health` is the deciding environment's.
-    health: ConnectionHealth | None = None
-    # The plugin whose platform app this environment signs in with (c-565); null on the team's own app.
-    platform_app: str | None = None
-    # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
-    plugin_settings: dict[str, Any] | None = None
-    plugin_secrets: dict[str, bool] | None = None
-
-
-class ConnectionEvent(Out):
+class AccountEvent(Out):
     action: str
-    environment: str | None = None
     actor: str
     at: str | None = None
     detail: dict[str, Any]
@@ -248,14 +232,17 @@ class AccountTest(Out):
     at: str
 
 
-class MyConnection(Out):
+class MyAccount(Out):
     """One of the caller's own sign-ins (c-558), as Your connections lists it."""
 
     connection_id: str
+    # The account's app, under which its sign-in is started.
+    app_id: str
     connection: str
     # The connection's own status; the person's sign-in is held while it is listed.
     connection_status: str
-    environment: Environment
+    # A sandbox account, which only test runs use.
+    sandbox: bool
     # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account" (c-595).
     method: str
     auth_kind: str
@@ -277,54 +264,60 @@ class MyConnection(Out):
     expires_at: str | None = None
 
 
-class ConnectionRow(Out):
+class AccountRow(Out):
     id: str
+    # The app it belongs to: `plugin:<id>` for a plugin's, the custom app's first account's id for a custom app's.
+    app_id: str
     name: str
     auth_kind: str
     kind_label: str
+    # The account a test run of the app uses; a live run never signs in with it.
+    sandbox: bool
     status: Status
     status_detail: str | None = None
     team_id: str
-    available_to: list[str]
     used_by: list[ModuleUse]
-    environments_set: list[str]
     revision: int
     updated_at: str | None = None
-    # Whether the caller holds connections.manage: the console offers New connection, Set and Sign in only then.
+    # Whether the caller holds connections.manage: the console offers Connect, Set and Sign in only then.
     may_manage: bool
     sign_in: SignIn = "team"
     team_backup: bool = False
-    # The deciding environment's last test: production when it is set, else test (c-580).
+    # The account's last test.
     health: ConnectionHealth | None = None
     category: str | None = None
     description: str | None = None
     docs_url: str | None = None
-    # An app's account (c-608): the plugin it belongs to and the name a tool or step uses for it.
-    plugin_id: str | None = None
+    # The name a tool or step uses for the account (c-608).
     account_name: str | None = None
 
 
 class PersonSignedIn(Out):
-    """One person's own sign-in on a connection: admins see everyone's, a person their own."""
+    """One person's own sign-in on an account: admins see everyone's, a person their own."""
 
     person_id: str
-    environment: Environment
     account: str | None = None
     since: str | None = None
     expires_at: str | None = None
     scopes: list[str]
 
 
-class ConnectionDetail(ConnectionRow):
-    environments: dict[str, ConnectionEnvironment]
+class AccountDetail(AccountRow):
+    settings: dict[str, str]
+    secrets: dict[str, SecretPart]
+    # The team's own sign-in on the account.
+    signed_in: SignedIn | None = None
+    # The signing certificate's view, never its key (c-583); null when the PEM held does not read.
+    certificate: SigningCertificate | None = None
+    # The plugin whose platform app the account signs in with (c-565); null on the team's own app.
+    platform_app: str | None = None
+    # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
+    plugin_settings: dict[str, Any] | None = None
+    plugin_secrets: dict[str, bool] | None = None
     # The address to register with the system's sign-in, for a kind that signs in with an account.
     redirect_uri: str | None = None
-    activity: list[ConnectionEvent]
+    activity: list[AccountEvent]
     people: list[PersonSignedIn] = Field(default_factory=list[PersonSignedIn])
-
-
-class ConnectionList(ListResult[ConnectionRow]):
-    """GET /v1/connections: one page, by name."""
 
 
 class SignInStart(Out):
@@ -332,3 +325,5 @@ class SignInStart(Out):
     redirect_uri: str
     expires_at: str | None = None
     connection_id: str | None = None
+    # The account's app: the return page finishes the sign-in under it.
+    app_id: str | None = None

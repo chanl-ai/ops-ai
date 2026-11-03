@@ -36,7 +36,7 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     gw.post("/v1/egress/hosts", json={"value": HOST})
     gw.post("/v1/egress/ranges", json={"value": bank.range})
     # The module's own connection, holding the bank's address; the spec's key header signs the calls.
-    conn = data(gw.post("/v1/connections", json={"name": "uc013 statements", "authKind": "none"}))
+    conn = data(gw.post("/v1/apps", json={"name": "uc013 statements", "authKind": "none"}))
     spec = {"kind": "openapi", "specUrl": f"https://{HOST}/v1/openapi.json"}
     op = {"name": "latest_statement", "description": "", "access": "read", "group": "statements", "input": []}
     body = {

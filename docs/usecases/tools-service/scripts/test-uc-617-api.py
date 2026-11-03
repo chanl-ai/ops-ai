@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from apps_walk import AUTH, app_path, apps_stack, target
+from apps_walk import AUTH, account_path, app_path, apps_stack, target
 from usecase_harness import TOOLS_PORT, agents, check, data, engine_worker, finish, until
 
 APP = "plugin:test.client"
@@ -114,8 +114,8 @@ with (
     desk = data(w.kept(w.gw.get(app_path("plugin:test.person-key"), headers=w.who["admin"]))) or {}
     given = w.kept(
         w.gw.put(
-            f"/v1/me/connections/{(desk.get('card') or {}).get('connectionId')}/credentials",
-            json={"environment": "production", "credentials": {"key": w.m["person_keys"]["james"]}},
+            f"/v1/me/accounts/{(desk.get('card') or {}).get('connectionId')}/credentials",
+            json={"credentials": {"key": w.m["person_keys"]["james"]}},
             headers=w.who["builder"],
         )
     )
@@ -131,15 +131,16 @@ with (
     backed = w.turn_on(
         "admin", "test.person", signIn="person_or_team", clientId="multi-app", clientSecret=w.m["clients"]["multi-app"]
     )
-    revision = (data(w.gw.get(f"/v1/connections/{backed}", headers=w.who["admin"])) or {}).get("revision")
+    backed_path = account_path("plugin:test.person", backed)
+    revision = (data(w.gw.get(backed_path, headers=w.who["admin"])) or {}).get("revision")
     w.gw.patch(
-        f"/v1/connections/{backed}",
+        backed_path,
         json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
         headers=w.who["admin"],
     )
     team = w.gw.post(
-        f"/v1/connections/{backed}/sign-in",
-        json={"environment": "production", "account": "team"},
+        f"{backed_path}/sign-in",
+        json={"account": "team"},
         headers=w.who["admin"],
     )
     back = (
@@ -148,7 +149,7 @@ with (
         else {}
     )
     signed = w.gw.post(
-        f"/v1/connections/{backed}/sign-in/complete",
+        f"{backed_path}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=w.who["admin"],
     )
@@ -187,11 +188,11 @@ with (
     # 4. An app's first address on a host nobody listed is held for a Security admin, nothing saved.
     # James (builder) holds no Security role, so his hosts wait for Security; Sam (Security admin) lists his own (4c).
     def custom_app(name: str, base: str, role: str = "builder") -> str:
-        made = w.kept(w.gw.post("/v1/connections", json={"name": name, "authKind": "none"}, headers=w.who[role]))
+        made = w.kept(w.gw.post("/v1/apps", json={"name": name, "authKind": "none"}, headers=w.who[role]))
         app_id = str((data(made) or {}).get("id") or "con_missing")
         w.kept(
-            w.gw.put(
-                f"/v1/connections/{app_id}/environments/production",
+            w.gw.patch(
+                f"/v1/apps/{app_id}/accounts/{app_id}",
                 json={"revision": (data(made) or {}).get("revision") or 1, "settings": {"baseUrl": base}},
                 headers=w.who[role],
             )

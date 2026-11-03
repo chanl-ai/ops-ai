@@ -20,7 +20,7 @@ APP = f"plugin:{ID}"
 
 async def on_ops_ais_app(w: World, tenant: str) -> str:
     """Desk turned on with Ops AI's own app (the install's, test_plugin_credentials.INSTALL); its connection id."""
-    on = await w.client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=admin(tenant))
+    on = await w.client.put(f"/v1/apps/plugin:{ID}/team", json={"enabled": True}, headers=admin(tenant))
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])
 
@@ -39,10 +39,10 @@ async def test_the_teams_own_client_replaces_ops_ais_app_and_its_secret_never_co
     row = made.json()["data"]
     assert (row["id"], row["app"], row["type"], row["permissions"]) == (conn, APP, "own", ["api"]), row
     listed = await world.client.get("/v1/app-credentials", headers=admin(tenant))
-    detail = await world.client.get(f"/v1/connections/{conn}", headers=admin(tenant))
+    detail = await world.client.get(f"/v1/apps/{APP}/accounts/{conn}", headers=admin(tenant))
     assert [c["type"] for c in listed.json()["data"] if c["app"] == APP] == ["own"]
-    production = detail.json()["data"]["environments"]["production"]
-    assert production["settings"]["clientId"] == "bank-own-client", production
+    account = detail.json()["data"]
+    assert account["settings"]["clientId"] == "bank-own-client", account
     assert all(SECRET not in r.text for r in (made, listed, detail))
 
 
@@ -86,21 +86,22 @@ async def test_a_custom_app_that_signs_in_takes_the_teams_client(world: World, t
         "clientId": "first",
     }
     made = await world.client.post(
-        "/v1/connections", json={"name": "Bank CRM", "authKind": "oauth2_auth_code"}, headers=admin(tenant)
+        "/v1/apps", json={"name": "Bank CRM", "authKind": "oauth2_auth_code"}, headers=admin(tenant)
     )
     assert made.status_code == 201, made.text
     conn = made.json()["data"]
-    env = await world.client.put(
-        f"/v1/connections/{conn['id']}/environments/production",
+    saved = await world.client.patch(
+        f"/v1/apps/{conn['id']}/accounts/{conn['id']}",
         json={"revision": conn["revision"], "settings": settings},
         headers=admin(tenant),
     )
-    assert env.status_code == 200, env.text
+    assert saved.status_code == 200, saved.text
     r = await world.client.post("/v1/app-credentials", json=body(app=conn["id"]), headers=admin(tenant))
     assert r.status_code == 201 and r.json()["data"]["type"] == "own", r.text
-    shown = (await world.client.get(f"/v1/connections/{conn['id']}", headers=admin(tenant))).json()["data"]
-    production = shown["environments"]["production"]
-    assert production["settings"]["clientId"] == "bank-own-client" and SECRET not in str(shown), production
+    shown = (await world.client.get(f"/v1/apps/{conn['id']}/accounts/{conn['id']}", headers=admin(tenant))).json()[
+        "data"
+    ]
+    assert shown["settings"]["clientId"] == "bank-own-client" and SECRET not in str(shown), shown
 
 
 async def test_replacing_the_secret_changes_the_teams_own_client_only(world: World, tenant: str) -> None:  # noqa: F811
@@ -116,8 +117,7 @@ async def test_replacing_the_secret_changes_the_teams_own_client_only(world: Wor
     assert replaced.status_code == 200 and "bank-rotated-secret-2" not in replaced.text, replaced.text
     fresh = await world.store.get(tenant, conn)
     assert fresh is not None
-    production = fresh["environments"]["production"]
-    assert production["settings"]["clientId"] == "bank-own-client" and production["credential_id"] == credential
+    assert fresh["settings"]["clientId"] == "bank-own-client" and fresh["credential_id"] == credential
     missing = await world.client.put(
         "/v1/app-credentials/cred_none/secret", json={"clientSecret": "x"}, headers=admin(tenant)
     )

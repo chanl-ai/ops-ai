@@ -38,7 +38,7 @@ class Directory:
 
 
 class Apps:
-    """tools-service's GET /v1/systems for the person asked for: CRM is connected; Payments is one each person signs
+    """tools-service's GET /v1/apps for the person asked for: CRM is connected; Payments is one each person signs
     in to, and this person has not."""
 
     def __init__(self) -> None:
