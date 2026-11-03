@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -16,15 +17,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = ROOT.parent
 HOME = Path.home()
-LOGIN = "dean" + "grover"
+# The login to scrub besides this machine's home path; set where it differs from the home folder's name.
+LOGIN = os.environ.get("OPS_SCRUB_LOGIN", "")
 LOGIN_TOKEN = "<" + "login" + ">"
 SCOPES = ("docs", "examples", "scripts")
 SKIP_PARTS = frozenset({"state"})
-HOME_RE = re.compile(
-    rf"(?:/Users|/home)/{re.escape(LOGIN)}(?=/|$)|"
-    rf"/Users/{re.escape(LOGIN[:3])}[A-Za-z0-9._-]*\.\.\."
-)
-LOGIN_RE = re.compile(rf"\b{re.escape(LOGIN)}\b")
+# A pattern that never matches stands in when no login is set.
+NEVER = r"(?!x)x"
+_LOGIN_HOME = rf"(?:/Users|/home)/{re.escape(LOGIN)}(?=/|$)|/Users/{re.escape(LOGIN[:3])}[A-Za-z0-9._-]*\.\.\."
+HOME_RE = re.compile(_LOGIN_HOME if LOGIN else NEVER)
+LOGIN_RE = re.compile(rf"\b{re.escape(LOGIN)}\b" if LOGIN else NEVER)
 
 
 def _swap_prefix(text: str, old: Path, new: str) -> str:
