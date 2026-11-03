@@ -285,15 +285,55 @@ try {
           await shoot(page, 'app-test-failed');
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const card = await page.getByTestId(`system-${APP}-test-failed`).waitFor({ timeout: 60_000 }).then(async () => ((await page.getByTestId(`system-${APP}-test-failed`).innerText()) ?? '').trim(), () => '');
-          const cardReconnect = await page.getByTestId(`reconnect-${APP}`).isVisible().catch(() => false);
+          const cardState = await page.getByTestId(`system-${APP}`).getAttribute('data-state');
           await shoot(page, 'catalog-test-failed');
           for (const host of apiHosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
           const passed = await call(tools, 'POST', `/v1/connections/${conn?.connectionId}/test`, priya, { environment: 'production', account: 'team' });
           const after = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
           check(
             '29 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect',
-            /Signed in, but a test call failed/.test(row) && rowReconnect && /Signed in, but a test call failed/.test(card) && cardReconnect && after?.state === 'connected' && after?.environments?.production?.health?.status === 'ok',
-            { tested: failed.status, row, rowReconnect, card, cardReconnect, retested: passed.status, health: after?.environments?.production?.health },
+            /Signed in, but a test call failed/.test(row) && rowReconnect && /Signed in, but a test call failed/.test(card) && cardState === 'test_failed' && after?.state === 'connected' && after?.environments?.production?.health?.status === 'ok',
+            { tested: failed.status, row, rowReconnect, card, cardState, retested: passed.status, health: after?.environments?.production?.health },
+          );
+        }, page);
+
+        // The catalog: the team's connected apps first, then the ones it may connect, each card with its state and one
+        // action; a category narrows it, and the whole card opens the app's page.
+        await step('31 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page', async () => {
+          // A second app for the install, not turned on for the team: Person key desk, in the Service desk category.
+          const both = { 'test.person': { enabled: true, client: { id: 'multi-app' } }, 'test.person-key': { enabled: true } };
+          await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: both });
+          for (let i = 0; i < 30 && !((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).some((c) => c.id === 'plugin:test.person-key'); i++) await page.waitForTimeout(1000);
+          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('apps-connected').waitFor({ timeout: 60_000 });
+          await page.getByTestId('apps-available').waitFor({ timeout: 60_000 });
+          const connectedHas = (await page.getByTestId('apps-connected').getByTestId(`system-${APP}`).count()) === 1;
+          const ours = page.getByTestId(`system-${APP}`);
+          const ourState = await ours.getAttribute('data-state');
+          const ourText = ((await ours.innerText()) ?? '').replace(/\s+/g, ' ');
+          const oneAction = (await ours.getByTestId(`open-${APP}`).count()) === 1 && (await ours.getByTestId(`connect-${APP}`).count()) === 0;
+          const available = page.getByTestId('apps-available');
+          const others = await available.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-testid'), e.getAttribute('data-state')]));
+          const othersConnect = await available.locator('button[data-testid^="connect-"]').count();
+          const heads = (await page.locator('main section h2').allInnerTexts()).map((t) => t.trim());
+          await shoot(page, 'catalog-sections');
+          const total = (await page.getByTestId('apps-count').innerText()).trim();
+          await page.getByTestId('filter-category-Service desk').click();
+          const narrowed = (await page.getByTestId('apps-count').innerText()).trim();
+          const narrowedCards = await page.locator('[data-testid^="system-"][data-state]').count();
+          await shoot(page, 'catalog-category');
+          await page.getByTestId('filter-category-Service desk').click();
+          const href = await page.getByTestId(`card-link-${APP}`).getAttribute('href');
+          // A click anywhere on the card, away from its name, opens the app's page.
+          await ours.click({ position: { x: 24, y: 110 } });
+          const opened = await page.waitForURL((u) => u.pathname === `/integrations/apps/${encodeURIComponent(APP)}` || u.pathname === `/integrations/apps/${APP}`, { timeout: 30_000 }).then(() => true, () => false);
+          await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': both['test.person'] } });
+          check(
+            '31 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
+            heads[0]?.startsWith('Connected') && heads[1]?.startsWith('Available') && connectedHas && ourState === 'connected' && /Connected · 1 tool/.test(ourText) && oneAction &&
+              others.length >= 1 && others.every(([, st]) => st === 'not_installed' || st === 'needs_sign_in') && othersConnect >= 1 &&
+              narrowedCards === 1 && /^1 of \d+$/.test(narrowed) && href === `/integrations/apps/${encodeURIComponent(APP)}` && opened,
+            { heads, connectedHas, ourState, ourText, oneAction, others, othersConnect, total, narrowed, narrowedCards, href, opened },
           );
         }, page);
 
@@ -410,9 +450,12 @@ try {
           const cards = (await call(tools, 'GET', '/v1/systems', priya)).data ?? [];
           out.disagree = [];
           for (const c of cards.filter((x) => x.kind !== 'builtin')) {
-            const shown = (await james.getByTestId(`system-${c.id}-status`).count()) > 0;
-            const want = c.plugin?.teamOn !== false && (c.state ? ['connected', 'expired', 'refused'].includes(c.state) : Object.values(c.environments ?? {}).some((e) => e?.set));
-            if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown });
+            const shown = await james.getByTestId(`system-${c.id}`).getAttribute('data-state');
+            const envs = Object.values(c.environments ?? {});
+            const on = c.plugin ? c.plugin.teamOn !== false && Boolean(c.connectionId) : Boolean(c.connectionId) || envs.some((e) => e?.set);
+            const failed = envs.some((e) => e?.health?.status === 'failed' && e.health.account === 'team');
+            const want = !on ? 'not_installed' : c.state === 'connected' ? (failed ? 'test_failed' : 'connected') : c.state ? 'needs_sign_in' : envs.some((e) => e?.health?.status === 'ok') ? 'connected' : 'needs_sign_in';
+            if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown, want });
           }
           // Connect off for a non-admin says why.
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
@@ -465,7 +508,7 @@ try {
           await page.getByTestId(`system-${APP}`).waitFor({ timeout: 90_000 });
           const cards = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).filter((c) => c.kind === 'builtin');
           const opened = {};
-          for (const c of cards) opened[c.id] = await page.getByTestId(`open-${c.id}`).getAttribute('href');
+          for (const c of cards) opened[c.id] = await page.getByTestId(`card-link-${c.id}`).getAttribute('href');
           await page.getByRole('button', { name: 'Built in', exact: true }).click().catch(() => {});
           await page.waitForTimeout(300);
           await shoot(page, 'catalog-built-in');

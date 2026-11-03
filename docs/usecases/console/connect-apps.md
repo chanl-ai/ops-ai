@@ -21,6 +21,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S15 | A test call that fails after the sign-in leaves the account Connected and shows the reason on its row and the catalog card, with Reconnect | ui | 29 | 29 |
 | S18 | An empty required field says what it needs in place, the same way on every sign-in kind, and Authorize opens no sign-in window | ui | 32 | 32 |
 | S16 | Settings › Edit keeps what was saved: its fields start blank, and saving without typing changes nothing; the sign-in address typed on the first Connect is the one used | ui | 19, 30 | 30 |
+| S17 | Apps lists the team's connected apps first, then the ones it may connect; each card shows its state (Connected, Needs sign-in, Signed in but test failed, Not installed) and one action; a category narrows the list, and the whole card opens the app's page | ui | 31 | 31 |
 | S14 | One Connect window: Ops AI's app or the team's own, the access asked for, then Authorize; the sign-in window opens at once; a refused sign-in shows in both windows and Authorize works again; an app turned on again continues with its app credential | ui | 3 | 3 |
 | S3 | A person presses Connect my account, allows access, and the page reads Connected as their account; a tool the agent then calls runs with it, shown on Usage | ui | 5-7 | 7 |
 | S4 | Ops AI's own tools show as Built in apps that open the page managing them | ui | 8 | 8 |
@@ -71,6 +72,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 29 | Security takes Person desk's hosts off the allow list and the team account is tested; then the hosts go back and it is tested again | the account row and the catalog card read "Signed in, but a test call failed" with Reconnect; after, the account is Connected and the test passes |
 | 30 | On Salesforce's Settings, Priya presses Edit on Production and Save without typing | the sign-in address field is blank with "Blank keeps the saved value."; the saved settings are unchanged |
 | 32 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |
+| 31 | The install allows Person key desk too; Priya opens Apps, picks the Service desk category, clears it, then clicks Person desk's card | Connected (Person desk, "Connected · 1 tool", Open) above Available (Person key desk, Not installed, Connect); the category leaves 1 card; the card opens Person desk's page |
 | 28 | Priya makes a tool from a full URL (`POST /v1/tool-modules`), lists `GET /v1/systems`, and reads the tool's connection page and `builtin:files` | The tool's own connection, the built-in apps and module cards are not listed; both pages answer 200 |
 
 ## Acceptance layers
