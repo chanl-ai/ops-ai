@@ -21,7 +21,7 @@ from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
-from ops_tools.executor import HttpExecutor
+from ops_tools.executor import Executor, HttpExecutor
 from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
@@ -31,6 +31,7 @@ from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.store.connections import SHARED, ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
+from ops_tools.tools import ToolCaller
 
 from .plugin_desk import plugin as desk
 from .test_personal_sign_in import JAMES, MAYA, TEAM, connection, rig
@@ -311,3 +312,32 @@ async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
     assert "own account" in str(seen.get("sign_in_needed"))
     refused = _before_policy(Resolved("read", "plugin", seen, {"name": "desk_get_case", "enabled": True}), {})
     assert refused is not None and refused[1] == "CONNECTION_NOT_LINKED", refused
+
+
+async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections_origin(
+    local_catalog: Any, engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    # The connection's environment holds the instance's origin (what sign-in saves for Test connection); a plugin's
+    # tool still reaches the address its manifest renders under it, through the gateway's executor.
+    connections, tokens, auth = rig(engine)
+    conn = await connection(connections, tenant, "team")
+    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
+    await bind(engine, tenant, TEAM, "https://crm.bank.test", conn)
+    h = host(engine, store)
+    h.connections = connections
+    resolved = await ToolRegistry(local_catalog, store, h).resolve("desk_get_case", tenant_id=tenant, team_id=TEAM)
+    assert resolved is not None
+    heard: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        heard.append(str(request.url))
+        return httpx.Response(200, json={"id": "c1"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    http = HttpExecutor(client, AllowAll(), None, auth)  # type: ignore[arg-type]
+    caller = ToolCaller(tenant_id=tenant, team_id=TEAM, sub="service:agents", kind="service")
+    out = await Executor(local_catalog, http).run(
+        resolved, "desk_get_case", {"id": "c1"}, key="k1", caller=caller, environment="test"
+    )
+    assert out.ok, out
+    assert heard == ["https://crm.bank.test/api/v1/cases/c1"]

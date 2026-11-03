@@ -733,7 +733,9 @@ class Executor:
             return await self.code.run(
                 op, args, key=key, caller=caller, environment=environment, module_team=module.get("team_id")
             )
-        if resolved.executor in ("http", "mcp") and self.http.auth is not None:
+        # A plugin's address is rendered from its manifest by the plugin host (instance plus API path); the connection
+        # holds only the instance's origin, so only every other module takes its connection's address.
+        if resolved.executor in ("http", "mcp") and self.http.auth is not None and "plugin_settings" not in module:
             # A module's address is its connection's for the run's environment (c-616), the only home it has.
             module = await self.http.auth.addressed(module, environment)
         if self.mocks is not None and (

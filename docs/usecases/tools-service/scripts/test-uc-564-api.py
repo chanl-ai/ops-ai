@@ -45,11 +45,22 @@ QUERY = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"
 
 
 TENANT: dict[str, str] = {}
+INNER: dict[str, httpx.Client] = {}
 
 
-def call(gw: httpx.Client, tool: str, args: dict[str, Any], team: str = "team_ops") -> httpx.Response:
-    """A gateway call as agents-service makes it for a run in `team`: a read, so it runs at once."""
+def call(
+    gw: httpx.Client, tool: str, args: dict[str, Any], team: str = "team_ops", acting_for: str | None = None
+) -> httpx.Response:
+    """A gateway call as agents-service makes it for a run in `team`: a read, so it runs at once. With `acting_for`
+    (an email) it carries the acting-for token platform-service signs for that person, as a run a person started."""
     headers = service_headers("tools", tenant=TENANT["id"], service="agents", team=team)
+    if acting_for:
+        minted = INNER["api"].post(
+            "/v1/acting-for-tokens",
+            json={"email": acting_for},
+            headers=service_headers("platform", tenant=TENANT["id"], service="agents", team=team),
+        )
+        headers["X-Acting-For"] = str((data(minted) or {}).get("token") or "")
     body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "production"}}
     return gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": team})
 
@@ -92,7 +103,7 @@ def install(api: httpx.Client, who: dict[str, str], on: bool, client: str | None
 
 with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
-    api, _ = stack.enter_context(platform())
+    api, INNER["api"] = stack.enter_context(platform())
     gw = stack.enter_context(
         tools({**sf["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
     )
@@ -240,7 +251,8 @@ with ExitStack() as stack:
     )
 
     # 42. A Real run goes through the gateway's checks with the team's account and reaches Salesforce.
-    real = gw.post(run, json={"mode": "real", "input": {"q": QUERY}}, headers=james)
+    # The team signed in for production (step 5), so the Real run names that environment.
+    real = gw.post(run, json={"mode": "real", "environment": "production", "input": {"q": QUERY}}, headers=james)
     records = ((data(real) or {}).get("output") or {}).get("records") or [{}]
     check(
         "42 a Real run reads the case with the team's account through the gateway, and the call is logged",
@@ -380,6 +392,52 @@ with ExitStack() as stack:
         "28 the platform's secret is never shown back",
         all(r.status_code == 200 for r in reads) and not any(PLATFORM_SECRET in r.text for r in reads),
         [r.status_code for r in reads],
+    )
+
+    # 47. A third team turns Salesforce on with each person signing in with their own account, and no team account.
+    # Before Sam signs in, his call asks for his own sign-in; it is not refused as the app being off.
+    security = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
+    mine_on = gw.put(
+        f"/v1/plugins/{PLUGIN}/team",
+        json={"enabled": True, "signIn": "person", "settings": {"login_url": login}},
+        headers=security,
+    )
+    mine_id = str((data(mine_on) or {}).get("connectionId") or "con_missing")
+    before = call(gw, "salesforce_query", {"q": QUERY}, team="team_security", acting_for="s.adeyemi@harborpine.example")
+    check(
+        "47 on an app where each person signs in, a person's call before their sign-in asks them to sign in",
+        mine_on.status_code == 200 and before.status_code == 403 and code_of(before) == "CONNECTION_NOT_LINKED",
+        {"on": mine_on.text[:200], "call": before.status_code, "text": before.text[:300]},
+    )
+
+    # 48. Sam signs in with his own account; no team account exists, and the instance comes from his sign-in.
+    own = gw.post(f"/v1/connections/{mine_id}/sign-in", json={"environment": "production"}, headers=security)
+    back = sf["sign_in"]((data(own) or {}).get("authorizeUrl", ""), "sam.own") if own.status_code == 200 else {}
+    own_done = gw.post(
+        f"/v1/connections/{mine_id}/sign-in/complete",
+        json={"state": back.get("state", ""), "code": back.get("code", "")},
+        headers=security,
+    )
+    page_mine = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=security)) or {}
+    accounts_mine = page_mine.get("accounts") or []
+    check(
+        "48 a person signs in with their own account before any team account exists",
+        own_done.status_code == 200 and any(a.get("id") == mine_id and a.get("mine") for a in accounts_mine),
+        {"start": own.text[:200], "done": own_done.text[:300], "accounts": accounts_mine},
+    )
+
+    # 49. His call now runs on his own account and reaches the instance his sign-in named.
+    sent_before = len(sf["fake"].state()["queries"])
+    after_own = call(
+        gw, "salesforce_query", {"q": QUERY}, team="team_security", acting_for="s.adeyemi@harborpine.example"
+    )
+    rows = ((data(after_own) or {}).get("output") or {}).get("records") or [{}]
+    check(
+        "49 the person's call runs on their own account with no team account, and reaches Salesforce",
+        after_own.status_code == 200
+        and rows[0].get("CaseNumber") == "00044818"
+        and QUERY in sf["fake"].state()["queries"][sent_before:],
+        {"status": after_own.status_code, "text": after_own.text[:300]},
     )
 
 finish()

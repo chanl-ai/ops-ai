@@ -17,7 +17,8 @@ def ids(rows: object) -> list[str]:
     return [str(r["id"]) for r in rows] if isinstance(rows, list) else []
 
 
-with apps_stack() as w:
+# A person's sign-in returns to the console, so its address is set (step 29).
+with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu.
     listed = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
     kinds = [r.get("kind") for r in data(listed) or []] if listed.status_code == 200 else []
@@ -80,6 +81,19 @@ with apps_stack() as w:
         and not [k for _, k in shown if k in ("builtin", "module")]
         and pages == [200, 200],
         {"made": made.status_code, "own": own, "shown": shown, "pages": pages},
+    )
+
+    # 29. An app where each person signs in with their own account: with no team account, James signs in with his own
+    # and his call runs as him, through the app's own address.
+    client = {"clientId": "multi-app", "clientSecret": w.m["clients"]["multi-app"]}
+    person_app = w.turn_on("admin", "test.person", signIn="person", **client)
+    signed = w.sign_in("builder", "plugin:test.person", person_app, "james.own")
+    ran = w.call("person_get_record", args={"id": "r-1"}, acting_for="j.richardson@harborpine.example")
+    answer = ((data(ran) or {}).get("output") or {}) if ran.status_code == 200 else {}
+    check(
+        "29 on an app where each person signs in, a person's own sign-in runs a tool before any team account exists",
+        person_app != "con_missing" and signed == 200 and answer.get("as") == "james.own",
+        {"account": person_app, "sign-in": signed, "call": ran.text[:300]},
     )
 
 finish()

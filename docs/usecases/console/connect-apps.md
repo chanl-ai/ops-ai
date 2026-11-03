@@ -31,6 +31,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S13 | When the app refuses the team account's refresh, the account reads Expired with Reconnect, and signing in again makes it work (from uc-580) | ui | 21 | 21 |
 | S9 | Anyone in the team lists the apps in one call: the plugins and the apps a person added, no built-in app and no connection made for a tool; an app turned on with a key reads Connected only once a test has passed | api | 20-21, 28 | 21 |
 | S10 | A viewer sees the apps but may not turn one on, while the admin may; the app's page reads Connected · team account | api | 22-23 | 23 |
+| S14 | On an app where each person signs in with their own account, a person's own sign-in runs a tool before any team account exists | api | 29 | 29 |
 | S11 | A developer lists the connected apps and reads one through the Python SDK and gets what the API gives | sdk | 24 | 24 |
 | S12 | A team admin lists and shows apps with `ops apps`; a viewer's `ops apps connect` is refused | cli | 25-26 | 25 |
 
@@ -64,6 +65,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 25 | Priya runs `ops apps list --connected` and `ops apps show plugin:test.header-key` | Exit 0; the list holds the app; show names it |
 | 26 | Ravi runs `ops apps connect plugin:test.query-key` | A non-zero exit naming the refusal (403) |
 | 27 | The console steps for group A (Apps grid, Connected only and Available only, the small Connect window) | Written by the console builder with tasks U1-U3; steps 1-13 stay until then |
+| 29 | Priya turns the person desk on with `signIn: person`; James signs in with his own account; a call acting for James reads a record | 200; the record is read as James's own account, with no team account |
 | 28 | Priya makes a tool from a full URL (`POST /v1/tool-modules`), lists `GET /v1/systems`, and reads the tool's connection page and `builtin:files` | The tool's own connection, the built-in apps and module cards are not listed; both pages answer 200 |
 
 ## Acceptance layers
