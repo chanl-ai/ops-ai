@@ -2,8 +2,5 @@
   "date": "2026-10-21",
   "title": "A demo mailbox to try email intake",
   "description": "Send a document to the demo mailbox and watch it start a workflow, with each step shown on the run page.",
-  "tag": "improved",
-  "cards": [
-    "c-467"
-  ]
+  "tag": "improved"
 }

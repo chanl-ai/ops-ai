@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "An app that stops working says which one to reconnect",
   "description": "When an app turns down your team's account, or its sign-in ends, a run's step now says which app needs reconnecting and that an admin does it under Apps, and the app page says why. Admins hear about it once, not on every call.",
-  "tag": "improved",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "improved"
 }

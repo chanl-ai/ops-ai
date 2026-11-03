@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "A workflow waits for you to connect your account",
   "description": "When a workflow you started needs your own account of an app you haven't connected, it waits instead of failing, and goes on by itself once you connect.",
-  "tag": "improved",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "improved"
 }

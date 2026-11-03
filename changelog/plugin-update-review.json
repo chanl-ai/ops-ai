@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Review a plugin update before your tools change",
   "description": "When an app's plugin is upgraded, your team keeps running the version it took until a team admin reviews the new, changed and removed tools and which agents and workflows use them, then takes the update.",
-  "tag": "improved",
-  "cards": [
-    "c-609"
-  ]
+  "tag": "improved"
 }

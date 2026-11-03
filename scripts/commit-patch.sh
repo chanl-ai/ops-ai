@@ -5,7 +5,7 @@
 # (a compare-and-swap). The working tree is never written: your lines are already in it, and so are everyone else's.
 #   scripts/commit-patch.sh <message-file> <patch-file>
 # Make the patch from your own hunks: `make my-hunks FILE=docs/usecases/README.md > mine.patch`, delete the hunks that
-# are not yours, then `make commit-hunks PATCH=mine.patch MSG='…' CARD=c-NNN`.
+# are not yours, then `make commit-hunks PATCH=mine.patch MSG='…' CHANGELOG=<topic>`.
 set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: scripts/commit-patch.sh <message-file> <patch-file>" >&2; exit 2; }
 msg_in=$1; patch=$2

@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Leaving a team removes your accounts on its apps",
   "description": "When someone is removed from a team, the accounts they connected to that team's apps are removed within seconds, so their sign-ins stop working there. Their accounts in other teams stay.",
-  "tag": "improved",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "improved"
 }
