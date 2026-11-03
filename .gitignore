@@ -19,11 +19,6 @@ __pycache__/
 .run/
 .data/
 
-# The private half of Ops AI (board, plans, private agent setup) is its own repository, cloned here as .private/.
-# scripts/link-private.sh links .codeloop and the private agent files into the checkout and lists them in
-# .git/info/exclude, so their names never appear in this public file.
-/.private/
-/.codeloop
 # A lane worktree's own settings (name, number, card, ports), written by scripts/lane.sh.
 /.lane
 

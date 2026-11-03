@@ -7,8 +7,8 @@ and rebases inside your own checkout are normal git. This hook refuses only what
 (work nobody else can see), a hard reset or clean (unpushed work gone), skipped hooks, a force push, and a push
 straight to main. Exit 2 blocks the call; stderr is the reason and what to do instead.
 
-Applies to commands that run in ops-ai or a lane (the hook's cwd, or a `cd`/`-C` into one), not in `.private/`, which
-is its own repository. `python3 scripts/git-rules.py --self-test` checks every rule.
+Applies to commands that run in ops-ai or a lane (the hook's cwd, or a `cd`/`-C` into one), not in another repository
+nested inside one, which follows its own rules. `python3 scripts/git-rules.py --self-test` checks every rule.
 """
 
 from __future__ import annotations
@@ -59,11 +59,16 @@ RULES: list[tuple[str, str, str]] = [
 
 
 def in_tree(path: str) -> bool:
-    # .private is its own repository (the private half of Ops AI), so its git commands follow its own rules.
-    private = os.path.join(TREE, ".private")
-    if path == private or path.startswith(private + "/") or "/.private" in path[len(LANES) :]:
+    if not (path == TREE or path.startswith(TREE + "/") or path.startswith(LANES)):
         return False
-    return path == TREE or path.startswith(TREE + "/") or path.startswith(LANES)
+    # A repository nested inside the checkout (its own .git below the checkout's root) follows its own rules.
+    root = TREE if path == TREE or path.startswith(TREE + "/") else LANES + path[len(LANES) :].split("/", maxsplit=1)[0]
+    here = path
+    while len(here) > len(root):
+        if os.path.exists(os.path.join(here, ".git")):
+            return False
+        here = os.path.dirname(here)
+    return True
 
 
 def check(command: str, cwd: str) -> str | None:
@@ -119,8 +124,7 @@ def self_test() -> int:
         ("git stash", hub, False),
         (f"cd {TREE} && git stash", hub, True),
         ("git stash", LANES + "backend", True),
-        ("git stash", os.path.join(TREE, ".private"), False),
-        ("git push origin main", os.path.join(TREE, ".private"), False),
+        ("git stash", os.path.join(TREE, "node_modules"), True),
     ]
     for c, where, want in elsewhere:
         if (check(c, where) is not None) != want:
