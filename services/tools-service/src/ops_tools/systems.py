@@ -109,6 +109,8 @@ class SystemCard(Out):
     state: AccountState | None = None
     environments: dict[str, SystemEnvironment]
     may_manage: bool
+    # Whether the install's own OAuth client signs this app in, so a team types no client id or secret.
+    managed_client: bool = False
     plugin: SystemPlugin | None = None
     # A built-in app's console page, where it is managed (its knowledge bases, its mailboxes).
     href: str | None = None
@@ -324,6 +326,7 @@ class Systems:
                         "state": states[str(conn["id"])][0] if conn else None,
                         "environments": _environments(conn),
                         "mayManage": may,
+                        "managedClient": platform,
                         "plugin": {
                             "installOn": install_on,
                             "teamOn": bool(b.get("enabled")),
@@ -358,6 +361,7 @@ class Systems:
                     "state": states[str(conn["id"])][0],
                     "environments": _environments(conn),
                     "mayManage": may,
+                    "managedClient": False,
                 }
             )
         built: set[str] = set()
@@ -387,6 +391,7 @@ class Systems:
                     "state": CONNECTED,
                     "environments": _environments(None),
                     "mayManage": may,
+                    "managedClient": False,
                     "href": app["href"],
                 }
             )
@@ -405,6 +410,7 @@ class Systems:
                     "moduleIds": [str(m["id"])],
                     "environments": _environments(None),
                     "mayManage": may,
+                    "managedClient": False,
                 }
             )
         await self._app_states(who, cards, by_id, person)

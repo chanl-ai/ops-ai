@@ -8964,6 +8964,11 @@
             ],
             "title": "Logo"
           },
+          "managedClient": {
+            "default": false,
+            "title": "Managedclient",
+            "type": "boolean"
+          },
           "mayManage": {
             "title": "Maymanage",
             "type": "boolean"

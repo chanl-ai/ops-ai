@@ -6,12 +6,13 @@ team's secret that other teams read: it lives at the account, set by an account 
 do in models-service. Its value leaves only through `value`, which a sign-in's token exchange uses; no route returns
 it. The value is kept in the credential store (`ops_policy.credentials`) under the tenant and the plugin id, so a
 reference copied to another plugin or tenant does not open; the row holds only that reference. A value is kept a
-minute so a sign-in does not wait on the database, and a save or a delete drops it at once."""
+minute so a sign-in does not wait on the database, and a save or a delete drops it at once. With no saved secret, the
+install config's (plugin_clients, from the deploy's secret store) is the value; it is never written to a row."""
 
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_policy import CredentialStore, context_of
 from ops_service_kit.ids import now_iso
+from ops_service_kit.settings import PluginClient
 from ops_store import Guarantee, isolation
 from ops_store.dialect import locked, upsert
 from ops_store.schema import TENANT_SCOPED
@@ -51,10 +53,16 @@ class PluginAppKeys:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
     def __init__(
-        self, engine: AsyncEngine, credentials: CredentialStore, clock: Callable[[], float] = time.monotonic
+        self,
+        engine: AsyncEngine,
+        credentials: CredentialStore,
+        clock: Callable[[], float] = time.monotonic,
+        *,
+        install: Mapping[str, PluginClient] | None = None,
     ) -> None:
         self.engine = engine
         self.credentials = credentials
+        self.install = dict(install or {})
         self.clock = clock
         self._kept: dict[tuple[str, str], tuple[float, str | None]] = {}
 
@@ -96,5 +104,7 @@ class PluginAppKeys:
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             ref = await c.scalar(sa.select(plugin_app_keys.c.ciphertext).where(_mine(tenant_id, plugin_id)))
         found = None if ref is None else await self.credentials.get(ref, context=context_of(tenant_id, plugin_id))
+        if found is None and (installed := self.install.get(plugin_id)) is not None:
+            found = installed.secret.get_secret_value()
         self._kept[key] = (self.clock(), found)
         return found

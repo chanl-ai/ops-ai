@@ -1653,6 +1653,7 @@ class SystemCard(TypedDict, closed=True):
     kind: Literal["plugin", "connection", "module", "builtin"]
     kindLabel: NotRequired[str | None]
     logo: NotRequired[str | None]
+    managedClient: NotRequired[bool]
     mayManage: bool
     moduleIds: list[str]
     name: str

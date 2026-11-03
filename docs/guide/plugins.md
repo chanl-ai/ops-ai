@@ -242,15 +242,21 @@ tools-service and kb-service load every plugin when they start. A plugin that fa
 ## Turn a plugin on
 
 An install with no plugin loads nothing: the plugin routes answer 404 and kb-service refuses a plugin source
-(`tools_unavailable`). A plugin that loaded is still off until two people turn it on. The platform admin's switch is
-an API call; until it is set, the Apps catalog reads "No apps yet" for the plugin. The team's switch, its settings
-and its sign-in are the App's Connect window in the console (apps.md, Turn an App on); the calls below are the same
-steps for a script.
+(`tools_unavailable`). A plugin that loaded is offered to every team: installing it is the platform admin's decision,
+and the policy below only turns it off again. When the policy cannot be read and has not been read before, every plugin
+counts as off. The team's switch, its settings and its sign-in are the App's Connect window in the console (apps.md,
+Turn an App on); the calls below are the same steps for a script.
+
+The platform's own OAuth app, which every team uses unless it brings its own, can come from the install config instead
+of an admin's calls. Register the app once with the vendor and set its client in the deploy's secret store:
+`OPS_PLUGIN_CLIENTS='{"opsai.salesforce": {"id": "<client id>", "secret": "<client secret>"}}'`. tools-service reads
+it at start and never writes the secret to the database. A client id in the policy and a secret saved by an account
+admin take its place; set both, since a saved id with the install's secret signs in with neither app.
 
 | Who | Call | What it does |
 |---|---|---|
-| Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: true, locked: {api_version: "61.0"}}}}` | Allows it for the install and fixes any lockable setting; off again stops every team's calls within seconds |
-| Account admin (`settings.manage`) | the policy entry's `client: {id}`, then tools-service `PUT /v1/plugins/opsai.salesforce/app-secret` with `{clientSecret}` | Sets up the platform's own OAuth app once for every team; the secret is sealed at the account and no read returns it |
+| Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: false, locked: {api_version: "61.0"}}}}` | `enabled: false` stops every team's calls within seconds; `locked` fixes any lockable setting |
+| Account admin (`settings.manage`) | the policy entry's `client: {id}`, then tools-service `PUT /v1/plugins/opsai.salesforce/app-secret` with `{clientSecret}` | Sets up the platform's own OAuth app once for every team, in place of the install config's; the secret is sealed at the account and no read returns it |
 | Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
 | Security | tools-service `POST /v1/egress/hosts` | Adds the system's hosts to the workspace's allow-list, as for any outside system |
 | Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |

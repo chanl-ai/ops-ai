@@ -4227,6 +4227,11 @@ export interface components {
             kindLabel?: string | null;
             /** Logo */
             logo?: string | null;
+            /**
+             * Managedclient
+             * @default false
+             */
+            managedClient: boolean;
             /** Maymanage */
             mayManage: boolean;
             /** Moduleids */

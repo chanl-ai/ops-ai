@@ -140,7 +140,7 @@ def main() -> None:
     # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
     # The platform's own OAuth app secrets for plugins (c-565), sealed at the account; only on an install with plugins.
-    app_keys = PluginAppKeys(engine, credentials) if settings.plugins else None
+    app_keys = PluginAppKeys(engine, credentials, install=settings.plugin_clients) if settings.plugins else None
     authenticator = Authenticator(
         connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
     )
@@ -158,7 +158,8 @@ def main() -> None:
         store,
         PluginBindings(engine),
         InstallSwitches(
-            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
+            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
+            clients=settings.plugin_clients,
         ),
         connection_store,
         # The lookup after a plugin's sign-in goes out through the egress client, as any call does (c-584).
