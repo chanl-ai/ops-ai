@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -10,11 +11,13 @@ import { useSignInWindow } from '@/components/connections/sign-in';
 import { CopyButton } from '@/components/shared/copy-button';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
+import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Form } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTeam } from '@/hooks/use-team';
@@ -28,7 +31,8 @@ import {
   useStartSignIn,
   useTestEnvironment,
 } from '@/hooks/systems-queries';
-import { draftFor, keyed, pluginGroups, turnOnBody, type Kinds } from '@/lib/connect-plan';
+import { draftFor, keyed, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
+import { fieldErrors, schemaForFields } from '@/lib/field-schema';
 
 type App = 'platform' | 'own';
 
@@ -65,21 +69,25 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
   const reusing = Boolean(card.connectionId) && !newClient;
   const [app, setApp] = React.useState<App>(plugin?.platformApp ? 'platform' : 'own');
   const chosen: App = reusing ? (existing?.type === 'own' ? 'own' : 'platform') : newClient ? 'own' : app;
-  const [clientId, setClientId] = React.useState('');
-  const [clientSecret, setClientSecret] = React.useState('');
   const typing = !reusing && chosen === 'own';
-  // The plugin's own settings (Salesforce's sign-in address): asked when the app is first connected, kept after.
+  // The fields this window asks, as the API describes them: the team's own client when it brings one, and the plugin's
+  // own settings (Salesforce's sign-in address) when the app is first connected; kept after.
   const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked);
+  const fields: KindField[] = [
+    ...(plugin && kind ? pluginGroups(kind, kinds, plugin, typing ? 'own' : 'platform').main.filter((f) => f.name === 'clientId' || f.name === 'clientSecret') : []),
+    ...asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default })),
+  ];
+  const schema = schemaForFields(fields);
+  const form = useForm<Record<string, string>>({
+    defaultValues: { clientId: '', clientSecret: '', accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
+  });
   // Settings with a default wait under More options, so the default path stays the app credential and Authorize.
-  const needed = asked.filter((x) => !x.default);
-  const tuned = asked.filter((x) => x.default);
-  const [values, setValues] = React.useState<Record<string, string>>(() => Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])));
-  const missing = (typing && (!clientId.trim() || !clientSecret.trim())) || asked.some((x) => !x.default && !values[x.name]?.trim());
+  const needed = fields.filter((f) => f.name !== 'clientId' && f.name !== 'clientSecret' && !f.advanced);
+  const tuned = fields.filter((f) => f.advanced);
 
   // Whose account it is and its name sit under More options; a second account opens with them showing.
   const [more, setMore] = React.useState(another);
   const [team, setTeam] = React.useState(true);
-  const [accountName, setAccountName] = React.useState('');
   const suggested = another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`;
 
   const [waiting, setWaiting] = React.useState(false);
@@ -119,21 +127,29 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
 
   if (!plugin || !kind) return null;
 
-  const setting = (x: (typeof asked)[number]) => (
-    <FormField key={x.name} id={`connect-setting-${x.name}`} label={x.label} optional={Boolean(x.default)}>
-      <Input
-        id={`connect-setting-${x.name}`}
-        type={x.secret ? 'password' : 'text'}
-        value={values[x.name] ?? ''}
-        onChange={(e) => setValues((v) => ({ ...v, [x.name]: e.target.value }))}
-        autoComplete="off"
-        data-testid={`connect-window-setting-${x.name}`}
-      />
-    </FormField>
+  const setting = (f: KindField) => (
+    <FormTextField
+      key={f.name}
+      control={form.control}
+      name={f.name}
+      label={f.label}
+      optional={!f.required}
+      type={f.secret ? 'password' : 'text'}
+      testId={`connect-window-setting-${f.name}`}
+    />
   );
 
   const authorize = async () => {
-    // Opened in the click, before any call: a window opened after an await is blocked as a pop-up.
+    // Checked before the sign-in window opens, and synchronously: a window opened after an await is blocked as a pop-up.
+    const values = form.getValues();
+    const errors = fieldErrors(schema.safeParse(values));
+    form.clearErrors();
+    if (Object.keys(errors).length) {
+      for (const [name, msg] of Object.entries(errors)) form.setError(name, { type: 'schema', message: msg });
+      // A field folded under More options opens it, so its error is seen.
+      if (tuned.some((f) => errors[f.name])) setMore(true);
+      return;
+    }
     const w = signIn.open(card.name, card.logo);
     if (!w) return;
     setError(null);
@@ -141,16 +157,17 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
     try {
       const draft = draftFor(environment, pluginGroups(kind, kinds, plugin, typing ? 'own' : 'platform'));
       if (typing) {
-        draft.settings.clientId = clientId.trim();
-        draft.secrets.clientSecret = clientSecret;
+        draft.settings.clientId = values.clientId.trim();
+        draft.secrets.clientSecret = values.clientSecret;
       }
       for (const x of asked.filter((a) => a.perEnvironment)) draft.settings[x.name] = values[x.name] ?? '';
       const teamSettings = Object.fromEntries(asked.filter((a) => !a.perEnvironment).map((a) => [a.name, values[a.name] ?? '']));
+      const accountName = (values.accountName ?? '').trim();
       const offered = team ? (plugin.signIn.includes('person_or_team') ? 'person_or_team' : undefined) : plugin.signIn.includes('person') ? 'person' : undefined;
       const body = {
         // A later turn-on that names no client keeps the app credential the team's connection already has.
         ...turnOnBody(kind, plugin, typing ? 'own' : 'platform', draft, teamSettings, !card.connectionId || another, offered),
-        ...(another ? { name: accountName.trim() || suggested } : { accountName: accountName.trim() || suggested }),
+        ...(another ? { name: accountName || suggested } : { accountName: accountName || suggested }),
       } as TeamPluginBody;
       let id: string;
       if (another) {
@@ -181,7 +198,8 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
     <DialogShell
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
-      // The default dialog width (512px): room for the client fields side by side.
+      // Wider than the default: the client fields sit side by side, and the return address reads in full.
+      size="md"
       title={another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
       description={`Choose how Ops AI signs in to ${card.name}, then allow access.`}
       data-testid="connect-window"
@@ -190,13 +208,14 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
           <Button variant="outline" onClick={() => void cancel()} data-testid="connect-window-cancel">
             Cancel
           </Button>
-          <LoadingButton isLoading={waiting} disabled={missing} onClick={() => void authorize()} data-testid="connect-window-authorize">
+          <LoadingButton isLoading={waiting} onClick={() => void authorize()} data-testid="connect-window-authorize">
             <ExternalLink />
             {waiting ? 'Connecting…' : `Authorize with ${card.name}`}
           </LoadingButton>
         </>
       }
     >
+      <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
         {reusing ? (
           <div className="flex flex-col gap-1 rounded-md border p-3 text-sm" data-testid="connect-window-reuse">
@@ -227,12 +246,8 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
         {typing && (
           <div className="flex flex-col gap-3" data-testid="connect-window-client">
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField id="connect-client-id" label="Client ID">
-                <Input id="connect-client-id" value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete="off" data-testid="connect-window-client-id" />
-              </FormField>
-              <FormField id="connect-client-secret" label="Client secret" hint="Sealed when saved; never shown again.">
-                <Input id="connect-client-secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="off" data-testid="connect-window-client-secret" />
-              </FormField>
+              <FormTextField control={form.control} name="clientId" label="Client ID" testId="connect-window-client-id" />
+              <FormTextField control={form.control} name="clientSecret" label="Client secret" type="password" hint="Sealed when saved; never shown again." testId="connect-window-client-secret" />
             </div>
             {kinds.redirectUri && (
               <FormField id="connect-return" label="Return address" hint={`Register it on your ${card.name} app.`}>
@@ -273,9 +288,7 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-4 pt-3">
             {tuned.map(setting)}
-            <FormField id="connect-window-name" label="Account name" hint="Steps and tools pick an account by this name.">
-              <Input id="connect-window-name" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder={suggested} data-testid="connect-window-name" />
-            </FormField>
+            <FormTextField control={form.control} name="accountName" label="Account name" optional placeholder={suggested} hint="Steps and tools pick an account by this name." testId="connect-window-name" />
             <label className="flex items-start gap-2" data-testid="connect-window-team">
               <Checkbox checked={team} onCheckedChange={(v) => setTeam(v === true)} className="mt-0.5" />
               <span className="grid gap-1">
@@ -293,6 +306,7 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
           </p>
         )}
       </div>
+      </Form>
     </DialogShell>
   );
 }

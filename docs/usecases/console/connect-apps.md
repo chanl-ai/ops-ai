@@ -19,6 +19,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S1 | A team member opens Connections and sees each app once as a card, plugins first, with its tools, how it signs in and Connect, read in one call; search finds an app | ui | 1-2 | 2 |
 | S2 | An admin presses Connect on an app, allows access on the system's page, and lands on the app's page with the team's account listed as the default | ui | 3-4 | 4 |
 | S15 | A test call that fails after the sign-in leaves the account Connected and shows the reason on its row and the catalog card, with Reconnect | ui | 29 | 29 |
+| S18 | An empty required field says what it needs in place, the same way on every sign-in kind, and Authorize opens no sign-in window | ui | 32 | 32 |
 | S16 | Settings › Edit keeps what was saved: its fields start blank, and saving without typing changes nothing; the sign-in address typed on the first Connect is the one used | ui | 19, 30 | 30 |
 | S14 | One Connect window: Ops AI's app or the team's own, the access asked for, then Authorize; the sign-in window opens at once; a refused sign-in shows in both windows and Authorize works again; an app turned on again continues with its app credential | ui | 3 | 3 |
 | S3 | A person presses Connect my account, allows access, and the page reads Connected as their account; a tool the agent then calls runs with it, shown on Usage | ui | 5-7 | 7 |
@@ -69,6 +70,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 27 | The console steps for group A (Apps grid, Connected only and Available only, the small Connect window) | Written by the console builder with tasks U1-U3; steps 1-13 stay until then |
 | 29 | Security takes Person desk's hosts off the allow list and the team account is tested; then the hosts go back and it is tested again | the account row and the catalog card read "Signed in, but a test call failed" with Reconnect; after, the account is Connected and the test passes |
 | 30 | On Salesforce's Settings, Priya presses Edit on Production and Save without typing | the sign-in address field is blank with "Blank keeps the saved value."; the saved settings are unchanged |
+| 32 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |
 | 28 | Priya makes a tool from a full URL (`POST /v1/tool-modules`), lists `GET /v1/systems`, and reads the tool's connection page and `builtin:files` | The tool's own connection, the built-in apps and module cards are not listed; both pages answer 200 |
 
 ## Acceptance layers

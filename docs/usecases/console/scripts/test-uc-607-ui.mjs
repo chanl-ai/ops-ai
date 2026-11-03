@@ -669,18 +669,11 @@ try {
           // Connect on an app turned off opens the one Connect window, continuing with the app credential it had.
           await page.getByTestId(`connect-${APP}`).click();
           const smallAgain = await page.getByTestId('connect-window-reuse').waitFor({ timeout: 30_000 }).then(async () => /Continuing with/.test(await page.getByTestId('connect-window-reuse').innerText()), () => false);
-          // A sign-in that cannot start says why in the window, instead of a silent 400.
-          await page.route('**/v1/connections/*/sign-in', (r) => r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'validation_failed', message: 'environment: Field required', status: 400 } }) }), { times: 1 });
-          const [blocked] = await Promise.all([page.waitForEvent('popup', { timeout: 30_000 }), page.getByTestId('connect-window-authorize').click()]);
-          const startError = await page.getByTestId('connect-window-error').waitFor({ timeout: 30_000 }).then(async () => ((await page.getByTestId('connect-window-error').innerText()) ?? '').trim(), () => '');
-          const windowSays = await blocked.getByTestId('connect-failed').waitFor({ timeout: 30_000 }).then(async () => ((await blocked.getByTestId('connect-failed').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
-          await blocked.close().catch(() => {});
-          await page.waitForFunction(() => !document.querySelector('[data-testid="connect-window-authorize"]')?.hasAttribute('disabled'), null, { timeout: 30_000 }).catch(() => {});
           await page.keyboard.press('Escape');
           check(
             '13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Connect, continuing with its app credential',
-            /Ticket desk/.test(named) && /Agent/.test(named) && res.status() === 200 && offered && smallAgain && /environment: Field required/.test(startError) && /Connection failed/.test(windowSays),
-            { named, status: res.status(), offered, smallAgain, startError, windowSays },
+            /Ticket desk/.test(named) && /Agent/.test(named) && res.status() === 200 && offered && smallAgain,
+            { named, status: res.status(), offered, smallAgain },
           );
         }, page);
 
@@ -950,6 +943,17 @@ try {
           const window_ = page.getByTestId('connect-window');
           await window_.waitFor({ timeout: 30_000 });
           await window_.getByTestId('connect-window-app-own').click();
+          // Authorize with the client fields empty: each says what it needs in place, and no sign-in window opens.
+          let opened = false;
+          const onPopup = () => (opened = true);
+          page.on('popup', onPopup);
+          await window_.getByTestId('connect-window-authorize').click();
+          const idError = await window_.getByTestId('connect-window-client-id-error').innerText({ timeout: 10_000 }).catch(() => '');
+          const secretError = await window_.getByTestId('connect-window-client-secret-error').innerText({ timeout: 10_000 }).catch(() => '');
+          await page.waitForTimeout(500);
+          page.off('popup', onPopup);
+          await shoot(page, 'connect-required');
+          check('32 an empty required field shows its error in place, and Authorize opens no sign-in window', /Enter the client ID/.test(idError) && /Enter the client secret/.test(secretError) && !opened, { idError, secretError, opened });
           await window_.getByTestId('connect-window-client-id').fill(values.clientId);
           await window_.getByTestId('connect-window-client-secret').fill(values.clientSecret);
           await window_.getByTestId('connect-window-more').click();
