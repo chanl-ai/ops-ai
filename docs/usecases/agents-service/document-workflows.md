@@ -56,6 +56,7 @@ a spreadsheet of 200 cases each needs new code or a person retyping it.
 | 31 | (ui) James opens a file's Read dialog | It offers Full text (`file-read-full-text`) and "Let the model propose the fields" (`file-read-propose`) |
 | 32 | (ui) Full text, then the Text tab | 12 page entries (`file-text-page`) in order; words under 0.7 confidence are shaded |
 | 32b | (ui) Full text with Pages to read 3, then Show every page | Pages 1 to 3 of 12, then all 12 |
+| 32c | (ui) The file's header after Full text, and after a reload | "Read as full text" both times, never "Not read" |
 | 33 | (ui) Propose, rename a field, Save as document type | The header says Fields proposed, a wait for a person names each field and why, and the type exists in team_ops with the renamed field |
 | 34 | (ui) An Extract from file step's sheet | "What to read" (`step-what-to-read`) offers Fields, Full text and Let the model propose the fields |
 | 35 | (ui) Share as a form on the Request trigger | A link (`form-link`), its QR code (`form-qr`, the same image the link makes) with Download QR code, and Rotate (`form-rotate`) |

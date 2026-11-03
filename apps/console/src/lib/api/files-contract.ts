@@ -122,8 +122,8 @@ export interface FilesApi {
   };
   /** documents-service `/v1/documents/layout` (c-247): a file's pages, blocks and words, read once and cached. No model call. */
   layouts: {
-    /** The layout already read; 404 until `read` has read it. A layout read with OCR is cached apart from one without. */
-    get(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
+    /** The layout already read, or only its `page`; 404 until `read` has read it. A layout read with OCR is cached apart from one without. */
+    get(fileId: string, opts: { ocr: boolean; page?: number }): Promise<DocumentLayout>;
     /** Reads the layout (OCR on a page with no text layer when `ocr`), or returns the cached one. */
     read(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
   };

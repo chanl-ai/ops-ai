@@ -55,7 +55,10 @@ export function createExtractionsRoutes(get: Get, send: Send): FilesApi['extract
 /** documents-service's layout routes: a file's pages, blocks and words, read once per content and cached. */
 export function createLayoutsRoutes(get: Get, send: Send): FilesApi['layouts'] {
   return {
-    get: (fileId, { ocr }) => get(`/documents/layout/${encodeURIComponent(fileId)}${ocr ? '?ocr=true' : ''}`),
+    get: (fileId, { ocr, page }) => {
+      const q = new URLSearchParams({ ...(ocr ? { ocr: 'true' } : {}), ...(page ? { page: String(page) } : {}) }).toString();
+      return get(`/documents/layout/${encodeURIComponent(fileId)}${q ? `?${q}` : ''}`);
+    },
     read: (fileId, { ocr }) => send('POST', '/documents/layout', { fileId, ocr }),
   };
 }
